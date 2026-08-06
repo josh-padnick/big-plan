@@ -9,8 +9,12 @@
 
 import { CHEVRONS_DOWN_UP_ICON } from "../../icons/lucide/chevrons-down-up.js";
 import { CHEVRONS_UP_DOWN_ICON } from "../../icons/lucide/chevrons-up-down.js";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
+import { MONITOR_ICON } from "../../icons/lucide/monitor.js";
+import { MOON_ICON } from "../../icons/lucide/moon.js";
 import { SETTINGS_ICON } from "../../icons/lucide/settings.js";
+import { SUN_ICON } from "../../icons/lucide/sun.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
@@ -168,32 +172,49 @@ const renderPreferencesControl = (): string =>
 <button class="inline-flex size-11 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-open aria-label="Open settings" aria-haspopup="dialog" aria-expanded="false">${lucideIconToHtml({ icon: SETTINGS_ICON, className: "size-4" })}</button>
 </span>`;
 
-// Rows are deliberately a stable label/control grid so future preferences can
-// join the dialog without changing the chrome or the first row's shape.
+const renderPreferenceOption = ({
+  mode,
+  title,
+  description,
+  icon,
+}: {
+  readonly mode: string;
+  readonly title: string;
+  readonly description: string;
+  readonly icon: typeof SUN_ICON;
+}): string =>
+  `<label class="group relative flex min-h-28 min-w-0 cursor-pointer flex-col justify-between gap-3 rounded-lg border border-edge bg-paper p-3 text-ink transition-colors hover:bg-surface has-[:checked]:border-accent has-[:checked]:bg-surface has-[:checked]:text-accent has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-accent">
+<input class="absolute top-3 right-3 size-4 accent-accent" id="big-plan-appearance-${mode}" type="radio" name="big-plan-appearance" value="${mode}" data-preference-mode="${mode}" aria-label="${title}">
+<span class="flex size-8 items-center justify-center rounded-md bg-surface text-muted group-has-[input:checked]:text-accent">${lucideIconToHtml({ icon, className: "size-4" })}</span>
+<span class="min-w-0 pr-5">
+<span class="block text-sm font-semibold leading-tight">${title}</span>
+<span class="mt-1 block text-xs leading-normal text-muted">${description}</span>
+</span>
+</label>`;
+
+// The dialog is intentionally a focused appearance chooser. Future settings
+// join only when actionable, so an unavailable roadmap item never competes
+// with the reviewer's one current decision.
 const renderPreferencesDialog = (): string =>
   `<div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" data-preferences-backdrop hidden>
-<section class="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-edge bg-paper p-5 text-ink shadow-2xl" data-preferences-dialog role="dialog" aria-modal="true" aria-labelledby="big-plan-preferences-title">
+<section class="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-edge bg-paper p-5 text-ink shadow-2xl wide:p-7" data-preferences-dialog role="dialog" aria-modal="true" aria-labelledby="big-plan-preferences-title">
 <div class="flex items-start justify-between gap-4">
 <div>
 <h2 class="m-0 text-lg font-semibold leading-tight" id="big-plan-preferences-title">Settings</h2>
-<p class="mt-1 text-sm leading-normal text-muted">Choose how this review document looks.</p>
+<p class="mt-2 max-w-sm text-sm leading-normal text-muted">Preferences are saved for every review document in this browser.</p>
 </div>
 <button class="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-close aria-label="Close settings">${lucideIconToHtml({ icon: X_ICON, className: "size-4" })}</button>
 </div>
-<div class="mt-5 divide-y divide-edge border-y border-edge">
-<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-4" data-preferences-row>
-<span class="text-sm font-medium" id="big-plan-appearance-label">Appearance</span>
-<fieldset class="m-0 flex flex-wrap justify-end gap-1.5 border-0 p-0" aria-labelledby="big-plan-appearance-label" role="radiogroup">
+<div class="mt-6 border-t border-edge pt-5" data-preferences-row>
+<h3 class="m-0 text-sm font-semibold" id="big-plan-appearance-label">Appearance</h3>
+<p class="mt-1 text-sm leading-normal text-muted">Choose how Big Plan looks.</p>
+<fieldset class="mt-4 grid min-w-0 grid-cols-1 gap-2.5 border-0 p-0 min-[32rem]:grid-cols-3" aria-labelledby="big-plan-appearance-label" role="radiogroup">
 <legend class="sr-only">Appearance</legend>
-<label class="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-edge px-3 py-2 text-sm text-ink has-[:checked]:border-accent has-[:checked]:bg-surface has-[:checked]:text-accent focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent"><input class="size-4 accent-accent" id="big-plan-appearance-light" type="radio" name="big-plan-appearance" value="light" data-preference-mode="light" aria-label="Light"><span>Light</span></label>
-<label class="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-edge px-3 py-2 text-sm text-ink has-[:checked]:border-accent has-[:checked]:bg-surface has-[:checked]:text-accent focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent"><input class="size-4 accent-accent" id="big-plan-appearance-dark" type="radio" name="big-plan-appearance" value="dark" data-preference-mode="dark" aria-label="Dark"><span>Dark</span></label>
-<label class="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-edge px-3 py-2 text-sm text-ink has-[:checked]:border-accent has-[:checked]:bg-surface has-[:checked]:text-accent focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent"><input class="size-4 accent-accent" id="big-plan-appearance-system" type="radio" name="big-plan-appearance" value="system" data-preference-mode="system" aria-label="System"><span>System</span></label>
+${renderPreferenceOption({ mode: "light", title: "Light", description: "Always light", icon: SUN_ICON })}
+${renderPreferenceOption({ mode: "dark", title: "Dark", description: "Always dark", icon: MOON_ICON })}
+${renderPreferenceOption({ mode: "system", title: "System", description: "Match device", icon: MONITOR_ICON })}
 </fieldset>
-</div>
-<div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-4 opacity-60" data-preferences-row>
-<span class="text-sm font-medium">Color theme</span>
-<span class="rounded-full bg-surface px-2.5 py-1 text-xs font-medium text-muted">Coming in stage two</span>
-</div>
+<p class="mt-4 flex items-center gap-2 text-xs leading-normal text-muted" data-preferences-guidance>${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes apply immediately and are saved automatically.</span></p>
 </div>
 </section>
 </div>`;
