@@ -1206,3 +1206,77 @@ test("should allow initial capture configuration after the merge base", async ()
     await rm(repoRoot, { recursive: true, force: true });
   }
 });
+
+test("should capture each unique SHA at configured bounded concurrency", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    const capture = onePixelPng({ red: 255, green: 0, blue: 0 });
+    const encodedCapture = capture.toString("base64");
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
+const checkout = process.env.STYLE_SNAPSHOT_CHECKOUT;
+const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
+const logPath = join(process.env.STYLE_SNAPSHOT_HARNESS_ROOT, "capture-events.log");
+await appendFile(logPath, "start:" + basename(checkout) + "\\n");
+await new Promise((resolve) => setTimeout(resolve, 150));
+await mkdir(output, { recursive: true });
+await writeFile(join(output, "state.png"), Buffer.from(${JSON.stringify(encodedCapture)}, "base64"));
+await appendFile(logPath, "end:" + basename(checkout) + "\\n");
+`,
+      "utf8",
+    );
+    for (const index of [1, 2, 3]) {
+      await writeFile(
+        join(repoRoot, "style.txt"),
+        `red\ncomment ${index}\n`,
+        "utf8",
+      );
+      await commit({
+        repoRoot,
+        subject: `style: preserve the red pixel ${index} [visual:empty]`,
+      });
+    }
+
+    const results = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "bounded-capture-concurrency",
+      }),
+    });
+    assert.equal(results.length, 3);
+
+    const events = (
+      await readFile(join(repoRoot, "capture-events.log"), "utf8")
+    )
+      .trim()
+      .split("\n");
+    assert.equal(
+      events.filter((event) => event.startsWith("start:")).length,
+      4,
+      "the base and three commits must each be captured once",
+    );
+    let activeCaptures = 0;
+    let maximumActiveCaptures = 0;
+    for (const event of events) {
+      activeCaptures += event.startsWith("start:") ? 1 : -1;
+      maximumActiveCaptures = Math.max(maximumActiveCaptures, activeCaptures);
+    }
+    const requestedConcurrency = Number.parseInt(
+      process.env.STYLE_HISTORY_CAPTURE_CONCURRENCY ?? "2",
+      10,
+    );
+    const expectedConcurrency = Number.isInteger(requestedConcurrency)
+      ? Math.min(4, Math.max(1, requestedConcurrency))
+      : 2;
+    assert.equal(maximumActiveCaptures, expectedConcurrency);
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});

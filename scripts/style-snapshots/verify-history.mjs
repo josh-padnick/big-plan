@@ -22,6 +22,8 @@ import { PNG } from "pngjs";
 
 const execFileAsync = promisify(execFile);
 const CAPTURE_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_CAPTURE_CONCURRENCY = 2;
+const MAX_CAPTURE_CONCURRENCY = 4;
 
 const RELEVANCE_FLOOR = {
   fixturePaths: ["examples/mdx-components.mdx", "examples/deck.mdx"],
@@ -54,6 +56,62 @@ const run = async ({ command, args, cwd, env = process.env, timeout }) => {
     timeout,
   });
   return stdout.trim();
+};
+
+/** Reads the bounded capture concurrency from the local environment. */
+const captureConcurrency = () => {
+  const configured = Number.parseInt(
+    process.env.STYLE_HISTORY_CAPTURE_CONCURRENCY ?? "",
+    10,
+  );
+  if (!Number.isInteger(configured)) {
+    return DEFAULT_CAPTURE_CONCURRENCY;
+  }
+  return Math.min(MAX_CAPTURE_CONCURRENCY, Math.max(1, configured));
+};
+
+/** Runs asynchronous work in a small serial queue. */
+const createSerialQueue = () => {
+  let tail = Promise.resolve();
+  return async (operation) => {
+    const previous = tail;
+    let release;
+    tail = new Promise((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  };
+};
+
+/** Captures each requested SHA once while keeping failures deterministic. */
+const captureCommits = async ({ commits, captureCommit, concurrency }) => {
+  let nextIndex = 0;
+  const failures = [];
+  const worker = async () => {
+    while (nextIndex < commits.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      try {
+        await captureCommit(commits[index]);
+      } catch (error) {
+        failures.push({ error, index });
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, commits.length) }, () =>
+      worker(),
+    ),
+  );
+  if (failures.length > 0) {
+    failures.sort((left, right) => left.index - right.index);
+    throw failures[0].error;
+  }
 };
 
 /** Validates the stable surface of one screenshot configuration revision. */
@@ -726,6 +784,7 @@ export const verifyHistory = async ({
     join(tmpdir(), "big-plan-style-history-"),
   );
   const capturesByCommit = new Map();
+  const worktreeOperations = createSerialQueue();
 
   const captureCommit = async (commit) => {
     const cached = capturesByCommit.get(commit);
@@ -737,11 +796,13 @@ export const verifyHistory = async ({
       temporaryRoot,
       `captures-${commit.slice(0, 12)}`,
     );
-    await run({
-      command: "git",
-      args: ["worktree", "add", "--detach", worktree, commit],
-      cwd: repoRoot,
-    });
+    await worktreeOperations(() =>
+      run({
+        command: "git",
+        args: ["worktree", "add", "--detach", worktree, commit],
+        cwd: repoRoot,
+      }),
+    );
     try {
       await mkdir(outputDirectory, { recursive: true });
       const command = config.captureCommand.map((part) =>
@@ -781,11 +842,13 @@ export const verifyHistory = async ({
         }
       }
     } finally {
-      await run({
-        command: "git",
-        args: ["worktree", "remove", "--force", worktree],
-        cwd: repoRoot,
-      });
+      await worktreeOperations(() =>
+        run({
+          command: "git",
+          args: ["worktree", "remove", "--force", worktree],
+          cwd: repoRoot,
+        }),
+      );
     }
     capturesByCommit.set(commit, outputDirectory);
     return outputDirectory;
@@ -794,7 +857,18 @@ export const verifyHistory = async ({
   const results = [];
   try {
     await rm(disposableArtifactRoot, { recursive: true, force: true });
-    await captureCommit(head);
+    const commitsToCapture = [
+      ...new Set([
+        head,
+        ...relevant.flatMap((entry) => [entry.parent, entry.commit]),
+      ]),
+    ];
+    // The default is two capture jobs. This keeps browser and worktree load bounded.
+    await captureCommits({
+      commits: commitsToCapture,
+      captureCommit,
+      concurrency: captureConcurrency(),
+    });
     for (const entry of relevant) {
       const beforeDirectory = await captureCommit(entry.parent);
       const afterDirectory = await captureCommit(entry.commit);
