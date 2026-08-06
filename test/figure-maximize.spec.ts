@@ -223,6 +223,7 @@ test("should copy plain code and make figure hints wait for a linger", async ({
     )
     .toBe(expected);
   await expect(copy).toHaveAccessibleName("Copied code");
+  await expect(frame.locator("[data-copy-message]")).toBeVisible();
 });
 
 test("should traverse disclosures and wrap within maximized figures", async ({
