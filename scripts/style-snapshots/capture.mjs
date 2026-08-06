@@ -180,6 +180,31 @@ const withTimeout = async (promise, label, milliseconds) => {
   }
 };
 
+/** Prevents a hosted font load from holding every screenshot indefinitely. */
+const settleFonts = async (page) => {
+  let timeout;
+  try {
+    const loaded = await Promise.race([
+      page.evaluate(() => globalThis.document.fonts.ready.then(() => true)),
+      new Promise((resolve) => {
+        timeout = setTimeout(() => resolve(false), 2_000);
+      }),
+    ]);
+    if (!loaded) {
+      await page.evaluate(() => {
+        Object.defineProperty(globalThis.document.fonts, "ready", {
+          configurable: true,
+          value: Promise.resolve(globalThis.document.fonts),
+        });
+      });
+    }
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+};
+
 /** Compares rendered pixels while ignoring screencast encoder metadata. */
 const samePixels = (left, right) => {
   const leftImage = PNG.sync.read(left);
@@ -196,6 +221,7 @@ const samePixels = (left, right) => {
  * both Playwright's element screenshot wait and Chromium's clip request.
  */
 const captureTargetFrame = async ({ page, target, path }) => {
+  await settleFonts(page);
   const bounds = await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return {
