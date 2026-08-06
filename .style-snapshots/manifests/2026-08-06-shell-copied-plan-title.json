@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "fix(shell): make copied plan title exact [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/render/shell/shell.ts",
+      "propertyDeltas": [
+        {
+          "property": "plan title markup",
+          "from": "The plan title is a direct child of the header paragraph.",
+          "to": "The plan title is an italic span inside the header paragraph, so the title text stays selectable as one unit."
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__shell-header__desktop__dark.png",
+      "changedPixels": 1137,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "c8275de48f903fdd8dfebd03b8a43f2c612f59482f9ab6b46ac92e3e86d43286"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "370f161e7a7ee4f2edeffb42e7ecfc3d99b0e7f88de5b13ea8f8b02909fd2d4b"
+      },
+      "propertyDeltas": [
+        {
+          "property": "plan title text style",
+          "from": "regular text",
+          "to": "italic text"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__desktop__light.png",
+      "changedPixels": 1147,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "05c79253dd8b72da9fee4d6d29649751b5dc725497ae6196072ab861b0345b95"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "f0dcb5bd372813b1a4441a5b0e997441d7f2a69fa4b6f44cf4821718f03db450"
+      },
+      "propertyDeltas": [
+        {
+          "property": "plan title text style",
+          "from": "regular text",
+          "to": "italic text"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__phone__dark.png",
+      "changedPixels": 577,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "b8a27a3205da313da0b4ce33b033117bbfd99bea44b6b3405998d7419e9a8e10"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "205a942510eddfe28c31044158970fbd53e1beb85ed3157512748970bcf6a074"
+      },
+      "propertyDeltas": [
+        {
+          "property": "plan title text style",
+          "from": "regular text",
+          "to": "italic text"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__phone__light.png",
+      "changedPixels": 576,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "24a4b1b92b20504cbd8c701cd13e7d5067043e53de146be00b2e0305c01ff2f9"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "14f21951046662d20fefe3e84378fd86936d77735882972d18cc7e5385f68c80"
+      },
+      "propertyDeltas": [
+        {
+          "property": "plan title text style",
+          "from": "regular text",
+          "to": "italic text"
+        }
+      ]
+    }
+  ]
+}
