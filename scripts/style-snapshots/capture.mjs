@@ -125,10 +125,18 @@ const settlePaint = async (page) => {
 /**
  * Writes only a byte-stable frame. The exact comparison is deliberate: an
  * unsettled animation, transition, font, or layout frame is a fixture defect,
- * not a visual delta the history contract may smooth over.
+ * not a visual delta the history contract may smooth over. The direct DOM
+ * scroll avoids Playwright's locator stability wait, which can deadlock while
+ * a large target is still settling.
  */
 const captureStableTarget = async ({ page, target, path }) => {
-  await target.scrollIntoViewIfNeeded();
+  await target.evaluate((element) => {
+    element.scrollIntoView({
+      behavior: "instant",
+      block: "nearest",
+      inline: "nearest",
+    });
+  });
   let prior;
   for (let attempt = 0; attempt < 6; attempt += 1) {
     await settlePaint(page);
