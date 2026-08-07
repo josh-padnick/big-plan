@@ -1015,35 +1015,35 @@ export const verifyHistory = async ({
       });
 
       try {
-      if (entry.visualKind === "empty" && changes.length > 0) {
-        const detail = changes
-          .map(
-            (change) =>
-              `${change.capture} (${change.changedPixels} changed pixels)`,
-          )
-          .join(", ");
-        throw new Error(
-          `${entry.subject}: expected zero changed pixels; observed ${detail}.`,
-        );
-      }
-      if (entry.visualKind === "approved") {
-        if (changes.length === 0) {
+        if (entry.visualKind === "empty" && changes.length > 0) {
+          const detail = changes
+            .map(
+              (change) =>
+                `${change.capture} (${change.changedPixels} changed pixels)`,
+            )
+            .join(", ");
           throw new Error(
-            `${entry.subject}: an approved commit must produce its declared screenshot changes.`,
+            `${entry.subject}: expected zero changed pixels; observed ${detail}.`,
           );
         }
-        await validateManifest({
-          repoRoot,
-          commit: entry.commit,
-          parent: entry.parent,
-          subject: entry.subject,
-          manifestDirectory: config.manifestDirectory,
-          stylingFiles: entry.stylingFiles,
-          changes,
-          contractSubjects: entry.contractSubjects,
-          squashed: entry.squashed,
-        });
-      }
+        if (entry.visualKind === "approved") {
+          if (changes.length === 0) {
+            throw new Error(
+              `${entry.subject}: an approved commit must produce its declared screenshot changes.`,
+            );
+          }
+          await validateManifest({
+            repoRoot,
+            commit: entry.commit,
+            parent: entry.parent,
+            subject: entry.subject,
+            manifestDirectory: config.manifestDirectory,
+            stylingFiles: entry.stylingFiles,
+            changes,
+            contractSubjects: entry.contractSubjects,
+            squashed: entry.squashed,
+          });
+        }
       } catch (error) {
         console.error(`MISMATCH ${entry.commit} :: ${error.message}`);
       }
