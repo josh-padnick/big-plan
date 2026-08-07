@@ -101,7 +101,7 @@ const EXEMPT_PATHS = [/^components\/wireframe\//];
 //
 //   // approved-metric: the panel padding the approved render used
 //
-// .big-plan/style-diff.md records every marked value and why a scale step
+// .big-plan/refui-b-report.md records every marked value and why a scale step
 // could not carry it.
 const APPROVED_MARKER = "approved-metric:";
 // Prettier wraps a long class string onto its own line and the explanation
