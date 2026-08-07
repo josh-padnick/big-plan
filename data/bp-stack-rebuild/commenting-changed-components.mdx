@@ -1,0 +1,50 @@
+# Commenting foundation component check
+
+Review every built-in component whose owned markup changed in the commenting foundation.
+
+<QuickSummary>
+
+<Why>
+
+- Comment targeting must not disturb the plan components readers already trust.
+
+</Why>
+
+<What>
+
+- Review QuickSummary facets and DataTable targets together in one rendered document.
+
+</What>
+
+<How>
+
+- Comment on each summary facet, then target a table row, column, and cell.
+
+</How>
+
+</QuickSummary>
+
+<Part title="Changed components" />
+
+## QuickSummary keeps three independent targets
+
+*Hover Why, What, and How separately; each should reveal its own comment control.*
+
+The component stays visually unchanged until a reviewer asks to comment.
+
+## DataTable exposes the full grid
+
+*Hover a header, cell, and row to verify each target is precise.*
+
+<DataTable title="Comment targeting matrix">
+
+```table
+| Surface | Target | Expected label |
+| --- | --- | --- |
+| QuickSummary | Facet | Why, What, or How |
+| DataTable | Column | Column: Target |
+| DataTable | Cell | Surface: DataTable |
+| DataTable | Row | DataTable |
+```
+
+</DataTable>
