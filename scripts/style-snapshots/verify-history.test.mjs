@@ -704,6 +704,198 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
   }
 });
 
+test("reports every visual-contract failure from one run", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    const colors = {
+      red: onePixelPng({ red: 255, green: 0, blue: 0 }),
+      blue: onePixelPng({ red: 0, green: 0, blue: 255 }),
+      green: onePixelPng({ red: 0, green: 255, blue: 0 }),
+    };
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const style = (await readFile(join(process.env.STYLE_SNAPSHOT_CHECKOUT, "style.txt"), "utf8")).split(/\\s/)[0];
+const colors = ${JSON.stringify(
+        Object.fromEntries(
+          Object.entries(colors).map(([name, value]) => [
+            name,
+            value.toString("base64"),
+          ]),
+        ),
+      )};
+await mkdir(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, { recursive: true });
+await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer.from(colors[style], "base64"));
+`,
+      "utf8",
+    );
+    await writeFile(join(repoRoot, "style.txt"), "blue\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: blue without approval [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "style.txt"), "green\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: green without approval [visual:empty]",
+    });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({ repoRoot, name: "aggregate-failures" }),
+      }),
+      (error) =>
+        /verification failed for 2 commits/u.test(error.message) &&
+        error.message.indexOf("style: blue without approval") <
+          error.message.indexOf("style: green without approval"),
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("reuses receipts for an unchanged tree prefix and invalidates changed trees", async () => {
+  const { repoRoot, configPath, config, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  const receiptDirectory = join(repoRoot, "receipts");
+  const previousReceiptDirectory = process.env.STYLE_HISTORY_RECEIPT_DIR;
+  const previousAuthority = process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS;
+  process.env.STYLE_HISTORY_RECEIPT_DIR = receiptDirectory;
+  process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS = "local";
+  try {
+    const colors = {
+      red: onePixelPng({ red: 255, green: 0, blue: 0 }),
+      blue: onePixelPng({ red: 0, green: 0, blue: 255 }),
+    };
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const style = (await readFile(join(process.env.STYLE_SNAPSHOT_CHECKOUT, "style.txt"), "utf8")).split(/\\s/)[0];
+const colors = ${JSON.stringify(
+        Object.fromEntries(
+          Object.entries(colors).map(([name, value]) => [
+            name,
+            value.toString("base64"),
+          ]),
+        ),
+      )};
+await mkdir(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, { recursive: true });
+await mkdir(process.env.STYLE_HISTORY_RECEIPT_DIR, { recursive: true });
+await appendFile(join(process.env.STYLE_HISTORY_RECEIPT_DIR, "capture-count"), "1\\n");
+await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer.from(colors[style], "base64"));
+`,
+      "utf8",
+    );
+    await writeFile(join(repoRoot, "style.txt"), "red\ncomment one\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: preserve red one [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "style.txt"), "red\ncomment two\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: preserve red two [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "style.txt"), "blue\n", "utf8");
+    const changedCommit = await commit({
+      repoRoot,
+      subject: "style: blue without approval [visual:empty]",
+    });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({ repoRoot, name: "receipt-first" }),
+      }),
+      /expected zero changed pixels/u,
+    );
+    const firstCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    const receipts = JSON.parse(
+      await readFile(join(receiptDirectory, "receipts.json"), "utf8"),
+    );
+    assert.equal(Object.keys(receipts.receipts).length, 2);
+
+    await writeFile(join(repoRoot, "style.txt"), "red\n", "utf8");
+    await git({
+      repoRoot,
+      arguments_: ["add", "style.txt"],
+    });
+    await git({
+      repoRoot,
+      arguments_: [
+        "commit",
+        "--amend",
+        "-m",
+        "style: restore red after rerun [visual:empty]",
+      ],
+    });
+    const rerun = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "receipt-second" }),
+    });
+    const secondCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(rerun.length, 3);
+    assert.equal(rerun[0].cached, true);
+    assert.equal(rerun[1].cached, true);
+    assert.equal(secondCount - firstCount, 2);
+    assert.notEqual(changedCommit, rerun[2].commit);
+
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        { ...config, stylingFilePatterns: ["^style\\.txt$", "^other\\.txt$"] },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "receipt-policy-change" }),
+    });
+    const policyChangeCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(policyChangeCount - secondCount, 4);
+  } finally {
+    if (previousReceiptDirectory === undefined) {
+      delete process.env.STYLE_HISTORY_RECEIPT_DIR;
+    } else {
+      process.env.STYLE_HISTORY_RECEIPT_DIR = previousReceiptDirectory;
+    }
+    if (previousAuthority === undefined) {
+      delete process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS;
+    } else {
+      process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS = previousAuthority;
+    }
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("should retain relevance from every config revision", async () => {
   const { repoRoot, configPath, config, base } = await createMinimalRepository({
     stylingFilePatterns: ["^custom-pixel\\.txt$"],

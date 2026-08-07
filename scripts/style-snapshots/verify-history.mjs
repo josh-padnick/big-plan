@@ -18,7 +18,14 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { chromium } from "@playwright/test";
 import { PNG } from "pngjs";
+import {
+  DETERMINISM_FLAGS,
+  environmentFingerprint,
+  environmentLabel,
+  sameEnvironment,
+} from "./environment.mjs";
 
 const execFileAsync = promisify(execFile);
 const CAPTURE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -135,7 +142,16 @@ const captureCommits = async ({ commits, captureCommit, concurrency }) => {
   );
   if (failures.length > 0) {
     failures.sort((left, right) => left.index - right.index);
-    throw failures[0].error;
+    throw new Error(
+      [
+        `Style history capture failed for ${failures.length} commit${failures.length === 1 ? "" : "s"}.`,
+        ...failures.map(
+          ({ error, index }) =>
+            `- ${commits[index]}: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      ].join("\n"),
+      { cause: failures[0].error },
+    );
   }
 };
 
@@ -262,6 +278,18 @@ const parseConfig = (source) => {
       );
     }
   }
+  if (config.captureEnvironment !== undefined) {
+    if (
+      typeof config.captureEnvironment !== "object" ||
+      config.captureEnvironment === null ||
+      typeof config.captureEnvironment.authorityClass !== "string" ||
+      config.captureEnvironment.authorityClass.trim() === ""
+    ) {
+      throw new Error(
+        "Style screenshot captureEnvironment requires a non-empty authorityClass.",
+      );
+    }
+  }
   return config;
 };
 
@@ -278,6 +306,59 @@ const canonicalize = (value) => {
     );
   }
   return value;
+};
+
+const configFingerprint = (config) =>
+  createHash("sha256")
+    .update(JSON.stringify(canonicalize(config)))
+    .digest("hex");
+
+const receiptKey = ({ parentTree, commitTree }) =>
+  `${parentTree}:${commitTree}`;
+
+const readReceiptStore = async (directory) => {
+  try {
+    const store = JSON.parse(
+      await readFile(join(directory, "receipts.json"), "utf8"),
+    );
+    return store.schemaVersion === 1 &&
+      store.receipts !== null &&
+      typeof store.receipts === "object"
+      ? store
+      : { schemaVersion: 1, receipts: {} };
+  } catch (error) {
+    if (error.code === "ENOENT" || error instanceof SyntaxError) {
+      return { schemaVersion: 1, receipts: {} };
+    }
+    throw error;
+  }
+};
+
+const writeReceiptStore = async (directory, store) => {
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    join(directory, "receipts.json"),
+    `${JSON.stringify(store, null, 2)}\n`,
+    "utf8",
+  );
+};
+
+const currentEnvironment = async ({ repoRoot }) => {
+  const browser = await chromium.launch({
+    headless: true,
+    args: DETERMINISM_FLAGS,
+  });
+  try {
+    return environmentFingerprint({
+      browserVersion: browser.version(),
+      fontRoot: join(repoRoot, "assets", "fonts"),
+      authorityClass:
+        process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS ??
+        (process.env.CI === "true" ? "ci-runner" : "local"),
+    });
+  } finally {
+    await browser.close();
+  }
 };
 
 /** Indexes the complete rendering contract for each named capture. */
@@ -324,6 +405,19 @@ const captureEntries = (config) =>
       capture,
     })),
   );
+
+const treePairFor = async ({ repoRoot, parent, commit }) => ({
+  parentTree: await run({
+    command: "git",
+    args: ["rev-parse", `${parent}^{tree}`],
+    cwd: repoRoot,
+  }),
+  commitTree: await run({
+    command: "git",
+    args: ["rev-parse", `${commit}^{tree}`],
+    cwd: repoRoot,
+  }),
+});
 
 /** Selects owned regions while retaining a complete global and tip safety net. */
 export const capturePlan = ({ config, stylingFiles, isTip }) => {
@@ -518,6 +612,7 @@ const comparePngs = async ({ beforePath, afterPath }) => {
   const height = Math.max(before?.height ?? 0, after?.height ?? 0);
   const diff = new PNG({ width, height });
   let changedPixels = 0;
+  let toleratedPixels = 0;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const beforeOffset =
@@ -528,15 +623,31 @@ const comparePngs = async ({ beforePath, afterPath }) => {
         after !== null && x < after.width && y < after.height
           ? (y * after.width + x) * 4
           : null;
+      const channelDelta =
+        beforeOffset !== null && afterOffset !== null
+          ? Math.max(
+              Math.abs(before.data[beforeOffset] - after.data[afterOffset]),
+              Math.abs(
+                before.data[beforeOffset + 1] - after.data[afterOffset + 1],
+              ),
+              Math.abs(
+                before.data[beforeOffset + 2] - after.data[afterOffset + 2],
+              ),
+            )
+          : null;
       const changed =
         beforeOffset === null ||
         afterOffset === null ||
         before.data[beforeOffset + 3] !== after.data[afterOffset + 3] ||
-        Math.max(
-          Math.abs(before.data[beforeOffset] - after.data[afterOffset]),
-          Math.abs(before.data[beforeOffset + 1] - after.data[afterOffset + 1]),
-          Math.abs(before.data[beforeOffset + 2] - after.data[afterOffset + 2]),
-        ) > PIXEL_CHANNEL_TOLERANCE;
+        channelDelta > PIXEL_CHANNEL_TOLERANCE;
+      if (
+        !changed &&
+        channelDelta !== null &&
+        channelDelta > 0 &&
+        channelDelta <= PIXEL_CHANNEL_TOLERANCE
+      ) {
+        toleratedPixels += 1;
+      }
       const diffOffset = (y * width + x) * 4;
       if (changed) {
         changedPixels += 1;
@@ -554,6 +665,7 @@ const comparePngs = async ({ beforePath, afterPath }) => {
   }
   return {
     changedPixels,
+    toleratedPixels,
     before: captureIdentity(before),
     after: captureIdentity(after),
     diff: changedPixels === 0 ? null : diff,
@@ -615,9 +727,16 @@ const normalizeIdentity = (identity) =>
       };
 
 /** Selects the deterministic evidence shared by manifests and CI ledgers. */
-const captureEvidence = ({ capture, changedPixels, before, after }) => ({
+const captureEvidence = ({
   capture,
   changedPixels,
+  toleratedPixels = 0,
+  before,
+  after,
+}) => ({
+  capture,
+  changedPixels,
+  toleratedPixels,
   before: normalizeIdentity(before),
   after: normalizeIdentity(after),
 });
@@ -913,6 +1032,19 @@ export const verifyHistory = async ({
     artifactRoot,
   });
   const config = await readConfig(configPath);
+  const policyFingerprint = configFingerprint(config);
+  const environment = await currentEnvironment({ repoRoot });
+  const receiptDirectory =
+    process.env.STYLE_HISTORY_RECEIPT_DIR === undefined
+      ? null
+      : resolve(process.env.STYLE_HISTORY_RECEIPT_DIR);
+  const receiptStore =
+    receiptDirectory === null
+      ? { schemaVersion: 1, receipts: {} }
+      : await readReceiptStore(receiptDirectory);
+  const pixelAuthority =
+    config.captureEnvironment?.authorityClass === undefined ||
+    config.captureEnvironment.authorityClass === environment.authorityClass;
   const harnessRoot = dirname(dirname(configPath));
   const configRepoPath = relative(repoRoot, configPath).replaceAll("\\", "/");
   if (configRepoPath.startsWith("../") || isAbsolute(configRepoPath)) {
@@ -1022,6 +1154,7 @@ export const verifyHistory = async ({
     relevant.push({
       commit,
       parent,
+      treePair: await treePairFor({ repoRoot, parent, commit }),
       subject,
       stylingFiles,
       visualKind: contract.kind,
@@ -1073,6 +1206,27 @@ export const verifyHistory = async ({
           STYLE_SNAPSHOT_CAPTURE_KEYS: JSON.stringify(captureKeys),
         },
       });
+      let capturedEnvironment = environment;
+      try {
+        const manifest = JSON.parse(
+          await readFile(
+            join(outputDirectory, "capture-manifest.json"),
+            "utf8",
+          ),
+        );
+        if (manifest.environment !== undefined) {
+          capturedEnvironment = manifest.environment;
+          if (!sameEnvironment(environment, capturedEnvironment)) {
+            throw new Error(
+              `environment differs: captured on ${environmentLabel(capturedEnvironment)}, verifying on ${environmentLabel(environment)}`,
+            );
+          }
+        }
+      } catch (error) {
+        if (error.code !== "ENOENT") {
+          throw error;
+        }
+      }
       if (commit === head) {
         const captureManifestPath = join(
           outputDirectory,
@@ -1144,13 +1298,44 @@ export const verifyHistory = async ({
         }),
       );
     }
-    capturesByCommit.set(cacheKey, outputDirectory);
-    return outputDirectory;
+    const result = { directory: outputDirectory, environment };
+    capturesByCommit.set(cacheKey, result);
+    return result;
   };
 
   const results = [];
+  const receiptFor = (entry) =>
+    receiptStore.receipts[receiptKey(entry.treePair)];
+  const reusableReceipt = (entry) => {
+    const receipt = receiptFor(entry);
+    return (
+      pixelAuthority &&
+      receiptDirectory !== null &&
+      receipt?.schemaVersion === 1 &&
+      receipt.policyFingerprint === policyFingerprint &&
+      sameEnvironment(receipt.environment, environment) &&
+      receipt.visualKind === entry.visualKind &&
+      JSON.stringify(receipt.stylingFiles) ===
+        JSON.stringify([...entry.stylingFiles].sort()) &&
+      JSON.stringify(receipt.contractSubjects) ===
+        JSON.stringify(entry.contractSubjects) &&
+      receipt.squashed === entry.squashed &&
+      receipt.result !== undefined
+    );
+  };
   try {
     await rm(disposableArtifactRoot, { recursive: true, force: true });
+    const firstUncachedIndex = relevant.findIndex(
+      (entry) => !reusableReceipt(entry),
+    );
+    const activeRelevant =
+      firstUncachedIndex === -1 ? [] : relevant.slice(firstUncachedIndex);
+    for (const entry of relevant.slice(
+      0,
+      firstUncachedIndex === -1 ? relevant.length : firstUncachedIndex,
+    )) {
+      results.push({ ...receiptFor(entry).result, cached: true });
+    }
     const captureRequests = new Map();
     const addCaptureRequest = (commit, captureKeys) => {
       const existing = captureRequests.get(commit) ?? new Set();
@@ -1163,7 +1348,7 @@ export const verifyHistory = async ({
       head,
       capturePlan({ config, stylingFiles: [], isTip: true }),
     );
-    for (const entry of relevant) {
+    for (const entry of activeRelevant) {
       const captureKeys = capturePlan({
         config,
         stylingFiles: entry.stylingFiles,
@@ -1180,83 +1365,125 @@ export const verifyHistory = async ({
         captureCommit(commit, [...captureRequests.get(commit)].sort()),
       concurrency: captureConcurrency(),
     });
-    for (const entry of relevant) {
-      const beforeDirectory = await captureCommit(
-        entry.parent,
-        [...captureRequests.get(entry.parent)].sort(),
-      );
-      const afterDirectory = await captureCommit(
-        entry.commit,
-        [...captureRequests.get(entry.commit)].sort(),
-      );
-      const captures = await compareCaptureSets({
-        beforeDirectory,
-        afterDirectory,
-        captureKeys:
-          config.schemaVersion < 2
-            ? undefined
-            : capturePlan({
-                config,
-                stylingFiles: entry.stylingFiles,
-                isTip: entry.commit === head,
-              }),
-      });
-      const changes = captures.filter((capture) => capture.changedPixels > 0);
-      const artifactDirectory = join(
-        disposableArtifactRoot,
-        entry.commit.slice(0, 12),
-      );
-      await writeEvidenceLedger({
-        artifactDirectory,
-        entry,
-        captures,
-      });
-      await writeArtifacts({
-        artifactDirectory,
-        changes,
-        beforeDirectory,
-        afterDirectory,
-      });
-
-      if (entry.visualKind === "empty" && changes.length > 0) {
-        const detail = changes
-          .map(
-            (change) =>
-              `${change.capture} (${change.changedPixels} changed pixels)`,
-          )
-          .join(", ");
-        throw new Error(
-          `${entry.subject}: expected zero changed pixels; observed ${detail}.`,
+    const failures = [];
+    for (const entry of activeRelevant) {
+      try {
+        const beforeCapture = await captureCommit(
+          entry.parent,
+          [...captureRequests.get(entry.parent)].sort(),
         );
-      }
-      if (entry.visualKind === "approved") {
-        await validateManifest({
-          repoRoot,
-          commit: entry.commit,
-          parent: entry.parent,
-          subject: entry.subject,
-          manifestDirectory: config.manifestDirectory,
-          stylingFiles: entry.stylingFiles,
-          changes,
-          contractSubjects: entry.contractSubjects,
-          squashed: entry.squashed,
-        });
-        if (changes.length === 0) {
+        const afterCapture = await captureCommit(
+          entry.commit,
+          [...captureRequests.get(entry.commit)].sort(),
+        );
+        if (
+          !sameEnvironment(beforeCapture.environment, afterCapture.environment)
+        ) {
           throw new Error(
-            `${entry.subject}: an approved commit must produce its declared screenshot changes.`,
+            `environment differs: captured on ${environmentLabel(beforeCapture.environment)}, verifying on ${environmentLabel(afterCapture.environment)}`,
           );
         }
+        const captures = await compareCaptureSets({
+          beforeDirectory: beforeCapture.directory,
+          afterDirectory: afterCapture.directory,
+          captureKeys:
+            config.schemaVersion < 2
+              ? undefined
+              : capturePlan({
+                  config,
+                  stylingFiles: entry.stylingFiles,
+                  isTip: entry.commit === head,
+                }),
+        });
+        const changes = captures.filter((capture) => capture.changedPixels > 0);
+        const artifactDirectory = join(
+          disposableArtifactRoot,
+          entry.commit.slice(0, 12),
+        );
+        await writeEvidenceLedger({
+          artifactDirectory,
+          entry,
+          captures,
+        });
+        await writeArtifacts({
+          artifactDirectory,
+          changes,
+          beforeDirectory: beforeCapture.directory,
+          afterDirectory: afterCapture.directory,
+        });
+
+        if (pixelAuthority) {
+          if (entry.visualKind === "empty" && changes.length > 0) {
+            const detail = changes
+              .map(
+                (change) =>
+                  `${change.capture} (${change.changedPixels} changed pixels)`,
+              )
+              .join(", ");
+            throw new Error(
+              `${entry.subject}: expected zero changed pixels; observed ${detail}.`,
+            );
+          }
+          if (entry.visualKind === "approved") {
+            await validateManifest({
+              repoRoot,
+              commit: entry.commit,
+              parent: entry.parent,
+              subject: entry.subject,
+              manifestDirectory: config.manifestDirectory,
+              stylingFiles: entry.stylingFiles,
+              changes,
+              contractSubjects: entry.contractSubjects,
+              squashed: entry.squashed,
+            });
+            if (changes.length === 0) {
+              throw new Error(
+                `${entry.subject}: an approved commit must produce its declared screenshot changes.`,
+              );
+            }
+          }
+        }
+        const result = {
+          commit: entry.commit,
+          subject: entry.subject,
+          visualKind: entry.visualKind,
+          changedCaptures: changes.length,
+          changedPixels: changes.reduce(
+            (total, change) => total + (change.changedPixels ?? 0),
+            0,
+          ),
+          advisory: !pixelAuthority,
+        };
+        results.push(result);
+        if (pixelAuthority && receiptDirectory !== null) {
+          receiptStore.receipts[receiptKey(entry.treePair)] = {
+            schemaVersion: 1,
+            ...entry.treePair,
+            policyFingerprint,
+            environment,
+            visualKind: entry.visualKind,
+            stylingFiles: [...entry.stylingFiles].sort(),
+            contractSubjects: entry.contractSubjects,
+            squashed: entry.squashed,
+            result,
+          };
+          await writeReceiptStore(receiptDirectory, receiptStore);
+        }
+      } catch (error) {
+        failures.push({ entry, error });
       }
-      results.push({
-        commit: entry.commit,
-        subject: entry.subject,
-        visualKind: entry.visualKind,
-        changedCaptures: changes.length,
-        changedPixels: changes.reduce(
-          (total, change) => total + (change.changedPixels ?? 0),
-          0,
-        ),
-      });
+    }
+    if (failures.length > 0) {
+      throw new Error(
+        [
+          `Style history verification failed for ${failures.length} commit${failures.length === 1 ? "" : "s"}.`,
+          ...failures.map(
+            ({ entry, error }) =>
+              `- ${entry.subject}: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        ].join("\n"),
+        { cause: failures[0].error },
+      );
     }
   } finally {
     for (const worktree of (await readdir(temporaryRoot)).filter((name) =>
@@ -1335,6 +1562,11 @@ if (isMain) {
   if (results.length === 0) {
     console.log("style history: no relevant commits");
   } else {
+    if (results.some((result) => result.advisory)) {
+      console.log(
+        "style history: advisory-only; this environment is not the configured pixel authority",
+      );
+    }
     for (const result of results) {
       console.log(
         `style history: ${result.commit.slice(0, 12)} ${result.visualKind} ${result.changedCaptures} changed captures ${result.changedPixels} changed pixels`,
