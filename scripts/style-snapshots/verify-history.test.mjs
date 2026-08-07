@@ -331,6 +331,112 @@ test("should reject an approved styling commit without a manifest", async () => 
   }
 });
 
+test("should absorb only edge-anchored two-channel antialias drift", async () => {
+  const { repoRoot, configPath } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    const rowPng = (pixels) => {
+      const png = new PNG({ width: pixels.length, height: 1 });
+      for (const [index, [red, green, blue]] of pixels.entries()) {
+        png.data[index * 4] = red;
+        png.data[index * 4 + 1] = green;
+        png.data[index * 4 + 2] = blue;
+        png.data[index * 4 + 3] = 255;
+      }
+      return PNG.sync.write(png).toString("base64");
+    };
+    const captures = {
+      base: rowPng([
+        [40, 38, 32],
+        [40, 38, 32],
+        [40, 38, 32],
+      ]),
+      edge: rowPng([
+        [41, 39, 33],
+        [42, 39, 33],
+        [40, 38, 32],
+      ]),
+      uniform: rowPng([
+        [43, 41, 35],
+        [44, 41, 35],
+        [42, 40, 34],
+      ]),
+    };
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
+const state = (await readFile(join(process.env.STYLE_SNAPSHOT_CHECKOUT, "style.txt"), "utf8")).trim();
+const captures = ${JSON.stringify(captures)};
+await mkdir(output, { recursive: true });
+await writeFile(join(output, "state.png"), Buffer.from(captures[state], "base64"));
+`,
+      "utf8",
+    );
+    await writeFile(join(repoRoot, "style.txt"), "base\n", "utf8");
+    await git({ repoRoot, arguments_: ["add", "."] });
+    await git({
+      repoRoot,
+      arguments_: [
+        "commit",
+        "--amend",
+        "-m",
+        "test: establish antialias fixture",
+      ],
+    });
+    const antialiasBase = await git({
+      repoRoot,
+      arguments_: ["rev-parse", "HEAD"],
+    });
+    await writeFile(join(repoRoot, "style.txt"), "edge\n", "utf8");
+    const toleratedCommit = await commit({
+      repoRoot,
+      subject: "style: preserve an antialiased edge [visual:empty]",
+    });
+
+    const results = await verifyHistory({
+      repoRoot,
+      base: antialiasBase,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "antialias-edge" }),
+    });
+    assert.equal(results[0].changedPixels, 0);
+    const ledger = JSON.parse(
+      await readFile(
+        join(
+          artifactPath({ repoRoot, name: "antialias-edge" }),
+          toleratedCommit.slice(0, 12),
+          "evidence.json",
+        ),
+        "utf8",
+      ),
+    );
+    assert.equal(ledger.captures[0].toleratedPixels, 2);
+
+    await writeFile(join(repoRoot, "style.txt"), "uniform\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: shift the whole edge [visual:empty]",
+    });
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base: antialiasBase,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "uniform-two-channel-shift",
+        }),
+      }),
+      /expected zero changed pixels/u,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("excludes bookkeeping merges and their side-only ancestry from the contract", async () => {
   const { repoRoot, configPath, base } = await createMinimalRepository({
     stylingFilePatterns: ["^style\\.txt$"],
@@ -1268,9 +1374,7 @@ await writeFile(join(output, "capture-manifest.json"), JSON.stringify({
                   scope: "full-document",
                   selector: "article",
                   themes: ["light"],
-                  viewports: [
-                    { name: "desktop", width: 1440, height: 900 },
-                  ],
+                  viewports: [{ name: "desktop", width: 1440, height: 900 }],
                   actions: [],
                 },
                 {
@@ -1279,9 +1383,7 @@ await writeFile(join(output, "capture-manifest.json"), JSON.stringify({
                   ownerPatterns: ["^style\\.txt$"],
                   selector: "[data-component]",
                   themes: ["light"],
-                  viewports: [
-                    { name: "desktop", width: 1440, height: 900 },
-                  ],
+                  viewports: [{ name: "desktop", width: 1440, height: 900 }],
                   actions: [],
                 },
               ],
@@ -2147,7 +2249,8 @@ test("should reject a real below-fold owned-surface regression", async () => {
       join(repoRoot, fixturePath),
       `${Array.from(
         { length: 60 },
-        (_, index) => `Paragraph ${index + 1} keeps the owned surface below the viewport.`,
+        (_, index) =>
+          `Paragraph ${index + 1} keeps the owned surface below the viewport.`,
       ).join("\n\n")}
 
 <Wireframe id="below-fold" title="Below-fold workspace">
@@ -2247,8 +2350,8 @@ test("should capture each unique SHA at configured bounded concurrency", async (
       10,
     );
     const expectedConcurrency = Number.isInteger(requestedConcurrency)
-      ? Math.min(4, Math.max(1, requestedConcurrency))
-      : 4;
+      ? Math.min(3, Math.max(1, requestedConcurrency))
+      : 3;
     await writeFile(
       join(repoRoot, "capture.mjs"),
       `import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";

@@ -85,7 +85,7 @@ export const sameEnvironment = (left, right) =>
  * rather than a runner mismatch.
  */
 export const sameRunnerEnvironment = (left, right) => {
-  const runnerProperties = ({ fontSetHash, ...rest }) => rest;
+  const runnerProperties = ({ fontSetHash: _fontSetHash, ...rest }) => rest;
   return (
     JSON.stringify(runnerProperties(left)) ===
     JSON.stringify(runnerProperties(right))

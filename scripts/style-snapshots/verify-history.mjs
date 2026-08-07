@@ -30,8 +30,8 @@ import {
 
 const execFileAsync = promisify(execFile);
 const CAPTURE_TIMEOUT_MS = 10 * 60 * 1000;
-const DEFAULT_CAPTURE_CONCURRENCY = 4;
-const MAX_CAPTURE_CONCURRENCY = 4;
+const DEFAULT_CAPTURE_CONCURRENCY = 3;
+const MAX_CAPTURE_CONCURRENCY = 3;
 const POLICY_SOURCE_PATHS = [
   fileURLToPath(import.meta.url),
   fileURLToPath(new URL("./available-documents.mjs", import.meta.url)),
@@ -114,7 +114,8 @@ const recoveryMergeParent = ({ subject, parents }) => {
   const recoveryCommit = subject.match(
     /^Merge commit '([0-9a-f]{40})' into .+$/u,
   )?.[1];
-  return recoveryCommit !== undefined && parents.slice(1).includes(recoveryCommit)
+  return recoveryCommit !== undefined &&
+    parents.slice(1).includes(recoveryCommit)
     ? recoveryCommit
     : null;
 };
@@ -381,8 +382,7 @@ const readReceiptStore = async (directory) => {
       ? {
           ...store,
           tipReceipts:
-            store.tipReceipts !== null &&
-            typeof store.tipReceipts === "object"
+            store.tipReceipts !== null && typeof store.tipReceipts === "object"
               ? store.tipReceipts
               : {},
         }
@@ -662,8 +662,47 @@ const captureIdentity = (capture) =>
       };
 
 // Hosted Chromium can vary one antialias channel on rounded edges without a
-// layout or color change. Larger channel deltas remain visual differences.
+// layout or color change. A two-channel excursion is tolerated only beside a
+// one-channel drift pixel, while isolated and uniform two-channel changes fail.
 const PIXEL_CHANNEL_TOLERANCE = 1;
+const ADJACENT_PIXEL_CHANNEL_TOLERANCE = 2;
+
+/** Detects a tightly anchored antialias excursion around one decoded pixel. */
+const hasToleratedNeighbor = ({ before, after, x, y }) => {
+  for (let yOffset = -1; yOffset <= 1; yOffset += 1) {
+    for (let xOffset = -1; xOffset <= 1; xOffset += 1) {
+      if (xOffset === 0 && yOffset === 0) {
+        continue;
+      }
+      const neighborX = x + xOffset;
+      const neighborY = y + yOffset;
+      if (
+        neighborX < 0 ||
+        neighborY < 0 ||
+        neighborX >= before.width ||
+        neighborX >= after.width ||
+        neighborY >= before.height ||
+        neighborY >= after.height
+      ) {
+        continue;
+      }
+      const beforeOffset = (neighborY * before.width + neighborX) * 4;
+      const afterOffset = (neighborY * after.width + neighborX) * 4;
+      if (before.data[beforeOffset + 3] !== after.data[afterOffset + 3]) {
+        continue;
+      }
+      const channelDelta = Math.max(
+        Math.abs(before.data[beforeOffset] - after.data[afterOffset]),
+        Math.abs(before.data[beforeOffset + 1] - after.data[afterOffset + 1]),
+        Math.abs(before.data[beforeOffset + 2] - after.data[afterOffset + 2]),
+      );
+      if (channelDelta > 0 && channelDelta <= PIXEL_CHANNEL_TOLERANCE) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
 
 /** Counts visual differences, including pixels added by dimension changes. */
 const comparePngs = async ({ beforePath, afterPath }) => {
@@ -696,16 +735,24 @@ const comparePngs = async ({ beforePath, afterPath }) => {
               ),
             )
           : null;
+      const isAdjacentAntialiasExcursion =
+        before !== null &&
+        after !== null &&
+        channelDelta > PIXEL_CHANNEL_TOLERANCE &&
+        channelDelta <= ADJACENT_PIXEL_CHANNEL_TOLERANCE &&
+        hasToleratedNeighbor({ before, after, x, y });
       const changed =
         beforeOffset === null ||
         afterOffset === null ||
         before.data[beforeOffset + 3] !== after.data[afterOffset + 3] ||
-        channelDelta > PIXEL_CHANNEL_TOLERANCE;
+        (channelDelta > PIXEL_CHANNEL_TOLERANCE &&
+          !isAdjacentAntialiasExcursion);
       if (
         !changed &&
         channelDelta !== null &&
         channelDelta > 0 &&
-        channelDelta <= PIXEL_CHANNEL_TOLERANCE
+        (channelDelta <= PIXEL_CHANNEL_TOLERANCE ||
+          isAdjacentAntialiasExcursion)
       ) {
         toleratedPixels += 1;
       }
@@ -1483,8 +1530,7 @@ export const verifyHistory = async ({
     tipReceipt?.schemaVersion === 1 &&
     tipReceipt.policyFingerprint === activePolicyFingerprint &&
     sameEnvironment(tipReceipt.environment, environment) &&
-    JSON.stringify(tipReceipt.captureKeys) ===
-      JSON.stringify(tipCaptureKeys) &&
+    JSON.stringify(tipReceipt.captureKeys) === JSON.stringify(tipCaptureKeys) &&
     tipReceipt.scope === "tip-safety-net" &&
     tipReceipt.verified === true;
   try {
@@ -1517,7 +1563,7 @@ export const verifyHistory = async ({
       addCaptureRequest(entry.commit, captureKeys);
     }
     const commitsToCapture = [...captureRequests.keys()];
-    // The default is four capture jobs. The maximum is shared by all SHA work.
+    // The default is three capture jobs. The maximum is shared by all SHA work.
     await captureCommits({
       commits: commitsToCapture,
       captureCommit: (commit) =>
