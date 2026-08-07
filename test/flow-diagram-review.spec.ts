@@ -58,6 +58,52 @@ test("should preserve authored markup when an edit is canceled or cleared", asyn
   await expect(body).not.toHaveAttribute("data-flow-edited");
 });
 
+test("should hold the original-view switch state and revert every proposal", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const label = diagram.locator(
+    '[data-flow-node="authored"] [data-flow-field="label"]',
+  );
+  const modeSwitch = diagram.locator("[data-flow-mode]");
+  const revertAll = diagram.locator("[data-flow-revert-all]");
+
+  // Both proposal controls stay out of the way until there is a proposal.
+  await expect(modeSwitch).toBeHidden();
+  await expect(revertAll).toBeHidden();
+
+  await label.dblclick();
+  await label.fill("Author carefully");
+  await page.getByRole("heading").first().click();
+  await expect(modeSwitch).toBeVisible();
+  await expect(revertAll).toBeVisible();
+  await expect(revertAll).toHaveAttribute("aria-label", "Revert all changes");
+
+  // The switch reports its own state, so a reader can see which view is on
+  // without reading the diagram to work it out.
+  await expect(modeSwitch).toHaveAttribute("aria-checked", "false");
+  await modeSwitch.click();
+  await expect(modeSwitch).toHaveAttribute("aria-checked", "true");
+  await expect(diagram).toHaveAttribute("data-flow-original", "");
+  await expect(label).toHaveText("Author once");
+
+  await modeSwitch.click();
+  await expect(modeSwitch).toHaveAttribute("aria-checked", "false");
+  await expect(label).toHaveText("Author carefully");
+
+  // Reverting the last proposal returns the diagram to its authored view and
+  // clears the switch with it, so the control never outlives its subject.
+  await modeSwitch.click();
+  await revertAll.click();
+  await expect(label).toHaveText("Author once");
+  await expect(diagram).not.toHaveAttribute("data-flow-original");
+  await expect(modeSwitch).toBeHidden();
+  await expect(revertAll).toBeHidden();
+});
+
 test("should preserve work when focus moves outside the diagram", async ({
   page,
   flowDiagramViewerUrl,
@@ -413,23 +459,19 @@ test("should preserve a panned canvas when feedback repaints it", async ({
   const unlabeledEdge = diagram.locator(
     '[data-flow-edge-from="generator"][data-flow-edge-to="cli"]',
   );
-  // The removal action names the outcome and the key that performs it, and the
-  // name flips with the state, so the bar never describes the wrong direction.
+  // Revert appears only once there is something to revert, and its hint names
+  // the outcome for the state the element is actually in.
   await unlabeledEdge.click();
-  const removeAction = diagram.locator('[data-flow-action="remove"]');
-  await expect(removeAction).toHaveAttribute(
-    "aria-label",
-    "Remove this edge (Delete)",
-  );
-  await expect(removeAction).toHaveAttribute(
+  const revertAction = diagram.locator('[data-flow-action="revert"]');
+  await expect(revertAction).toHaveCount(0);
+  await page.keyboard.press("Delete");
+  await expect(revertAction).toHaveText("Revert");
+  await expect(revertAction).toHaveAttribute(
     "data-tooltip",
-    "Remove this edge (Delete)",
+    "Restore this edge",
   );
   await page.keyboard.press("Delete");
-  await expect(removeAction).toHaveAttribute(
-    "aria-label",
-    "Restore this edge (Delete)",
-  );
+  await expect(revertAction).toHaveCount(0);
 });
 
 test("should preserve diagram drafts when undoing review text", async ({

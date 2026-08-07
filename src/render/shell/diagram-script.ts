@@ -31,14 +31,12 @@
 // toggle; this one watches for the attribute and refits the canvas.
 //
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
-import { DELETE_ICON } from "../../icons/lucide/delete.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { lucideIconToMarkup } from "./lucide-icon-markup.js";
 
 const ICON_COMMENT = lucideIconToMarkup(MESSAGE_SQUARE_ICON);
 const ICON_REVERT = lucideIconToMarkup(ROTATE_CCW_ICON);
-const ICON_DELETE = lucideIconToMarkup(DELETE_ICON);
 const ICON_CLOSE = lucideIconToMarkup(X_ICON);
 
 export const DIAGRAM_SCRIPT = `
@@ -50,7 +48,6 @@ export const DIAGRAM_SCRIPT = `
     comment: '${ICON_COMMENT}',
     revert: '${ICON_REVERT}',
     close: '${ICON_CLOSE}',
-    remove: '${ICON_DELETE}',
   };
   const ZOOM_MIN = 0.25;
   const ZOOM_MAX = 4;
@@ -801,8 +798,6 @@ export const DIAGRAM_SCRIPT = `
       if (group) group.hidden = proposals.length === 0;
       const zoomSep = diagram.querySelector("[data-flow-zoom-sep]");
       if (zoomSep) zoomSep.hidden = mine.length === 0;
-      const revertAll = diagram.querySelector("[data-flow-revert-all]");
-      if (revertAll) revertAll.hidden = proposals.length < 2;
       if (proposals.length === 0 && diagram.hasAttribute("data-flow-original")) {
         diagram.removeAttribute("data-flow-original");
         diagram.dispatchEvent(new CustomEvent("flow-original-reset"));
@@ -937,27 +932,23 @@ export const DIAGRAM_SCRIPT = `
     if (kindOf(selected) !== "figure") {
       addAction("comment", ICON.comment, "Comment", () => openCompose(selected));
     }
+    // Revert appears only once there is something to revert, and it says the
+    // word. The hint names what this click undoes on this element, so a removed
+    // node is restored and a retyped label is put back. Removal itself has no
+    // button: the reader already has the key, and a second control that undid
+    // the same removal read as two owners for one outcome.
     const mine = drafts.filter((d) => d.element === selected);
-    const removed = removalOn(selected);
-    // The hint names what this click undoes on this element, not the general
-    // idea of reverting: a removed node is restored, a retyped label is put
-    // back, and several changes at once are named as several.
     if (mine.length > 0) {
       const only = mine.length === 1 ? mine[0] : null;
       const hint = only === null
         ? "Revert all changes on this " + (kindOf(selected) || "element")
-        : only.kind === "removal"
+        : only.kind === "remove-element"
           ? "Restore this " + (kindOf(selected) || "element")
           : only.kind === "comment" ? "Remove this comment" : "Revert this edit";
-      addAction("revert", ICON.revert, "", () => revertElement(selected), hint);
+      addAction("revert", ICON.revert, "Revert", () => revertElement(selected), hint);
     }
     if (editing) {
       actionBar.appendChild(keycapHint([["Enter", "save"], ["Esc", "cancel"]]));
-    } else if (kindOf(selected) !== "figure") {
-      addAction("remove", ICON.remove, "",
-        () => toggleRemoval(selected),
-        (removed ? "Restore this " : "Remove this ")
-          + (kindOf(selected) || "element") + " (Delete)");
     }
     if (actionBar.childElementCount === 0) {
       actionBar.hidden = true;
@@ -1491,32 +1482,24 @@ export const DIAGRAM_SCRIPT = `
 
   // --- Figure-level proposal chrome --------------------------------------
   for (const diagram of diagrams) {
-    // The mode control shows which view is on screen rather than naming the
-    // next action, so the pressed option and the visible diagram always agree.
-    const modeOptions = diagram.querySelectorAll("[data-flow-mode]");
-    if (modeOptions.length > 0) {
+    // The switch carries the state itself: on means the original is on screen.
+    // Nothing has to be read as a verb and translated into a current view.
+    const modeSwitch = diagram.querySelector("[data-flow-mode]");
+    if (modeSwitch) {
+      const thumb = modeSwitch.firstElementChild;
       const paintMode = (on) => {
-        for (const option of modeOptions) {
-          const wants = option.getAttribute("data-flow-mode") === "original";
-          const active = wants === on;
-          option.setAttribute("aria-pressed", active ? "true" : "false");
-          const name = wants ? "Original" : "Changes";
-          option.setAttribute("aria-label",
-            active ? name + ", showing" : "Show " + name.toLowerCase());
-        }
+        modeSwitch.setAttribute("aria-checked", on ? "true" : "false");
+        if (thumb) thumb.style.transform = on ? "translateX(calc(100% - 2px))" : "translateX(0)";
       };
       paintMode(false);
-      for (const option of modeOptions) {
-        option.addEventListener("click", (event) => {
-          event.stopPropagation();
-          const on = option.getAttribute("data-flow-mode") === "original";
-          if (on === showingOriginal(diagram)) return;
-          diagram.toggleAttribute("data-flow-original", on);
-          paintMode(on);
-          paint();
-          announce(on ? "Showing the original diagram" : "Showing your changes");
-        });
-      }
+      modeSwitch.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const on = !showingOriginal(diagram);
+        diagram.toggleAttribute("data-flow-original", on);
+        paintMode(on);
+        paint();
+        announce(on ? "Showing the original diagram" : "Showing your changes");
+      });
       diagram.addEventListener("flow-original-reset", () => paintMode(false));
     }
     const revertAll = diagram.querySelector("[data-flow-revert-all]");

@@ -33,7 +33,6 @@ import {
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { MINUS_ICON } from "../../icons/lucide/minus.js";
 import { PLUS_ICON } from "../../icons/lucide/plus.js";
-import { LIST_ICON } from "../../icons/lucide/list.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { SCAN_ICON } from "../../icons/lucide/scan.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
@@ -212,7 +211,7 @@ const VIEWER_CONTROL_CLASSES =
 // A bounded group: the border and the shared ground say these controls belong
 // together, so no separator has to say it for them.
 const TOOLBAR_GROUP_CLASSES =
-  "inline-flex shrink-0 items-center overflow-hidden rounded-md border border-edge bg-raised";
+  "inline-flex h-9 shrink-0 items-center overflow-hidden rounded-md border border-edge bg-raised";
 
 const IconControl = ({
   icon,
@@ -278,52 +277,46 @@ const ViewerControls = () => (
   </span>
 );
 
-// The mode control. A single toggle named the next action, which left the
-// current one to be inferred; two options in one bounded group show which view
-// the reader is in and offer the other, and the pressed state carries it to
-// assistive technology.
-const MODE_OPTION_CLASSES = `${VIEWER_CONTROL_CLASSES} flow-diagram-mode-option gap-1.5 px-3 font-sans text-2xs font-semibold`;
+// Showing the original is one either-or state, so it is a switch. A switch
+// shows which state is on without the reader translating a verb, and it is the
+// same control the file-tree diff uses for the same kind of question.
+const MODE_SWITCH_CLASSES =
+  "flow-diagram-mode-switch inline-flex h-3.5 w-6 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-raised transition-all outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 aria-checked:bg-accent aria-[checked=false]:bg-edge";
+const MODE_THUMB_CLASSES =
+  "flow-diagram-mode-thumb pointer-events-none block size-3 rounded-full bg-paper ring-0 transition-transform";
 
 // Proposal chrome: dormant until the reviewer makes a proposal, because a
 // diagram nobody has marked up should show no control it cannot act on. It
 // sits directly after the feedback action rather than floating between margins.
 const ProposalControls = () => (
   <span
-    className="flow-diagram-proposal-group ml-2 inline-flex items-center gap-2"
+    className="flow-diagram-proposal-group ml-2 inline-flex items-center gap-1"
     data-flow-proposal-group
     hidden
   >
     <span
-      className={`flow-diagram-mode ${TOOLBAR_GROUP_CLASSES}`}
-      role="group"
-      aria-label="Diagram view"
+      className={`flow-diagram-mode ${VIEWER_CONTROL_CLASSES} gap-2 rounded-md px-3 font-sans text-2xs font-semibold`}
     >
+      <span id="flow-mode-label">Show original</span>
       <button
         type="button"
-        className={MODE_OPTION_CLASSES}
-        data-flow-mode="changes"
-        aria-pressed="true"
+        role="switch"
+        aria-checked="false"
+        aria-labelledby="flow-mode-label"
+        className={MODE_SWITCH_CLASSES}
+        data-flow-mode
       >
-        {lucideIconToReact({ icon: LIST_ICON, hidden: false })}
-        <span>Changes</span>
-      </button>
-      <button
-        type="button"
-        className={`${MODE_OPTION_CLASSES} border-l border-edge`}
-        data-flow-mode="original"
-        aria-pressed="false"
-      >
-        <span>Original</span>
+        <span className={MODE_THUMB_CLASSES} />
       </button>
     </span>
     <button
       type="button"
-      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-revert-all gap-1.5 rounded-md px-3 font-sans text-2xs font-semibold`}
+      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-revert-all w-9 rounded-md px-0`}
       data-flow-revert-all
-      hidden
+      aria-label="Revert all changes"
+      data-tooltip="Revert all changes"
     >
       {lucideIconToReact({ icon: ROTATE_CCW_ICON, hidden: false })}
-      <span>Revert all changes</span>
     </button>
   </span>
 );
