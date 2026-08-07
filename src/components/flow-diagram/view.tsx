@@ -217,7 +217,7 @@ const CONTROL_CLASSES =
   "figure-control inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md border-0 bg-transparent px-1 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 
 const VIEWER_CONTROL_CLASSES =
-  "figure-control inline-flex h-9 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-4";
+  "figure-control inline-flex h-9 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
 
 const IconControl = ({
   icon,
@@ -256,7 +256,7 @@ const ViewerControls = () => (
       <IconControl icon={MINUS_ICON} label="Zoom out" action="out" />
       <button
         type="button"
-        className={`${VIEWER_CONTROL_CLASSES} flow-diagram-zoom-readout min-w-14 border-x border-edge px-2 font-sans text-xs tabular-nums`}
+        className={`${VIEWER_CONTROL_CLASSES} flow-diagram-zoom-readout min-w-12 border-x border-edge px-2 font-sans text-2xs tabular-nums`}
         aria-label="Reset zoom to 100%"
         data-tooltip="Reset zoom to 100%"
         data-flow-zoom="reset"
@@ -271,7 +271,7 @@ const ViewerControls = () => (
         glyph reads as a second maximize. */}
     <button
       type="button"
-      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-fit gap-1.5 rounded-md border border-edge bg-paper px-3 font-sans text-xs font-semibold`}
+      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-fit gap-1 rounded-md border border-edge bg-paper px-2 font-sans text-2xs font-semibold`}
       aria-label="Fit diagram to width"
       aria-pressed="false"
       data-tooltip="Fit diagram to width"
@@ -290,11 +290,6 @@ const ViewerControls = () => (
 const ProposalControls = () => (
   <>
     <span
-      className="flow-diagram-total inline-flex shrink-0 items-center rounded-full px-2 py-0.5 font-sans text-2xs font-semibold"
-      data-flow-total
-      hidden
-    />
-    <span
       className="flow-diagram-proposal-group inline-flex items-center gap-0.5"
       data-flow-proposal-group
       hidden
@@ -306,7 +301,9 @@ const ProposalControls = () => (
         data-flow-show-original
         aria-pressed="false"
       >
-        <span className="font-sans text-2xs font-semibold">Show original</span>
+        <span className="inline-block min-w-24 text-center font-sans text-2xs font-semibold">
+          Show original
+        </span>
       </button>
       <button
         type="button"

@@ -794,11 +794,6 @@ export const DIAGRAM_SCRIPT = `
       const mine = drafts.filter((d) => d.diagram === diagram);
       const proposals = mine.filter((d) => d.kind !== "comment");
       diagram.toggleAttribute("data-flow-has-feedback", mine.length > 0);
-      const total = diagram.querySelector("[data-flow-total]");
-      if (total) {
-        total.hidden = mine.length === 0;
-        total.textContent = mine.length === 1 ? "1 note" : mine.length + " notes";
-      }
       const group = diagram.querySelector("[data-flow-proposal-group]");
       if (group) group.hidden = proposals.length === 0;
       const zoomSep = diagram.querySelector("[data-flow-zoom-sep]");
@@ -1441,8 +1436,8 @@ export const DIAGRAM_SCRIPT = `
 
     c.count.textContent = String(mine.length);
     const addLabel = mine.length === 1
-      ? "Add 1 note to plan feedback"
-      : "Add " + mine.length + " notes to plan feedback";
+      ? "Add 1 note to feedback"
+      : "Add " + mine.length + " notes to feedback";
     for (const add of [c.toolbarAdd, c.trayAdd]) {
       add.textContent = addLabel;
       add.hidden = mine.length === 0;

@@ -242,10 +242,6 @@ classes.
       transition: opacity 0.15s ease;
     }
   }
-  .flow-diagram-total {
-    background: color-mix(in srgb, var(--accent-c) 16%, transparent);
-    color: var(--accent-c);
-  }
   /* A hairline, not a rule: enough to group four sets of controls, quiet
      enough that the toolbar still reads as one band. */
   .flow-diagram-toolbar-sep[hidden] {
@@ -382,9 +378,6 @@ classes.
   .flow-diagram-compose[hidden],
   .flow-diagram-zoom[hidden],
   .flow-diagram-proposal-group[hidden],
-  .flow-diagram-total[hidden] {
-    display: none;
-  }
 
   /* The action bar a selection offers: one row of small buttons, in viewport
      pixels, anchored beside the selected element and re-anchored whenever the

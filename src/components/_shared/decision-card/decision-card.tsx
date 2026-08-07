@@ -231,7 +231,7 @@ const Reversibility = ({ model }: { readonly model: CompiledDecisionCard }) => {
   const reversibility = model.reversibility;
   if (reversibility === undefined) return null;
   return (
-    <div className="decision-reversibility bg-well px-6 py-4">
+    <div className="decision-reversibility bg-paper px-6 py-4">
       <p className="m-0 text-xs font-semibold tracking-caps text-muted uppercase">
         {`Reversibility · ${reversibility.rating.replace("-", " ")}`}
       </p>
@@ -244,7 +244,7 @@ const Reversibility = ({ model }: { readonly model: CompiledDecisionCard }) => {
 
 const Details = ({ model }: { readonly model: CompiledDecisionCard }) =>
   model.detail.length === 0 ? null : (
-    <details className="decision-long-details bg-well px-6">
+    <details className="decision-long-details bg-paper px-6">
       <summary className="decision-details-summary flex min-h-12 w-fit cursor-pointer items-center text-sm font-semibold">
         {"More detail"}
       </summary>
@@ -264,7 +264,7 @@ export const DecisionCard = ({
   return (
     <figure
       id={model.id}
-      className="decision mb-6 min-w-0 overflow-hidden rounded-xl bg-raised shadow-raised"
+      className="decision mb-6 min-w-0 overflow-hidden rounded-xl border border-edge bg-paper shadow-raised"
       data-decision=""
       data-decision-status={model.status}
       data-decision-layout={model.layout}
@@ -307,7 +307,10 @@ export const DecisionCard = ({
       )}
       <fieldset className="decision-fieldset m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">{model.question}</legend>
-        <div className="decision-zone-compare bg-well" data-decision-compare="">
+        <div
+          className="decision-zone-compare bg-paper"
+          data-decision-compare=""
+        >
           <Comparison model={model} answerable={answerable} />
         </div>
         {/* Only the matrix earns a rationale region: its cells are values, so

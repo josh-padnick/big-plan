@@ -184,7 +184,7 @@ export const RowsLayout = ({
             {...(option.chosen ? { "data-option-chosen": "" } : {})}
           >
             <label
-              className="decision-option-card flex h-full min-w-0 cursor-pointer flex-col rounded-lg bg-raised shadow-raised transition-shadow hover:shadow-lifted"
+              className="decision-option-card flex h-full min-w-0 cursor-pointer flex-col rounded-lg border border-edge bg-paper"
               htmlFor={option.id}
             >
               <span className="decision-option-top flex items-start gap-3 px-4 pt-4 pb-3">

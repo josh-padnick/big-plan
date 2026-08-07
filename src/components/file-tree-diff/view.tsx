@@ -216,6 +216,10 @@ const StatePane = ({
     className={[
       "file-tree-diff-pane",
       "min-w-0",
+      // The two columns carry different grounds. Current is the state that
+      // already exists, so it sits back on the quiet surface; Planned is what
+      // the reader is being asked about, so it keeps the content ground.
+      side === "before" ? "bg-surface" : "bg-[var(--diff-content-bg)]",
       ...(side === "after"
         ? ["border-t", "border-edge", "wide:border-t-0", "wide:border-l"]
         : []),
@@ -223,7 +227,7 @@ const StatePane = ({
     aria-label={side === "before" ? "Current" : "Planned"}
     data-tree-pane={side}
   >
-    <div className="file-tree-diff-pane-caption flex min-w-0 items-center justify-between gap-2 bg-[var(--diff-hunk-bg)] px-3 py-1.5 font-sans text-xs font-semibold text-muted">
+    <div className="file-tree-diff-pane-caption flex min-w-0 items-center justify-between gap-2 border-b border-edge bg-[var(--diff-hunk-bg)] px-3 py-1.5 font-sans text-xs font-semibold text-muted">
       {side === "before" ? "Current" : "Planned"}
       <span className="file-tree-pane-controls flex shrink-0 items-center gap-1.5">
         <TreeFoldControls tone="quiet" />

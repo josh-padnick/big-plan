@@ -479,7 +479,7 @@
   }
   article .decision-brief-compare-body {
     border-radius: 0.375rem;
-    background: var(--well-c);
+    background: var(--bg);
     box-shadow: var(--elevation-well);
     overflow: hidden;
   }
@@ -546,7 +546,7 @@
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--edge-strong-c);
     border-radius: 0.375rem;
-    background: var(--well-c);
+    background: var(--bg);
     color: var(--ink-c);
     font: inherit;
     font-size: 0.875rem;

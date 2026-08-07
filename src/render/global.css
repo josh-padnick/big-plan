@@ -60,7 +60,9 @@ reading surface read as paper rather than as white.
 :root {
   --grey-25: #fefdfb;
   --grey-50: #f7f5f0;
+  --grey-75: #f6f5f2;
   --grey-100: #efece3;
+  --grey-125: #ece7db;
   --grey-150: #ebe6da;
   --grey-200: #e2ddd1;
   --grey-300: #c9c1ae;
@@ -69,6 +71,7 @@ reading surface read as paper rather than as white.
   --grey-600: #6f695c;
   --grey-700: #4f4a3f;
   --grey-800: #35312a;
+  --grey-875: #332e24;
   --grey-900: #242119;
   --grey-925: #211e1a;
   --grey-950: #1b1916;
@@ -168,7 +171,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --surface-c: var(--grey-100);
   --tray-c: var(--grey-100);
   --well-c: var(--grey-100);
-  --header-bg: var(--grey-100);
+  --header-bg: var(--grey-125);
 
   /* Text, in three weights of attention. */
   --ink-c: var(--grey-925);
@@ -217,7 +220,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --annotation-bg: var(--note-50);
   --annotation-ink: var(--note-900);
   --diff-content-bg: var(--grey-25);
-  --diff-hunk-bg: var(--grey-100);
+  --diff-hunk-bg: var(--grey-75);
   --diff-hunk-c: var(--grey-600);
   --diff-header-bg: var(--header-bg);
 
@@ -261,7 +264,7 @@ same separation.
     --surface-c: var(--grey-900);
     --tray-c: var(--grey-900);
     --well-c: var(--grey-950);
-    --header-bg: var(--grey-800);
+    --header-bg: var(--grey-875);
 
     --ink-c: var(--grey-150);
     --muted-c: var(--grey-300);
@@ -302,7 +305,7 @@ same separation.
     --annotation-bg: var(--note-900);
     --annotation-ink: var(--note-100);
     --diff-content-bg: var(--grey-950);
-    --diff-hunk-bg: var(--grey-800);
+    --diff-hunk-bg: var(--grey-925);
     --diff-hunk-c: var(--grey-400);
     --diff-header-bg: var(--header-bg);
 
@@ -329,7 +332,7 @@ same separation.
   --surface-c: var(--grey-900);
   --tray-c: var(--grey-900);
   --well-c: var(--grey-950);
-  --header-bg: var(--grey-800);
+  --header-bg: var(--grey-875);
 
   --ink-c: var(--grey-150);
   --muted-c: var(--grey-300);
@@ -370,7 +373,7 @@ same separation.
   --annotation-bg: var(--note-900);
   --annotation-ink: var(--note-100);
   --diff-content-bg: var(--grey-950);
-  --diff-hunk-bg: var(--grey-800);
+  --diff-hunk-bg: var(--grey-925);
   --diff-hunk-c: var(--grey-400);
   --diff-header-bg: var(--header-bg);
 
