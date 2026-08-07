@@ -6434,24 +6434,26 @@
         .bg-accent-wash {
           background-color: var(--accent-wash-c);
         }
+        .bg-backdrop\/70 {
+          background-color: var(--backdrop-c);
+        }
+        @supports (color: color-mix(in lab, red, red)) {
+          .bg-backdrop\/70 {
+            background-color: color-mix(
+              in oklab,
+              var(--backdrop-c) 70%,
+              transparent
+            );
+          }
+        }
         .bg-edge {
           background-color: var(--edge-c);
         }
         .bg-header {
           background-color: var(--header-bg);
         }
-        .bg-ink,
-        .bg-ink\/70 {
+        .bg-ink {
           background-color: var(--ink-c);
-        }
-        @supports (color: color-mix(in lab, red, red)) {
-          .bg-ink\/70 {
-            background-color: color-mix(
-              in oklab,
-              var(--ink-c) 70%,
-              transparent
-            );
-          }
         }
         .bg-paper,
         .bg-paper\/90 {
@@ -8035,6 +8037,7 @@
         --tray-c: var(--grey-100);
         --well-c: var(--grey-100);
         --header-bg: var(--grey-125);
+        --backdrop-c: #000;
         --ink-c: var(--grey-925);
         --muted-c: var(--grey-700);
         --subtle-c: var(--grey-600);
@@ -10017,7 +10020,7 @@ admin-cli retry force --schedule {schedule_</span>id}</span>
       </main>
     </div>
     <div
-      class="fixed inset-0 z-50 flex items-start justify-center bg-ink/70 p-3 wide:grid wide:place-items-center wide:p-4"
+      class="fixed inset-0 z-50 flex items-start justify-center bg-backdrop/70 p-3 wide:grid wide:place-items-center wide:p-4"
       data-preferences-backdrop
       hidden
     >
