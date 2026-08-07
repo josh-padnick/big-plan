@@ -33,10 +33,8 @@ test("should stage and restore a block note in the React thread kernel", async (
   await note.fill(
     "Keep `leaseOwner` explicit. <strong>Literal reviewer text</strong>",
   );
-  const preview = dialog.getByLabel("Comment preview");
-  await expect(preview.locator("code")).toHaveText("leaseOwner");
-  await expect(preview).toContainText("<strong>Literal reviewer text</strong>");
-  await expect(preview.locator("strong")).toHaveCount(0);
+  await expect(dialog).toContainText("Markdown supported");
+  await expect(dialog.getByLabel("Comment preview")).toHaveCount(0);
   await note.press("Control+Enter");
 
   const kernel = page.getByRole("complementary", { name: "Review notes" });

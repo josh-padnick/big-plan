@@ -403,17 +403,7 @@ const CommentComposer = ({
         onChange={(event) => setBody(event.target.value)}
         onKeyDown={handleKeyDown}
       />
-      {body.trim() === "" ? null : (
-        <div
-          className="mt-3 rounded-lg border border-edge bg-surface p-3 text-sm text-muted"
-          aria-label="Comment preview"
-        >
-          <p className="m-0 text-xs font-semibold uppercase tracking-caps text-subtle">
-            Preview
-          </p>
-          <MarkdownBody body={body} className="mt-2" />
-        </div>
-      )}
+      <p className="mt-2 mb-0 text-xs text-subtle">Markdown supported</p>
       {compose.target.type === "selection" ? (
         <blockquote className="mt-3 mb-0 border-l-2 border-accent pl-3 text-xs text-muted">
           “{compose.target.quote}”
