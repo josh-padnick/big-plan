@@ -349,6 +349,29 @@
           "actions": []
         },
         {
+          "name": "settings-open",
+          "selector": "[data-preferences-backdrop]",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            },
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": [
+            {
+              "type": "click",
+              "selector": "[data-preferences-open]"
+            }
+          ]
+        },
+        {
           "name": "maximized-code",
           "selector": "[data-code-snippet][data-figure-maximized]",
           "themes": ["light", "dark"],

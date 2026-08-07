@@ -182,6 +182,8 @@ it that way: a band carries primary or secondary text, never tertiary.
   --tray-c: var(--grey-100);
   --well-c: var(--grey-100);
   --header-bg: var(--grey-125);
+  /* Modal backdrops dim both palettes with the same neutral black overlay. */
+  --backdrop-c: rgb(0 0 0);
 
   /* Text, in three weights of attention. */
   --ink-c: var(--grey-925);
@@ -440,6 +442,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
 /* The roles, and only the roles, become utilities. */
 @theme inline {
   --color-paper: var(--bg);
+  --color-backdrop: var(--backdrop-c);
   --color-raised: var(--raised-c);
   --color-surface: var(--surface-c);
   --color-tray: var(--tray-c);
@@ -518,6 +521,30 @@ are declared, so a role or a scale step is the only thing a utility can name.
 }
 
 @layer bp-state {
+  /* Override invariant: the settings sheet must clear the device safe area
+     after the resting twelve-pixel mobile viewport margin. */
+  @media (width < 56rem) {
+    /* Override invariant: safe-area padding must beat the resting pb-3 utility. */
+    [data-preferences-backdrop] {
+      padding-top: max(0.75rem, env(safe-area-inset-top));
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+  }
+
+  /* Override invariant: dark mode needs stronger modal separation than the
+     resting light-mode backdrop utility. */
+  @media (prefers-color-scheme: dark) {
+    /* Override invariant: System dark mode must use the approved 80% dim. */
+    :root:not([data-theme]) [data-preferences-backdrop] {
+      background-color: color-mix(in srgb, var(--backdrop-c) 80%, transparent);
+    }
+  }
+
+  /* Override invariant: explicit Dark mode must use the approved 80% dim. */
+  :root[data-theme="dark"] [data-preferences-backdrop] {
+    background-color: color-mix(in srgb, var(--backdrop-c) 80%, transparent);
+  }
+
   /* Override invariant: floated popover geometry must beat the body's resting
      max-width and in-flow utility values after the viewer script promotes it. */
   [data-info-popover-floating] > [data-info-popover-body] {
