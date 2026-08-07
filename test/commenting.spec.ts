@@ -1,6 +1,6 @@
 // Critical browser journey for the React thin thread kernel over a static
-// rendered document: block composition, durable browser drafts, literal text,
-// keyboard focus, and both appearance themes.
+// rendered document: block and selection composition, durable browser drafts,
+// safe Markdown, keyboard focus, and both appearance themes.
 
 import { expect, test } from "./fixtures";
 
@@ -30,11 +30,18 @@ test("should stage and restore a block note in the React thread kernel", async (
   await expect(dialog).toBeVisible();
   const note = dialog.getByLabel("Your note");
   await expect(note).toBeFocused();
-  await note.fill("<strong>Literal reviewer text</strong>");
+  await note.fill(
+    "Keep `leaseOwner` explicit. <strong>Literal reviewer text</strong>",
+  );
+  const preview = dialog.getByLabel("Comment preview");
+  await expect(preview.locator("code")).toHaveText("leaseOwner");
+  await expect(preview).toContainText("<strong>Literal reviewer text</strong>");
+  await expect(preview.locator("strong")).toHaveCount(0);
   await note.press("Control+Enter");
 
   const kernel = page.getByRole("complementary", { name: "Review notes" });
   await expect(kernel).toBeVisible();
+  await expect(kernel.locator("code")).toHaveText("leaseOwner");
   await expect(kernel).toContainText("<strong>Literal reviewer text</strong>");
   await expect(kernel.locator("strong")).toHaveCount(0);
   await expect(kernel).toContainText("1 staged");
@@ -42,6 +49,7 @@ test("should stage and restore a block note in the React thread kernel", async (
 
   await page.reload();
   await notesToggle.click();
+  await expect(kernel.locator("code")).toHaveText("leaseOwner");
   await expect(kernel).toContainText("<strong>Literal reviewer text</strong>");
   await kernel.getByRole("button", { name: "Close review notes" }).click();
   await expect(notesToggle).toBeVisible();
@@ -62,5 +70,89 @@ test("should stage and restore a block note in the React thread kernel", async (
         })),
       )
       .toEqual({ focused: true, outline: "solid" });
+  }
+});
+
+test("should turn an authored-text selection into a durable targeted note", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const block = page.locator("[data-block-kind='paragraph']").first();
+  const selected = await block.evaluate((element) => {
+    const text = element.firstChild;
+    if (!(text instanceof Text)) {
+      return "";
+    }
+    const quote = text.data.slice(0, 18);
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, quote.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return quote;
+  });
+  expect(selected).not.toBe("");
+
+  const selectionButton = page.getByRole("button", {
+    name: "Comment on selected text",
+  });
+  await expect(selectionButton).toBeVisible();
+  await selectionButton.click();
+
+  const dialog = page.getByRole("dialog", {
+    name: /Comment on Selected text in/,
+  });
+  await expect(dialog).toContainText(selected);
+  await dialog.getByLabel("Your note").fill("Clarify `leaseOwner` here.");
+  await dialog.getByRole("button", { name: "Add note" }).click();
+
+  const kernel = page.getByRole("complementary", { name: "Review notes" });
+  await expect(kernel).toContainText("Selected text in");
+  await expect(kernel.locator("code")).toHaveText("leaseOwner");
+  await expect(block).toHaveAttribute("data-review-note-count", "1");
+
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((candidate) =>
+      candidate.startsWith("big-plan:review:drafts:"),
+    );
+    return key === undefined ? null : localStorage.getItem(key);
+  });
+  expect(stored).not.toBeNull();
+  expect(JSON.parse(stored ?? "[]")[0]?.target).toMatchObject({
+    type: "selection",
+    quote: selected,
+    start: 0,
+    end: selected.length,
+  });
+});
+
+test("should expose table cells, columns, and QuickSummary facets as comment targets", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+
+  await expect(
+    page.locator("[data-block-kind='table-cell']").first(),
+  ).toBeVisible();
+  await expect(
+    page.locator("[data-block-kind='table-column']").first(),
+  ).toBeVisible();
+  await expect(
+    page.locator("[data-block-kind='quick-summary-facet']"),
+  ).toHaveCount(3);
+
+  for (const kind of ["table-cell", "table-column"] as const) {
+    const target = page.locator(`[data-block-kind='${kind}']`).first();
+    await target.hover();
+    await expect(
+      target.getByRole("button", { name: "Add note" }),
+    ).toBeVisible();
   }
 });

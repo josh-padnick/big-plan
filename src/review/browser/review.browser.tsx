@@ -10,6 +10,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -17,6 +18,7 @@ import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import type { CommentTarget, ReviewComment } from "../comment.js";
+import { parseCommentMarkdownLine } from "../comment-markdown.js";
 import { Icon } from "./icon.browser.js";
 import { Badge, Button, Card, Textarea } from "./ui.browser.js";
 
@@ -37,6 +39,12 @@ type ReviewSnapshot = {
 type ComposeState = {
   readonly target: CommentTarget;
   readonly top: number;
+};
+
+type SelectionControlState = {
+  readonly target: Extract<CommentTarget, { readonly type: "selection" }>;
+  readonly top: number;
+  readonly left: number;
 };
 
 const rootElement = document.documentElement;
@@ -154,11 +162,119 @@ const targetLabel = (target: CommentTarget): string => {
   if (target.type === "document") {
     return "Whole plan";
   }
+  if (target.type === "selection") {
+    return `Selected text in ${target.label}`;
+  }
   return target.label;
+};
+
+const blockIdentity = (block: HTMLElement) => ({
+  blockId: block.dataset.blockId ?? "",
+  kind: block.dataset.blockKind ?? "block",
+  label: block.dataset.blockLabel ?? "This block",
+  ...(block.dataset.blockSection === undefined
+    ? {}
+    : { section: block.dataset.blockSection }),
+});
+
+const parentElementFor = (node: Node): Element | null =>
+  node instanceof Element ? node : node.parentElement;
+
+const selectionControlState = (): SelectionControlState | null => {
+  const selection = window.getSelection();
+  if (
+    selection === null ||
+    selection.rangeCount !== 1 ||
+    selection.isCollapsed
+  ) {
+    return null;
+  }
+  const range = selection.getRangeAt(0);
+  const startBlock = parentElementFor(
+    range.startContainer,
+  )?.closest<HTMLElement>('[data-block-id]:not([data-block-kind="part"])');
+  const endBlock = parentElementFor(range.endContainer)?.closest<HTMLElement>(
+    '[data-block-id]:not([data-block-kind="part"])',
+  );
+  if (
+    startBlock === undefined ||
+    startBlock === null ||
+    startBlock !== endBlock ||
+    startBlock.closest("#big-plan-review-root") !== null
+  ) {
+    return null;
+  }
+  const quote = selection.toString();
+  if (quote.trim() === "" || quote.length > 400) {
+    return null;
+  }
+  const before = document.createRange();
+  before.selectNodeContents(startBlock);
+  before.setEnd(range.startContainer, range.startOffset);
+  const start = before.toString().length;
+  const rect = range.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) {
+    return null;
+  }
+  return {
+    target: {
+      type: "selection",
+      ...blockIdentity(startBlock),
+      start,
+      end: start + quote.length,
+      quote,
+    },
+    top: Math.min(window.innerHeight - 48, rect.bottom + 8),
+    left: Math.max(8, Math.min(window.innerWidth - 48, rect.right - 40)),
+  };
 };
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "Something went wrong.";
+
+const inlineMarkdown = (source: string): ReadonlyArray<ReactNode> => {
+  return parseCommentMarkdownLine(source).map((token, index) => {
+    const key = `${index}-${token.value}`;
+    if (token.type === "code") {
+      return (
+        <code
+          className="rounded-sm bg-surface px-1 py-0.5 font-mono text-[0.875em] text-ink"
+          key={key}
+        >
+          {token.value}
+        </code>
+      );
+    }
+    if (token.type === "strong") {
+      return <strong key={key}>{token.value}</strong>;
+    }
+    if (token.type === "emphasis") {
+      return <em key={key}>{token.value}</em>;
+    }
+    return token.value;
+  });
+};
+
+const MarkdownBody = ({
+  body,
+  className = "",
+}: {
+  readonly body: string;
+  readonly className?: string;
+}) => (
+  <div className={className}>
+    {body.split(/\n{2,}/u).map((paragraph, index) => (
+      <p className="mt-2 mb-0 first:mt-0" key={`${index}-${paragraph}`}>
+        {paragraph
+          .split("\n")
+          .flatMap((line, lineIndex) => [
+            ...(lineIndex === 0 ? [] : [<br key={`break-${lineIndex}`} />]),
+            ...inlineMarkdown(line),
+          ])}
+      </p>
+    ))}
+  </div>
+);
 
 const useBlockHosts = (): ReadonlyArray<{
   readonly block: HTMLElement;
@@ -274,6 +390,22 @@ const CommentComposer = ({
         onChange={(event) => setBody(event.target.value)}
         onKeyDown={handleKeyDown}
       />
+      {body.trim() === "" ? null : (
+        <div
+          className="mt-3 rounded-lg border border-edge bg-surface p-3 text-sm text-muted"
+          aria-label="Comment preview"
+        >
+          <p className="m-0 text-xs font-semibold uppercase tracking-caps text-subtle">
+            Preview
+          </p>
+          <MarkdownBody body={body} className="mt-2" />
+        </div>
+      )}
+      {compose.target.type === "selection" ? (
+        <blockquote className="mt-3 mb-0 border-l-2 border-accent pl-3 text-xs text-muted">
+          “{compose.target.quote}”
+        </blockquote>
+      ) : null}
       <div className="mt-3 flex items-center justify-between gap-3">
         <span className="text-xs text-subtle">⌘/Ctrl + Enter</span>
         <Button size="sm" disabled={body.trim() === ""} onClick={save}>
@@ -292,6 +424,8 @@ const ReviewKernel = () => {
   const [drafts, setDrafts] = useState<ReadonlyArray<ReviewComment>>([]);
   const [sent, setSent] = useState<ReadonlyArray<ReviewComment>>([]);
   const [compose, setCompose] = useState<ComposeState | null>(null);
+  const [selectionControl, setSelectionControl] =
+    useState<SelectionControlState | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -414,13 +548,44 @@ const ReviewKernel = () => {
     }
   }, [drafts, hosts]);
 
-  const beginComment = useCallback((block: HTMLElement): void => {
-    const rect = block.getBoundingClientRect();
-    setCompose({
-      target: targetForBlock(block),
-      top: Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
-    });
+  useEffect(() => {
+    let frame = 0;
+    const update = (): void => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        setSelectionControl(selectionControlState());
+      });
+    };
+    const clear = (): void => {
+      setSelectionControl(null);
+    };
+    document.addEventListener("selectionchange", update);
+    window.addEventListener("scroll", clear, { passive: true });
+    window.addEventListener("resize", clear, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("selectionchange", update);
+      window.removeEventListener("scroll", clear);
+      window.removeEventListener("resize", clear);
+    };
   }, []);
+
+  const beginTarget = useCallback(
+    (target: CommentTarget, rect: Pick<DOMRect, "top">): void => {
+      setCompose({
+        target,
+        top: Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
+      });
+    },
+    [],
+  );
+
+  const beginComment = useCallback(
+    (block: HTMLElement): void => {
+      beginTarget(targetForBlock(block), block.getBoundingClientRect());
+    },
+    [beginTarget],
+  );
 
   const saveComment = (body: string): void => {
     if (compose === null) {
@@ -479,10 +644,38 @@ const ReviewKernel = () => {
             onClick={() => beginComment(block)}
           >
             <Icon icon={MESSAGE_SQUARE_ICON} />
+            {block.dataset.blockKind === "table-row" ? (
+              <span aria-hidden="true">Row</span>
+            ) : block.dataset.blockKind === "table-cell" ? (
+              <span aria-hidden="true">Cell</span>
+            ) : block.dataset.blockKind === "table-column" ? (
+              <span aria-hidden="true">Column</span>
+            ) : null}
           </Button>,
           host,
           block.dataset.blockId,
         ),
+      )}
+      {selectionControl === null || compose !== null ? null : (
+        <Button
+          className="fixed z-20 size-10 p-0"
+          style={{
+            top: `${selectionControl.top}px`,
+            left: `${selectionControl.left}px`,
+          }}
+          aria-label="Comment on selected text"
+          title="Comment on selected text"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            beginTarget(selectionControl.target, {
+              top: selectionControl.top,
+            });
+            setSelectionControl(null);
+            window.getSelection()?.removeAllRanges();
+          }}
+        >
+          <Icon icon={MESSAGE_SQUARE_ICON} />
+        </Button>
       )}
       {identity === null && drafts.length > 0 && !isOpen ? (
         <Button
@@ -538,9 +731,10 @@ const ReviewKernel = () => {
                           <p className="m-0 truncate text-sm font-semibold text-ink">
                             {targetLabel(comment.target)}
                           </p>
-                          <p className="mt-2 mb-0 text-sm text-muted">
-                            {comment.body}
-                          </p>
+                          <MarkdownBody
+                            body={comment.body}
+                            className="mt-2 text-sm text-muted"
+                          />
                         </div>
                         <Button
                           variant="ghost"
