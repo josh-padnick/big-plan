@@ -136,6 +136,7 @@ Route by the kind of fact:
 
 - A fact about one file lives in that file's header comment; a fact a check enforces lives in the check and its error message.
 - Current product capabilities and human or agent usage guidance live in `docs/`.
+- How the product looks, and the scales and rules a visual decision picks from, live in [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md); token values stay in `src/render/global.css`.
 - Setup, build, run, and shortest-path usage procedures live in the root [README.md](README.md).
 - DCO, branches, pull requests, CI expectations, and other contribution workflow live in [CONTRIBUTING.md](CONTRIBUTING.md).
 - A directory-scoped, multi-file, unenforced placement boundary lives in that directory's `README.md` local map.
@@ -164,6 +165,12 @@ Guidance is demand-driven: add a document, rule, or map entry only after an agen
 
 Read and follow [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for the authoritative coding, comments, error-handling, logging, testing, browser-runtime, styling, and tooling practices.
 Mechanically enforced facts remain owned by their checks.
+
+## Design
+
+Read and follow [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) before changing anything a reader sees.
+It owns the spacing, type, colour, and elevation scales, and the rules for picking a step from each.
+Engineering practices own how to write the styling code; the design principles own what to write.
 
 ## Gold-standard plan-quality testing
 
