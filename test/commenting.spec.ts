@@ -187,6 +187,24 @@ test("should expose table cells, columns, and QuickSummary facets as comment tar
             : Math.abs(buttonBox.x - targetBox.x);
         })
         .toBeLessThanOrEqual(1);
+      await expect
+        .poll(() =>
+          target
+            .locator("xpath=ancestor::*[@data-block-id]")
+            .evaluateAll((ancestors) =>
+              ancestors.every((ancestor) => {
+                const host = Array.from(ancestor.children).find((child) =>
+                  child.hasAttribute("data-review-anchor-host"),
+                );
+                return (
+                  host === undefined ||
+                  (getComputedStyle(host).opacity === "0" &&
+                    getComputedStyle(host).pointerEvents === "none")
+                );
+              }),
+            ),
+        )
+        .toBe(true);
     }
   }
 

@@ -68,6 +68,20 @@ Resting control visuals stay as Tailwind utilities on the React markup.
     pointer-events: auto;
   }
 
+  /* Nested table targets share hover with their row and table ancestors.
+     Suppress those broader controls while the reader is on a more precise
+     target so the active affordance stays beside the highlighted anchor. */
+  [data-block-id]:hover:has([data-block-id]:hover) > [data-review-anchor-host] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  [data-block-id]:hover:has([data-block-id]:hover)
+    > [data-review-anchor-host]
+    .review-block-button {
+    pointer-events: none;
+  }
+
   [data-review-note-count]::after {
     content: attr(data-review-note-count);
     position: absolute;
