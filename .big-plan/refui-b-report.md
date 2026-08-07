@@ -133,6 +133,38 @@ What it changed, and what it taught the system:
 
 Every value still names a scale step or a role. Remaining differences from the approved render are one or two pixels and single palette rounding steps.
 
+## 4c. The rest of the components
+
+The captain signed off the three surfaces and cleared the rest. That pass did
+three things.
+
+**It rebased onto main.** The branch now carries PR 73, which makes a slide
+title open a collapsed slide without ever closing an open one, keeps the kicker
+and the chevron as full toggles, and switches the title cursor between pointer
+and text. That behaviour is a hard constraint on this work and is proved by
+`test/deck.spec.ts`. It also carries PR 75 and PR 76.
+
+**It extended the audit from ten surfaces to thirty-nine.** Most of what the
+audit reports on the other components is the design pass itself: an outline
+traded for a different ground plus one step of elevation. That is the change
+already reviewed, and it stays. The audit lists it so the pass stays
+accountable, not so it can be reverted.
+
+**It fixed three regressions the wider audit exposed**, each the same class of
+drift the captain rejected on the signed surfaces:
+
+1. The branding bar had traded its hairline for a resting shadow. A bar that
+   never leaves the screen reads heavier that way. Its comment control gets its
+   outline back too.
+2. The slide context line had gone one shade darker and one size smaller than
+   the document lede it echoes.
+3. The dark quiet surface sat one step too light, so a disabled control and
+   every chrome band on the dark page read lighter than approved. Fixing it also
+   collapsed the tray role onto the quiet surface in both themes, because the
+   approved values turned out to be the same shade.
+
+The three signed surfaces stayed byte-identical through all of it.
+
 ## 5. A coverage gap this pass found
 
 The style-history contract captures two fixture documents: `examples/mdx-components.mdx` and `examples/deck.mdx`.
