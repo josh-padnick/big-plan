@@ -1082,15 +1082,31 @@ export const verifyHistory = async ({
           const captureManifest = JSON.parse(
             await readFile(captureManifestPath, "utf8"),
           );
-          const observedKeys = new Set(
-            captureManifest.captures.map((entry) => entry.key),
+          const observedTuples = new Set(
+            captureManifest.captures.map(
+              (entry) => `${entry.key}@${entry.viewport}@${entry.theme}`,
+            ),
           );
-          const missingKeys = captureKeys.filter(
-            (key) => !observedKeys.has(key),
+          const definitionsByKey = new Map(
+            captureEntries(config).map((entry) => [entry.key, entry.capture]),
           );
-          if (missingKeys.length > 0) {
+          const missingTuples = captureKeys.flatMap((key) => {
+            const capture = definitionsByKey.get(key);
+            if (capture === undefined) {
+              return [key];
+            }
+            return capture.viewports.flatMap((viewport) =>
+              capture.themes
+                .filter(
+                  (theme) =>
+                    !observedTuples.has(`${key}@${viewport.name}@${theme}`),
+                )
+                .map((theme) => `${key} at ${viewport.name}/${theme}`),
+            );
+          });
+          if (missingTuples.length > 0) {
             throw new Error(
-              `Final style fixture did not produce a visible target for ${missingKeys.join(", ")}.`,
+              `Final style fixture did not produce a visible target for ${missingTuples.join(", ")}.`,
             );
           }
         } catch (error) {

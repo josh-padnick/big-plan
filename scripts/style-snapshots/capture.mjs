@@ -252,8 +252,14 @@ const captureTargetFrame = async ({
   }));
   const topInset = Math.min(100, Math.max(0, viewport.height - 1));
   const tileHeight = Math.max(1, viewport.height - topInset - 20);
-  await target.evaluate(
+  const originalStyles = await target.evaluate(
     (element, value) => {
+      const original = {
+        element: element.getAttribute("style"),
+        documentElement:
+          globalThis.document.documentElement.getAttribute("style"),
+        body: globalThis.document.body.getAttribute("style"),
+      };
       let current = element;
       while (value.isolate && current.parentElement !== null) {
         const parent = current.parentElement;
@@ -277,47 +283,63 @@ const captureTargetFrame = async ({
       element.style.width = `${value.width}px`;
       element.style.maxWidth = `${value.width}px`;
       element.style.zIndex = "2147483647";
+      return original;
     },
     { x: bounds.x, top: topInset, width: bounds.width, isolate },
   );
   await settlePaint(page);
   const output = new PNG({ width: bounds.width, height: bounds.height });
-  for (let offset = 0; offset < bounds.height; offset += tileHeight) {
-    await target.evaluate((element, top) => {
-      element.style.top = `${top}px`;
-    }, topInset - offset);
-    await settlePaint(page);
-    const tile = {
-      x: bounds.x,
-      y: topInset,
-      width: bounds.width,
-      height: Math.min(tileHeight, bounds.height - offset),
-    };
-    if (
-      tile.x < 0 ||
-      tile.y < 0 ||
-      tile.width !== bounds.width ||
-      tile.width <= 0 ||
-      tile.height <= 0 ||
-      tile.x + tile.width > viewport.width ||
-      tile.y + tile.height > viewport.height
-    ) {
-      throw new Error(
-        `Screenshot tile bounds ${JSON.stringify(tile)} exceed viewport ${viewport.width}x${viewport.height}.`,
+  try {
+    for (let offset = 0; offset < bounds.height; offset += tileHeight) {
+      await target.evaluate((element, top) => {
+        element.style.top = `${top}px`;
+      }, topInset - offset);
+      await settlePaint(page);
+      const tile = {
+        x: bounds.x,
+        y: topInset,
+        width: bounds.width,
+        height: Math.min(tileHeight, bounds.height - offset),
+      };
+      if (
+        tile.x < 0 ||
+        tile.y < 0 ||
+        tile.width !== bounds.width ||
+        tile.width <= 0 ||
+        tile.height <= 0 ||
+        tile.x + tile.width > viewport.width ||
+        tile.y + tile.height > viewport.height
+      ) {
+        throw new Error(
+          `Screenshot tile bounds ${JSON.stringify(tile)} exceed viewport ${viewport.width}x${viewport.height}.`,
+        );
+      }
+      await reportProgress("capture tile", { path, offset, tile });
+      const image = PNG.sync.read(
+        await page.screenshot({
+          animations: "disabled",
+          caret: "hide",
+          clip: tile,
+          mask: masks,
+          maskColor: "#000000",
+          timeout: 10_000,
+        }),
       );
+      PNG.bitblt(image, output, 0, 0, tile.width, tile.height, 0, offset);
     }
-    await reportProgress("capture tile", { path, offset, tile });
-    const image = PNG.sync.read(
-      await page.screenshot({
-        animations: "disabled",
-        caret: "hide",
-        clip: tile,
-        mask: masks,
-        maskColor: "#000000",
-        timeout: 10_000,
-      }),
-    );
-    PNG.bitblt(image, output, 0, 0, tile.width, tile.height, 0, offset);
+  } finally {
+    await target.evaluate((element, original) => {
+      const restore = (node, style) => {
+        if (style === null) {
+          node.removeAttribute("style");
+        } else {
+          node.setAttribute("style", style);
+        }
+      };
+      restore(element, original.element);
+      restore(globalThis.document.documentElement, original.documentElement);
+      restore(globalThis.document.body, original.body);
+    }, originalStyles);
   }
   return PNG.sync.write(output);
 };
@@ -577,6 +599,8 @@ try {
                   document: document.name,
                   capture: capture.name,
                 }),
+                viewport: viewport.name,
+                theme,
                 path: basename(path),
               });
             }
