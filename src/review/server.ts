@@ -65,6 +65,7 @@ const CONTENT_SECURITY_POLICY = [
   "style-src 'unsafe-inline'",
   "script-src 'unsafe-inline'",
   "img-src data:",
+  "font-src data:",
   "connect-src 'self'",
   "form-action 'none'",
   "frame-ancestors 'none'",
