@@ -33,6 +33,7 @@ import {
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { MINUS_ICON } from "../../icons/lucide/minus.js";
 import { PLUS_ICON } from "../../icons/lucide/plus.js";
+import { LIST_ICON } from "../../icons/lucide/list.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { SCAN_ICON } from "../../icons/lucide/scan.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
@@ -203,21 +204,15 @@ const branchPosition = ({
 }): "first" | "middle" | "last" =>
   index === 0 ? "first" : index === count - 1 ? "last" : "middle";
 
-// A hairline between control groups, so "2 notes Show original Revert all
-// minus 100% plus Fit Maximize" reads as four units instead of one run-on.
-const ToolbarSeparator = ({ id }: { readonly id?: string }) => (
-  <span
-    className="flow-diagram-toolbar-sep"
-    aria-hidden
-    {...(id === undefined ? {} : { [id]: "" })}
-  />
-);
-
-const CONTROL_CLASSES =
-  "figure-control inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md border-0 bg-transparent px-1 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
-
+// approved-metric: the 36 pixel control box, which is the touch-target floor a
+// browser test holds for every toolbar control.
 const VIEWER_CONTROL_CLASSES =
   "figure-control inline-flex h-9 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+
+// A bounded group: the border and the shared ground say these controls belong
+// together, so no separator has to say it for them.
+const TOOLBAR_GROUP_CLASSES =
+  "inline-flex shrink-0 items-center overflow-hidden rounded-md border border-edge bg-raised";
 
 const IconControl = ({
   icon,
@@ -249,7 +244,7 @@ const ViewerControls = () => (
     hidden
   >
     <span
-      className="flow-diagram-zoom inline-flex shrink-0 items-center overflow-hidden rounded-md border border-edge bg-paper"
+      className={`flow-diagram-zoom ${TOOLBAR_GROUP_CLASSES}`}
       role="group"
       aria-label="Diagram zoom"
     >
@@ -266,12 +261,11 @@ const ViewerControls = () => (
       </button>
       <IconControl icon={PLUS_ICON} label="Zoom in" action="in" />
     </span>
-    <ToolbarSeparator />
     {/* Fit says its word: beside a maximize control, a second frame-shaped
         glyph reads as a second maximize. */}
     <button
       type="button"
-      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-fit gap-1 rounded-md border border-edge bg-paper px-2 font-sans text-2xs font-semibold`}
+      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-fit gap-1.5 rounded-md border border-edge bg-raised px-3 font-sans text-2xs font-semibold`}
       aria-label="Fit diagram to width"
       aria-pressed="false"
       data-tooltip="Fit diagram to width"
@@ -280,42 +274,58 @@ const ViewerControls = () => (
       {lucideIconToReact({ icon: SCAN_ICON, hidden: false })}
       <span>Fit</span>
     </button>
-    <ToolbarSeparator />
     <MaximizeButton subject="diagram" size="toolbar" />
   </span>
 );
 
+// The mode control. A single toggle named the next action, which left the
+// current one to be inferred; two options in one bounded group show which view
+// the reader is in and offer the other, and the pressed state carries it to
+// assistive technology.
+const MODE_OPTION_CLASSES = `${VIEWER_CONTROL_CLASSES} flow-diagram-mode-option gap-1.5 px-3 font-sans text-2xs font-semibold`;
+
 // Proposal chrome: dormant until the reviewer makes a proposal, because a
-// diagram nobody has marked up should show no control it cannot act on.
+// diagram nobody has marked up should show no control it cannot act on. It
+// sits directly after the feedback action rather than floating between margins.
 const ProposalControls = () => (
-  <>
+  <span
+    className="flow-diagram-proposal-group ml-2 inline-flex items-center gap-2"
+    data-flow-proposal-group
+    hidden
+  >
     <span
-      className="flow-diagram-proposal-group inline-flex items-center gap-0.5"
-      data-flow-proposal-group
-      hidden
+      className={`flow-diagram-mode ${TOOLBAR_GROUP_CLASSES}`}
+      role="group"
+      aria-label="Diagram view"
     >
-      <ToolbarSeparator />
       <button
         type="button"
-        className={CONTROL_CLASSES}
-        data-flow-show-original
+        className={MODE_OPTION_CLASSES}
+        data-flow-mode="changes"
+        aria-pressed="true"
+      >
+        {lucideIconToReact({ icon: LIST_ICON, hidden: false })}
+        <span>Changes</span>
+      </button>
+      <button
+        type="button"
+        className={`${MODE_OPTION_CLASSES} border-l border-edge`}
+        data-flow-mode="original"
         aria-pressed="false"
       >
-        <span className="inline-block min-w-24 text-center font-sans text-2xs font-semibold">
-          Show original
-        </span>
-      </button>
-      <button
-        type="button"
-        className={CONTROL_CLASSES}
-        data-flow-revert-all
-        hidden
-      >
-        {lucideIconToReact({ icon: ROTATE_CCW_ICON, hidden: false })}
-        <span className="font-sans text-2xs font-semibold">Revert all</span>
+        <span>Original</span>
       </button>
     </span>
-  </>
+    <button
+      type="button"
+      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-revert-all gap-1.5 rounded-md px-3 font-sans text-2xs font-semibold`}
+      data-flow-revert-all
+      hidden
+    >
+      {lucideIconToReact({ icon: ROTATE_CCW_ICON, hidden: false })}
+      <span>Revert all changes</span>
+    </button>
+  </span>
 );
 
 // The connectors leaving one stage, in the column between it and the next.

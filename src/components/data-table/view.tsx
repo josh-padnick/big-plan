@@ -277,7 +277,7 @@ const FilterField = ({ id }: { readonly id: string }) => (
 /** Renders one DataTable as a figure: caption chrome over the complete grid. */
 export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
   <figure
-    className="data-table mb-6 w-fit max-w-full rounded-md bg-[var(--diff-content-bg)] shadow-raised"
+    className="data-table mb-6 w-fit max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)]"
     data-data-table
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "table" }}
     data-table-id={model.id}

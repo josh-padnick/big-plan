@@ -76,7 +76,7 @@ test("should preserve work when focus moves outside the diagram", async ({
   await expect(label).toHaveText("Author carefully");
   await expect(label).toHaveAttribute("data-flow-edited", "");
   await expect(diagram.locator(".flow-collector-add").first()).toHaveText(
-    "Add 1 note to feedback",
+    "Add 1 note to plan feedback",
   );
 
   await node.click();
@@ -88,7 +88,7 @@ test("should preserve work when focus moves outside the diagram", async ({
     "Keep this unfinished note.",
   );
   await expect(diagram.locator(".flow-collector-add").first()).toHaveText(
-    "Add 1 note to feedback",
+    "Add 1 note to plan feedback",
   );
 });
 
@@ -128,7 +128,7 @@ test("should preserve work across diagram interaction transitions", async ({
     'Comment on node "Generate"',
   );
   await expect(diagram.locator(".flow-collector-add").first()).toHaveText(
-    "Add 3 notes to feedback",
+    "Add 3 notes to plan feedback",
   );
 });
 
@@ -413,13 +413,22 @@ test("should preserve a panned canvas when feedback repaints it", async ({
   const unlabeledEdge = diagram.locator(
     '[data-flow-edge-from="generator"][data-flow-edge-to="cli"]',
   );
+  // The removal action names the outcome and the key that performs it, and the
+  // name flips with the state, so the bar never describes the wrong direction.
   await unlabeledEdge.click();
-  await expect(diagram.locator(".flow-diagram-actionbar-hint")).toHaveText(
-    "Delete to remove",
+  const removeAction = diagram.locator('[data-flow-action="remove"]');
+  await expect(removeAction).toHaveAttribute(
+    "aria-label",
+    "Remove this edge (Delete)",
+  );
+  await expect(removeAction).toHaveAttribute(
+    "data-tooltip",
+    "Remove this edge (Delete)",
   );
   await page.keyboard.press("Delete");
-  await expect(diagram.locator(".flow-diagram-actionbar-hint")).toHaveText(
-    "Delete to restore",
+  await expect(removeAction).toHaveAttribute(
+    "aria-label",
+    "Restore this edge (Delete)",
   );
 });
 
@@ -443,7 +452,7 @@ test("should preserve diagram drafts when undoing review text", async ({
     .locator(".flow-diagram-compose")
     .getByRole("button", { name: "Comment", exact: true })
     .click();
-  await expect(total).toHaveText("Add 1 note to feedback");
+  await expect(total).toHaveText("Add 1 note to plan feedback");
 
   await test.step("use native undo in the diagram composer", async () => {
     await node.click();
@@ -454,7 +463,7 @@ test("should preserve diagram drafts when undoing review text", async ({
     await expect(input).toHaveValue("Composer text!");
     await page.keyboard.press(undoShortcut);
     await expect(input).toHaveValue("Composer text");
-    await expect(total).toHaveText("Add 1 note to feedback");
+    await expect(total).toHaveText("Add 1 note to plan feedback");
   });
 
   await test.step("use native undo in the page review composer", async () => {
@@ -465,7 +474,7 @@ test("should preserve diagram drafts when undoing review text", async ({
     await expect(input).toHaveValue("Page review text!");
     await page.keyboard.press(undoShortcut);
     await expect(input).toHaveValue("Page review text");
-    await expect(total).toHaveText("Add 1 note to feedback");
+    await expect(total).toHaveText("Add 1 note to plan feedback");
   });
 });
 
@@ -519,7 +528,7 @@ test("should size a persisted-collapsed diagram when expanded", async ({
   await expect(compose).toBeHidden();
   await toggle.click();
   await expect(diagram.locator(".flow-collector-add").first()).toHaveText(
-    "Add 1 note to feedback",
+    "Add 1 note to plan feedback",
   );
 });
 
@@ -598,7 +607,7 @@ test("should exit without an alert after handing off the last note", async ({
   await expect(compose.locator("textarea")).toHaveValue("One open note");
 
   await compose.getByRole("button", { name: "Comment", exact: true }).click();
-  await expect(toolbarAdd).toHaveText("Add 1 note to feedback");
+  await expect(toolbarAdd).toHaveText("Add 1 note to plan feedback");
   await toolbarAdd.click();
   await expect(toolbarAdd).toBeHidden();
   await page.keyboard.press(undoShortcut);
@@ -760,7 +769,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
     // The control states the count itself, so there is no second chip beside
     // it saying the same number.
     await expect(toolbarAdd).toBeVisible();
-    await expect(toolbarAdd).toHaveText("Add 2 notes to feedback");
+    await expect(toolbarAdd).toHaveText("Add 2 notes to plan feedback");
     await expect(diagram.locator("[data-flow-total]")).toHaveCount(0);
     const placement = await toolbar.evaluate((element) => {
       const add = element.querySelector(":scope > .flow-collector-add");
@@ -818,7 +827,7 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       await expect(viewport).toHaveCSS("touch-action", "none");
       await expect(toolbarAdd).toBeVisible();
       await expect(trayAdd).toBeVisible();
-      await expect(trayAdd).toHaveText("Add 2 notes to feedback");
+      await expect(trayAdd).toHaveText("Add 2 notes to plan feedback");
       await expect(node.locator("[data-flow-comment-marker]")).toBeVisible();
       const tray = diagram.locator(".flow-collector");
       const head = tray.locator(".flow-collector-head");
@@ -885,12 +894,12 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       await expect(compose).toBeHidden();
       await expect(diagram).not.toHaveAttribute("data-figure-maximized");
       await expect(diagram).not.toHaveAttribute("data-flow-selected");
-      await expect(toolbarAdd).toHaveText("Add 3 notes to feedback");
+      await expect(toolbarAdd).toHaveText("Add 3 notes to plan feedback");
       await expect(diagram).toHaveAttribute("data-figure-focus-quiet", "");
       await expect(diagram).toBeFocused();
       await expect(diagram.locator("[data-figure-maximize]")).not.toBeFocused();
       await page.keyboard.press(undoShortcut);
-      await expect(toolbarAdd).toHaveText("Add 2 notes to feedback");
+      await expect(toolbarAdd).toHaveText("Add 2 notes to plan feedback");
     });
   }
 

@@ -216,10 +216,6 @@ const StatePane = ({
     className={[
       "file-tree-diff-pane",
       "min-w-0",
-      // The two columns carry different grounds. Current is the state that
-      // already exists, so it sits back on the quiet surface; Planned is what
-      // the reader is being asked about, so it keeps the content ground.
-      side === "before" ? "bg-surface" : "bg-[var(--diff-content-bg)]",
       ...(side === "after"
         ? ["border-t", "border-edge", "wide:border-t-0", "wide:border-l"]
         : []),
@@ -279,7 +275,7 @@ export const FileTreeDiff = ({
   readonly model: CompiledFileTreeDiff;
 }) => (
   <figure
-    className="file-tree file-tree-diff mb-6 min-w-0 overflow-hidden rounded-md bg-[var(--diff-content-bg)] font-mono text-sm shadow-raised"
+    className="file-tree file-tree-diff mb-6 min-w-0 overflow-hidden rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-sm"
     data-file-tree-diff=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "tree" }}
     data-tree-view="combined"

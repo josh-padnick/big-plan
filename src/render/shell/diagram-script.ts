@@ -31,12 +31,14 @@
 // toggle; this one watches for the attribute and refits the canvas.
 //
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
+import { DELETE_ICON } from "../../icons/lucide/delete.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { lucideIconToMarkup } from "./lucide-icon-markup.js";
 
 const ICON_COMMENT = lucideIconToMarkup(MESSAGE_SQUARE_ICON);
 const ICON_REVERT = lucideIconToMarkup(ROTATE_CCW_ICON);
+const ICON_DELETE = lucideIconToMarkup(DELETE_ICON);
 const ICON_CLOSE = lucideIconToMarkup(X_ICON);
 
 export const DIAGRAM_SCRIPT = `
@@ -48,6 +50,7 @@ export const DIAGRAM_SCRIPT = `
     comment: '${ICON_COMMENT}',
     revert: '${ICON_REVERT}',
     close: '${ICON_CLOSE}',
+    remove: '${ICON_DELETE}',
   };
   const ZOOM_MIN = 0.25;
   const ZOOM_MAX = 4;
@@ -888,12 +891,34 @@ export const DIAGRAM_SCRIPT = `
   };
   document.body.appendChild(actionBar);
 
-  const addAction = (action, icon, text, onClick, title) => {
+  // A shortcut is a key, so it is drawn as one rather than described in prose.
+  const keycapHint = (pairs) => {
+    const hint = el("span", "flow-diagram-actionbar-hint");
+    for (const [key, outcome] of pairs) {
+      if (hint.childElementCount > 0) hint.appendChild(el("span", "", "\u00b7"));
+      hint.appendChild(el("kbd", "flow-diagram-keycap", key));
+      hint.appendChild(el("span", "", outcome));
+    }
+    return hint;
+  };
+
+  // A labelled action states its outcome. An icon-only action states the same
+  // outcome in its accessible name and in the hint that appears after a
+  // second, so nothing is knowable by shape alone.
+  const addAction = (action, icon, text, onClick, hint) => {
     const button = el("button", "flow-diagram-actionbar-button");
     button.type = "button";
     button.setAttribute("data-flow-action", action);
-    button.title = title || text;
-    button.innerHTML = icon + "<span>" + text + "</span>";
+    if (text) {
+      button.innerHTML = icon + "<span>" + text + "</span>";
+      button.setAttribute("aria-label", hint || text);
+      if (hint) button.setAttribute("data-tooltip", hint);
+    } else {
+      button.classList.add("flow-diagram-actionbar-icon");
+      button.innerHTML = icon;
+      button.setAttribute("aria-label", hint);
+      button.setAttribute("data-tooltip", hint);
+    }
     button.addEventListener("click", (event) => { event.stopPropagation(); onClick(); });
     actionBar.appendChild(button);
   };
@@ -913,20 +938,26 @@ export const DIAGRAM_SCRIPT = `
       addAction("comment", ICON.comment, "Comment", () => openCompose(selected));
     }
     const mine = drafts.filter((d) => d.element === selected);
+    const removed = removalOn(selected);
+    // The hint names what this click undoes on this element, not the general
+    // idea of reverting: a removed node is restored, a retyped label is put
+    // back, and several changes at once are named as several.
     if (mine.length > 0) {
-      addAction("revert", ICON.revert, "Revert", () => revertElement(selected),
-        "Revert every change on this element");
+      const only = mine.length === 1 ? mine[0] : null;
+      const hint = only === null
+        ? "Revert all changes on this " + (kindOf(selected) || "element")
+        : only.kind === "removal"
+          ? "Restore this " + (kindOf(selected) || "element")
+          : only.kind === "comment" ? "Remove this comment" : "Revert this edit";
+      addAction("revert", ICON.revert, "", () => revertElement(selected), hint);
     }
     if (editing) {
-      actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
-        "Enter to save \u00b7 Esc to cancel"));
+      actionBar.appendChild(keycapHint([["Enter", "save"], ["Esc", "cancel"]]));
     } else if (kindOf(selected) !== "figure") {
-      const removed = removalOn(selected);
-      const canType = fieldsIn(selected).length > 0 && !removed;
-      actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
-        canType
-          ? "Type to edit \u00b7 Delete to remove"
-          : removed ? "Delete to restore" : "Delete to remove"));
+      addAction("remove", ICON.remove, "",
+        () => toggleRemoval(selected),
+        (removed ? "Restore this " : "Remove this ")
+          + (kindOf(selected) || "element") + " (Delete)");
     }
     if (actionBar.childElementCount === 0) {
       actionBar.hidden = true;
@@ -1436,8 +1467,8 @@ export const DIAGRAM_SCRIPT = `
 
     c.count.textContent = String(mine.length);
     const addLabel = mine.length === 1
-      ? "Add 1 note to feedback"
-      : "Add " + mine.length + " notes to feedback";
+      ? "Add 1 note to plan feedback"
+      : "Add " + mine.length + " notes to plan feedback";
     for (const add of [c.toolbarAdd, c.trayAdd]) {
       add.textContent = addLabel;
       add.hidden = mine.length === 0;
@@ -1460,29 +1491,33 @@ export const DIAGRAM_SCRIPT = `
 
   // --- Figure-level proposal chrome --------------------------------------
   for (const diagram of diagrams) {
-    const showOriginal = diagram.querySelector("[data-flow-show-original]");
-    if (showOriginal) {
-      // The label names what the click will do, and flips on every
-      // activation, so the reader can always tell which view they are in and
-      // how to get back. The accessible name says the same words.
-      const labelSpan = showOriginal.querySelector("span") || showOriginal;
-      const setToggleLabel = (on) => {
-        const text = on ? "Show changes" : "Show original";
-        labelSpan.textContent = text;
-        showOriginal.setAttribute("aria-label", text);
-        showOriginal.setAttribute("title", text);
-        showOriginal.setAttribute("aria-pressed", on ? "true" : "false");
+    // The mode control shows which view is on screen rather than naming the
+    // next action, so the pressed option and the visible diagram always agree.
+    const modeOptions = diagram.querySelectorAll("[data-flow-mode]");
+    if (modeOptions.length > 0) {
+      const paintMode = (on) => {
+        for (const option of modeOptions) {
+          const wants = option.getAttribute("data-flow-mode") === "original";
+          const active = wants === on;
+          option.setAttribute("aria-pressed", active ? "true" : "false");
+          const name = wants ? "Original" : "Changes";
+          option.setAttribute("aria-label",
+            active ? name + ", showing" : "Show " + name.toLowerCase());
+        }
       };
-      setToggleLabel(false);
-      showOriginal.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const on = !showingOriginal(diagram);
-        diagram.toggleAttribute("data-flow-original", on);
-        setToggleLabel(on);
-        paint();
-        announce(on ? "Showing the original diagram" : "Showing your changes");
-      });
-      diagram.addEventListener("flow-original-reset", () => setToggleLabel(false));
+      paintMode(false);
+      for (const option of modeOptions) {
+        option.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const on = option.getAttribute("data-flow-mode") === "original";
+          if (on === showingOriginal(diagram)) return;
+          diagram.toggleAttribute("data-flow-original", on);
+          paintMode(on);
+          paint();
+          announce(on ? "Showing the original diagram" : "Showing your changes");
+        });
+      }
+      diagram.addEventListener("flow-original-reset", () => paintMode(false));
     }
     const revertAll = diagram.querySelector("[data-flow-revert-all]");
     if (revertAll) {

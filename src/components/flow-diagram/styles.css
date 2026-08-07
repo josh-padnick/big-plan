@@ -419,8 +419,28 @@ classes.
     outline: 2px solid var(--accent-c);
     outline-offset: -1px;
   }
-  .flow-diagram-actionbar-button[data-flow-action="revert"] {
+  .flow-diagram-actionbar-button[data-flow-action="revert"],
+  .flow-diagram-actionbar-button[data-flow-action="remove"] {
     color: var(--muted-c);
+  }
+  /* An icon-only action is a square, so it reads as a control rather than as a
+     label whose word fell off. */
+  .flow-diagram-actionbar-icon {
+    width: 1.5rem;
+    padding: 0;
+  }
+  /* A shortcut drawn as the key it is. */
+  .flow-diagram-keycap {
+    display: inline-flex;
+    align-items: center;
+    height: 1rem;
+    padding: 0 0.25rem;
+    border-radius: 0.25rem;
+    background: var(--surface-c);
+    color: var(--muted-c);
+    font-family: var(--font-sans);
+    font-size: 0.625rem;
+    font-weight: 600;
   }
   .flow-diagram-actionbar-button svg {
     width: 0.8125rem;

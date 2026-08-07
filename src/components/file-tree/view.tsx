@@ -9,7 +9,7 @@ import {
 
 export const FileTree = ({ model }: { readonly model: CompiledFileTree }) => (
   <figure
-    className="file-tree mb-6 min-w-0 overflow-hidden rounded-md bg-[var(--diff-content-bg)] font-mono text-sm shadow-raised"
+    className="file-tree mb-6 min-w-0 overflow-hidden rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-sm"
     data-file-tree=""
   >
     {model.title === undefined ? null : (
