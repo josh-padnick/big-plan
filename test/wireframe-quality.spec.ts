@@ -19,8 +19,8 @@ test("should render every proof at its native device geometry", async ({
     const artboard = screen.locator(".wireframe-artboard");
     const prose = page.locator("article p").first();
 
-    expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1440);
-    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(900);
+    expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1200);
+    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(820);
     expect((await boxOf(frame)).width).toBeGreaterThan(
       (await boxOf(prose)).width,
     );
@@ -116,8 +116,8 @@ test("should render every proof at its native device geometry", async ({
       );
       const artboard = screen.locator(".wireframe-artboard");
 
-      expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1180);
-      expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(820);
+      expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1020);
+      expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(720);
       const ratio = await artboard.evaluate(
         (node) => node.offsetWidth / node.offsetHeight,
       );
@@ -126,6 +126,19 @@ test("should render every proof at its native device geometry", async ({
       expect(
         await artboard.evaluate((node) => getComputedStyle(node).overflowY),
       ).toBe("auto");
+      // A fixed-frame screen must lay out within its declared artboard - an
+      // internal scrollbar is a layout defect, not a scroll affordance.
+      // overflow-y stays a safety net (asserted above), never a crutch.
+      const { overflow, screenId } = await artboard.evaluate((node) => ({
+        overflow: node.scrollHeight - node.clientHeight,
+        screenId: node
+          .closest("[data-wireframe-screen]")
+          ?.getAttribute("data-wireframe-screen"),
+      }));
+      expect(
+        overflow,
+        `screen "${screenId}" needs an internal scrollbar (${overflow}px of overflow)`,
+      ).toBeLessThanOrEqual(0);
       await expect(screen.locator(".wireframe-browser-bar")).toHaveCount(0);
       await expect(screen.locator(".wireframe-tablet-handle")).toHaveCount(1);
       const targets = await screen
@@ -205,6 +218,10 @@ test("should render every proof at its native device geometry", async ({
       ".wireframe-choice-card[data-wireframe-selected]",
     );
     await expect(selected).toHaveCount(1);
+    const unselected = selectedScreen
+      .locator(".wireframe-choice-card:not([data-wireframe-selected])")
+      .first();
+    await expect(unselected).toHaveCount(1);
     const selectedPaint = await selected.evaluate((node) => {
       const style = getComputedStyle(node);
       return {
@@ -213,7 +230,16 @@ test("should render every proof at its native device geometry", async ({
         boxShadow: style.boxShadow,
       };
     });
-    expect(Number.parseFloat(selectedPaint.borderWidth)).toBeGreaterThan(2.8);
+    const unselectedBorderWidth = await unselected.evaluate(
+      (node) => getComputedStyle(node).borderTopWidth,
+    );
+    // The authored 3px selected border paints thinner than 3px once the
+    // tablet's true width is scaled into the review column, so this compares
+    // against the same screen's resting (2px authored) border rather than a
+    // fixed pixel threshold that drifts every time the device preset changes.
+    expect(Number.parseFloat(selectedPaint.borderWidth)).toBeGreaterThan(
+      Number.parseFloat(unselectedBorderWidth) * 1.3,
+    );
     expect(selectedPaint.boxShadow).not.toBe("none");
     await expect(selected.locator(".wireframe-choice-check")).toHaveText("✓");
     await expect(

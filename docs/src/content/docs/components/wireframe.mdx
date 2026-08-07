@@ -4,12 +4,13 @@ description: True-size product screens with honest device proportions, safe cont
 ---
 
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
-Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1440 px logical layout within a shared 768 px painted cap.
+Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1200 px logical layout within a shared 768 px painted cap.
 Desktop pages and phone screens use realistic minimum silhouettes and grow with content.
-Desktop application shells instead hold a 1440 × 900 workspace viewport: persistent panes own their overflow while the app itself never scrolls sideways.
-Tablet holds a real iPad aspect ratio; overflow scrolls inside the fixed device instead of stretching its bezel.
+Desktop application shells instead hold a 1200 × 820 workspace viewport: persistent panes own their overflow while the app itself never scrolls sideways.
+Tablet holds a real iPad aspect ratio; content lays out to fit that fixed frame instead of stretching its bezel or scrolling inside it.
 Only desktop uses browser chrome; tablet renders as a native device.
 Multiple screens can link to one another without adding executable plan-authored code, while the complete storyboard remains readable when scripts are disabled.
+Every wireframe carries the shared `Maximize` control; while maximized, the screen switcher reflows into a left rail and <kbd>ArrowUp</kbd>/<kbd>ArrowDown</kbd> step through the screens with focus following.
 
 ## When to use it
 
@@ -103,9 +104,9 @@ Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`:
 
 | `device`          | Logical size                      | Frame                 |
 | ----------------- | --------------------------------- | --------------------- |
-| `desktop`         | 1440 × 900 px minimum              | Desktop browser; an `AppShell` holds the viewport |
-| `tablet`          | 1180 × 820 px fixed (about 1.44:1) | Landscape tablet; internal scroll |
-| `tablet-portrait` | 820 × 1180 px fixed                | Portrait tablet; internal scroll  |
+| `desktop`         | 1200 × 820 px minimum              | Desktop browser; an `AppShell` holds the viewport |
+| `tablet`          | 1020 × 720 px fixed (about 1.44:1) | Landscape tablet; content fits with no internal scroll |
+| `tablet-portrait` | 820 × 1180 px fixed                | Portrait tablet; content fits with no internal scroll  |
 | `phone`           | 390 × 720 px minimum               | Phone, no browser bar             |
 
 Only a desktop screen may add `url` for its browser bar.

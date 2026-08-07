@@ -938,13 +938,24 @@ export const VIEWER_SCRIPT = `<script>
 (() => {
   const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
   const fit = (screen) => {
-    const frame = screen.querySelector(":scope > .wireframe-frame");
-    if (frame === null || screen.clientWidth === 0) return;
+    const card = screen.querySelector(":scope > .wireframe-frame-card");
+    const frame = card === null ? null : card.querySelector(":scope > .wireframe-frame");
+    if (card === null || frame === null || screen.clientWidth === 0) return;
     // offsetWidth stays in the frame's unscaled coordinate space. Writing a
     // numeric zoom avoids relying on unsupported length division in CSS.
     frame.style.zoom = "1";
+    // The card's padding and border sit outside the frame, so the space
+    // available to the frame is the screen's width minus that inset - read
+    // from computed style rather than a duplicated constant, so the two
+    // never drift out of sync.
+    const cardStyle = getComputedStyle(card);
+    const inset =
+      parseFloat(cardStyle.paddingLeft) +
+      parseFloat(cardStyle.paddingRight) +
+      parseFloat(cardStyle.borderLeftWidth) +
+      parseFloat(cardStyle.borderRightWidth);
     frame.style.zoom = String(
-      Math.min(1, screen.clientWidth / frame.offsetWidth),
+      Math.min(1, (screen.clientWidth - inset) / frame.offsetWidth),
     );
   };
   for (const root of roots) {
@@ -952,10 +963,23 @@ export const VIEWER_SCRIPT = `<script>
       root.querySelectorAll("[data-wireframe-screen]"),
     );
     if (screens.length === 0) continue;
+    const screenIds = screens.map((screen) =>
+      screen.getAttribute("data-wireframe-screen"),
+    );
     // Fit while every screen still participates in layout. Marking the root
     // interactive then narrows it to one screen; without this script the
     // complete storyboard remains readable, with true-width frames scrolling.
     for (const screen of screens) fit(screen);
+    // Maximizing (or restoring) changes the width available to the active
+    // frame without firing a window resize event, and the expanded rail
+    // narrows it further still. Observing the screen's own box catches every
+    // one of those reflows instead of hand-wiring each transition.
+    if ("ResizeObserver" in window) {
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) fit(entry.target);
+      });
+      for (const screen of screens) observer.observe(screen);
+    }
     root.setAttribute("data-wireframe-interactive", "");
     const show = (id) => {
       let current = null;
@@ -978,8 +1002,42 @@ export const VIEWER_SCRIPT = `<script>
           : null;
       if (trigger === null || !root.contains(trigger)) return;
       const id = trigger.getAttribute("data-wireframe-navigate");
-      if (screens.some((screen) => screen.getAttribute("data-wireframe-screen") === id))
-        show(id);
+      if (screenIds.includes(id)) show(id);
+    });
+    // Maximized mode draws the switcher as a left rail; arrow keys sequence
+    // through it wherever focus sits inside the maximized figure, matching
+    // the guidance requirement without forcing a reader to first tab onto a
+    // specific rail button.
+    root.addEventListener("keydown", (event) => {
+      if (!root.hasAttribute("data-figure-maximized")) return;
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      )
+        return;
+      const currentId = screens
+        .find((screen) => screen.hasAttribute("data-wireframe-current"))
+        ?.getAttribute("data-wireframe-screen");
+      const index = screenIds.indexOf(currentId);
+      if (index === -1) return;
+      const nextIndex =
+        event.key === "ArrowDown"
+          ? Math.min(screenIds.length - 1, index + 1)
+          : Math.max(0, index - 1);
+      if (nextIndex === index) return;
+      event.preventDefault();
+      const nextId = screenIds[nextIndex];
+      show(nextId);
+      for (const tab of root.querySelectorAll(
+        ".wireframe-switcher [data-wireframe-navigate]",
+      )) {
+        if (tab.getAttribute("data-wireframe-navigate") === nextId) {
+          tab.focus();
+          break;
+        }
+      }
     });
   }
   addEventListener("resize", () => {
