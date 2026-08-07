@@ -531,6 +531,20 @@ are declared, so a role or a scale step is the only thing a utility can name.
     }
   }
 
+  /* Override invariant: dark mode needs stronger modal separation than the
+     resting light-mode backdrop utility. */
+  @media (prefers-color-scheme: dark) {
+    /* Override invariant: System dark mode must use the approved 80% dim. */
+    :root:not([data-theme]) [data-preferences-backdrop] {
+      background-color: color-mix(in srgb, var(--backdrop-c) 80%, transparent);
+    }
+  }
+
+  /* Override invariant: explicit Dark mode must use the approved 80% dim. */
+  :root[data-theme="dark"] [data-preferences-backdrop] {
+    background-color: color-mix(in srgb, var(--backdrop-c) 80%, transparent);
+  }
+
   /* Override invariant: floated popover geometry must beat the body's resting
      max-width and in-flow utility values after the viewer script promotes it. */
   [data-info-popover-floating] > [data-info-popover-body] {

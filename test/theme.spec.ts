@@ -99,7 +99,7 @@ test("should choose and persist appearance from the settings dialog", async ({
   });
 });
 
-test("should recompose settings as a compact top sheet on narrow screens", async ({
+test("should recompose settings as a centered sheet on narrow screens", async ({
   page,
   sampleViewerUrl,
 }) => {
@@ -120,8 +120,7 @@ test("should recompose settings as a compact top sheet on narrow screens", async
         viewportHeight: window.innerHeight,
         left: rect.left,
         right: rect.right,
-        top: rect.top,
-        bottom: rect.bottom,
+        verticalCenter: (rect.top + rect.bottom) / 2,
         optionHeights: options,
         documentScrollWidth: document.documentElement.scrollWidth,
       };
@@ -130,7 +129,7 @@ test("should recompose settings as a compact top sheet on narrow screens", async
     expect(geometry.viewportWidth).toBe(width);
     expect(geometry.left).toBe(12);
     expect(geometry.right).toBe(width - 12);
-    expect(geometry.top).toBe(12);
+    expect(geometry.verticalCenter).toBeCloseTo(geometry.viewportHeight / 2);
     expect(geometry.optionHeights).toEqual([68, 68, 68]);
     expect(geometry.documentScrollWidth).toBe(geometry.viewportWidth);
     await page.keyboard.press("Escape");
@@ -141,7 +140,10 @@ test("should recompose settings as a compact top sheet on narrow screens", async
   const shortViewport = await dialog.evaluate((element) => ({
     clientHeight: element.clientHeight,
     scrollHeight: element.scrollHeight,
-    top: element.getBoundingClientRect().top,
+    verticalCenter: (() => {
+      const rect = element.getBoundingClientRect();
+      return (rect.top + rect.bottom) / 2;
+    })(),
     footerBottom:
       element
         .querySelector("[data-preferences-status]")
@@ -151,7 +153,7 @@ test("should recompose settings as a compact top sheet on narrow screens", async
   expect(shortViewport.scrollHeight).toBeGreaterThan(
     shortViewport.clientHeight,
   );
-  expect(shortViewport.top).toBe(12);
+  expect(shortViewport.verticalCenter).toBeCloseTo(110);
   await dialog.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
@@ -169,6 +171,7 @@ test("should isolate the document while settings is open and restore focus on cl
   page,
   sampleViewerUrl,
 }) => {
+  await page.emulateMedia({ colorScheme: "light" });
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(sampleViewerUrl);
   const settings = page.getByRole("button", { name: "Open settings" });
@@ -179,12 +182,16 @@ test("should isolate the document while settings is open and restore focus on cl
     const dialog = document.querySelector("[data-preferences-dialog]");
     const backdropStyle =
       backdrop instanceof HTMLElement ? getComputedStyle(backdrop) : null;
+    const backdropOpacity =
+      backdropStyle?.backgroundColor.match(/\/\s*([\d.]+)\s*\)$/)?.[1] ?? null;
     return {
       backdropInert: backdrop instanceof HTMLElement && backdrop.inert,
       dialogInert: dialog instanceof HTMLElement && dialog.inert,
       backdropIsDimmed:
         backdropStyle !== null &&
         backdropStyle.backgroundColor !== "rgba(0, 0, 0, 0)",
+      backdropOpacity:
+        backdropOpacity === null ? null : Number(backdropOpacity),
       topLevelSiblingsInert:
         backdrop instanceof HTMLElement
           ? Array.from(document.body.children)
@@ -200,10 +207,27 @@ test("should isolate the document while settings is open and restore focus on cl
     backdropInert: false,
     dialogInert: false,
     backdropIsDimmed: true,
+    backdropOpacity: 0.7,
     topLevelSiblingsInert: true,
   });
 
   await page.getByRole("button", { name: "Close settings" }).click();
   await expect(settings).toBeFocused();
   await expect(page.locator("[inert]")).toHaveCount(0);
+
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+  });
+  await settings.click();
+  await expect
+    .poll(() =>
+      page.locator("[data-preferences-backdrop]").evaluate((element) => {
+        const opacity =
+          getComputedStyle(element).backgroundColor.match(
+            /\/\s*([\d.]+)\s*\)$/,
+          )?.[1];
+        return opacity === undefined ? null : Number(opacity);
+      }),
+    )
+    .toBe(0.8);
 });

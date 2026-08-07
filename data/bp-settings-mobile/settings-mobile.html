@@ -6434,6 +6434,7 @@
         .bg-accent-wash {
           background-color: var(--accent-wash-c);
         }
+        .bg-backdrop,
         .bg-backdrop\/70 {
           background-color: var(--backdrop-c);
         }
@@ -7909,6 +7910,32 @@
           [data-preferences-backdrop] {
             padding-top: max(0.75rem, env(safe-area-inset-top));
             padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+          }
+        }
+        @media (prefers-color-scheme: dark) {
+          :root:not([data-theme]) [data-preferences-backdrop] {
+            background-color: var(--backdrop-c);
+          }
+          @supports (color: color-mix(in lab, red, red)) {
+            :root:not([data-theme]) [data-preferences-backdrop] {
+              background-color: color-mix(
+                in srgb,
+                var(--backdrop-c) 80%,
+                transparent
+              );
+            }
+          }
+        }
+        :root[data-theme="dark"] [data-preferences-backdrop] {
+          background-color: var(--backdrop-c);
+        }
+        @supports (color: color-mix(in lab, red, red)) {
+          :root[data-theme="dark"] [data-preferences-backdrop] {
+            background-color: color-mix(
+              in srgb,
+              var(--backdrop-c) 80%,
+              transparent
+            );
           }
         }
         [data-info-popover-floating] > [data-info-popover-body] {
@@ -10020,7 +10047,7 @@ admin-cli retry force --schedule {schedule_</span>id}</span>
       </main>
     </div>
     <div
-      class="fixed inset-0 z-50 flex items-start justify-center bg-backdrop/70 p-3 wide:grid wide:place-items-center wide:p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-backdrop/70 p-3 wide:grid wide:place-items-center wide:p-4"
       data-preferences-backdrop
       hidden
     >
