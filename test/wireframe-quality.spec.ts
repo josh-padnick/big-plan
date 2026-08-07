@@ -20,7 +20,7 @@ test("should render every proof at its native device geometry", async ({
     const prose = page.locator("article p").first();
 
     expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1200);
-    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(900);
+    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(820);
     expect((await boxOf(frame)).width).toBeGreaterThan(
       (await boxOf(prose)).width,
     );
@@ -116,8 +116,8 @@ test("should render every proof at its native device geometry", async ({
       );
       const artboard = screen.locator(".wireframe-artboard");
 
-      expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1080);
-      expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(750);
+      expect(await artboard.evaluate((node) => node.clientWidth)).toBe(950);
+      expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(660);
       const ratio = await artboard.evaluate(
         (node) => node.offsetWidth / node.offsetHeight,
       );
@@ -205,6 +205,10 @@ test("should render every proof at its native device geometry", async ({
       ".wireframe-choice-card[data-wireframe-selected]",
     );
     await expect(selected).toHaveCount(1);
+    const unselected = selectedScreen
+      .locator(".wireframe-choice-card:not([data-wireframe-selected])")
+      .first();
+    await expect(unselected).toHaveCount(1);
     const selectedPaint = await selected.evaluate((node) => {
       const style = getComputedStyle(node);
       return {
@@ -213,11 +217,16 @@ test("should render every proof at its native device geometry", async ({
         boxShadow: style.boxShadow,
       };
     });
+    const unselectedBorderWidth = await unselected.evaluate(
+      (node) => getComputedStyle(node).borderTopWidth,
+    );
     // The authored 3px selected border paints thinner than 3px once the
-    // tablet's true width is scaled into the review column, but it must
-    // still read as clearly thicker than the 2px resting border scaled by
-    // the same factor (~1.8px at this viewport).
-    expect(Number.parseFloat(selectedPaint.borderWidth)).toBeGreaterThan(2.5);
+    // tablet's true width is scaled into the review column, so this compares
+    // against the same screen's resting (2px authored) border rather than a
+    // fixed pixel threshold that drifts every time the device preset changes.
+    expect(Number.parseFloat(selectedPaint.borderWidth)).toBeGreaterThan(
+      Number.parseFloat(unselectedBorderWidth) * 1.3,
+    );
     expect(selectedPaint.boxShadow).not.toBe("none");
     await expect(selected.locator(".wireframe-choice-check")).toHaveText("✓");
     await expect(

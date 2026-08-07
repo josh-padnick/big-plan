@@ -109,10 +109,17 @@ marks and a plan diff never jitters.
   [data-wireframe-interactive] .wireframe-switcher {
     display: flex;
   }
+  /* A conventional rectangle, not the hand-drawn sketch radius: the switcher
+     is big-plan review chrome, the same call already made for its keyboard
+     focus treatment. Every entry carries a subtle resting border so it reads
+     as a tangible control rather than bare text; the selected entry's border
+     darkens to the same ink stroke the maximized rail's aria-current state
+     uses, which reads as "selected" without competing for width against the
+     unselected borders around it. */
   .wireframe-switch {
     padding: 0.2rem 0.6rem;
-    border: 2px solid transparent;
-    border-radius: var(--wf-sketch);
+    border: 2px solid var(--edge-c);
+    border-radius: 0.375rem;
     font-size: 0.8125rem;
     color: var(--color-muted);
     cursor: pointer;
@@ -194,18 +201,20 @@ marks and a plan diff never jitters.
      scrolls internally. */
   .wireframe-screen[data-wireframe-device="desktop"] {
     --wf-width: 1200px;
-    --wf-min-height: 900px;
+    /* The width stays wide enough for the documented 280-320px pane floors
+       (list/master, inspector/rail) beside a dominant primary surface;
+       "shorter" for desktop means height, which nothing else depends on. */
+    --wf-min-height: 820px;
     /* One review width for every desktop prototype. The surrounding reading
        column, not this max-width, is the real ceiling at ordinary viewport
        widths, so the page card's inset (below) comes out of that same fixed
        768px budget: the card's outer edge lands on 768px and the frame
-       inside it is smaller by the inset. At 48rem the narrowed 1200px canvas
-       still paints with more scale than the wider 1440px canvas did before. */
+       inside it is smaller by the inset. */
     max-width: 48rem;
   }
   .wireframe-screen[data-wireframe-device="tablet"] {
-    --wf-width: 1080px;
-    --wf-height: 750px;
+    --wf-width: 950px;
+    --wf-height: 660px;
     --wf-min-height: 0px;
     max-width: 960px;
   }

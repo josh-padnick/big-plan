@@ -181,7 +181,7 @@ test("should scale a true-size drawing inside a narrow review viewport", async (
   await test.step("the artboard keeps device geometry without widening the page", async () => {
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
-      .toBe(1080);
+      .toBe(950);
     const box = await boxOf(artboard);
     expect(box.width).toBeLessThanOrEqual(320);
     const overflow = await page.evaluate(
@@ -292,7 +292,7 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
       .toBe(1200);
-    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(900);
+    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(820);
     // The reading column caps the page card, not the bare frame, at the
     // shared review width; the card's light border is the outer edge of the
     // page silhouette, and the frame inside it is smaller by the card's own
@@ -307,8 +307,8 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
     const artboard = tablet.locator(".wireframe-artboard");
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
-      .toBe(1080);
-    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(750);
+      .toBe(950);
+    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(660);
   });
 
   await test.step("selection does not indent Ticket or Inbox queue rows", async () => {
