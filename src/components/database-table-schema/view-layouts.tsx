@@ -15,10 +15,10 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 
 // Shared by every pill in the grid and the bands below it.
 const BADGE_CLASSES =
-  "table-schema-badge inline-flex shrink-0 items-center rounded-full border border-edge px-[0.4rem] py-px align-middle font-sans text-[0.625rem] font-semibold tracking-wide text-muted uppercase data-[schema-badge=pk]:border-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] data-[schema-badge=pk]:text-accent";
+  "table-schema-badge inline-flex shrink-0 items-center rounded-full border border-edge px-[0.4rem] py-px align-middle font-sans text-[0.625rem] font-semibold tracking-wide text-subtle uppercase data-[schema-badge=pk]:border-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] data-[schema-badge=pk]:text-accent";
 // Shared by the Indexes and DDL band labels.
 const SECTION_LABEL_CLASSES =
-  "table-schema-section-label m-0 text-[0.6875rem] font-medium uppercase tracking-wider text-muted";
+  "table-schema-section-label m-0 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle";
 
 const GRID_HEADS: ReadonlyArray<{
   readonly label: string;

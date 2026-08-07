@@ -57,7 +57,7 @@ const Radio = ({
 );
 
 const Recommended = () => (
-  <span className="decision-recommended-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] leading-4 font-bold uppercase">
+  <span className="decision-recommended-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] leading-4 font-semibold uppercase">
     <span className="inline-flex size-3 shrink-0">
       {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
     </span>

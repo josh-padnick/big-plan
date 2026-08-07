@@ -8,7 +8,7 @@ import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 // /* off-scale */ Phase A preserves the legacy hero type, 3px accent rule,
 // tracking, and token wash exactly; Phase B will select scale-backed values.
 const Label = ({ text }: { readonly text: string }) => (
-  <dt className="mb-1 text-xs font-semibold tracking-[0.08em] uppercase text-accent">
+  <dt className="mb-1 text-xs font-semibold tracking-[0.08em] uppercase text-subtle">
     {text}
   </dt>
 );
@@ -44,7 +44,7 @@ export const QuickSummary = ({
       data-quick-summary
       className="mb-8 max-w-[var(--measure)] rounded-lg border border-edge bg-surface px-5 py-4"
     >
-      <p className="mb-3 text-[1.0625rem] font-semibold text-ink">
+      <p className="mb-3 text-[1.0625rem] font-semibold text-subtle">
         Quick summary
       </p>
       <dl className="m-0">

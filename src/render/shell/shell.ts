@@ -68,13 +68,13 @@ const TOC_GROUPED_LINK_CLASSES =
 // it sits flush with the Contents label rather than sharing the rule and inset
 // its section links use.
 const TOC_PART_HEADER_CLASSES =
-  "mt-3 mb-1 block pr-3 text-[0.6875rem] font-bold tracking-[0.1em] uppercase text-accent hover:text-ink";
+  "mt-3 mb-1 block pr-3 text-[0.6875rem] font-semibold tracking-[0.1em] uppercase text-subtle hover:text-ink";
 const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-5 py-2.5 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 const MOBILE_TOC_GROUPED_LINK_CLASSES =
   "block border-l-2 border-transparent py-2.5 pr-5 pl-8 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 const MOBILE_TOC_PART_HEADER_CLASSES =
-  "block border-l-2 border-transparent px-5 pt-3 pb-1 text-[0.6875rem] font-bold tracking-[0.1em] uppercase text-accent hover:text-ink";
+  "block border-l-2 border-transparent px-5 pt-3 pb-1 text-[0.6875rem] font-semibold tracking-[0.1em] uppercase text-subtle hover:text-ink";
 
 // Allocates the shell-owned overview anchor alongside document-owned ids.
 const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
@@ -243,7 +243,7 @@ const renderDesktopToc = ({
     partHeaderClasses: TOC_PART_HEADER_CLASSES,
   });
   return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:block wide:self-start" aria-label="Contents">
-<p class="mb-3 flex items-center justify-between gap-2 border-b border-edge pb-2 text-xs font-semibold uppercase tracking-[0.08em]" data-toc-header><a class="rounded-sm text-muted hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
+<p class="mb-3 flex items-center justify-between gap-2 border-b border-edge pb-2 text-xs font-semibold uppercase tracking-[0.08em]" data-toc-header><a class="rounded-sm text-subtle hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
 <ol>
 ${items}
 </ol>
@@ -308,7 +308,7 @@ export const renderShell = ({
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
 <img class="w-27 h-auto" data-logo-dark src="${LOGO_DARK_SRC}" alt="Big Plan" width="1200" height="220">
 </a>
-<p class="truncate text-center text-sm leading-none text-muted"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>
+<p class="truncate text-center text-sm leading-none text-subtle"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>
 ${renderHeaderActions()}
 </div>
 </header>

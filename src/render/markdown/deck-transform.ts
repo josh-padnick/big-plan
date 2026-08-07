@@ -117,7 +117,7 @@ const KICKER_CLASSES = [
   "font-semibold",
   "uppercase",
   "tracking-[0.14em]",
-  "text-accent",
+  "text-subtle",
   ...SCROLL_CLASSES,
 ] as const;
 
@@ -140,7 +140,7 @@ const SUBSLIDE_KICKER_CLASSES = [
   "font-semibold",
   "uppercase",
   "tracking-[0.14em]",
-  "text-accent",
+  "text-subtle",
   ...SCROLL_CLASSES,
 ] as const;
 

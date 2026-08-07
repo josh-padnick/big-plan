@@ -39,7 +39,7 @@ const MENU_LIST_CLASSES =
   "data-table-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-40 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8_/_0.18)]";
 
 const MENU_LABEL_CLASSES =
-  "data-table-menu-label px-2 pt-1 pb-[0.2rem] text-[0.625rem] font-semibold tracking-wider text-muted uppercase";
+  "data-table-menu-label px-2 pt-1 pb-[0.2rem] text-[0.625rem] font-semibold tracking-wider text-subtle uppercase";
 
 const MENU_ITEM_CLASSES =
   "data-table-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink hover:bg-edge [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
@@ -87,7 +87,7 @@ const HeaderCell = ({
 }) => (
   <th
     scope="col"
-    className="data-table-head bg-transparent py-[0.3rem] text-[0.625rem] font-medium tracking-[0.06em] whitespace-nowrap text-muted uppercase select-none data-[table-sorted]:text-ink"
+    className="data-table-head bg-transparent py-[0.3rem] text-[0.625rem] font-medium tracking-[0.06em] whitespace-nowrap text-subtle uppercase select-none data-[table-sorted]:text-ink"
     data-table-column={index}
     data-table-type={column.type}
     data-table-align={column.align}

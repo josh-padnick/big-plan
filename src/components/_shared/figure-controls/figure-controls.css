@@ -34,7 +34,7 @@
   article [data-figure-focus-quiet]:focus-visible {
     outline: none;
     background: transparent;
-    color: var(--muted-c);
+    color: var(--subtle-c);
     box-shadow: none;
   }
   /* Override invariant: quiet focus suppresses the resting focus tooltip. */

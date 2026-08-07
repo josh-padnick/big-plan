@@ -289,7 +289,7 @@
     border: 0;
     border-radius: 0.1875rem;
     background: transparent;
-    color: color-mix(in srgb, var(--color-muted) 48%, transparent);
+    color: var(--edge-strong-c);
   }
   article .decision-score-star svg {
     width: 0.875rem;
@@ -380,8 +380,8 @@
   }
   article .decision-calculation-matrix thead th {
     background: var(--surface-c);
-    color: var(--color-muted);
-    font-weight: 700;
+    color: var(--color-subtle);
+    font-weight: 600;
   }
   article .decision-calculation-matrix th:first-child {
     width: 32%;

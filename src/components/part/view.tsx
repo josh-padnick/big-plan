@@ -27,7 +27,7 @@ export const Part = ({
     >
       <span
         data-part-number
-        className="text-[0.8125rem] font-bold tracking-[0.1em] whitespace-nowrap uppercase text-accent"
+        className="text-[0.8125rem] font-semibold tracking-[0.1em] whitespace-nowrap uppercase text-subtle"
       >
         {number === undefined ? null : `Part ${number}`}
       </span>

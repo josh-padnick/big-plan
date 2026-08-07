@@ -17,7 +17,7 @@ import type { CompiledTableOfContents } from "./compile.js";
 const GroupHeader = ({ part }: { readonly part: DocumentOutlinePart }) => (
   <p
     data-table-of-contents-group=""
-    className="table-of-contents-group mt-2.5 mb-0.5 text-xs font-semibold uppercase tracking-[0.1em] text-accent"
+    className="table-of-contents-group mt-2.5 mb-0.5 text-xs font-semibold uppercase tracking-[0.1em] text-subtle"
   >
     {`[${part.number}] ${part.title}`}
   </p>
@@ -63,7 +63,7 @@ export const TableOfContents = ({
             >
               <span
                 data-table-of-contents-num
-                className="text-xs font-medium text-muted"
+                className="text-xs font-medium text-subtle"
               >
                 {section?.number}
               </span>

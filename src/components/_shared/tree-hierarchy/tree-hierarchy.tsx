@@ -33,7 +33,7 @@ export type TreeFoldTone = "standard" | "quiet";
 // neighboring controls. Hover restores full contrast either way.
 const FOLD_TONE_CLASSES: Readonly<Record<TreeFoldTone, string>> = {
   standard: "text-muted",
-  quiet: "text-muted/50",
+  quiet: "text-subtle",
 };
 
 // Statuses read the way git tooling presents them: a changed file's leading

@@ -106,7 +106,7 @@ is styled by its owning module, not here.
   }
   article h6[data-authored-prose] {
     font-size: 0.875rem;
-    color: var(--color-muted);
+    color: var(--color-subtle);
   }
 
   article p[data-authored-prose] {
@@ -279,6 +279,6 @@ is styled by its owning module, not here.
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--color-muted);
+    color: var(--color-subtle);
   }
 }

@@ -274,7 +274,7 @@ export const DecisionCard = ({
     >
       <figcaption className="decision-zone-question bg-header px-5 py-4">
         {model.layout === "rows" ? (
-          <p className="decision-eyebrow m-0 text-xs font-bold tracking-wider text-accent uppercase">
+          <p className="decision-eyebrow m-0 text-xs font-semibold tracking-wider text-subtle uppercase">
             {"Decision"}
           </p>
         ) : null}
