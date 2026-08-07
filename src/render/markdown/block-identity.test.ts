@@ -179,6 +179,35 @@ describe("block identity boundaries", () => {
     expect(rows.every((row) => row.section === "Rows")).toBe(true);
   });
 
+  it("should address every Markdown table value and each header-defined column", () => {
+    const { blocks } = compile(
+      "## Rows\n\n| Field | Meaning |\n| --- | --- |\n| `versionId` | Content hash |\n| `number` | History position |\n",
+    );
+    const columns = blocks.filter((block) => block.kind === "table-column");
+    const cells = blocks.filter((block) => block.kind === "table-cell");
+    expect(columns.map((column) => column.label)).toEqual([
+      "Column: Field",
+      "Column: Meaning",
+    ]);
+    expect(cells.map((cell) => cell.label)).toEqual([
+      "Field: versionId",
+      "Meaning: Content hash",
+      "Field: number",
+      "Meaning: History position",
+    ]);
+  });
+
+  it("should expose each QuickSummary facet without opening private component markup", () => {
+    const { blocks } = compile(
+      "## Summary\n\n<QuickSummary>\n\n<Why>\n\n- Value.\n\n</Why>\n\n<What>\n\n- Build it.\n\n</What>\n\n<How>\n\n- Carefully.\n\n</How>\n\n</QuickSummary>\n",
+    );
+    expect(
+      blocks
+        .filter((block) => block.kind === "quick-summary-facet")
+        .map((block) => block.label),
+    ).toEqual(["Why", "What", "How"]);
+  });
+
   it("should not address a component's private internals as blocks", () => {
     const { blocks } = compile(DECISION_FIXTURE);
     // The decision card is one target; its options and considerations are the

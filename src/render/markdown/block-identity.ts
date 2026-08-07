@@ -11,10 +11,10 @@
 // can never carry an authored string into a filesystem path.
 //
 // Presentation-only wrappers stay outside the block tree: the walk stamps a
-// scope's direct children and a component's root, never a component's private
-// internals. Code figures are the one exception - their line rows carry
-// `data-block-line` so a comment can name a line range the way an authored
-// Annotation does.
+// scope's direct children and a component's root. A component may deliberately
+// expose a semantic sub-target with `data-commentable-kind`; everything else
+// inside it stays private. Code figures also expose `data-block-line` so a
+// comment can name a line range the way an authored Annotation does.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 
@@ -108,6 +108,11 @@ const idSegment = (raw: string): string => {
 const componentName = (node: Element): string | undefined => {
   const name = node.properties["data-component"];
   return typeof name === "string" && name.length > 0 ? name : undefined;
+};
+
+const declaredCommentKind = (node: Element): string | undefined => {
+  const kind = node.properties["data-commentable-kind"];
+  return typeof kind === "string" && kind.length > 0 ? kind : undefined;
 };
 
 const hasTitleClass = (node: Element): boolean => {
@@ -289,11 +294,35 @@ const allocateId = ({
   return `${scope}/${idSegment(kind)}-${next}`;
 };
 
-// A Markdown table is one readable figure, but repeated rows are the units a
-// reviewer most often distinguishes in feedback. The row label comes from
-// its first authored cell ("versionId", "number", ...), which is concrete
-// enough for two adjacent rows to remain scannable in the comments tray.
-const stampTableRows = ({
+const stampBlock = ({
+  node,
+  kind,
+  label,
+  scope,
+  section,
+  blocks,
+  counter,
+}: {
+  readonly node: Element;
+  readonly kind: string;
+  readonly label: string;
+  readonly scope: string;
+  readonly section: string;
+  readonly blocks: Array<BlockDescriptor>;
+  readonly counter: ScopeCounter;
+}): void => {
+  const id = allocateId({ scope, kind, counter });
+  node.properties["data-block-id"] = id;
+  node.properties["data-block-kind"] = kind;
+  node.properties["data-block-label"] = label;
+  node.properties["data-block-section"] = section;
+  blocks.push({ id, kind, label, section });
+};
+
+// A Markdown table exposes the whole table, each row, every body cell, and one
+// column target per header. A header cell is the column's authored name, so its
+// single anchor honestly serves both the header cell and the whole column.
+const stampTableTargets = ({
   table,
   scope,
   section,
@@ -306,30 +335,104 @@ const stampTableRows = ({
   readonly blocks: Array<BlockDescriptor>;
   readonly counter: ScopeCounter;
 }): void => {
+  let columnLabels: ReadonlyArray<string> = [];
   forEachDescendant({
     node: table,
     visit: (candidate) => {
       if (candidate.tagName !== "tr") {
         return;
       }
-      const firstCell = candidate.children.find(
+      const cells = candidate.children.filter(
         (child): child is Element =>
           isElement(child) &&
           (child.tagName === "th" || child.tagName === "td"),
       );
+      const firstCell = cells[0];
       const label =
         firstCell === undefined ? "Table row" : summarize(textOf(firstCell));
-      const id = allocateId({ scope, kind: "table-row", counter });
-      candidate.properties["data-block-id"] = id;
-      candidate.properties["data-block-kind"] = "table-row";
-      candidate.properties["data-block-label"] =
-        label.length > 0 ? label : "Table row";
-      candidate.properties["data-block-section"] = section;
-      blocks.push({
-        id,
+      stampBlock({
+        node: candidate,
         kind: "table-row",
         label: label.length > 0 ? label : "Table row",
+        scope,
         section,
+        blocks,
+        counter,
+      });
+
+      const isHeader = cells.some((cell) => cell.tagName === "th");
+      if (isHeader) {
+        columnLabels = cells.map((cell, index) => {
+          const cellLabel = summarize(textOf(cell));
+          const columnLabel =
+            cellLabel.length > 0 ? cellLabel : `Column ${index + 1}`;
+          stampBlock({
+            node: cell,
+            kind: "table-column",
+            label: `Column: ${columnLabel}`,
+            scope,
+            section,
+            blocks,
+            counter,
+          });
+          return columnLabel;
+        });
+        return;
+      }
+
+      cells.forEach((cell, index) => {
+        const value = summarize(textOf(cell));
+        const column = columnLabels[index] ?? `Column ${index + 1}`;
+        stampBlock({
+          node: cell,
+          kind: "table-cell",
+          label: `${column}: ${value.length > 0 ? value : "Empty"}`,
+          scope,
+          section,
+          blocks,
+          counter,
+        });
+      });
+    },
+  });
+};
+
+const stampDeclaredTargets = ({
+  component,
+  scope,
+  section,
+  blocks,
+  counter,
+}: {
+  readonly component: Element;
+  readonly scope: string;
+  readonly section: string;
+  readonly blocks: Array<BlockDescriptor>;
+  readonly counter: ScopeCounter;
+}): void => {
+  forEachDescendant({
+    node: component,
+    visit: (candidate) => {
+      const kind = declaredCommentKind(candidate);
+      if (kind === undefined) {
+        return;
+      }
+      const declaredLabel = candidate.properties["data-commentable-label"];
+      const fallback = summarize(textOf(candidate));
+      const label =
+        typeof declaredLabel === "string" && declaredLabel.length > 0
+          ? declaredLabel
+          : fallback.length > 0
+            ? fallback
+            : readableKind(kind);
+      stampBlock({
+        node: candidate,
+        kind,
+        label,
+        scope,
+        section,
+        blocks,
+        counter,
       });
     },
   });
@@ -372,16 +475,28 @@ const stampScope = ({
       continue;
     }
     const label = labelOf({ node: child, kind });
-    const id = allocateId({ scope, kind, counter });
-    child.properties["data-block-id"] = id;
-    child.properties["data-block-kind"] = kind;
-    child.properties["data-block-label"] = label;
-    child.properties["data-block-section"] = section;
-    blocks.push({ id, kind, label, section });
+    stampBlock({
+      node: child,
+      kind,
+      label,
+      scope,
+      section,
+      blocks,
+      counter,
+    });
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);
     } else if (kind === "table") {
-      stampTableRows({ table: child, scope, section, blocks, counter });
+      stampTableTargets({ table: child, scope, section, blocks, counter });
+    }
+    if (componentName(child) !== undefined) {
+      stampDeclaredTargets({
+        component: child,
+        scope,
+        section,
+        blocks,
+        counter,
+      });
     }
   }
 };
