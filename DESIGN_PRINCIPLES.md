@@ -30,6 +30,8 @@ Change the scale in `src/render/global.css` and say why; do not add a one-off va
 Colour and type are enforced by the theme itself.
 The palette steps are plain custom properties, so no utility can name one; only a role can be painted.
 Every stock Tailwind colour, size, and tracking step is dropped, so a utility can only name a step this product declared.
+Spacing cannot close the same way, because Tailwind derives every numeric spacing utility from one base unit, so `scripts/design-system/check.mjs` closes spacing, radius, and elevation instead.
+That check owns the exact allowed steps; the tables below say what each step is for.
 
 ## Spacing
 

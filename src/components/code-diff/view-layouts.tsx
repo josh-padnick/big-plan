@@ -342,10 +342,7 @@ const DiffView = ({
   readonly showLineNumbers: boolean;
   readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }) => (
-  <div
-    className="code-diff-view min-w-0 rounded-b-[calc(var(--radius-md)-1px)]"
-    data-diff-content={view}
-  >
+  <div className="code-diff-view min-w-0 rounded-b-md" data-diff-content={view}>
     {diff.hunks.flatMap((hunk, hunkKey) =>
       view === "unified" ? (
         unifiedHunk({ hunk, showLineNumbers, annotations, hunkKey })

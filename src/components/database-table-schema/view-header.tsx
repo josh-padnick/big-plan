@@ -155,7 +155,7 @@ export const TableSchemaHeader = ({
   readonly schemaName?: string;
   readonly note?: string;
 }) => (
-  <figcaption className="table-schema-header min-w-0 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
+  <figcaption className="table-schema-header min-w-0 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
     <span className="table-schema-header-row flex min-w-0 items-center justify-between gap-3">
       <TableIdentity
         tableName={tableName}

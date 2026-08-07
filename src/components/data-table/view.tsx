@@ -39,7 +39,7 @@ const MENU_LIST_CLASSES =
   "data-table-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-40 rounded-md bg-[var(--diff-header-bg)] p-1 shadow-floating";
 
 const MENU_LABEL_CLASSES =
-  "data-table-menu-label px-2 pt-1 pb-0.5 text-2xs font-semibold tracking-capsr text-subtle uppercase";
+  "data-table-menu-label px-2 pt-1 pb-0.5 text-2xs font-semibold tracking-caps text-subtle uppercase";
 
 const MENU_ITEM_CLASSES =
   "data-table-menu-item flex w-full cursor-pointer items-center gap-2 whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-1 text-left text-xs text-ink hover:bg-edge [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";

@@ -18,7 +18,7 @@ const BADGE_CLASSES =
   "table-schema-badge inline-flex shrink-0 items-center rounded-full bg-surface px-1.5 py-px align-middle font-sans text-2xs font-semibold tracking-caps text-subtle uppercase data-[schema-badge=pk]:bg-accent-soft data-[schema-badge=pk]:text-accent";
 // Shared by the Indexes and DDL band labels.
 const SECTION_LABEL_CLASSES =
-  "table-schema-section-label m-0 text-2xs font-semibold uppercase tracking-capsr text-subtle";
+  "table-schema-section-label m-0 text-2xs font-semibold uppercase tracking-caps text-subtle";
 
 const GRID_HEADS: ReadonlyArray<{
   readonly label: string;
@@ -275,7 +275,7 @@ export const TableSchemaGrid = ({
             <th
               key={key}
               scope="col"
-              className={`table-schema-head table-schema-head-${key} text-2xs uppercase tracking-capsr`}
+              className={`table-schema-head table-schema-head-${key} text-2xs uppercase tracking-caps`}
               data-schema-grid-column={key}
             >
               {/* The gripper ships hidden for the live review application. */}

@@ -22,7 +22,7 @@ export const AnnotationCard = ({
 }) => (
   <aside
     className={[
-      "annotation-card flex min-w-0 gap-2 rounded-[0.3rem] border bg-[var(--annotation-bg)] px-3 py-2 font-sans text-sm leading-normal whitespace-normal [border-color:color-mix(in_srgb,var(--annotation-c)_30%,transparent)] [&.annotation-hover]:bg-[color-mix(in_srgb,var(--annotation-c)_14%,var(--annotation-bg))] [&.annotation-hover]:[border-color:color-mix(in_srgb,var(--annotation-c)_60%,transparent)] [&>svg]:mt-0.5 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-[var(--annotation-c)]",
+      "annotation-card flex min-w-0 gap-2 rounded-md border bg-[var(--annotation-bg)] px-3 py-2 font-sans text-sm leading-normal whitespace-normal [border-color:color-mix(in_srgb,var(--annotation-c)_30%,transparent)] [&.annotation-hover]:bg-[color-mix(in_srgb,var(--annotation-c)_14%,var(--annotation-bg))] [&.annotation-hover]:[border-color:color-mix(in_srgb,var(--annotation-c)_60%,transparent)] [&>svg]:mt-0.5 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-[var(--annotation-c)]",
       ...className,
     ].join(" ")}
     role="note"

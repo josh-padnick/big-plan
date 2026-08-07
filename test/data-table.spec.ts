@@ -84,31 +84,22 @@ test("should keep every table-chrome focus state subtle in every palette", async
   });
   const filter = table.getByRole("searchbox", { name: "Filter rows" });
   const header = table.locator(".data-table-header");
+  // The assertion is that chrome takes its colour from a role, not that a role
+  // holds one particular shade, so each expected value is resolved from the
+  // live theme rather than restated as a hex the design system can move.
+  const roleColor = (token: string) =>
+    page.evaluate((name) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${name})`;
+      document.body.append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    }, token);
   const paletteCases = [
-    {
-      name: "default light",
-      theme: undefined,
-      colorScheme: "light" as const,
-      border: "rgb(201, 193, 174)",
-      chrome: "rgb(236, 231, 219)",
-      accent: "rgb(22, 101, 52)",
-    },
-    {
-      name: "system dark",
-      theme: undefined,
-      colorScheme: "dark" as const,
-      border: "rgb(79, 74, 63)",
-      chrome: "rgb(51, 46, 36)",
-      accent: "rgb(130, 201, 154)",
-    },
-    {
-      name: "explicit dark",
-      theme: "dark",
-      colorScheme: "light" as const,
-      border: "rgb(79, 74, 63)",
-      chrome: "rgb(51, 46, 36)",
-      accent: "rgb(130, 201, 154)",
-    },
+    { name: "default light", theme: undefined, colorScheme: "light" as const },
+    { name: "system dark", theme: undefined, colorScheme: "dark" as const },
+    { name: "explicit dark", theme: "dark", colorScheme: "light" as const },
   ];
   const tabTo = async (target: typeof filter) => {
     for (let index = 0; index < 20; index += 1) {
@@ -141,19 +132,23 @@ test("should keep every table-chrome focus state subtle in every palette", async
         document.documentElement.dataset["theme"] = theme;
       }, paletteCase.theme);
 
+      const edgeStrong = await roleColor("--edge-strong-c");
+      const chrome = await roleColor("--header-bg");
+      const accent = await roleColor("--accent-c");
+
       await header.click({ position: { x: 2, y: 2 } });
-      await expect(filter).toHaveCSS("border-top-color", paletteCase.border);
-      await expect(header).toHaveCSS("background-color", paletteCase.chrome);
+      await expect(filter).toHaveCSS("border-top-color", edgeStrong);
+      await expect(header).toHaveCSS("background-color", chrome);
 
       await filter.click();
       await expect(filter).toBeFocused();
-      await expect(filter).toHaveCSS("border-top-color", paletteCase.accent);
+      await expect(filter).toHaveCSS("border-top-color", accent);
       await expectSoftHalo(filter);
 
       await page.keyboard.press("Shift+Tab");
       await page.keyboard.press("Tab");
       await expect(filter).toBeFocused();
-      await expect(filter).toHaveCSS("border-top-color", paletteCase.accent);
+      await expect(filter).toHaveCSS("border-top-color", accent);
       await expectSoftHalo(filter);
 
       const focusTargets = [
@@ -253,13 +248,23 @@ test("should preserve generous separation before visible group bands when sortin
     );
 
   await expect(separatedBands).toHaveCount(1);
+  // The 48px step on the spacing scale; the assertion is that the separation
+  // stays generous, not that it stays at one legacy value.
   await expect(groupEnds.locator("td").first()).toHaveCSS(
     "padding-bottom",
-    "40px",
+    "48px",
   );
+  const edge = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--edge-c)";
+    document.body.append(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  });
   await expect(groupEnds.locator("td").first()).toHaveCSS(
     "border-bottom",
-    "1px solid rgb(226, 221, 209)",
+    `1px solid ${edge}`,
   );
   await expect
     .poll(groupEndRows)
@@ -285,11 +290,19 @@ test("should preserve generous separation before visible group bands when sortin
   await expect(separatedBands).toHaveCount(1);
   await expect(groupEnds.locator("td").first()).toHaveCSS(
     "padding-bottom",
-    "40px",
+    "48px",
   );
+  const darkEdge = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--edge-c)";
+    document.body.append(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  });
   await expect(groupEnds.locator("td").first()).toHaveCSS(
     "border-bottom",
-    "1px solid rgb(53, 49, 42)",
+    `1px solid ${darkEdge}`,
   );
 
   await filter.fill("network");

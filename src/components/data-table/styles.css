@@ -230,7 +230,7 @@
   article .data-table-filter-input:focus {
     border-color: var(--accent-c);
     outline: none;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
+    box-shadow: var(--elevation-focus);
   }
   /* Override invariant: keyboard focus beats resting chrome color utilities. */
   article .data-table-button:focus-visible,
@@ -239,7 +239,7 @@
     outline: none;
     background: var(--edge-c);
     color: var(--color-ink);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
+    box-shadow: var(--elevation-focus);
   }
   /* Override invariant: sort focus rounding beats the resting square edge. */
   article .data-table-sort:focus-visible {

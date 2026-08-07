@@ -23,7 +23,7 @@ export const Part = ({
       data-part
       data-part-title={model.title}
       id={model.id}
-      className="plan-part flex items-baseline gap-3 rounded-[0.6rem] bg-surface px-4 py-2"
+      className="plan-part flex items-baseline gap-3 rounded-xl bg-surface px-4 py-2"
     >
       <span
         data-part-number

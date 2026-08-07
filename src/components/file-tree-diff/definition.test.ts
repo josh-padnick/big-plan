@@ -157,7 +157,7 @@ describe("renderFileTreeDiff", () => {
     expect(controls).toContain("aria-pressed:bg-edge");
     // Segmented rounding stands in for the overflow clipping that used to cut
     // these controls' hover hints off.
-    expect(controls).toContain("first:rounded-l-[0.3125rem]");
+    expect(controls).toContain("first:rounded-l-md");
   });
 
   it("should open an entry note as a hover popover rather than a native title", () => {

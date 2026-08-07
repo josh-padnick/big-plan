@@ -227,6 +227,10 @@ it that way: a band carries primary or secondary text, never tertiary.
     0 6px 10px -4px rgb(34 31 27 / 0.14), 0 18px 32px -10px rgb(34 31 27 / 0.14);
   --elevation-pressed: inset 0 1px 2px 0 rgb(34 31 27 / 0.14);
   --elevation-well: inset 0 1px 2px 0 rgb(34 31 27 / 0.05);
+  /* Focus is not elevation, but it is the same vocabulary: one halo, one
+     width, everywhere a control takes the keyboard. */
+  --elevation-focus: 0 0 0 3px
+    color-mix(in srgb, var(--accent-c) 24%, transparent);
 
   color-scheme: light dark;
 }
@@ -297,6 +301,8 @@ same separation.
       0 6px 10px -4px rgb(0 0 0 / 0.6), 0 18px 32px -10px rgb(0 0 0 / 0.5);
     --elevation-pressed: inset 0 1px 2px 0 rgb(0 0 0 / 0.5);
     --elevation-well: inset 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --elevation-focus: 0 0 0 3px
+      color-mix(in srgb, var(--accent-c) 30%, transparent);
   }
 }
 
@@ -361,6 +367,8 @@ same separation.
     0 6px 10px -4px rgb(0 0 0 / 0.6), 0 18px 32px -10px rgb(0 0 0 / 0.5);
   --elevation-pressed: inset 0 1px 2px 0 rgb(0 0 0 / 0.5);
   --elevation-well: inset 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --elevation-focus: 0 0 0 3px
+    color-mix(in srgb, var(--accent-c) 30%, transparent);
 
   color-scheme: dark;
 }
@@ -414,6 +422,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --shadow-raised: var(--elevation-raised);
   --shadow-lifted: var(--elevation-lifted);
   --shadow-floating: var(--elevation-floating);
+  --shadow-focus: var(--elevation-focus);
   --inset-shadow-pressed: var(--elevation-pressed);
   --inset-shadow-well: var(--elevation-well);
 }
