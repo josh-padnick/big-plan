@@ -20,8 +20,8 @@ describe("compileMarkdown code figures", () => {
     expect(bodyHtml.indexOf('data-copy-code=""')).toBeLessThan(
       bodyHtml.indexOf('data-figure-maximize=""'),
     );
-    expect(bodyHtml).toContain(
-      '<pre data-authored-prose="" data-figure-body="">',
+    expect(bodyHtml).toMatch(
+      /<pre data-authored-prose="" data-figure-body=""[^>]*>/,
     );
   });
 

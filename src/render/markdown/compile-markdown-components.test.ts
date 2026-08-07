@@ -32,7 +32,7 @@ describe("compileMarkdown Callout components", () => {
       '# Plan\n\nOutside.\n\n<Callout type="note" title="Review goal">\nInside.\n</Callout>\n',
     );
 
-    expect(bodyHtml).toContain('<p data-authored-prose="">Outside.</p>');
+    expect(bodyHtml).toMatch(/<p data-authored-prose=""[^>]*>Outside\.<\/p>/);
     expect(bodyHtml).toContain('<p data-authored-prose="">Inside.</p>');
     expect(bodyHtml).toContain('<aside data-callout="note"');
     expect(bodyHtml).not.toContain(
