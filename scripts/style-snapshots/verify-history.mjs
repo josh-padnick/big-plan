@@ -522,7 +522,7 @@ const treePairFor = async ({ repoRoot, parent, commit }) => ({
   }),
 });
 
-/** Selects owned regions while retaining a complete global and tip safety net. */
+/** Selects owned regions plus full-document and latest-styling safety nets. */
 export const capturePlan = ({ config, stylingFiles, isTip }) => {
   if (config.schemaVersion < 2) {
     return captureEntries(config).map(({ key }) => key);
