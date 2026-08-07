@@ -21,7 +21,7 @@ const HUNK_HEADER_CLASSES =
 const LINE_CLASSES = "code-diff-line grid min-w-max whitespace-pre";
 // Shared by unified and split annotation surrounds.
 const ANNOTATION_SURROUND_CLASSES =
-  "code-diff-annotation-surround min-w-0 border-l-4 p-1.5";
+  "code-diff-annotation-surround min-w-0 border-l-[0.1875rem] p-1.5";
 
 const annotationLineLabel = (annotation: AnchoredAnnotation): string =>
   annotation.startLine === annotation.endLine

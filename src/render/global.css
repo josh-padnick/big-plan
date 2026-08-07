@@ -218,12 +218,12 @@ it that way: a band carries primary or secondary text, never tertiary.
   --decision-con-bg: var(--danger-50);
   --decision-con-ink: var(--danger-900);
   --annotation-c: var(--note-500);
-  --annotation-rail-c: var(--note-300);
+  --annotation-rail-c: var(--note-400);
   --annotation-bg: var(--note-50);
   --annotation-ink: var(--note-900);
   --diff-content-bg: var(--grey-0);
   --diff-hunk-bg: var(--grey-75);
-  --table-head-bg: var(--grey-100);
+  --table-head-bg: var(--grey-150);
   --diff-hunk-c: var(--grey-600);
   --diff-header-bg: var(--header-bg);
 

@@ -98,8 +98,10 @@
       var(--diff-remove-bg)
     );
   }
+  /* The card continues the spine that runs through the lines it covers:
+     same width, same colour, same left edge, so the pair reads as one bar. */
   article .code-diff-annotation-surround {
-    border-left-color: var(--annotation-c);
+    border-left-color: var(--annotation-rail-c);
     background: color-mix(
       in srgb,
       var(--annotation-c) 8%,

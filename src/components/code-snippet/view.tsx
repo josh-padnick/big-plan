@@ -52,7 +52,7 @@ const CodeLine = ({
     className={`code-snippet-line grid min-w-max grid-cols-[4rem_minmax(max-content,1fr)] whitespace-pre ${
       annotated === undefined
         ? ""
-        : "relative bg-[color-mix(in_srgb,var(--annotation-c)_8%,transparent)] before:absolute before:inset-y-0 before:left-0 before:w-[0.1875rem] before:bg-[var(--annotation-c)] before:content-[''] [&.annotation-hover]:bg-[color-mix(in_srgb,var(--annotation-c)_16%,transparent)]"
+        : "relative bg-[color-mix(in_srgb,var(--annotation-c)_8%,transparent)] before:absolute before:inset-y-0 before:left-0 before:w-[0.1875rem] before:bg-[var(--annotation-rail-c)] before:content-[''] [&.annotation-hover]:bg-[color-mix(in_srgb,var(--annotation-c)_16%,transparent)]"
     } ${annotated?.includes("start") === true ? "before:rounded-t-full" : ""} ${
       annotated?.includes("end") === true ? "before:rounded-b-full" : ""
     }`}
@@ -83,7 +83,17 @@ const annotationCard = (annotation: CompiledCodeSnippetAnnotation) => (
         : `Lines ${annotation.start}-${annotation.end}`
     }
     children={annotation.children}
-    className={["code-snippet-annotation", "mx-3", "my-2"]}
+    // The card carries the same rail as the lines it refers to, at the same
+    // width and the same left edge, so the spine runs unbroken from the first
+    // covered line to the end of the note.
+    className={[
+      "code-snippet-annotation",
+      "my-2",
+      "mr-3",
+      "rounded-l-none",
+      "border-l-[0.1875rem]",
+      "[border-left-color:var(--annotation-rail-c)]",
+    ]}
     dataProperties={{
       "data-snippet-annotation": annotation.sourceValue,
       "data-snippet-anchor-end": annotation.end,
