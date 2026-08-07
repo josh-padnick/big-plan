@@ -141,6 +141,9 @@ test("should keep column drag cursors through pointer gestures in both themes", 
       "article table:not(.data-table-grid):not(.table-schema-grid) thead th",
     )
     .first();
+  const schemaRowHeader = page
+    .locator("[data-database-table-schema] tbody th[scope=row]")
+    .first();
   const cursorAt = async (x: number, y: number): Promise<string | null> =>
     page.evaluate(
       ({ clientX, clientY }) => {
@@ -153,10 +156,12 @@ test("should keep column drag cursors through pointer gestures in both themes", 
     {
       name: "DataTable",
       selector: "[data-data-table] thead [data-column-reorderable]",
+      cursorSelector: "[data-table-sort]",
     },
     {
       name: "DatabaseTableSchema",
       selector: "[data-database-table-schema] thead [data-column-reorderable]",
+      cursorSelector: null,
     },
   ];
 
@@ -171,9 +176,14 @@ test("should keep column drag cursors through pointer gestures in both themes", 
     for (const surface of surfaces) {
       await test.step(`${theme}: ${surface.name}`, async () => {
         const header = page.locator(surface.selector).first();
+        const cursorTarget =
+          surface.cursorSelector === null
+            ? header
+            : header.locator(surface.cursorSelector);
         await header.scrollIntoViewIfNeeded();
         await expect(header).toHaveJSProperty("draggable", false);
-        const headerBox = await header.boundingBox();
+        await expect(header).toHaveCSS("user-select", "none");
+        const headerBox = await cursorTarget.boundingBox();
         const controlBox = await pointerControl.boundingBox();
         if (headerBox === null || controlBox === null) {
           throw new Error("Column drag cursor targets must be visible");
@@ -191,15 +201,42 @@ test("should keep column drag cursors through pointer gestures in both themes", 
         expect(await cursorAt(headerPoint.x, headerPoint.y)).toBe("grab");
         await page.mouse.down();
         expect(await cursorAt(headerPoint.x, headerPoint.y)).toBe("grabbing");
+        await expect(body).toHaveAttribute("data-column-pressing", "");
+        expect(
+          await cursorTarget.evaluate((element) => {
+            for (let pointerId = 1; pointerId < 10; pointerId += 1) {
+              if (element.hasPointerCapture(pointerId)) return true;
+            }
+            return false;
+          }),
+        ).toBe(true);
         await page.mouse.move(controlPoint.x, controlPoint.y, { steps: 10 });
         await expect(body).toHaveAttribute("data-column-dragging", "");
         expect(await cursorAt(controlPoint.x, controlPoint.y)).toBe("grabbing");
         await expect(plainTableHeader).toHaveCSS("cursor", "default");
+        await expect(schemaRowHeader).toHaveCSS("cursor", "default");
         await page.mouse.up();
+        await expect(body).not.toHaveAttribute("data-column-pressing");
         await expect(body).not.toHaveAttribute("data-column-dragging");
         expect(await cursorAt(controlPoint.x, controlPoint.y)).toBe("pointer");
         await expect(header).toHaveCSS("cursor", "grab");
         await expect(plainTableHeader).toHaveCSS("cursor", "auto");
+
+        await page.mouse.move(headerPoint.x, headerPoint.y);
+        await page.mouse.down();
+        expect(
+          await cursorTarget.evaluate((element) => {
+            for (let pointerId = 1; pointerId < 10; pointerId += 1) {
+              if (!element.hasPointerCapture(pointerId)) continue;
+              element.releasePointerCapture(pointerId);
+              return true;
+            }
+            return false;
+          }),
+        ).toBe(true);
+        await page.mouse.move(headerPoint.x + 1, headerPoint.y);
+        await expect(body).not.toHaveAttribute("data-column-pressing");
+        await page.mouse.up();
       });
     }
   }
@@ -536,6 +573,9 @@ test("should exercise every live component affordance with browser gestures", as
       "data-table-column",
       firstColumn ?? "",
     );
+    const movedSort = headers.nth(1).locator("[data-table-sort]");
+    await movedSort.click();
+    await expect(headers.nth(1)).toHaveAttribute("aria-sort", "ascending");
 
     const maximize = table.locator("[data-figure-maximize]");
     await maximize.click();

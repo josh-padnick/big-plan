@@ -2,11 +2,16 @@
 
 @layer components {
   article [data-column-reorderable] {
-    cursor: grab;
+    user-select: none;
   }
 }
 
 @layer bp-state {
+  article [data-column-reorderable],
+  article [data-column-reorderable] * {
+    cursor: grab;
+  }
+
   /* Override invariant: the pointer-owned press/drag beats every resting
      cursor while the gesture is active, including outside the source header. */
   body[data-column-pressing],
@@ -18,10 +23,10 @@
 
   /* Override invariant: non-reorderable table headers never advertise column
      reordering, even while a different header owns the active gesture. */
-  body[data-column-pressing] article thead th:not([data-column-reorderable]),
-  body[data-column-pressing] article thead th:not([data-column-reorderable]) *,
-  body[data-column-dragging] article thead th:not([data-column-reorderable]),
-  body[data-column-dragging] article thead th:not([data-column-reorderable]) * {
+  body[data-column-pressing] article th:not([data-column-reorderable]),
+  body[data-column-pressing] article th:not([data-column-reorderable]) *,
+  body[data-column-dragging] article th:not([data-column-reorderable]),
+  body[data-column-dragging] article th:not([data-column-reorderable]) * {
     cursor: default !important;
   }
 }

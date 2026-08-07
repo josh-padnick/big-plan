@@ -33,109 +33,160 @@ import { DIAGRAM_SCRIPT } from "./diagram-script.js";
 const COMPARE_DATA_TABLE_VALUES_SOURCE = compareDataTableValues.toString();
 
 export const VIEWER_SCRIPT = `<script>
-const setColumnDragState = (figure, { pressed, dragging }) => {
-  figure.toggleAttribute("data-column-pressing", pressed);
-  figure.toggleAttribute("data-column-dragging", dragging);
+const setColumnDragState = ({ pressed, dragging }) => {
   document.body?.toggleAttribute("data-column-pressing", pressed);
   document.body?.toggleAttribute("data-column-dragging", dragging);
 };
 
+let activeColumnReorder = null;
+let suppressedColumnDragClick = null;
+let suppressedColumnDragClickTimer = null;
+
+const clearColumnDropIndicators = (drag) => {
+  for (const head of drag.heads) {
+    head.classList.remove(drag.beforeClass);
+    head.classList.remove(drag.afterClass);
+  }
+};
+
+const columnTargetAt = (drag, clientX, clientY) => {
+  const element = document.elementFromPoint(clientX, clientY);
+  const target = element?.closest("[data-column-reorderable]");
+  return target instanceof HTMLElement && drag.heads.includes(target)
+    ? target
+    : null;
+};
+
+const finishColumnPointerReorder = (event, commit) => {
+  const drag = activeColumnReorder;
+  if (
+    drag === null ||
+    (event !== null && event.pointerId !== drag.pointerId)
+  )
+    return;
+  const shouldSuppressClick = commit && drag.dragging && event !== null;
+  if (shouldSuppressClick) {
+    const target = columnTargetAt(
+      drag,
+      event.clientX,
+      event.clientY,
+    );
+    if (target !== null && target !== drag.head) {
+      const bounds = target.getBoundingClientRect();
+      drag.onDrop({
+        column: drag.columnOf(drag.head),
+        target,
+        after: event.clientX > bounds.left + bounds.width / 2,
+      });
+    }
+  }
+  clearColumnDropIndicators(drag);
+  activeColumnReorder = null;
+  setColumnDragState({ pressed: false, dragging: false });
+  if (drag.captureTarget.hasPointerCapture(drag.pointerId)) {
+    drag.captureTarget.releasePointerCapture(drag.pointerId);
+  }
+  if (!shouldSuppressClick) return;
+  suppressedColumnDragClick = { pointerId: drag.pointerId };
+  if (suppressedColumnDragClickTimer !== null) {
+    clearTimeout(suppressedColumnDragClickTimer);
+  }
+  suppressedColumnDragClickTimer = setTimeout(() => {
+    suppressedColumnDragClick = null;
+    suppressedColumnDragClickTimer = null;
+  }, 0);
+};
+
+document.addEventListener("pointermove", (event) => {
+  const drag = activeColumnReorder;
+  if (drag === null || event.pointerId !== drag.pointerId) return;
+  if (!drag.dragging) {
+    const distance = Math.hypot(
+      event.clientX - drag.startX,
+      event.clientY - drag.startY,
+    );
+    if (distance < 4) return;
+    drag.dragging = true;
+    setColumnDragState({ pressed: true, dragging: true });
+  }
+  event.preventDefault();
+  clearColumnDropIndicators(drag);
+  const target = columnTargetAt(drag, event.clientX, event.clientY);
+  if (target === null || target === drag.head) return;
+  const bounds = target.getBoundingClientRect();
+  const after = event.clientX > bounds.left + bounds.width / 2;
+  target.classList.add(after ? drag.afterClass : drag.beforeClass);
+});
+document.addEventListener("pointerup", (event) => {
+  finishColumnPointerReorder(event, true);
+});
+document.addEventListener("pointercancel", (event) => {
+  finishColumnPointerReorder(event, false);
+});
+document.addEventListener("lostpointercapture", (event) => {
+  if (event.target === activeColumnReorder?.captureTarget) {
+    finishColumnPointerReorder(event, false);
+  }
+});
+document.addEventListener(
+  "click",
+  (event) => {
+    if (
+      suppressedColumnDragClick === null ||
+      event.pointerId !== suppressedColumnDragClick.pointerId
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressedColumnDragClick = null;
+    if (suppressedColumnDragClickTimer !== null) {
+      clearTimeout(suppressedColumnDragClickTimer);
+      suppressedColumnDragClickTimer = null;
+    }
+  },
+  true,
+);
+addEventListener("blur", () => {
+  finishColumnPointerReorder(null, false);
+});
+
 // Own the reorder gesture with Pointer Events so Chromium cannot replace the
 // page cursor with its native HTML5 drag cursor.
 const installColumnPointerReorder = ({
-  figure,
   heads,
   columnOf,
   onDrop,
   beforeClass,
   afterClass,
 }) => {
-  let active = null;
-  let suppressClick = null;
-  const clearDropIndicators = () => {
-    for (const head of heads) {
-      head.classList.remove(beforeClass);
-      head.classList.remove(afterClass);
-    }
-  };
-  const setState = (pressed, dragging) =>
-    setColumnDragState(figure, { pressed, dragging });
-  const targetAt = (clientX, clientY) => {
-    const element = document.elementFromPoint(clientX, clientY);
-    const target = element?.closest("[data-column-reorderable]");
-    return target instanceof HTMLElement && heads.includes(target) ? target : null;
-  };
-  const updateDropIndicator = (clientX, clientY) => {
-    clearDropIndicators();
-    const target = targetAt(clientX, clientY);
-    if (target === null || target === active?.head) return;
-    const bounds = target.getBoundingClientRect();
-    const after = clientX > bounds.left + bounds.width / 2;
-    target.classList.add(after ? afterClass : beforeClass);
-  };
-  const finish = (event, commit) => {
-    const drag = active;
-    if (drag === null) return;
-    if (commit && drag.dragging && event !== null) {
-      const target = targetAt(event.clientX, event.clientY);
-      if (target !== null && target !== drag.head) {
-        const bounds = target.getBoundingClientRect();
-        onDrop({
-          column: columnOf(drag.head),
-          target,
-          after: event.clientX > bounds.left + bounds.width / 2,
-        });
-      }
-      suppressClick = drag.head;
-    }
-    clearDropIndicators();
-    setState(false, false);
-    active = null;
-  };
-  const onPointerMove = (event) => {
-    if (active === null || event.pointerId !== active.pointerId) return;
-    if (!active.dragging) {
-      const distance = Math.hypot(
-        event.clientX - active.startX,
-        event.clientY - active.startY,
-      );
-      if (distance < 4) return;
-      active.dragging = true;
-      setState(true, true);
-    }
-    event.preventDefault();
-    updateDropIndicator(event.clientX, event.clientY);
-  };
-  const onPointerUp = (event) => {
-    if (active?.pointerId === event.pointerId) finish(event, true);
-  };
-  document.addEventListener("pointermove", onPointerMove);
-  document.addEventListener("pointerup", onPointerUp);
-  document.addEventListener("pointercancel", (event) => finish(event, false));
-  addEventListener("blur", () => finish(null, false));
   for (const head of heads) {
     head.draggable = false;
     head.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || !event.isPrimary || active !== null) return;
-      active = {
+      if (
+        event.button !== 0 ||
+        !event.isPrimary ||
+        activeColumnReorder !== null
+      )
+        return;
+      const pointerTarget =
+        event.target instanceof Element ? event.target : head;
+      const captureTarget = pointerTarget.closest("button") ?? head;
+      activeColumnReorder = {
         head,
+        captureTarget,
+        heads,
+        columnOf,
+        onDrop,
+        beforeClass,
+        afterClass,
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
         dragging: false,
       };
-      setState(true, false);
+      captureTarget.setPointerCapture(event.pointerId);
+      setColumnDragState({ pressed: true, dragging: false });
     });
-    head.addEventListener(
-      "click",
-      (event) => {
-        if (suppressClick !== head) return;
-        event.preventDefault();
-        event.stopPropagation();
-        suppressClick = null;
-      },
-      true,
-    );
   }
 };
 
@@ -779,7 +830,6 @@ const installColumnPointerReorder = ({
     };
 
     figure.setAttribute("data-schema-reorderable", "");
-    figure.setAttribute("data-column-reorderable-figure", "");
     const reorderableHeads = [];
     for (const head of Array.from(headRow.children)) {
       const column = head.getAttribute("data-schema-grid-column");
@@ -817,7 +867,6 @@ const installColumnPointerReorder = ({
       });
     }
     installColumnPointerReorder({
-      figure,
       heads: reorderableHeads,
       columnOf: (head) => head.getAttribute("data-schema-grid-column"),
       beforeClass: "table-schema-head-drop-before",
@@ -1734,7 +1783,6 @@ const installColumnPointerReorder = ({
     // affordance that cannot act. Enabling them is the last thing this leg
     // does for a table, after its state is already restored.
     figure.setAttribute("data-table-reorderable", "");
-    figure.setAttribute("data-column-reorderable-figure", "");
     figure.setAttribute("data-table-interactive", "");
     for (const control of figure.querySelectorAll(
       "[data-table-filter],[data-table-fit-button],[data-table-menu-button],[data-table-reset]",
@@ -1776,7 +1824,6 @@ const installColumnPointerReorder = ({
       }
     }
     installColumnPointerReorder({
-      figure,
       heads: reorderableHeads,
       columnOf: (head) => Array.from(headRow.children).indexOf(head),
       beforeClass: "data-table-head-drop-before",
