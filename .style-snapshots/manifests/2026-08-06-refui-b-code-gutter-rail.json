@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "design(code): give the annotation gutter and rail their approved handling [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/components/code-diff/view-header.tsx",
+      "propertyDeltas": [
+        {
+          "property": "header rule",
+          "from": "no rule under the file identity",
+          "to": "the hairline the approved render carried"
+        }
+      ]
+    },
+    {
+      "path": "src/components/code-diff/view-layouts.tsx",
+      "propertyDeltas": [
+        {
+          "property": "line-number gutter",
+          "from": "a filled well block behind the numbers",
+          "to": "a hairline rule with the numbers at the tertiary text role"
+        }
+      ]
+    },
+    {
+      "path": "src/components/code-snippet/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "line-number gutter",
+          "from": "a filled well block behind the numbers",
+          "to": "a hairline rule with the numbers at the tertiary text role, which is the older handling the captain preferred"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.css",
+      "propertyDeltas": [
+        {
+          "property": "annotation roles",
+          "from": "roles tuned for the filled gutter",
+          "to": "roles that carry the hairline handling"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded stylesheet",
+          "from": "the stylesheet before the gutter changed",
+          "to": "the stylesheet carrying the hairline gutter"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__maximized-code__desktop__dark.png",
+      "changedPixels": 283690,
+      "before": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "3b265106a89c3abcd190aea196d609fb4843f0016c561731ee58c8b27bf92b7b"
+      },
+      "after": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "1839ead2540569db4fcbec8ec47c7c5b56f688659d3298cf565382b25e9846b9"
+      },
+      "propertyDeltas": [
+        {
+          "property": "header rule",
+          "from": "no rule under the file identity",
+          "to": "the hairline the approved render carried"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__light.png",
+      "changedPixels": 286409,
+      "before": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "c1ce5325a972ddadbd491717d26ca25190a863b45844c79f410f6718f2d94ded"
+      },
+      "after": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "b37d97e84b564a1a310a96a3085591e9526ebeec61678b6ec0fcf0a4d2267d9f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "header rule",
+          "from": "no rule under the file identity",
+          "to": "the hairline the approved render carried"
+        }
+      ]
+    }
+  ]
+}

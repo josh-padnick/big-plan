@@ -132,16 +132,16 @@ reading surface read as paper rather than as white.
   --info-800: #1e384d;
   --info-900: #162736;
 
-  --note-50: #e8eaf8;
+  --note-50: #e4e8f7;
   --note-100: #d5d9f0;
   --note-200: #b9bde4;
-  --note-300: #989ed7;
+  --note-300: #aab4f0;
   --note-400: #757cc7;
-  --note-500: #5359b2;
+  --note-500: #4e5891;
   --note-600: #454892;
   --note-700: #393b74;
   --note-800: #2c2d59;
-  --note-900: #212140;
+  --note-900: #2a2f4e;
 }
 
 /*
@@ -217,7 +217,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --decision-con-c: var(--danger-700);
   --decision-con-bg: var(--danger-50);
   --decision-con-ink: var(--danger-900);
-  --annotation-c: var(--note-700);
+  --annotation-c: var(--note-500);
   --annotation-bg: var(--note-50);
   --annotation-ink: var(--note-900);
   --diff-content-bg: var(--grey-0);
