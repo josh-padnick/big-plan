@@ -13,7 +13,7 @@
 //    anything running as the reviewer, so drafts and progress events are
 //    re-checked on read exactly as if they had arrived over the wire.
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import type { ReviewComment } from "./comment.js";
@@ -27,6 +27,7 @@ const FILE_MODE = 0o600;
 const PROGRESS_STATES = new Set(["waiting", "live", "done", "failed"]);
 const PROGRESS_TEXT_LIMIT = 160;
 const PROGRESS_EVENT_LIMIT = 200;
+const REVIEW_PLAN_ID_LENGTH = 16;
 
 /** One relayed agent progress event, after checking. */
 export type ProgressEvent = {
@@ -47,6 +48,20 @@ export type ReviewStore = {
   readonly progressPath: string;
   readonly sessionPath: string;
 };
+
+/**
+ * Namespaces review custody by source location while remaining stable across
+ * the source revisions produced during one review.
+ */
+export const deriveReviewPlanId = ({
+  planPath,
+}: {
+  readonly planPath: string;
+}): string =>
+  createHash("sha256")
+    .update(resolve(planPath))
+    .digest("hex")
+    .slice(0, REVIEW_PLAN_ID_LENGTH);
 
 // The one place a review path is constructed. Callers name a leaf, never a
 // path, and a leaf that escaped the review root would be a defect in this

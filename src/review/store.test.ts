@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   appendProgress,
+  deriveReviewPlanId,
   prepareStore,
   readProgress,
   reviewStoreFor,
@@ -24,6 +25,12 @@ afterEach(() => {
 });
 
 describe("review store placement", () => {
+  it("should keep one review namespace across revisions at the same path", () => {
+    expect(deriveReviewPlanId({ planPath: "/plans/plan.mdx" })).toBe(
+      deriveReviewPlanId({ planPath: "/plans/nested/../plan.mdx" }),
+    );
+  });
+
   it("should put every artifact under one .big-plan beside the plan", async () => {
     const { directory, planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });

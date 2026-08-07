@@ -32,12 +32,12 @@ import {
   renderDocument,
   MarkdownDiagnosticsError,
 } from "../render/render-document.js";
-import { derivePlanId } from "../render/plan-id.js";
 import type { BlockMapEntry, ReviewComment } from "./comment.js";
 import { CommentRejected, validateComments } from "./comment.js";
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 import {
   appendProgress,
+  deriveReviewPlanId,
   prepareStore,
   randomId,
   readComments,
@@ -178,10 +178,7 @@ export const startReviewRuntime = async ({
   readonly planPath: string;
 }): Promise<ReviewRuntime> => {
   const resolvedPlanPath = resolve(planPath);
-  const planId = derivePlanId({
-    planPath: resolvedPlanPath,
-    planContent: "",
-  });
+  const planId = deriveReviewPlanId({ planPath: resolvedPlanPath });
   const sessionId = randomId(8);
   const token = randomBytes(32).toString("base64url");
   const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
@@ -201,7 +198,7 @@ export const startReviewRuntime = async ({
     const rendered = renderDocument({
       markdown,
       fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
-      planPath: resolvedPlanPath,
+      identity: { planId, reviewSessionId: sessionId, reviewToken: token },
     });
     for (const block of rendered.blocks) {
       blocks.set(block.id, block);

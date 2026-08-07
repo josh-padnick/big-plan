@@ -55,11 +55,11 @@ const rootAttributesFor = (
 const renderCompiledDocument = ({
   compiled,
   fallbackTitle,
-  planId,
+  identity,
 }: {
   readonly compiled: CompiledMarkdown;
   readonly fallbackTitle: string;
-  readonly planId?: string;
+  readonly identity: DocumentIdentity;
 }): RenderedDocument => {
   const { root, sections, elementIds, title, partIds, blocks } = compiled;
   const resolvedTitle = title ?? fallbackTitle;
@@ -90,7 +90,7 @@ const renderCompiledDocument = ({
     styles: shell.styles,
     bodyClassName: shell.bodyClassName,
     bodyHtml: shell.html,
-    planId,
+    rootAttributes: rootAttributesFor(identity),
   });
   return { html, title: resolvedTitle, sections, blocks };
 };
@@ -105,20 +105,29 @@ export const renderDocument = ({
   markdown,
   fallbackTitle,
   planPath,
+  identity,
 }: {
   readonly markdown: string;
   readonly fallbackTitle: string;
   // Only filesystem-backed render delivery supplies a path. Omitting it keeps
   // the pure renderer useful while deliberately disabling viewer persistence.
   readonly planPath?: string;
+  // A served review supplies runtime identity explicitly. Static rendering
+  // derives only the ordinary content-sensitive viewer namespace above.
+  readonly identity?: DocumentIdentity;
 }): RenderedDocument => {
   const compiled = compileMarkdown({ markdown });
+  const resolvedIdentity =
+    identity ??
+    (planPath === undefined
+      ? {}
+      : {
+          planId: derivePlanId({ planPath, planContent: markdown }),
+        });
   return renderCompiledDocument({
     compiled,
     fallbackTitle,
-    ...(planPath === undefined
-      ? {}
-      : { planId: derivePlanId({ planPath, planContent: markdown }) }),
+    identity: resolvedIdentity,
   });
 };
 
@@ -134,7 +143,11 @@ export const validateDocument = ({
   readonly fallbackTitle: string;
 }): PlanModel => {
   const compiled = compileMarkdownWithModels({ markdown });
-  const rendered = renderCompiledDocument({ compiled, fallbackTitle });
+  const rendered = renderCompiledDocument({
+    compiled,
+    fallbackTitle,
+    identity: {},
+  });
   return {
     title: rendered.title,
     sections: compiled.sections,
