@@ -129,6 +129,81 @@ test("should account for every registered component in the interaction gate", as
   }
 });
 
+test("should keep column drag cursors through native gestures in both themes", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+  const body = page.locator("body");
+  const pointerControl = page.locator("[data-preferences-open]");
+  const plainTableHeader = page
+    .locator(
+      "article table:not(.data-table-grid):not(.table-schema-grid) thead th",
+    )
+    .first();
+  const cursorAt = async (x: number, y: number): Promise<string | null> =>
+    page.evaluate(
+      ({ clientX, clientY }) => {
+        const target = document.elementFromPoint(clientX, clientY);
+        return target === null ? null : getComputedStyle(target).cursor;
+      },
+      { clientX: x, clientY: y },
+    );
+  const surfaces = [
+    {
+      name: "DataTable",
+      selector: "[data-data-table] thead [data-column-reorderable]",
+    },
+    {
+      name: "DatabaseTableSchema",
+      selector:
+        "[data-database-table-schema] thead [data-column-reorderable]",
+    },
+  ];
+
+  await expect(pointerControl).toHaveCSS("cursor", "pointer");
+  await expect(plainTableHeader).toHaveCSS("cursor", "auto");
+
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset["theme"] = value;
+    }, theme);
+
+    for (const surface of surfaces) {
+      await test.step(`${theme}: ${surface.name}`, async () => {
+        const header = page.locator(surface.selector).first();
+        await header.scrollIntoViewIfNeeded();
+        const headerBox = await header.boundingBox();
+        const controlBox = await pointerControl.boundingBox();
+        if (headerBox === null || controlBox === null) {
+          throw new Error("Column drag cursor targets must be visible");
+        }
+        const headerPoint = {
+          x: headerBox.x + 4,
+          y: headerBox.y + headerBox.height / 2,
+        };
+        const controlPoint = {
+          x: controlBox.x + controlBox.width / 2,
+          y: controlBox.y + controlBox.height / 2,
+        };
+
+        await page.mouse.move(headerPoint.x, headerPoint.y);
+        expect(await cursorAt(headerPoint.x, headerPoint.y)).toBe("grab");
+        await page.mouse.down();
+        expect(await cursorAt(headerPoint.x, headerPoint.y)).toBe("grabbing");
+        await page.mouse.move(controlPoint.x, controlPoint.y, { steps: 10 });
+        await expect(body).toHaveAttribute("data-column-dragging", "");
+        expect(await cursorAt(controlPoint.x, controlPoint.y)).toBe("grabbing");
+        await expect(plainTableHeader).toHaveCSS("cursor", "default");
+        await page.mouse.up();
+        await expect(body).not.toHaveAttribute("data-column-dragging");
+        await expect(header).toHaveCSS("cursor", "grab");
+        await expect(plainTableHeader).toHaveCSS("cursor", "auto");
+      });
+    }
+  }
+});
+
 test("should exercise every live component affordance with browser gestures", async ({
   page,
   allComponentsViewerUrl,
@@ -143,25 +218,6 @@ test("should exercise every live component affordance with browser gestures", as
       .filter({ hasText: "Review decisions" })
       .click();
     await expect(page).toHaveURL(/#review-decisions$/u);
-  });
-
-  await test.step("column reorder: cursor states stay scoped to movable headers", async () => {
-    const movable = page.locator(
-      "[data-data-table] thead [data-column-reorderable], [data-database-table-schema] thead [data-column-reorderable]",
-    );
-    const plainTableHeader = page
-      .locator(
-        "article table:not(.data-table-grid):not(.table-schema-grid) thead th",
-      )
-      .first();
-    await expect(movable).not.toHaveCount(0);
-    await expect(plainTableHeader).toHaveCount(1);
-    await expect(movable.first()).toHaveCSS("cursor", "grab");
-    await movable.first().hover();
-    await expect(movable.first()).toHaveCSS("cursor", "grab");
-    await expect(plainTableHeader).toHaveCSS("cursor", "auto");
-    await plainTableHeader.hover();
-    await expect(plainTableHeader).toHaveCSS("cursor", "auto");
   });
 
   await test.step("Part: collapse and expand", async () => {
@@ -327,27 +383,6 @@ test("should exercise every live component affordance with browser gestures", as
     const first = headers.first();
     const firstKey = await first.getAttribute("data-schema-grid-column");
     await expect(first).toHaveAttribute("draggable", "true");
-    await expect(first).toHaveCSS("cursor", "grab");
-    await first.evaluate((element) => {
-      element.dispatchEvent(
-        new DragEvent("dragstart", {
-          bubbles: true,
-          dataTransfer: new DataTransfer(),
-        }),
-      );
-    });
-    await expect(first).toHaveCSS("cursor", "grabbing");
-    await expect(page.locator("body")).toHaveCSS("cursor", "grabbing");
-    await expect(
-      page
-        .locator(
-          "article table:not(.data-table-grid):not(.table-schema-grid) thead th",
-        )
-        .first(),
-    ).toHaveCSS("cursor", "default");
-    await first.dispatchEvent("dragend");
-    await expect(first).toHaveCSS("cursor", "grab");
-    await expect(page.locator("body")).toHaveCSS("cursor", "auto");
     await expect(first).toHaveAttribute(
       "aria-keyshortcuts",
       "ArrowLeft ArrowRight",
@@ -472,27 +507,6 @@ test("should exercise every live component affordance with browser gestures", as
     const headers = table.locator("thead [data-table-column]");
     const firstColumn = await headers.first().getAttribute("data-table-column");
     const second = headers.nth(1);
-    await expect(headers.first()).toHaveCSS("cursor", "grab");
-    await headers.first().evaluate((element) => {
-      element.dispatchEvent(
-        new DragEvent("dragstart", {
-          bubbles: true,
-          dataTransfer: new DataTransfer(),
-        }),
-      );
-    });
-    await expect(headers.first()).toHaveCSS("cursor", "grabbing");
-    await expect(page.locator("body")).toHaveCSS("cursor", "grabbing");
-    await expect(
-      page
-        .locator(
-          "article table:not(.data-table-grid):not(.table-schema-grid) thead th",
-        )
-        .first(),
-    ).toHaveCSS("cursor", "default");
-    await headers.first().dispatchEvent("dragend");
-    await expect(headers.first()).toHaveCSS("cursor", "grab");
-    await expect(page.locator("body")).toHaveCSS("cursor", "auto");
     const secondBox = await second.boundingBox();
     expect(secondBox).not.toBeNull();
     await headers.first().dragTo(second, {
