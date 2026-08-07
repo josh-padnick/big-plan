@@ -330,10 +330,17 @@ const canonicalize = (value) => {
 const policyFingerprint = async ({ config, harnessRoot }) => {
   const hash = createHash("sha256");
   hash.update(JSON.stringify(canonicalize(config)));
-  const sources = POLICY_SOURCE_PATHS.map((path) => ({
-    label: `gate/${path.slice(path.lastIndexOf("/") + 1)}`,
-    path,
-  }));
+  const sources = [
+    ...POLICY_SOURCE_PATHS.map((path) => ({
+      label: `gate/${path.slice(path.lastIndexOf("/") + 1)}`,
+      path,
+    })),
+    {
+      label: "dependencies/package.json",
+      path: join(harnessRoot, "package.json"),
+    },
+    { label: "dependencies/bun.lock", path: join(harnessRoot, "bun.lock") },
+  ];
   for (const [index, part] of config.captureCommand.entries()) {
     const path = part.replaceAll("{harnessRoot}", harnessRoot);
     if (!isAbsolute(path)) {
@@ -362,7 +369,41 @@ const policyFingerprint = async ({ config, harnessRoot }) => {
     hash.update("\0");
     hash.update(label);
     hash.update("\0");
-    hash.update(await readFile(path));
+    try {
+      hash.update(await readFile(path));
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
+      hash.update("<missing>");
+    }
+  }
+  return hash.digest("hex");
+};
+
+/** Binds completeness evidence to the exact active fixture contents. */
+const fixtureFingerprint = async ({ config, repoRoot, policyFingerprint }) => {
+  const hash = createHash("sha256");
+  hash.update(policyFingerprint);
+  for (const path of [...new Set(fixturePathsForConfig(config))].sort()) {
+    const absolutePath = resolve(repoRoot, path);
+    const repoRelativePath = relative(repoRoot, absolutePath);
+    if (repoRelativePath.startsWith("../") || isAbsolute(repoRelativePath)) {
+      throw new Error(
+        "Style screenshot fixture paths must stay in the repository.",
+      );
+    }
+    hash.update("\0");
+    hash.update(path);
+    hash.update("\0");
+    try {
+      hash.update(await readFile(absolutePath));
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
+      hash.update("<missing>");
+    }
   }
   return hash.digest("hex");
 };
@@ -371,19 +412,20 @@ const receiptKey = ({ parentTree, commitTree }) =>
   `${parentTree}:${commitTree}`;
 
 const readReceiptStore = async (directory) => {
-  const emptyStore = { schemaVersion: 1, receipts: {}, tipReceipts: {} };
+  const emptyStore = { schemaVersion: 2, receipts: {}, coverageReceipts: {} };
   try {
     const store = JSON.parse(
       await readFile(join(directory, "receipts.json"), "utf8"),
     );
-    return store.schemaVersion === 1 &&
+    return store.schemaVersion === 2 &&
       store.receipts !== null &&
       typeof store.receipts === "object"
       ? {
           ...store,
-          tipReceipts:
-            store.tipReceipts !== null && typeof store.tipReceipts === "object"
-              ? store.tipReceipts
+          coverageReceipts:
+            store.coverageReceipts !== null &&
+            typeof store.coverageReceipts === "object"
+              ? store.coverageReceipts
               : {},
         }
       : emptyStore;
@@ -492,36 +534,100 @@ export const capturePlan = ({ config, stylingFiles, isTip }) => {
     globalPatterns.some((pattern) => pattern.test(path)),
   );
   const entries = captureEntries(config);
+  const componentEntries = entries.filter(
+    ({ capture }) => capture.scope === "component",
+  );
+  const unownedFiles = stylingFiles.filter(
+    (path) =>
+      !globalPatterns.some((pattern) => pattern.test(path)) &&
+      !componentEntries.some(({ capture }) =>
+        capture.ownerPatterns.some((pattern) => new RegExp(pattern).test(path)),
+      ),
+  );
+  if (unownedFiles.length > 0) {
+    throw new Error(
+      `Style screenshot capture policy has no component owner for ${unownedFiles.join(", ")}. Mark the file global or add an owner pattern.`,
+    );
+  }
   const selected = entries.filter(({ capture }) => {
     if (isTip || isGlobal) {
       return true;
     }
     return (
-      capture.scope === "component" &&
-      stylingFiles.some((path) =>
-        capture.ownerPatterns.some((pattern) => new RegExp(pattern).test(path)),
-      )
-    );
-  });
-  if (!isGlobal && !isTip) {
-    const ownedFiles = stylingFiles.filter((path) =>
-      entries.some(
-        ({ capture }) =>
-          capture.scope === "component" &&
+      capture.scope === "full-document" ||
+      (capture.scope === "component" &&
+        stylingFiles.some((path) =>
           capture.ownerPatterns.some((pattern) =>
             new RegExp(pattern).test(path),
           ),
+        ))
+    );
+  });
+  return selected.map(({ key }) => key);
+};
+
+/** Verifies that a complete capture request produced every configured tuple. */
+const assertCaptureCompleteness = async ({
+  config,
+  captureKeys,
+  outputDirectory,
+}) => {
+  try {
+    const captureManifest = JSON.parse(
+      await readFile(join(outputDirectory, "capture-manifest.json"), "utf8"),
+    );
+    const observedTuples = new Set(
+      captureManifest.captures.map(
+        (entry) => `${entry.key}@${entry.viewport}@${entry.theme}`,
       ),
     );
-    if (ownedFiles.length !== stylingFiles.length) {
+    const definitionsByKey = new Map(
+      captureEntries(config).map((entry) => [entry.key, entry.capture]),
+    );
+    const missingTuples = captureKeys.flatMap((key) => {
+      const capture = definitionsByKey.get(key);
+      if (capture === undefined) {
+        return [key];
+      }
+      return capture.viewports.flatMap((viewport) =>
+        capture.themes
+          .filter(
+            (theme) => !observedTuples.has(`${key}@${viewport.name}@${theme}`),
+          )
+          .map((theme) => `${key} at ${viewport.name}/${theme}`),
+      );
+    });
+    if (missingTuples.length > 0) {
       throw new Error(
-        `Style screenshot capture policy has no component owner for ${stylingFiles
-          .filter((path) => !ownedFiles.includes(path))
-          .join(", ")}. Mark the file global or add an owner pattern.`,
+        `Final style fixture did not produce a visible target for ${missingTuples.join(", ")}.`,
+      );
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+    const definitionsByKey = new Map(
+      captureEntries(config).map((entry) => [entry.key, entry.capture]),
+    );
+    const expectedCaptureCount = captureKeys.reduce((total, key) => {
+      const capture = definitionsByKey.get(key);
+      return (
+        total +
+        (capture === undefined
+          ? 0
+          : capture.themes.length * capture.viewports.length)
+      );
+    }, 0);
+    const actualCaptureCount = (await listFiles(outputDirectory)).filter(
+      (path) => path.endsWith(".png"),
+    ).length;
+    if (actualCaptureCount !== expectedCaptureCount) {
+      throw new Error(
+        `Final style fixture produced ${actualCaptureCount} of ${expectedCaptureCount} configured captures.`,
+        { cause: error },
       );
     }
   }
-  return selected.map(({ key }) => key);
 };
 
 /** Prevents a branch from reinterpreting capture keys present on its base. */
@@ -1145,6 +1251,11 @@ export const verifyHistory = async ({
     config,
     harnessRoot,
   });
+  const activeFixtureFingerprint = await fixtureFingerprint({
+    config,
+    repoRoot,
+    policyFingerprint: activePolicyFingerprint,
+  });
   const environment = await currentEnvironment({ repoRoot });
   const receiptDirectory =
     process.env.STYLE_HISTORY_RECEIPT_DIR === undefined
@@ -1152,7 +1263,7 @@ export const verifyHistory = async ({
       : resolve(process.env.STYLE_HISTORY_RECEIPT_DIR);
   const receiptStore =
     receiptDirectory === null
-      ? { schemaVersion: 1, receipts: {}, tipReceipts: {} }
+      ? { schemaVersion: 2, receipts: {}, coverageReceipts: {} }
       : await readReceiptStore(receiptDirectory);
   const pixelAuthority =
     config.captureEnvironment?.authorityClass === undefined ||
@@ -1186,19 +1297,6 @@ export const verifyHistory = async ({
     });
     parentsByCommit.set(commit, parentLine.split(" ").slice(1));
   }
-  const headParent =
-    parentsByCommit.get(head)?.[0] ??
-    (
-      await run({
-        command: "git",
-        args: ["rev-list", "--parents", "-n", "1", head],
-        cwd: repoRoot,
-      })
-    ).split(" ")[1];
-  const tipTreePair =
-    headParent === undefined
-      ? null
-      : await treePairFor({ repoRoot, parent: headParent, commit: head });
   const excludedCommits = new Set();
   for (const commit of enumeratedCommits) {
     const parents = parentsByCommit.get(commit);
@@ -1343,7 +1441,9 @@ export const verifyHistory = async ({
     join(tmpdir(), "big-plan-style-history-"),
   );
   const capturesByCommit = new Map();
+  const completeCaptureCommits = new Set();
   const worktreeOperations = createSerialQueue();
+  const safetyNetCommit = relevant.at(-1)?.commit;
 
   const captureCommit = async (commit, captureKeys) => {
     const cacheKey = `${commit}:${JSON.stringify(captureKeys)}`;
@@ -1403,67 +1503,12 @@ export const verifyHistory = async ({
           throw error;
         }
       }
-      if (commit === head) {
-        const captureManifestPath = join(
+      if (completeCaptureCommits.has(commit)) {
+        await assertCaptureCompleteness({
+          config,
+          captureKeys,
           outputDirectory,
-          "capture-manifest.json",
-        );
-        try {
-          const captureManifest = JSON.parse(
-            await readFile(captureManifestPath, "utf8"),
-          );
-          const observedTuples = new Set(
-            captureManifest.captures.map(
-              (entry) => `${entry.key}@${entry.viewport}@${entry.theme}`,
-            ),
-          );
-          const definitionsByKey = new Map(
-            captureEntries(config).map((entry) => [entry.key, entry.capture]),
-          );
-          const missingTuples = captureKeys.flatMap((key) => {
-            const capture = definitionsByKey.get(key);
-            if (capture === undefined) {
-              return [key];
-            }
-            return capture.viewports.flatMap((viewport) =>
-              capture.themes
-                .filter(
-                  (theme) =>
-                    !observedTuples.has(`${key}@${viewport.name}@${theme}`),
-                )
-                .map((theme) => `${key} at ${viewport.name}/${theme}`),
-            );
-          });
-          if (missingTuples.length > 0) {
-            throw new Error(
-              `Final style fixture did not produce a visible target for ${missingTuples.join(", ")}.`,
-            );
-          }
-        } catch (error) {
-          if (error.code !== "ENOENT") {
-            throw error;
-          }
-          const expectedCaptureCount = config.documents.reduce(
-            (documentTotal, document) =>
-              documentTotal +
-              document.captures.reduce(
-                (captureTotal, capture) =>
-                  captureTotal +
-                  capture.themes.length * capture.viewports.length,
-                0,
-              ),
-            0,
-          );
-          const actualCaptureCount = (await listFiles(outputDirectory)).filter(
-            (path) => path.endsWith(".png"),
-          ).length;
-          if (actualCaptureCount !== expectedCaptureCount) {
-            throw new Error(
-              `Final style fixture produced ${actualCaptureCount} of ${expectedCaptureCount} configured captures.`,
-              { cause: error },
-            );
-          }
-        }
+        });
       }
     } finally {
       await worktreeOperations(() =>
@@ -1483,9 +1528,6 @@ export const verifyHistory = async ({
   };
 
   const results = [];
-  // Non-styling commits may advance HEAD without removing the branch's one
-  // global comparison from the latest authored visual contract.
-  const safetyNetCommit = relevant.at(-1)?.commit;
   const hasSafetyNetScope = (entry) => entry.commit === safetyNetCommit;
   const receiptFor = (entry) =>
     receiptStore.receipts[receiptKey(entry.treePair)];
@@ -1500,10 +1542,10 @@ export const verifyHistory = async ({
     return (
       pixelAuthority &&
       receiptDirectory !== null &&
-      receipt?.schemaVersion === 1 &&
+      receipt?.schemaVersion === 2 &&
       receipt.policyFingerprint === activePolicyFingerprint &&
       sameEnvironment(receipt.environment, environment) &&
-      receipt.isTip === hasSafetyNetScope(entry) &&
+      receipt.completeCaptureSet === hasSafetyNetScope(entry) &&
       JSON.stringify(receipt.captureKeys) ===
         JSON.stringify(entryCaptureKeys(entry)) &&
       receipt.visualKind === entry.visualKind &&
@@ -1515,24 +1557,24 @@ export const verifyHistory = async ({
       receipt.result !== undefined
     );
   };
-  const tipCaptureKeys = capturePlan({
+  const completeCaptureKeys = capturePlan({
     config,
     stylingFiles: [],
     isTip: true,
   });
-  const tipReceipt =
-    tipTreePair === null
-      ? undefined
-      : receiptStore.tipReceipts[receiptKey(tipTreePair)];
-  const reusableTipReceipt =
+  const coverageReceipt =
+    receiptStore.coverageReceipts[activeFixtureFingerprint];
+  const reusableCoverageReceipt =
     pixelAuthority &&
     receiptDirectory !== null &&
-    tipReceipt?.schemaVersion === 1 &&
-    tipReceipt.policyFingerprint === activePolicyFingerprint &&
-    sameEnvironment(tipReceipt.environment, environment) &&
-    JSON.stringify(tipReceipt.captureKeys) === JSON.stringify(tipCaptureKeys) &&
-    tipReceipt.scope === "tip-safety-net" &&
-    tipReceipt.verified === true;
+    coverageReceipt?.schemaVersion === 2 &&
+    coverageReceipt.policyFingerprint === activePolicyFingerprint &&
+    coverageReceipt.fixtureFingerprint === activeFixtureFingerprint &&
+    sameEnvironment(coverageReceipt.environment, environment) &&
+    JSON.stringify(coverageReceipt.captureKeys) ===
+      JSON.stringify(completeCaptureKeys) &&
+    coverageReceipt.scope === "complete-fixture" &&
+    coverageReceipt.verified === true;
   try {
     await rm(disposableArtifactRoot, { recursive: true, force: true });
     const firstUncachedIndex = relevant.findIndex(
@@ -1554,13 +1596,27 @@ export const verifyHistory = async ({
       }
       captureRequests.set(commit, existing);
     };
-    if (!reusableTipReceipt) {
-      addCaptureRequest(head, tipCaptureKeys);
-    }
     for (const entry of activeRelevant) {
       const captureKeys = entryCaptureKeys(entry);
       addCaptureRequest(entry.parent, captureKeys);
       addCaptureRequest(entry.commit, captureKeys);
+    }
+    const activeSafetyNetEntry = activeRelevant.find(hasSafetyNetScope);
+    if (activeSafetyNetEntry !== undefined) {
+      completeCaptureCommits.add(activeSafetyNetEntry.commit);
+    }
+    const safetyNetEntry = relevant.at(-1);
+    const reusableSafetyNetCompleteness =
+      safetyNetEntry !== undefined &&
+      reusableReceipt(safetyNetEntry) &&
+      receiptFor(safetyNetEntry).completeCaptureSet === true;
+    const needsStandaloneCompleteness =
+      activeSafetyNetEntry === undefined &&
+      !reusableCoverageReceipt &&
+      !reusableSafetyNetCompleteness;
+    if (needsStandaloneCompleteness) {
+      completeCaptureCommits.add(head);
+      addCaptureRequest(head, completeCaptureKeys);
     }
     const commitsToCapture = [...captureRequests.keys()];
     // The default is three capture jobs. The maximum is shared by all SHA work.
@@ -1659,11 +1715,11 @@ export const verifyHistory = async ({
         results.push(result);
         if (pixelAuthority && receiptDirectory !== null) {
           receiptStore.receipts[receiptKey(entry.treePair)] = {
-            schemaVersion: 1,
+            schemaVersion: 2,
             ...entry.treePair,
             policyFingerprint: activePolicyFingerprint,
             environment,
-            isTip: hasSafetyNetScope(entry),
+            completeCaptureSet: hasSafetyNetScope(entry),
             captureKeys: entryCaptureKeys(entry),
             visualKind: entry.visualKind,
             stylingFiles: [...entry.stylingFiles].sort(),
@@ -1692,16 +1748,15 @@ export const verifyHistory = async ({
     if (
       pixelAuthority &&
       receiptDirectory !== null &&
-      tipTreePair !== null &&
-      !reusableTipReceipt
+      !reusableCoverageReceipt
     ) {
-      receiptStore.tipReceipts[receiptKey(tipTreePair)] = {
-        schemaVersion: 1,
-        ...tipTreePair,
+      receiptStore.coverageReceipts[activeFixtureFingerprint] = {
+        schemaVersion: 2,
         policyFingerprint: activePolicyFingerprint,
+        fixtureFingerprint: activeFixtureFingerprint,
         environment,
-        captureKeys: tipCaptureKeys,
-        scope: "tip-safety-net",
+        captureKeys: completeCaptureKeys,
+        scope: "complete-fixture",
         verified: true,
       };
       await writeReceiptStore(receiptDirectory, receiptStore);

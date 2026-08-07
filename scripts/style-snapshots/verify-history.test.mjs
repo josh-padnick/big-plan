@@ -164,7 +164,7 @@ test("should select owned components and retain the global safety net", () => {
       stylingFiles: ["src/components/callout/styles.css"],
       isTip: false,
     }),
-    ["showcase/callout"],
+    ["showcase/document", "showcase/callout"],
   );
   assert.deepEqual(
     capturePlan({
@@ -179,6 +179,18 @@ test("should select owned components and retain the global safety net", () => {
       capturePlan({
         config,
         stylingFiles: ["src/components/unknown/styles.css"],
+        isTip: true,
+      }),
+    /no component owner/u,
+  );
+  assert.throws(
+    () =>
+      capturePlan({
+        config,
+        stylingFiles: [
+          "src/render/global.generated.ts",
+          "src/components/unknown/styles.css",
+        ],
         isTip: false,
       }),
     /no component owner/u,
@@ -209,6 +221,8 @@ const createMinimalRepository = async ({
     arguments_: ["config", "user.email", "style-history@example.invalid"],
   });
   await mkdir(join(repoRoot, ".style-snapshots"), { recursive: true });
+  await writeFile(join(repoRoot, "package.json"), "{}\n", "utf8");
+  await writeFile(join(repoRoot, "bun.lock"), "\n", "utf8");
   await writeFile(join(repoRoot, "fixture.txt"), "fixture\n", "utf8");
   await writeFile(join(repoRoot, "style.txt"), "red\n", "utf8");
   const capture = onePixelPng({ red: 255, green: 0, blue: 0 });
@@ -1146,6 +1160,12 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
       await readFile(join(receiptDirectory, "receipts.json"), "utf8"),
     );
     assert.equal(Object.keys(receipts.receipts).length, 2);
+    const receiptEnvironment = Object.values(receipts.receipts)[0].environment;
+    const { stdout: bunVersion } = await execFileAsync("bun", ["--version"]);
+    assert.deepEqual(receiptEnvironment.runtime, {
+      node: process.version,
+      bun: bunVersion.trim(),
+    });
 
     await writeFile(join(repoRoot, "style.txt"), "red\n", "utf8");
     await git({
@@ -1194,6 +1214,29 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
       .split("\n").length;
     assert.ok(unchangedRerun.every((result) => result.cached === true));
     assert.equal(unchangedCount, secondCount);
+
+    await writeFile(join(repoRoot, "non-style.txt"), "advance HEAD\n", "utf8");
+    await git({ repoRoot, arguments_: ["add", "non-style.txt"] });
+    await git({
+      repoRoot,
+      arguments_: ["commit", "-m", "test: advance non-styling HEAD"],
+    });
+    const advancedRerun = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "receipt-non-styling-head",
+      }),
+    });
+    const advancedCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.ok(advancedRerun.every((result) => result.cached === true));
+    assert.equal(advancedCount, unchangedCount);
 
     const fullHead = await git({ repoRoot, arguments_: ["rev-parse", "HEAD"] });
     await git({
@@ -1263,6 +1306,48 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
       .trim()
       .split("\n").length;
     assert.equal(executablePolicyChangeCount - policyChangeCount, 4);
+
+    await writeFile(
+      join(repoRoot, "package.json"),
+      '{"version":"2"}\n',
+      "utf8",
+    );
+    await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "receipt-package-policy-change",
+      }),
+    });
+    const packagePolicyChangeCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(packagePolicyChangeCount - executablePolicyChangeCount, 4);
+
+    await writeFile(
+      join(repoRoot, "bun.lock"),
+      "lockfileVersion = 1\n",
+      "utf8",
+    );
+    await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "receipt-lockfile-policy-change",
+      }),
+    });
+    const lockfilePolicyChangeCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(lockfilePolicyChangeCount - packagePolicyChangeCount, 4);
   } finally {
     if (previousReceiptDirectory === undefined) {
       delete process.env.STYLE_HISTORY_RECEIPT_DIR;
@@ -1316,7 +1401,7 @@ test("should retain relevance from every config revision", async () => {
   }
 });
 
-test("should keep the global safety net on the latest styling commit", async () => {
+test("should reject a cross-component leak at its originating commit", async () => {
   const { repoRoot, configPath } = await createMinimalRepository({
     stylingFilePatterns: ["^style\\.txt$"],
   });
@@ -1414,6 +1499,15 @@ await writeFile(join(output, "capture-manifest.json"), JSON.stringify({
       repoRoot,
       subject: "style: leak outside component ownership [visual:empty]",
     });
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "leak\nlater component edit\n",
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "style: preserve the leak in a later commit [visual:empty]",
+    });
     await writeFile(join(repoRoot, "non-style.txt"), "advance tip\n", "utf8");
     await commit({
       repoRoot,
@@ -1430,7 +1524,11 @@ await writeFile(join(output, "capture-manifest.json"), JSON.stringify({
           name: "latest-styling-safety-net",
         }),
       }),
-      /sample__full-document__desktop__light\.png \(1 changed pixels\)/u,
+      (error) =>
+        /style: leak outside component ownership/u.test(error.message) &&
+        /sample__full-document__desktop__light\.png \(1 changed pixels\)/u.test(
+          error.message,
+        ),
     );
   } finally {
     if (previousAuthority === undefined) {
@@ -1657,7 +1755,7 @@ test("should reject a styling conflict resolved to one parent's version", async 
   }
 });
 
-test("should validate final HEAD capture completeness unconditionally", async () => {
+test("should validate completeness at the latest styling capture", async () => {
   const { repoRoot, configPath, config, base } =
     await createMinimalRepository();
   try {
@@ -1711,7 +1809,7 @@ test("should validate final HEAD capture completeness unconditionally", async ()
   }
 });
 
-test("should require every configured viewport and theme at HEAD", async () => {
+test("should require every configured viewport and theme for fixture policy", async () => {
   const { repoRoot, configPath, base } = await createMinimalRepository({
     documents: [
       {

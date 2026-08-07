@@ -1,8 +1,11 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { promisify } from "node:util";
 
 const FONT_EXTENSIONS = new Set([".otf", ".ttf", ".woff", ".woff2"]);
+const execFileAsync = promisify(execFile);
 
 export const DETERMINISM_FLAGS = [
   "--disable-gpu",
@@ -60,21 +63,28 @@ export const environmentFingerprint = async ({
   browserVersion,
   fontRoot,
   authorityClass,
-}) => ({
-  schemaVersion: 1,
-  authorityClass,
-  browser: {
-    name: "chromium",
-    version: browserVersion,
-  },
-  platform: `${process.platform}/${process.arch}`,
-  fontSetHash: await fontSetHash(fontRoot),
-  viewport: {
-    deviceScaleFactor: 1,
-    colorProfile: "srgb",
-  },
-  determinismFlags: [...DETERMINISM_FLAGS],
-});
+}) => {
+  const { stdout: bunVersion } = await execFileAsync("bun", ["--version"]);
+  return {
+    schemaVersion: 2,
+    authorityClass,
+    browser: {
+      name: "chromium",
+      version: browserVersion,
+    },
+    runtime: {
+      node: process.version,
+      bun: bunVersion.trim(),
+    },
+    platform: `${process.platform}/${process.arch}`,
+    fontSetHash: await fontSetHash(fontRoot),
+    viewport: {
+      deviceScaleFactor: 1,
+      colorProfile: "srgb",
+    },
+    determinismFlags: [...DETERMINISM_FLAGS],
+  };
+};
 
 export const sameEnvironment = (left, right) =>
   JSON.stringify(left) === JSON.stringify(right);
@@ -93,4 +103,4 @@ export const sameRunnerEnvironment = (left, right) => {
 };
 
 export const environmentLabel = (environment) =>
-  `${environment.browser.name} ${environment.browser.version} on ${environment.platform} with fonts ${environment.fontSetHash}`;
+  `${environment.browser.name} ${environment.browser.version} with Node ${environment.runtime.node} and Bun ${environment.runtime.bun} on ${environment.platform} with fonts ${environment.fontSetHash}`;

@@ -65,10 +65,9 @@ jobs:
           path: test-results/style-history-receipts
           # The run id keeps every primary key unique so each run saves its
           # newly written receipts; restores come from the prefix keys.
-          key: big-plan-style-history-receipts-${{ runner.os }}-${{ hashFiles('bun.lock', '.style-snapshots/config.json', 'scripts/style-snapshots/*.mjs') }}-${{ github.run_id }}
+          key: big-plan-style-history-receipts-${{ runner.os }}-${{ hashFiles('package.json', 'bun.lock', '.style-snapshots/config.json', 'scripts/style-snapshots/*.mjs') }}-${{ github.run_id }}
           restore-keys: |
-            big-plan-style-history-receipts-${{ runner.os }}-${{ hashFiles('bun.lock', '.style-snapshots/config.json', 'scripts/style-snapshots/*.mjs') }}-
-            big-plan-style-history-receipts-${{ runner.os }}-
+            big-plan-style-history-receipts-${{ runner.os }}-${{ hashFiles('package.json', 'bun.lock', '.style-snapshots/config.json', 'scripts/style-snapshots/*.mjs') }}-
       - name: Styling commits must match their visual contract
         env:
           STYLE_HISTORY_BASE: ${{ github.ref == 'refs/heads/main' && github.event.before || 'origin/main' }}
