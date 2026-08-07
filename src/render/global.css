@@ -58,6 +58,7 @@ interpolated. They stay warm through the whole range, which is what makes the
 reading surface read as paper rather than as white.
 */
 :root {
+  --grey-0: #ffffff;
   --grey-25: #fefdfb;
   --grey-50: #f7f5f0;
   --grey-75: #f6f5f2;
@@ -219,7 +220,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --annotation-c: var(--note-700);
   --annotation-bg: var(--note-50);
   --annotation-ink: var(--note-900);
-  --diff-content-bg: var(--grey-25);
+  --diff-content-bg: var(--grey-0);
   --diff-hunk-bg: var(--grey-75);
   --diff-hunk-c: var(--grey-600);
   --diff-header-bg: var(--header-bg);
