@@ -22,7 +22,7 @@ Do not make the content louder.
 A design decision picks a step from a scale.
 It does not invent a value.
 
-There are four scales: spacing, type, colour, and elevation.
+There are five scales: spacing, type, colour, elevation, and radius.
 Each is closed.
 If a design needs a value that is not on a scale, the design is wrong, or the scale is wrong.
 Change the scale in `src/render/global.css` and say why; do not add a one-off value.
@@ -168,9 +168,11 @@ The smaller the shadow, the closer the thing.
 | `shadow-floating`      | A popover, a drawer, a maximized figure                       |
 | `inset-shadow-pressed` | A control being pressed                                       |
 | `inset-shadow-well`    | A recessed panel                                              |
+| `shadow-focus`         | The halo on a control holding the keyboard                    |
 
 The two larger steps are a tight direct shadow plus a wide ambient one.
 That is how a real shadow behaves, and a single blur never reads as convincingly.
+Focus is not elevation, but it belongs to the same vocabulary: one halo, one width, on every control that can take the keyboard.
 
 Rules:
 
@@ -187,6 +189,12 @@ Rules:
 4. **Overlap deliberately, and rarely.**
    An element that crosses a boundary creates a layer.
    Two that do it on one screen create confusion.
+
+## Radius
+
+Four steps and a pill.
+`rounded-sm` for a chip, `rounded-md` for a control or a figure, `rounded-lg` for a panel inside a card, `rounded-xl` for a card, and `rounded-full` for a pill or a dot.
+A corner is never softened by an amount between two steps.
 
 ## Finishing
 
