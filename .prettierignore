@@ -15,3 +15,4 @@ bun.lock
 # MDX plan documents are product input with author-controlled layout
 # (one sentence per line); Prettier only speaks legacy MDX v1 anyway.
 *.mdx
+.claude/
