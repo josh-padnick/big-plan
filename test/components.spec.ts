@@ -92,6 +92,12 @@ test("should preserve component content without controls when JavaScript is disa
   await expect(page.locator("[data-noscript-notice]")).toContainText(
     "sorting, collapse, maximize, and comments",
   );
+  await expect(
+    page.locator("[data-noscript-notice] [data-lucide='triangle-alert']"),
+  ).toBeVisible();
+  await page.locator("[data-noscript-dismiss]").click();
+  await expect(page.getByLabel("Dismiss JavaScript warning")).toBeChecked();
+  await expect(page.locator("[data-noscript-notice]")).toBeHidden();
   await expect(page.locator("[data-callout]")).toHaveCount(4);
   await expect(page.locator("[data-callout]").first()).toBeVisible();
   const diffs = page.locator("[data-code-diff]");
