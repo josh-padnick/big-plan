@@ -28,6 +28,13 @@ test("should choose and persist appearance from the settings dialog", async ({
     await page.getByRole("button", { name: "Open settings" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.getByRole("radio", { name: "System" })).toBeChecked();
+    await expect
+      .poll(() =>
+        page
+          .locator("[data-preferences-backdrop]")
+          .evaluate((backdrop) => getComputedStyle(backdrop).backgroundColor),
+      )
+      .toContain("0.4");
   });
 
   await test.step("Escape closes and returns focus to the gear", async () => {
@@ -42,6 +49,13 @@ test("should choose and persist appearance from the settings dialog", async ({
     await page.getByRole("button", { name: "Open settings" }).click();
     await page.getByRole("radio", { name: "Dark" }).check();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect
+      .poll(() =>
+        page
+          .locator("[data-preferences-backdrop]")
+          .evaluate((backdrop) => getComputedStyle(backdrop).backgroundColor),
+      )
+      .toContain("0.7");
     await expect
       .poll(() =>
         page.evaluate(

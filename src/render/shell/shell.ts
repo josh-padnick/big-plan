@@ -210,7 +210,7 @@ const renderPreferenceOption = ({
 // join only when actionable, so an unavailable roadmap item never competes
 // with the reviewer's one current decision.
 const renderPreferencesDialog = (): string =>
-  `<div class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" data-preferences-backdrop hidden>
+  `<div class="fixed inset-0 z-50 grid place-items-center bg-[var(--preferences-backdrop-c)] p-4" data-preferences-backdrop hidden>
 <section class="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-edge bg-paper p-6 text-ink shadow-floating wide:p-8" data-preferences-dialog role="dialog" aria-modal="true" aria-labelledby="big-plan-preferences-title">
 <div class="flex items-start justify-between gap-4">
 <div>
