@@ -22,7 +22,7 @@ import { PNG } from "pngjs";
 
 const execFileAsync = promisify(execFile);
 const CAPTURE_TIMEOUT_MS = 10 * 60 * 1000;
-const DEFAULT_CAPTURE_CONCURRENCY = 2;
+const DEFAULT_CAPTURE_CONCURRENCY = 4;
 const MAX_CAPTURE_CONCURRENCY = 4;
 
 const RELEVANCE_FLOOR = {
@@ -142,8 +142,8 @@ const captureCommits = async ({ commits, captureCommit, concurrency }) => {
 /** Validates the stable surface of one screenshot configuration revision. */
 const parseConfig = (source) => {
   const config = JSON.parse(source);
-  if (config.schemaVersion !== 1) {
-    throw new Error("Style screenshot config must use schemaVersion 1.");
+  if (![1, 2].includes(config.schemaVersion)) {
+    throw new Error("Style screenshot config must use schemaVersion 1 or 2.");
   }
   for (const field of [
     "fixturePaths",
@@ -166,6 +166,35 @@ const parseConfig = (source) => {
         if (!Array.isArray(capture[field]) || capture[field].length === 0) {
           throw new Error(
             `Style screenshot config document ${documentIndex + 1} capture ${captureIndex + 1} requires non-empty ${field}.`,
+          );
+        }
+      }
+      if (
+        capture.multiple !== undefined &&
+        typeof capture.multiple !== "boolean"
+      ) {
+        throw new Error(
+          `Style screenshot document ${documentIndex + 1} capture ${captureIndex + 1} multiple must be boolean when present.`,
+        );
+      }
+      if (
+        capture.scope !== undefined &&
+        !["component", "full-document"].includes(capture.scope)
+      ) {
+        throw new Error(
+          `Style screenshot document ${documentIndex + 1} capture ${captureIndex + 1} scope must be component or full-document.`,
+        );
+      }
+      if (capture.scope === "component") {
+        if (
+          !Array.isArray(capture.ownerPatterns) ||
+          capture.ownerPatterns.length === 0 ||
+          capture.ownerPatterns.some(
+            (pattern) => typeof pattern !== "string" || pattern.length === 0,
+          )
+        ) {
+          throw new Error(
+            `Style screenshot document ${documentIndex + 1} component capture ${captureIndex + 1} requires non-empty ownerPatterns.`,
           );
         }
       }
@@ -204,6 +233,33 @@ const parseConfig = (source) => {
         );
       }
       names.add(exemption.name);
+    }
+  }
+  if (config.schemaVersion === 2) {
+    if (
+      config.capturePolicy === undefined ||
+      !Array.isArray(config.capturePolicy.globalFilePatterns) ||
+      config.capturePolicy.globalFilePatterns.length === 0 ||
+      config.capturePolicy.globalFilePatterns.some(
+        (pattern) => typeof pattern !== "string" || pattern.length === 0,
+      )
+    ) {
+      throw new Error(
+        "Style screenshot schemaVersion 2 requires non-empty capturePolicy.globalFilePatterns.",
+      );
+    }
+    const scopedCaptures = config.documents.flatMap((document) =>
+      document.captures.filter((capture) => capture.scope !== undefined),
+    );
+    if (
+      scopedCaptures.length === 0 ||
+      scopedCaptures.some(
+        (capture) => capture.scope === "full-document" && capture.multiple,
+      )
+    ) {
+      throw new Error(
+        "Style screenshot schemaVersion 2 requires scoped captures and single full-document targets.",
+      );
     }
   }
   return config;
@@ -257,6 +313,60 @@ const captureDefinitions = (config) => {
     }
   }
   return definitions;
+};
+
+/** Returns captures in document order with their stable configuration keys. */
+const captureEntries = (config) =>
+  config.documents.flatMap((document) =>
+    document.captures.map((capture) => ({
+      key: `${document.name}/${capture.name}`,
+      document,
+      capture,
+    })),
+  );
+
+/** Selects owned regions while retaining a complete global and tip safety net. */
+export const capturePlan = ({ config, stylingFiles, isTip }) => {
+  if (config.schemaVersion < 2) {
+    return captureEntries(config).map(({ key }) => key);
+  }
+  const globalPatterns = config.capturePolicy.globalFilePatterns.map(
+    (pattern) => new RegExp(pattern),
+  );
+  const isGlobal = stylingFiles.some((path) =>
+    globalPatterns.some((pattern) => pattern.test(path)),
+  );
+  const entries = captureEntries(config);
+  const selected = entries.filter(({ capture }) => {
+    if (isTip || isGlobal) {
+      return true;
+    }
+    return (
+      capture.scope === "component" &&
+      stylingFiles.some((path) =>
+        capture.ownerPatterns.some((pattern) => new RegExp(pattern).test(path)),
+      )
+    );
+  });
+  if (!isGlobal && !isTip) {
+    const ownedFiles = stylingFiles.filter((path) =>
+      entries.some(
+        ({ capture }) =>
+          capture.scope === "component" &&
+          capture.ownerPatterns.some((pattern) =>
+            new RegExp(pattern).test(path),
+          ),
+      ),
+    );
+    if (ownedFiles.length !== stylingFiles.length) {
+      throw new Error(
+        `Style screenshot capture policy has no component owner for ${stylingFiles
+          .filter((path) => !ownedFiles.includes(path))
+          .join(", ")}. Mark the file global or add an owner pattern.`,
+      );
+    }
+  }
+  return selected.map(({ key }) => key);
 };
 
 /** Prevents a branch from reinterpreting capture keys present on its base. */
@@ -451,13 +561,32 @@ const comparePngs = async ({ beforePath, afterPath }) => {
 };
 
 /** Returns deterministic evidence for every capture on either side. */
-const compareCaptureSets = async ({ beforeDirectory, afterDirectory }) => {
-  const beforeFiles = (await listFiles(beforeDirectory)).filter((path) =>
-    path.endsWith(".png"),
+const captureFilePrefix = (key) => {
+  const separator = key.indexOf("/");
+  const document = key.slice(0, separator);
+  const capture = key.slice(separator + 1);
+  return (
+    [document, capture]
+      .map((part) => part.replaceAll(/[^a-zA-Z0-9_-]/g, "-"))
+      .join("__") + "__"
   );
-  const afterFiles = (await listFiles(afterDirectory)).filter((path) =>
-    path.endsWith(".png"),
+};
+
+/** Compares only the captures owned by one styling commit. */
+const compareCaptureSets = async ({
+  beforeDirectory,
+  afterDirectory,
+  captureKeys,
+}) => {
+  const prefixes = captureKeys?.map(captureFilePrefix);
+  const belongsToRequest = (path) =>
+    path.endsWith(".png") &&
+    (prefixes === undefined ||
+      prefixes.some((prefix) => path.startsWith(prefix)));
+  const beforeFiles = (await listFiles(beforeDirectory)).filter(
+    belongsToRequest,
   );
+  const afterFiles = (await listFiles(afterDirectory)).filter(belongsToRequest);
   const allFiles = [...new Set([...beforeFiles, ...afterFiles])].sort();
   const captures = [];
 
@@ -607,7 +736,7 @@ const validateManifest = async ({
   const expectedManifestCount = squashed ? approvedSubjects.length : 1;
   if (manifestFiles.length !== expectedManifestCount) {
     throw new Error(
-      `${subject}: an approved commit must add ${expectedManifestCount} manifest${expectedManifestCount === 1 ? "" : "s"} under ${manifestDirectory}; found ${manifestFiles.length}.`,
+      `${subject}: an approved commit requires ${expectedManifestCount} manifest${expectedManifestCount === 1 ? "" : "s"} under ${manifestDirectory}; found ${manifestFiles.length}. Repair this history entry instead of treating missing evidence as empty.`,
     );
   }
 
@@ -907,8 +1036,9 @@ export const verifyHistory = async ({
   const capturesByCommit = new Map();
   const worktreeOperations = createSerialQueue();
 
-  const captureCommit = async (commit) => {
-    const cached = capturesByCommit.get(commit);
+  const captureCommit = async (commit, captureKeys) => {
+    const cacheKey = `${commit}:${JSON.stringify(captureKeys)}`;
+    const cached = capturesByCommit.get(cacheKey);
     if (cached !== undefined) {
       return cached;
     }
@@ -940,26 +1070,53 @@ export const verifyHistory = async ({
           STYLE_SNAPSHOT_OUTPUT_DIR: outputDirectory,
           STYLE_SNAPSHOT_CONFIG: configPath,
           STYLE_SNAPSHOT_HARNESS_ROOT: harnessRoot,
+          STYLE_SNAPSHOT_CAPTURE_KEYS: JSON.stringify(captureKeys),
         },
       });
       if (commit === head) {
-        const expectedCaptureCount = config.documents.reduce(
-          (documentTotal, document) =>
-            documentTotal +
-            document.captures.reduce(
-              (captureTotal, capture) =>
-                captureTotal + capture.themes.length * capture.viewports.length,
-              0,
-            ),
-          0,
+        const captureManifestPath = join(
+          outputDirectory,
+          "capture-manifest.json",
         );
-        const actualCaptureCount = (await listFiles(outputDirectory)).filter(
-          (path) => path.endsWith(".png"),
-        ).length;
-        if (actualCaptureCount !== expectedCaptureCount) {
-          throw new Error(
-            `Final style fixture produced ${actualCaptureCount} of ${expectedCaptureCount} configured captures.`,
+        try {
+          const captureManifest = JSON.parse(
+            await readFile(captureManifestPath, "utf8"),
           );
+          const observedKeys = new Set(
+            captureManifest.captures.map((entry) => entry.key),
+          );
+          const missingKeys = captureKeys.filter(
+            (key) => !observedKeys.has(key),
+          );
+          if (missingKeys.length > 0) {
+            throw new Error(
+              `Final style fixture did not produce a visible target for ${missingKeys.join(", ")}.`,
+            );
+          }
+        } catch (error) {
+          if (error.code !== "ENOENT") {
+            throw error;
+          }
+          const expectedCaptureCount = config.documents.reduce(
+            (documentTotal, document) =>
+              documentTotal +
+              document.captures.reduce(
+                (captureTotal, capture) =>
+                  captureTotal +
+                  capture.themes.length * capture.viewports.length,
+                0,
+              ),
+            0,
+          );
+          const actualCaptureCount = (await listFiles(outputDirectory)).filter(
+            (path) => path.endsWith(".png"),
+          ).length;
+          if (actualCaptureCount !== expectedCaptureCount) {
+            throw new Error(
+              `Final style fixture produced ${actualCaptureCount} of ${expectedCaptureCount} configured captures.`,
+              { cause: error },
+            );
+          }
         }
       }
     } finally {
@@ -971,31 +1128,62 @@ export const verifyHistory = async ({
         }),
       );
     }
-    capturesByCommit.set(commit, outputDirectory);
+    capturesByCommit.set(cacheKey, outputDirectory);
     return outputDirectory;
   };
 
   const results = [];
   try {
     await rm(disposableArtifactRoot, { recursive: true, force: true });
-    const commitsToCapture = [
-      ...new Set([
-        head,
-        ...relevant.flatMap((entry) => [entry.parent, entry.commit]),
-      ]),
-    ];
-    // The default is two capture jobs. This keeps browser and worktree load bounded.
+    const captureRequests = new Map();
+    const addCaptureRequest = (commit, captureKeys) => {
+      const existing = captureRequests.get(commit) ?? new Set();
+      for (const captureKey of captureKeys) {
+        existing.add(captureKey);
+      }
+      captureRequests.set(commit, existing);
+    };
+    addCaptureRequest(
+      head,
+      capturePlan({ config, stylingFiles: [], isTip: true }),
+    );
+    for (const entry of relevant) {
+      const captureKeys = capturePlan({
+        config,
+        stylingFiles: entry.stylingFiles,
+        isTip: entry.commit === head,
+      });
+      addCaptureRequest(entry.parent, captureKeys);
+      addCaptureRequest(entry.commit, captureKeys);
+    }
+    const commitsToCapture = [...captureRequests.keys()];
+    // The default is four capture jobs. The maximum is shared by all SHA work.
     await captureCommits({
       commits: commitsToCapture,
-      captureCommit,
+      captureCommit: (commit) =>
+        captureCommit(commit, [...captureRequests.get(commit)].sort()),
       concurrency: captureConcurrency(),
     });
     for (const entry of relevant) {
-      const beforeDirectory = await captureCommit(entry.parent);
-      const afterDirectory = await captureCommit(entry.commit);
+      const beforeDirectory = await captureCommit(
+        entry.parent,
+        [...captureRequests.get(entry.parent)].sort(),
+      );
+      const afterDirectory = await captureCommit(
+        entry.commit,
+        [...captureRequests.get(entry.commit)].sort(),
+      );
       const captures = await compareCaptureSets({
         beforeDirectory,
         afterDirectory,
+        captureKeys:
+          config.schemaVersion < 2
+            ? undefined
+            : capturePlan({
+                config,
+                stylingFiles: entry.stylingFiles,
+                isTip: entry.commit === head,
+              }),
       });
       const changes = captures.filter((capture) => capture.changedPixels > 0);
       const artifactDirectory = join(
@@ -1026,11 +1214,6 @@ export const verifyHistory = async ({
         );
       }
       if (entry.visualKind === "approved") {
-        if (changes.length === 0) {
-          throw new Error(
-            `${entry.subject}: an approved commit must produce its declared screenshot changes.`,
-          );
-        }
         await validateManifest({
           repoRoot,
           commit: entry.commit,
@@ -1042,6 +1225,11 @@ export const verifyHistory = async ({
           contractSubjects: entry.contractSubjects,
           squashed: entry.squashed,
         });
+        if (changes.length === 0) {
+          throw new Error(
+            `${entry.subject}: an approved commit must produce its declared screenshot changes.`,
+          );
+        }
       }
       results.push({
         commit: entry.commit,
