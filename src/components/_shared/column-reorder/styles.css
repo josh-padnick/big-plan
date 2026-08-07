@@ -7,6 +7,8 @@
 }
 
 @layer bp-state {
+  /* Override invariant: reorderable columns beat resting descendant cursors
+     so the whole header consistently advertises the shared gesture. */
   article [data-column-reorderable],
   article [data-column-reorderable] * {
     cursor: grab;
