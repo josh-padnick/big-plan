@@ -110,6 +110,18 @@ const componentName = (node: Element): string | undefined => {
   return typeof name === "string" && name.length > 0 ? name : undefined;
 };
 
+const hasTitleClass = (node: Element): boolean => {
+  const className = node.properties.className;
+  return (
+    Array.isArray(className) &&
+    className.some(
+      (value) =>
+        typeof value === "string" &&
+        (value === "title" || value.endsWith("-title")),
+    )
+  );
+};
+
 const findDescendant = ({
   node,
   match,
@@ -197,10 +209,18 @@ const labelOf = ({
         node,
         match: (candidate) => HEADING_TAGS.has(candidate.tagName),
       });
-    const headingText =
-      heading === undefined ? "" : summarize(textOf(heading));
+    const headingText = heading === undefined ? "" : summarize(textOf(heading));
     if (headingText.length > 0) {
       return headingText;
+    }
+    const semanticTitle = findDescendant({
+      node,
+      match: hasTitleClass,
+    });
+    const semanticTitleText =
+      semanticTitle === undefined ? "" : summarize(textOf(semanticTitle));
+    if (semanticTitleText.length > 0) {
+      return semanticTitleText;
     }
     const caption = findDescendant({
       node,
@@ -210,8 +230,11 @@ const labelOf = ({
     if (captionText.length > 0) {
       return captionText;
     }
-    const bodyText = summarize(textOf(node));
-    return bodyText.length > 0 ? bodyText : readableKind(kind);
+    // When a component exposes no concise title, its full rendered body is a
+    // poor accessible name: it swallows internal control labels ("Tier",
+    // "Maximize", and so on) and makes scoped role queries ambiguous. The
+    // component kind is the honest stable fallback.
+    return readableKind(kind);
   }
   const text = summarize(textOf(node)).replace(KICKER_PREFIX, "");
   return text.length > 0 ? text : readableKind(kind);

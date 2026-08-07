@@ -199,9 +199,9 @@ export default tseslint.config(
       // reviewer's on-disk state, and the feedback package. It renders through
       // the composer's public entry points and owns no command I/O.
       review: {
-        files: ["src/review/**/*.ts"],
+        files: ["src/review/**/*.ts", "src/review/**/*.tsx"],
         imports: ["**/review/**"],
-        mayImport: ["composer"],
+        mayImport: ["composer", "icons"],
       },
       cli: {
         files: ["src/cli/**/*.ts"],
