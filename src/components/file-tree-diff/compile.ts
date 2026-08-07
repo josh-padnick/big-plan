@@ -18,8 +18,8 @@ export type CompiledFileTreeDiff = {
   readonly hideDiff: boolean;
 };
 
-// The After pane's Show diff switch defaults on; hideDiff is the authored
-// opt-out for a tree whose final state matters more than its change set.
+// hideDiff selects the static planned-state pane variant; the viewer's only
+// interactive tree control is the combined/side-by-side view switch.
 const FILE_TREE_DIFF_SCHEMA = {
   title: { kind: "string", nonEmpty: true },
   hideDiff: { kind: "booleanShorthand" },

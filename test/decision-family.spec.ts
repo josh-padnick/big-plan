@@ -177,6 +177,52 @@ test("should compare, answer, and revise a Decision", async ({
   );
 });
 
+test("should keep decision content readable and script-only controls dormant without JavaScript", async ({
+  browser,
+  decisionViewerUrl,
+  decisionAnalysisViewerUrl,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const decisionPage = await context.newPage();
+  await decisionPage.goto(decisionViewerUrl);
+  await expect(decisionPage.locator("[data-noscript-notice]")).toBeVisible();
+  await expect(
+    decisionPage.locator("[data-decision-proposal-cancel]"),
+  ).toBeHidden();
+  await expect(
+    decisionPage.locator("[data-decision-question]").first(),
+  ).toBeVisible();
+
+  const analysisPage = await context.newPage();
+  await analysisPage.goto(decisionAnalysisViewerUrl);
+  await expect(analysisPage.locator("[data-noscript-notice]")).toBeVisible();
+  expect(
+    await analysisPage
+      .locator("[data-decision-weight-control], [data-decision-score-control]")
+      .evaluateAll((controls) =>
+        controls.every((control) => (control as HTMLElement).hidden),
+      ),
+  ).toBe(true);
+  expect(
+    await analysisPage
+      .locator("[data-decision-weight-group], [data-decision-score-group]")
+      .evaluateAll((groups) =>
+        groups.every(
+          (group) =>
+            !group.hasAttribute("role") && !group.hasAttribute("aria-label"),
+        ),
+      ),
+  ).toBe(true);
+  await expect(
+    analysisPage.locator("[data-decision-weight-output]").first(),
+  ).toBeVisible();
+  await expect(
+    analysisPage.locator("[data-decision-score-output]").first(),
+  ).toBeVisible();
+
+  await context.close();
+});
+
 test("should keep long Decision verdicts inside comparison cards", async ({
   page,
   decisionViewerUrl,
@@ -303,6 +349,14 @@ test("should audit, choose, and recalculate DecisionAnalysis", async ({
   await expect(enabled.locator("[data-decision-choice]").nth(1)).toBeChecked();
 
   const weighted = analyses.nth(2);
+  await expect(
+    weighted.getByRole("radiogroup", { name: "Impact of Integrity" }),
+  ).toBeVisible();
+  await expect(
+    weighted.getByRole("radiogroup", {
+      name: "Score PostgreSQL on Integrity",
+    }),
+  ).toBeVisible();
   await expect(
     weighted.locator("table.decision-matrix-keyed > tbody > tr"),
   ).toHaveCount(7);

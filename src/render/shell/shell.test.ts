@@ -49,3 +49,15 @@ describe("bulk collapse controls", () => {
     );
   });
 });
+
+describe("scripts-disabled notice", () => {
+  it("should ship the readable-content notice in every rendered shell", () => {
+    const html = shellFor("<p>Readable plan content.</p>");
+    expect(html).toContain("<noscript>");
+    expect(html).toContain("data-noscript-notice");
+    expect(html).toContain("The full plan content is readable");
+    expect(html).toContain(
+      "Interactive affordances such as sorting, collapse, maximize, and comments are unavailable.",
+    );
+  });
+});

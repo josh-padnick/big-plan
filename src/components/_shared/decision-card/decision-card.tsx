@@ -131,8 +131,9 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
           {"The agent revises the plan to answer a proposal."}
         </p>
         <button
-          className="decision-proposal-cancel mt-2"
+          className="decision-proposal-cancel data-[shown]:inline-flex mt-2"
           type="button"
+          hidden
           data-decision-proposal-cancel=""
         >
           {"Cancel"}
