@@ -196,6 +196,7 @@ test("should keep column drag cursors through native gestures in both themes", a
         await expect(plainTableHeader).toHaveCSS("cursor", "default");
         await page.mouse.up();
         await expect(body).not.toHaveAttribute("data-column-dragging");
+        expect(await cursorAt(controlPoint.x, controlPoint.y)).toBe("pointer");
         await expect(header).toHaveCSS("cursor", "grab");
         await expect(plainTableHeader).toHaveCSS("cursor", "auto");
       });
