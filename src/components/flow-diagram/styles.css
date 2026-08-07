@@ -377,7 +377,9 @@ classes.
   .flow-diagram-actionbar[hidden],
   .flow-diagram-compose[hidden],
   .flow-diagram-zoom[hidden],
-  .flow-diagram-proposal-group[hidden],
+  .flow-diagram-proposal-group[hidden] {
+    display: none;
+  }
 
   /* The action bar a selection offers: one row of small buttons, in viewport
      pixels, anchored beside the selected element and re-anchored whenever the
@@ -419,8 +421,7 @@ classes.
     outline: 2px solid var(--accent-c);
     outline-offset: -1px;
   }
-  .flow-diagram-actionbar-button[data-flow-action="revert"],
-  .flow-diagram-actionbar-button[data-flow-action="remove"] {
+  .flow-diagram-actionbar-button[data-flow-action="revert"] {
     color: var(--muted-c);
   }
   /* An icon-only action is a square, so it reads as a control rather than as a

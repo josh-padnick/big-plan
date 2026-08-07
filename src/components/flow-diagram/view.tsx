@@ -297,12 +297,12 @@ const ProposalControls = () => (
     <span
       className={`flow-diagram-mode ${VIEWER_CONTROL_CLASSES} gap-2 rounded-md px-3 font-sans text-2xs font-semibold`}
     >
-      <span id="flow-mode-label">Show original</span>
+      <span>Show original</span>
       <button
         type="button"
         role="switch"
         aria-checked="false"
-        aria-labelledby="flow-mode-label"
+        aria-label="Show original"
         className={MODE_SWITCH_CLASSES}
         data-flow-mode
       >
