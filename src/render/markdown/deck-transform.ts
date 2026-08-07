@@ -106,8 +106,9 @@ const SLIDE_TITLE_CLASSES = [
   "m-0",
   "border-b-0",
   "pb-0",
-  "text-2xl",
-  "tracking-tight",
+  // approved-metric: the slide title size, upright. The overview title matches
+  // it by contract, so the two move together or not at all.
+  "text-[1.6rem]",
   ...SCROLL_CLASSES,
 ] as const;
 

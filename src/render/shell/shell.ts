@@ -52,10 +52,11 @@ const BODY_CLASSES = "bg-paper font-sans text-base text-ink antialiased";
 // column above it. The wide column contains a standard desktop wireframe
 // through nested card chrome, while prose holds its own narrower measure.
 //
-// The page gutter is not proportional: a phone gives its margin to the text,
-// while a wide screen can afford twice as much and reads better for it.
+// approved-metric: the page gutter, the sidebar gap, and the page's own bottom
+// margin. The sidebar gap in particular places the reading column, so a step
+// off the scale here moved every surface on the page sideways.
 const LAYOUT_CLASSES =
-  "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-4 pt-16 pb-16 wide:gap-16 wide:px-8 wide:pt-12 wide:pb-24";
+  "grid grid-cols-[minmax(0,1fr)] justify-center gap-8 px-5 pt-16 pb-16 wide:gap-14 wide:px-6 wide:pt-12 wide:pb-20";
 const LAYOUT_WITH_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[15rem_minmax(0,54.5rem)]`;
 const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,54.5rem)]`;
 
@@ -63,20 +64,27 @@ const LAYOUT_WITHOUT_TOC = `${LAYOUT_CLASSES} wide:grid-cols-[minmax(0,54.5rem)]
 // can never re-wrap a label. Entries grouped under a part header carry the
 // rule and the inset that make them read as its children.
 const TOC_LINK_CLASSES =
-  "block border-l-2 border-edge px-3 py-1 leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
+  // approved-metric: the sidebar row height
+  "block border-l-2 border-edge px-3 py-[0.3rem] leading-snug text-subtle hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
 const TOC_GROUPED_LINK_CLASSES =
-  "block border-l-2 border-edge py-1 pr-3 pl-4 leading-snug text-muted hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
+  // approved-metric: the sidebar row height and the grouped inset
+  "block border-l-2 border-edge py-[0.3rem] pr-3 pl-3.5 leading-snug text-subtle hover:text-ink aria-[current=true]:border-accent aria-[current=true]:text-accent";
 // A part header is a heading over the entries beneath it, not one of them, so
 // it sits flush with the Contents label rather than sharing the rule and inset
 // its section links use.
 const TOC_PART_HEADER_CLASSES =
-  "mt-3 mb-1 block pr-3 text-2xs font-semibold tracking-caps uppercase text-subtle hover:text-ink";
+  "mt-3 mb-1 block pr-3 text-2xs font-bold tracking-caps uppercase text-accent hover:text-ink";
 const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-6 py-3 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 const MOBILE_TOC_GROUPED_LINK_CLASSES =
   "block border-l-2 border-transparent py-3 pr-6 pl-8 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 const MOBILE_TOC_PART_HEADER_CLASSES =
-  "block border-l-2 border-transparent px-6 pt-3 pb-1 text-2xs font-semibold tracking-caps uppercase text-subtle hover:text-ink";
+  "block border-l-2 border-transparent px-6 pt-3 pb-1 text-2xs font-bold tracking-caps uppercase text-accent hover:text-ink";
+
+// The sidebar's own eyebrow, sitting over the section list.
+// approved-metric: the Contents eyebrow tracking
+const TOC_EYEBROW_CLASSES =
+  "mb-3 flex items-center justify-between gap-2 border-b border-edge pb-2 text-xs font-semibold uppercase tracking-[0.08em]";
 
 // Allocates the shell-owned overview anchor alongside document-owned ids.
 const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
@@ -137,7 +145,7 @@ const renderTocItems = ({
 // They are script-only affordances, so they ship hidden and the viewer script
 // reveals them; a scripts-disabled document shows no control it cannot honour.
 const COLLAPSE_ALL_BUTTON_CLASSES =
-  "inline-flex size-[1.35rem] cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted opacity-55 transition-opacity transition-colors hover:text-ink hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "inline-flex size-[1.35rem] cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-subtle opacity-55 transition-opacity transition-colors hover:text-ink hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 // Carries no display utility: the hidden attribute (zero-specificity preflight)
 // must win until the script sets data-shown, which then supplies the display.
@@ -245,7 +253,7 @@ const renderDesktopToc = ({
     partHeaderClasses: TOC_PART_HEADER_CLASSES,
   });
   return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:block wide:self-start" aria-label="Contents">
-<p class="mb-3 flex items-center justify-between gap-2 border-b border-edge pb-2 text-xs font-semibold uppercase tracking-caps" data-toc-header><a class="rounded-sm text-subtle hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
+<p class="${TOC_EYEBROW_CLASSES}" data-toc-header><a class="rounded-sm text-subtle hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
 <ol>
 ${items}
 </ol>
@@ -253,6 +261,10 @@ ${items}
 };
 
 // Builds the sticky mobile TOC as a native disclosure.
+// approved-metric: the mobile fold control inset, matching the row inset it
+// sits over in the approved render.
+const MOBILE_FOLD_CONTROL_CLASSES = "float-right mr-5 mb-1";
+
 const renderMobileToc = ({
   nav,
   overviewId,
@@ -274,7 +286,7 @@ const renderMobileToc = ({
 <svg class="size-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden="true" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 4.96a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 1 1-1.06-1.06L11.18 10 7.21 6.02a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
 </summary>
 <div class="absolute inset-x-0 top-full max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain bg-paper py-2 shadow-floating">
-${renderBulkCollapseControls("float-right mr-6 mb-1")}
+${renderBulkCollapseControls(MOBILE_FOLD_CONTROL_CLASSES)}
 <ol>
 <li><a class="${MOBILE_TOC_LINK_CLASSES}" data-overview-link href="#${encodeURIComponent(overviewId)}">Overview</a></li>
 ${items}

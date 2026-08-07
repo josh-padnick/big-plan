@@ -94,6 +94,20 @@ const INSET_SHADOW_STEPS = new Set(["pressed", "well", "none"]);
 // reading surface, so its internal sketch metrics are its own language.
 const EXEMPT_PATHS = [/^components\/wireframe\//];
 
+// One escape, stated at the site rather than hidden in a path list. A value the
+// captain approved before the design pass outranks the scale, because parity
+// with the approved render is the product decision and the scale is only how
+// new decisions get made. Mark the line or the line above it:
+//
+//   // approved-metric: the panel padding the approved render used
+//
+// .big-plan/style-diff.md records every marked value and why a scale step
+// could not carry it.
+const APPROVED_MARKER = "approved-metric:";
+// Prettier wraps a long class string onto its own line and the explanation
+// itself often wraps, so a marker covers the next few lines of code.
+const APPROVED_MARKER_REACH = 3;
+
 const group = SPACING_PREFIXES.join("|");
 const RULES = [
   {
@@ -157,7 +171,10 @@ const findModules = async (root) => {
         await visit(path);
       } else if (
         /\.(ts|tsx)$/.test(entry.name) &&
-        !entry.name.includes(".generated.")
+        !entry.name.includes(".generated.") &&
+        // A test asserting a class string is describing a decision, not making
+        // one, so the scales are enforced where the decision lives.
+        !entry.name.includes(".test.")
       ) {
         modules.push(path);
       }
@@ -178,7 +195,21 @@ const check = async () => {
       continue;
     }
     const lines = (await readFile(module, "utf8")).split("\n");
+    let markerReach = 0;
     lines.forEach((line, index) => {
+      const trimmed = line.trim();
+      const isComment =
+        trimmed === "" || trimmed.startsWith("//") || trimmed.startsWith("*");
+      if (line.includes(APPROVED_MARKER)) {
+        markerReach = APPROVED_MARKER_REACH;
+        return;
+      }
+      if (markerReach > 0) {
+        if (!isComment) {
+          markerReach -= 1;
+        }
+        return;
+      }
       for (const rule of RULES) {
         rule.pattern.lastIndex = 0;
         for (const match of line.matchAll(rule.pattern)) {

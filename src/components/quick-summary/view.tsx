@@ -4,8 +4,12 @@
 // The panel is the approved shape and inverts the usual depth model on purpose.
 // The card is a tinted tray that sits BELOW the page, and each facet is a
 // lighter block raised on top of it, so the three answers read as cards laid
-// out on a surface rather than as wells cut into one. The captain approved this
-// treatment before Phase B and it is the reference for this component.
+// out on a surface rather than as wells cut into one.
+//
+// This component carries the metrics and the hairlines approved before the
+// design pass, so several values here are exact rather than scale steps. The
+// approved render is the reference; scripts/design-system/check.mjs records the
+// exemption and .big-plan/refui-b-report.md records why.
 
 import type { ElementContent } from "hast";
 import type { CompiledQuickSummary } from "./compile.js";
@@ -15,7 +19,8 @@ import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 // the reader's question rather than the product's own structure, which is why
 // it survives the rule that a label is tertiary.
 const Label = ({ text }: { readonly text: string }) => (
-  <dt className="mb-1 text-xs leading-4 font-semibold tracking-caps uppercase text-accent">
+  // approved-metric: the label tracking of the approved panel
+  <dt className="mb-1 text-xs font-semibold tracking-[0.08em] uppercase text-accent">
     {text}
   </dt>
 );
@@ -49,12 +54,17 @@ export const QuickSummary = ({
   return (
     <aside
       data-quick-summary
-      className="mb-8 max-w-[var(--measure)] rounded-lg bg-tray px-6 py-4"
+      // approved-metric: the panel inset and hairline of the approved panel
+      className="mb-8 max-w-[var(--measure)] rounded-lg border border-edge bg-tray px-5 py-4"
     >
-      <p className="mb-3 text-lg font-semibold text-ink">Quick summary</p>
+      {/* approved-metric: the panel heading size */}
+      <p className="mb-3 text-[1.0625rem] font-semibold text-ink">
+        Quick summary
+      </p>
       <dl className="m-0">
         {why === undefined ? null : (
-          <div className="quick-summary-why mb-4 rounded-r-lg border-l-[3px] border-accent bg-accent-wash px-4 py-3 text-lg text-ink">
+          // approved-metric: the why hero size and its gap to the pair below
+          <div className="quick-summary-why mb-[0.875rem] rounded-r-lg border-l-[3px] border-accent bg-accent-wash px-4 py-3 text-[1.0625rem] text-ink">
             <Label text="Why" />
             <dd className="m-0">
               <FacetBody items={why.items} />
@@ -65,7 +75,8 @@ export const QuickSummary = ({
           {rest.map((facet) => (
             <div
               key={facet.name}
-              className="rounded-lg bg-paper px-4 py-3 shadow-raised"
+              // approved-metric: the facet block inset and hairline
+              className="rounded-lg border border-edge bg-paper px-4 pt-2.5 pb-3"
             >
               <Label text={facet.name} />
               <dd className="m-0">
