@@ -165,6 +165,39 @@ drift the captain rejected on the signed surfaces:
 
 The three signed surfaces stayed byte-identical through all of it.
 
+## 4d. The captain's nine visual notes
+
+A review of the rendered gallery produced nine specific notes. All nine are
+answered, and three of them were the same defect wearing different clothes.
+
+**The depth pass had traded borders for shadow utilities, and a utility beats a
+component-layer rule.** That is why the selected decision option lost its green
+outline: the ring was still declared, but the resting shadow utility on the card
+outranked it. Giving the card its border back restored the outline. The lesson
+generalises: a state that must beat a resting utility belongs in the `bp-state`
+layer or must not be expressed as a competing property.
+
+**Decision surfaces are paper.** The body, the compare zone, the reversibility
+note, the long details, the proposal field, and the brief comparison all sit on
+the page colour again. Measured against the approved render, the quick
+decision's card, lead, option, propose, and footer grounds now match exactly.
+
+**Two chrome roles were one step off.** The band behind a decision question and
+the ground behind a diff hunk header both sat on a rebuilt shade rather than the
+approved one, which read as a muddy tint. Three more approved shades joined the
+grey ramp to carry them.
+
+**The diagram toolbar said the same number twice** and reflowed when the reader
+pressed Show original. The chip is gone, the control names the count, and the
+label holds one width, so the bar stays a single row: toggling leaves it 40
+pixels tall with every control at the same left edge. Zoom and Fit shed visual
+weight but keep their 36 pixel hit area, which a browser test holds as a
+touch-target floor.
+
+**The two file-tree panes shared one ground.** Current sits back on the quiet
+surface because it is the state that already exists; Planned keeps the content
+ground because it is what the reader is being asked about.
+
 ## 5. A coverage gap this pass found
 
 The style-history contract captures two fixture documents: `examples/mdx-components.mdx` and `examples/deck.mdx`.
