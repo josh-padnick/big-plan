@@ -101,6 +101,19 @@ test("should turn an authored-text selection into a durable targeted note", asyn
     name: "Comment on selected text",
   });
   await expect(selectionButton).toBeVisible();
+  await expect
+    .poll(() =>
+      selectionButton.evaluate((button) => {
+        const selection = window.getSelection();
+        if (selection === null || selection.rangeCount !== 1) {
+          return false;
+        }
+        const selectionRect = selection.getRangeAt(0).getBoundingClientRect();
+        const buttonRect = button.getBoundingClientRect();
+        return buttonRect.bottom <= selectionRect.top;
+      }),
+    )
+    .toBe(true);
   await selectionButton.click();
 
   const dialog = page.getByRole("dialog", {

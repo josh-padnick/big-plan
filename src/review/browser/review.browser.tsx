@@ -237,7 +237,7 @@ const selectionControlState = (): SelectionControlState | null => {
       end: start + quote.length,
       quote,
     },
-    top: Math.min(window.innerHeight - 48, rect.bottom + 8),
+    top: Math.max(8, rect.top - 52),
     left: Math.max(8, Math.min(window.innerWidth - 48, rect.right - 40)),
   };
 };
