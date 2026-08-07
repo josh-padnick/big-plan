@@ -89,7 +89,7 @@ Generated previews remain ignored by Git.
 bun install
 bun run build           # regenerate embedded modules, then compile TypeScript to dist/
 bun run test            # Vitest and Node unit tests (regenerates embedded modules first)
-bun run lint            # ESLint, stylesheet-contract, and Prettier checks
+bun run lint            # ESLint, stylesheet-contract, design-system, and Prettier checks
 bun run format          # format authored files with Prettier
 bun run gen             # regenerate CSS, font, branding-asset, guidance, and skill modules
 bun run test:e2e        # browser tests of the rendered viewer (build first)
