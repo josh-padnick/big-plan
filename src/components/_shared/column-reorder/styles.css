@@ -10,4 +10,19 @@
     [data-column-reorderable] {
     cursor: grabbing;
   }
+
+  body[data-column-dragging] {
+    cursor: grabbing;
+  }
+
+  body[data-column-dragging]
+    article
+    [data-column-reorderable-figure][data-column-dragging]
+    [data-column-reorderable] {
+    cursor: grabbing;
+  }
+
+  body[data-column-dragging] article thead th:not([data-column-reorderable]) {
+    cursor: default;
+  }
 }

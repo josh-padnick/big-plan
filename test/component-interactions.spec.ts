@@ -337,8 +337,17 @@ test("should exercise every live component affordance with browser gestures", as
       );
     });
     await expect(first).toHaveCSS("cursor", "grabbing");
+    await expect(page.locator("body")).toHaveCSS("cursor", "grabbing");
+    await expect(
+      page
+        .locator(
+          "article table:not(.data-table-grid):not(.table-schema-grid) thead th",
+        )
+        .first(),
+    ).toHaveCSS("cursor", "default");
     await first.dispatchEvent("dragend");
     await expect(first).toHaveCSS("cursor", "grab");
+    await expect(page.locator("body")).toHaveCSS("cursor", "auto");
     await expect(first).toHaveAttribute(
       "aria-keyshortcuts",
       "ArrowLeft ArrowRight",
@@ -473,8 +482,17 @@ test("should exercise every live component affordance with browser gestures", as
       );
     });
     await expect(headers.first()).toHaveCSS("cursor", "grabbing");
+    await expect(page.locator("body")).toHaveCSS("cursor", "grabbing");
+    await expect(
+      page
+        .locator(
+          "article table:not(.data-table-grid):not(.table-schema-grid) thead th",
+        )
+        .first(),
+    ).toHaveCSS("cursor", "default");
     await headers.first().dispatchEvent("dragend");
     await expect(headers.first()).toHaveCSS("cursor", "grab");
+    await expect(page.locator("body")).toHaveCSS("cursor", "auto");
     const secondBox = await second.boundingBox();
     expect(secondBox).not.toBeNull();
     await headers.first().dragTo(second, {

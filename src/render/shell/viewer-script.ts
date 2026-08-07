@@ -33,6 +33,11 @@ import { DIAGRAM_SCRIPT } from "./diagram-script.js";
 const COMPARE_DATA_TABLE_VALUES_SOURCE = compareDataTableValues.toString();
 
 export const VIEWER_SCRIPT = `<script>
+const setColumnDragState = (figure, dragging) => {
+  figure.toggleAttribute("data-column-dragging", dragging);
+  document.body?.toggleAttribute("data-column-dragging", dragging);
+};
+
 (() => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
   const overviewLinks = Array.from(
@@ -711,7 +716,7 @@ export const VIEWER_SCRIPT = `<script>
       });
       head.addEventListener("dragstart", (event) => {
         activeColumnDrag = { figure, column };
-        figure.setAttribute("data-column-dragging", "");
+        setColumnDragState(figure, true);
         if (event.dataTransfer !== null) {
           event.dataTransfer.effectAllowed = "move";
           event.dataTransfer.setData("text/plain", column);
@@ -740,13 +745,14 @@ export const VIEWER_SCRIPT = `<script>
       head.addEventListener("dragleave", clearDrop);
       head.addEventListener("dragend", () => {
         clearDrop();
-        figure.removeAttribute("data-column-dragging");
+        setColumnDragState(figure, false);
         if (activeColumnDrag?.figure === figure) activeColumnDrag = null;
       });
       head.addEventListener("drop", (event) => {
         const drag = activeColumnDrag;
         const after = dropAfter;
         clearDrop();
+        setColumnDragState(figure, false);
         if (
           drag?.figure !== figure ||
           drag.column === column ||
@@ -1710,7 +1716,7 @@ export const VIEWER_SCRIPT = `<script>
         const positions = Array.from(headRow.children);
         const from = positions.indexOf(head);
         activeColumnDrag = { figure, from };
-        figure.setAttribute("data-column-dragging", "");
+        setColumnDragState(figure, true);
         event.dataTransfer.effectAllowed = "move";
       });
       let dropAfter = false;
@@ -1739,13 +1745,14 @@ export const VIEWER_SCRIPT = `<script>
       head.addEventListener("dragleave", clear);
       head.addEventListener("dragend", () => {
         clear();
-        figure.removeAttribute("data-column-dragging");
+        setColumnDragState(figure, false);
         if (activeColumnDrag?.figure === figure) activeColumnDrag = null;
       });
       head.addEventListener("drop", (event) => {
         const drag = activeColumnDrag;
         const after = dropAfter;
         clear();
+        setColumnDragState(figure, false);
         if (
           drag?.figure !== figure ||
           !Number.isInteger(drag.from) ||
