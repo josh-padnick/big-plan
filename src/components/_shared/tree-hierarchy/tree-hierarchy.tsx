@@ -216,7 +216,7 @@ const NoteElement = ({
   // scripts the same disclosure still opens the note in place.
   return (
     <details className="file-tree-note-hint group" data-info-popover>
-      <summary className="inline-flex cursor-help text-muted group-open:text-ink hover:text-ink [&>svg]:size-3.5 [&>svg]:shrink-0">
+      <summary className="inline-flex translate-y-px cursor-help text-muted group-open:text-ink hover:text-ink [&>svg]:size-3 [&>svg]:shrink-0">
         {lucideIconToReact({ icon: MESSAGE_SQUARE_ICON, hidden: false })}
         <span className="sr-only">{"Note"}</span>
       </summary>

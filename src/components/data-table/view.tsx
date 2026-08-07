@@ -87,7 +87,7 @@ const HeaderCell = ({
 }) => (
   <th
     scope="col"
-    className="data-table-head bg-transparent py-1 text-2xs font-medium tracking-caps whitespace-nowrap text-subtle uppercase select-none data-[table-sorted]:text-ink"
+    className="data-table-head bg-[var(--table-head-bg)] py-1 text-2xs font-medium tracking-caps whitespace-nowrap text-subtle uppercase select-none data-[table-sorted]:text-ink"
     data-table-column={index}
     data-table-type={column.type}
     data-table-align={column.align}
