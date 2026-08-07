@@ -149,7 +149,8 @@ test("should expose table cells, columns, and QuickSummary facets as comment tar
   ).toHaveCount(3);
 
   for (const kind of ["table-cell", "table-column"] as const) {
-    const target = page.locator(`[data-block-kind='${kind}']`).first();
+    const targets = page.locator(`[data-block-kind='${kind}']`);
+    const target = kind === "table-column" ? targets.last() : targets.first();
     await target.hover();
     const button = target.getByRole("button", { name: "Add note" });
     await expect(button).toBeVisible();
@@ -165,6 +166,17 @@ test("should expose table cells, columns, and QuickSummary facets as comment tar
         }),
       )
       .toBe(true);
+    if (kind === "table-column") {
+      await expect
+        .poll(async () => {
+          const targetBox = await target.boundingBox();
+          const buttonBox = await button.boundingBox();
+          return targetBox === null || buttonBox === null
+            ? null
+            : Math.abs(buttonBox.x - targetBox.x);
+        })
+        .toBeLessThanOrEqual(1);
+    }
   }
 
   await page.setViewportSize({ width: 390, height: 844 });

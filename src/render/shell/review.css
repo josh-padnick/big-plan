@@ -47,11 +47,15 @@ Resting control visuals stay as Tailwind utilities on the React markup.
      clickable without changing table geometry. */
   [data-block-kind="table-column"] > [data-review-anchor-host] {
     top: 100%;
+    right: auto;
+    left: 0;
   }
 
   [data-block-kind="table-column"]
     > [data-review-anchor-host]
     .review-block-button {
+    right: auto;
+    left: 0;
     transform: none;
   }
 
