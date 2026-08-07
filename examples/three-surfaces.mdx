@@ -1,0 +1,88 @@
+# Retire the nightly export job
+
+Replace the nightly bulk export with a change feed, so downstream teams read
+fresh records instead of yesterday's snapshot.
+
+<QuickSummary>
+
+<Why>
+
+- Every downstream report carries a stale-data caveat, because the nightly
+  export is up to a day behind and now finishes late.
+
+</Why>
+
+<What>
+
+- Publish a change feed from the orders service, and give each consumer a
+  cursor it owns.
+
+</What>
+
+<How>
+
+- Prove the contract with one consumer, then move the rest and retire the job.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="Where the day goes" gist="What the nightly window costs today" />
+<Entry section="What good looks like" gist="The freshness downstream teams need" />
+<Entry section="The change feed" gist="What the orders service publishes" />
+<Entry section="Cursors and replay" gist="How a consumer tracks its own position" />
+<Entry section="Moving the consumers" gist="The order the four teams migrate in" />
+<Entry section="Acceptance criteria" gist="What must be true before the job is retired" />
+</TableOfContents>
+
+<Part title="Context" />
+
+## Where the day goes
+
+*The nightly window is full, and the data it produces is already old.*
+
+The export starts at 01:00 and now finishes between 04:40 and 05:20. Three
+pipelines wait on it, so a late finish moves their start into the working day.
+
+## What good looks like
+
+*Downstream reads are minutes behind, not a day behind.*
+
+A consumer sees an order change within five minutes of it happening, and can
+replay from any point in the last seven days without asking for a backfill.
+
+<Part title="The proposal" />
+
+## The change feed
+
+*The orders service publishes every change once, in order.*
+
+The feed carries one record per change, keyed by order id and stamped with a
+monotonic sequence number. Nothing else in the service changes.
+
+## Cursors and replay
+
+*Each consumer owns its position, so one slow reader never blocks another.*
+
+A cursor is a sequence number and a timestamp. A consumer commits its cursor
+after it has durably handled a record, and can rewind to any retained point.
+
+<Part title="Delivery" />
+
+## Moving the consumers
+
+*One consumer proves the contract before the other three follow.*
+
+Reporting moves first because it tolerates replay most easily. Billing moves
+last because its reconciliation needs the nightly export as a cross-check until
+the feed has run clean for a full week.
+
+## Acceptance criteria
+
+*The nightly job is retired only when all four hold.*
+
+- Every consumer reads from the feed and commits a cursor.
+- A replay from seven days back reproduces the same downstream totals.
+- The feed's end-to-end delay stays under five minutes for a full week.
+- The nightly window is empty for seven consecutive nights.
