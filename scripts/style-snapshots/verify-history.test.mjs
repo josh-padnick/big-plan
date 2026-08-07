@@ -1485,6 +1485,7 @@ test("should tile a masked full-document capture below the viewport", async () =
       await readFile(join(outputDirectory, "capture-manifest.json"), "utf8"),
     );
     assert.equal(captureManifest.captures.length, 4);
+    const widths = { desktop: [], phone: [] };
     for (const entry of captureManifest.captures) {
       const image = PNG.sync.read(
         await readFile(join(outputDirectory, entry.path)),
@@ -1493,6 +1494,15 @@ test("should tile a masked full-document capture below the viewport", async () =
         image.height > 900,
         `${entry.path} must include content below one viewport`,
       );
+      widths[entry.viewport].push(image.width);
+    }
+    for (const desktopWidth of widths.desktop) {
+      for (const phoneWidth of widths.phone) {
+        assert.ok(
+          desktopWidth > phoneWidth,
+          `desktop capture width ${desktopWidth} must exceed phone capture width ${phoneWidth}; a narrower desktop means isolation restore squeezed the layout`,
+        );
+      }
     }
   } finally {
     await rm(outputDirectory, { recursive: true, force: true });

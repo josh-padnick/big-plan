@@ -260,11 +260,13 @@ const captureTargetFrame = async ({
           globalThis.document.documentElement.getAttribute("style"),
         body: globalThis.document.body.getAttribute("style"),
       };
+      const hiddenSiblings = [];
       let current = element;
       while (value.isolate && current.parentElement !== null) {
         const parent = current.parentElement;
         for (const sibling of parent.children) {
           if (sibling !== current) {
+            hiddenSiblings.push([sibling, sibling.getAttribute("style")]);
             sibling.style.display = "none";
           }
         }
@@ -283,6 +285,7 @@ const captureTargetFrame = async ({
       element.style.width = `${value.width}px`;
       element.style.maxWidth = `${value.width}px`;
       element.style.zIndex = "2147483647";
+      globalThis.__captureHiddenSiblings = hiddenSiblings;
       return original;
     },
     { x: bounds.x, top: topInset, width: bounds.width, isolate },
@@ -339,6 +342,10 @@ const captureTargetFrame = async ({
       restore(element, original.element);
       restore(globalThis.document.documentElement, original.documentElement);
       restore(globalThis.document.body, original.body);
+      for (const [sibling, style] of globalThis.__captureHiddenSiblings ?? []) {
+        restore(sibling, style);
+      }
+      delete globalThis.__captureHiddenSiblings;
     }, originalStyles);
   }
   return PNG.sync.write(output);
