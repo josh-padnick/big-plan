@@ -79,5 +79,18 @@ export const environmentFingerprint = async ({
 export const sameEnvironment = (left, right) =>
   JSON.stringify(left) === JSON.stringify(right);
 
+/**
+ * Compares runner-owned rendering properties only. The font set belongs to
+ * each checkout, so a historical font change is a styling delta under test
+ * rather than a runner mismatch.
+ */
+export const sameRunnerEnvironment = (left, right) => {
+  const runnerProperties = ({ fontSetHash, ...rest }) => rest;
+  return (
+    JSON.stringify(runnerProperties(left)) ===
+    JSON.stringify(runnerProperties(right))
+  );
+};
+
 export const environmentLabel = (environment) =>
   `${environment.browser.name} ${environment.browser.version} on ${environment.platform} with fonts ${environment.fontSetHash}`;
