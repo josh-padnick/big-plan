@@ -35,6 +35,12 @@ Resting control visuals stay as Tailwind utilities on the React markup.
     pointer-events: none;
   }
 
+  /* Table controls name their targeting level visually without inserting
+     label text into a cell's content model, which sorting and grouping read. */
+  .review-block-button[data-review-target-name]::after {
+    content: attr(data-review-target-name);
+  }
+
   /* A column target lives in a table header, whose horizontal scroll
      container clips anything translated above the grid. Place that one anchor
      just below its header instead so the control remains visible and

@@ -158,6 +158,19 @@ const targetForBlock = (block: HTMLElement): CommentTarget => ({
     : { section: block.dataset.blockSection }),
 });
 
+const targetKindName = (kind: string | undefined): string | undefined => {
+  if (kind === "table-row") {
+    return "Row";
+  }
+  if (kind === "table-cell") {
+    return "Cell";
+  }
+  if (kind === "table-column") {
+    return "Column";
+  }
+  return undefined;
+};
+
 const targetLabel = (target: CommentTarget): string => {
   if (target.type === "document") {
     return "Whole plan";
@@ -641,16 +654,10 @@ const ReviewKernel = () => {
             aria-label="Add note"
             title={`Comment on ${block.dataset.blockLabel ?? "this block"}`}
             data-review-block-button=""
+            data-review-target-name={targetKindName(block.dataset.blockKind)}
             onClick={() => beginComment(block)}
           >
             <Icon icon={MESSAGE_SQUARE_ICON} />
-            {block.dataset.blockKind === "table-row" ? (
-              <span aria-hidden="true">Row</span>
-            ) : block.dataset.blockKind === "table-cell" ? (
-              <span aria-hidden="true">Cell</span>
-            ) : block.dataset.blockKind === "table-column" ? (
-              <span aria-hidden="true">Column</span>
-            ) : null}
           </Button>,
           host,
           block.dataset.blockId,
