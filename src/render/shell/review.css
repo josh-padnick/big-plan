@@ -35,6 +35,20 @@ Resting control visuals stay as Tailwind utilities on the React markup.
     pointer-events: none;
   }
 
+  /* A column target lives in a table header, whose horizontal scroll
+     container clips anything translated above the grid. Place that one anchor
+     just below its header instead so the control remains visible and
+     clickable without changing table geometry. */
+  [data-block-kind="table-column"] > [data-review-anchor-host] {
+    top: 100%;
+  }
+
+  [data-block-kind="table-column"]
+    > [data-review-anchor-host]
+    .review-block-button {
+    transform: none;
+  }
+
   :root[data-figure-maximized-open] [data-review-anchor-host] {
     display: none;
   }

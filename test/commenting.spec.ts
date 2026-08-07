@@ -151,8 +151,32 @@ test("should expose table cells, columns, and QuickSummary facets as comment tar
   for (const kind of ["table-cell", "table-column"] as const) {
     const target = page.locator(`[data-block-kind='${kind}']`).first();
     await target.hover();
-    await expect(
-      target.getByRole("button", { name: "Add note" }),
-    ).toBeVisible();
+    const button = target.getByRole("button", { name: "Add note" });
+    await expect(button).toBeVisible();
+    await expect
+      .poll(() =>
+        button.evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            rect.left + rect.width / 2,
+            rect.top + rect.height / 2,
+          );
+          return hit === node || node.contains(hit);
+        }),
+      )
+      .toBe(true);
   }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const phoneTarget = page.locator("[data-block-kind='table-cell']").first();
+  await phoneTarget.hover();
+  const phoneButton = phoneTarget.getByRole("button", { name: "Add note" });
+  await expect
+    .poll(() =>
+      phoneButton.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.width >= 44 && rect.height >= 44;
+      }),
+    )
+    .toBe(true);
 });

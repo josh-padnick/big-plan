@@ -29,7 +29,7 @@ const BUTTON_VARIANTS: Readonly<Record<ButtonVariant, string>> = {
 
 const BUTTON_SIZES: Readonly<Record<ButtonSize, string>> = {
   default: "h-11 px-4 py-2",
-  sm: "h-9 px-3 py-1.5 text-sm",
+  sm: "h-11 min-w-11 px-3 py-1.5 text-sm wide:h-9 wide:min-w-9",
   icon: "size-11 p-0",
 };
 

@@ -368,7 +368,7 @@ const CommentComposer = ({
         <Button
           variant="ghost"
           size="icon"
-          className="size-9"
+          className="size-11 wide:size-9"
           aria-label="Cancel comment"
           onClick={onCancel}
         >
@@ -658,7 +658,7 @@ const ReviewKernel = () => {
       )}
       {selectionControl === null || compose !== null ? null : (
         <Button
-          className="fixed z-20 size-10 p-0"
+          className="fixed z-20 size-11 p-0"
           style={{
             top: `${selectionControl.top}px`,
             left: `${selectionControl.left}px`,
@@ -739,7 +739,7 @@ const ReviewKernel = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="size-9"
+                          className="size-11 wide:size-9"
                           aria-label={`Delete note on ${targetLabel(comment.target)}`}
                           onClick={() =>
                             setDrafts((current) =>
