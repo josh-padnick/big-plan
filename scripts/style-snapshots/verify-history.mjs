@@ -1066,7 +1066,50 @@ export const verifyHistory = async ({
     args: ["rev-list", "--reverse", `${mergeBase}..HEAD`],
     cwd: repoRoot,
   });
-  const commits = commitOutput.split("\n").filter(Boolean);
+  const enumeratedCommits = commitOutput.split("\n").filter(Boolean);
+  const parentsByCommit = new Map();
+  for (const commit of enumeratedCommits) {
+    const parentLine = await run({
+      command: "git",
+      args: ["rev-list", "--parents", "-n", "1", commit],
+      cwd: repoRoot,
+    });
+    parentsByCommit.set(commit, parentLine.split(" ").slice(1));
+  }
+  // A merge whose tree matches its first parent contributes nothing to the
+  // branch line (recovery bookkeeping), so it and the ancestry reachable only
+  // through its other parents stay outside the per-commit visual contract.
+  const excludedCommits = new Set();
+  for (const commit of enumeratedCommits) {
+    const parents = parentsByCommit.get(commit);
+    if (parents.length < 2) {
+      continue;
+    }
+    const [commitTree, firstParentTree] = await Promise.all(
+      [commit, parents[0]].map((revision) =>
+        run({
+          command: "git",
+          args: ["rev-parse", `${revision}^{tree}`],
+          cwd: repoRoot,
+        }),
+      ),
+    );
+    if (commitTree !== firstParentTree) {
+      continue;
+    }
+    excludedCommits.add(commit);
+    const sideOnly = await run({
+      command: "git",
+      args: ["rev-list", ...parents.slice(1), "--not", parents[0]],
+      cwd: repoRoot,
+    });
+    for (const sideCommit of sideOnly.split("\n").filter(Boolean)) {
+      excludedCommits.add(sideCommit);
+    }
+  }
+  const commits = enumeratedCommits.filter(
+    (commit) => !excludedCommits.has(commit),
+  );
   const historicalConfigs = await Promise.all(
     [mergeBase, ...commits].map((commit) =>
       readConfigAtCommit({ repoRoot, commit, configRepoPath }),
@@ -1090,12 +1133,7 @@ export const verifyHistory = async ({
   const relevant = [];
 
   for (const commit of commits) {
-    const parentLine = await run({
-      command: "git",
-      args: ["rev-list", "--parents", "-n", "1", commit],
-      cwd: repoRoot,
-    });
-    const [, ...parents] = parentLine.split(" ");
+    const parents = parentsByCommit.get(commit);
     const parent = parents[0];
     if (parent === undefined) {
       continue;

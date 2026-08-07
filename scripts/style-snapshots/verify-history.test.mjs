@@ -304,6 +304,86 @@ test("should reject an approved styling commit without a manifest", async () => 
   }
 });
 
+test("excludes bookkeeping merges and their side-only ancestry from the contract", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "red\nbranch-line comment\n",
+      "utf8",
+    );
+    const branchStyleCommit = await commit({
+      repoRoot,
+      subject: "style: keep red on the branch line [visual:empty]",
+    });
+
+    await git({ repoRoot, arguments_: ["checkout", "-b", "recovery", base] });
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "red\nuncontracted recovery repair\n",
+      "utf8",
+    );
+    const recoveryCommit = await commit({
+      repoRoot,
+      subject: "no-mistakes(review): repair the pipeline",
+    });
+    await git({ repoRoot, arguments_: ["checkout", "main"] });
+    await git({
+      repoRoot,
+      arguments_: [
+        "merge",
+        "-s",
+        "ours",
+        "recovery",
+        "-m",
+        "Merge commit 'recovery' into main",
+      ],
+    });
+    const bookkeepingMerge = await git({
+      repoRoot,
+      arguments_: ["rev-parse", "HEAD"],
+    });
+
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "red\nbranch-line comment after recovery\n",
+      "utf8",
+    );
+    const tipStyleCommit = await commit({
+      repoRoot,
+      subject: "style: keep red after the recovery merge [visual:empty]",
+    });
+
+    const results = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "bookkeeping-merge" }),
+    });
+    const verifiedCommits = results.map((result) => result.commit);
+    assert.ok(
+      verifiedCommits.includes(branchStyleCommit),
+      "the branch-line styling commit before the merge must stay contracted",
+    );
+    assert.ok(
+      verifiedCommits.includes(tipStyleCommit),
+      "the branch-line styling commit after the merge must stay contracted",
+    );
+    assert.ok(
+      !verifiedCommits.includes(recoveryCommit),
+      "the recovery commit reachable only through the bookkeeping merge must be excluded",
+    );
+    assert.ok(
+      !verifiedCommits.includes(bookkeepingMerge),
+      "the bookkeeping merge itself must be excluded",
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("should stop at the commit whose screenshots exceed its visual contract", async () => {
   const repoRoot = await mkdtemp(join(tmpdir(), "style-history-test-"));
   try {
