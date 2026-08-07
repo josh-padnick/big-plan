@@ -560,7 +560,7 @@ export const MatrixLayout = ({
                   answerable={answerable}
                 />
               ) : null}
-              <span className="decision-key inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-edge bg-paper text-xs font-bold text-muted">
+              <span className="decision-key inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-surface text-xs font-bold text-muted">
                 {optionKey(index)}
               </span>
               <span

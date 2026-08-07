@@ -141,9 +141,19 @@ is styled by its owning module, not here.
     margin: 3rem 0;
   }
 
+  /* An authored image is a figure, not a run of text, so it takes its own
+     line and the full content column rather than the prose measure: a
+     screenshot scaled into a narrow column stops being readable. The raised
+     ground behind it means a transparent or white-backed capture still reads
+     as one object on the page instead of bleeding into the paper. */
   article img[data-authored-prose] {
+    display: block;
     max-width: 100%;
     height: auto;
+    margin: 0 0 1rem;
+    border-radius: 0.5rem;
+    background: var(--raised-c);
+    box-shadow: var(--elevation-raised);
   }
 
   article code[data-authored-prose],

@@ -15,7 +15,7 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 
 // Shared by every pill in the grid and the bands below it.
 const BADGE_CLASSES =
-  "table-schema-badge inline-flex shrink-0 items-center rounded-full border border-edge px-1.5 py-px align-middle font-sans text-2xs font-semibold tracking-caps text-subtle uppercase data-[schema-badge=pk]:border-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] data-[schema-badge=pk]:text-accent";
+  "table-schema-badge inline-flex shrink-0 items-center rounded-full bg-surface px-1.5 py-px align-middle font-sans text-2xs font-semibold tracking-caps text-subtle uppercase data-[schema-badge=pk]:bg-accent-soft data-[schema-badge=pk]:text-accent";
 // Shared by the Indexes and DDL band labels.
 const SECTION_LABEL_CLASSES =
   "table-schema-section-label m-0 text-2xs font-semibold uppercase tracking-capsr text-subtle";
