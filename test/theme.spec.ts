@@ -99,7 +99,7 @@ test("should choose and persist appearance from the settings dialog", async ({
   });
 });
 
-test("should recompose settings as a compact bottom sheet on narrow screens", async ({
+test("should recompose settings as a compact top sheet on narrow screens", async ({
   page,
   sampleViewerUrl,
 }) => {
@@ -120,6 +120,7 @@ test("should recompose settings as a compact bottom sheet on narrow screens", as
         viewportHeight: window.innerHeight,
         left: rect.left,
         right: rect.right,
+        top: rect.top,
         bottom: rect.bottom,
         optionHeights: options,
         documentScrollWidth: document.documentElement.scrollWidth,
@@ -129,7 +130,7 @@ test("should recompose settings as a compact bottom sheet on narrow screens", as
     expect(geometry.viewportWidth).toBe(width);
     expect(geometry.left).toBe(12);
     expect(geometry.right).toBe(width - 12);
-    expect(geometry.bottom).toBe(800);
+    expect(geometry.top).toBe(12);
     expect(geometry.optionHeights).toEqual([68, 68, 68]);
     expect(geometry.documentScrollWidth).toBe(geometry.viewportWidth);
     await page.keyboard.press("Escape");
@@ -140,6 +141,7 @@ test("should recompose settings as a compact bottom sheet on narrow screens", as
   const shortViewport = await dialog.evaluate((element) => ({
     clientHeight: element.clientHeight,
     scrollHeight: element.scrollHeight,
+    top: element.getBoundingClientRect().top,
     footerBottom:
       element
         .querySelector("[data-preferences-status]")
@@ -149,6 +151,7 @@ test("should recompose settings as a compact bottom sheet on narrow screens", as
   expect(shortViewport.scrollHeight).toBeGreaterThan(
     shortViewport.clientHeight,
   );
+  expect(shortViewport.top).toBe(12);
   await dialog.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
@@ -174,9 +177,14 @@ test("should isolate the document while settings is open and restore focus on cl
   const isolation = await page.evaluate(() => {
     const backdrop = document.querySelector("[data-preferences-backdrop]");
     const dialog = document.querySelector("[data-preferences-dialog]");
+    const backdropStyle =
+      backdrop instanceof HTMLElement ? getComputedStyle(backdrop) : null;
     return {
       backdropInert: backdrop instanceof HTMLElement && backdrop.inert,
       dialogInert: dialog instanceof HTMLElement && dialog.inert,
+      backdropIsDimmed:
+        backdropStyle !== null &&
+        backdropStyle.backgroundColor !== "rgba(0, 0, 0, 0)",
       topLevelSiblingsInert:
         backdrop instanceof HTMLElement
           ? Array.from(document.body.children)
@@ -191,6 +199,7 @@ test("should isolate the document while settings is open and restore focus on cl
   expect(isolation).toEqual({
     backdropInert: false,
     dialogInert: false,
+    backdropIsDimmed: true,
     topLevelSiblingsInert: true,
   });
 

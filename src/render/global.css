@@ -523,6 +523,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
   @media (width < 56rem) {
     /* Override invariant: safe-area padding must beat the resting pb-3 utility. */
     [data-preferences-backdrop] {
+      padding-top: max(0.75rem, env(safe-area-inset-top));
       padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
     }
   }
