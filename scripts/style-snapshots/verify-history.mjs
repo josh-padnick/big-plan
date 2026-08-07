@@ -1436,13 +1436,17 @@ export const verifyHistory = async ({
   };
 
   const results = [];
+  // Non-styling commits may advance HEAD without removing the branch's one
+  // global comparison from the latest authored visual contract.
+  const safetyNetCommit = relevant.at(-1)?.commit;
+  const hasSafetyNetScope = (entry) => entry.commit === safetyNetCommit;
   const receiptFor = (entry) =>
     receiptStore.receipts[receiptKey(entry.treePair)];
   const entryCaptureKeys = (entry) =>
     capturePlan({
       config,
       stylingFiles: entry.stylingFiles,
-      isTip: entry.commit === head,
+      isTip: hasSafetyNetScope(entry),
     });
   const reusableReceipt = (entry) => {
     const receipt = receiptFor(entry);
@@ -1452,7 +1456,7 @@ export const verifyHistory = async ({
       receipt?.schemaVersion === 1 &&
       receipt.policyFingerprint === activePolicyFingerprint &&
       sameEnvironment(receipt.environment, environment) &&
-      receipt.isTip === (entry.commit === head) &&
+      receipt.isTip === hasSafetyNetScope(entry) &&
       JSON.stringify(receipt.captureKeys) ===
         JSON.stringify(entryCaptureKeys(entry)) &&
       receipt.visualKind === entry.visualKind &&
@@ -1613,7 +1617,7 @@ export const verifyHistory = async ({
             ...entry.treePair,
             policyFingerprint: activePolicyFingerprint,
             environment,
-            isTip: entry.commit === head,
+            isTip: hasSafetyNetScope(entry),
             captureKeys: entryCaptureKeys(entry),
             visualKind: entry.visualKind,
             stylingFiles: [...entry.stylingFiles].sort(),

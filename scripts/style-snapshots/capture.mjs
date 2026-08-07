@@ -582,7 +582,6 @@ try {
                       page,
                       target: targetInstance,
                       path,
-                      isolate: capture.multiple !== true,
                     })
                   : captureStableTargetWithAnimatedRegions({
                       page,
@@ -591,7 +590,6 @@ try {
                       masks: animatedExemptions.map(({ selector }) =>
                         page.locator(selector),
                       ),
-                      isolate: capture.multiple !== true,
                     }),
                 `Screenshot target "${path}"`,
                 60_000,

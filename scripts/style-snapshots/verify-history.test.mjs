@@ -1210,6 +1210,136 @@ test("should retain relevance from every config revision", async () => {
   }
 });
 
+test("should keep the global safety net on the latest styling commit", async () => {
+  const { repoRoot, configPath } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  const previousAuthority = process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS;
+  process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS = "local";
+  try {
+    const colors = {
+      red: onePixelPng({ red: 255, green: 0, blue: 0 }).toString("base64"),
+      blue: onePixelPng({ red: 0, green: 0, blue: 255 }).toString("base64"),
+    };
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
+const checkout = process.env.STYLE_SNAPSHOT_CHECKOUT;
+const selected = JSON.parse(process.env.STYLE_SNAPSHOT_CAPTURE_KEYS ?? "[]");
+const style = await readFile(join(checkout, "style.txt"), "utf8");
+const captures = [];
+await mkdir(output, { recursive: true });
+for (const key of selected) {
+  const path = key.replace("/", "__") + "__desktop__light.png";
+  const bytes = key === "sample/full-document" && style.includes("leak")
+    ? ${JSON.stringify(colors.blue)}
+    : ${JSON.stringify(colors.red)};
+  await writeFile(join(output, path), Buffer.from(bytes, "base64"));
+  captures.push({ key, viewport: "desktop", theme: "light", path });
+}
+await writeFile(join(output, "capture-manifest.json"), JSON.stringify({
+  schemaVersion: 2,
+  selectedCaptureKeys: selected,
+  captures,
+}));
+`,
+      "utf8",
+    );
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 2,
+          fixturePaths: ["fixture.txt"],
+          stylingFilePatterns: ["^style\\.txt$"],
+          manifestDirectory: ".style-snapshots/manifests",
+          capturePolicy: { globalFilePatterns: ["^global/"] },
+          captureEnvironment: { authorityClass: "local" },
+          captureCommand: ["node", "{harnessRoot}/capture.mjs"],
+          documents: [
+            {
+              name: "sample",
+              source: "fixture.txt",
+              captures: [
+                {
+                  name: "full-document",
+                  scope: "full-document",
+                  selector: "article",
+                  themes: ["light"],
+                  viewports: [
+                    { name: "desktop", width: 1440, height: 900 },
+                  ],
+                  actions: [],
+                },
+                {
+                  name: "component",
+                  scope: "component",
+                  ownerPatterns: ["^style\\.txt$"],
+                  selector: "[data-component]",
+                  themes: ["light"],
+                  viewports: [
+                    { name: "desktop", width: 1440, height: 900 },
+                  ],
+                  actions: [],
+                },
+              ],
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await git({ repoRoot, arguments_: ["add", "."] });
+    await git({
+      repoRoot,
+      arguments_: [
+        "commit",
+        "--amend",
+        "-m",
+        "test: establish scoped safety-net fixture",
+      ],
+    });
+    const base = await git({
+      repoRoot,
+      arguments_: ["rev-parse", "HEAD"],
+    });
+    await writeFile(join(repoRoot, "style.txt"), "leak\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: leak outside component ownership [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "non-style.txt"), "advance tip\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "test: advance tip after styling commit",
+    });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "latest-styling-safety-net",
+        }),
+      }),
+      /sample__full-document__desktop__light\.png \(1 changed pixels\)/u,
+    );
+  } finally {
+    if (previousAuthority === undefined) {
+      delete process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS;
+    } else {
+      process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS = previousAuthority;
+    }
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("should derive fixture relevance from every document source", async () => {
   const { repoRoot, configPath, base } = await createMinimalRepository({
     documents: [
