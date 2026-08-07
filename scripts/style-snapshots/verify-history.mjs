@@ -25,6 +25,7 @@ import {
   environmentFingerprint,
   environmentLabel,
   sameEnvironment,
+  sameRunnerEnvironment,
 } from "./environment.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -1187,6 +1188,7 @@ export const verifyHistory = async ({
         cwd: repoRoot,
       }),
     );
+    let capturedEnvironment = environment;
     try {
       await mkdir(outputDirectory, { recursive: true });
       const command = config.captureCommand.map((part) =>
@@ -1206,7 +1208,6 @@ export const verifyHistory = async ({
           STYLE_SNAPSHOT_CAPTURE_KEYS: JSON.stringify(captureKeys),
         },
       });
-      let capturedEnvironment = environment;
       try {
         const manifest = JSON.parse(
           await readFile(
@@ -1216,7 +1217,7 @@ export const verifyHistory = async ({
         );
         if (manifest.environment !== undefined) {
           capturedEnvironment = manifest.environment;
-          if (!sameEnvironment(environment, capturedEnvironment)) {
+          if (!sameRunnerEnvironment(environment, capturedEnvironment)) {
             throw new Error(
               `environment differs: captured on ${environmentLabel(capturedEnvironment)}, verifying on ${environmentLabel(environment)}`,
             );
@@ -1298,7 +1299,10 @@ export const verifyHistory = async ({
         }),
       );
     }
-    const result = { directory: outputDirectory, environment };
+    const result = {
+      directory: outputDirectory,
+      environment: capturedEnvironment,
+    };
     capturesByCommit.set(cacheKey, result);
     return result;
   };
@@ -1306,6 +1310,12 @@ export const verifyHistory = async ({
   const results = [];
   const receiptFor = (entry) =>
     receiptStore.receipts[receiptKey(entry.treePair)];
+  const entryCaptureKeys = (entry) =>
+    capturePlan({
+      config,
+      stylingFiles: entry.stylingFiles,
+      isTip: entry.commit === head,
+    });
   const reusableReceipt = (entry) => {
     const receipt = receiptFor(entry);
     return (
@@ -1314,6 +1324,9 @@ export const verifyHistory = async ({
       receipt?.schemaVersion === 1 &&
       receipt.policyFingerprint === policyFingerprint &&
       sameEnvironment(receipt.environment, environment) &&
+      receipt.isTip === (entry.commit === head) &&
+      JSON.stringify(receipt.captureKeys) ===
+        JSON.stringify(entryCaptureKeys(entry)) &&
       receipt.visualKind === entry.visualKind &&
       JSON.stringify(receipt.stylingFiles) ===
         JSON.stringify([...entry.stylingFiles].sort()) &&
@@ -1349,11 +1362,7 @@ export const verifyHistory = async ({
       capturePlan({ config, stylingFiles: [], isTip: true }),
     );
     for (const entry of activeRelevant) {
-      const captureKeys = capturePlan({
-        config,
-        stylingFiles: entry.stylingFiles,
-        isTip: entry.commit === head,
-      });
+      const captureKeys = entryCaptureKeys(entry);
       addCaptureRequest(entry.parent, captureKeys);
       addCaptureRequest(entry.commit, captureKeys);
     }
@@ -1377,7 +1386,10 @@ export const verifyHistory = async ({
           [...captureRequests.get(entry.commit)].sort(),
         );
         if (
-          !sameEnvironment(beforeCapture.environment, afterCapture.environment)
+          !sameRunnerEnvironment(
+            beforeCapture.environment,
+            afterCapture.environment,
+          )
         ) {
           throw new Error(
             `environment differs: captured on ${environmentLabel(beforeCapture.environment)}, verifying on ${environmentLabel(afterCapture.environment)}`,
@@ -1387,13 +1399,7 @@ export const verifyHistory = async ({
           beforeDirectory: beforeCapture.directory,
           afterDirectory: afterCapture.directory,
           captureKeys:
-            config.schemaVersion < 2
-              ? undefined
-              : capturePlan({
-                  config,
-                  stylingFiles: entry.stylingFiles,
-                  isTip: entry.commit === head,
-                }),
+            config.schemaVersion < 2 ? undefined : entryCaptureKeys(entry),
         });
         const changes = captures.filter((capture) => capture.changedPixels > 0);
         const artifactDirectory = join(
@@ -1461,6 +1467,8 @@ export const verifyHistory = async ({
             ...entry.treePair,
             policyFingerprint,
             environment,
+            isTip: entry.commit === head,
+            captureKeys: entryCaptureKeys(entry),
             visualKind: entry.visualKind,
             stylingFiles: [...entry.stylingFiles].sort(),
             contractSubjects: entry.contractSubjects,

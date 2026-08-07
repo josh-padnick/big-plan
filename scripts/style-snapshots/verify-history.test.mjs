@@ -860,6 +860,32 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
     assert.equal(secondCount - firstCount, 2);
     assert.notEqual(changedCommit, rerun[2].commit);
 
+    const fullHead = await git({ repoRoot, arguments_: ["rev-parse", "HEAD"] });
+    await git({
+      repoRoot,
+      arguments_: ["reset", "--hard", rerun[1].commit],
+    });
+    const rewound = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "receipt-tip-rewind" }),
+    });
+    const tipRewindCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(rewound.length, 2);
+    assert.equal(rewound[0].cached, true);
+    assert.notEqual(rewound[1].cached, true);
+    assert.equal(
+      tipRewindCount - secondCount,
+      2,
+      "a mid-branch receipt must not stand in for tip-scope verification",
+    );
+    await git({ repoRoot, arguments_: ["reset", "--hard", fullHead] });
+
     await writeFile(
       configPath,
       `${JSON.stringify(
@@ -880,7 +906,7 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
     )
       .trim()
       .split("\n").length;
-    assert.equal(policyChangeCount - secondCount, 4);
+    assert.equal(policyChangeCount - tipRewindCount, 4);
   } finally {
     if (previousReceiptDirectory === undefined) {
       delete process.env.STYLE_HISTORY_RECEIPT_DIR;
