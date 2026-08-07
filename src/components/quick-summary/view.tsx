@@ -47,7 +47,7 @@ export const QuickSummary = ({
       <p className="mb-3 text-lg font-semibold text-subtle">Quick summary</p>
       <dl className="m-0">
         {why === undefined ? null : (
-          <div className="quick-summary-why mb-4 rounded-r-lg border-l-[3px] border-accent bg-[color-mix(in_srgb,var(--accent-c)_8%,transparent)] px-4 py-3 text-lg">
+          <div className="quick-summary-why mb-4 rounded-r-lg border-l-[3px] border-accent bg-accent-soft px-4 py-3 text-lg text-[var(--accent-soft-ink-c)]">
             <Label text="Why" />
             <dd className="m-0">
               <FacetBody items={why.items} />

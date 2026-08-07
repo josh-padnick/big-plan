@@ -175,28 +175,36 @@ it that way: a band carries primary or secondary text, never tertiary.
   /* Brand. */
   --accent-c: var(--primary-700);
   --accent-soft-c: var(--primary-50);
+  --accent-soft-ink-c: var(--primary-900);
   --accent-ink-c: var(--grey-25);
 
   /* Semantic roles. Each carries its own tinted ground so coloured text never
      sits on a grey one. */
   --callout-note-c: var(--info-700);
   --callout-note-bg: var(--info-50);
+  --callout-note-ink: var(--info-900);
   --callout-tip-c: var(--success-700);
   --callout-tip-bg: var(--success-50);
+  --callout-tip-ink: var(--success-900);
   --callout-warning-c: var(--warning-700);
   --callout-warning-bg: var(--warning-50);
+  --callout-warning-ink: var(--warning-900);
   --callout-danger-c: var(--danger-700);
   --callout-danger-bg: var(--danger-50);
+  --callout-danger-ink: var(--danger-900);
   --diff-add-c: var(--success-700);
   --diff-add-bg: var(--success-50);
   --diff-remove-c: var(--danger-700);
   --diff-remove-bg: var(--danger-50);
   --decision-pro-c: var(--success-700);
   --decision-pro-bg: var(--success-50);
+  --decision-pro-ink: var(--success-900);
   --decision-con-c: var(--danger-700);
   --decision-con-bg: var(--danger-50);
+  --decision-con-ink: var(--danger-900);
   --annotation-c: var(--note-700);
   --annotation-bg: var(--note-50);
+  --annotation-ink: var(--note-900);
   --diff-content-bg: var(--grey-25);
   --diff-hunk-bg: var(--grey-100);
   --diff-hunk-c: var(--grey-600);
@@ -248,26 +256,34 @@ same separation.
 
     --accent-c: var(--primary-300);
     --accent-soft-c: var(--primary-900);
+    --accent-soft-ink-c: var(--primary-100);
     --accent-ink-c: var(--grey-950);
 
     --callout-note-c: var(--info-300);
     --callout-note-bg: var(--info-900);
+    --callout-note-ink: var(--info-100);
     --callout-tip-c: var(--success-300);
     --callout-tip-bg: var(--success-900);
+    --callout-tip-ink: var(--success-100);
     --callout-warning-c: var(--warning-300);
     --callout-warning-bg: var(--warning-900);
+    --callout-warning-ink: var(--warning-100);
     --callout-danger-c: var(--danger-300);
     --callout-danger-bg: var(--danger-900);
+    --callout-danger-ink: var(--danger-100);
     --diff-add-c: var(--success-300);
     --diff-add-bg: var(--success-900);
     --diff-remove-c: var(--danger-300);
     --diff-remove-bg: var(--danger-900);
     --decision-pro-c: var(--success-300);
     --decision-pro-bg: var(--success-900);
+    --decision-pro-ink: var(--success-100);
     --decision-con-c: var(--danger-300);
     --decision-con-bg: var(--danger-900);
+    --decision-con-ink: var(--danger-100);
     --annotation-c: var(--note-300);
     --annotation-bg: var(--note-900);
+    --annotation-ink: var(--note-100);
     --diff-content-bg: var(--grey-950);
     --diff-hunk-bg: var(--grey-800);
     --diff-hunk-c: var(--grey-400);
@@ -304,26 +320,34 @@ same separation.
 
   --accent-c: var(--primary-300);
   --accent-soft-c: var(--primary-900);
+  --accent-soft-ink-c: var(--primary-100);
   --accent-ink-c: var(--grey-950);
 
   --callout-note-c: var(--info-300);
   --callout-note-bg: var(--info-900);
+  --callout-note-ink: var(--info-100);
   --callout-tip-c: var(--success-300);
   --callout-tip-bg: var(--success-900);
+  --callout-tip-ink: var(--success-100);
   --callout-warning-c: var(--warning-300);
   --callout-warning-bg: var(--warning-900);
+  --callout-warning-ink: var(--warning-100);
   --callout-danger-c: var(--danger-300);
   --callout-danger-bg: var(--danger-900);
+  --callout-danger-ink: var(--danger-100);
   --diff-add-c: var(--success-300);
   --diff-add-bg: var(--success-900);
   --diff-remove-c: var(--danger-300);
   --diff-remove-bg: var(--danger-900);
   --decision-pro-c: var(--success-300);
   --decision-pro-bg: var(--success-900);
+  --decision-pro-ink: var(--success-100);
   --decision-con-c: var(--danger-300);
   --decision-con-bg: var(--danger-900);
+  --decision-con-ink: var(--danger-100);
   --annotation-c: var(--note-300);
   --annotation-bg: var(--note-900);
+  --annotation-ink: var(--note-100);
   --diff-content-bg: var(--grey-950);
   --diff-hunk-bg: var(--grey-800);
   --diff-hunk-c: var(--grey-400);

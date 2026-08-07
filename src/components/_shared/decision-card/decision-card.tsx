@@ -189,11 +189,11 @@ const AnswerControls = () => (
         {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="m-0 text-base font-semibold text-ink">
+        <p className="m-0 text-base font-semibold text-[var(--decision-pro-ink)]">
           <span data-decision-answer-lead="">{"Answer recorded"}</span>
           <span className="sr-only" data-decision-answer-title="" />
         </p>
-        <p className="m-0 mt-0.5 text-xs text-muted">
+        <p className="m-0 mt-0.5 text-xs text-[var(--decision-pro-c)]">
           {"Noted for this reading session."}
         </p>
       </div>

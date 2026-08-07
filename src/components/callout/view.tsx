@@ -36,7 +36,7 @@ export const Callout = ({ model }: { readonly model: CompiledCallout }) => {
           {model.title ?? config.defaultTitle}
         </span>
       </header>
-      <div className="callout-body text-ink [&>:last-child]:mb-0">
+      <div className="callout-body text-[var(--callout-ink)] [&>:last-child]:mb-0">
         {hastContentToReact(model.body)}
       </div>
     </aside>

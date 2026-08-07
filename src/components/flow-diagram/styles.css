@@ -22,6 +22,32 @@ classes.
 */
 
 @layer components {
+  /* A node's tone is one palette pairing, kept together as a selector
+     relationship: the ground, the label ink drawn from the same hue, and the
+     secondary ink one step brighter than the label. A tinted card never
+     receives grey text. */
+  article [data-flow-diagram-tone="neutral"] {
+    background: var(--surface-c);
+    color: var(--ink-c);
+  }
+  article [data-flow-diagram-tone="neutral"] .flow-diagram-node-code {
+    color: var(--muted-c);
+  }
+  article [data-flow-diagram-tone="source"] {
+    background: var(--accent-soft-c);
+    color: var(--accent-soft-ink-c);
+  }
+  article [data-flow-diagram-tone="source"] .flow-diagram-node-code {
+    color: var(--accent-c);
+  }
+  article [data-flow-diagram-tone="destination"] {
+    background: var(--callout-note-bg);
+    color: var(--callout-note-ink);
+  }
+  article [data-flow-diagram-tone="destination"] .flow-diagram-node-code {
+    color: var(--callout-note-c);
+  }
+
   .flow-diagram {
     /* One name for the connector paint and one for its weight, so a ghosted
        edge can fade every line, rail, and arrowhead by overriding a single

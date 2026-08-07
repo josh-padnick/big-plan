@@ -51,23 +51,15 @@ const BADGE_CLASSES =
   "flow-diagram-badge ml-1.5 inline-block rounded-full px-2 py-0.5 align-[1px] text-2xs font-semibold";
 
 const BADGE_TONE_CLASSES: Readonly<Record<"neutral" | "warning", string>> = {
-  neutral:
-    "bg-[color-mix(in_srgb,var(--ink-c)_7%,transparent)] text-[var(--muted-c)]",
-  warning:
-    "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)] text-[var(--callout-warning-c)]",
+  neutral: "bg-surface text-muted",
+  warning: "bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]",
 };
 
-const NODE_TONE_CLASSES: Readonly<
-  Record<CompiledFlowDiagramNode["tone"], string>
-> = {
-  neutral: "border-edge bg-surface",
-  source:
-    "border-[color-mix(in_srgb,var(--accent-c)_38%,var(--edge-c))] bg-[color-mix(in_srgb,var(--accent-c)_10%,transparent)]",
-  destination:
-    "border-[color-mix(in_srgb,var(--callout-note-c)_35%,var(--edge-c))] bg-[color-mix(in_srgb,var(--callout-note-c)_10%,transparent)]",
-};
+// A node's tone is a palette pairing - ground, label ink, and a secondary ink
+// from the same hue - so the stylesheet owns it through the tone attribute and
+// no utility here can hand a tinted card a grey label.
 
-const LABEL_CLASSES = "block text-sm font-semibold text-ink";
+const LABEL_CLASSES = "block text-sm font-semibold";
 
 const EDGE_LABEL_CLASSES =
   "absolute -top-[1.15rem] left-1/2 -translate-x-1/2 text-2xs whitespace-nowrap text-muted";
@@ -122,7 +114,7 @@ const Node = ({
     data-flow-diagram-tone={node.tone}
     data-flow-node={node.id}
     data-flow-in-stage={stage.id}
-    className={`flow-diagram-node rounded-lg border px-3 py-2 leading-normal ${NODE_TONE_CLASSES[node.tone]}${spaced ? " my-1" : ""}`}
+    className={`flow-diagram-node rounded-lg border border-edge px-3 py-2 leading-normal${spaced ? " my-1" : ""}`}
     style={style}
     {...targetProps({
       kind: "node",
@@ -152,7 +144,7 @@ const Node = ({
     {node.code === undefined ? null : (
       <code
         data-flow-field="code"
-        className="flow-diagram-node-code block rounded-none border-0 bg-transparent p-0 font-mono text-xs text-muted"
+        className="flow-diagram-node-code block rounded-none border-0 bg-transparent p-0 font-mono text-xs"
       >
         {node.code}
       </code>
