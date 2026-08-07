@@ -88,6 +88,8 @@ const HeaderCell = ({
   <th
     scope="col"
     className="data-table-head bg-[var(--table-head-bg)] py-1 text-2xs font-medium tracking-caps whitespace-nowrap text-muted uppercase select-none data-[table-sorted]:text-ink"
+    data-commentable-kind="table-column"
+    data-commentable-label={`Column: ${column.label}`}
     data-table-column={index}
     data-table-type={column.type}
     data-table-align={column.align}
@@ -331,13 +333,20 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
         </thead>
         <tbody>
           {model.rows.map((row, rowIndex) => (
-            <tr key={rowIndex} data-table-row={rowIndex}>
+            <tr
+              key={rowIndex}
+              data-commentable-kind="table-row"
+              data-commentable-label={row.cells[0]?.text ?? "Table row"}
+              data-table-row={rowIndex}
+            >
               {row.cells.map((cell, cellIndex) => {
                 const column = model.columns[cellIndex];
                 return (
                   <td
                     key={cellIndex}
                     className="data-table-cell data-[table-align=center]:text-center data-[table-align=right]:text-right"
+                    data-commentable-kind="table-cell"
+                    data-commentable-label={`${column?.label ?? `Column ${cellIndex + 1}`}: ${cell.text === "" ? "Empty" : cell.text}`}
                     data-table-column={cellIndex}
                     data-table-align={column?.align ?? "left"}
                     {...(column?.fit === undefined

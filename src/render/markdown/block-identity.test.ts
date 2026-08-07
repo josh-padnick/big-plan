@@ -208,6 +208,27 @@ describe("block identity boundaries", () => {
     ).toEqual(["Why", "What", "How"]);
   });
 
+  it("should expose DataTable rows, cells, and columns as semantic sub-targets", () => {
+    const { blocks } = compile(
+      '## Gates\n\n<DataTable title="Rollout gates">\n\n```table\n| Gate | Owner |\n| --- | --- |\n| Durability | Service |\n```\n\n</DataTable>\n',
+    );
+    expect(
+      blocks
+        .filter((block) => block.kind === "table-column")
+        .map((block) => block.label),
+    ).toEqual(["Column: Gate", "Column: Owner"]);
+    expect(
+      blocks
+        .filter((block) => block.kind === "table-cell")
+        .map((block) => block.label),
+    ).toEqual(["Gate: Durability", "Owner: Service"]);
+    expect(
+      blocks
+        .filter((block) => block.kind === "table-row")
+        .map((block) => block.label),
+    ).toEqual(["Durability"]);
+  });
+
   it("should not address a component's private internals as blocks", () => {
     const { blocks } = compile(DECISION_FIXTURE);
     // The decision card is one target; its options and considerations are the
