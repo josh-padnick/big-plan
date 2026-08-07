@@ -90,7 +90,9 @@ The captain's preference wins. Each conflict and its resolution:
 3. **Accent colour on chrome.**
    The book's "emphasize by de-emphasizing" says to quiet chrome.
    The product had used the brand green on kickers, part tags, and section labels, which reads as deliberate branding.
-   **Resolved for the book,** because the captain's own standing instruction is that plan content is the star and chrome must not compete. Accent is now scarce: the current section, a prose link, and a chosen option.
+   **Resolved for the book at first, then split by the captain's review of PR 74.**
+   The captain kept the quiet treatment on slide kickers and part tags, and overruled it on two surfaces he had already approved: the quick summary's Why, What, and How labels, and the table-of-contents part labels. Both are back in the brand colour.
+   The distinction that survives: a label naming the product's own structure is tertiary; a label naming the reader's question, or the part they are looking for, keeps the accent.
 
 4. **Font family.**
    The book has tests a typeface can fail.
@@ -113,6 +115,23 @@ The captain's preference wins. Each conflict and its resolution:
 
 - **Font family, icon set, and dependencies.**
   Unchanged, per the rules of engagement.
+
+## 4b. The captain's parity review of PR 74
+
+The captain reviewed the pass and asked for three surfaces to be brought back toward the look he had approved before Phase B: the quick summary, the plan title and lede, and the table of contents.
+That work is in `design(parity)`, and the before and after pairs are at `data/bp-refui-b/parity-three.html`.
+
+What it changed, and what it taught the system:
+
+- **The quick summary inverts the depth model on purpose.**
+  Phase B had made it a near-white card holding recessed blocks. The approved shape is a tinted tray with lighter blocks raised on it.
+  The system gained a `tray` role for that, so the shape is named rather than special-cased.
+- **A scale step should hold the approved value.**
+  The title is 40 pixels because that is what was approved, so `--text-4xl` is 2.5rem. The call site did not gain an exception.
+- **Tracking on prose headings was a step too far.**
+  The book says to tighten large type. The approved title reads better upright, so the blanket tracking is gone.
+
+Every value still names a scale step or a role. Remaining differences from the approved render are one or two pixels and single palette rounding steps.
 
 ## 5. A coverage gap this pass found
 
