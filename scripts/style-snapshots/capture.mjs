@@ -11,6 +11,7 @@ import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
 import { PNG } from "pngjs";
 import { availableDocuments } from "./available-documents.mjs";
+import { DETERMINISM_FLAGS, environmentFingerprint } from "./environment.mjs";
 
 const execFileAsync = promisify(execFile);
 const checkout = process.env["STYLE_SNAPSHOT_CHECKOUT"];
@@ -459,21 +460,15 @@ const temporaryDirectory = await mkdtemp(
 // Exact RGBA evidence requires one stable rasterizer and color space in CI.
 const browser = await chromium.launch({
   headless: true,
-  args: [
-    "--disable-gpu",
-    // Hosted runners expose different CPU instruction sets. Skia documents
-    // this switch as its baseline layout-test path; it prevents SIMD-specific
-    // antialias rounding from changing an otherwise identical pixel by one.
-    "--disable-skia-runtime-opts",
-    // Keep deterministic compositor stages without enabling begin-frame
-    // control, which can stall screenshots on hosted Linux runners.
-    "--run-all-compositor-stages-before-draw",
-    "--disable-threaded-animation",
-    "--disable-threaded-scrolling",
-    "--disable-checker-imaging",
-    "--force-color-profile=srgb",
-    "--force-device-scale-factor=1",
-  ],
+  args: DETERMINISM_FLAGS,
+});
+
+const environment = await environmentFingerprint({
+  browserVersion: browser.version(),
+  fontRoot: join(checkout, "assets", "fonts"),
+  authorityClass:
+    process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS ??
+    (process.env.CI === "true" ? "ci-runner" : "local"),
 });
 
 try {
@@ -609,6 +604,7 @@ try {
                 viewport: viewport.name,
                 theme,
                 path: basename(path),
+                environment,
               });
             }
           } finally {
@@ -622,7 +618,8 @@ try {
     join(outputDirectory, "capture-manifest.json"),
     `${JSON.stringify(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
+        environment,
         selectedCaptureKeys: [...selectedCaptureKeys],
         captures: captureManifest,
       },

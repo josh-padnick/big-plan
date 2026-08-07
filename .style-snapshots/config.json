@@ -33,9 +33,13 @@
       "^scripts/",
       "^examples/",
       "^src/components/_shared/",
+      "^src/components/(?:part|slide)/",
       "^src/icons/",
       "^src/render/"
     ]
+  },
+  "captureEnvironment": {
+    "authorityClass": "ci-runner"
   },
   "captureCommand": [
     "node",
