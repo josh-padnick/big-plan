@@ -17,7 +17,7 @@ import type { CompiledTableOfContents } from "./compile.js";
 const GroupHeader = ({ part }: { readonly part: DocumentOutlinePart }) => (
   <p
     data-table-of-contents-group=""
-    className="table-of-contents-group mt-3 mb-0.5 text-xs font-semibold uppercase tracking-caps text-subtle"
+    className="table-of-contents-group mt-3 mb-0.5 text-xs leading-4 font-semibold uppercase tracking-caps text-accent"
   >
     {`[${part.number}] ${part.title}`}
   </p>
@@ -41,7 +41,7 @@ export const TableOfContents = ({
     >
       {/* Semantic h2 for chrome only: nested inside the overview nav so it
           is not a deck slide, and sized to match slide-title h2 scale. */}
-      <h2 className="table-of-contents-title m-0 mb-3 border-0 p-0 text-2xl font-semibold tracking-tight text-ink">
+      <h2 className="table-of-contents-title m-0 mb-3 border-0 p-0 text-2xl font-semibold text-ink">
         The plan in one look
       </h2>
       {model.entries.map((entry, index) => {
@@ -63,16 +63,16 @@ export const TableOfContents = ({
             >
               <span
                 data-table-of-contents-num
-                className="text-xs font-medium text-subtle"
+                className="text-xs leading-4 font-medium text-subtle"
               >
                 {section?.number}
               </span>
               {/* The name turns accent through a group variant; a stylesheet rule
                   on this span would lose to its own text-ink utility. */}
-              <span className="table-of-contents-name block text-base font-semibold text-ink group-hover:text-accent">
+              <span className="table-of-contents-name block text-base leading-6 font-semibold text-ink group-hover:text-accent">
                 {entry.section}
               </span>
-              <span className="col-start-2 text-sm text-muted">
+              <span className="col-start-2 text-sm leading-5 text-subtle">
                 {entry.gist}
               </span>
             </a>

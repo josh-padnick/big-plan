@@ -62,11 +62,11 @@ is styled by its owning module, not here.
   }
 
   /* Size and its line height come from the same scale step, so a heading can
-     never be given a leading that does not belong to its size. Large type is
-     tracked in because the gaps between letters grow with the letters. */
+     never be given a leading that does not belong to its size. Tracking stays
+     normal: the approved plan title reads better upright, and the captain's
+     preference outranks the book's rule for tightening large type. */
   article :is(h1, h2, h3, h4, h5, h6)[data-authored-prose] {
     font-weight: 600;
-    letter-spacing: var(--tracking-tight);
     margin: 2rem 0 0.75rem;
   }
   article h1[data-authored-prose] {
@@ -89,12 +89,10 @@ is styled by its owning module, not here.
   article h4[data-authored-prose] {
     font-size: var(--text-xl);
     line-height: var(--text-xl--line-height);
-    letter-spacing: normal;
   }
   article h5[data-authored-prose] {
     font-size: var(--text-lg);
     line-height: var(--text-lg--line-height);
-    letter-spacing: normal;
   }
 
   /* The paragraph directly under the title is the plan's lede; it reads as
@@ -107,16 +105,15 @@ is styled by its owning module, not here.
   }
   article h1[data-authored-prose] + p[data-authored-prose] {
     font-size: var(--text-xl);
-    line-height: var(--text-xl--line-height);
-    color: var(--color-muted);
+    line-height: 1.5;
+    color: var(--color-subtle);
     border-bottom: 1px solid var(--color-edge);
-    padding-bottom: 0.75rem;
-    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    margin-bottom: 2rem;
   }
   article h6[data-authored-prose] {
     font-size: var(--text-sm);
     line-height: var(--text-sm--line-height);
-    letter-spacing: normal;
     color: var(--color-subtle);
   }
 

@@ -1,0 +1,310 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "design(parity): restore the approved quick summary, title, and contents [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/components/quick-summary/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "quick summary, plan title, and contents treatment",
+          "from": "a near-white quick-summary card holding recessed blocks, a 36 pixel tracked-in title over a secondary lede, and contents labels in tertiary grey at scale line heights",
+          "to": "the approved tinted tray holding raised blocks with accent labels, a 40 pixel upright title over a tertiary lede at reading line height, and contents labels back in the brand colour at the approved density"
+        }
+      ]
+    },
+    {
+      "path": "src/components/table-of-contents/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "quick summary, plan title, and contents treatment",
+          "from": "a near-white quick-summary card holding recessed blocks, a 36 pixel tracked-in title over a secondary lede, and contents labels in tertiary grey at scale line heights",
+          "to": "the approved tinted tray holding raised blocks with accent labels, a 40 pixel upright title over a tertiary lede at reading line height, and contents labels back in the brand colour at the approved density"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.css",
+      "propertyDeltas": [
+        {
+          "property": "quick summary, plan title, and contents treatment",
+          "from": "a near-white quick-summary card holding recessed blocks, a 36 pixel tracked-in title over a secondary lede, and contents labels in tertiary grey at scale line heights",
+          "to": "the approved tinted tray holding raised blocks with accent labels, a 40 pixel upright title over a tertiary lede at reading line height, and contents labels back in the brand colour at the approved density"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "quick summary, plan title, and contents treatment",
+          "from": "a near-white quick-summary card holding recessed blocks, a 36 pixel tracked-in title over a secondary lede, and contents labels in tertiary grey at scale line heights",
+          "to": "the approved tinted tray holding raised blocks with accent labels, a 40 pixel upright title over a tertiary lede at reading line height, and contents labels back in the brand colour at the approved density"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/prose.css",
+      "propertyDeltas": [
+        {
+          "property": "quick summary, plan title, and contents treatment",
+          "from": "a near-white quick-summary card holding recessed blocks, a 36 pixel tracked-in title over a secondary lede, and contents labels in tertiary grey at scale line heights",
+          "to": "the approved tinted tray holding raised blocks with accent labels, a 40 pixel upright title over a tertiary lede at reading line height, and contents labels back in the brand colour at the approved density"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 184265,
+      "before": {
+        "width": 872,
+        "height": 808,
+        "sha256": "d9b6f8ec62b0bd4e289deb673a3946ca19288b2296431f75bfc1f9580787c188"
+      },
+      "after": {
+        "width": 872,
+        "height": 808,
+        "sha256": "93ebe6fad099e68d0c9081673d7cec22870e766f73c148cf7c34998f7cce4e6f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 184923,
+      "before": {
+        "width": 872,
+        "height": 808,
+        "sha256": "f7f1ef6af3d5187fb6bbe0994be6ac56fa30c84a1e717b73c54f25691086c752"
+      },
+      "after": {
+        "width": 872,
+        "height": 808,
+        "sha256": "a62cd9aee3fd59f23f6389f5444ba2f0594260901d0efaccde403d764886ce45"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__dark.png",
+      "changedPixels": 85729,
+      "before": {
+        "width": 358,
+        "height": 692,
+        "sha256": "926e706556ca23d02458e4b95e95782fb9cd529a3f4431e3a5f8939cc286170e"
+      },
+      "after": {
+        "width": 358,
+        "height": 692,
+        "sha256": "89506ee102b617d5a2f41c7924b8d0b345fe03964552e31360fe3a67bb7ac7d6"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__light.png",
+      "changedPixels": 85688,
+      "before": {
+        "width": 358,
+        "height": 692,
+        "sha256": "3df951f709eef4a188b60a1a716523ec8c3c7a8d78290ce0cbf9e7147f4fa0c2"
+      },
+      "after": {
+        "width": 358,
+        "height": 692,
+        "sha256": "7beed78e44d523aed0c5b5b7ab135a2831599f31e705ca6f76320adfb5ab1f98"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__dark.png",
+      "changedPixels": 292791,
+      "before": {
+        "width": 872,
+        "height": 1304,
+        "sha256": "b33d46e0847dc3db3e16a51e27ae420dcd345e9beef4f6d78ef3b4516104c719"
+      },
+      "after": {
+        "width": 872,
+        "height": 1293,
+        "sha256": "d5778df0a14615fbdc9809c1f2d4d1dfd07180146f57083f41b0940a56c05c41"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__light.png",
+      "changedPixels": 395258,
+      "before": {
+        "width": 872,
+        "height": 1304,
+        "sha256": "b80c75d3088deafba00b0db625073e3c3ddf3a7b253f84aadb5db889bcb6efa0"
+      },
+      "after": {
+        "width": 872,
+        "height": 1293,
+        "sha256": "7b6f500ed7a49267d62f41d69f71faf0ce74a9d989581434153d1b4c00b5a03d"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__dark.png",
+      "changedPixels": 190850,
+      "before": {
+        "width": 358,
+        "height": 1628,
+        "sha256": "26f38014ff886e2d69c1f4befa23a76bcfcc10022e927c6908e24ba9ef0580c4"
+      },
+      "after": {
+        "width": 358,
+        "height": 1620,
+        "sha256": "af978a6774a46adc7630151b49578473946369aaededb0c1fb02390d35852660"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__light.png",
+      "changedPixels": 275581,
+      "before": {
+        "width": 358,
+        "height": 1628,
+        "sha256": "dd38a548cabeb649026e50018eb5271d5d0884982553a958b32ef5b5e06c1d00"
+      },
+      "after": {
+        "width": 358,
+        "height": 1620,
+        "sha256": "fe7887c13a739584803bf760a54e5162dd850025e6963ded506b97b774f5504e"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__dark.png",
+      "changedPixels": 533810,
+      "before": {
+        "width": 872,
+        "height": 2731,
+        "sha256": "8ac17354fb57d298626e4867c281d234d77a7d59a98c7e5914834dbf9040f6cd"
+      },
+      "after": {
+        "width": 872,
+        "height": 2719,
+        "sha256": "33a4ab99f0c024cb54e9ebb3e0d6681e2424eb5f1a90339ec87e85dc79c6745f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__light.png",
+      "changedPixels": 643837,
+      "before": {
+        "width": 872,
+        "height": 2731,
+        "sha256": "8a1e0fe4336b6a19156f81cd1855b225bfa5dd8bed41de4268fcb52f99ae1710"
+      },
+      "after": {
+        "width": 872,
+        "height": 2719,
+        "sha256": "d6ab0d57df7404bf4a0981dd55c0f5747e5afbea0ef22a5964371f8ac81b48e8"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__dark.png",
+      "changedPixels": 334914,
+      "before": {
+        "width": 358,
+        "height": 3440,
+        "sha256": "0c7f65e380f54e0fc9e17f02ff0faa886c5e81077df6aacfc599f8aa250adf13"
+      },
+      "after": {
+        "width": 358,
+        "height": 3432,
+        "sha256": "9071b57cb6d25dacb0ef3def95343ec799fe57e91413cf336862b9536ab21d4c"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__light.png",
+      "changedPixels": 423367,
+      "before": {
+        "width": 358,
+        "height": 3440,
+        "sha256": "3473c14478f9e0b37ef65a0df079c71baebe859785df2f43dcb18ea52f229454"
+      },
+      "after": {
+        "width": 358,
+        "height": 3432,
+        "sha256": "a89b0e925df30dd17d708c0e368ae526464edbf13a604b02a29b2e603bdab717"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the three approved surfaces",
+          "from": "the Phase B treatment of the quick summary, the plan masthead, and the contents overview",
+          "to": "the treatment approved before Phase B, expressed in scale steps and role tokens"
+        }
+      ]
+    }
+  ]
+}
