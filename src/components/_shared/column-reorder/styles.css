@@ -1,0 +1,34 @@
+/* CSS escape hatch: shared visual primitive for generated reorderable columns. */
+
+@layer components {
+  article [data-column-reorderable] {
+    user-select: none;
+  }
+}
+
+@layer bp-state {
+  /* Override invariant: reorderable columns beat resting descendant cursors
+     so the whole header consistently advertises the shared gesture. */
+  article [data-column-reorderable],
+  article [data-column-reorderable] * {
+    cursor: grab;
+  }
+
+  /* Override invariant: the pointer-owned press/drag beats every resting
+     cursor while the gesture is active, including outside the source header. */
+  body[data-column-pressing],
+  body[data-column-pressing] *,
+  body[data-column-dragging],
+  body[data-column-dragging] * {
+    cursor: grabbing !important;
+  }
+
+  /* Override invariant: non-reorderable table headers never advertise column
+     reordering, even while a different header owns the active gesture. */
+  body[data-column-pressing] article th:not([data-column-reorderable]),
+  body[data-column-pressing] article th:not([data-column-reorderable]) *,
+  body[data-column-dragging] article th:not([data-column-reorderable]),
+  body[data-column-dragging] article th:not([data-column-reorderable]) * {
+    cursor: default !important;
+  }
+}

@@ -33,6 +33,169 @@ import { DIAGRAM_SCRIPT } from "./diagram-script.js";
 const COMPARE_DATA_TABLE_VALUES_SOURCE = compareDataTableValues.toString();
 
 export const VIEWER_SCRIPT = `<script>
+const setColumnDragState = ({ pressed, dragging }) => {
+  document.body?.toggleAttribute("data-column-pressing", pressed);
+  document.body?.toggleAttribute("data-column-dragging", dragging);
+};
+
+let activeColumnReorder = null;
+let suppressedColumnDragClick = null;
+let suppressedColumnDragClickTimer = null;
+
+const clearColumnDropIndicators = (drag) => {
+  for (const head of drag.heads) {
+    head.classList.remove(drag.beforeClass);
+    head.classList.remove(drag.afterClass);
+  }
+};
+
+const columnTargetAt = (drag, clientX, clientY) => {
+  const element = document.elementFromPoint(clientX, clientY);
+  const target = element?.closest("[data-column-reorderable]");
+  return target instanceof HTMLElement && drag.heads.includes(target)
+    ? target
+    : null;
+};
+
+const finishColumnPointerReorder = (event, commit) => {
+  const drag = activeColumnReorder;
+  if (
+    drag === null ||
+    (event !== null && event.pointerId !== drag.pointerId)
+  )
+    return;
+  const shouldSuppressClick = commit && drag.dragging && event !== null;
+  if (shouldSuppressClick) {
+    const target = columnTargetAt(
+      drag,
+      event.clientX,
+      event.clientY,
+    );
+    if (target !== null && target !== drag.head) {
+      const bounds = target.getBoundingClientRect();
+      drag.onDrop({
+        column: drag.columnOf(drag.head),
+        target,
+        after: event.clientX > bounds.left + bounds.width / 2,
+      });
+    }
+  }
+  clearColumnDropIndicators(drag);
+  activeColumnReorder = null;
+  setColumnDragState({ pressed: false, dragging: false });
+  if (drag.captureTarget.hasPointerCapture(drag.pointerId)) {
+    drag.captureTarget.releasePointerCapture(drag.pointerId);
+  }
+  if (!shouldSuppressClick) return;
+  suppressedColumnDragClick = { pointerId: drag.pointerId };
+  if (suppressedColumnDragClickTimer !== null) {
+    clearTimeout(suppressedColumnDragClickTimer);
+  }
+  suppressedColumnDragClickTimer = setTimeout(() => {
+    suppressedColumnDragClick = null;
+    suppressedColumnDragClickTimer = null;
+  }, 0);
+};
+
+document.addEventListener("pointermove", (event) => {
+  const drag = activeColumnReorder;
+  if (drag === null || event.pointerId !== drag.pointerId) return;
+  // Capture ownership is authoritative even when Chromium delays the
+  // corresponding lostpointercapture event.
+  if (!drag.captureTarget.hasPointerCapture(drag.pointerId)) {
+    finishColumnPointerReorder(event, false);
+    return;
+  }
+  if (!drag.dragging) {
+    const distance = Math.hypot(
+      event.clientX - drag.startX,
+      event.clientY - drag.startY,
+    );
+    if (distance < 4) return;
+    drag.dragging = true;
+    setColumnDragState({ pressed: true, dragging: true });
+  }
+  event.preventDefault();
+  clearColumnDropIndicators(drag);
+  const target = columnTargetAt(drag, event.clientX, event.clientY);
+  if (target === null || target === drag.head) return;
+  const bounds = target.getBoundingClientRect();
+  const after = event.clientX > bounds.left + bounds.width / 2;
+  target.classList.add(after ? drag.afterClass : drag.beforeClass);
+});
+document.addEventListener("pointerup", (event) => {
+  finishColumnPointerReorder(event, true);
+});
+document.addEventListener("pointercancel", (event) => {
+  finishColumnPointerReorder(event, false);
+});
+document.addEventListener("lostpointercapture", (event) => {
+  if (event.target === activeColumnReorder?.captureTarget) {
+    finishColumnPointerReorder(event, false);
+  }
+});
+document.addEventListener(
+  "click",
+  (event) => {
+    if (
+      suppressedColumnDragClick === null ||
+      event.pointerId !== suppressedColumnDragClick.pointerId
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressedColumnDragClick = null;
+    if (suppressedColumnDragClickTimer !== null) {
+      clearTimeout(suppressedColumnDragClickTimer);
+      suppressedColumnDragClickTimer = null;
+    }
+  },
+  true,
+);
+addEventListener("blur", () => {
+  finishColumnPointerReorder(null, false);
+});
+
+// Own the reorder gesture with Pointer Events so Chromium cannot replace the
+// page cursor with its native HTML5 drag cursor.
+const installColumnPointerReorder = ({
+  heads,
+  columnOf,
+  onDrop,
+  beforeClass,
+  afterClass,
+}) => {
+  for (const head of heads) {
+    head.draggable = false;
+    head.addEventListener("pointerdown", (event) => {
+      if (
+        event.button !== 0 ||
+        !event.isPrimary ||
+        activeColumnReorder !== null
+      )
+        return;
+      const pointerTarget =
+        event.target instanceof Element ? event.target : head;
+      const captureTarget = pointerTarget.closest("button") ?? head;
+      activeColumnReorder = {
+        head,
+        captureTarget,
+        heads,
+        columnOf,
+        onDrop,
+        beforeClass,
+        afterClass,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        dragging: false,
+      };
+      captureTarget.setPointerCapture(event.pointerId);
+      setColumnDragState({ pressed: true, dragging: false });
+    });
+  }
+};
+
 (() => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
   const overviewLinks = Array.from(
@@ -511,7 +674,6 @@ export const VIEWER_SCRIPT = `<script>
       ? null
       : "big-plan:table:" + planId + ":" + tableName;
   };
-  let activeColumnDrag = null;
   let nextIndexTargetId = 1;
   const indexFlashTimers = new WeakMap();
   for (const figure of figures) {
@@ -674,11 +836,13 @@ export const VIEWER_SCRIPT = `<script>
     };
 
     figure.setAttribute("data-schema-reorderable", "");
+    const reorderableHeads = [];
     for (const head of Array.from(headRow.children)) {
       const column = head.getAttribute("data-schema-grid-column");
       if (column === null || column === "") continue;
       const label = (head.textContent || column).trim();
-      head.draggable = true;
+      head.setAttribute("data-column-reorderable", "");
+      reorderableHeads.push(head);
       head.tabIndex = 0;
       head.title = "Drag or use Left and Right arrow keys to reorder";
       head.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight");
@@ -707,60 +871,25 @@ export const VIEWER_SCRIPT = `<script>
         head.focus();
         announceMove(column);
       });
-      head.addEventListener("dragstart", (event) => {
-        activeColumnDrag = { figure, column };
-        if (event.dataTransfer !== null) {
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData("text/plain", column);
-        }
-      });
-      let dropAfter = false;
-      const clearDrop = () => {
-        head.classList.remove("table-schema-head-drop-before");
-        head.classList.remove("table-schema-head-drop-after");
-        dropAfter = false;
-      };
-      head.addEventListener("dragover", (event) => {
-        if (
-          activeColumnDrag?.figure !== figure ||
-          activeColumnDrag.column === column
-        ) {
-          clearDrop();
-          return;
-        }
-        event.preventDefault();
-        const bounds = head.getBoundingClientRect();
-        dropAfter = event.clientX > bounds.left + bounds.width / 2;
-        head.classList.toggle("table-schema-head-drop-before", !dropAfter);
-        head.classList.toggle("table-schema-head-drop-after", dropAfter);
-      });
-      head.addEventListener("dragleave", clearDrop);
-      head.addEventListener("dragend", () => {
-        clearDrop();
-        if (activeColumnDrag?.figure === figure) activeColumnDrag = null;
-      });
-      head.addEventListener("drop", (event) => {
-        const drag = activeColumnDrag;
-        const after = dropAfter;
-        clearDrop();
-        if (
-          drag?.figure !== figure ||
-          drag.column === column ||
-          !allowedColumns.has(drag.column)
-        )
-          return;
-        event.preventDefault();
-        activeColumnDrag = null;
-        const order = currentOrder();
-        const fromIndex = order.indexOf(drag.column);
-        const targetIndex = order.indexOf(column);
-        const boundary = targetIndex + (after ? 1 : 0);
-        const insertion =
-          boundary - (fromIndex < boundary ? 1 : 0);
-        moveColumn(drag.column, insertion);
-        announceMove(drag.column);
-      });
     }
+    installColumnPointerReorder({
+      heads: reorderableHeads,
+      columnOf: (head) => head.getAttribute("data-schema-grid-column"),
+      beforeClass: "table-schema-head-drop-before",
+      afterClass: "table-schema-head-drop-after",
+      onDrop: ({ column, target, after }) => {
+        if (column === null || !allowedColumns.has(column)) return;
+        const targetColumn = target.getAttribute("data-schema-grid-column");
+        if (targetColumn === null || targetColumn === column) return;
+        const order = currentOrder();
+        const fromIndex = order.indexOf(column);
+        const targetIndex = order.indexOf(targetColumn);
+        const boundary = targetIndex + (after ? 1 : 0);
+        const insertion = boundary - (fromIndex < boundary ? 1 : 0);
+        moveColumn(column, insertion);
+        announceMove(column);
+      },
+    });
 
     // Index references stay inert text without scripts. Once enhanced, each
     // becomes a native button whose controlled entry receives focus, scrolls
@@ -1266,8 +1395,6 @@ export const VIEWER_SCRIPT = `<script>
     } catch (_) {}
   };
   const compareDataTableValues = ${COMPARE_DATA_TABLE_VALUES_SOURCE};
-  let activeColumnDrag = null;
-
   for (const figure of tables) {
     const grid = figure.querySelector("table");
     if (grid === null) continue;
@@ -1669,8 +1796,10 @@ export const VIEWER_SCRIPT = `<script>
       control.hidden = false;
     }
 
+    const reorderableHeads = [];
     for (const head of headRow.children) {
-      head.setAttribute("draggable", "true");
+      head.setAttribute("data-column-reorderable", "");
+      reorderableHeads.push(head);
       const button = head.querySelector("[data-table-sort]");
       if (button !== null) {
         button.disabled = false;
@@ -1699,61 +1828,22 @@ export const VIEWER_SCRIPT = `<script>
           button.focus();
         });
       }
-      head.addEventListener("dragstart", (event) => {
-        const positions = Array.from(headRow.children);
-        const from = positions.indexOf(head);
-        activeColumnDrag = { figure, from };
-        event.dataTransfer.effectAllowed = "move";
-      });
-      let dropAfter = false;
-      const clear = () => {
-        head.classList.remove("data-table-head-drop-before");
-        head.classList.remove("data-table-head-drop-after");
-        dropAfter = false;
-      };
-      head.addEventListener("dragover", (event) => {
-        const from = activeColumnDrag?.from;
-        if (
-          activeColumnDrag?.figure !== figure ||
-          !Number.isInteger(from) ||
-          from < 0 ||
-          from >= columnCount
-        ) {
-          clear();
+    }
+    installColumnPointerReorder({
+      heads: reorderableHeads,
+      columnOf: (head) => Array.from(headRow.children).indexOf(head),
+      beforeClass: "data-table-head-drop-before",
+      afterClass: "data-table-head-drop-after",
+      onDrop: ({ column, target, after }) => {
+        const from = Number(column);
+        const to = Array.from(headRow.children).indexOf(target);
+        if (!Number.isInteger(from) || from < 0 || to < 0 || from === to)
           return;
-        }
-        event.preventDefault();
-        const box = head.getBoundingClientRect();
-        dropAfter = event.clientX > box.left + box.width / 2;
-        head.classList.toggle("data-table-head-drop-before", !dropAfter);
-        head.classList.toggle("data-table-head-drop-after", dropAfter);
-      });
-      head.addEventListener("dragleave", clear);
-      head.addEventListener("dragend", () => {
-        clear();
-        if (activeColumnDrag?.figure === figure) activeColumnDrag = null;
-      });
-      head.addEventListener("drop", (event) => {
-        const drag = activeColumnDrag;
-        const after = dropAfter;
-        clear();
-        if (
-          drag?.figure !== figure ||
-          !Number.isInteger(drag.from) ||
-          drag.from < 0 ||
-          drag.from >= columnCount
-        )
-          return;
-        event.preventDefault();
-        activeColumnDrag = null;
-        const from = drag.from;
-        const positions = Array.from(headRow.children);
-        const to = positions.indexOf(head);
         const boundary = to + (after ? 1 : 0);
         const insertion = boundary - (from < boundary ? 1 : 0);
         moveColumn(from, insertion);
-      });
-    }
+      },
+    });
 
     if (filterInput !== null) {
       filterInput.addEventListener("input", applyFilter);
