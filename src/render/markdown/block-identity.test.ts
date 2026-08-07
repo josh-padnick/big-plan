@@ -111,6 +111,14 @@ describe("block identity kinds and labels", () => {
     expect(blocks.map((block) => block.kind)).toContain("quick-summary");
   });
 
+  it("should use a component's concise title instead of its control labels", () => {
+    const { blocks } = compile(
+      '## Metrics\n\n<DataTable title="Queue depth by processor">\n\n```table\n| Processor | Attempts |\n| --- | ---: |\n| Stripe | 3 |\n```\n\n</DataTable>\n',
+    );
+    const table = blocks.find((block) => block.kind === "data-table");
+    expect(table?.label).toBe("Queue depth by processor");
+  });
+
   it("should drop the generated kicker prefix from a sub-slide heading label", () => {
     const { blocks } = compile("## Design\n\n### The worker\n\nHow.\n");
     const heading = blocks.find(
