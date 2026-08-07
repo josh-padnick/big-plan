@@ -1011,6 +1011,73 @@ test("should validate final HEAD capture completeness unconditionally", async ()
   }
 });
 
+test("should require every configured viewport and theme at HEAD", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    documents: [
+      {
+        name: "sample",
+        source: "fixture.txt",
+        captures: [
+          {
+            name: "document",
+            selector: "article",
+            themes: ["light", "dark"],
+            viewports: [{ name: "desktop", width: 1440, height: 900 }],
+            actions: [],
+          },
+        ],
+      },
+    ],
+  });
+  try {
+    const capture = onePixelPng({ red: 255, green: 0, blue: 0 });
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
+await mkdir(output, { recursive: true });
+await writeFile(
+  join(output, "sample__document__desktop__light.png"),
+  Buffer.from(${JSON.stringify(capture.toString("base64"))}, "base64"),
+);
+await writeFile(
+  join(output, "capture-manifest.json"),
+  JSON.stringify({
+    schemaVersion: 1,
+    selectedCaptureKeys: JSON.parse(process.env.STYLE_SNAPSHOT_CAPTURE_KEYS ?? "[]"),
+    captures: [
+      {
+        key: "sample/document",
+        viewport: "desktop",
+        theme: "light",
+        path: "sample__document__desktop__light.png",
+      },
+    ],
+  }),
+);
+`,
+      "utf8",
+    );
+    await commit({ repoRoot, subject: "test: capture only the light theme" });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "head-theme-coverage",
+        }),
+      }),
+      /did not produce a visible target for sample\/document at desktop\/dark/u,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("should reject empty capture configuration dimensions", async () => {
   const { repoRoot, configPath, config, base } =
     await createMinimalRepository();
@@ -1439,15 +1506,32 @@ test("should capture each unique SHA at configured bounded concurrency", async (
   try {
     const capture = onePixelPng({ red: 255, green: 0, blue: 0 });
     const encodedCapture = capture.toString("base64");
+    const requestedConcurrency = Number.parseInt(
+      process.env.STYLE_HISTORY_CAPTURE_CONCURRENCY ?? "4",
+      10,
+    );
+    const expectedConcurrency = Number.isInteger(requestedConcurrency)
+      ? Math.min(4, Math.max(1, requestedConcurrency))
+      : 4;
     await writeFile(
       join(repoRoot, "capture.mjs"),
-      `import { appendFile, mkdir, writeFile } from "node:fs/promises";
+      `import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 const checkout = process.env.STYLE_SNAPSHOT_CHECKOUT;
 const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
 const logPath = join(process.env.STYLE_SNAPSHOT_HARNESS_ROOT, "capture-events.log");
 await appendFile(logPath, "start:" + basename(checkout) + "\\n");
-await new Promise((resolve) => setTimeout(resolve, 150));
+const deadline = Date.now() + 5000;
+while (Date.now() < deadline) {
+  const events = (await readFile(logPath, "utf8")).trim().split("\\n");
+  const active =
+    events.filter((event) => event.startsWith("start:")).length -
+    events.filter((event) => event.startsWith("end:")).length;
+  if (active >= ${expectedConcurrency}) {
+    break;
+  }
+  await new Promise((resolve) => setTimeout(resolve, 25));
+}
 await mkdir(output, { recursive: true });
 await writeFile(join(output, "state.png"), Buffer.from(${JSON.stringify(encodedCapture)}, "base64"));
 await appendFile(logPath, "end:" + basename(checkout) + "\\n");
@@ -1493,13 +1577,6 @@ await appendFile(logPath, "end:" + basename(checkout) + "\\n");
       activeCaptures += event.startsWith("start:") ? 1 : -1;
       maximumActiveCaptures = Math.max(maximumActiveCaptures, activeCaptures);
     }
-    const requestedConcurrency = Number.parseInt(
-      process.env.STYLE_HISTORY_CAPTURE_CONCURRENCY ?? "4",
-      10,
-    );
-    const expectedConcurrency = Number.isInteger(requestedConcurrency)
-      ? Math.min(4, Math.max(1, requestedConcurrency))
-      : 4;
     assert.equal(maximumActiveCaptures, expectedConcurrency);
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
