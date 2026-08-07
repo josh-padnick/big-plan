@@ -42,7 +42,7 @@ export const QuickSummary = ({
   return (
     <aside
       data-quick-summary
-      className="mb-8 max-w-[var(--measure)] rounded-lg border border-edge bg-surface px-6 py-4"
+      className="mb-8 max-w-[var(--measure)] rounded-xl bg-raised px-6 py-4 shadow-raised"
     >
       <p className="mb-3 text-lg font-semibold text-subtle">Quick summary</p>
       <dl className="m-0">
@@ -56,10 +56,7 @@ export const QuickSummary = ({
         )}
         <div className="grid gap-3">
           {rest.map((facet) => (
-            <div
-              key={facet.name}
-              className="rounded-lg border border-edge bg-paper px-4 pt-3 pb-3"
-            >
+            <div key={facet.name} className="rounded-lg bg-well px-4 py-3">
               <Label text={facet.name} />
               <dd className="m-0">
                 <FacetBody items={facet.items} />

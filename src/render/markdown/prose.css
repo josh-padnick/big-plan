@@ -152,15 +152,17 @@ is styled by its owning module, not here.
     font-family: var(--font-mono);
     font-size: 0.875em;
   }
+  /* A different ground already separates code from the sentence around it,
+     so the outline it used to carry is gone. Padding stays in em because it
+     has to track whatever text the code interrupts. */
   article code[data-authored-prose] {
     background: var(--color-surface);
-    border: 1px solid var(--color-edge);
     border-radius: 4px;
     padding: 0.1em 0.35em;
   }
   article pre[data-authored-prose] {
-    background: var(--color-surface);
-    border: 1px solid var(--color-edge);
+    background: var(--color-well);
+    box-shadow: var(--elevation-well);
     border-radius: 6px;
     padding: 1rem 1.5rem;
     overflow-x: auto;

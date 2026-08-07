@@ -160,7 +160,7 @@ export const GrpcMethod = ({
   readonly model: CompiledGrpcMethod;
 }) => (
   <figure
-    className="grpc-method mb-6 min-w-0 overflow-hidden rounded-md border border-edge"
+    className="grpc-method mb-6 min-w-0 overflow-hidden rounded-md bg-raised shadow-raised"
     data-grpc-method=""
     data-grpc-kind={model.kind}
     {...(model.deprecated ? { "data-grpc-deprecated": "" } : {})}

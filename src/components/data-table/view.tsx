@@ -36,7 +36,7 @@ const BUTTON_CLASSES =
   "data-table-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-transparent hover:text-ink aria-pressed:bg-transparent aria-pressed:text-ink [&_svg]:size-3.5";
 
 const MENU_LIST_CLASSES =
-  "data-table-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-40 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8_/_0.18)]";
+  "data-table-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-40 rounded-md bg-[var(--diff-header-bg)] p-1 shadow-floating";
 
 const MENU_LABEL_CLASSES =
   "data-table-menu-label px-2 pt-1 pb-0.5 text-2xs font-semibold tracking-capsr text-subtle uppercase";
@@ -277,14 +277,14 @@ const FilterField = ({ id }: { readonly id: string }) => (
 /** Renders one DataTable as a figure: caption chrome over the complete grid. */
 export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
   <figure
-    className="data-table mb-6 w-fit max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)]"
+    className="data-table mb-6 w-fit max-w-full rounded-md bg-[var(--diff-content-bg)] shadow-raised"
     data-data-table
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "table" }}
     data-table-id={model.id}
     data-table-fit={model.fit}
     data-table-group-column={model.groupColumn}
   >
-    <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1 max-[55.999rem]:flex-col max-[55.999rem]:items-stretch max-[55.999rem]:gap-1">
+    <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 rounded-t-md bg-[var(--diff-header-bg)] px-2 py-1 max-[55.999rem]:flex-col max-[55.999rem]:items-stretch max-[55.999rem]:gap-1">
       <span className="data-table-identity flex min-w-0 items-center gap-2 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted">
         {lucideIconToReact({ icon: TABLE_ICON, hidden: false })}
         <span className="data-table-title min-w-0 truncate font-semibold text-ink">

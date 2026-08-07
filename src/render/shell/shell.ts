@@ -152,14 +152,14 @@ const renderBulkCollapseControls = (layoutClasses = ""): string =>
 // a scripts-disabled review therefore remains readable without a dead control.
 const renderCommentDraftControl = (): string =>
   `<span data-comment-draft-control hidden>
-<button class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-edge bg-paper px-3 py-1 text-xs font-medium text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-open aria-label="Add review comment" aria-expanded="false">${lucideIconToHtml({ icon: MESSAGE_SQUARE_ICON, className: "size-3.5" })}<span>Comment</span></button>
-<section class="fixed top-14 right-5 z-20 w-80 max-w-[calc(100vw-2.5rem)] rounded-md border border-edge bg-paper p-3 shadow-lg" data-comment-draft-panel aria-label="Review comment draft" hidden>
+<button class="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-raised px-3 py-1 text-xs font-medium text-ink shadow-raised transition-shadow hover:shadow-lifted active:shadow-none active:inset-shadow-pressed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-open aria-label="Add review comment" aria-expanded="false">${lucideIconToHtml({ icon: MESSAGE_SQUARE_ICON, className: "size-3.5" })}<span>Comment</span></button>
+<section class="fixed top-14 right-4 z-20 w-80 max-w-[calc(100vw-2rem)] rounded-xl bg-raised p-4 shadow-floating" data-comment-draft-panel aria-label="Review comment draft" hidden>
 <div class="mb-2 flex items-center justify-between gap-3">
 <p class="text-sm font-semibold">Review comment</p>
 <button class="inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-close aria-label="Close comment draft">${lucideIconToHtml({ icon: X_ICON, className: "size-3.5" })}</button>
 </div>
 <label class="mb-1 block text-xs font-medium text-muted" for="big-plan-comment-draft">Draft</label>
-<textarea class="block min-h-28 w-full resize-y rounded-md border border-edge bg-paper px-3 py-2 text-sm leading-normal text-ink focus-visible:border-accent focus-visible:outline-none" id="big-plan-comment-draft" data-comment-draft-input aria-label="Comment draft"></textarea>
+<textarea class="block min-h-28 w-full resize-y rounded-md bg-well px-3 py-2 text-sm leading-normal text-ink inset-shadow-well focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent" id="big-plan-comment-draft" data-comment-draft-input aria-label="Comment draft"></textarea>
 <div class="mt-2 flex items-center justify-between gap-3">
 <p class="min-w-0 text-xs text-muted" data-comment-draft-status aria-live="polite"></p>
 <button class="shrink-0 cursor-pointer rounded-md bg-accent px-3 py-1 text-xs font-semibold text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-save>Save draft</button>
@@ -266,14 +266,14 @@ const renderMobileToc = ({
     groupedLinkClasses: MOBILE_TOC_GROUPED_LINK_CLASSES,
     partHeaderClasses: MOBILE_TOC_PART_HEADER_CLASSES,
   });
-  return `<nav class="sticky top-11 z-10 h-11 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
+  return `<nav class="sticky top-11 z-10 h-11 bg-paper/95 text-sm leading-normal shadow-raised backdrop-blur-sm wide:hidden" data-mobile-toc aria-label="Contents">
 <details class="group relative mx-auto h-full max-w-[74ch]">
 <summary class="flex h-full cursor-pointer list-none items-center gap-3 px-6 py-2 [&amp;::-webkit-details-marker]:hidden">
 <span class="font-semibold text-ink">Sections</span>
 <span class="flex min-w-6 items-center justify-center rounded-full bg-surface px-2 py-0.5 text-xs font-medium tabular-nums text-muted">${nav.length}</span>
 <svg class="size-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden="true" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 4.96a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 1 1-1.06-1.06L11.18 10 7.21 6.02a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
 </summary>
-<div class="absolute inset-x-0 top-full max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain border-y border-edge bg-paper py-2 shadow-lg">
+<div class="absolute inset-x-0 top-full max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain bg-paper py-2 shadow-floating">
 ${renderBulkCollapseControls("float-right mr-6 mb-1")}
 <ol>
 <li><a class="${MOBILE_TOC_LINK_CLASSES}" data-overview-link href="#${encodeURIComponent(overviewId)}">Overview</a></li>
@@ -304,7 +304,7 @@ export const renderShell = ({
 }): ShellResult => {
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
-  const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
+  const html = `<header class="sticky top-0 z-10 h-11 bg-paper/90 shadow-raised backdrop-blur">
 <div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-6 wide:px-6">
 <a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">

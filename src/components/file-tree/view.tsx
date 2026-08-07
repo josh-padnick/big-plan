@@ -9,11 +9,11 @@ import {
 
 export const FileTree = ({ model }: { readonly model: CompiledFileTree }) => (
   <figure
-    className="file-tree mb-6 min-w-0 overflow-hidden rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-sm"
+    className="file-tree mb-6 min-w-0 overflow-hidden rounded-md bg-[var(--diff-content-bg)] font-mono text-sm shadow-raised"
     data-file-tree=""
   >
     {model.title === undefined ? null : (
-      <figcaption className="file-tree-header flex min-w-0 items-center justify-between gap-3 border-b border-edge bg-[var(--diff-header-bg)] px-3 py-1.5 font-sans text-sm font-semibold text-ink">
+      <figcaption className="file-tree-header flex min-w-0 items-center justify-between gap-3 bg-[var(--diff-header-bg)] px-3 py-1.5 font-sans text-sm font-semibold text-ink">
         <span className="file-tree-title truncate">{model.title}</span>
         <span className="file-tree-controls flex shrink-0 items-center gap-1">
           <TreeFoldControls tone="standard" />

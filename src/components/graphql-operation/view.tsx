@@ -105,7 +105,7 @@ export const GraphqlOperation = ({
   readonly model: CompiledGraphqlOperation;
 }) => (
   <figure
-    className="graphql-operation mb-6 min-w-0 overflow-hidden rounded-md border border-edge"
+    className="graphql-operation mb-6 min-w-0 overflow-hidden rounded-md bg-raised shadow-raised"
     data-graphql-operation=""
     data-graphql-kind={model.kind}
     {...(model.deprecated ? { "data-graphql-deprecated": "" } : {})}

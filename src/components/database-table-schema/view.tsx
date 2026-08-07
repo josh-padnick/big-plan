@@ -15,7 +15,7 @@ export const DatabaseTableSchema = ({
   readonly model: CompiledDatabaseTableSchema;
 }) => (
   <figure
-    className="table-schema mb-6 min-w-0 rounded-md border border-edge bg-paper"
+    className="table-schema mb-6 min-w-0 rounded-md bg-raised shadow-raised"
     data-database-table-schema=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "schema" }}
     data-schema-table-name={`${model.schemaName ?? ""}${model.tableName}`}

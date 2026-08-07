@@ -116,7 +116,7 @@ const LineNumberCell = ({
   readonly side: CodeDiffSide;
 }) => (
   <span
-    className="code-diff-line-number select-none border-r border-edge px-2 text-right text-muted"
+    className="code-diff-line-number select-none bg-well px-2 text-right text-subtle"
     aria-hidden="true"
     data-diff-number={side}
   >

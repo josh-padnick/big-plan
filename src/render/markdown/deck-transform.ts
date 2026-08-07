@@ -83,20 +83,20 @@ const isIgnorableBetweenMarkerAndHeading = (
 // Padding and every vertical gap deliberately stay in deck.css behind custom
 // properties so one number drives the frame padding and the toggle's escape
 // into the gutter at once. Renderer-owned card surfaces live here.
-const CARD_CLASSES = [
-  "plan-card",
-  "box-border",
-  "rounded-xl",
-  "border",
-  "border-edge",
-  "bg-transparent",
+// Separation is depth, not a line. A slide is lifted off the page by being
+// lighter than it and casting the smallest shadow in the scale; a sub-slide
+// drops back to page level inside its parent, so the nesting reads as one
+// raised thing containing recessed parts rather than as boxes inside boxes.
+// The same two steps invert on the dark page, where lighter still means nearer.
+const CARD_CLASSES = ["plan-card", "box-border", "rounded-xl"] as const;
+const RAISED_CLASSES = ["bg-raised", "shadow-raised"] as const;
+const RECESSED_CLASSES = ["bg-paper", "inset-shadow-well"] as const;
+const SLIDE_CLASSES = [
+  "plan-slide",
+  ...CARD_CLASSES,
+  ...RAISED_CLASSES,
 ] as const;
-const SLIDE_CLASSES = ["plan-slide", ...CARD_CLASSES] as const;
 
-// /* off-scale */ Phase A preserves the legacy 0.45rem/0.9rem text gaps,
-// 0.6875rem kicker, 1.6rem slide title, 0.14em tracking, and 10.75rem mobile
-// scroll offset exactly. Phase B may regularize them against the product
-// scale.
 const SCROLL_CLASSES = [
   "scroll-mt-32",
   "max-[55.999rem]:scroll-mt-[10.75rem]",
@@ -129,6 +129,7 @@ const KICKER_CLASSES = [
 const SLIDE_GROUP_CLASSES = [
   "plan-slide",
   ...CARD_CLASSES,
+  ...RAISED_CLASSES,
   "plan-slide-group",
 ] as const;
 
@@ -150,6 +151,7 @@ const SUBSLIDE_KICKER_CLASSES = [
 const SUBSLIDE_FRAME_CLASSES = [
   "plan-slide",
   ...CARD_CLASSES,
+  ...RECESSED_CLASSES,
   "plan-subslide-frame",
 ] as const;
 

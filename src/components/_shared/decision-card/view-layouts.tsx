@@ -184,7 +184,7 @@ export const RowsLayout = ({
             {...(option.chosen ? { "data-option-chosen": "" } : {})}
           >
             <label
-              className="decision-option-card flex h-full min-w-0 cursor-pointer flex-col rounded-lg border border-edge bg-paper"
+              className="decision-option-card flex h-full min-w-0 cursor-pointer flex-col rounded-lg bg-raised shadow-raised transition-shadow hover:shadow-lifted"
               htmlFor={option.id}
             >
               <span className="decision-option-top flex items-start gap-3 px-4 pt-4 pb-3">
@@ -736,7 +736,7 @@ export const BriefLayout = ({
     <div className="decision-brief" data-decision-brief="">
       {lead?.summary === undefined ? null : (
         <p
-          className="decision-brief-lead m-0 border-b border-edge bg-surface px-6 py-4 text-base leading-6 text-ink"
+          className="decision-brief-lead m-0 bg-surface px-6 py-4 text-base leading-6 text-ink"
           data-decision-brief-lead=""
         >
           {lead.summary}

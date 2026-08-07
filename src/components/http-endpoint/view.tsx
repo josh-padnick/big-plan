@@ -233,7 +233,7 @@ export const HttpEndpoint = ({
   readonly model: CompiledHttpEndpoint;
 }) => (
   <figure
-    className="http-endpoint mb-6 min-w-0 overflow-hidden rounded-md border border-edge"
+    className="http-endpoint mb-6 min-w-0 overflow-hidden rounded-md bg-raised shadow-raised"
     data-http-endpoint=""
     data-http-method={model.method}
     {...(model.deprecated ? { "data-http-deprecated": "" } : {})}

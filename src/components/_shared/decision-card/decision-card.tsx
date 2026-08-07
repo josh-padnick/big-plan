@@ -149,7 +149,7 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
 const AnswerControls = () => (
   <>
     <div
-      className="decision-footer flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-edge px-6 py-4"
+      className="decision-footer flex flex-wrap items-center justify-end gap-x-4 gap-y-2 px-6 py-4"
       data-decision-footer=""
     >
       <p
@@ -177,7 +177,7 @@ const AnswerControls = () => (
       </button>
     </div>
     <div
-      className="decision-answer gap-3 border-t border-edge px-6 py-4"
+      className="decision-answer gap-3 px-6 py-4"
       data-decision-answer=""
       role="status"
       hidden
@@ -231,7 +231,7 @@ const Reversibility = ({ model }: { readonly model: CompiledDecisionCard }) => {
   const reversibility = model.reversibility;
   if (reversibility === undefined) return null;
   return (
-    <div className="decision-reversibility border-t border-edge px-6 py-4">
+    <div className="decision-reversibility bg-well px-6 py-4">
       <p className="m-0 text-xs font-semibold tracking-caps text-muted uppercase">
         {`Reversibility · ${reversibility.rating.replace("-", " ")}`}
       </p>
@@ -244,7 +244,7 @@ const Reversibility = ({ model }: { readonly model: CompiledDecisionCard }) => {
 
 const Details = ({ model }: { readonly model: CompiledDecisionCard }) =>
   model.detail.length === 0 ? null : (
-    <details className="decision-long-details border-t border-edge px-6">
+    <details className="decision-long-details bg-well px-6">
       <summary className="decision-details-summary flex min-h-12 w-fit cursor-pointer items-center text-sm font-semibold">
         {"More detail"}
       </summary>
@@ -264,7 +264,7 @@ export const DecisionCard = ({
   return (
     <figure
       id={model.id}
-      className="decision mb-6 min-w-0 overflow-hidden rounded-md border border-edge bg-paper"
+      className="decision mb-6 min-w-0 overflow-hidden rounded-xl bg-raised shadow-raised"
       data-decision=""
       data-decision-status={model.status}
       data-decision-layout={model.layout}
@@ -307,10 +307,7 @@ export const DecisionCard = ({
       )}
       <fieldset className="decision-fieldset m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">{model.question}</legend>
-        <div
-          className="decision-zone-compare border-t border-edge bg-paper"
-          data-decision-compare=""
-        >
+        <div className="decision-zone-compare bg-well" data-decision-compare="">
           <Comparison model={model} answerable={answerable} />
         </div>
         {/* Only the matrix earns a rationale region: its cells are values, so
@@ -318,7 +315,7 @@ export const DecisionCard = ({
             shapes already carry their reasoning in line. */}
         {isMatrixLayout(model) ? (
           <div
-            className="decision-zone-rationale border-t border-edge bg-surface px-6 py-4"
+            className="decision-zone-rationale bg-surface px-6 py-4"
             data-decision-explain=""
           >
             <div
@@ -342,7 +339,7 @@ export const DecisionCard = ({
             className={
               model.layout === "rows"
                 ? "decision-zone-propose bg-paper px-6 pb-4"
-                : "decision-zone-propose border-t border-edge bg-surface px-6 py-3"
+                : "decision-zone-propose bg-surface px-6 py-3"
             }
           >
             <ProposeLink model={model} />

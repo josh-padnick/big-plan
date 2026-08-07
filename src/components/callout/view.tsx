@@ -28,7 +28,7 @@ export const Callout = ({ model }: { readonly model: CompiledCallout }) => {
     // border-edge utility here would win the cascade and flatten the accent.
     <aside
       data-callout={model.type}
-      className="callout mb-6 max-w-[var(--measure)] rounded-md border border-l-4 px-4 py-3"
+      className="callout mb-6 max-w-[var(--measure)] rounded-r-md border-l-4 px-4 py-3"
     >
       <header className="callout-header mb-2 flex items-center gap-2 font-semibold text-[var(--callout-accent)] [&_svg]:size-4 [&_svg]:shrink-0">
         {lucideIconToReact({ icon: config.icon, hidden: false })}
