@@ -354,12 +354,26 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
         </tbody>
       </table>
     </div>
-    <p
-      className="data-table-empty px-3 py-2 text-xs text-muted"
+    {/* The first thing a reader sees when a filter finds nothing, so it says
+        what happened and what to do rather than reporting a count of zero.
+        The viewer script replaces the sentence with one naming the query. */}
+    <div
+      className="data-table-empty flex flex-col items-center gap-2 px-6 py-12 text-center"
       hidden
       data-table-empty
     >
-      No rows match this filter.
-    </p>
+      <span
+        className="inline-flex size-8 items-center justify-center rounded-full bg-surface text-subtle [&_svg]:size-4"
+        aria-hidden="true"
+      >
+        {lucideIconToReact({ icon: SEARCH_ICON, hidden: false })}
+      </span>
+      <p className="m-0 text-sm font-semibold text-ink" data-table-empty-lead>
+        No rows match this filter.
+      </p>
+      <p className="m-0 text-xs text-subtle">
+        Clear the filter to see every row again.
+      </p>
+    </div>
   </figure>
 );

@@ -1479,7 +1479,12 @@ export const VIEWER_SCRIPT = `<script>
       }
       if (empty !== null) {
         empty.hidden = shown !== 0;
-        if (shown === 0) empty.textContent = 'No rows match "' + query + '".';
+        // Only the lead sentence names the query; the empty state's icon and
+        // its recovery hint are markup the script must not overwrite.
+        const lead = empty.querySelector("[data-table-empty-lead]");
+        if (shown === 0 && lead !== null) {
+          lead.textContent = 'No rows match "' + query + '".';
+        }
       }
     };
 
@@ -2432,7 +2437,7 @@ export const VIEWER_SCRIPT = `<script>
       if (summary !== null) {
         summary.textContent =
           choice === null
-            ? "Nothing selected yet."
+            ? "Select an option to continue."
             : proposing
               ? "Your own approach selected."
               : choice.value + " selected.";

@@ -159,7 +159,7 @@ const renderCommentDraftControl = (): string =>
 <button class="inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-close aria-label="Close comment draft">${lucideIconToHtml({ icon: X_ICON, className: "size-3.5" })}</button>
 </div>
 <label class="mb-1 block text-xs font-medium text-muted" for="big-plan-comment-draft">Draft</label>
-<textarea class="block min-h-28 w-full resize-y rounded-md bg-well px-3 py-2 text-sm leading-normal text-ink inset-shadow-well focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent" id="big-plan-comment-draft" data-comment-draft-input aria-label="Comment draft"></textarea>
+<textarea class="block min-h-28 w-full resize-y rounded-md bg-well px-3 py-2 text-sm leading-normal text-ink inset-shadow-well focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent" id="big-plan-comment-draft" data-comment-draft-input aria-label="Comment draft" placeholder="Name the part of the plan you are unsure about, and what would settle it."></textarea>
 <div class="mt-2 flex items-center justify-between gap-3">
 <p class="min-w-0 text-xs text-muted" data-comment-draft-status aria-live="polite"></p>
 <button class="shrink-0 cursor-pointer rounded-md bg-accent px-3 py-1 text-xs font-semibold text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-comment-draft-save>Save draft</button>
