@@ -3,7 +3,7 @@ title: CLI reference
 description: Reference the complete Big Plan command surface, defaults, results, and errors.
 ---
 
-Big Plan exposes five product commands through the `big-plan` executable: `guidance` for the plan-writing principles, `skill` for the agent skill shell, `validate` for a no-write authoring check, `render` for the human-facing HTML document, and `compile` for the machine-facing plan model.
+Big Plan exposes seven product commands through the `big-plan` executable: `guidance` for the plan-writing principles, `skill` for the agent skill shell, `validate` for a no-write authoring check, `render` for the human-facing HTML document, `compile` for the machine-facing plan model, `review` for local commenting, and `agent` for the local coding-agent exchange.
 The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors, and result serialization.
 `axi-sdk-js` also reserves a built-in `update` command for optional package self-update of global installs.
 
@@ -15,6 +15,10 @@ big-plan skill [write <path>]
 big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
+big-plan review <input.mdx>
+big-plan agent <input.mdx>
+big-plan agent next <input.mdx> [--wait]
+big-plan agent respond <input.mdx> <response.json>
 big-plan update [--check]
 ```
 
@@ -34,6 +38,8 @@ npx big-plan skill write <path/to/SKILL.md>
 npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
+npx big-plan review <input.mdx>
+npx big-plan agent <input.mdx>
 npx big-plan update --check
 ```
 
@@ -150,6 +156,26 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 
 It writes no output.
 
+`review` returns the loopback address, resolved plan path, session id, and
+feedback directory, then keeps running until `Ctrl+C`. It owns the local
+session token, heartbeat, durable review state, and revision snapshots.
+
+`agent <input.mdx>` reads the matching live session and returns the owner-only
+prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
+a model provider itself. The launched coding-agent session uses:
+
+- `agent next <input.mdx> --wait` to receive the oldest pending feedback or
+  reply, its prior conversation, a validated response template, and the exact
+  publish command; and
+- `agent respond <input.mdx> <response.json>` to publish one complete answer
+  after the current MDX has rendered and passed lint.
+
+A `changed` outcome is accepted only when the source revision changed and
+every named target belongs to the computed revision diff. The review document
+therefore distinguishes **With agent**, **Changed**, **Needs your answer**, and
+**Outside this plan** without inventing progress. Its basic **What changed**
+view comes from stored source revisions, not DOM mutation.
+
 `guidance` returns the guidance Markdown itself rather than a structured result.
 `skill` with no arguments returns the skill Markdown the same way.
 `skill write` returns:
@@ -165,6 +191,8 @@ If the input argument is missing, any plan-file command raises a structured `VAL
 Usage: big-plan validate <input.mdx>
 Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
+Usage: big-plan review <input.mdx>
+Usage: big-plan agent <input.mdx>
 ```
 
 The three plan-file commands and `skill` reject any dash-prefixed command argument as an unknown option.

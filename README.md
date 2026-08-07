@@ -27,6 +27,8 @@ npx big-plan skill write <path/to/SKILL.md>
 npx big-plan validate <file.mdx>
 npx big-plan render <file.mdx> [output.html]
 npx big-plan compile <file.mdx> [output.json]
+npx big-plan review <file.mdx>
+npx big-plan agent <file.mdx>
 ```
 
 `guidance` prints the principles for writing a plan a human loves to review; reading it recently is required before `validate` and `render` will run.
@@ -78,6 +80,7 @@ The full authoring contract lives in the documentation:
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
 - [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `skill`, `validate`, `render`, and `compile` in detail.
+- [Reviewing a plan](docs/src/content/docs/reference/reviewing.md) - local comments, the coding-agent exchange, and revision truth.
 
 To preview components locally from a source checkout, run `bun run build` first. Then run `node bin/big-plan.mjs guidance` once and render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`. The local executable reads the compiled files in `dist/`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.
