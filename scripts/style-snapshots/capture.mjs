@@ -17,6 +17,9 @@ const checkout = process.env["STYLE_SNAPSHOT_CHECKOUT"];
 const outputDirectory = process.env["STYLE_SNAPSHOT_OUTPUT_DIR"];
 const configPath = process.env["STYLE_SNAPSHOT_CONFIG"];
 const harnessRoot = process.env["STYLE_SNAPSHOT_HARNESS_ROOT"];
+const selectedCaptureKeys = new Set(
+  JSON.parse(process.env["STYLE_SNAPSHOT_CAPTURE_KEYS"] ?? "[]"),
+);
 
 if (
   checkout === undefined ||
@@ -130,10 +133,14 @@ const applyActions = async ({ page, actions }) => {
 };
 
 /** Turns a logical capture tuple into one stable manifest key. */
-const captureName = ({ document, capture, viewport, theme }) =>
+const captureKey = ({ document, capture }) => `${document}/${capture}`;
+
+const captureName = ({ document, capture, viewport, theme, instance }) =>
   [document, capture, viewport, theme]
     .map((part) => part.replaceAll(/[^a-zA-Z0-9_-]/g, "-"))
-    .join("__") + ".png";
+    .join("__") +
+  (instance === undefined ? "" : `__${instance + 1}`) +
+  ".png";
 
 /** Waits for two frames without hanging when hosted headless pages pause rAF. */
 const settlePaint = async (page) => {
@@ -220,7 +227,13 @@ const samePixels = (left, right) => {
  * Captures the visible viewport, then crops target tiles in Node. This avoids
  * both Playwright's element screenshot wait and Chromium's clip request.
  */
-const captureTargetFrame = async ({ page, target, path }) => {
+const captureTargetFrame = async ({
+  page,
+  target,
+  path,
+  masks = [],
+  isolate = true,
+}) => {
   await settleFonts(page);
   const bounds = await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
@@ -242,7 +255,7 @@ const captureTargetFrame = async ({ page, target, path }) => {
   await target.evaluate(
     (element, value) => {
       let current = element;
-      while (current.parentElement !== null) {
+      while (value.isolate && current.parentElement !== null) {
         const parent = current.parentElement;
         for (const sibling of parent.children) {
           if (sibling !== current) {
@@ -265,7 +278,7 @@ const captureTargetFrame = async ({ page, target, path }) => {
       element.style.maxWidth = `${value.width}px`;
       element.style.zIndex = "2147483647";
     },
-    { x: bounds.x, top: topInset, width: bounds.width },
+    { x: bounds.x, top: topInset, width: bounds.width, isolate },
   );
   await settlePaint(page);
   const output = new PNG({ width: bounds.width, height: bounds.height });
@@ -299,6 +312,8 @@ const captureTargetFrame = async ({ page, target, path }) => {
         animations: "disabled",
         caret: "hide",
         clip: tile,
+        mask: masks,
+        maskColor: "#000000",
         timeout: 10_000,
       }),
     );
@@ -308,7 +323,7 @@ const captureTargetFrame = async ({ page, target, path }) => {
 };
 
 /** Writes only a pixel-stable frame. */
-const captureStableTarget = async ({ page, target, path }) => {
+const captureStableTarget = async ({ page, target, path, isolate = true }) => {
   for (let retry = 0; retry < 2; retry += 1) {
     await target.evaluate((element) => {
       element.scrollIntoView({
@@ -321,7 +336,12 @@ const captureStableTarget = async ({ page, target, path }) => {
     for (let attempt = 0; attempt < 6; attempt += 1) {
       await reportProgress("settle paint", { path, retry, attempt });
       await settlePaint(page);
-      const current = await captureTargetFrame({ page, target, path });
+      const current = await captureTargetFrame({
+        page,
+        target,
+        path,
+        isolate,
+      });
       if (prior !== undefined && samePixels(prior, current)) {
         await writeFile(path, current);
         return;
@@ -337,58 +357,60 @@ const captureStableTarget = async ({ page, target, path }) => {
   );
 };
 
-const targetClip = (target) =>
-  target.evaluate((element) => {
-    const rect = element.getBoundingClientRect();
-    return {
-      x: rect.left + globalThis.scrollX,
-      y: rect.top + globalThis.scrollY,
-      width: rect.width,
-      height: rect.height,
-    };
-  });
-
-/**
- * Masks only the named animated regions during the exact byte check. The rest
- * of a broad target, such as an article, must still produce two equal frames.
- * The saved frame stays unmasked so the visual ledger shows the real surface.
- */
-const captureTargetWithAnimatedRegions = async ({
+/** Writes a tiled frame whose stability check ignores only named animations. */
+const captureStableTargetWithAnimatedRegions = async ({
   page,
   target,
   path,
   masks,
+  isolate = true,
 }) => {
-  const clip = await targetClip(target);
-  let prior;
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    await settlePaint(page);
-    const current = await page.screenshot({
-      animations: "disabled",
-      caret: "hide",
-      clip,
-      mask: masks,
-      maskColor: "#000000",
-      timeout: 10_000,
-    });
-    if (prior !== undefined && prior.equals(current)) {
-      await settlePaint(page);
-      const frame = await page.screenshot({
-        animations: "disabled",
-        caret: "hide",
-        clip,
-        timeout: 10_000,
+  for (let retry = 0; retry < 2; retry += 1) {
+    await target.evaluate((element) => {
+      element.scrollIntoView({
+        behavior: "instant",
+        block: "nearest",
+        inline: "nearest",
       });
-      await writeFile(path, frame);
-      return;
+    });
+    let prior;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await reportProgress("settle masked paint", { path, retry, attempt });
+      await settlePaint(page);
+      const current = await captureTargetFrame({
+        page,
+        target,
+        path,
+        masks,
+        isolate,
+      });
+      if (prior !== undefined && samePixels(prior, current)) {
+        await settlePaint(page);
+        const frame = await captureTargetFrame({
+          page,
+          target,
+          path,
+          isolate,
+        });
+        await writeFile(path, frame);
+        return;
+      }
+      prior = current;
     }
-    prior = current;
+    if (retry === 0) {
+      await reportProgress("retry stable masked target", { path });
+    }
   }
   throw new Error(
     `Screenshot target "${path}" never repeated exact bytes outside its named animated regions across six settled frames.`,
   );
 };
 
+/**
+ * Masks only the named animated regions during the exact byte check. The rest
+ * of a broad target, such as an article, must still produce two equal frames.
+ * The saved frame stays unmasked so the visual ledger shows the real surface.
+ */
 const animatedExemptionsWithin = async ({ target, exemptions }) =>
   target.evaluate(
     (element, candidates) =>
@@ -430,6 +452,8 @@ try {
   await reportProgress("prepare checkout");
   await prepareCheckout();
 
+  const captureManifest = [];
+
   const documents = await availableDocuments({
     checkout,
     documents: config.documents,
@@ -447,6 +471,14 @@ try {
     });
 
     for (const capture of document.captures) {
+      if (
+        selectedCaptureKeys.size > 0 &&
+        !selectedCaptureKeys.has(
+          captureKey({ document: document.name, capture: capture.name }),
+        )
+      ) {
+        continue;
+      }
       for (const viewport of capture.viewports) {
         for (const theme of capture.themes) {
           const page = await browser.newPage({
@@ -471,51 +503,83 @@ try {
             if (!actionsAvailable) {
               continue;
             }
+            if (capture.scope === "component") {
+              await page
+                .locator("[data-collapsible][data-collapsed]")
+                .evaluateAll((blocks) => {
+                  for (const block of blocks) {
+                    block.removeAttribute("data-collapsed");
+                  }
+                });
+            }
             const target = page.locator(capture.selector);
             const targetCount = await target.count();
             if (targetCount === 0) {
               continue;
             }
-            if (targetCount !== 1) {
+            if (targetCount !== 1 && capture.multiple !== true) {
               throw new Error(
                 `Screenshot selector "${capture.selector}" matched ${targetCount} elements; selectors must identify one visual surface.`,
               );
             }
-            await target.waitFor({ state: "visible" });
-            await reportProgress("capture target", {
-              document: document.name,
-              capture: capture.name,
-              viewport: viewport.name,
-              theme,
-              selector: capture.selector,
-            });
-            const path = join(
-              outputDirectory,
-              captureName({
+            const targets =
+              capture.multiple === true
+                ? Array.from({ length: targetCount }, (_, index) =>
+                    target.nth(index),
+                  )
+                : [target];
+            for (const [instance, targetInstance] of targets.entries()) {
+              await targetInstance.waitFor({ state: "visible" });
+              await reportProgress("capture target", {
                 document: document.name,
                 capture: capture.name,
                 viewport: viewport.name,
                 theme,
-              }),
-            );
-            const animatedExemptions = await animatedExemptionsWithin({
-              target,
-              exemptions: config.animatedSurfaceExemptions ?? [],
-            });
-            await withTimeout(
-              animatedExemptions.length === 0
-                ? captureStableTarget({ page, target, path })
-                : captureTargetWithAnimatedRegions({
-                    page,
-                    target,
-                    path,
-                    masks: animatedExemptions.map(({ selector }) =>
-                      page.locator(selector),
-                    ),
-                  }),
-              `Screenshot target "${path}"`,
-              60_000,
-            );
+                instance: capture.multiple === true ? instance : undefined,
+                selector: capture.selector,
+              });
+              const path = join(
+                outputDirectory,
+                captureName({
+                  document: document.name,
+                  capture: capture.name,
+                  viewport: viewport.name,
+                  theme,
+                  instance: capture.multiple === true ? instance : undefined,
+                }),
+              );
+              const animatedExemptions = await animatedExemptionsWithin({
+                target: targetInstance,
+                exemptions: config.animatedSurfaceExemptions ?? [],
+              });
+              await withTimeout(
+                animatedExemptions.length === 0
+                  ? captureStableTarget({
+                      page,
+                      target: targetInstance,
+                      path,
+                      isolate: capture.multiple !== true,
+                    })
+                  : captureStableTargetWithAnimatedRegions({
+                      page,
+                      target: targetInstance,
+                      path,
+                      masks: animatedExemptions.map(({ selector }) =>
+                        page.locator(selector),
+                      ),
+                      isolate: capture.multiple !== true,
+                    }),
+                `Screenshot target "${path}"`,
+                60_000,
+              );
+              captureManifest.push({
+                key: captureKey({
+                  document: document.name,
+                  capture: capture.name,
+                }),
+                path: basename(path),
+              });
+            }
           } finally {
             await withTimeout(page.close(), "Closing screenshot page", 10_000);
           }
@@ -523,6 +587,19 @@ try {
       }
     }
   }
+  await writeFile(
+    join(outputDirectory, "capture-manifest.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        selectedCaptureKeys: [...selectedCaptureKeys],
+        captures: captureManifest,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
   if (progressPath !== null) {
     await rm(progressPath, { force: true });
   }

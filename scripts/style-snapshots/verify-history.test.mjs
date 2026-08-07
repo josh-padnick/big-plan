@@ -13,7 +13,11 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { PNG } from "pngjs";
 import { availableDocuments } from "./available-documents.mjs";
-import { verifyHistory, visualContract } from "./verify-history.mjs";
+import {
+  capturePlan,
+  verifyHistory,
+  visualContract,
+} from "./verify-history.mjs";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = join(
@@ -101,6 +105,56 @@ test("reads visual contracts from direct and squash commit messages", () => {
       ],
       squashed: true,
     },
+  );
+});
+
+test("should select owned components and retain the global safety net", () => {
+  const config = {
+    schemaVersion: 2,
+    capturePolicy: { globalFilePatterns: ["^src/render/"] },
+    documents: [
+      {
+        name: "showcase",
+        captures: [
+          { name: "document", scope: "full-document" },
+          {
+            name: "callout",
+            scope: "component",
+            ownerPatterns: ["^src/components/callout/"],
+          },
+          {
+            name: "wireframe",
+            scope: "component",
+            ownerPatterns: ["^src/components/wireframe/"],
+          },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(
+    capturePlan({
+      config,
+      stylingFiles: ["src/components/callout/styles.css"],
+      isTip: false,
+    }),
+    ["showcase/callout"],
+  );
+  assert.deepEqual(
+    capturePlan({
+      config,
+      stylingFiles: ["src/render/global.generated.ts"],
+      isTip: false,
+    }),
+    ["showcase/document", "showcase/callout", "showcase/wireframe"],
+  );
+  assert.throws(
+    () =>
+      capturePlan({
+        config,
+        stylingFiles: ["src/components/unknown/styles.css"],
+        isTip: false,
+      }),
+    /no component owner/u,
   );
 });
 
@@ -214,6 +268,37 @@ test("should require explicit named animated-surface exemptions", async () => {
         invalid.message,
       );
     }
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should reject an approved styling commit without a manifest", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "red\napproved move\n",
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "style: claim an approved move [visual:approved]",
+    });
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "approved-without-manifest",
+        }),
+      }),
+      /approved commit requires 1 manifest.*Repair this history entry/u,
+    );
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }
@@ -1302,6 +1387,51 @@ test("should allow initial capture configuration after the merge base", async ()
   }
 });
 
+test("should tile a masked full-document capture below the viewport", async () => {
+  const outputDirectory = await mkdtemp(
+    join(tmpdir(), "style-history-capture-regression-"),
+  );
+  try {
+    await execFileAsync(
+      process.execPath,
+      [join(repositoryRoot, "scripts", "style-snapshots", "capture.mjs")],
+      {
+        cwd: repositoryRoot,
+        env: {
+          ...process.env,
+          STYLE_SNAPSHOT_CHECKOUT: repositoryRoot,
+          STYLE_SNAPSHOT_OUTPUT_DIR: outputDirectory,
+          STYLE_SNAPSHOT_CONFIG: join(
+            repositoryRoot,
+            ".style-snapshots",
+            "config.json",
+          ),
+          STYLE_SNAPSHOT_HARNESS_ROOT: outputDirectory,
+          STYLE_SNAPSHOT_CAPTURE_KEYS: JSON.stringify([
+            "all-components/full-document",
+          ]),
+        },
+        maxBuffer: 20 * 1024 * 1024,
+      },
+    );
+    const captureManifest = JSON.parse(
+      await readFile(join(outputDirectory, "capture-manifest.json"), "utf8"),
+    );
+    assert.equal(captureManifest.captures.length, 4);
+    for (const entry of captureManifest.captures) {
+      const image = PNG.sync.read(
+        await readFile(join(outputDirectory, entry.path)),
+      );
+      assert.ok(
+        image.height > 900,
+        `${entry.path} must include content below one viewport`,
+      );
+    }
+  } finally {
+    await rm(outputDirectory, { recursive: true, force: true });
+  }
+});
+
 test("should capture each unique SHA at configured bounded concurrency", async () => {
   const { repoRoot, configPath, base } = await createMinimalRepository({
     stylingFilePatterns: ["^style\\.txt$"],
@@ -1364,12 +1494,12 @@ await appendFile(logPath, "end:" + basename(checkout) + "\\n");
       maximumActiveCaptures = Math.max(maximumActiveCaptures, activeCaptures);
     }
     const requestedConcurrency = Number.parseInt(
-      process.env.STYLE_HISTORY_CAPTURE_CONCURRENCY ?? "2",
+      process.env.STYLE_HISTORY_CAPTURE_CONCURRENCY ?? "4",
       10,
     );
     const expectedConcurrency = Number.isInteger(requestedConcurrency)
       ? Math.min(4, Math.max(1, requestedConcurrency))
-      : 2;
+      : 4;
     assert.equal(maximumActiveCaptures, expectedConcurrency);
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
