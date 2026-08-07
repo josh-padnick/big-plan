@@ -1,6 +1,10 @@
 {
-  "schemaVersion": 1,
-  "fixturePaths": ["examples/mdx-components.mdx", "examples/deck.mdx"],
+  "schemaVersion": 2,
+  "fixturePaths": [
+    "examples/all-components.mdx",
+    "examples/mdx-components.mdx",
+    "examples/deck.mdx"
+  ],
   "stylingFilePatterns": [
     "^\\.style-snapshots/config\\.json$",
     "^bun\\.lock$",
@@ -20,6 +24,23 @@
     "^src/render/(?:markdown|shell)/.*\\.ts$"
   ],
   "manifestDirectory": ".style-snapshots/manifests",
+  "capturePolicy": {
+    "globalFilePatterns": [
+      "^\\.style-snapshots/",
+      "^bun\\.lock$",
+      "^package\\.json$",
+      "^assets/",
+      "^scripts/",
+      "^examples/",
+      "^src/components/_shared/",
+      "^src/components/(?:part|slide)/",
+      "^src/icons/",
+      "^src/render/"
+    ]
+  },
+  "captureEnvironment": {
+    "authorityClass": "ci-runner"
+  },
   "captureCommand": [
     "node",
     "{harnessRoot}/scripts/style-snapshots/capture.mjs"
@@ -47,6 +68,220 @@
     }
   ],
   "documents": [
+    {
+      "name": "all-components",
+      "source": "examples/all-components.mdx",
+      "captures": [
+        {
+          "name": "full-document",
+          "scope": "full-document",
+          "selector": "article",
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "callout",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/callout/"],
+          "selector": "[data-callout]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "code-diff",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/code-diff/"],
+          "selector": "[data-code-diff]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "code-snippet",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/code-snippet/"],
+          "selector": "[data-code-snippet]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "data-table",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/data-table/"],
+          "selector": "[data-data-table]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "database-table-schema",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/database-table-schema/"],
+          "selector": "[data-database-table-schema]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "decision",
+          "scope": "component",
+          "ownerPatterns": [
+            "^src/components/(?:decision|decision-analysis|quick-decision)/"
+          ],
+          "selector": "[data-decision]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "file-tree",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/file-tree/"],
+          "selector": "[data-file-tree]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "file-tree-diff",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/file-tree-diff/"],
+          "selector": "[data-file-tree-diff]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "flow-diagram",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/flow-diagram/"],
+          "selector": "[data-flow-diagram]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "graphql-operation",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/graphql-operation/"],
+          "selector": "[data-graphql-operation]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "grpc-method",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/grpc-method/"],
+          "selector": "[data-grpc-method]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "http-endpoint",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/http-endpoint/"],
+          "selector": "[data-http-endpoint]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "quick-summary",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/quick-summary/"],
+          "selector": "[data-quick-summary]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "table-of-contents",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/table-of-contents/"],
+          "selector": "[data-table-of-contents]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
+          "name": "wireframe",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/wireframe/"],
+          "selector": "[data-wireframe]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        }
+      ]
+    },
     {
       "name": "components",
       "source": "examples/mdx-components.mdx",
