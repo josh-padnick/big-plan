@@ -100,6 +100,12 @@ const finishColumnPointerReorder = (event, commit) => {
 document.addEventListener("pointermove", (event) => {
   const drag = activeColumnReorder;
   if (drag === null || event.pointerId !== drag.pointerId) return;
+  // Capture ownership is authoritative even when Chromium delays the
+  // corresponding lostpointercapture event.
+  if (!drag.captureTarget.hasPointerCapture(drag.pointerId)) {
+    finishColumnPointerReorder(event, false);
+    return;
+  }
   if (!drag.dragging) {
     const distance = Math.hypot(
       event.clientX - drag.startX,
