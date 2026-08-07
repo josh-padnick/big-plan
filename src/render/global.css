@@ -518,6 +518,15 @@ are declared, so a role or a scale step is the only thing a utility can name.
 }
 
 @layer bp-state {
+  /* Override invariant: the settings sheet must clear the device safe area
+     after the resting twelve-pixel mobile viewport margin. */
+  @media (width < 56rem) {
+    /* Override invariant: safe-area padding must beat the resting pb-3 utility. */
+    [data-preferences-backdrop] {
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+  }
+
   /* Override invariant: floated popover geometry must beat the body's resting
      max-width and in-flow utility values after the viewer script promotes it. */
   [data-info-popover-floating] > [data-info-popover-body] {
