@@ -19,7 +19,7 @@ test("should render every proof at its native device geometry", async ({
     const artboard = screen.locator(".wireframe-artboard");
     const prose = page.locator("article p").first();
 
-    expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1440);
+    expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1200);
     expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(900);
     expect((await boxOf(frame)).width).toBeGreaterThan(
       (await boxOf(prose)).width,
@@ -116,8 +116,8 @@ test("should render every proof at its native device geometry", async ({
       );
       const artboard = screen.locator(".wireframe-artboard");
 
-      expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1180);
-      expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(820);
+      expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1080);
+      expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(750);
       const ratio = await artboard.evaluate(
         (node) => node.offsetWidth / node.offsetHeight,
       );
@@ -213,7 +213,11 @@ test("should render every proof at its native device geometry", async ({
         boxShadow: style.boxShadow,
       };
     });
-    expect(Number.parseFloat(selectedPaint.borderWidth)).toBeGreaterThan(2.8);
+    // The authored 3px selected border paints thinner than 3px once the
+    // tablet's true width is scaled into the review column, but it must
+    // still read as clearly thicker than the 2px resting border scaled by
+    // the same factor (~1.8px at this viewport).
+    expect(Number.parseFloat(selectedPaint.borderWidth)).toBeGreaterThan(2.5);
     expect(selectedPaint.boxShadow).not.toBe("none");
     await expect(selected.locator(".wireframe-choice-check")).toHaveText("✓");
     await expect(

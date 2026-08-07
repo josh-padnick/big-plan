@@ -26,6 +26,12 @@ marks and a plan diff never jitters.
     --wf-fill: color-mix(in srgb, var(--color-ink) 6%, transparent);
     --wf-sketch: 9px 4px 11px 5px / 5px 11px 4px 9px;
     --wf-sketch-alt: 11px 5px 9px 4px / 4px 9px 5px 11px;
+    /* The page card's own chrome (2x0.5rem padding + 2x1px border) sits
+       outside every device's frame. Each device's max-width below adds this
+       back in, so the card is a pure additive decoration: the frame renders
+       at the exact same size the review width has always targeted, and the
+       card's outer edge is this much bigger around it. */
+    --wf-card-inset: calc(1rem + 2px);
   }
   /* Isolation from the reading column's element selectors. */
   .wireframe h3,
@@ -119,6 +125,20 @@ marks and a plan diff never jitters.
     color: var(--color-ink);
     font-weight: 600;
   }
+  /* The switcher is big-plan review chrome, not wireframe product chrome, so
+     keyboard focus reads as an ordinary quiet halo instead of the browser's
+     native ring or the hand-drawn sketch radius. aria-current already marks
+     the active screen with a border/fill of its own, so a focused active
+     item shows no extra ring at all; only a focused inactive item gets the
+     halo, since aria-current cannot speak for it. */
+  .wireframe-switch:focus-visible {
+    border-radius: 0.25rem;
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
+  }
+  .wireframe-switch[aria-current="true"]:focus-visible {
+    box-shadow: none;
+  }
 
   /* Maximized: the switcher becomes the vertical screen rail the guidance
      requires, sitting left of the active screen; arrow keys (wired in the
@@ -173,17 +193,19 @@ marks and a plan diff never jitters.
      realistic minimum silhouettes; tablet holds a fixed device viewport and
      scrolls internally. */
   .wireframe-screen[data-wireframe-device="desktop"] {
-    --wf-width: 1440px;
+    --wf-width: 1200px;
     --wf-min-height: 900px;
-    /* One review width for every desktop prototype. At 48rem the 1440px
-       canvas retains enough scale for Harbor-style list/main/rail panes,
-       while the deepest supported deck nesting plus card chrome still fits
-       inside a 1280px viewer with page margin left over. */
+    /* One review width for every desktop prototype. The surrounding reading
+       column, not this max-width, is the real ceiling at ordinary viewport
+       widths, so the page card's inset (below) comes out of that same fixed
+       768px budget: the card's outer edge lands on 768px and the frame
+       inside it is smaller by the inset. At 48rem the narrowed 1200px canvas
+       still paints with more scale than the wider 1440px canvas did before. */
     max-width: 48rem;
   }
   .wireframe-screen[data-wireframe-device="tablet"] {
-    --wf-width: 1180px;
-    --wf-height: 820px;
+    --wf-width: 1080px;
+    --wf-height: 750px;
     --wf-min-height: 0px;
     max-width: 960px;
   }
@@ -191,14 +213,32 @@ marks and a plan diff never jitters.
     --wf-width: 820px;
     --wf-height: 1180px;
     --wf-min-height: 0px;
-    max-width: 820px;
+    max-width: calc(820px + var(--wf-card-inset));
   }
   .wireframe-screen[data-wireframe-device="phone"] {
     --wf-width: 390px;
     /* An iPhone-SE-class floor reads unmistakably as a handset. The artboard
-       can still grow for long settings or form screens. */
+       can still grow for long settings or form screens. The max-width matches
+       the frame's true outer size (390px + 2x6px bezel + 2x0.4rem inline
+       padding) plus the page card's own inset, so the phone keeps rendering
+       at its true, unscaled 1:1 size rather than being clipped into an
+       unwanted shrink. */
     --wf-min-height: 720px;
-    max-width: calc(390px + 12px + 0.8rem);
+    max-width: calc(390px + 12px + 0.8rem + var(--wf-card-inset));
+  }
+  /* A light, conventional card reads as the page's own silhouette against
+     the surrounding review chrome (the maximize panel or the storyboard
+     background). It wraps outside the hand-drawn device bezel `.wireframe-frame`
+     already draws for desktop/tablet/phone, so nothing doubles up inside it.
+     The viewer script reads this padding and border back out of computed
+     style to keep the frame's fit-to-width math correct, so the two stay in
+     sync without a duplicated constant. */
+  .wireframe-frame-card {
+    display: inline-block;
+    max-width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.625rem;
   }
   .wireframe-frame {
     --wf-bezel: 2px;

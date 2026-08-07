@@ -708,34 +708,36 @@ const Screen = ({
               : "minimum · grows with content"}
         </span>
       </div>
-      <div
-        className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
-        data-wireframe-device={screen.device}
-      >
-        {desktop ? (
-          <div className="wireframe-browser-bar">
-            <span className="wireframe-browser-dots" aria-hidden="true" />
-            <span className="wireframe-browser-address">
-              {screen.url ?? " "}
-            </span>
-          </div>
-        ) : null}
-        {!desktop && !phone ? (
-          <span className="wireframe-tablet-handle" aria-hidden="true" />
-        ) : null}
-        {phone ? (
-          <span className="wireframe-phone-notch" aria-hidden="true" />
-        ) : null}
+      <div className="wireframe-frame-card">
         <div
-          className="wireframe-artboard"
+          className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
           data-wireframe-device={screen.device}
-          data-wireframe-height-policy={preset.heightPolicy}
-          {...(screen.pattern === undefined
-            ? {}
-            : { "data-wireframe-pattern": screen.pattern })}
         >
-          <div className="wireframe-canvas flex flex-col gap-4">
-            <WireframeElements nodes={screen.children} />
+          {desktop ? (
+            <div className="wireframe-browser-bar">
+              <span className="wireframe-browser-dots" aria-hidden="true" />
+              <span className="wireframe-browser-address">
+                {screen.url ?? " "}
+              </span>
+            </div>
+          ) : null}
+          {!desktop && !phone ? (
+            <span className="wireframe-tablet-handle" aria-hidden="true" />
+          ) : null}
+          {phone ? (
+            <span className="wireframe-phone-notch" aria-hidden="true" />
+          ) : null}
+          <div
+            className="wireframe-artboard"
+            data-wireframe-device={screen.device}
+            data-wireframe-height-policy={preset.heightPolicy}
+            {...(screen.pattern === undefined
+              ? {}
+              : { "data-wireframe-pattern": screen.pattern })}
+          >
+            <div className="wireframe-canvas flex flex-col gap-4">
+              <WireframeElements nodes={screen.children} />
+            </div>
           </div>
         </div>
       </div>

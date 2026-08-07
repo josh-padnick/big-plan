@@ -938,13 +938,24 @@ export const VIEWER_SCRIPT = `<script>
 (() => {
   const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
   const fit = (screen) => {
-    const frame = screen.querySelector(":scope > .wireframe-frame");
-    if (frame === null || screen.clientWidth === 0) return;
+    const card = screen.querySelector(":scope > .wireframe-frame-card");
+    const frame = card === null ? null : card.querySelector(":scope > .wireframe-frame");
+    if (card === null || frame === null || screen.clientWidth === 0) return;
     // offsetWidth stays in the frame's unscaled coordinate space. Writing a
     // numeric zoom avoids relying on unsupported length division in CSS.
     frame.style.zoom = "1";
+    // The card's padding and border sit outside the frame, so the space
+    // available to the frame is the screen's width minus that inset - read
+    // from computed style rather than a duplicated constant, so the two
+    // never drift out of sync.
+    const cardStyle = getComputedStyle(card);
+    const inset =
+      parseFloat(cardStyle.paddingLeft) +
+      parseFloat(cardStyle.paddingRight) +
+      parseFloat(cardStyle.borderLeftWidth) +
+      parseFloat(cardStyle.borderRightWidth);
     frame.style.zoom = String(
-      Math.min(1, screen.clientWidth / frame.offsetWidth),
+      Math.min(1, (screen.clientWidth - inset) / frame.offsetWidth),
     );
   };
   for (const root of roots) {

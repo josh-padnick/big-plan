@@ -193,14 +193,14 @@ export const WIREFRAME_DEVICE_PRESETS: Readonly<
 > = {
   desktop: {
     label: "Desktop",
-    width: 1440,
+    width: 1200,
     height: 900,
     heightPolicy: "minimum",
   },
   tablet: {
     label: "Tablet, landscape",
-    width: 1180,
-    height: 820,
+    width: 1080,
+    height: 750,
     heightPolicy: "fixed",
   },
   "tablet-portrait": {

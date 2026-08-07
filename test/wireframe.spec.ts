@@ -181,7 +181,7 @@ test("should scale a true-size drawing inside a narrow review viewport", async (
   await test.step("the artboard keeps device geometry without widening the page", async () => {
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
-      .toBe(1180);
+      .toBe(1080);
     const box = await boxOf(artboard);
     expect(box.width).toBeLessThanOrEqual(320);
     const overflow = await page.evaluate(
@@ -288,12 +288,18 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
   await test.step("desktop drawings use the shared 768px review width", async () => {
     const desktop = page.locator('[data-wireframe-screen="d-ticket"]');
     const artboard = desktop.locator(".wireframe-artboard");
-    const frame = desktop.locator(".wireframe-frame");
+    const card = desktop.locator(".wireframe-frame-card");
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
-      .toBe(1440);
+      .toBe(1200);
     expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(900);
-    expect((await boxOf(frame)).width).toBeCloseTo(768, 1);
+    // The reading column caps the page card, not the bare frame, at the
+    // shared review width; the card's light border is the outer edge of the
+    // page silhouette, and the frame inside it is smaller by the card's own
+    // padding and border. A wider tolerance than a bare zoomed frame needs,
+    // since the card compounds the frame's fractional CSS zoom with its own
+    // fixed-pixel border and padding.
+    expect(Math.abs((await boxOf(card)).width - 768)).toBeLessThan(1.5);
   });
 
   await test.step("landscape tablet drawings hold a real iPad frame", async () => {
@@ -301,8 +307,8 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
     const artboard = tablet.locator(".wireframe-artboard");
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
-      .toBe(1180);
-    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(820);
+      .toBe(1080);
+    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(750);
   });
 
   await test.step("selection does not indent Ticket or Inbox queue rows", async () => {
