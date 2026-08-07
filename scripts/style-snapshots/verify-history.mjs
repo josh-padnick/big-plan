@@ -32,6 +32,12 @@ const execFileAsync = promisify(execFile);
 const CAPTURE_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_CAPTURE_CONCURRENCY = 4;
 const MAX_CAPTURE_CONCURRENCY = 4;
+const POLICY_SOURCE_PATHS = [
+  fileURLToPath(import.meta.url),
+  fileURLToPath(new URL("./available-documents.mjs", import.meta.url)),
+  fileURLToPath(new URL("./capture.mjs", import.meta.url)),
+  fileURLToPath(new URL("./environment.mjs", import.meta.url)),
+];
 
 const RELEVANCE_FLOOR = {
   fixturePaths: ["examples/mdx-components.mdx", "examples/deck.mdx"],
@@ -101,6 +107,16 @@ export const visualContract = ({ subject, body }) => {
   return subjects.length > 0
     ? { kind: "empty", subjects, squashed: true }
     : undefined;
+};
+
+/** Recognizes the recovery merge convention emitted by the gate executor. */
+const recoveryMergeParent = ({ subject, parents }) => {
+  const recoveryCommit = subject.match(
+    /^Merge commit '([0-9a-f]{40})' into .+$/u,
+  )?.[1];
+  return recoveryCommit !== undefined && parents.slice(1).includes(recoveryCommit)
+    ? recoveryCommit
+    : null;
 };
 
 /** Runs asynchronous work in a small serial queue. */
@@ -309,15 +325,52 @@ const canonicalize = (value) => {
   return value;
 };
 
-const configFingerprint = (config) =>
-  createHash("sha256")
-    .update(JSON.stringify(canonicalize(config)))
-    .digest("hex");
+/** Fingerprints configuration and every executable source owned by the gate. */
+const policyFingerprint = async ({ config, harnessRoot }) => {
+  const hash = createHash("sha256");
+  hash.update(JSON.stringify(canonicalize(config)));
+  const sources = POLICY_SOURCE_PATHS.map((path) => ({
+    label: `gate/${path.slice(path.lastIndexOf("/") + 1)}`,
+    path,
+  }));
+  for (const [index, part] of config.captureCommand.entries()) {
+    const path = part.replaceAll("{harnessRoot}", harnessRoot);
+    if (!isAbsolute(path)) {
+      continue;
+    }
+    const harnessRelativePath = relative(harnessRoot, path);
+    if (
+      harnessRelativePath.startsWith("../") ||
+      isAbsolute(harnessRelativePath)
+    ) {
+      continue;
+    }
+    try {
+      if ((await lstat(path)).isFile()) {
+        sources.push({ label: `capture-command/${index}`, path });
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
+    }
+  }
+  for (const { label, path } of sources.sort((left, right) =>
+    left.label.localeCompare(right.label),
+  )) {
+    hash.update("\0");
+    hash.update(label);
+    hash.update("\0");
+    hash.update(await readFile(path));
+  }
+  return hash.digest("hex");
+};
 
 const receiptKey = ({ parentTree, commitTree }) =>
   `${parentTree}:${commitTree}`;
 
 const readReceiptStore = async (directory) => {
+  const emptyStore = { schemaVersion: 1, receipts: {}, tipReceipts: {} };
   try {
     const store = JSON.parse(
       await readFile(join(directory, "receipts.json"), "utf8"),
@@ -325,11 +378,18 @@ const readReceiptStore = async (directory) => {
     return store.schemaVersion === 1 &&
       store.receipts !== null &&
       typeof store.receipts === "object"
-      ? store
-      : { schemaVersion: 1, receipts: {} };
+      ? {
+          ...store,
+          tipReceipts:
+            store.tipReceipts !== null &&
+            typeof store.tipReceipts === "object"
+              ? store.tipReceipts
+              : {},
+        }
+      : emptyStore;
   } catch (error) {
     if (error.code === "ENOENT" || error instanceof SyntaxError) {
-      return { schemaVersion: 1, receipts: {} };
+      return emptyStore;
     }
     throw error;
   }
@@ -1033,7 +1093,11 @@ export const verifyHistory = async ({
     artifactRoot,
   });
   const config = await readConfig(configPath);
-  const policyFingerprint = configFingerprint(config);
+  const harnessRoot = dirname(dirname(configPath));
+  const activePolicyFingerprint = await policyFingerprint({
+    config,
+    harnessRoot,
+  });
   const environment = await currentEnvironment({ repoRoot });
   const receiptDirectory =
     process.env.STYLE_HISTORY_RECEIPT_DIR === undefined
@@ -1041,12 +1105,11 @@ export const verifyHistory = async ({
       : resolve(process.env.STYLE_HISTORY_RECEIPT_DIR);
   const receiptStore =
     receiptDirectory === null
-      ? { schemaVersion: 1, receipts: {} }
+      ? { schemaVersion: 1, receipts: {}, tipReceipts: {} }
       : await readReceiptStore(receiptDirectory);
   const pixelAuthority =
     config.captureEnvironment?.authorityClass === undefined ||
     config.captureEnvironment.authorityClass === environment.authorityClass;
-  const harnessRoot = dirname(dirname(configPath));
   const configRepoPath = relative(repoRoot, configPath).replaceAll("\\", "/");
   if (configRepoPath.startsWith("../") || isAbsolute(configRepoPath)) {
     throw new Error("Style screenshot config must be inside the repository.");
@@ -1076,13 +1139,31 @@ export const verifyHistory = async ({
     });
     parentsByCommit.set(commit, parentLine.split(" ").slice(1));
   }
-  // A merge whose tree matches its first parent contributes nothing to the
-  // branch line (recovery bookkeeping), so it and the ancestry reachable only
-  // through its other parents stay outside the per-commit visual contract.
+  const headParent =
+    parentsByCommit.get(head)?.[0] ??
+    (
+      await run({
+        command: "git",
+        args: ["rev-list", "--parents", "-n", "1", head],
+        cwd: repoRoot,
+      })
+    ).split(" ")[1];
+  const tipTreePair =
+    headParent === undefined
+      ? null
+      : await treePairFor({ repoRoot, parent: headParent, commit: head });
   const excludedCommits = new Set();
   for (const commit of enumeratedCommits) {
     const parents = parentsByCommit.get(commit);
     if (parents.length < 2) {
+      continue;
+    }
+    const subject = await run({
+      command: "git",
+      args: ["show", "-s", "--format=%s", commit],
+      cwd: repoRoot,
+    });
+    if (recoveryMergeParent({ subject, parents }) === null) {
       continue;
     }
     const [commitTree, firstParentTree] = await Promise.all(
@@ -1131,6 +1212,7 @@ export const verifyHistory = async ({
     ),
   ].map((pattern) => new RegExp(pattern));
   const relevant = [];
+  const discoveryFailures = [];
 
   for (const commit of commits) {
     const parents = parentsByCommit.get(commit);
@@ -1180,15 +1262,23 @@ export const verifyHistory = async ({
       cwd: repoRoot,
     });
     if (parents.length > 1) {
-      throw new Error(
-        `${subject}: a merge commit resolved a configured styling file, so its visual delta cannot be isolated from the merged branch. Rebase and record the resolution as a single-parent [visual:empty] or [visual:approved] commit.`,
-      );
+      discoveryFailures.push({
+        entry: { commit, subject },
+        error: new Error(
+          "A merge commit resolved a configured styling file, so its visual delta cannot be isolated from the merged branch. Rebase and record the resolution as a single-parent [visual:empty] or [visual:approved] commit.",
+        ),
+      });
+      continue;
     }
     const contract = visualContract({ subject, body });
     if (contract === undefined) {
-      throw new Error(
-        `${subject}: styling commits must end with [visual:empty] or [visual:approved].`,
-      );
+      discoveryFailures.push({
+        entry: { commit, subject },
+        error: new Error(
+          "styling commits must end with [visual:empty] or [visual:approved].",
+        ),
+      });
+      continue;
     }
     relevant.push({
       commit,
@@ -1360,7 +1450,7 @@ export const verifyHistory = async ({
       pixelAuthority &&
       receiptDirectory !== null &&
       receipt?.schemaVersion === 1 &&
-      receipt.policyFingerprint === policyFingerprint &&
+      receipt.policyFingerprint === activePolicyFingerprint &&
       sameEnvironment(receipt.environment, environment) &&
       receipt.isTip === (entry.commit === head) &&
       JSON.stringify(receipt.captureKeys) ===
@@ -1374,6 +1464,25 @@ export const verifyHistory = async ({
       receipt.result !== undefined
     );
   };
+  const tipCaptureKeys = capturePlan({
+    config,
+    stylingFiles: [],
+    isTip: true,
+  });
+  const tipReceipt =
+    tipTreePair === null
+      ? undefined
+      : receiptStore.tipReceipts[receiptKey(tipTreePair)];
+  const reusableTipReceipt =
+    pixelAuthority &&
+    receiptDirectory !== null &&
+    tipReceipt?.schemaVersion === 1 &&
+    tipReceipt.policyFingerprint === activePolicyFingerprint &&
+    sameEnvironment(tipReceipt.environment, environment) &&
+    JSON.stringify(tipReceipt.captureKeys) ===
+      JSON.stringify(tipCaptureKeys) &&
+    tipReceipt.scope === "tip-safety-net" &&
+    tipReceipt.verified === true;
   try {
     await rm(disposableArtifactRoot, { recursive: true, force: true });
     const firstUncachedIndex = relevant.findIndex(
@@ -1395,10 +1504,9 @@ export const verifyHistory = async ({
       }
       captureRequests.set(commit, existing);
     };
-    addCaptureRequest(
-      head,
-      capturePlan({ config, stylingFiles: [], isTip: true }),
-    );
+    if (!reusableTipReceipt) {
+      addCaptureRequest(head, tipCaptureKeys);
+    }
     for (const entry of activeRelevant) {
       const captureKeys = entryCaptureKeys(entry);
       addCaptureRequest(entry.parent, captureKeys);
@@ -1412,7 +1520,7 @@ export const verifyHistory = async ({
         captureCommit(commit, [...captureRequests.get(commit)].sort()),
       concurrency: captureConcurrency(),
     });
-    const failures = [];
+    const failures = [...discoveryFailures];
     for (const entry of activeRelevant) {
       try {
         const beforeCapture = await captureCommit(
@@ -1503,7 +1611,7 @@ export const verifyHistory = async ({
           receiptStore.receipts[receiptKey(entry.treePair)] = {
             schemaVersion: 1,
             ...entry.treePair,
-            policyFingerprint,
+            policyFingerprint: activePolicyFingerprint,
             environment,
             isTip: entry.commit === head,
             captureKeys: entryCaptureKeys(entry),
@@ -1530,6 +1638,23 @@ export const verifyHistory = async ({
         ].join("\n"),
         { cause: failures[0].error },
       );
+    }
+    if (
+      pixelAuthority &&
+      receiptDirectory !== null &&
+      tipTreePair !== null &&
+      !reusableTipReceipt
+    ) {
+      receiptStore.tipReceipts[receiptKey(tipTreePair)] = {
+        schemaVersion: 1,
+        ...tipTreePair,
+        policyFingerprint: activePolicyFingerprint,
+        environment,
+        captureKeys: tipCaptureKeys,
+        scope: "tip-safety-net",
+        verified: true,
+      };
+      await writeReceiptStore(receiptDirectory, receiptStore);
     }
   } finally {
     for (const worktree of (await readdir(temporaryRoot)).filter((name) =>
