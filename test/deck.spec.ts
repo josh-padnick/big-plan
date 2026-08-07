@@ -66,6 +66,38 @@ test("should read the deck plan through parts, the overview, and sub-slides", as
   });
 });
 
+test("should keep deck content readable and collapse controls dormant without JavaScript", async ({
+  browser,
+  deckViewerUrl,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto(deckViewerUrl);
+
+  await expect(page.locator("[data-noscript-notice]")).toBeVisible();
+  await expect(page.locator("[data-noscript-notice]")).toContainText(
+    "Interactive affordances",
+  );
+  expect(
+    await page
+      .locator("[data-collapse-toggle]")
+      .evaluateAll((controls) =>
+        controls.every((control) => (control as HTMLElement).hidden),
+      ),
+  ).toBe(true);
+  await expect(page.locator("[data-collapse-header]").first()).toHaveCSS(
+    "cursor",
+    "auto",
+  );
+  await expect(
+    page.getByText(
+      "Inline retries couple checkout latency to processor health.",
+    ),
+  ).toBeVisible();
+
+  await context.close();
+});
+
 test("should collapse and expand deck parts, slides, and sub-slides", async ({
   page,
   deckViewerUrl,

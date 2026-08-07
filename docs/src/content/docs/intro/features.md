@@ -47,6 +47,8 @@ Everything on this page is shipped and works today.
 
 ## Output
 
+- A plan ships as two review artifacts: the authoritative MDX source and one self-contained interactive HTML render. The render stays readable with scripts disabled; its interactive affordances may require the embedded viewer scripts.
+- With JavaScript disabled, the render explains that its full content remains readable while interactive affordances such as sorting, collapse, maximize, and comments are unavailable.
 - One self-contained HTML file with styling and branding embedded.
 - A tiny embedded head script that applies a saved appearance before the first paint, an embedded settings script for the appearance dialog, and one embedded viewer script (TOC scroll-spy, hover popovers, CodeDiff and FileTreeDiff view selection, deck collapse, database-schema columns and index jumps, comment drafts, figure maximize, flow-diagram review, and wireframe navigation and scaling); content stays fully readable with scripts disabled.
 - No external requests, ever.

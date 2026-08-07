@@ -16,7 +16,7 @@ This is what a rendered plan looks like:
   </TabItem>
 </Tabs>
 
-The viewer follows your OS preference until you pick a `Light` or `Dark` appearance in its `Settings` dialog.
+The viewer follows your OS preference until you pick `Light`, `Dark`, or `System` in its `Settings` dialog.
 [See the full rendered plan in your browser.](/demo/)
 
 Some parts of this plan are ordinary Markdown.
@@ -25,5 +25,5 @@ But take a look at the **code diff** and the warning under **Risks and mitigatio
 Those use [`CodeDiff`](/components/code-diff/) and [`Callout`](/components/callout/), two of the [typed components](/components/) Big Plan ships for presenting common plan information in a first-class way.
 The diff adds line numbers, counts, change coloring, and a line-anchored annotation without asking the agent to design custom HTML.
 
-The output runs locally without a third-party service and stays fully readable with JavaScript disabled.
+The output runs locally without a third-party service. The full plan content stays readable with JavaScript disabled; interactive affordances may require the embedded viewer scripts.
 To see it in action, [install it](/intro/installation/).

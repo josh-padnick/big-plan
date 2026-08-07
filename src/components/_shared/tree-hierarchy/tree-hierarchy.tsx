@@ -2,15 +2,11 @@
 // FileTreeDiff view, parameterized by displayed names and change markers.
 
 import type { ReactNode } from "react";
-import { countTreeChanges } from "../../_model/tree-text/derive-tree-view.js";
 import type { TreeChangeCounts } from "../../_model/tree-text/derive-tree-view.js";
 import type {
   TreeBadge,
   TreeEntry,
 } from "../../_model/tree-text/parse-tree-text.js";
-import { CHEVRON_RIGHT_ICON } from "../../../icons/lucide/chevron-right.js";
-import { COPY_MINUS_ICON } from "../../../icons/lucide/copy-minus.js";
-import { COPY_PLUS_ICON } from "../../../icons/lucide/copy-plus.js";
 import { FILE_DIFF_ICON } from "../../../icons/lucide/file-diff.js";
 import { FILE_MINUS_2_ICON } from "../../../icons/lucide/file-minus-2.js";
 import { FILE_PLUS_2_ICON } from "../../../icons/lucide/file-plus-2.js";
@@ -25,16 +21,6 @@ import { lucideIconToReact } from "../lucide-icon/lucide-icon.js";
 // the row because they are its content, while FileTreeDiff keeps rows
 // status-first and tucks each note behind a hoverable comment hint.
 export type TreeNoteDisplay = "inline" | "hint";
-
-export type TreeFoldTone = "standard" | "quiet";
-
-// The quiet tone keeps pane-bar fold-alls discoverable without competing
-// with the trees; the header pair keeps standard contrast beside its
-// neighboring controls. Hover restores full contrast either way.
-const FOLD_TONE_CLASSES: Readonly<Record<TreeFoldTone, string>> = {
-  standard: "text-muted",
-  quiet: "text-subtle",
-};
 
 // Statuses read the way git tooling presents them: a changed file's leading
 // glyph becomes its status icon (the Lucide file-plus-2 family standing in
@@ -77,107 +63,6 @@ export const treeChangeCountsToReact = (
           </span>,
         ],
   );
-
-// Only visible while its directory is collapsed, telling the reader whether
-// the folded subtree is worth expanding.
-const DirectorySummary = ({
-  entry,
-  badgeForEntry,
-}: {
-  readonly entry: TreeEntry;
-  readonly badgeForEntry: (entry: TreeEntry) => TreeBadge | undefined;
-}) => {
-  if (entry.kind !== "directory" || entry.children.length === 0) {
-    return null;
-  }
-  const counts = countTreeChanges({ entries: entry.children, badgeForEntry });
-  const parts = treeChangeCountsToReact(counts);
-  if (parts.length === 0) {
-    return null;
-  }
-  return (
-    <span className="file-tree-dir-summary items-center gap-1 font-sans text-2xs font-semibold">
-      {parts}
-    </span>
-  );
-};
-
-// A server-rendered but hidden control; the live review application reveals
-// it, so inert documents stay fully expanded with no dead affordance.
-// Rows without a toggle (files and childless directories) carry an equally
-// hidden spacer revealed at the same time, so revealing the chevrons never
-// pushes foldable rows a full chevron out of column with their siblings. The
-// spacer is deliberately 6px narrower than the chevron: a slight outdent
-// keeps files from reading as over-indented under their folder rows.
-const DirectoryToggle = ({
-  entry,
-  name,
-}: {
-  readonly entry: TreeEntry;
-  readonly name: string;
-}) =>
-  entry.kind !== "directory" || entry.children.length === 0 ? (
-    <span
-      className="file-tree-toggle-spacer inline-flex w-2 shrink-0"
-      hidden
-      data-tree-toggle-spacer=""
-    />
-  ) : (
-    <button
-      type="button"
-      className="file-tree-toggle inline-flex cursor-pointer border-0 bg-transparent p-0 text-muted hover:text-ink [&>svg]:size-3.5 [&>svg]:shrink-0"
-      aria-label={`Collapse ${name}`}
-      aria-expanded="true"
-      hidden
-      data-tree-toggle=""
-    >
-      {lucideIconToReact({ icon: CHEVRON_RIGHT_ICON, hidden: false })}
-    </button>
-  );
-
-const FoldButton = ({
-  action,
-  label,
-  icon,
-  tone,
-}: {
-  readonly action: "collapse" | "expand";
-  readonly label: string;
-  readonly icon: LucideIcon;
-  readonly tone: TreeFoldTone;
-}) => (
-  <button
-    type="button"
-    className={`file-tree-button inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 transition-colors hover:bg-transparent hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5 ${FOLD_TONE_CLASSES[tone]}`}
-    aria-label={label}
-    data-tooltip={label}
-    hidden
-    data-tree-fold={action}
-    data-size="xs"
-    data-slot="button"
-    data-variant="ghost"
-  >
-    {lucideIconToReact({ icon, hidden: false })}
-  </button>
-);
-
-/** Renders the collapse-all and expand-all folding controls in one tone. */
-export const TreeFoldControls = ({ tone }: { readonly tone: TreeFoldTone }) => (
-  <>
-    <FoldButton
-      action="collapse"
-      label="Collapse all folders"
-      icon={COPY_MINUS_ICON}
-      tone={tone}
-    />
-    <FoldButton
-      action="expand"
-      label="Expand all folders"
-      icon={COPY_PLUS_ICON}
-      tone={tone}
-    />
-  </>
-);
 
 const entryIcon = ({
   entry,
@@ -235,20 +120,17 @@ const EntryRow = ({
   name,
   badge,
   noteDisplay,
-  badgeForEntry,
 }: {
   readonly entry: TreeEntry;
   readonly name: string;
   readonly badge: TreeBadge | undefined;
   readonly noteDisplay: TreeNoteDisplay;
-  readonly badgeForEntry: (entry: TreeEntry) => TreeBadge | undefined;
 }) => (
   <div
     className="file-tree-row relative flex min-h-6 items-center gap-1.5 whitespace-nowrap [&>svg]:size-3.5 [&>svg]:shrink-0"
     data-tree-entry={entry.kind}
     {...(badge === undefined ? {} : { "data-tree-badge": badge })}
   >
-    <DirectoryToggle entry={entry} name={name} />
     {entryIcon({ entry, badge })}
     <span
       className={[
@@ -267,7 +149,6 @@ const EntryRow = ({
       </span>
     )}
     <NoteElement entry={entry} noteDisplay={noteDisplay} />
-    <DirectorySummary entry={entry} badgeForEntry={badgeForEntry} />
   </div>
 );
 
@@ -299,7 +180,6 @@ export const TreeHierarchy = ({
           name={nameForEntry(entry)}
           badge={badgeForEntry(entry)}
           noteDisplay={noteDisplay}
-          badgeForEntry={badgeForEntry}
         />
         {entry.children.length === 0 ? null : (
           <TreeHierarchy
