@@ -1030,11 +1030,14 @@ export const VIEWER_SCRIPT = `<script>
       event.preventDefault();
       const nextId = screenIds[nextIndex];
       show(nextId);
-      root
-        .querySelector(
-          '.wireframe-switcher [data-wireframe-navigate="' + nextId + '"]',
-        )
-        ?.focus();
+      for (const tab of root.querySelectorAll(
+        ".wireframe-switcher [data-wireframe-navigate]",
+      )) {
+        if (tab.getAttribute("data-wireframe-navigate") === nextId) {
+          tab.focus();
+          break;
+        }
+      }
     });
   }
   addEventListener("resize", () => {
