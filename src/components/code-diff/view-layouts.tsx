@@ -16,12 +16,12 @@ type AnchoredAnnotation = ResolvedCodeDiffAnnotation;
 
 // Shared by the unified and split hunk headers.
 const HUNK_HEADER_CLASSES =
-  "code-diff-hunk-header min-w-max whitespace-pre bg-[var(--diff-hunk-bg)] px-[0.65rem] py-[0.4rem] text-xs text-[var(--diff-hunk-c)]";
+  "code-diff-hunk-header min-w-max whitespace-pre bg-[var(--diff-hunk-bg)] px-3 py-1.5 text-xs text-[var(--diff-hunk-c)]";
 // Shared by unified and split line rows.
 const LINE_CLASSES = "code-diff-line grid min-w-max whitespace-pre";
 // Shared by unified and split annotation surrounds.
 const ANNOTATION_SURROUND_CLASSES =
-  "code-diff-annotation-surround min-w-0 border-l-4 p-[0.35rem]";
+  "code-diff-annotation-surround min-w-0 border-l-[0.1875rem] p-1.5";
 
 const annotationLineLabel = (annotation: AnchoredAnnotation): string =>
   annotation.startLine === annotation.endLine
@@ -116,7 +116,7 @@ const LineNumberCell = ({
   readonly side: CodeDiffSide;
 }) => (
   <span
-    className="code-diff-line-number select-none border-r border-edge px-[0.55rem] text-right text-muted"
+    className="code-diff-line-number select-none border-r border-edge px-2 text-right text-subtle"
     aria-hidden="true"
     data-diff-number={side}
   >
@@ -125,7 +125,7 @@ const LineNumberCell = ({
 );
 
 const LineContent = ({ line }: { readonly line: DiffLine }) => (
-  <span className="code-diff-line-content inline-block min-w-full pr-3 pl-[0.45rem]">
+  <span className="code-diff-line-content inline-block min-w-full pr-3 pl-2">
     {line.kind === "context" ? null : (
       <span className="sr-only">
         {line.kind === "add" ? "Added line: " : "Removed line: "}
@@ -342,10 +342,7 @@ const DiffView = ({
   readonly showLineNumbers: boolean;
   readonly annotations: ReadonlyArray<AnchoredAnnotation>;
 }) => (
-  <div
-    className="code-diff-view min-w-0 rounded-b-[calc(var(--radius-md)-1px)]"
-    data-diff-content={view}
-  >
+  <div className="code-diff-view min-w-0 rounded-b-md" data-diff-content={view}>
     {diff.hunks.flatMap((hunk, hunkKey) =>
       view === "unified" ? (
         unifiedHunk({ hunk, showLineNumbers, annotations, hunkKey })

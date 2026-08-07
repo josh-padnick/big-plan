@@ -32,7 +32,7 @@ const GAP_CLASSES: Readonly<Record<WireframeSpace, string>> = {
   sm: "gap-2",
   md: "gap-4",
   lg: "gap-6",
-  xl: "gap-10",
+  xl: "gap-12",
 };
 
 const ALIGN_CLASSES: Readonly<Record<WireframeAlign, string>> = {
@@ -693,7 +693,7 @@ const Screen = ({
     >
       <div className="wireframe-screen-caption mb-1.5 flex flex-wrap justify-between gap-2 text-xs text-muted">
         {named ? (
-          <span className="wireframe-screen-name font-semibold tracking-[0.02em]">
+          <span className="wireframe-screen-name font-semibold tracking-caps">
             {screen.name}
           </span>
         ) : (
@@ -747,7 +747,7 @@ const Screen = ({
 
 export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
   <figure
-    className="wireframe my-7"
+    className="wireframe my-8"
     data-wireframe={model.id}
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe" }}
     {...(model.screens.some((screen) => screen.device === "desktop")
@@ -756,7 +756,7 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
   >
     <div className="wireframe-header flex w-full flex-wrap items-center gap-3">
       {model.title === undefined ? null : (
-        <figcaption className="wireframe-caption text-[0.9375rem] font-semibold text-ink">
+        <figcaption className="wireframe-caption text-sm font-semibold text-ink">
           {model.title}
         </figcaption>
       )}

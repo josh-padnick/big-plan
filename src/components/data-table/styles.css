@@ -16,7 +16,7 @@
 @layer components {
   article .data-table-grid th,
   article .data-table-grid td {
-    padding: 0.35rem 0.6rem;
+    padding: 0.375rem 0.5rem;
     border-bottom: 1px solid var(--edge-c);
     vertical-align: top;
     text-align: left;
@@ -154,7 +154,7 @@
      the tinted strip or leaves a trailing gap after the final group. */
   article .data-table-grid tbody tr[data-table-group-end] td {
     border-bottom: 1px solid var(--edge-c);
-    padding-bottom: 2.5rem;
+    padding-bottom: 3rem;
   }
   article .data-table-grid tbody tr[data-table-group-last] td {
     border-bottom: 0;
@@ -162,7 +162,7 @@
   article .data-table-group-row > th {
     background: var(--surface-c);
     border-bottom: 1px solid var(--edge-c);
-    padding: 0.3rem 0.6rem;
+    padding: 0.25rem 0.5rem;
     color: var(--color-ink);
     font-size: 0.6875rem;
     font-weight: 600;
@@ -180,7 +180,7 @@
   /* A grouped table indents its first column under the band so the hierarchy
      is visible without a second border. */
   article [data-table-grouped] .data-table-grid td[data-table-column="0"] {
-    padding-left: 1.15rem;
+    padding-left: 1rem;
   }
 
   /* Menu and chrome surfaces mirror the schema figure so the two read as one
@@ -230,7 +230,7 @@
   article .data-table-filter-input:focus {
     border-color: var(--accent-c);
     outline: none;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
+    box-shadow: var(--elevation-focus);
   }
   /* Override invariant: keyboard focus beats resting chrome color utilities. */
   article .data-table-button:focus-visible,
@@ -239,7 +239,7 @@
     outline: none;
     background: var(--edge-c);
     color: var(--color-ink);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
+    box-shadow: var(--elevation-focus);
   }
   /* Override invariant: sort focus rounding beats the resting square edge. */
   article .data-table-sort:focus-visible {

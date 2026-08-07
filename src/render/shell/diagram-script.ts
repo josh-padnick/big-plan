@@ -794,17 +794,10 @@ export const DIAGRAM_SCRIPT = `
       const mine = drafts.filter((d) => d.diagram === diagram);
       const proposals = mine.filter((d) => d.kind !== "comment");
       diagram.toggleAttribute("data-flow-has-feedback", mine.length > 0);
-      const total = diagram.querySelector("[data-flow-total]");
-      if (total) {
-        total.hidden = mine.length === 0;
-        total.textContent = mine.length === 1 ? "1 note" : mine.length + " notes";
-      }
       const group = diagram.querySelector("[data-flow-proposal-group]");
       if (group) group.hidden = proposals.length === 0;
       const zoomSep = diagram.querySelector("[data-flow-zoom-sep]");
       if (zoomSep) zoomSep.hidden = mine.length === 0;
-      const revertAll = diagram.querySelector("[data-flow-revert-all]");
-      if (revertAll) revertAll.hidden = proposals.length < 2;
       if (proposals.length === 0 && diagram.hasAttribute("data-flow-original")) {
         diagram.removeAttribute("data-flow-original");
         diagram.dispatchEvent(new CustomEvent("flow-original-reset"));
@@ -893,12 +886,34 @@ export const DIAGRAM_SCRIPT = `
   };
   document.body.appendChild(actionBar);
 
-  const addAction = (action, icon, text, onClick, title) => {
+  // A shortcut is a key, so it is drawn as one rather than described in prose.
+  const keycapHint = (pairs) => {
+    const hint = el("span", "flow-diagram-actionbar-hint");
+    for (const [key, outcome] of pairs) {
+      if (hint.childElementCount > 0) hint.appendChild(el("span", "", "\u00b7"));
+      hint.appendChild(el("kbd", "flow-diagram-keycap", key));
+      hint.appendChild(el("span", "", outcome));
+    }
+    return hint;
+  };
+
+  // A labelled action states its outcome. An icon-only action states the same
+  // outcome in its accessible name and in the hint that appears after a
+  // second, so nothing is knowable by shape alone.
+  const addAction = (action, icon, text, onClick, hint) => {
     const button = el("button", "flow-diagram-actionbar-button");
     button.type = "button";
     button.setAttribute("data-flow-action", action);
-    button.title = title || text;
-    button.innerHTML = icon + "<span>" + text + "</span>";
+    if (text) {
+      button.innerHTML = icon + "<span>" + text + "</span>";
+      button.setAttribute("aria-label", hint || text);
+      if (hint) button.setAttribute("data-tooltip", hint);
+    } else {
+      button.classList.add("flow-diagram-actionbar-icon");
+      button.innerHTML = icon;
+      button.setAttribute("aria-label", hint);
+      button.setAttribute("data-tooltip", hint);
+    }
     button.addEventListener("click", (event) => { event.stopPropagation(); onClick(); });
     actionBar.appendChild(button);
   };
@@ -917,21 +932,23 @@ export const DIAGRAM_SCRIPT = `
     if (kindOf(selected) !== "figure") {
       addAction("comment", ICON.comment, "Comment", () => openCompose(selected));
     }
+    // Revert appears only once there is something to revert, and it says the
+    // word. The hint names what this click undoes on this element, so a removed
+    // node is restored and a retyped label is put back. Removal itself has no
+    // button: the reader already has the key, and a second control that undid
+    // the same removal read as two owners for one outcome.
     const mine = drafts.filter((d) => d.element === selected);
     if (mine.length > 0) {
-      addAction("revert", ICON.revert, "Revert", () => revertElement(selected),
-        "Revert every change on this element");
+      const only = mine.length === 1 ? mine[0] : null;
+      const hint = only === null
+        ? "Revert all changes on this " + (kindOf(selected) || "element")
+        : only.kind === "remove-element"
+          ? "Restore this " + (kindOf(selected) || "element")
+          : only.kind === "comment" ? "Remove this comment" : "Revert this edit";
+      addAction("revert", ICON.revert, "Revert", () => revertElement(selected), hint);
     }
     if (editing) {
-      actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
-        "Enter to save \u00b7 Esc to cancel"));
-    } else if (kindOf(selected) !== "figure") {
-      const removed = removalOn(selected);
-      const canType = fieldsIn(selected).length > 0 && !removed;
-      actionBar.appendChild(el("span", "flow-diagram-actionbar-hint",
-        canType
-          ? "Type to edit \u00b7 Delete to remove"
-          : removed ? "Delete to restore" : "Delete to remove"));
+      actionBar.appendChild(keycapHint([["Enter", "save"], ["Esc", "cancel"]]));
     }
     if (actionBar.childElementCount === 0) {
       actionBar.hidden = true;
@@ -1465,29 +1482,25 @@ export const DIAGRAM_SCRIPT = `
 
   // --- Figure-level proposal chrome --------------------------------------
   for (const diagram of diagrams) {
-    const showOriginal = diagram.querySelector("[data-flow-show-original]");
-    if (showOriginal) {
-      // The label names what the click will do, and flips on every
-      // activation, so the reader can always tell which view they are in and
-      // how to get back. The accessible name says the same words.
-      const labelSpan = showOriginal.querySelector("span") || showOriginal;
-      const setToggleLabel = (on) => {
-        const text = on ? "Show changes" : "Show original";
-        labelSpan.textContent = text;
-        showOriginal.setAttribute("aria-label", text);
-        showOriginal.setAttribute("title", text);
-        showOriginal.setAttribute("aria-pressed", on ? "true" : "false");
+    // The switch carries the state itself: on means the original is on screen.
+    // Nothing has to be read as a verb and translated into a current view.
+    const modeSwitch = diagram.querySelector("[data-flow-mode]");
+    if (modeSwitch) {
+      const thumb = modeSwitch.firstElementChild;
+      const paintMode = (on) => {
+        modeSwitch.setAttribute("aria-checked", on ? "true" : "false");
+        if (thumb) thumb.style.transform = on ? "translateX(calc(100% - 2px))" : "translateX(0)";
       };
-      setToggleLabel(false);
-      showOriginal.addEventListener("click", (event) => {
+      paintMode(false);
+      modeSwitch.addEventListener("click", (event) => {
         event.stopPropagation();
         const on = !showingOriginal(diagram);
         diagram.toggleAttribute("data-flow-original", on);
-        setToggleLabel(on);
+        paintMode(on);
         paint();
         announce(on ? "Showing the original diagram" : "Showing your changes");
       });
-      diagram.addEventListener("flow-original-reset", () => setToggleLabel(false));
+      diagram.addEventListener("flow-original-reset", () => paintMode(false));
     }
     const revertAll = diagram.querySelector("[data-flow-revert-all]");
     if (revertAll) {

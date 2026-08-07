@@ -1,0 +1,582 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "design(parity): match the approved render exactly on three surfaces [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/components/quick-summary/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "the approved metrics, tones, and hairlines of three surfaces",
+          "from": "a rebuilt grey ramp, looser leading on the small type steps, a wider sidebar gap, and a quick summary with no hairlines",
+          "to": "the grey ramp anchored on the approved shades, the approved leading on the small steps, the approved sidebar gap, and the quick summary's hairlines restored"
+        }
+      ]
+    },
+    {
+      "path": "src/components/table-of-contents/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "the approved metrics, tones, and hairlines of three surfaces",
+          "from": "a rebuilt grey ramp, looser leading on the small type steps, a wider sidebar gap, and a quick summary with no hairlines",
+          "to": "the grey ramp anchored on the approved shades, the approved leading on the small steps, the approved sidebar gap, and the quick summary's hairlines restored"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.css",
+      "propertyDeltas": [
+        {
+          "property": "the approved metrics, tones, and hairlines of three surfaces",
+          "from": "a rebuilt grey ramp, looser leading on the small type steps, a wider sidebar gap, and a quick summary with no hairlines",
+          "to": "the grey ramp anchored on the approved shades, the approved leading on the small steps, the approved sidebar gap, and the quick summary's hairlines restored"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "the approved metrics, tones, and hairlines of three surfaces",
+          "from": "a rebuilt grey ramp, looser leading on the small type steps, a wider sidebar gap, and a quick summary with no hairlines",
+          "to": "the grey ramp anchored on the approved shades, the approved leading on the small steps, the approved sidebar gap, and the quick summary's hairlines restored"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/deck-transform.ts",
+      "propertyDeltas": [
+        {
+          "property": "the approved metrics, tones, and hairlines of three surfaces",
+          "from": "a rebuilt grey ramp, looser leading on the small type steps, a wider sidebar gap, and a quick summary with no hairlines",
+          "to": "the grey ramp anchored on the approved shades, the approved leading on the small steps, the approved sidebar gap, and the quick summary's hairlines restored"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/prose.css",
+      "propertyDeltas": [
+        {
+          "property": "the approved metrics, tones, and hairlines of three surfaces",
+          "from": "a rebuilt grey ramp, looser leading on the small type steps, a wider sidebar gap, and a quick summary with no hairlines",
+          "to": "the grey ramp anchored on the approved shades, the approved leading on the small steps, the approved sidebar gap, and the quick summary's hairlines restored"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/shell.ts",
+      "propertyDeltas": [
+        {
+          "property": "the approved metrics, tones, and hairlines of three surfaces",
+          "from": "a rebuilt grey ramp, looser leading on the small type steps, a wider sidebar gap, and a quick summary with no hairlines",
+          "to": "the grey ramp anchored on the approved shades, the approved leading on the small steps, the approved sidebar gap, and the quick summary's hairlines restored"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__desktop-navigation__desktop__dark.png",
+      "changedPixels": 72362,
+      "before": {
+        "width": 240,
+        "height": 288,
+        "sha256": "88404f8ebf89af8ee1daeb97c8b67a01ca9fad9cb4c07b168fd8034610bb2d10"
+      },
+      "after": {
+        "width": 240,
+        "height": 302,
+        "sha256": "52c01e6154395d1a17b95e944cb68c943a25dc00196bbacfdb90cc8000a3dbdf"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__desktop-navigation__desktop__light.png",
+      "changedPixels": 13528,
+      "before": {
+        "width": 240,
+        "height": 288,
+        "sha256": "a7718a1a0ba93721aefe12d169bc18a0e3d196ca6776d2e4d48c3fd77d42c241"
+      },
+      "after": {
+        "width": 240,
+        "height": 302,
+        "sha256": "f6f539ae838dd3ec3a728d6a5ad7018f4fe17ffe6a457699bdfa42c0976cc4b4"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 573527,
+      "before": {
+        "width": 872,
+        "height": 808,
+        "sha256": "93ebe6fad099e68d0c9081673d7cec22870e766f73c148cf7c34998f7cce4e6f"
+      },
+      "after": {
+        "width": 872,
+        "height": 808,
+        "sha256": "215a3c2fb250b43ae83e2a85c07293ae4014022f2c1f4ff361d9a651590e0bcf"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 73556,
+      "before": {
+        "width": 872,
+        "height": 808,
+        "sha256": "a62cd9aee3fd59f23f6389f5444ba2f0594260901d0efaccde403d764886ce45"
+      },
+      "after": {
+        "width": 872,
+        "height": 808,
+        "sha256": "8cbf4766b883e3a773224a8510996d7e937d8424336e4d593ec5c81dcddac572"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__dark.png",
+      "changedPixels": 209202,
+      "before": {
+        "width": 358,
+        "height": 692,
+        "sha256": "89506ee102b617d5a2f41c7924b8d0b345fe03964552e31360fe3a67bb7ac7d6"
+      },
+      "after": {
+        "width": 350,
+        "height": 692,
+        "sha256": "2cf4b3113607c5cacfeadd76ecbc7919f9040f6b4cdc07d2ea89a59df2267161"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__light.png",
+      "changedPixels": 44563,
+      "before": {
+        "width": 358,
+        "height": 692,
+        "sha256": "7beed78e44d523aed0c5b5b7ab135a2831599f31e705ca6f76320adfb5ab1f98"
+      },
+      "after": {
+        "width": 350,
+        "height": 692,
+        "sha256": "dc2da1e46aeaf882f4fd903bcd07ecb773d0986938eda018c7c94369fed4f9b8"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__dark.png",
+      "changedPixels": 2006549,
+      "before": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "252fe2ad4e4ed10f32286a28dcf903d5f60b905041dae2458f997ea726a6da6d"
+      },
+      "after": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "df6ea8aa57372b28f18d56bea15d9aa7847e0c83da5b0f0bb17c09aa5e24201e"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__light.png",
+      "changedPixels": 139844,
+      "before": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "b627fa85ce91c683e6bce6a72fcbebe394a4c35b38b9d28a62a803b4dc0eaa52"
+      },
+      "after": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "bd1994a2cd377743d6f437f559d288593df7858ae90ed3e78b33d31c5b9320c9"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__mobile-navigation__phone__dark.png",
+      "changedPixels": 17160,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "b6fa0adc06e8cda47563c0aed855d7c4880ad97f52960595fdae6372113a3d25"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "7bf151d2dbb9153ff98faf1a336a14d17c1ce42fb10ce9976d144957e81301d1"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__mobile-navigation__phone__light.png",
+      "changedPixels": 550,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "3b480b31080d865c537549b6b02f70cc61ba1b6a36b3e56a985a42ead9d00eb2"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "108cae659b5b0582d0cd7115309173559abf32dbc38f4076b7c806a4eae9da67"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__desktop__dark.png",
+      "changedPixels": 63012,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "200dd93badfb66dca1e353ccd0248ae73091a936fe40912451c4a94fc7c027c9"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "64245c173f13649330187973d397754f4b67e9e30355879b38f95583f06ef1a3"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__desktop__light.png",
+      "changedPixels": 971,
+      "before": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "2a15658727bbc2d22499f7b26dbe94d1490da46967198158397f7ef9556e310f"
+      },
+      "after": {
+        "width": 1440,
+        "height": 44,
+        "sha256": "7351adbfedb8c5d8d8596e8fdf01e90f65d49606be6490e9118d2d1833a44673"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__phone__dark.png",
+      "changedPixels": 16890,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "f9c294762402a483ede8a5ea447728bd1ca0430209658fba004840ed5aadba2a"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "92ea64900b08cbc9f7e4c6af547745c792c0405c1882737424e2d17293bdaf8d"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "components__shell-header__phone__light.png",
+      "changedPixels": 674,
+      "before": {
+        "width": 390,
+        "height": 44,
+        "sha256": "30aab6551375bb8918a4951c83b5e01263ff4aa0c3d631dd56f0896f006732ec"
+      },
+      "after": {
+        "width": 390,
+        "height": 44,
+        "sha256": "0d321faed0dcb76c679a80c94210259e64a56cd66d731bd31c27241f38b582cf"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__dark.png",
+      "changedPixels": 1126708,
+      "before": {
+        "width": 872,
+        "height": 1293,
+        "sha256": "d5778df0a14615fbdc9809c1f2d4d1dfd07180146f57083f41b0940a56c05c41"
+      },
+      "after": {
+        "width": 872,
+        "height": 1291,
+        "sha256": "0c2e0864aa20998470b7c70de5c63b5bbd23d03efb7b9e711e572e8eeb48c45d"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__light.png",
+      "changedPixels": 333050,
+      "before": {
+        "width": 872,
+        "height": 1293,
+        "sha256": "7b6f500ed7a49267d62f41d69f71faf0ce74a9d989581434153d1b4c00b5a03d"
+      },
+      "after": {
+        "width": 872,
+        "height": 1291,
+        "sha256": "fbfa01d768d18043c4942dad7d39604f0a1b13ff4cb963ab15e3da4b739d0457"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__dark.png",
+      "changedPixels": 579131,
+      "before": {
+        "width": 358,
+        "height": 1620,
+        "sha256": "af978a6774a46adc7630151b49578473946369aaededb0c1fb02390d35852660"
+      },
+      "after": {
+        "width": 350,
+        "height": 1619,
+        "sha256": "810930cdc6dce5f218e331390b76528cf3a04903796df68356079444c4f698e1"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__light.png",
+      "changedPixels": 213172,
+      "before": {
+        "width": 358,
+        "height": 1620,
+        "sha256": "fe7887c13a739584803bf760a54e5162dd850025e6963ded506b97b774f5504e"
+      },
+      "after": {
+        "width": 350,
+        "height": 1619,
+        "sha256": "0883c26880db26634fa9b9b7b39e374152e74f6ceee206ddc011fb57b84c746f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__dark.png",
+      "changedPixels": 2368331,
+      "before": {
+        "width": 872,
+        "height": 2719,
+        "sha256": "33a4ab99f0c024cb54e9ebb3e0d6681e2424eb5f1a90339ec87e85dc79c6745f"
+      },
+      "after": {
+        "width": 872,
+        "height": 2714,
+        "sha256": "d93e5f78293dd51afdf85bb2d613b61b3d7ecc823bba9715e1bcac5ae061f833"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__light.png",
+      "changedPixels": 451773,
+      "before": {
+        "width": 872,
+        "height": 2719,
+        "sha256": "d6ab0d57df7404bf4a0981dd55c0f5747e5afbea0ef22a5964371f8ac81b48e8"
+      },
+      "after": {
+        "width": 872,
+        "height": 2714,
+        "sha256": "05a1f59728aff1ed631e53789cd9026233e0b5e7b3136bcb593439922a28e489"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__dark.png",
+      "changedPixels": 1244053,
+      "before": {
+        "width": 358,
+        "height": 3432,
+        "sha256": "9071b57cb6d25dacb0ef3def95343ec799fe57e91413cf336862b9536ab21d4c"
+      },
+      "after": {
+        "width": 350,
+        "height": 3479,
+        "sha256": "bd15a13a06e3092264180f4e807f99fb0b348e04531ca523e2d6245e6feb1fab"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__light.png",
+      "changedPixels": 470551,
+      "before": {
+        "width": 358,
+        "height": 3432,
+        "sha256": "a89b0e925df30dd17d708c0e368ae526464edbf13a604b02a29b2e603bdab717"
+      },
+      "after": {
+        "width": 350,
+        "height": 3479,
+        "sha256": "a587e3170b44a517ff67b4119a57b688daf9f9e3716c0ce869faff0152c0884f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "deck__mobile-navigation-open__phone__dark.png",
+      "changedPixels": 145319,
+      "before": {
+        "width": 390,
+        "height": 371,
+        "sha256": "3d12c29c8a77c012a681f9fe6f1ba5fddbe5b4e0a4be47fd4474c8735ed7627e"
+      },
+      "after": {
+        "width": 390,
+        "height": 373,
+        "sha256": "3115816e92c6e1bac72e4773d2c7c3c7f033686f42751ec987611c27d3f3f565"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    },
+    {
+      "capture": "deck__mobile-navigation-open__phone__light.png",
+      "changedPixels": 22152,
+      "before": {
+        "width": 390,
+        "height": 371,
+        "sha256": "287180fdedcf41544ef3edd44d1fa0a9a26cae5e85e0db897cd4c80e7741e128"
+      },
+      "after": {
+        "width": 390,
+        "height": 373,
+        "sha256": "db548cfbf773eeb2e78ae77f706ffead6ae909bfbc0641d154abffe561a04b30"
+      },
+      "propertyDeltas": [
+        {
+          "property": "the plan masthead, the quick summary, and the contents",
+          "from": "surfaces that had drifted from the approved render in tone, leading, and position",
+          "to": "surfaces byte-identical to the approved render in both themes"
+        }
+      ]
+    }
+  ]
+}

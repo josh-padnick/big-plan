@@ -23,7 +23,7 @@ loses nothing when the hint never renders.
     top: calc(100% + 0.35rem);
     right: 0;
     z-index: 50;
-    padding: 0.2rem 0.45rem;
+    padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
     background: var(--ink-c);
     color: var(--bg);

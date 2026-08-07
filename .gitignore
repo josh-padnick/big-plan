@@ -5,3 +5,4 @@ test-results/
 playwright-report/
 examples/*.html
 .DS_Store
+.claude/

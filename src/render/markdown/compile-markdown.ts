@@ -103,7 +103,7 @@ const isElement = (node: RootContent): node is Element =>
 // Tailwind utilities remain private styling implementation. The data
 // attribute is the stable behavior-bearing interface used by browser tests.
 const TABLE_WRAPPER_CLASSES = [
-  "mb-5",
+  "mb-6",
   // The container carries the card - border, corners, the scroll box - so it
   // has to end where the columns end. Left block-level it stretched to the
   // reading width and drew a rule across empty space beside a narrow table.

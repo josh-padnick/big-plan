@@ -23,7 +23,7 @@ const BUTTON_BASE_CLASSES =
 // Segmented buttons sit flush and round only where they meet the group's
 // outer corners, so the group needs no overflow clipping and the buttons'
 // hover hints stay visible. The end radius is the group's less its border.
-const TOGGLE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} bg-surface hover:bg-edge first:rounded-l-[0.3125rem] last:rounded-r-[0.3125rem] aria-pressed:bg-edge aria-pressed:text-ink`;
+const TOGGLE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} bg-surface hover:bg-edge first:rounded-l-md last:rounded-r-md aria-pressed:bg-edge aria-pressed:text-ink`;
 // Header summary of the parsed diff; authors opt in per component via the
 // showLineCounts shorthand attribute.
 const DiffStats = ({
@@ -33,7 +33,7 @@ const DiffStats = ({
   readonly addedCount: number;
   readonly removedCount: number;
 }) => (
-  <span className="code-diff-stats inline-flex shrink-0 gap-[0.4rem] text-xs font-semibold">
+  <span className="code-diff-stats inline-flex shrink-0 gap-1.5 text-xs font-semibold">
     <span className="sr-only">
       {`${addedCount} added, ${removedCount} removed`}
     </span>
@@ -84,7 +84,7 @@ const ViewToggleButton = ({
 // server-rendered unified and split views.
 const ViewToggleGroup = () => (
   <span
-    className="code-diff-toggle-group inline-flex rounded-[0.375rem] border border-edge"
+    className="code-diff-toggle-group inline-flex rounded-md border border-edge"
     role="group"
     aria-label="Diff view"
     hidden
@@ -117,7 +117,7 @@ export const CodeDiffHeader = ({
   readonly removedCount: number;
   readonly showLineCounts: boolean;
 }) => (
-  <figcaption className="code-diff-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem]">
+  <figcaption className="code-diff-header flex min-w-0 items-center justify-between gap-3 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
     <FileIdentity filePath={filePath} />
     <span className="code-diff-controls flex shrink-0 items-center gap-3">
       <span className="code-diff-view-group inline-flex items-center gap-2">

@@ -11,17 +11,21 @@
   article [data-callout="note"] {
     --callout-accent: var(--callout-note-c);
     --callout-bg: var(--callout-note-bg);
+    --callout-ink: var(--callout-note-ink);
   }
   article [data-callout="tip"] {
     --callout-accent: var(--callout-tip-c);
     --callout-bg: var(--callout-tip-bg);
+    --callout-ink: var(--callout-tip-ink);
   }
   article [data-callout="warning"] {
     --callout-accent: var(--callout-warning-c);
     --callout-bg: var(--callout-warning-bg);
+    --callout-ink: var(--callout-warning-ink);
   }
   article [data-callout="danger"] {
     --callout-accent: var(--callout-danger-c);
     --callout-bg: var(--callout-danger-bg);
+    --callout-ink: var(--callout-danger-ink);
   }
 }

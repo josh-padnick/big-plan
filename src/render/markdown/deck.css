@@ -25,21 +25,21 @@ stability follow from the layout instead of from hand-tuned insets.
 @layer components {
   article {
     /* Chrome */
-    --deck-toggle-size: 1.35rem;
+    --deck-toggle-size: 1.5rem;
     --deck-toggle-gap: 0.25rem;
     /* The glyph inside the toggle's hit area; keeps the chevron quiet. */
-    --deck-chevron-size: 0.95rem;
+    --deck-chevron-size: 1rem;
 
     /* Designed gaps. Slide-level and sub-slide-level sit at a 2:1 ratio so a
        sub-slide reads as belonging to its parent (Proximity/Contrast). */
     --deck-gap-slide: 1.5rem;
     --deck-gap-subslide: 0.75rem;
-    --deck-gap-part: 3.8rem;
+    --deck-gap-part: 4rem;
 
     /* Header chrome to its body. Small on purpose: the title and the context
        builder under it are one unit (Proximity). */
-    --deck-gap-title-body: 0.35rem;
-    --deck-gap-band-body: 1.3rem;
+    --deck-gap-title-body: 0.375rem;
+    --deck-gap-band-body: 1.5rem;
   }
 
   /*
@@ -51,13 +51,13 @@ stability follow from the layout instead of from hand-tuned insets.
     padding: var(--deck-pad-y) var(--deck-pad-x);
   }
   article .plan-slide.plan-card {
-    --deck-pad-y: 1.25rem;
-    --deck-pad-x: 1.25rem;
+    --deck-pad-y: 1.5rem;
+    --deck-pad-x: 1.5rem;
   }
   @media (width >= 56rem) {
     article .plan-slide.plan-card {
-      --deck-pad-y: 1.9rem;
-      --deck-pad-x: 2.1rem;
+      --deck-pad-y: 2rem;
+      --deck-pad-x: 2rem;
     }
   }
   /* One level tighter than a slide card (Contrast); uniform among sub-slides. */

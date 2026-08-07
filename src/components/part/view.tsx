@@ -23,15 +23,15 @@ export const Part = ({
       data-part
       data-part-title={model.title}
       id={model.id}
-      className="plan-part flex items-baseline gap-3 rounded-[0.6rem] bg-surface px-[1.1rem] py-[0.55rem]"
+      className="plan-part flex items-baseline gap-3 rounded-xl bg-surface px-4 py-2"
     >
       <span
         data-part-number
-        className="text-[0.8125rem] font-bold tracking-[0.1em] whitespace-nowrap uppercase text-accent"
+        className="text-sm font-semibold tracking-caps whitespace-nowrap uppercase text-subtle"
       >
         {number === undefined ? null : `Part ${number}`}
       </span>
-      <span className="text-[1.45rem] leading-tight font-bold text-ink">
+      <span className="text-2xl font-bold tracking-tight text-ink">
         {model.title}
       </span>
     </div>

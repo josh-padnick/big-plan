@@ -17,7 +17,8 @@ import type { CompiledTableOfContents } from "./compile.js";
 const GroupHeader = ({ part }: { readonly part: DocumentOutlinePart }) => (
   <p
     data-table-of-contents-group=""
-    className="table-of-contents-group mt-2.5 mb-0.5 text-xs font-semibold uppercase tracking-[0.1em] text-accent"
+    // approved-metric: the group label's gap to the row above it
+    className="table-of-contents-group mt-[0.625rem] mb-0.5 text-xs font-semibold uppercase tracking-caps text-accent"
   >
     {`[${part.number}] ${part.title}`}
   </p>
@@ -37,10 +38,12 @@ export const TableOfContents = ({
     <nav
       data-table-of-contents
       aria-label="The plan in one look"
+      // approved-metric: the overview's gap to the first part band
       className="table-of-contents mb-10"
     >
       {/* Semantic h2 for chrome only: nested inside the overview nav so it
           is not a deck slide, and sized to match slide-title h2 scale. */}
+      {/* approved-metric: the overview title size */}
       <h2 className="table-of-contents-title m-0 mb-3 border-0 p-0 text-[1.6rem] leading-tight font-semibold text-ink">
         The plan in one look
       </h2>
@@ -59,20 +62,22 @@ export const TableOfContents = ({
             <a
               data-table-of-contents-row
               href={section?.id === undefined ? "#" : `#${section.id}`}
+              // approved-metric: the gap between the row number and its title
               className="table-of-contents-row group -mx-2 grid w-fit max-w-full grid-cols-[2rem_minmax(0,max-content)] items-baseline gap-x-[0.9rem] rounded-md px-2 py-1.5 no-underline hover:bg-[color-mix(in_srgb,var(--ink-c)_4%,transparent)]"
             >
               <span
                 data-table-of-contents-num
-                className="text-xs font-medium text-muted"
+                className="text-xs font-medium text-subtle"
               >
                 {section?.number}
               </span>
               {/* The name turns accent through a group variant; a stylesheet rule
                   on this span would lose to its own text-ink utility. */}
+              {/* approved-metric: the row title size */}
               <span className="table-of-contents-name block text-[0.9375rem] font-semibold text-ink group-hover:text-accent">
                 {entry.section}
               </span>
-              <span className="col-start-2 text-sm text-muted">
+              <span className="col-start-2 text-sm text-subtle">
                 {entry.gist}
               </span>
             </a>

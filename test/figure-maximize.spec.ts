@@ -183,10 +183,9 @@ test("should switch a plain code figure's controls from a resting hover stack to
   expect(maximizeBoxAtRest).not.toBeNull();
   // A resting hover stack lays its controls out top to bottom.
   expect(maximizeBoxAtRest?.y).toBeGreaterThan(copyBoxAtRest?.y ?? 0);
-  const restBackground = await copy.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
-  );
-  expect(restBackground).not.toBe("rgba(0, 0, 0, 0)");
+  // The control is a bare icon at rest, like every other icon in the product;
+  // the stack carries the affordance, not a chip behind each glyph.
+  await expect(copy).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 
   await maximize.click();
   await expect(frame).toHaveAttribute("data-figure-maximized", "");

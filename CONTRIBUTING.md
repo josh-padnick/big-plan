@@ -29,7 +29,7 @@ Push the branch and use the `style-history` job's uploaded artifact to inspect i
 Use that evidence to author an approved manifest, then push the commit so the isolated job can verify it exactly.
 The verifier's diagnostics own the manifest's enforced schema.
 
-See [AGENTS.md](AGENTS.md) for architecture, [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for engineering practices, and [README.md](README.md) for development commands.
+See [AGENTS.md](AGENTS.md) for architecture, [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) for the design scales a visual change picks from, [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for engineering practices, and [README.md](README.md) for development commands.
 
 Wireframe changes must also pass the rendered geometry fence in `test/wireframe-quality.spec.ts`.
 That browser check renders the proof and form-factor showcase documents at their declared device sizes and rejects cramped panes, overlapping regions, dead layout bands, and device-shell mismatches.

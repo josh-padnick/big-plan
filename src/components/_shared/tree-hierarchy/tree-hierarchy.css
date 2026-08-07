@@ -31,7 +31,7 @@
     display: inline-flex;
   }
   article .file-tree-row > svg {
-    color: var(--color-muted);
+    color: var(--color-subtle);
   }
   /* Guides sit well behind the content: indentation already carries the
      structure, so the lines only whisper it. */

@@ -58,6 +58,8 @@ describe("TableOfContents", () => {
     expect(html).toMatch(
       /<h2 class="table-of-contents-title[^"]*">The plan in one look<\/h2>/,
     );
+    // The overview title carries the slide title's own size, which is the
+    // approved value rather than a scale step; deck-transform owns the pair.
     expect(html).toContain("text-[1.6rem]");
     expect(html).not.toMatch(
       /<p class="mb-2 text-\[1\.0625rem\][^"]*">The plan in one look<\/p>/,

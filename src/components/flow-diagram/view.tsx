@@ -48,29 +48,21 @@ import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 // B may regularize them against the product scale.
 
 const BADGE_CLASSES =
-  "flow-diagram-badge ml-[0.4rem] inline-block rounded-full px-2 py-[0.05rem] align-[1px] text-[0.6875rem] font-semibold";
+  "flow-diagram-badge ml-1.5 inline-block rounded-full px-2 py-0.5 align-[1px] text-2xs font-semibold";
 
 const BADGE_TONE_CLASSES: Readonly<Record<"neutral" | "warning", string>> = {
-  neutral:
-    "bg-[color-mix(in_srgb,var(--ink-c)_7%,transparent)] text-[var(--muted-c)]",
-  warning:
-    "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)] text-[var(--callout-warning-c)]",
+  neutral: "bg-surface text-muted",
+  warning: "bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]",
 };
 
-const NODE_TONE_CLASSES: Readonly<
-  Record<CompiledFlowDiagramNode["tone"], string>
-> = {
-  neutral: "border-edge bg-surface",
-  source:
-    "border-[color-mix(in_srgb,var(--accent-c)_38%,var(--edge-c))] bg-[color-mix(in_srgb,var(--accent-c)_10%,transparent)]",
-  destination:
-    "border-[color-mix(in_srgb,var(--callout-note-c)_35%,var(--edge-c))] bg-[color-mix(in_srgb,var(--callout-note-c)_10%,transparent)]",
-};
+// A node's tone is a palette pairing - ground, label ink, and a secondary ink
+// from the same hue - so the stylesheet owns it through the tone attribute and
+// no utility here can hand a tinted card a grey label.
 
-const LABEL_CLASSES = "block text-sm font-semibold text-ink";
+const LABEL_CLASSES = "block text-sm font-semibold";
 
 const EDGE_LABEL_CLASSES =
-  "absolute -top-[1.15rem] left-1/2 -translate-x-1/2 text-[0.6875rem] whitespace-nowrap text-muted";
+  "absolute -top-[1.15rem] left-1/2 -translate-x-1/2 text-2xs whitespace-nowrap text-muted";
 
 // Grid template column widths: card columns size to content, connector
 // columns hold a verb label without crowding it, and a fork column is
@@ -122,7 +114,7 @@ const Node = ({
     data-flow-diagram-tone={node.tone}
     data-flow-node={node.id}
     data-flow-in-stage={stage.id}
-    className={`flow-diagram-node rounded-lg border px-[0.85rem] py-2 leading-normal ${NODE_TONE_CLASSES[node.tone]}${spaced ? " my-[0.275rem]" : ""}`}
+    className={`flow-diagram-node rounded-lg border border-edge px-3 py-2 leading-normal${spaced ? " my-1" : ""}`}
     style={style}
     {...targetProps({
       kind: "node",
@@ -152,16 +144,13 @@ const Node = ({
     {node.code === undefined ? null : (
       <code
         data-flow-field="code"
-        className="flow-diagram-node-code block rounded-none border-0 bg-transparent p-0 font-mono text-xs text-muted"
+        className="flow-diagram-node-code block rounded-none border-0 bg-transparent p-0 font-mono text-xs"
       >
         {node.code}
       </code>
     )}
     {node.body.length === 0 ? null : (
-      <span
-        data-flow-field="body"
-        className="mt-[0.1rem] block text-[0.8125rem] text-muted"
-      >
+      <span data-flow-field="body" className="mt-0.5 block text-sm text-muted">
         {hastContentToReact(node.body)}
       </span>
     )}
@@ -214,21 +203,15 @@ const branchPosition = ({
 }): "first" | "middle" | "last" =>
   index === 0 ? "first" : index === count - 1 ? "last" : "middle";
 
-// A hairline between control groups, so "2 notes Show original Revert all
-// minus 100% plus Fit Maximize" reads as four units instead of one run-on.
-const ToolbarSeparator = ({ id }: { readonly id?: string }) => (
-  <span
-    className="flow-diagram-toolbar-sep"
-    aria-hidden
-    {...(id === undefined ? {} : { [id]: "" })}
-  />
-);
-
-const CONTROL_CLASSES =
-  "figure-control inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md border-0 bg-transparent px-1 text-muted transition-colors hover:bg-edge hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
-
+// approved-metric: the 36 pixel control box, which is the touch-target floor a
+// browser test holds for every toolbar control.
 const VIEWER_CONTROL_CLASSES =
-  "figure-control inline-flex h-9 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-4";
+  "figure-control inline-flex h-9 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+
+// A bounded group: the border and the shared ground say these controls belong
+// together, so no separator has to say it for them.
+const TOOLBAR_GROUP_CLASSES =
+  "inline-flex h-9 shrink-0 items-center overflow-hidden rounded-md border border-edge bg-raised";
 
 const IconControl = ({
   icon,
@@ -260,14 +243,14 @@ const ViewerControls = () => (
     hidden
   >
     <span
-      className="flow-diagram-zoom inline-flex shrink-0 items-center overflow-hidden rounded-md border border-edge bg-paper"
+      className={`flow-diagram-zoom ${TOOLBAR_GROUP_CLASSES}`}
       role="group"
       aria-label="Diagram zoom"
     >
       <IconControl icon={MINUS_ICON} label="Zoom out" action="out" />
       <button
         type="button"
-        className={`${VIEWER_CONTROL_CLASSES} flow-diagram-zoom-readout min-w-14 border-x border-edge px-2 font-sans text-xs tabular-nums`}
+        className={`${VIEWER_CONTROL_CLASSES} flow-diagram-zoom-readout min-w-12 border-x border-edge px-2 font-sans text-2xs tabular-nums`}
         aria-label="Reset zoom to 100%"
         data-tooltip="Reset zoom to 100%"
         data-flow-zoom="reset"
@@ -277,12 +260,11 @@ const ViewerControls = () => (
       </button>
       <IconControl icon={PLUS_ICON} label="Zoom in" action="in" />
     </span>
-    <ToolbarSeparator />
     {/* Fit says its word: beside a maximize control, a second frame-shaped
         glyph reads as a second maximize. */}
     <button
       type="button"
-      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-fit gap-1.5 rounded-md border border-edge bg-paper px-2.5 font-sans text-xs font-semibold`}
+      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-fit gap-1.5 rounded-md border border-edge bg-raised px-3 font-sans text-2xs font-semibold`}
       aria-label="Fit diagram to width"
       aria-pressed="false"
       data-tooltip="Fit diagram to width"
@@ -291,49 +273,52 @@ const ViewerControls = () => (
       {lucideIconToReact({ icon: SCAN_ICON, hidden: false })}
       <span>Fit</span>
     </button>
-    <ToolbarSeparator />
     <MaximizeButton subject="diagram" size="toolbar" />
   </span>
 );
 
+// Showing the original is one either-or state, so it is a switch. A switch
+// shows which state is on without the reader translating a verb, and it is the
+// same control the file-tree diff uses for the same kind of question.
+const MODE_SWITCH_CLASSES =
+  "flow-diagram-mode-switch inline-flex h-3.5 w-6 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-raised transition-all outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 aria-checked:bg-accent aria-[checked=false]:bg-edge";
+const MODE_THUMB_CLASSES =
+  "flow-diagram-mode-thumb pointer-events-none block size-3 rounded-full bg-paper ring-0 transition-transform";
+
 // Proposal chrome: dormant until the reviewer makes a proposal, because a
-// diagram nobody has marked up should show no control it cannot act on.
+// diagram nobody has marked up should show no control it cannot act on. It
+// sits directly after the feedback action rather than floating between margins.
 const ProposalControls = () => (
-  <>
+  <span
+    className="flow-diagram-proposal-group ml-2 inline-flex items-center gap-1"
+    data-flow-proposal-group
+    hidden
+  >
     <span
-      className="flow-diagram-total inline-flex shrink-0 items-center rounded-full px-2 py-[0.05rem] font-sans text-[0.6875rem] font-semibold"
-      data-flow-total
-      hidden
-    />
-    <span
-      className="flow-diagram-proposal-group inline-flex items-center gap-0.5"
-      data-flow-proposal-group
-      hidden
+      className={`flow-diagram-mode ${VIEWER_CONTROL_CLASSES} gap-2 rounded-md px-3 font-sans text-2xs font-semibold`}
     >
-      <ToolbarSeparator />
+      <span>Show original</span>
       <button
         type="button"
-        className={CONTROL_CLASSES}
-        data-flow-show-original
-        aria-pressed="false"
+        role="switch"
+        aria-checked="false"
+        aria-label="Show original"
+        className={MODE_SWITCH_CLASSES}
+        data-flow-mode
       >
-        <span className="font-sans text-[0.6875rem] font-semibold">
-          Show original
-        </span>
-      </button>
-      <button
-        type="button"
-        className={CONTROL_CLASSES}
-        data-flow-revert-all
-        hidden
-      >
-        {lucideIconToReact({ icon: ROTATE_CCW_ICON, hidden: false })}
-        <span className="font-sans text-[0.6875rem] font-semibold">
-          Revert all
-        </span>
+        <span className={MODE_THUMB_CLASSES} />
       </button>
     </span>
-  </>
+    <button
+      type="button"
+      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-revert-all w-9 rounded-md px-0`}
+      data-flow-revert-all
+      aria-label="Revert all changes"
+      data-tooltip="Revert all changes"
+    >
+      {lucideIconToReact({ icon: ROTATE_CCW_ICON, hidden: false })}
+    </button>
+  </span>
 );
 
 // The connectors leaving one stage, in the column between it and the next.
@@ -427,7 +412,7 @@ const connectorsLeaving = ({
             // verb floats over that right half.
             <span
               data-flow-field="label"
-              className="absolute top-[calc(50%-1.35rem)] left-3/4 -translate-x-1/2 text-[0.6875rem] whitespace-nowrap text-muted"
+              className="absolute top-[calc(50%-1.35rem)] left-3/4 -translate-x-1/2 text-2xs whitespace-nowrap text-muted"
             >
               {edge.label}
             </span>
@@ -456,7 +441,7 @@ const StageHeader = ({
     // from here rather than from the accessible name, which a proposal
     // rewrites.
     data-flow-where={`stage ${stageIndex + 1} of ${stageCount}`}
-    className="m-0 mb-2 self-end text-[0.6875rem] font-semibold tracking-[0.09em] uppercase text-muted"
+    className="m-0 mb-2 self-end text-2xs font-semibold tracking-caps uppercase text-subtle"
     style={style}
     {...targetProps({
       kind: "stage",
@@ -505,7 +490,7 @@ export const FlowDiagram = ({
   const lastStageTitle = model.stages[lastStage]?.title ?? "";
   return (
     <figure
-      className="flow-diagram relative mb-5 min-w-0"
+      className="flow-diagram relative mb-6 min-w-0"
       data-flow-diagram
       // The collector names the diagram it belongs to from here, not from the
       // accessible name: the shared maximize leg rewrites that label while the
@@ -588,7 +573,7 @@ export const FlowDiagram = ({
       {model.footer === undefined || model.footerAnchor === undefined ? null : (
         <figcaption
           data-flow-diagram-footer
-          className="mt-[0.9rem] mb-0 text-center text-[0.8125rem] text-muted"
+          className="mt-4 mb-0 text-center text-sm text-muted"
           {...targetProps({
             kind: "footer",
             anchor: model.footerAnchor,

@@ -19,7 +19,7 @@ import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 // /* off-scale */ Phase A preserves the legacy header/body radii, 0.6rem
 // body padding, and annotation-rail width exactly for the zero-pixel contract.
 const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
-  <figcaption className="code-snippet-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem]">
+  <figcaption className="code-snippet-header flex min-w-0 items-center justify-between gap-3 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
     {filePath === undefined ? (
       <span className="code-snippet-label text-xs font-semibold text-muted">
         Code snippet
@@ -52,7 +52,7 @@ const CodeLine = ({
     className={`code-snippet-line grid min-w-max grid-cols-[4rem_minmax(max-content,1fr)] whitespace-pre ${
       annotated === undefined
         ? ""
-        : "relative bg-[color-mix(in_srgb,var(--annotation-c)_8%,transparent)] before:absolute before:inset-y-0 before:left-0 before:w-[0.1875rem] before:bg-[var(--annotation-c)] before:content-[''] [&.annotation-hover]:bg-[color-mix(in_srgb,var(--annotation-c)_16%,transparent)]"
+        : "relative bg-[color-mix(in_srgb,var(--annotation-c)_8%,transparent)] before:absolute before:inset-y-0 before:left-0 before:w-[0.1875rem] before:bg-[var(--annotation-rail-c)] before:content-[''] [&.annotation-hover]:bg-[color-mix(in_srgb,var(--annotation-c)_16%,transparent)]"
     } ${annotated?.includes("start") === true ? "before:rounded-t-full" : ""} ${
       annotated?.includes("end") === true ? "before:rounded-b-full" : ""
     }`}
@@ -62,13 +62,13 @@ const CodeLine = ({
       : { "data-snippet-annotated": annotated })}
   >
     <span
-      className="code-snippet-line-number select-none border-r border-edge px-[0.65rem] text-right text-muted"
+      className="code-snippet-line-number select-none border-r border-edge px-3 text-right text-subtle"
       aria-hidden="true"
       data-snippet-line-number={lineNumber}
     >
       {String(lineNumber)}
     </span>
-    <span className="code-snippet-line-content inline-block min-w-full px-[1rem]">
+    <span className="code-snippet-line-content inline-block min-w-full px-4">
       {hastContentToReact(line)}
     </span>
   </div>
@@ -83,7 +83,17 @@ const annotationCard = (annotation: CompiledCodeSnippetAnnotation) => (
         : `Lines ${annotation.start}-${annotation.end}`
     }
     children={annotation.children}
-    className={["code-snippet-annotation", "mx-3", "my-2"]}
+    // The card carries the same rail as the lines it refers to, at the same
+    // width and the same left edge, so the spine runs unbroken from the first
+    // covered line to the end of the note.
+    className={[
+      "code-snippet-annotation",
+      "my-2",
+      "mr-3",
+      "rounded-l-none",
+      "border-l-[0.1875rem]",
+      "[border-left-color:var(--annotation-rail-c)]",
+    ]}
     dataProperties={{
       "data-snippet-annotation": annotation.sourceValue,
       "data-snippet-anchor-end": annotation.end,
@@ -140,7 +150,7 @@ export const CodeSnippet = ({
   readonly model: CompiledCodeSnippet;
 }) => (
   <figure
-    className="code-snippet mb-5 min-w-0 rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-[0.8125rem] leading-[1.5]"
+    className="code-snippet mb-6 min-w-0 rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-sm"
     data-code-snippet=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "code" }}
     {...(model.filePath === undefined
@@ -152,7 +162,7 @@ export const CodeSnippet = ({
       {...(model.filePath === undefined ? {} : { filePath: model.filePath })}
     />
     <div
-      className="code-snippet-body min-w-0 overflow-x-auto rounded-b-[calc(var(--radius-md)-1px)] py-[0.6rem]"
+      className="code-snippet-body min-w-0 overflow-x-auto rounded-b-md py-2"
       {...{ [BODY_ATTRIBUTE]: "" }}
     >
       <SnippetRows

@@ -32,9 +32,9 @@ const BUTTON_BASE_CLASSES =
 // Segmented buttons sit flush and round only where they meet the group's
 // outer corners, so the group needs no overflow clipping and the buttons'
 // hover hints stay visible. The end radius is the group's less its border.
-const TOGGLE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} bg-surface hover:bg-edge first:rounded-l-[0.3125rem] last:rounded-r-[0.3125rem] aria-pressed:bg-edge aria-pressed:text-ink`;
+const TOGGLE_BUTTON_CLASSES = `${BUTTON_BASE_CLASSES} bg-surface hover:bg-edge first:rounded-l-md last:rounded-r-md aria-pressed:bg-edge aria-pressed:text-ink`;
 // Shared by the combined view and both state-pane bodies.
-const BODY_CLASSES = "file-tree-body overflow-x-auto px-3 py-2.5";
+const BODY_CLASSES = "file-tree-body overflow-x-auto px-3 py-3";
 
 const ViewToggleButton = ({
   view,
@@ -64,7 +64,7 @@ const ViewToggleButton = ({
 
 const ViewToggleGroup = () => (
   <span
-    className="file-tree-diff-toggle-group inline-flex shrink-0 rounded-[0.375rem] border border-edge"
+    className="file-tree-diff-toggle-group inline-flex shrink-0 rounded-md border border-edge"
     role="group"
     aria-label="File tree diff view"
     hidden
@@ -91,7 +91,7 @@ const ChangeSummary = ({
 }: {
   readonly entries: ReadonlyArray<TreeEntry>;
 }) => (
-  <span className="file-tree-diff-summary inline-flex min-w-0 shrink-0 items-center gap-1 font-sans text-[0.6875rem] font-semibold">
+  <span className="file-tree-diff-summary inline-flex min-w-0 shrink-0 items-center gap-1 font-sans text-2xs font-semibold">
     {treeChangeCountsToReact(
       countTreeChanges({ entries, badgeForEntry: (entry) => entry.badge }),
     )}
@@ -105,7 +105,7 @@ const DiffHeader = ({
   readonly title: string | undefined;
   readonly entries: ReadonlyArray<TreeEntry>;
 }) => (
-  <figcaption className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-3 border-b border-edge bg-[var(--diff-header-bg)] px-[0.65rem] py-[0.4rem] font-sans text-sm font-semibold text-ink">
+  <figcaption className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-3 bg-[var(--diff-header-bg)] px-3 py-1.5 font-sans text-sm font-semibold text-ink">
     {title === undefined ? null : (
       <span className="file-tree-diff-title truncate">{title}</span>
     )}
@@ -147,7 +147,7 @@ const CombinedView = ({
 // primary -> accent, input -> edge, background -> paper. State transitions are
 // driven by the live review application instead of Radix.
 const SWITCH_CLASSES =
-  "file-tree-changes-toggle inline-flex h-3.5 w-6 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 data-[state=checked]:bg-accent data-[state=unchecked]:bg-edge";
+  "file-tree-changes-toggle inline-flex h-3.5 w-6 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-raised transition-all outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 data-[state=checked]:bg-accent data-[state=unchecked]:bg-edge";
 const SWITCH_THUMB_CLASSES =
   "pointer-events-none block size-3 rounded-full bg-paper ring-0 transition-transform data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0";
 
@@ -275,7 +275,7 @@ export const FileTreeDiff = ({
   readonly model: CompiledFileTreeDiff;
 }) => (
   <figure
-    className="file-tree file-tree-diff mb-5 min-w-0 overflow-hidden rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-[0.8125rem] leading-[1.5]"
+    className="file-tree file-tree-diff mb-6 min-w-0 overflow-hidden rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-sm"
     data-file-tree-diff=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "tree" }}
     data-tree-view="combined"

@@ -116,7 +116,7 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
           activating the link reveals the field with the viewer script
           disabled. The shell enhances that reachable authored state with
           cancellation, confirmation, and answer recording. */}
-      <div className="decision-proposal mt-2.5" data-decision-proposal="">
+      <div className="decision-proposal mt-3" data-decision-proposal="">
         <label className="sr-only" htmlFor={textId}>
           {"Proposed approach"}
         </label>
@@ -149,7 +149,7 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
 const AnswerControls = () => (
   <>
     <div
-      className="decision-footer flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-edge px-5 py-4"
+      className="decision-footer flex flex-wrap items-center justify-end gap-x-4 gap-y-2 px-6 py-4"
       data-decision-footer=""
     >
       <p
@@ -177,7 +177,7 @@ const AnswerControls = () => (
       </button>
     </div>
     <div
-      className="decision-answer gap-3 border-t border-edge px-5 py-4"
+      className="decision-answer gap-3 px-6 py-4"
       data-decision-answer=""
       role="status"
       hidden
@@ -189,11 +189,11 @@ const AnswerControls = () => (
         {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="m-0 text-base font-semibold text-ink">
+        <p className="m-0 text-base font-semibold text-[var(--decision-pro-ink)]">
           <span data-decision-answer-lead="">{"Answer recorded"}</span>
           <span className="sr-only" data-decision-answer-title="" />
         </p>
-        <p className="m-0 mt-0.5 text-xs text-muted">
+        <p className="m-0 mt-0.5 text-xs text-[var(--decision-pro-c)]">
           {"Noted for this reading session."}
         </p>
       </div>
@@ -231,8 +231,8 @@ const Reversibility = ({ model }: { readonly model: CompiledDecisionCard }) => {
   const reversibility = model.reversibility;
   if (reversibility === undefined) return null;
   return (
-    <div className="decision-reversibility border-t border-edge px-5 py-4">
-      <p className="m-0 text-xs font-semibold tracking-wide text-muted uppercase">
+    <div className="decision-reversibility bg-paper px-6 py-4">
+      <p className="m-0 text-xs font-semibold tracking-caps text-muted uppercase">
         {`Reversibility · ${reversibility.rating.replace("-", " ")}`}
       </p>
       <div className="mt-1 text-sm text-ink [&>:last-child]:mb-0">
@@ -244,7 +244,7 @@ const Reversibility = ({ model }: { readonly model: CompiledDecisionCard }) => {
 
 const Details = ({ model }: { readonly model: CompiledDecisionCard }) =>
   model.detail.length === 0 ? null : (
-    <details className="decision-long-details border-t border-edge px-5">
+    <details className="decision-long-details bg-paper px-6">
       <summary className="decision-details-summary flex min-h-12 w-fit cursor-pointer items-center text-sm font-semibold">
         {"More detail"}
       </summary>
@@ -264,7 +264,7 @@ export const DecisionCard = ({
   return (
     <figure
       id={model.id}
-      className="decision mb-5 min-w-0 overflow-hidden rounded-md border border-edge bg-paper"
+      className="decision mb-6 min-w-0 overflow-hidden rounded-xl border border-edge bg-paper shadow-raised"
       data-decision=""
       data-decision-status={model.status}
       data-decision-layout={model.layout}
@@ -272,9 +272,9 @@ export const DecisionCard = ({
       data-decision-interaction={model.interaction}
       {...(answerable ? { "data-decision-selector": "" } : {})}
     >
-      <figcaption className="decision-zone-question bg-header px-5 py-4">
+      <figcaption className="decision-zone-question bg-header px-6 py-4">
         {model.layout === "rows" ? (
-          <p className="decision-eyebrow m-0 text-xs font-bold tracking-wider text-accent uppercase">
+          <p className="decision-eyebrow m-0 text-xs font-semibold tracking-caps text-subtle uppercase">
             {"Decision"}
           </p>
         ) : null}
@@ -301,14 +301,14 @@ export const DecisionCard = ({
         </p>
       </figcaption>
       {model.context.length === 0 ? null : (
-        <div className="decision-zone-question bg-header px-5 pb-4 text-base [&>:last-child]:mb-0">
+        <div className="decision-zone-question bg-header px-6 pb-4 text-base [&>:last-child]:mb-0">
           {hastContentToReact(model.context)}
         </div>
       )}
       <fieldset className="decision-fieldset m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">{model.question}</legend>
         <div
-          className="decision-zone-compare border-t border-edge bg-paper"
+          className="decision-zone-compare bg-paper"
           data-decision-compare=""
         >
           <Comparison model={model} answerable={answerable} />
@@ -318,7 +318,7 @@ export const DecisionCard = ({
             shapes already carry their reasoning in line. */}
         {isMatrixLayout(model) ? (
           <div
-            className="decision-zone-rationale border-t border-edge bg-surface px-5 py-3.5"
+            className="decision-zone-rationale bg-surface px-6 py-4"
             data-decision-explain=""
           >
             <div
@@ -341,8 +341,8 @@ export const DecisionCard = ({
           <div
             className={
               model.layout === "rows"
-                ? "decision-zone-propose bg-paper px-5 pb-4"
-                : "decision-zone-propose border-t border-edge bg-surface px-5 py-3"
+                ? "decision-zone-propose bg-paper px-6 pb-4"
+                : "decision-zone-propose bg-surface px-6 py-3"
             }
           >
             <ProposeLink model={model} />

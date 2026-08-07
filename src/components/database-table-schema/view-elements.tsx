@@ -22,10 +22,10 @@ export const SchemaCode = ({
 );
 
 const SCHEMA_CELL_CLASSES = {
-  name: "table-schema-cell-name font-mono text-[0.8125rem] font-semibold",
-  type: "table-schema-cell-type font-mono text-[0.8125rem]",
-  constraints: "table-schema-cell-constraints text-[0.8125rem]",
-  default: "table-schema-cell-default font-mono text-[0.8125rem]",
+  name: "table-schema-cell-name font-mono text-sm font-semibold",
+  type: "table-schema-cell-type font-mono text-sm",
+  constraints: "table-schema-cell-constraints text-sm",
+  default: "table-schema-cell-default font-mono text-sm",
   comment: "table-schema-cell-comment text-xs leading-snug text-muted",
 } as const;
 
@@ -48,7 +48,7 @@ export const SchemaCell = ({
 const MUTED_TEXT_CLASSES = {
   inline: "text-muted",
   note: "block text-xs leading-snug text-muted",
-  headerNote: "table-schema-note block pb-[0.15rem] text-xs text-muted",
+  headerNote: "table-schema-note block pb-0.5 text-xs text-muted",
   indexDefinition:
     "table-schema-index-definition block overflow-x-auto text-xs text-muted",
   refArrow: "table-schema-ref-arrow text-muted",

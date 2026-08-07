@@ -33,7 +33,7 @@ export type TreeFoldTone = "standard" | "quiet";
 // neighboring controls. Hover restores full contrast either way.
 const FOLD_TONE_CLASSES: Readonly<Record<TreeFoldTone, string>> = {
   standard: "text-muted",
-  quiet: "text-muted/50",
+  quiet: "text-subtle",
 };
 
 // Statuses read the way git tooling presents them: a changed file's leading
@@ -96,7 +96,7 @@ const DirectorySummary = ({
     return null;
   }
   return (
-    <span className="file-tree-dir-summary items-center gap-1 font-sans text-[0.6875rem] font-semibold">
+    <span className="file-tree-dir-summary items-center gap-1 font-sans text-2xs font-semibold">
       {parts}
     </span>
   );
@@ -216,7 +216,7 @@ const NoteElement = ({
   // scripts the same disclosure still opens the note in place.
   return (
     <details className="file-tree-note-hint group" data-info-popover>
-      <summary className="inline-flex cursor-help text-muted group-open:text-ink hover:text-ink [&>svg]:size-3.5 [&>svg]:shrink-0">
+      <summary className="inline-flex translate-y-px cursor-help text-muted group-open:text-ink hover:text-ink [&>svg]:size-3 [&>svg]:shrink-0">
         {lucideIconToReact({ icon: MESSAGE_SQUARE_ICON, hidden: false })}
         <span className="sr-only">{"Note"}</span>
       </summary>
@@ -244,7 +244,7 @@ const EntryRow = ({
   readonly badgeForEntry: (entry: TreeEntry) => TreeBadge | undefined;
 }) => (
   <div
-    className="file-tree-row relative flex min-h-6 items-center gap-[0.35rem] whitespace-nowrap [&>svg]:size-3.5 [&>svg]:shrink-0"
+    className="file-tree-row relative flex min-h-6 items-center gap-1.5 whitespace-nowrap [&>svg]:size-3.5 [&>svg]:shrink-0"
     data-tree-entry={entry.kind}
     {...(badge === undefined ? {} : { "data-tree-badge": badge })}
   >
@@ -262,7 +262,7 @@ const EntryRow = ({
       {name}
     </span>
     {badge === undefined ? null : (
-      <span className="file-tree-label font-sans text-[0.6875rem] font-semibold">
+      <span className="file-tree-label font-sans text-2xs font-semibold">
         {BADGE_LABELS[badge]}
       </span>
     )}
@@ -288,7 +288,7 @@ export const TreeHierarchy = ({
   <ul
     className={
       nested
-        ? "file-tree-children m-0 ml-[0.45rem] list-none border-l border-edge pl-[1.05rem]"
+        ? "file-tree-children m-0 ml-2 list-none border-l border-edge pl-4"
         : "file-tree-list m-0 min-w-max list-none p-0"
     }
   >

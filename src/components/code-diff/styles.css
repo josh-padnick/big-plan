@@ -59,10 +59,12 @@
   article [data-annotation-anchor] {
     /* The annotation's accent bar climbs through its covered lines as a
        spine; an inset shadow adds no layout shift next to unmarked rows.
+       The spine takes the lighter step of the note ramp: it marks the run
+       without competing with the code it points at.
        An around-10% wash blends over the semantic add/remove tints so covered
        lines read as annotated without losing their diff identity, and the
        card's stronger background stays the loudest element. */
-    box-shadow: inset 4px 0 0 var(--annotation-c);
+    box-shadow: inset 3px 0 0 var(--annotation-rail-c);
     background: color-mix(
       in srgb,
       var(--annotation-c) 8%,
@@ -96,8 +98,10 @@
       var(--diff-remove-bg)
     );
   }
+  /* The card continues the spine that runs through the lines it covers:
+     same width, same colour, same left edge, so the pair reads as one bar. */
   article .code-diff-annotation-surround {
-    border-left-color: var(--annotation-c);
+    border-left-color: var(--annotation-rail-c);
     background: color-mix(
       in srgb,
       var(--annotation-c) 8%,

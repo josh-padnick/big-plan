@@ -34,7 +34,7 @@
   article [data-figure-focus-quiet]:focus-visible {
     outline: none;
     background: transparent;
-    color: var(--muted-c);
+    color: var(--subtle-c);
     box-shadow: none;
   }
   /* Override invariant: quiet focus suppresses the resting focus tooltip. */
@@ -120,7 +120,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
-    padding: 1.5rem 1.75rem 3rem;
+    padding: 1.5rem 2rem 3rem;
   }
   /* A family whose content is several siblings after its caption marks no
        body; the panel then scrolls as a whole and pads its own floor.
@@ -140,7 +140,7 @@
     flex-direction: row;
     border-bottom: 1px solid var(--edge-c);
     background: var(--diff-header-bg);
-    padding: 0.3rem 0.5rem;
+    padding: 0.25rem 0.5rem;
   }
   /* The resting hover stack keeps its filled chip so a floating icon reads
        against arbitrary code beneath it; a promoted control sits on its own

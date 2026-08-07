@@ -58,6 +58,52 @@ test("should preserve authored markup when an edit is canceled or cleared", asyn
   await expect(body).not.toHaveAttribute("data-flow-edited");
 });
 
+test("should hold the original-view switch state and revert every proposal", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const label = diagram.locator(
+    '[data-flow-node="authored"] [data-flow-field="label"]',
+  );
+  const modeSwitch = diagram.locator("[data-flow-mode]");
+  const revertAll = diagram.locator("[data-flow-revert-all]");
+
+  // Both proposal controls stay out of the way until there is a proposal.
+  await expect(modeSwitch).toBeHidden();
+  await expect(revertAll).toBeHidden();
+
+  await label.dblclick();
+  await label.fill("Author carefully");
+  await page.getByRole("heading").first().click();
+  await expect(modeSwitch).toBeVisible();
+  await expect(revertAll).toBeVisible();
+  await expect(revertAll).toHaveAttribute("aria-label", "Revert all changes");
+
+  // The switch reports its own state, so a reader can see which view is on
+  // without reading the diagram to work it out.
+  await expect(modeSwitch).toHaveAttribute("aria-checked", "false");
+  await modeSwitch.click();
+  await expect(modeSwitch).toHaveAttribute("aria-checked", "true");
+  await expect(diagram).toHaveAttribute("data-flow-original", "");
+  await expect(label).toHaveText("Author once");
+
+  await modeSwitch.click();
+  await expect(modeSwitch).toHaveAttribute("aria-checked", "false");
+  await expect(label).toHaveText("Author carefully");
+
+  // Reverting the last proposal returns the diagram to its authored view and
+  // clears the switch with it, so the control never outlives its subject.
+  await modeSwitch.click();
+  await revertAll.click();
+  await expect(label).toHaveText("Author once");
+  await expect(diagram).not.toHaveAttribute("data-flow-original");
+  await expect(modeSwitch).toBeHidden();
+  await expect(revertAll).toBeHidden();
+});
+
 test("should preserve work when focus moves outside the diagram", async ({
   page,
   flowDiagramViewerUrl,
@@ -75,7 +121,9 @@ test("should preserve work when focus moves outside the diagram", async ({
   await outside.click();
   await expect(label).toHaveText("Author carefully");
   await expect(label).toHaveAttribute("data-flow-edited", "");
-  await expect(diagram.locator("[data-flow-total]")).toHaveText("1 note");
+  await expect(diagram.locator(".flow-collector-add").first()).toHaveText(
+    "Add 1 note to plan feedback",
+  );
 
   await node.click();
   await diagram.locator('[data-flow-action="comment"]').click();
@@ -85,7 +133,9 @@ test("should preserve work when focus moves outside the diagram", async ({
   await expect(compose.locator("textarea")).toHaveValue(
     "Keep this unfinished note.",
   );
-  await expect(diagram.locator("[data-flow-total]")).toHaveText("1 note");
+  await expect(diagram.locator(".flow-collector-add").first()).toHaveText(
+    "Add 1 note to plan feedback",
+  );
 });
 
 test("should preserve work across diagram interaction transitions", async ({
@@ -123,7 +173,9 @@ test("should preserve work across diagram interaction transitions", async ({
   await expect(compose.locator(".flow-diagram-compose-target")).toHaveText(
     'Comment on node "Generate"',
   );
-  await expect(diagram.locator("[data-flow-total]")).toHaveText("3 notes");
+  await expect(diagram.locator(".flow-collector-add").first()).toHaveText(
+    "Add 3 notes to plan feedback",
+  );
 });
 
 test("should leave toolbar keyboard activation to the focused control", async ({
@@ -407,14 +459,19 @@ test("should preserve a panned canvas when feedback repaints it", async ({
   const unlabeledEdge = diagram.locator(
     '[data-flow-edge-from="generator"][data-flow-edge-to="cli"]',
   );
+  // Revert appears only once there is something to revert, and its hint names
+  // the outcome for the state the element is actually in.
   await unlabeledEdge.click();
-  await expect(diagram.locator(".flow-diagram-actionbar-hint")).toHaveText(
-    "Delete to remove",
+  const revertAction = diagram.locator('[data-flow-action="revert"]');
+  await expect(revertAction).toHaveCount(0);
+  await page.keyboard.press("Delete");
+  await expect(revertAction).toHaveText("Revert");
+  await expect(revertAction).toHaveAttribute(
+    "data-tooltip",
+    "Restore this edge",
   );
   await page.keyboard.press("Delete");
-  await expect(diagram.locator(".flow-diagram-actionbar-hint")).toHaveText(
-    "Delete to restore",
-  );
+  await expect(revertAction).toHaveCount(0);
 });
 
 test("should preserve diagram drafts when undoing review text", async ({
@@ -425,7 +482,7 @@ test("should preserve diagram drafts when undoing review text", async ({
 
   const diagram = page.locator("[data-flow-diagram]").first();
   const node = diagram.locator('[data-flow-node="authored"]');
-  const total = diagram.locator("[data-flow-total]");
+  const total = diagram.locator(".flow-collector-add").first();
   const undoShortcut = process.platform === "darwin" ? "Meta+z" : "Control+z";
 
   await node.click();
@@ -437,7 +494,7 @@ test("should preserve diagram drafts when undoing review text", async ({
     .locator(".flow-diagram-compose")
     .getByRole("button", { name: "Comment", exact: true })
     .click();
-  await expect(total).toHaveText("1 note");
+  await expect(total).toHaveText("Add 1 note to plan feedback");
 
   await test.step("use native undo in the diagram composer", async () => {
     await node.click();
@@ -448,7 +505,7 @@ test("should preserve diagram drafts when undoing review text", async ({
     await expect(input).toHaveValue("Composer text!");
     await page.keyboard.press(undoShortcut);
     await expect(input).toHaveValue("Composer text");
-    await expect(total).toHaveText("1 note");
+    await expect(total).toHaveText("Add 1 note to plan feedback");
   });
 
   await test.step("use native undo in the page review composer", async () => {
@@ -459,7 +516,7 @@ test("should preserve diagram drafts when undoing review text", async ({
     await expect(input).toHaveValue("Page review text!");
     await page.keyboard.press(undoShortcut);
     await expect(input).toHaveValue("Page review text");
-    await expect(total).toHaveText("1 note");
+    await expect(total).toHaveText("Add 1 note to plan feedback");
   });
 });
 
@@ -512,7 +569,9 @@ test("should size a persisted-collapsed diagram when expanded", async ({
   await toggle.click();
   await expect(compose).toBeHidden();
   await toggle.click();
-  await expect(diagram.locator("[data-flow-total]")).toHaveText("1 note");
+  await expect(diagram.locator(".flow-collector-add").first()).toHaveText(
+    "Add 1 note to plan feedback",
+  );
 });
 
 test("should reach footer review actions with the mouse", async ({
@@ -749,32 +808,25 @@ test("should keep review chrome stable through zoom and maximize in both themes"
   });
 
   await test.step("pin the inline action to the toolbar's left edge", async () => {
-    const total = diagram.locator("[data-flow-total]");
-    await expect(total).toHaveText("2 notes");
+    // The control states the count itself, so there is no second chip beside
+    // it saying the same number.
     await expect(toolbarAdd).toBeVisible();
     await expect(toolbarAdd).toHaveText("Add 2 notes to plan feedback");
+    await expect(diagram.locator("[data-flow-total]")).toHaveCount(0);
     const placement = await toolbar.evaluate((element) => {
       const add = element.querySelector(":scope > .flow-collector-add");
-      const total = element.querySelector("[data-flow-total]");
-      if (add === null || total === null) return null;
+      if (add === null) return null;
       const barRect = element.getBoundingClientRect();
       const addRect = add.getBoundingClientRect();
-      const totalRect = total.getBoundingClientRect();
       return {
         first: element.firstElementChild === add,
         leftInset: addRect.left - barRect.left,
         paddingLeft: Number.parseFloat(getComputedStyle(element).paddingLeft),
-        overlap: Math.max(
-          0,
-          Math.min(addRect.right, totalRect.right) -
-            Math.max(addRect.left, totalRect.left),
-        ),
       };
     });
     expect(placement).not.toBeNull();
     expect(placement?.first).toBe(true);
     expect(placement?.leftInset).toBeCloseTo(placement?.paddingLeft ?? -1);
-    expect(placement?.overlap).toBe(0);
   });
 
   for (const theme of ["light", "dark"]) {

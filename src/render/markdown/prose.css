@@ -61,31 +61,38 @@ is styled by its owning module, not here.
     max-width: none;
   }
 
+  /* Size and its line height come from the same scale step, so a heading can
+     never be given a leading that does not belong to its size. Tracking stays
+     normal: the approved plan title reads better upright, and the captain's
+     preference outranks the book's rule for tightening large type. */
   article :is(h1, h2, h3, h4, h5, h6)[data-authored-prose] {
-    line-height: 1.3;
     font-weight: 600;
-    margin: 2.25em 0 0.6em;
+    margin: 2rem 0 0.75rem;
   }
   article h1[data-authored-prose] {
-    font-size: 2.5rem;
-    line-height: 1.15;
+    font-size: var(--text-4xl);
+    line-height: var(--text-4xl--line-height);
     margin-top: 0;
     border-bottom: 1px solid var(--color-edge);
-    padding-bottom: 0.3em;
+    padding-bottom: 0.75rem;
   }
   article h2[data-authored-prose] {
-    font-size: 2rem;
+    font-size: var(--text-3xl);
+    line-height: var(--text-3xl--line-height);
     border-bottom: 1px solid var(--color-edge);
-    padding-bottom: 0.3em;
+    padding-bottom: 0.75rem;
   }
   article h3[data-authored-prose] {
-    font-size: 1.5rem;
+    font-size: var(--text-2xl);
+    line-height: var(--text-2xl--line-height);
   }
   article h4[data-authored-prose] {
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
+    line-height: var(--text-xl--line-height);
   }
   article h5[data-authored-prose] {
-    font-size: 1.0625rem;
+    font-size: var(--text-lg);
+    line-height: var(--text-lg--line-height);
   }
 
   /* The paragraph directly under the title is the plan's lede; it reads as
@@ -97,27 +104,34 @@ is styled by its owning module, not here.
     margin-bottom: 0.3rem;
   }
   article h1[data-authored-prose] + p[data-authored-prose] {
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
     line-height: 1.5;
-    color: var(--color-muted);
+    color: var(--color-subtle);
     border-bottom: 1px solid var(--color-edge);
     padding-bottom: 0.75em;
     margin-bottom: 1.5em;
   }
   article h6[data-authored-prose] {
-    font-size: 0.875rem;
-    color: var(--color-muted);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    color: var(--color-subtle);
   }
 
   article p[data-authored-prose] {
-    margin: 0 0 1em;
+    margin: 0 0 1rem;
   }
 
+  /* A link inside a sentence keeps its colour, because that is where a
+     reader needs to spot one mid-line. Hover thickens the rule rather than
+     changing the colour, so the page never flickers as a pointer crosses it. */
   article a[data-authored-prose] {
     color: var(--color-accent);
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
+  }
+  article a[data-authored-prose]:hover {
+    text-decoration-thickness: 2px;
   }
 
   article del[data-authored-prose] {
@@ -127,12 +141,22 @@ is styled by its owning module, not here.
   article hr[data-authored-prose] {
     border: 0;
     border-top: 1px solid var(--color-edge);
-    margin: 2.5rem 0;
+    margin: 3rem 0;
   }
 
+  /* An authored image is a figure, not a run of text, so it takes its own
+     line and the full content column rather than the prose measure: a
+     screenshot scaled into a narrow column stops being readable. The raised
+     ground behind it means a transparent or white-backed capture still reads
+     as one object on the page instead of bleeding into the paper. */
   article img[data-authored-prose] {
+    display: block;
     max-width: 100%;
     height: auto;
+    margin: 0 0 1rem;
+    border-radius: 0.5rem;
+    background: var(--raised-c);
+    box-shadow: var(--elevation-raised);
   }
 
   article code[data-authored-prose],
@@ -141,20 +165,27 @@ is styled by its owning module, not here.
     font-family: var(--font-mono);
     font-size: 0.875em;
   }
+  /* A different ground already separates code from the sentence around it,
+     so the outline it used to carry is gone. Padding stays in em because it
+     has to track whatever text the code interrupts. */
   article code[data-authored-prose] {
     background: var(--color-surface);
-    border: 1px solid var(--color-edge);
     border-radius: 4px;
     padding: 0.1em 0.35em;
   }
+  /* A fenced block is an inset code surface, not a slab. The diff hunk ground
+     is light enough to stay quiet under repeated snippets and dark enough not
+     to vanish into a panel, and a hairline closes it without a shadow. Any
+     semantic colour a snippet carries belongs to its label, not its ground. */
   article pre[data-authored-prose] {
-    background: var(--color-surface);
+    background: var(--diff-hunk-bg);
     border: 1px solid var(--color-edge);
     border-radius: 6px;
-    padding: 1rem 1.25rem;
+    padding: 1rem 1.5rem;
     overflow-x: auto;
-    line-height: 1.55;
-    margin: 0 0 1.25em;
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    margin: 0 0 1.5rem;
   }
   article pre[data-authored-prose] code[data-authored-prose] {
     background: none;
@@ -162,11 +193,26 @@ is styled by its owning module, not here.
     padding: 0;
   }
 
+  /* A quotation is a different voice, so it sits on its own ground with one
+     accent edge rather than inside a grey rule. The mark is drawn rather than
+     typed, so copying the quotation never carries a stray glyph. */
   article blockquote[data-authored-prose] {
-    margin: 0 0 1em;
-    padding: 0.25em 0 0.25em 1.25em;
-    border-left: 3px solid var(--color-edge);
+    position: relative;
+    margin: 0 0 1rem;
+    padding: 0.75rem 1rem 0.75rem 2.5rem;
+    border-left: 3px solid var(--color-accent);
+    border-radius: 0 0.5rem 0.5rem 0;
+    background: var(--color-surface);
     color: var(--color-muted);
+  }
+  article blockquote[data-authored-prose]::before {
+    content: "\201C";
+    position: absolute;
+    top: 0.25rem;
+    left: 0.75rem;
+    color: var(--color-accent);
+    font-size: var(--text-3xl);
+    line-height: 1;
   }
   article blockquote[data-authored-prose] > :last-child {
     margin-bottom: 0;
@@ -174,6 +220,11 @@ is styled by its owning module, not here.
 
   /* Preflight strips list markers, so markdown lists restore them, rotating
      the marker scheme at each nesting depth for both list kinds. */
+  /* The marker is the product speaking in the margin, so it takes the brand
+     colour while the text it introduces stays primary. */
+  article :is(ul, ol)[data-authored-prose] > li[data-authored-prose]::marker {
+    color: var(--color-accent);
+  }
   article ul[data-authored-prose] {
     list-style-type: disc;
   }
@@ -200,11 +251,11 @@ is styled by its owning module, not here.
   }
   article ul[data-authored-prose],
   article ol[data-authored-prose] {
-    margin: 0 0 1em;
-    padding-left: 1.75em;
+    margin: 0 0 1rem;
+    padding-left: 1.5rem;
   }
   article li[data-authored-prose] {
-    margin: 0.25em 0;
+    margin: 0.25rem 0;
   }
   article li[data-authored-prose] > ul[data-authored-prose],
   article li[data-authored-prose] > ol[data-authored-prose] {
@@ -213,13 +264,13 @@ is styled by its owning module, not here.
 
   article ul.contains-task-list[data-authored-prose] {
     list-style: none;
-    padding-left: 0.5em;
+    padding-left: 0.5rem;
   }
   /* Hanging indent: the item reserves a gutter and the checkbox sits inside
      it absolutely, so wrapped lines align with the text, not the checkbox. */
   article .task-list-item[data-authored-prose] {
     position: relative;
-    padding-left: 1.5em;
+    padding-left: 1.5rem;
   }
   article
     .task-list-item[data-authored-prose]
@@ -237,12 +288,13 @@ is styled by its owning module, not here.
   article table[data-authored-prose] {
     border-collapse: collapse;
     width: max-content;
-    font-size: 0.9375rem;
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
   }
   article th[data-authored-prose],
   article td[data-authored-prose] {
     border-bottom: 1px solid var(--color-edge);
-    padding: 0.5rem 0.9rem;
+    padding: 0.5rem 1rem;
     text-align: left;
     vertical-align: top;
   }
@@ -266,7 +318,7 @@ is styled by its owning module, not here.
     margin-top: 3rem;
     border-top: 1px solid var(--color-edge);
     padding-top: 1rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     color: var(--color-muted);
   }
   /* The section's label, styled like the TOC's "Contents" eyebrow rather
@@ -275,10 +327,10 @@ is styled by its owning module, not here.
     margin: 0 0 0.75rem;
     border-bottom: 0;
     padding-bottom: 0;
-    font-size: 0.75rem;
+    font-size: var(--text-2xs);
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: var(--tracking-caps);
     text-transform: uppercase;
-    color: var(--color-muted);
+    color: var(--color-subtle);
   }
 }

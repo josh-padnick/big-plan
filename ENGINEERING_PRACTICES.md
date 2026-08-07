@@ -11,7 +11,7 @@ That repository is provenance, not a dependency.
 Read [AGENTS.md](AGENTS.md) first for product orientation, vocabulary, architecture, source placement, and contribution guardrails.
 This file is the authoritative review standard for authored code, configuration, tests, and engineering documentation.
 Generated files are exempt because their generators own them.
-Exact mechanically enforced behavior lives in `eslint.config.mjs`, `tsconfig.json`, the stylesheet-contract check, and the test harness.
+Exact mechanically enforced behavior lives in `eslint.config.mjs`, `tsconfig.json`, the stylesheet-contract and design-system checks, and the test harness.
 
 Apply these practices to every new or changed line.
 Existing deviations do not weaken the standard, but broad migrations belong in separately scoped changes.

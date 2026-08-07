@@ -52,9 +52,7 @@ const ArgumentEntry = ({
     dataProperties={{ "data-graphql-argument": argument.name }}
     term={
       <>
-        <span className="font-mono text-[0.8125rem] font-semibold">
-          {argument.name}
-        </span>
+        <span className="font-mono text-sm font-semibold">{argument.name}</span>
         <MonoType value={argument.argumentType} />
       </>
     }
@@ -69,12 +67,10 @@ const FieldEntry = ({ field }: { readonly field: CompiledGraphqlField }) => (
     dataProperties={{ "data-graphql-field": field.side }}
     term={
       <>
-        <span className="font-mono text-[0.8125rem] font-semibold">
-          {field.name}
-        </span>
+        <span className="font-mono text-sm font-semibold">{field.name}</span>
         <MonoType value={field.fieldType} />
         {field.defaultValue === undefined ? null : (
-          <span className="text-[0.6875rem] text-muted">
+          <span className="text-2xs text-muted">
             {"default "}
             <span className="font-mono">{field.defaultValue}</span>
           </span>
@@ -109,13 +105,13 @@ export const GraphqlOperation = ({
   readonly model: CompiledGraphqlOperation;
 }) => (
   <figure
-    className="graphql-operation mb-5 min-w-0 overflow-hidden rounded-md border border-edge"
+    className="graphql-operation mb-6 min-w-0 overflow-hidden rounded-md border border-edge bg-raised"
     data-graphql-operation=""
     data-graphql-kind={model.kind}
     {...(model.deprecated ? { "data-graphql-deprecated": "" } : {})}
   >
     <header className="bg-header px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-3">
         <BadgePill
           label={model.kind}
           classNames={["graphql-operation-kind-pill", KIND_CLASSES[model.kind]]}
@@ -197,7 +193,7 @@ const ReturnsSection = ({
       <DefinitionList>
         <DefinitionEntry
           term={
-            <span className="font-mono text-[0.8125rem] font-semibold">
+            <span className="font-mono text-sm font-semibold">
               {returns.returnType}
             </span>
           }
