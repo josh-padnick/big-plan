@@ -114,7 +114,18 @@ The captain's preference wins. Each conflict and its resolution:
 - **Font family, icon set, and dependencies.**
   Unchanged, per the rules of engagement.
 
-## 5. Verification
+## 5. A coverage gap this pass found
+
+The style-history contract captures two fixture documents: `examples/mdx-components.mdx` and `examples/deck.mdx`.
+Neither exercises a database schema, a keyed decision, or an authored image.
+So the images commit changed real styling files and moved no configured capture, and its contract is `[visual:empty]` rather than `[visual:approved]`.
+That is the honest declaration, and it is also the evidence that the capture matrix does not cover the whole component surface.
+
+The fix is to add `examples/all-components.mdx` to the capture configuration as a new document with new capture keys, which the contract permits.
+It is not done here: extending coverage re-captures every commit in the range, and this pass is already a large review surface.
+It is the first thing worth doing after this PR lands.
+
+## 6. Verification
 
 - `bun run lint`, `bun run build`: pass.
 - `bun run test`: 940 unit tests pass.
