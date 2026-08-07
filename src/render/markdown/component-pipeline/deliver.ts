@@ -199,11 +199,6 @@ const renderFlowElement = ({
     }
     return element;
   };
-  if (delivery.kind === "model") {
-    return materializeModel
-      ? named(delivery.adapt(compiled.presentation()))
-      : undefined;
-  }
   // An outline-aware component defers its presentation behind a placeholder
   // until the deck transform has computed the document outline. A model being
   // materialized inside a parent's body never reaches the document tree, so
@@ -220,6 +215,11 @@ const renderFlowElement = ({
       ...(node.position === undefined ? {} : { position: node.position }),
       ...(name === null ? {} : { component: name }),
     });
+  }
+  if (delivery.kind === "model") {
+    return materializeModel
+      ? named(delivery.adapt(compiled.presentation()))
+      : undefined;
   }
   const rendered = named(delivery.adapt(compiled.presentation()));
   if (rendered !== undefined) {
