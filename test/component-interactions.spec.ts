@@ -156,8 +156,7 @@ test("should keep column drag cursors through native gestures in both themes", a
     },
     {
       name: "DatabaseTableSchema",
-      selector:
-        "[data-database-table-schema] thead [data-column-reorderable]",
+      selector: "[data-database-table-schema] thead [data-column-reorderable]",
     },
   ];
 

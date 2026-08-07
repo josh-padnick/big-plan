@@ -7,24 +7,24 @@
 }
 
 @layer bp-state {
+  /* Override invariant: an active reorderable header beats its resting grab
+     cursor, including across descendants under the pointer. */
   article [data-column-reorderable]:active,
-  article
-    [data-column-reorderable]:active
-    * {
+  article [data-column-reorderable]:active * {
     cursor: grabbing;
   }
 
+  /* Override invariant: the native column-drag gesture beats every resting
+     cursor when the pointer leaves the dragged header. */
   body[data-column-dragging],
   body[data-column-dragging] * {
     cursor: grabbing;
   }
 
+  /* Override invariant: non-reorderable table headers beat the document-wide
+     active-drag cursor so they never advertise column reordering. */
   body[data-column-dragging] article thead th:not([data-column-reorderable]),
-  body[data-column-dragging]
-    article
-    thead
-    th:not([data-column-reorderable])
-    * {
+  body[data-column-dragging] article thead th:not([data-column-reorderable]) * {
     cursor: default;
   }
 }
