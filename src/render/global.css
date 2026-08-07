@@ -258,7 +258,7 @@ same separation.
   :root:not([data-theme]) {
     --bg: var(--grey-950);
     --raised-c: var(--grey-900);
-    --surface-c: var(--grey-800);
+    --surface-c: var(--grey-900);
     --tray-c: var(--grey-900);
     --well-c: var(--grey-950);
     --header-bg: var(--grey-800);
@@ -326,7 +326,7 @@ same separation.
 :root[data-theme="dark"] {
   --bg: var(--grey-950);
   --raised-c: var(--grey-900);
-  --surface-c: var(--grey-800);
+  --surface-c: var(--grey-900);
   --tray-c: var(--grey-900);
   --well-c: var(--grey-950);
   --header-bg: var(--grey-800);

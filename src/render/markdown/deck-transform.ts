@@ -160,11 +160,15 @@ const SUBSLIDE_FRAME_CLASSES = [
 // looking at, restyled from the slide's leading emphasized paragraph.
 // No top margin: --deck-gap-title-body is the sole owner of the distance to
 // the title above, so the two cannot drift out of agreement.
+// approved-metric: the context line's size. It sits directly under the slide
+// title, so it reads as the slide's own lede and takes the same tone the
+// document lede takes.
 const CONTEXT_CLASSES = [
   "plan-slide-context",
-  "mb-4",
-  "text-sm",
-  "text-muted",
+  // approved-metric: the context line's size and its gap to the body
+  "mb-[0.9rem]",
+  "text-[0.9375rem]",
+  "text-subtle",
 ] as const;
 
 // A Part is a collapsible band rather than a card: no border or padding of
