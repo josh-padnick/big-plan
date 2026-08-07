@@ -145,6 +145,25 @@ test("should exercise every live component affordance with browser gestures", as
     await expect(page).toHaveURL(/#review-decisions$/u);
   });
 
+  await test.step("column reorder: cursor states stay scoped to movable headers", async () => {
+    const movable = page.locator(
+      "[data-data-table] thead [data-column-reorderable], [data-database-table-schema] thead [data-column-reorderable]",
+    );
+    const plainTableHeader = page
+      .locator(
+        "article table:not(.data-table-grid):not(.table-schema-grid) thead th",
+      )
+      .first();
+    await expect(movable).not.toHaveCount(0);
+    await expect(plainTableHeader).toHaveCount(1);
+    await expect(movable.first()).toHaveCSS("cursor", "grab");
+    await movable.first().hover();
+    await expect(movable.first()).toHaveCSS("cursor", "grab");
+    await expect(plainTableHeader).toHaveCSS("cursor", "auto");
+    await plainTableHeader.hover();
+    await expect(plainTableHeader).toHaveCSS("cursor", "auto");
+  });
+
   await test.step("Part: collapse and expand", async () => {
     const part = page.locator('[data-collapsible="part"]').first();
     const toggle = part.locator(
@@ -308,6 +327,18 @@ test("should exercise every live component affordance with browser gestures", as
     const first = headers.first();
     const firstKey = await first.getAttribute("data-schema-grid-column");
     await expect(first).toHaveAttribute("draggable", "true");
+    await expect(first).toHaveCSS("cursor", "grab");
+    await first.evaluate((element) => {
+      element.dispatchEvent(
+        new DragEvent("dragstart", {
+          bubbles: true,
+          dataTransfer: new DataTransfer(),
+        }),
+      );
+    });
+    await expect(first).toHaveCSS("cursor", "grabbing");
+    await first.dispatchEvent("dragend");
+    await expect(first).toHaveCSS("cursor", "grab");
     await expect(first).toHaveAttribute(
       "aria-keyshortcuts",
       "ArrowLeft ArrowRight",
@@ -432,6 +463,18 @@ test("should exercise every live component affordance with browser gestures", as
     const headers = table.locator("thead [data-table-column]");
     const firstColumn = await headers.first().getAttribute("data-table-column");
     const second = headers.nth(1);
+    await expect(headers.first()).toHaveCSS("cursor", "grab");
+    await headers.first().evaluate((element) => {
+      element.dispatchEvent(
+        new DragEvent("dragstart", {
+          bubbles: true,
+          dataTransfer: new DataTransfer(),
+        }),
+      );
+    });
+    await expect(headers.first()).toHaveCSS("cursor", "grabbing");
+    await headers.first().dispatchEvent("dragend");
+    await expect(headers.first()).toHaveCSS("cursor", "grab");
     const secondBox = await second.boundingBox();
     expect(secondBox).not.toBeNull();
     await headers.first().dragTo(second, {

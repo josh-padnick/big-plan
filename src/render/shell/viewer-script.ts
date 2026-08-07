@@ -674,11 +674,13 @@ export const VIEWER_SCRIPT = `<script>
     };
 
     figure.setAttribute("data-schema-reorderable", "");
+    figure.setAttribute("data-column-reorderable-figure", "");
     for (const head of Array.from(headRow.children)) {
       const column = head.getAttribute("data-schema-grid-column");
       if (column === null || column === "") continue;
       const label = (head.textContent || column).trim();
       head.draggable = true;
+      head.setAttribute("data-column-reorderable", "");
       head.tabIndex = 0;
       head.title = "Drag or use Left and Right arrow keys to reorder";
       head.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight");
@@ -709,6 +711,7 @@ export const VIEWER_SCRIPT = `<script>
       });
       head.addEventListener("dragstart", (event) => {
         activeColumnDrag = { figure, column };
+        figure.setAttribute("data-column-dragging", "");
         if (event.dataTransfer !== null) {
           event.dataTransfer.effectAllowed = "move";
           event.dataTransfer.setData("text/plain", column);
@@ -737,6 +740,7 @@ export const VIEWER_SCRIPT = `<script>
       head.addEventListener("dragleave", clearDrop);
       head.addEventListener("dragend", () => {
         clearDrop();
+        figure.removeAttribute("data-column-dragging");
         if (activeColumnDrag?.figure === figure) activeColumnDrag = null;
       });
       head.addEventListener("drop", (event) => {
@@ -751,6 +755,7 @@ export const VIEWER_SCRIPT = `<script>
           return;
         event.preventDefault();
         activeColumnDrag = null;
+        figure.removeAttribute("data-column-dragging");
         const order = currentOrder();
         const fromIndex = order.indexOf(drag.column);
         const targetIndex = order.indexOf(column);
@@ -1662,6 +1667,7 @@ export const VIEWER_SCRIPT = `<script>
     // affordance that cannot act. Enabling them is the last thing this leg
     // does for a table, after its state is already restored.
     figure.setAttribute("data-table-reorderable", "");
+    figure.setAttribute("data-column-reorderable-figure", "");
     figure.setAttribute("data-table-interactive", "");
     for (const control of figure.querySelectorAll(
       "[data-table-filter],[data-table-fit-button],[data-table-menu-button],[data-table-reset]",
@@ -1671,6 +1677,7 @@ export const VIEWER_SCRIPT = `<script>
 
     for (const head of headRow.children) {
       head.setAttribute("draggable", "true");
+      head.setAttribute("data-column-reorderable", "");
       const button = head.querySelector("[data-table-sort]");
       if (button !== null) {
         button.disabled = false;
@@ -1703,6 +1710,7 @@ export const VIEWER_SCRIPT = `<script>
         const positions = Array.from(headRow.children);
         const from = positions.indexOf(head);
         activeColumnDrag = { figure, from };
+        figure.setAttribute("data-column-dragging", "");
         event.dataTransfer.effectAllowed = "move";
       });
       let dropAfter = false;
@@ -1731,6 +1739,7 @@ export const VIEWER_SCRIPT = `<script>
       head.addEventListener("dragleave", clear);
       head.addEventListener("dragend", () => {
         clear();
+        figure.removeAttribute("data-column-dragging");
         if (activeColumnDrag?.figure === figure) activeColumnDrag = null;
       });
       head.addEventListener("drop", (event) => {
@@ -1746,6 +1755,7 @@ export const VIEWER_SCRIPT = `<script>
           return;
         event.preventDefault();
         activeColumnDrag = null;
+        figure.removeAttribute("data-column-dragging");
         const from = drag.from;
         const positions = Array.from(headRow.children);
         const to = positions.indexOf(head);

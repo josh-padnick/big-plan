@@ -1,0 +1,13 @@
+/* CSS escape hatch: shared visual primitive for generated reorderable columns. */
+
+@layer components {
+  article [data-column-reorderable] {
+    cursor: grab;
+  }
+
+  article
+    [data-column-reorderable-figure][data-column-dragging]
+    [data-column-reorderable] {
+    cursor: grabbing;
+  }
+}
