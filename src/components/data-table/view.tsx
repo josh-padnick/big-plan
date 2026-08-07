@@ -39,10 +39,10 @@ const MENU_LIST_CLASSES =
   "data-table-menu-list absolute top-[calc(100%+0.25rem)] right-0 z-10 min-w-40 rounded-[0.375rem] border border-edge bg-[var(--diff-header-bg)] p-1 shadow-[0_6px_18px_rgb(12_10_8_/_0.18)]";
 
 const MENU_LABEL_CLASSES =
-  "data-table-menu-label px-2 pt-1 pb-[0.2rem] text-[0.625rem] font-semibold tracking-wider text-subtle uppercase";
+  "data-table-menu-label px-2 pt-1 pb-0.5 text-[0.625rem] font-semibold tracking-wider text-subtle uppercase";
 
 const MENU_ITEM_CLASSES =
-  "data-table-menu-item flex w-full cursor-pointer items-center gap-[0.45rem] whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-[0.3rem] text-left text-xs text-ink hover:bg-edge [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
+  "data-table-menu-item flex w-full cursor-pointer items-center gap-2 whitespace-nowrap rounded-sm border-0 bg-transparent px-2 py-1 text-left text-xs text-ink hover:bg-edge [&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:text-muted";
 
 const FIT_LABELS: Readonly<Record<DataTableFit, string>> = {
   wrap: "Wrap text",
@@ -87,7 +87,7 @@ const HeaderCell = ({
 }) => (
   <th
     scope="col"
-    className="data-table-head bg-transparent py-[0.3rem] text-[0.625rem] font-medium tracking-[0.06em] whitespace-nowrap text-subtle uppercase select-none data-[table-sorted]:text-ink"
+    className="data-table-head bg-transparent py-1 text-[0.625rem] font-medium tracking-[0.06em] whitespace-nowrap text-subtle uppercase select-none data-[table-sorted]:text-ink"
     data-table-column={index}
     data-table-type={column.type}
     data-table-align={column.align}
@@ -266,7 +266,7 @@ const FilterField = ({ id }: { readonly id: string }) => (
     </span>
     <input
       type="search"
-      className="data-table-filter-input h-6 w-32 rounded-md border border-edge-strong bg-transparent py-0 pr-2 pl-[1.35rem] text-xs text-ink max-[55.999rem]:w-full"
+      className="data-table-filter-input h-6 w-32 rounded-md border border-edge-strong bg-transparent py-0 pr-2 pl-6 text-xs text-ink max-[55.999rem]:w-full"
       placeholder="Filter rows"
       aria-label="Filter rows"
       data-table-filter-input={id}
@@ -277,15 +277,15 @@ const FilterField = ({ id }: { readonly id: string }) => (
 /** Renders one DataTable as a figure: caption chrome over the complete grid. */
 export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
   <figure
-    className="data-table mb-5 w-fit max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)]"
+    className="data-table mb-6 w-fit max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)]"
     data-data-table
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "table" }}
     data-table-id={model.id}
     data-table-fit={model.fit}
     data-table-group-column={model.groupColumn}
   >
-    <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem] max-[55.999rem]:flex-col max-[55.999rem]:items-stretch max-[55.999rem]:gap-[0.3rem]">
-      <span className="data-table-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted">
+    <figcaption className="data-table-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1 max-[55.999rem]:flex-col max-[55.999rem]:items-stretch max-[55.999rem]:gap-1">
+      <span className="data-table-identity flex min-w-0 items-center gap-2 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted">
         {lucideIconToReact({ icon: TABLE_ICON, hidden: false })}
         <span className="data-table-title min-w-0 truncate font-semibold text-ink">
           {model.title ?? "Table"}

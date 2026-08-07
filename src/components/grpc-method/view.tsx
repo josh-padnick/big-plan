@@ -164,14 +164,14 @@ export const GrpcMethod = ({
   readonly model: CompiledGrpcMethod;
 }) => (
   <figure
-    className="grpc-method mb-5 min-w-0 overflow-hidden rounded-md border border-edge"
+    className="grpc-method mb-6 min-w-0 overflow-hidden rounded-md border border-edge"
     data-grpc-method=""
     data-grpc-kind={model.kind}
     {...(model.deprecated ? { "data-grpc-deprecated": "" } : {})}
   >
     <header className="bg-header px-4 py-3">
       <div className="font-mono text-xs text-muted">{model.service}</div>
-      <div className="mt-1 flex flex-wrap items-center gap-2.5">
+      <div className="mt-1 flex flex-wrap items-center gap-3">
         <Signature model={model} />
         <BadgePill
           label={KIND_LABELS[model.kind]}

@@ -244,7 +244,7 @@ const EntryRow = ({
   readonly badgeForEntry: (entry: TreeEntry) => TreeBadge | undefined;
 }) => (
   <div
-    className="file-tree-row relative flex min-h-6 items-center gap-[0.35rem] whitespace-nowrap [&>svg]:size-3.5 [&>svg]:shrink-0"
+    className="file-tree-row relative flex min-h-6 items-center gap-1.5 whitespace-nowrap [&>svg]:size-3.5 [&>svg]:shrink-0"
     data-tree-entry={entry.kind}
     {...(badge === undefined ? {} : { "data-tree-badge": badge })}
   >
@@ -288,7 +288,7 @@ export const TreeHierarchy = ({
   <ul
     className={
       nested
-        ? "file-tree-children m-0 ml-[0.45rem] list-none border-l border-edge pl-[1.05rem]"
+        ? "file-tree-children m-0 ml-2 list-none border-l border-edge pl-4"
         : "file-tree-list m-0 min-w-max list-none p-0"
     }
   >

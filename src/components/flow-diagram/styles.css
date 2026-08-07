@@ -173,7 +173,7 @@ classes.
   /* The footer is the figure's own line, not part of the canvas. */
   .flow-diagram[data-figure-maximized] > [data-flow-diagram-footer] {
     flex: none;
-    padding: 0 1.75rem 1rem;
+    padding: 0 2rem 1rem;
   }
 
   /* --- The control bar --------------------------------------------------- */
@@ -184,7 +184,7 @@ classes.
      space that never moves. Nothing is drawn in the band at rest. */
   .flow-diagram > .flow-diagram-controls {
     min-height: 2.25rem;
-    padding: 0 0 0.15rem;
+    padding: 0 0 0.125rem;
     gap: 0.25rem;
     opacity: 0;
     pointer-events: none;
@@ -209,7 +209,7 @@ classes.
   .flow-diagram[data-figure-maximized] > .flow-diagram-controls {
     border-bottom: 1px solid var(--edge-c);
     background: var(--header-bg);
-    padding: 0.35rem 0.6rem;
+    padding: 0.375rem 0.5rem;
   }
   @media (prefers-reduced-motion: no-preference) {
     .flow-diagram > .flow-diagram-controls {
@@ -229,7 +229,7 @@ classes.
     width: 1px;
     height: 1.25rem;
     flex: none;
-    margin: 0 0.2rem;
+    margin: 0 0.25rem;
     background: color-mix(in srgb, var(--ink-c) 18%, transparent);
   }
   /* The Fit state stays quiet in the reading column. The full toolbar can
@@ -323,7 +323,7 @@ classes.
   [data-flow-editing] {
     outline: none;
     border-radius: 0.25rem;
-    padding: 0.05rem 0.3rem;
+    padding: 0.125rem 0.25rem;
     margin: 0 -0.3rem;
     background: var(--bg);
     box-shadow:
@@ -369,8 +369,8 @@ classes.
     z-index: 76;
     display: inline-flex;
     align-items: center;
-    gap: 0.1rem;
-    padding: 0.15rem;
+    gap: 0.125rem;
+    padding: 0.125rem;
     border: 1px solid var(--edge-c);
     border-radius: 0.4rem;
     background: var(--bg);
@@ -382,7 +382,7 @@ classes.
     align-items: center;
     gap: 0.25rem;
     height: 1.5rem;
-    padding: 0 0.4rem;
+    padding: 0 0.375rem;
     border: 0;
     border-radius: 0.25rem;
     background: transparent;
@@ -412,7 +412,7 @@ classes.
      captain's point was that Edit and Delete buttons made this feel like a
      mode; the reviewer still has to be told that typing and Delete work. */
   .flow-diagram-actionbar-hint {
-    padding: 0 0.4rem 0 0.25rem;
+    padding: 0 0.375rem 0 0.25rem;
     color: var(--muted-c);
     font-size: 0.625rem;
     white-space: nowrap;
@@ -449,7 +449,7 @@ classes.
   }
   .flow-diagram-compose-target {
     margin: 0;
-    padding: 0.55rem 0.75rem 0.3rem;
+    padding: 0.5rem 0.75rem 0.25rem;
     color: var(--muted-c);
     font-size: 0.6875rem;
     font-weight: 600;
@@ -461,7 +461,7 @@ classes.
     width: 100%;
     min-height: 4.25rem;
     margin: 0;
-    padding: 0 0.75rem 0.55rem;
+    padding: 0 0.75rem 0.5rem;
     border: 0;
     background: transparent;
     color: var(--ink-c);
@@ -478,19 +478,19 @@ classes.
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.35rem;
-    padding: 0.4rem 0.5rem;
+    gap: 0.375rem;
+    padding: 0.375rem 0.5rem;
     border-top: 1px solid color-mix(in srgb, var(--ink-c) 9%, transparent);
     background: color-mix(in srgb, var(--ink-c) 3%, transparent);
   }
   .flow-diagram-compose-hint {
     margin-right: auto;
-    padding-left: 0.3rem;
+    padding-left: 0.25rem;
     color: var(--muted-c);
     font-size: 0.625rem;
   }
   .flow-diagram-button {
-    padding: 0.3rem 0.7rem;
+    padding: 0.25rem 0.75rem;
     border: 1px solid var(--edge-c);
     border-radius: 0.3rem;
     background: var(--surface-c);
@@ -532,7 +532,7 @@ classes.
      matches the type it sits beside - a monospace identifier's original stays
      monospace. Only colour and the strike are added. */
   .flow-diagram-original {
-    margin-left: 0.35rem;
+    margin-left: 0.375rem;
     color: var(--muted-c);
     text-decoration: line-through;
     opacity: 0.85;
@@ -551,7 +551,7 @@ classes.
     height: 1.25rem;
     align-items: center;
     justify-content: center;
-    gap: 0.12rem;
+    gap: 0.125rem;
     padding: 0 0.25rem;
     border: 2px solid var(--bg);
     border-radius: 999px;
@@ -597,7 +597,7 @@ classes.
   }
   .flow-diagram-exit-alert-card {
     width: min(28rem, calc(100vw - 2rem));
-    padding: 1.25rem;
+    padding: 1.5rem;
     border: 1px solid var(--edge-c);
     border-radius: 0.65rem;
     background: var(--bg);
@@ -614,7 +614,7 @@ classes.
     line-height: 1.35;
   }
   .flow-diagram-exit-alert-description {
-    margin: 0.45rem 0 0;
+    margin: 0.5rem 0 0;
     color: var(--muted-c);
     font-size: 0.8125rem;
     line-height: 1.55;
@@ -623,11 +623,11 @@ classes.
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
-    margin-top: 1.1rem;
+    margin-top: 1rem;
   }
   .flow-diagram-exit-alert-button {
     min-height: 2rem;
-    padding: 0.35rem 0.75rem;
+    padding: 0.375rem 0.75rem;
     border: 1px solid var(--edge-c);
     border-radius: 0.4rem;
     background: var(--bg);
@@ -687,8 +687,8 @@ classes.
   .flow-collector-head {
     display: flex;
     align-items: baseline;
-    gap: 0.4rem;
-    padding: 0.55rem 0.7rem 0.45rem;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem 0.5rem;
     border-bottom: 1px solid color-mix(in srgb, var(--ink-c) 9%, transparent);
     background: var(--header-bg);
     color: var(--ink-c);
@@ -697,14 +697,14 @@ classes.
   }
   .flow-collector-scope {
     display: block;
-    margin-top: 0.1rem;
+    margin-top: 0.125rem;
     color: var(--muted-c);
     font-size: 0.6875rem;
     font-weight: 400;
   }
   .flow-collector-count {
     margin-left: auto;
-    padding: 0 0.4rem;
+    padding: 0 0.375rem;
     border-radius: 999px;
     background: color-mix(in srgb, var(--accent-c) 18%, transparent);
     color: var(--accent-c);
@@ -721,15 +721,15 @@ classes.
   .flow-collector-item {
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
-    padding: 0.5rem 0.7rem;
+    gap: 0.125rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid color-mix(in srgb, var(--ink-c) 7%, transparent);
     font-size: 0.75rem;
   }
   .flow-collector-item-head {
     display: flex;
     align-items: baseline;
-    gap: 0.4rem;
+    gap: 0.375rem;
   }
   .flow-collector-target {
     flex: 1 1 auto;
@@ -748,7 +748,7 @@ classes.
   }
   .flow-collector-kind {
     flex: none;
-    padding: 0 0.35rem;
+    padding: 0 0.375rem;
     border-radius: 999px;
     background: var(--surface-c);
     color: var(--muted-c);
@@ -779,7 +779,7 @@ classes.
   }
   .flow-collector-revert {
     align-self: flex-start;
-    margin-top: 0.15rem;
+    margin-top: 0.125rem;
     padding: 0;
     border: 0;
     background: none;
@@ -795,7 +795,7 @@ classes.
   }
   .flow-collector-foot {
     flex: none;
-    padding: 0.5rem 0.7rem 0.6rem;
+    padding: 0.5rem 0.75rem 0.5rem;
     border-top: 1px solid color-mix(in srgb, var(--ink-c) 9%, transparent);
     background: color-mix(in srgb, var(--ink-c) 3%, transparent);
   }
@@ -807,7 +807,7 @@ classes.
   }
   /* The handoff never claims success it did not have. */
   .flow-collector-status {
-    margin: 0.4rem 0 0;
+    margin: 0.375rem 0 0;
     font-size: 0.6875rem;
     line-height: 1.4;
   }
@@ -829,9 +829,9 @@ classes.
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.35rem;
+    gap: 0.375rem;
     min-height: 1.5rem;
-    padding: 0.25rem 0.6rem;
+    padding: 0.25rem 0.5rem;
     border: 1px solid var(--accent-c);
     border-radius: 0.4rem;
     background: var(--accent-c);
@@ -859,7 +859,7 @@ classes.
   .flow-collector-foot > .flow-collector-add {
     width: 100%;
     min-height: 2rem;
-    margin-top: 0.55rem;
+    margin-top: 0.5rem;
     box-shadow: 0 3px 10px rgb(0 0 0 / 0.16);
     font-size: 0.75rem;
   }
@@ -939,7 +939,7 @@ classes.
      ink: a muted code or body line on the wash is only 3.4:1. */
   [data-flow-field][data-flow-edited] {
     border-radius: 0.2rem;
-    padding: 0 0.15rem;
+    padding: 0 0.125rem;
     background: var(--flow-edit-bg);
     box-shadow: inset 0 -1px 0 var(--flow-edit-edge);
     color: var(--ink-c);

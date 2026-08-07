@@ -112,7 +112,7 @@ const SLIDE_TITLE_CLASSES = [
 
 const KICKER_CLASSES = [
   "plan-slide-kicker",
-  "mb-[0.45rem]",
+  "mb-2",
   "text-[0.6875rem]",
   "font-semibold",
   "uppercase",
@@ -158,7 +158,7 @@ const SUBSLIDE_FRAME_CLASSES = [
 // the title above, so the two cannot drift out of agreement.
 const CONTEXT_CLASSES = [
   "plan-slide-context",
-  "mb-[0.9rem]",
+  "mb-4",
   "text-[0.9375rem]",
   "text-muted",
 ] as const;

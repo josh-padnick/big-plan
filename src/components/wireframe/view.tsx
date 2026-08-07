@@ -32,7 +32,7 @@ const GAP_CLASSES: Readonly<Record<WireframeSpace, string>> = {
   sm: "gap-2",
   md: "gap-4",
   lg: "gap-6",
-  xl: "gap-10",
+  xl: "gap-12",
 };
 
 const ALIGN_CLASSES: Readonly<Record<WireframeAlign, string>> = {
@@ -747,7 +747,7 @@ const Screen = ({
 
 export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
   <figure
-    className="wireframe my-7"
+    className="wireframe my-8"
     data-wireframe={model.id}
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe" }}
     {...(model.screens.some((screen) => screen.device === "desktop")

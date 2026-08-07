@@ -64,19 +64,19 @@ is styled by its owning module, not here.
   article :is(h1, h2, h3, h4, h5, h6)[data-authored-prose] {
     line-height: 1.3;
     font-weight: 600;
-    margin: 2.25em 0 0.6em;
+    margin: 2rem 0 0.75rem;
   }
   article h1[data-authored-prose] {
     font-size: 2.5rem;
     line-height: 1.15;
     margin-top: 0;
     border-bottom: 1px solid var(--color-edge);
-    padding-bottom: 0.3em;
+    padding-bottom: 0.75rem;
   }
   article h2[data-authored-prose] {
     font-size: 2rem;
     border-bottom: 1px solid var(--color-edge);
-    padding-bottom: 0.3em;
+    padding-bottom: 0.75rem;
   }
   article h3[data-authored-prose] {
     font-size: 1.5rem;
@@ -94,15 +94,15 @@ is styled by its owning module, not here.
   article h1[data-authored-prose]:has(+ p[data-authored-prose]) {
     border-bottom: none;
     padding-bottom: 0;
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.25rem;
   }
   article h1[data-authored-prose] + p[data-authored-prose] {
     font-size: 1.25rem;
     line-height: 1.5;
     color: var(--color-muted);
     border-bottom: 1px solid var(--color-edge);
-    padding-bottom: 0.75em;
-    margin-bottom: 1.5em;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1.5rem;
   }
   article h6[data-authored-prose] {
     font-size: 0.875rem;
@@ -110,7 +110,7 @@ is styled by its owning module, not here.
   }
 
   article p[data-authored-prose] {
-    margin: 0 0 1em;
+    margin: 0 0 1rem;
   }
 
   article a[data-authored-prose] {
@@ -127,7 +127,7 @@ is styled by its owning module, not here.
   article hr[data-authored-prose] {
     border: 0;
     border-top: 1px solid var(--color-edge);
-    margin: 2.5rem 0;
+    margin: 3rem 0;
   }
 
   article img[data-authored-prose] {
@@ -151,10 +151,10 @@ is styled by its owning module, not here.
     background: var(--color-surface);
     border: 1px solid var(--color-edge);
     border-radius: 6px;
-    padding: 1rem 1.25rem;
+    padding: 1rem 1.5rem;
     overflow-x: auto;
     line-height: 1.55;
-    margin: 0 0 1.25em;
+    margin: 0 0 1.5rem;
   }
   article pre[data-authored-prose] code[data-authored-prose] {
     background: none;
@@ -163,8 +163,8 @@ is styled by its owning module, not here.
   }
 
   article blockquote[data-authored-prose] {
-    margin: 0 0 1em;
-    padding: 0.25em 0 0.25em 1.25em;
+    margin: 0 0 1rem;
+    padding: 0.25rem 0 0.25rem 1.5rem;
     border-left: 3px solid var(--color-edge);
     color: var(--color-muted);
   }
@@ -200,11 +200,11 @@ is styled by its owning module, not here.
   }
   article ul[data-authored-prose],
   article ol[data-authored-prose] {
-    margin: 0 0 1em;
-    padding-left: 1.75em;
+    margin: 0 0 1rem;
+    padding-left: 1.5rem;
   }
   article li[data-authored-prose] {
-    margin: 0.25em 0;
+    margin: 0.25rem 0;
   }
   article li[data-authored-prose] > ul[data-authored-prose],
   article li[data-authored-prose] > ol[data-authored-prose] {
@@ -213,13 +213,13 @@ is styled by its owning module, not here.
 
   article ul.contains-task-list[data-authored-prose] {
     list-style: none;
-    padding-left: 0.5em;
+    padding-left: 0.5rem;
   }
   /* Hanging indent: the item reserves a gutter and the checkbox sits inside
      it absolutely, so wrapped lines align with the text, not the checkbox. */
   article .task-list-item[data-authored-prose] {
     position: relative;
-    padding-left: 1.5em;
+    padding-left: 1.5rem;
   }
   article
     .task-list-item[data-authored-prose]
@@ -242,7 +242,7 @@ is styled by its owning module, not here.
   article th[data-authored-prose],
   article td[data-authored-prose] {
     border-bottom: 1px solid var(--color-edge);
-    padding: 0.5rem 0.9rem;
+    padding: 0.5rem 1rem;
     text-align: left;
     vertical-align: top;
   }

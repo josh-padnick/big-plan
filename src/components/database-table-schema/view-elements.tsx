@@ -48,7 +48,7 @@ export const SchemaCell = ({
 const MUTED_TEXT_CLASSES = {
   inline: "text-muted",
   note: "block text-xs leading-snug text-muted",
-  headerNote: "table-schema-note block pb-[0.15rem] text-xs text-muted",
+  headerNote: "table-schema-note block pb-0.5 text-xs text-muted",
   indexDefinition:
     "table-schema-index-definition block overflow-x-auto text-xs text-muted",
   refArrow: "table-schema-ref-arrow text-muted",

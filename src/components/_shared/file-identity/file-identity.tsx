@@ -13,7 +13,7 @@ export const FileIdentity = ({ filePath }: { readonly filePath: string }) => {
     lastSlashIndex === -1 ? filePath : filePath.slice(lastSlashIndex + 1);
   return (
     <span
-      className="file-identity flex min-w-0 items-center gap-[0.45rem] [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted"
+      className="file-identity flex min-w-0 items-center gap-2 [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-muted"
       aria-label={filePath}
     >
       {lucideIconToReact({ icon: FILE_ICON, hidden: false })}

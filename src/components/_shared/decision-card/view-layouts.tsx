@@ -161,7 +161,7 @@ export const RowsLayout = ({
 }) => {
   const criteria = criteriaOf(model);
   return (
-    <div className="decision-options-region px-5 py-4">
+    <div className="decision-options-region px-6 py-4">
       <div className="decision-options-heading mb-3 flex items-baseline justify-between gap-4">
         <p className="m-0 text-sm font-semibold text-ink">
           {"Compare the options"}
@@ -219,7 +219,7 @@ export const RowsLayout = ({
                     ? []
                     : [
                         <span
-                          className="decision-row-line grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,auto)] items-center gap-x-3 border-t border-edge py-2.5 text-sm leading-5"
+                          className="decision-row-line grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,auto)] items-center gap-x-3 border-t border-edge py-3 text-sm leading-5"
                           key={row}
                         >
                           <span className="decision-row-dimension min-w-0 text-muted">
@@ -509,7 +509,7 @@ const WeightedScoreFooter = ({
             <span data-score-breakdown-open="">{"Hide score calculation"}</span>
           </summary>
           <ScoreCalculationMatrix model={model} />
-          <p className="mt-2.5 mb-0 text-xs text-muted">
+          <p className="mt-3 mb-0 text-xs text-muted">
             {
               "Each total is Σ(impact × option score) ÷ Σ(impact × 5), normalized to 100%."
             }
@@ -680,12 +680,12 @@ const ReadOnlyComparison = ({
     <ComparisonMatrix className="decision-matrix">
       <thead>
         <tr>
-          <th className="decision-corner px-4 py-2.5 text-left" scope="col">
+          <th className="decision-corner px-4 py-3 text-left" scope="col">
             <span className="sr-only">{"Criterion"}</span>
           </th>
           {model.options.map((option) => (
             <th
-              className="decision-column px-4 py-2.5 text-left align-bottom text-base leading-6 font-semibold text-ink"
+              className="decision-column px-4 py-3 text-left align-bottom text-base leading-6 font-semibold text-ink"
               key={option.id}
               scope="col"
             >
@@ -698,7 +698,7 @@ const ReadOnlyComparison = ({
         {criteria.map(({ row, criterion }) => (
           <tr className="comparison-matrix-row" key={criterion.id}>
             <th
-              className="decision-criterion px-4 py-2.5 text-left text-base leading-6 font-medium text-muted"
+              className="decision-criterion px-4 py-3 text-left text-base leading-6 font-medium text-muted"
               scope="row"
             >
               <DefinitionDisclosure
@@ -708,7 +708,7 @@ const ReadOnlyComparison = ({
               />
             </th>
             {model.options.map((option) => (
-              <td className="decision-cell px-4 py-2.5" key={option.id}>
+              <td className="decision-cell px-4 py-3" key={option.id}>
                 <span className="decision-verdict text-base leading-6 font-semibold text-ink">
                   {option.considerations[row]?.verdict ?? "-"}
                 </span>
@@ -736,7 +736,7 @@ export const BriefLayout = ({
     <div className="decision-brief" data-decision-brief="">
       {lead?.summary === undefined ? null : (
         <p
-          className="decision-brief-lead m-0 border-b border-edge bg-surface px-5 py-3.5 text-base leading-6 text-ink"
+          className="decision-brief-lead m-0 border-b border-edge bg-surface px-6 py-4 text-base leading-6 text-ink"
           data-decision-brief-lead=""
         >
           {lead.summary}
@@ -745,7 +745,7 @@ export const BriefLayout = ({
       <ul className="decision-brief-list m-0 grid list-none gap-0 p-0">
         {model.options.map((option, index) => (
           <li
-            className="decision-brief-option grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-5 py-3"
+            className="decision-brief-option grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-6 py-3"
             key={option.id}
             data-decision-option=""
             data-decision-column={index}
@@ -775,7 +775,7 @@ export const BriefLayout = ({
         ))}
       </ul>
       {model.discriminating.length === 0 ? null : (
-        <details className="decision-brief-compare px-5">
+        <details className="decision-brief-compare px-6">
           <summary className="decision-details-summary flex min-h-12 w-fit cursor-pointer items-center gap-1.5 rounded-sm text-sm font-semibold">
             <span className="decision-details-chevron inline-flex size-3.5 shrink-0">
               {lucideIconToReact({

@@ -15,7 +15,7 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 
 // Shared by every pill in the grid and the bands below it.
 const BADGE_CLASSES =
-  "table-schema-badge inline-flex shrink-0 items-center rounded-full border border-edge px-[0.4rem] py-px align-middle font-sans text-[0.625rem] font-semibold tracking-wide text-subtle uppercase data-[schema-badge=pk]:border-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] data-[schema-badge=pk]:text-accent";
+  "table-schema-badge inline-flex shrink-0 items-center rounded-full border border-edge px-1.5 py-px align-middle font-sans text-[0.625rem] font-semibold tracking-wide text-subtle uppercase data-[schema-badge=pk]:border-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] data-[schema-badge=pk]:text-accent";
 // Shared by the Indexes and DDL band labels.
 const SECTION_LABEL_CLASSES =
   "table-schema-section-label m-0 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle";
@@ -70,7 +70,7 @@ const separated = (items: ReadonlyArray<ReactNode>): ReadonlyArray<ReactNode> =>
 // The badge, arrow, and target wrap as one unit so a narrow cell never
 // strands the arrow or the badge on its own line.
 const ForeignKeyTarget = ({ target }: { readonly target: string }) => (
-  <span className="table-schema-ref-target inline-flex items-center gap-[0.35rem] whitespace-nowrap">
+  <span className="table-schema-ref-target inline-flex items-center gap-1.5 whitespace-nowrap">
     <Badge kind="fk" label="FK" />
     <span className="table-schema-ref-arrow text-muted" aria-hidden="true">
       {"→"}
@@ -89,7 +89,7 @@ const ConstraintGroup = ({
   readonly item: ReactNode;
   readonly trailingSeparator: boolean;
 }) => (
-  <span className="table-schema-constraint inline-flex items-center gap-x-[0.45rem] whitespace-nowrap">
+  <span className="table-schema-constraint inline-flex items-center gap-x-2 whitespace-nowrap">
     {item}
     {trailingSeparator ? <span className="text-muted">{"·"}</span> : null}
   </span>
@@ -190,7 +190,7 @@ const ConstraintsCell = ({
       className="table-schema-cell-constraints text-[0.8125rem]"
       data-schema-grid-column="constraints"
     >
-      <span className="table-schema-constraints flex flex-wrap items-center gap-x-[0.45rem] gap-y-[0.2rem]">
+      <span className="table-schema-constraints flex flex-wrap items-center gap-x-2 gap-y-0.5">
         {base.map((item, index) => group(item, index))}
         {/* display: contents keeps the ref wrapper addressable while its
             groups participate in the cell's flex run. */}
@@ -313,16 +313,16 @@ const IndexEntry = ({
       "m-0",
       "flex",
       "items-baseline",
-      "gap-[0.45rem]",
-      "px-[0.75rem]",
-      "py-[0.5rem]",
+      "gap-2",
+      "px-3",
+      "py-2",
       ...(offset === 0 ? [] : ["border-t", "border-edge"]),
     ].join(" ")}
     data-schema-index={String(offset + 1)}
   >
     <Badge kind="idx" label={indxLabel(offset + 1)} />
     <span className="min-w-0 flex-1">
-      <span className="flex flex-wrap items-center gap-[0.45rem]">
+      <span className="flex flex-wrap items-center gap-2">
         <span className="table-schema-index-name font-mono text-[0.8125rem] font-semibold text-ink">
           {index.name ?? "(unnamed)"}
         </span>
@@ -365,19 +365,19 @@ const IndexEntry = ({
 // through untouched for downstream highlighting.
 const DdlSection = ({ section }: { readonly section: CompiledDdlSection }) => (
   <section
-    className="table-schema-section border-t border-edge bg-surface pt-[0.55rem]"
+    className="table-schema-section border-t border-edge bg-surface pt-2"
     data-schema-section="ddl"
     data-schema-ddl-title={section.title}
   >
     {/* The badge marks the band as verbatim DDL in both the inert stack and
         the live application's tab. */}
     <p
-      className={`${SECTION_LABEL_CLASSES} px-[0.75rem] mb-[0.1rem] flex items-center gap-1.5`}
+      className={`${SECTION_LABEL_CLASSES} px-3 mb-0.5 flex items-center gap-1.5`}
     >
       {section.title}
       <Badge kind="ddl" label="DDL" />
     </p>
-    <div className="table-schema-ddl-body min-w-0 px-[0.75rem] pb-[0.6rem] [&>:last-child]:mb-0">
+    <div className="table-schema-ddl-body min-w-0 px-3 pb-2 [&>:last-child]:mb-0">
       {hastContentToReact(section.children)}
     </div>
   </section>
@@ -394,15 +394,13 @@ export const TableSchemaSections = ({
   <>
     {schema.indexes.length === 0 ? null : (
       <section
-        className="table-schema-section border-t border-edge bg-surface pt-[0.55rem]"
+        className="table-schema-section border-t border-edge bg-surface pt-2"
         data-schema-section="indexes"
       >
         {/* A styled paragraph rather than a real heading keeps component
             chrome out of the document outline the section navigator uses. */}
-        <p className={`${SECTION_LABEL_CLASSES} px-[0.75rem] mb-[0.1rem]`}>
-          {"Indexes"}
-        </p>
-        <ul className="table-schema-index-list m-0 flex flex-col p-0 pb-[0.15rem] list-none">
+        <p className={`${SECTION_LABEL_CLASSES} px-3 mb-0.5`}>{"Indexes"}</p>
+        <ul className="table-schema-index-list m-0 flex flex-col p-0 pb-0.5 list-none">
           {schema.indexes.map((index, offset) => (
             <IndexEntry key={offset} index={index} offset={offset} />
           ))}

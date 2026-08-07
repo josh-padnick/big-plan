@@ -17,7 +17,7 @@ import type { CompiledTableOfContents } from "./compile.js";
 const GroupHeader = ({ part }: { readonly part: DocumentOutlinePart }) => (
   <p
     data-table-of-contents-group=""
-    className="table-of-contents-group mt-2.5 mb-0.5 text-xs font-semibold uppercase tracking-[0.1em] text-subtle"
+    className="table-of-contents-group mt-3 mb-0.5 text-xs font-semibold uppercase tracking-[0.1em] text-subtle"
   >
     {`[${part.number}] ${part.title}`}
   </p>
@@ -37,7 +37,7 @@ export const TableOfContents = ({
     <nav
       data-table-of-contents
       aria-label="The plan in one look"
-      className="table-of-contents mb-10"
+      className="table-of-contents mb-12"
     >
       {/* Semantic h2 for chrome only: nested inside the overview nav so it
           is not a deck slide, and sized to match slide-title h2 scale. */}
@@ -59,7 +59,7 @@ export const TableOfContents = ({
             <a
               data-table-of-contents-row
               href={section?.id === undefined ? "#" : `#${section.id}`}
-              className="table-of-contents-row group -mx-2 grid w-fit max-w-full grid-cols-[2rem_minmax(0,max-content)] items-baseline gap-x-[0.9rem] rounded-md px-2 py-1.5 no-underline hover:bg-[color-mix(in_srgb,var(--ink-c)_4%,transparent)]"
+              className="table-of-contents-row group -mx-2 grid w-fit max-w-full grid-cols-[2rem_minmax(0,max-content)] items-baseline gap-x-4 rounded-md px-2 py-1.5 no-underline hover:bg-[color-mix(in_srgb,var(--ink-c)_4%,transparent)]"
             >
               <span
                 data-table-of-contents-num

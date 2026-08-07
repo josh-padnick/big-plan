@@ -275,7 +275,7 @@
     white-space: nowrap;
   }
   article .decision-score-stars {
-    gap: 0.0625rem;
+    gap: 1px;
     white-space: nowrap;
   }
   article .decision-score-star {
@@ -368,7 +368,7 @@
   }
   article .decision-calculation-matrix th,
   article .decision-calculation-matrix td {
-    padding: 0.5rem 0.625rem;
+    padding: 0.5rem 0.75rem;
     border-right: 1px solid var(--edge-c);
     border-bottom: 1px solid var(--edge-c);
     text-align: center;
@@ -545,7 +545,7 @@
     color: var(--color-muted);
   }
   article .decision-proposal-input {
-    padding: 0.4375rem 0.625rem;
+    padding: 0.5rem 0.75rem;
     border: 1px solid var(--edge-c);
     border-radius: 0.375rem;
     background: var(--bg);
@@ -562,7 +562,7 @@
       color-mix(in srgb, var(--color-accent) 20%, transparent);
   }
   article .decision-proposal-cancel {
-    padding: 0.25rem 0.625rem;
+    padding: 0.25rem 0.75rem;
     border: 1px solid var(--edge-c);
     border-radius: 0.375rem;
     cursor: pointer;
@@ -628,7 +628,7 @@
     border-color: var(--color-accent);
   }
   article .decision-change {
-    padding: 0.25rem 0.625rem;
+    padding: 0.25rem 0.75rem;
     border: 1px solid var(--edge-c);
     border-radius: 0.375rem;
     cursor: pointer;

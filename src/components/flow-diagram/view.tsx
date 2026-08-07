@@ -48,7 +48,7 @@ import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 // B may regularize them against the product scale.
 
 const BADGE_CLASSES =
-  "flow-diagram-badge ml-[0.4rem] inline-block rounded-full px-2 py-[0.05rem] align-[1px] text-[0.6875rem] font-semibold";
+  "flow-diagram-badge ml-1.5 inline-block rounded-full px-2 py-0.5 align-[1px] text-[0.6875rem] font-semibold";
 
 const BADGE_TONE_CLASSES: Readonly<Record<"neutral" | "warning", string>> = {
   neutral:
@@ -122,7 +122,7 @@ const Node = ({
     data-flow-diagram-tone={node.tone}
     data-flow-node={node.id}
     data-flow-in-stage={stage.id}
-    className={`flow-diagram-node rounded-lg border px-[0.85rem] py-2 leading-normal ${NODE_TONE_CLASSES[node.tone]}${spaced ? " my-[0.275rem]" : ""}`}
+    className={`flow-diagram-node rounded-lg border px-3 py-2 leading-normal ${NODE_TONE_CLASSES[node.tone]}${spaced ? " my-1" : ""}`}
     style={style}
     {...targetProps({
       kind: "node",
@@ -160,7 +160,7 @@ const Node = ({
     {node.body.length === 0 ? null : (
       <span
         data-flow-field="body"
-        className="mt-[0.1rem] block text-[0.8125rem] text-muted"
+        className="mt-0.5 block text-[0.8125rem] text-muted"
       >
         {hastContentToReact(node.body)}
       </span>
@@ -282,7 +282,7 @@ const ViewerControls = () => (
         glyph reads as a second maximize. */}
     <button
       type="button"
-      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-fit gap-1.5 rounded-md border border-edge bg-paper px-2.5 font-sans text-xs font-semibold`}
+      className={`${VIEWER_CONTROL_CLASSES} flow-diagram-fit gap-1.5 rounded-md border border-edge bg-paper px-3 font-sans text-xs font-semibold`}
       aria-label="Fit diagram to width"
       aria-pressed="false"
       data-tooltip="Fit diagram to width"
@@ -301,7 +301,7 @@ const ViewerControls = () => (
 const ProposalControls = () => (
   <>
     <span
-      className="flow-diagram-total inline-flex shrink-0 items-center rounded-full px-2 py-[0.05rem] font-sans text-[0.6875rem] font-semibold"
+      className="flow-diagram-total inline-flex shrink-0 items-center rounded-full px-2 py-0.5 font-sans text-[0.6875rem] font-semibold"
       data-flow-total
       hidden
     />
@@ -505,7 +505,7 @@ export const FlowDiagram = ({
   const lastStageTitle = model.stages[lastStage]?.title ?? "";
   return (
     <figure
-      className="flow-diagram relative mb-5 min-w-0"
+      className="flow-diagram relative mb-6 min-w-0"
       data-flow-diagram
       // The collector names the diagram it belongs to from here, not from the
       // accessible name: the shared maximize leg rewrites that label while the
@@ -588,7 +588,7 @@ export const FlowDiagram = ({
       {model.footer === undefined || model.footerAnchor === undefined ? null : (
         <figcaption
           data-flow-diagram-footer
-          className="mt-[0.9rem] mb-0 text-center text-[0.8125rem] text-muted"
+          className="mt-4 mb-0 text-center text-[0.8125rem] text-muted"
           {...targetProps({
             kind: "footer",
             anchor: model.footerAnchor,

@@ -82,7 +82,7 @@ const codeFigure = (pre: Element): Element => ({
       "code-figure",
       "group/code-figure",
       "relative",
-      "mb-5",
+      "mb-6",
       "[&>pre]:mb-0",
     ],
     [MAXIMIZABLE_ATTRIBUTE]: "code",

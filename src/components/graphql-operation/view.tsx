@@ -109,13 +109,13 @@ export const GraphqlOperation = ({
   readonly model: CompiledGraphqlOperation;
 }) => (
   <figure
-    className="graphql-operation mb-5 min-w-0 overflow-hidden rounded-md border border-edge"
+    className="graphql-operation mb-6 min-w-0 overflow-hidden rounded-md border border-edge"
     data-graphql-operation=""
     data-graphql-kind={model.kind}
     {...(model.deprecated ? { "data-graphql-deprecated": "" } : {})}
   >
     <header className="bg-header px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-3">
         <BadgePill
           label={model.kind}
           classNames={["graphql-operation-kind-pill", KIND_CLASSES[model.kind]]}

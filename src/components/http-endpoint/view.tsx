@@ -237,13 +237,13 @@ export const HttpEndpoint = ({
   readonly model: CompiledHttpEndpoint;
 }) => (
   <figure
-    className="http-endpoint mb-5 min-w-0 overflow-hidden rounded-md border border-edge"
+    className="http-endpoint mb-6 min-w-0 overflow-hidden rounded-md border border-edge"
     data-http-endpoint=""
     data-http-method={model.method}
     {...(model.deprecated ? { "data-http-deprecated": "" } : {})}
   >
     <header className="bg-header px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-3">
         <BadgePill
           label={model.method}
           classNames={[

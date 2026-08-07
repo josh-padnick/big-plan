@@ -33,7 +33,7 @@ const DiffStats = ({
   readonly addedCount: number;
   readonly removedCount: number;
 }) => (
-  <span className="code-diff-stats inline-flex shrink-0 gap-[0.4rem] text-xs font-semibold">
+  <span className="code-diff-stats inline-flex shrink-0 gap-1.5 text-xs font-semibold">
     <span className="sr-only">
       {`${addedCount} added, ${removedCount} removed`}
     </span>
@@ -117,7 +117,7 @@ export const CodeDiffHeader = ({
   readonly removedCount: number;
   readonly showLineCounts: boolean;
 }) => (
-  <figcaption className="code-diff-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-[0.55rem] py-[0.3rem]">
+  <figcaption className="code-diff-header flex min-w-0 items-center justify-between gap-3 rounded-t-[calc(var(--radius-md)-1px)] border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
     <FileIdentity filePath={filePath} />
     <span className="code-diff-controls flex shrink-0 items-center gap-3">
       <span className="code-diff-view-group inline-flex items-center gap-2">

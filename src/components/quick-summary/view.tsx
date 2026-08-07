@@ -42,14 +42,14 @@ export const QuickSummary = ({
   return (
     <aside
       data-quick-summary
-      className="mb-8 max-w-[var(--measure)] rounded-lg border border-edge bg-surface px-5 py-4"
+      className="mb-8 max-w-[var(--measure)] rounded-lg border border-edge bg-surface px-6 py-4"
     >
       <p className="mb-3 text-[1.0625rem] font-semibold text-subtle">
         Quick summary
       </p>
       <dl className="m-0">
         {why === undefined ? null : (
-          <div className="quick-summary-why mb-3.5 rounded-r-lg border-l-[3px] border-accent bg-[color-mix(in_srgb,var(--accent-c)_8%,transparent)] px-4 py-3 text-[1.0625rem]">
+          <div className="quick-summary-why mb-4 rounded-r-lg border-l-[3px] border-accent bg-[color-mix(in_srgb,var(--accent-c)_8%,transparent)] px-4 py-3 text-[1.0625rem]">
             <Label text="Why" />
             <dd className="m-0">
               <FacetBody items={why.items} />
@@ -60,7 +60,7 @@ export const QuickSummary = ({
           {rest.map((facet) => (
             <div
               key={facet.name}
-              className="rounded-lg border border-edge bg-paper px-4 pt-2.5 pb-3"
+              className="rounded-lg border border-edge bg-paper px-4 pt-3 pb-3"
             >
               <Label text={facet.name} />
               <dd className="m-0">
