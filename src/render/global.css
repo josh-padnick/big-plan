@@ -142,6 +142,14 @@ reading surface read as paper rather than as white.
   --note-700: #393b74;
   --note-800: #2c2d59;
   --note-900: #2a2f4e;
+
+  /* The one neutral pair, and a deliberate exception to the warm ramp above.
+     A column-header band is chrome that has to read as a band rather than as
+     more paper, and at that lightness the warm steps sit too close to the
+     caption to separate. The captain asked for a true neutral here twice; it
+     is scoped to that one role and never becomes a utility. */
+  --neutral-100: #eeeeee;
+  --neutral-800: #2b2b2b;
 }
 
 /*
@@ -223,7 +231,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --annotation-ink: var(--note-900);
   --diff-content-bg: var(--grey-0);
   --diff-hunk-bg: var(--grey-75);
-  --table-head-bg: var(--grey-200);
+  --table-head-bg: var(--neutral-100);
   --diff-hunk-c: var(--grey-600);
   --diff-header-bg: var(--header-bg);
 
@@ -310,7 +318,7 @@ same separation.
     --annotation-ink: var(--note-100);
     --diff-content-bg: var(--grey-950);
     --diff-hunk-bg: var(--grey-925);
-    --table-head-bg: var(--grey-900);
+    --table-head-bg: var(--neutral-800);
     --diff-hunk-c: var(--grey-400);
     --diff-header-bg: var(--header-bg);
 
@@ -380,7 +388,7 @@ same separation.
   --annotation-ink: var(--note-100);
   --diff-content-bg: var(--grey-950);
   --diff-hunk-bg: var(--grey-925);
-  --table-head-bg: var(--grey-900);
+  --table-head-bg: var(--neutral-800);
   --diff-hunk-c: var(--grey-400);
   --diff-header-bg: var(--header-bg);
 
