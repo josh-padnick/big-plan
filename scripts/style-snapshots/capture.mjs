@@ -129,6 +129,24 @@ const applyActions = async ({ page, actions }) => {
   return true;
 };
 
+/**
+ * Returns click-driven captures to their resting visual state. A click leaves
+ * both the pointer and focus on the activated control; once target capture
+ * positioning moves content beneath that screen coordinate, an unrelated
+ * hover affordance can otherwise leak into the screenshot.
+ */
+const clearIncidentalInteractionState = async ({ page, actions }) => {
+  if (actions.some(({ type }) => type === "focus" || type === "hover")) {
+    return;
+  }
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => {
+    if (globalThis.document.activeElement instanceof globalThis.HTMLElement) {
+      globalThis.document.activeElement.blur();
+    }
+  });
+};
+
 /** Turns a logical capture tuple into one stable manifest key. */
 const captureName = ({ document, capture, viewport, theme }) =>
   [document, capture, viewport, theme]
@@ -471,6 +489,10 @@ try {
             if (!actionsAvailable) {
               continue;
             }
+            await clearIncidentalInteractionState({
+              page,
+              actions: capture.actions,
+            });
             const target = page.locator(capture.selector);
             const targetCount = await target.count();
             if (targetCount === 0) {
