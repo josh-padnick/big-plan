@@ -199,8 +199,8 @@ export const WIREFRAME_DEVICE_PRESETS: Readonly<
   },
   tablet: {
     label: "Tablet, landscape",
-    width: 950,
-    height: 660,
+    width: 1020,
+    height: 720,
     heightPolicy: "fixed",
   },
   "tablet-portrait": {

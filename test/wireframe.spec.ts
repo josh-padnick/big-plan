@@ -181,7 +181,7 @@ test("should scale a true-size drawing inside a narrow review viewport", async (
   await test.step("the artboard keeps device geometry without widening the page", async () => {
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
-      .toBe(950);
+      .toBe(1020);
     const box = await boxOf(artboard);
     expect(box.width).toBeLessThanOrEqual(320);
     const overflow = await page.evaluate(
@@ -307,8 +307,8 @@ test("should preserve the captain's desktop, tablet, and phone measurements", as
     const artboard = tablet.locator(".wireframe-artboard");
     await expect
       .poll(() => artboard.evaluate((node) => node.clientWidth))
-      .toBe(950);
-    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(660);
+      .toBe(1020);
+    expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(720);
   });
 
   await test.step("selection does not indent Ticket or Inbox queue rows", async () => {

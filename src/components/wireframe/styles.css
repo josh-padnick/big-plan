@@ -197,8 +197,8 @@ marks and a plan diff never jitters.
 
   /* Lay out at the device's true width, then scale the whole drawing to fit.
      The layout never reflows into the review column. Desktop and phone own
-     realistic minimum silhouettes; tablet holds a fixed device viewport and
-     scrolls internally. */
+     realistic minimum silhouettes; tablet holds a fixed device viewport that
+     content must fit without an internal scrollbar. */
   .wireframe-screen[data-wireframe-device="desktop"] {
     --wf-width: 1200px;
     /* The width stays wide enough for the documented 280-320px pane floors
@@ -213,8 +213,8 @@ marks and a plan diff never jitters.
     max-width: 48rem;
   }
   .wireframe-screen[data-wireframe-device="tablet"] {
-    --wf-width: 950px;
-    --wf-height: 660px;
+    --wf-width: 1020px;
+    --wf-height: 720px;
     --wf-min-height: 0px;
     max-width: 960px;
   }
@@ -368,16 +368,18 @@ marks and a plan diff never jitters.
     font-size: 0.875rem;
     line-height: 1.45;
   }
-  /* iPad is a viewport contract, not minimum paper. Content scrolls inside a
-     real device silhouette instead of stretching the bezel into a 1.15:1
-     almost-square frame. */
+  /* iPad is a viewport contract, not minimum paper: content lays out to fit
+     this fixed device silhouette instead of stretching the bezel into a
+     1.15:1 almost-square frame. overflow-y stays auto only as a safety net -
+     a fixed-frame screen that needs it to show all its content has a layout
+     defect to fix, not a feature to keep; the geometry test fences this. */
   .wireframe-artboard[data-wireframe-height-policy="fixed"] {
     height: var(--wf-height);
     min-height: 0;
     overflow-y: auto;
   }
   /* A desktop application is a viewport, not an endlessly growing page.
-     Its shell owns the 900px device height; persistent chrome stays anchored
+     Its shell owns the device height; persistent chrome stays anchored
      while workspace panes take responsibility for their own overflow. */
   .wireframe-artboard[data-wireframe-device="desktop"]:has(
       .wireframe-app-shell

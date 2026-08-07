@@ -116,8 +116,8 @@ test("should render every proof at its native device geometry", async ({
       );
       const artboard = screen.locator(".wireframe-artboard");
 
-      expect(await artboard.evaluate((node) => node.clientWidth)).toBe(950);
-      expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(660);
+      expect(await artboard.evaluate((node) => node.clientWidth)).toBe(1020);
+      expect(await artboard.evaluate((node) => node.offsetHeight)).toBe(720);
       const ratio = await artboard.evaluate(
         (node) => node.offsetWidth / node.offsetHeight,
       );
@@ -126,6 +126,19 @@ test("should render every proof at its native device geometry", async ({
       expect(
         await artboard.evaluate((node) => getComputedStyle(node).overflowY),
       ).toBe("auto");
+      // A fixed-frame screen must lay out within its declared artboard - an
+      // internal scrollbar is a layout defect, not a scroll affordance.
+      // overflow-y stays a safety net (asserted above), never a crutch.
+      const { overflow, screenId } = await artboard.evaluate((node) => ({
+        overflow: node.scrollHeight - node.clientHeight,
+        screenId: node
+          .closest("[data-wireframe-screen]")
+          ?.getAttribute("data-wireframe-screen"),
+      }));
+      expect(
+        overflow,
+        `screen "${screenId}" needs an internal scrollbar (${overflow}px of overflow)`,
+      ).toBeLessThanOrEqual(0);
       await expect(screen.locator(".wireframe-browser-bar")).toHaveCount(0);
       await expect(screen.locator(".wireframe-tablet-handle")).toHaveCount(1);
       const targets = await screen
