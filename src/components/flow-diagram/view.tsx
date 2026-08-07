@@ -48,7 +48,7 @@ import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 // B may regularize them against the product scale.
 
 const BADGE_CLASSES =
-  "flow-diagram-badge ml-1.5 inline-block rounded-full px-2 py-0.5 align-[1px] text-[0.6875rem] font-semibold";
+  "flow-diagram-badge ml-1.5 inline-block rounded-full px-2 py-0.5 align-[1px] text-2xs font-semibold";
 
 const BADGE_TONE_CLASSES: Readonly<Record<"neutral" | "warning", string>> = {
   neutral:
@@ -70,7 +70,7 @@ const NODE_TONE_CLASSES: Readonly<
 const LABEL_CLASSES = "block text-sm font-semibold text-ink";
 
 const EDGE_LABEL_CLASSES =
-  "absolute -top-[1.15rem] left-1/2 -translate-x-1/2 text-[0.6875rem] whitespace-nowrap text-muted";
+  "absolute -top-[1.15rem] left-1/2 -translate-x-1/2 text-2xs whitespace-nowrap text-muted";
 
 // Grid template column widths: card columns size to content, connector
 // columns hold a verb label without crowding it, and a fork column is
@@ -158,10 +158,7 @@ const Node = ({
       </code>
     )}
     {node.body.length === 0 ? null : (
-      <span
-        data-flow-field="body"
-        className="mt-0.5 block text-[0.8125rem] text-muted"
-      >
+      <span data-flow-field="body" className="mt-0.5 block text-sm text-muted">
         {hastContentToReact(node.body)}
       </span>
     )}
@@ -301,7 +298,7 @@ const ViewerControls = () => (
 const ProposalControls = () => (
   <>
     <span
-      className="flow-diagram-total inline-flex shrink-0 items-center rounded-full px-2 py-0.5 font-sans text-[0.6875rem] font-semibold"
+      className="flow-diagram-total inline-flex shrink-0 items-center rounded-full px-2 py-0.5 font-sans text-2xs font-semibold"
       data-flow-total
       hidden
     />
@@ -317,9 +314,7 @@ const ProposalControls = () => (
         data-flow-show-original
         aria-pressed="false"
       >
-        <span className="font-sans text-[0.6875rem] font-semibold">
-          Show original
-        </span>
+        <span className="font-sans text-2xs font-semibold">Show original</span>
       </button>
       <button
         type="button"
@@ -328,9 +323,7 @@ const ProposalControls = () => (
         hidden
       >
         {lucideIconToReact({ icon: ROTATE_CCW_ICON, hidden: false })}
-        <span className="font-sans text-[0.6875rem] font-semibold">
-          Revert all
-        </span>
+        <span className="font-sans text-2xs font-semibold">Revert all</span>
       </button>
     </span>
   </>
@@ -427,7 +420,7 @@ const connectorsLeaving = ({
             // verb floats over that right half.
             <span
               data-flow-field="label"
-              className="absolute top-[calc(50%-1.35rem)] left-3/4 -translate-x-1/2 text-[0.6875rem] whitespace-nowrap text-muted"
+              className="absolute top-[calc(50%-1.35rem)] left-3/4 -translate-x-1/2 text-2xs whitespace-nowrap text-muted"
             >
               {edge.label}
             </span>
@@ -456,7 +449,7 @@ const StageHeader = ({
     // from here rather than from the accessible name, which a proposal
     // rewrites.
     data-flow-where={`stage ${stageIndex + 1} of ${stageCount}`}
-    className="m-0 mb-2 self-end text-[0.6875rem] font-semibold tracking-[0.09em] uppercase text-subtle"
+    className="m-0 mb-2 self-end text-2xs font-semibold tracking-caps uppercase text-subtle"
     style={style}
     {...targetProps({
       kind: "stage",
@@ -588,7 +581,7 @@ export const FlowDiagram = ({
       {model.footer === undefined || model.footerAnchor === undefined ? null : (
         <figcaption
           data-flow-diagram-footer
-          className="mt-4 mb-0 text-center text-[0.8125rem] text-muted"
+          className="mt-4 mb-0 text-center text-sm text-muted"
           {...targetProps({
             kind: "footer",
             anchor: model.footerAnchor,

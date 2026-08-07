@@ -8,7 +8,7 @@ import { MAXIMIZABLE_ATTRIBUTE } from "../_model/figure-controls/figure-controls
 
 export const CodeDiff = ({ model }: { readonly model: CompiledCodeDiff }) => (
   <figure
-    className="code-diff mb-6 min-w-0 max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-[0.8125rem] leading-[1.5]"
+    className="code-diff mb-6 min-w-0 max-w-full rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-sm"
     data-code-diff=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "diff" }}
     data-diff-view="unified"

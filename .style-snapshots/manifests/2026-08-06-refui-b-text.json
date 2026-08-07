@@ -1,0 +1,626 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "design(text): put every size and tracking on the type scale [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/components/_shared/badge-pill/badge-pill.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/_shared/decision-card/decision-card.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/_shared/decision-card/view-layouts.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/_shared/labeled-section/labeled-section.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/_shared/tree-hierarchy/tree-hierarchy.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/code-diff/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/code-snippet/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/data-table/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/database-table-schema/view-elements.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/database-table-schema/view-layouts.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/file-tree-diff/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/file-tree/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/flow-diagram/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/graphql-operation/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/grpc-method/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/http-endpoint/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/part/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/quick-summary/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/table-of-contents/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/components/wireframe/view.tsx",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/deck-transform.ts",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/render/markdown/prose.css",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/shell.ts",
+      "propertyDeltas": [
+        {
+          "property": "type size, line height, and tracking",
+          "from": "arbitrary rem sizes with line height and tracking chosen at the call site",
+          "to": "steps from the type scale, with line height owned by the step and one tracking value for all-caps labels"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__desktop-navigation__desktop__dark.png",
+      "changedPixels": 388,
+      "before": {
+        "width": 240,
+        "height": 288,
+        "sha256": "17b84537e12abbd466f3686e22f9c9dba7360c8f9268dbac5e58b6be9b8790c1"
+      },
+      "after": {
+        "width": 240,
+        "height": 288,
+        "sha256": "88404f8ebf89af8ee1daeb97c8b67a01ca9fad9cb4c07b168fd8034610bb2d10"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "components__desktop-navigation__desktop__light.png",
+      "changedPixels": 388,
+      "before": {
+        "width": 240,
+        "height": 288,
+        "sha256": "dbcff56453a053be5784b0eedc7d52ab7159995ac0f06c95c0960515f7f0ccb7"
+      },
+      "after": {
+        "width": 240,
+        "height": 288,
+        "sha256": "a7718a1a0ba93721aefe12d169bc18a0e3d196ca6776d2e4d48c3fd77d42c241"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__dark.png",
+      "changedPixels": 143477,
+      "before": {
+        "width": 872,
+        "height": 808,
+        "sha256": "bd46840b475cf2aa60ad7ff7d7c2aa9c4a060cfbde488f0a17595a04327fbbc4"
+      },
+      "after": {
+        "width": 872,
+        "height": 808,
+        "sha256": "76d6dba2664e18c76f940f70fdc3095ce044cc53fcec96f60a80f37fef0f79fd"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__desktop__light.png",
+      "changedPixels": 144489,
+      "before": {
+        "width": 872,
+        "height": 808,
+        "sha256": "948549e4f29d539ce38285e3c5dced4273e5e5d84847f0a6a64835c02669790f"
+      },
+      "after": {
+        "width": 872,
+        "height": 808,
+        "sha256": "ec0c9c772f7b72e4e139b87fc31e6aee00d5b0583ffe4e765cecc8c321b13a35"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__dark.png",
+      "changedPixels": 79100,
+      "before": {
+        "width": 358,
+        "height": 692,
+        "sha256": "bb4ea02daae0d6ca3ee43e860a43483e6e5ac2e1cb68c8f5f693390cc8f41c5a"
+      },
+      "after": {
+        "width": 358,
+        "height": 692,
+        "sha256": "dcf8e0c86c7c7dc8a927e4ca22a9630dcb9f6f551b8753211ce6d7558ff41d8f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "components__document__phone__light.png",
+      "changedPixels": 79561,
+      "before": {
+        "width": 358,
+        "height": 692,
+        "sha256": "9ad609cb37ffe7985ce072380d1bee0fb95bc489067b108c22aa770dc04a28b9"
+      },
+      "after": {
+        "width": 358,
+        "height": 692,
+        "sha256": "2630434ecee955a573e84794c3f498b636307a9c3e537030fdf24d01a90c2917"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__dark.png",
+      "changedPixels": 98504,
+      "before": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "b4af815aef078d2193c3629d0b815ecb1cd6c3db720c3ec976344f18aceb8151"
+      },
+      "after": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "cebee58d670d2ee214c61c495f07cee179532544324c18c7f4d66957ae6ce80f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "components__maximized-code__desktop__light.png",
+      "changedPixels": 98937,
+      "before": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "130a07bd4d92cbeefd57e084c0af4fff35eb2299c186eba7bf94a2be25d11cc1"
+      },
+      "after": {
+        "width": 1392,
+        "height": 1556,
+        "sha256": "0c0e9d0d8dd2c3d4676a673dd1a83430ed963526a6108ce0ca175df99584fe8a"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__dark.png",
+      "changedPixels": 147983,
+      "before": {
+        "width": 872,
+        "height": 1307,
+        "sha256": "c80e785f039df1a44b64193e7d33c9fa2ddc9e28b7be38bf09d4eeafc7ed0115"
+      },
+      "after": {
+        "width": 872,
+        "height": 1310,
+        "sha256": "4c5f213bd8a5a5e8ee77165e775e8cb6ae7955399744109f809118c9fb619efa"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-desktop__desktop__light.png",
+      "changedPixels": 152711,
+      "before": {
+        "width": 872,
+        "height": 1307,
+        "sha256": "fb88c35f516de1332e5c80b1839b59afcc54d16993918aaa6071abefb2502054"
+      },
+      "after": {
+        "width": 872,
+        "height": 1310,
+        "sha256": "fc4b10702475f975712e5145fc9ec6181c8e9a284943776d7650fad4d0f4bc53"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__dark.png",
+      "changedPixels": 159752,
+      "before": {
+        "width": 358,
+        "height": 1640,
+        "sha256": "c016233c66b72472e0f9f3503156570351006978b15534994c23ea1b68db43cf"
+      },
+      "after": {
+        "width": 358,
+        "height": 1634,
+        "sha256": "0432af1421dbd829559609b4275ea6a464d2c9ee8c289c2cd566ed2e136ee1b0"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "deck__collapsed-phone__phone__light.png",
+      "changedPixels": 161022,
+      "before": {
+        "width": 358,
+        "height": 1640,
+        "sha256": "b012d5d6682ae5ba2249d9e4ecdbbc4b96257bf45a005e5bdb3a96248b149d1b"
+      },
+      "after": {
+        "width": 358,
+        "height": 1634,
+        "sha256": "7305ffaf25b1929da765912784c452ca37c3d80813109690bf0c3ac79bf09dc2"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__dark.png",
+      "changedPixels": 340084,
+      "before": {
+        "width": 872,
+        "height": 2782,
+        "sha256": "0c0f135f993c9adee8af971abb1ca459a396482c05b9870f765c50bb1016f145"
+      },
+      "after": {
+        "width": 872,
+        "height": 2751,
+        "sha256": "2677e242c134f685c3679cf50d75e3e83c819334d10423b195aacfd4317c0073"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__desktop__light.png",
+      "changedPixels": 344752,
+      "before": {
+        "width": 872,
+        "height": 2782,
+        "sha256": "397ee94ecbb2896c6d4ac0909b0b98f7a2743b326afeb42f0ef63afdedcc9af0"
+      },
+      "after": {
+        "width": 872,
+        "height": 2751,
+        "sha256": "54eb5a042cc676a7c204cef96bdd351524e3b63b066d4617538d10e63edef67f"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__dark.png",
+      "changedPixels": 352617,
+      "before": {
+        "width": 358,
+        "height": 3572,
+        "sha256": "2b15c81ffd71aeb44b9eb0f1c3e82979f47797401a5ed2a0d03dfe7ad6b3c4af"
+      },
+      "after": {
+        "width": 358,
+        "height": 3487,
+        "sha256": "408d385f1cc787e17b8581a7671bef036427f026d0d2b68872fb02622f21247c"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "deck__document__phone__light.png",
+      "changedPixels": 354783,
+      "before": {
+        "width": 358,
+        "height": 3572,
+        "sha256": "f96764d361e0efaf61f4e85be16bfb4b481c8e32a31e0d1c71f30347baf32289"
+      },
+      "after": {
+        "width": 358,
+        "height": 3487,
+        "sha256": "22f5090136a7f1ff904f8537bdb690163def2857eadda901d128ab92ae7bb4e3"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "deck__mobile-navigation-open__phone__dark.png",
+      "changedPixels": 3891,
+      "before": {
+        "width": 390,
+        "height": 375,
+        "sha256": "3e2bf11100fe2c718813220da7e51171aa432ab513782fd7e4bf290f901abd8c"
+      },
+      "after": {
+        "width": 390,
+        "height": 373,
+        "sha256": "0825e2ba31936e344e1c8c5a296f279c92e09f0eb5332ac394df4bc6637c8524"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    },
+    {
+      "capture": "deck__mobile-navigation-open__phone__light.png",
+      "changedPixels": 3889,
+      "before": {
+        "width": 390,
+        "height": 375,
+        "sha256": "bdf18874cf07cac238c0e4d36aac13284ed89c44c1bb75d4862902babfc13232"
+      },
+      "after": {
+        "width": 390,
+        "height": 373,
+        "sha256": "9a2df133efe1ffb5a5985e8ba5716072d9b920d86edae4095103d4a2d5288c79"
+      },
+      "propertyDeltas": [
+        {
+          "property": "type",
+          "from": "sizes one pixel apart and five different all-caps tracking values",
+          "to": "ten scale steps, tightened tracking above 24 pixels, and one all-caps tracking value"
+        }
+      ]
+    }
+  ]
+}

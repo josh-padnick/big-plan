@@ -22,10 +22,10 @@ export const SchemaCode = ({
 );
 
 const SCHEMA_CELL_CLASSES = {
-  name: "table-schema-cell-name font-mono text-[0.8125rem] font-semibold",
-  type: "table-schema-cell-type font-mono text-[0.8125rem]",
-  constraints: "table-schema-cell-constraints text-[0.8125rem]",
-  default: "table-schema-cell-default font-mono text-[0.8125rem]",
+  name: "table-schema-cell-name font-mono text-sm font-semibold",
+  type: "table-schema-cell-type font-mono text-sm",
+  constraints: "table-schema-cell-constraints text-sm",
+  default: "table-schema-cell-default font-mono text-sm",
   comment: "table-schema-cell-comment text-xs leading-snug text-muted",
 } as const;
 

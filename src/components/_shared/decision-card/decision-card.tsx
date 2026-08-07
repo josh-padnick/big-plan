@@ -232,7 +232,7 @@ const Reversibility = ({ model }: { readonly model: CompiledDecisionCard }) => {
   if (reversibility === undefined) return null;
   return (
     <div className="decision-reversibility border-t border-edge px-6 py-4">
-      <p className="m-0 text-xs font-semibold tracking-wide text-muted uppercase">
+      <p className="m-0 text-xs font-semibold tracking-caps text-muted uppercase">
         {`Reversibility · ${reversibility.rating.replace("-", " ")}`}
       </p>
       <div className="mt-1 text-sm text-ink [&>:last-child]:mb-0">
@@ -274,7 +274,7 @@ export const DecisionCard = ({
     >
       <figcaption className="decision-zone-question bg-header px-6 py-4">
         {model.layout === "rows" ? (
-          <p className="decision-eyebrow m-0 text-xs font-semibold tracking-wider text-subtle uppercase">
+          <p className="decision-eyebrow m-0 text-xs font-semibold tracking-capsr text-subtle uppercase">
             {"Decision"}
           </p>
         ) : null}

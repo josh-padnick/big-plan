@@ -58,7 +58,7 @@ describe("TableOfContents", () => {
     expect(html).toMatch(
       /<h2 class="table-of-contents-title[^"]*">The plan in one look<\/h2>/,
     );
-    expect(html).toContain("text-[1.6rem]");
+    expect(html).toContain("text-2xl");
     expect(html).not.toMatch(
       /<p class="mb-2 text-\[1\.0625rem\][^"]*">The plan in one look<\/p>/,
     );

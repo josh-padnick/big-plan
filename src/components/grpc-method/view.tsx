@@ -87,9 +87,7 @@ const FieldEntry = ({ field }: { readonly field: CompiledGrpcField }) => (
     dataProperties={{ "data-grpc-field": field.side }}
     term={
       <>
-        <span className="font-mono text-[0.8125rem] font-semibold">
-          {field.name}
-        </span>
+        <span className="font-mono text-sm font-semibold">{field.name}</span>
         {field.fieldType === undefined ? null : (
           <span className="font-mono text-xs text-muted">
             {field.fieldType}
@@ -115,9 +113,7 @@ const FieldSection = ({
   <CardSection>
     <div className="flex flex-wrap items-center gap-2">
       <SectionLabel label={label} />
-      <span className="font-mono text-[0.8125rem] font-semibold">
-        {messageType}
-      </span>
+      <span className="font-mono text-sm font-semibold">{messageType}</span>
     </div>
     <DefinitionList>
       {fields.map((field) => (
@@ -133,7 +129,7 @@ const ErrorEntry = ({ error }: { readonly error: CompiledGrpcError }) => (
     data-grpc-error={error.code}
   >
     <div className="mb-2 flex flex-wrap items-center gap-2">
-      <span className="grpc-method-error-code inline-flex items-center rounded-full bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)] px-2 py-0.5 font-mono text-[0.6875rem] leading-4 font-bold text-[var(--callout-warning-c)]">
+      <span className="grpc-method-error-code inline-flex items-center rounded-full bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)] px-2 py-0.5 font-mono text-2xs leading-4 font-bold text-[var(--callout-warning-c)]">
         {error.code}
       </span>
     </div>

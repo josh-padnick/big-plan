@@ -106,17 +106,18 @@ const SLIDE_TITLE_CLASSES = [
   "m-0",
   "border-b-0",
   "pb-0",
-  "text-[1.6rem]",
+  "text-2xl",
+  "tracking-tight",
   ...SCROLL_CLASSES,
 ] as const;
 
 const KICKER_CLASSES = [
   "plan-slide-kicker",
   "mb-2",
-  "text-[0.6875rem]",
+  "text-2xs",
   "font-semibold",
   "uppercase",
-  "tracking-[0.14em]",
+  "tracking-caps",
   "text-subtle",
   ...SCROLL_CLASSES,
 ] as const;
@@ -136,10 +137,10 @@ const SLIDE_GROUP_CLASSES = [
 const SUBSLIDE_KICKER_CLASSES = [
   "mt-0",
   "mb-0",
-  "text-[0.6875rem]",
+  "text-2xs",
   "font-semibold",
   "uppercase",
-  "tracking-[0.14em]",
+  "tracking-caps",
   "text-subtle",
   ...SCROLL_CLASSES,
 ] as const;
@@ -159,7 +160,7 @@ const SUBSLIDE_FRAME_CLASSES = [
 const CONTEXT_CLASSES = [
   "plan-slide-context",
   "mb-4",
-  "text-[0.9375rem]",
+  "text-sm",
   "text-muted",
 ] as const;
 

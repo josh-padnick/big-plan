@@ -27,11 +27,11 @@ export const Part = ({
     >
       <span
         data-part-number
-        className="text-[0.8125rem] font-semibold tracking-[0.1em] whitespace-nowrap uppercase text-subtle"
+        className="text-sm font-semibold tracking-caps whitespace-nowrap uppercase text-subtle"
       >
         {number === undefined ? null : `Part ${number}`}
       </span>
-      <span className="text-[1.45rem] leading-tight font-bold text-ink">
+      <span className="text-2xl font-bold tracking-tight text-ink">
         {model.title}
       </span>
     </div>

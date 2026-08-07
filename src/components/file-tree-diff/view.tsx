@@ -91,7 +91,7 @@ const ChangeSummary = ({
 }: {
   readonly entries: ReadonlyArray<TreeEntry>;
 }) => (
-  <span className="file-tree-diff-summary inline-flex min-w-0 shrink-0 items-center gap-1 font-sans text-[0.6875rem] font-semibold">
+  <span className="file-tree-diff-summary inline-flex min-w-0 shrink-0 items-center gap-1 font-sans text-2xs font-semibold">
     {treeChangeCountsToReact(
       countTreeChanges({ entries, badgeForEntry: (entry) => entry.badge }),
     )}
@@ -275,7 +275,7 @@ export const FileTreeDiff = ({
   readonly model: CompiledFileTreeDiff;
 }) => (
   <figure
-    className="file-tree file-tree-diff mb-6 min-w-0 overflow-hidden rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-[0.8125rem] leading-[1.5]"
+    className="file-tree file-tree-diff mb-6 min-w-0 overflow-hidden rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-sm"
     data-file-tree-diff=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "tree" }}
     data-tree-view="combined"

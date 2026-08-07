@@ -57,7 +57,7 @@ const Radio = ({
 );
 
 const Recommended = () => (
-  <span className="decision-recommended-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] leading-4 font-semibold uppercase">
+  <span className="decision-recommended-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs leading-4 font-semibold uppercase">
     <span className="inline-flex size-3 shrink-0">
       {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
     </span>
@@ -304,7 +304,7 @@ const WeightControl = ({
       ))}
     </span>
     <output
-      className="text-[0.6875rem] leading-4 font-semibold text-muted tabular-nums"
+      className="text-2xs leading-4 font-semibold text-muted tabular-nums"
       data-decision-weight-output=""
     >
       {`${impact}/5`}

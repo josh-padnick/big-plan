@@ -15,10 +15,10 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 
 // Shared by every pill in the grid and the bands below it.
 const BADGE_CLASSES =
-  "table-schema-badge inline-flex shrink-0 items-center rounded-full border border-edge px-1.5 py-px align-middle font-sans text-[0.625rem] font-semibold tracking-wide text-subtle uppercase data-[schema-badge=pk]:border-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] data-[schema-badge=pk]:text-accent";
+  "table-schema-badge inline-flex shrink-0 items-center rounded-full border border-edge px-1.5 py-px align-middle font-sans text-2xs font-semibold tracking-caps text-subtle uppercase data-[schema-badge=pk]:border-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] data-[schema-badge=pk]:text-accent";
 // Shared by the Indexes and DDL band labels.
 const SECTION_LABEL_CLASSES =
-  "table-schema-section-label m-0 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle";
+  "table-schema-section-label m-0 text-2xs font-semibold uppercase tracking-capsr text-subtle";
 
 const GRID_HEADS: ReadonlyArray<{
   readonly label: string;
@@ -187,7 +187,7 @@ const ConstraintsCell = ({
   };
   return (
     <td
-      className="table-schema-cell-constraints text-[0.8125rem]"
+      className="table-schema-cell-constraints text-sm"
       data-schema-grid-column="constraints"
     >
       <span className="table-schema-constraints flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -220,20 +220,20 @@ const ColumnRow = ({
         identifier the reader scans for. */}
     <th
       scope="row"
-      className="table-schema-cell-name font-mono text-[0.8125rem] font-semibold"
+      className="table-schema-cell-name font-mono text-sm font-semibold"
       data-schema-grid-column="column"
     >
       {column.name}
     </th>
     <td
-      className="table-schema-cell-type font-mono text-[0.8125rem]"
+      className="table-schema-cell-type font-mono text-sm"
       data-schema-grid-column="type"
     >
       {column.type}
     </td>
     <ConstraintsCell column={column} markers={indexMarkers(column, indexes)} />
     <td
-      className="table-schema-cell-default font-mono text-[0.8125rem]"
+      className="table-schema-cell-default font-mono text-sm"
       data-schema-grid-column="default"
     >
       {column.defaultValue === undefined ? null : (
@@ -275,7 +275,7 @@ export const TableSchemaGrid = ({
             <th
               key={key}
               scope="col"
-              className={`table-schema-head table-schema-head-${key} text-[0.625rem] uppercase tracking-wider`}
+              className={`table-schema-head table-schema-head-${key} text-2xs uppercase tracking-capsr`}
               data-schema-grid-column={key}
             >
               {/* The gripper ships hidden for the live review application. */}
@@ -323,7 +323,7 @@ const IndexEntry = ({
     <Badge kind="idx" label={indxLabel(offset + 1)} />
     <span className="min-w-0 flex-1">
       <span className="flex flex-wrap items-center gap-2">
-        <span className="table-schema-index-name font-mono text-[0.8125rem] font-semibold text-ink">
+        <span className="table-schema-index-name font-mono text-sm font-semibold text-ink">
           {index.name ?? "(unnamed)"}
         </span>
         {index.unique ? <Badge kind="unique" label="Unique" /> : null}

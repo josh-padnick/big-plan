@@ -52,9 +52,7 @@ const ArgumentEntry = ({
     dataProperties={{ "data-graphql-argument": argument.name }}
     term={
       <>
-        <span className="font-mono text-[0.8125rem] font-semibold">
-          {argument.name}
-        </span>
+        <span className="font-mono text-sm font-semibold">{argument.name}</span>
         <MonoType value={argument.argumentType} />
       </>
     }
@@ -69,12 +67,10 @@ const FieldEntry = ({ field }: { readonly field: CompiledGraphqlField }) => (
     dataProperties={{ "data-graphql-field": field.side }}
     term={
       <>
-        <span className="font-mono text-[0.8125rem] font-semibold">
-          {field.name}
-        </span>
+        <span className="font-mono text-sm font-semibold">{field.name}</span>
         <MonoType value={field.fieldType} />
         {field.defaultValue === undefined ? null : (
-          <span className="text-[0.6875rem] text-muted">
+          <span className="text-2xs text-muted">
             {"default "}
             <span className="font-mono">{field.defaultValue}</span>
           </span>
@@ -197,7 +193,7 @@ const ReturnsSection = ({
       <DefinitionList>
         <DefinitionEntry
           term={
-            <span className="font-mono text-[0.8125rem] font-semibold">
+            <span className="font-mono text-sm font-semibold">
               {returns.returnType}
             </span>
           }

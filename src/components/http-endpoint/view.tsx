@@ -81,23 +81,19 @@ const ParamEntry = ({ param }: { readonly param: CompiledHttpParam }) => (
     dataProperties={{ "data-http-param-location": param.location }}
     term={
       <>
-        <span className="font-mono text-[0.8125rem] font-semibold">
-          {param.name}
-        </span>
+        <span className="font-mono text-sm font-semibold">{param.name}</span>
         {param.dataType === undefined ? null : (
           <span className="text-xs text-muted">{param.dataType}</span>
         )}
         {param.required ? (
-          <span className="text-[0.6875rem] font-bold text-ink">
-            {"required"}
-          </span>
+          <span className="text-2xs font-bold text-ink">{"required"}</span>
         ) : (
           <>
             {/* Optional-ness is a visual property beside the name, never a
                 separate cell; an authored default rides right next to it. */}
-            <span className="text-[0.6875rem] text-muted">{"optional"}</span>
+            <span className="text-2xs text-muted">{"optional"}</span>
             {param.defaultValue === undefined ? null : (
-              <span className="text-[0.6875rem] text-muted">
+              <span className="text-2xs text-muted">
                 {"default "}
                 <span className="font-mono">{param.defaultValue}</span>
               </span>
@@ -165,7 +161,7 @@ const RequestSection = ({
       {request?.contentType === undefined ? null : (
         // Media types stay lowercase monospace, the way every API reference
         // prints them; the uppercase chip is for labels.
-        <span className="inline-flex items-center rounded-full bg-surface px-2 py-0.5 font-mono text-[0.6875rem] leading-4 text-muted">
+        <span className="inline-flex items-center rounded-full bg-surface px-2 py-0.5 font-mono text-2xs leading-4 text-muted">
           {request.contentType}
         </span>
       )}

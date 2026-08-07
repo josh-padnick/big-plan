@@ -140,7 +140,7 @@ export const CodeSnippet = ({
   readonly model: CompiledCodeSnippet;
 }) => (
   <figure
-    className="code-snippet mb-6 min-w-0 rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-[0.8125rem] leading-[1.5]"
+    className="code-snippet mb-6 min-w-0 rounded-md border border-edge bg-[var(--diff-content-bg)] font-mono text-sm"
     data-code-snippet=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "code" }}
     {...(model.filePath === undefined

@@ -15,7 +15,7 @@ export const SectionLabel = ({
   // The label reads a step above muted so section names anchor scanning
   // without competing with content ink.
   <div
-    className="card-section-label text-[0.6875rem] leading-4 font-semibold tracking-[0.08em] uppercase text-subtle"
+    className="card-section-label text-2xs leading-4 font-semibold tracking-caps uppercase text-subtle"
     {...dataProperties}
   >
     {label}

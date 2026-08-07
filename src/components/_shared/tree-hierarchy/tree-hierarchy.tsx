@@ -96,7 +96,7 @@ const DirectorySummary = ({
     return null;
   }
   return (
-    <span className="file-tree-dir-summary items-center gap-1 font-sans text-[0.6875rem] font-semibold">
+    <span className="file-tree-dir-summary items-center gap-1 font-sans text-2xs font-semibold">
       {parts}
     </span>
   );
@@ -262,7 +262,7 @@ const EntryRow = ({
       {name}
     </span>
     {badge === undefined ? null : (
-      <span className="file-tree-label font-sans text-[0.6875rem] font-semibold">
+      <span className="file-tree-label font-sans text-2xs font-semibold">
         {BADGE_LABELS[badge]}
       </span>
     )}

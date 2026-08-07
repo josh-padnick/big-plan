@@ -46,8 +46,7 @@ export type ShellResult = {
   readonly bodyClassName: string;
 };
 
-const BODY_CLASSES =
-  "bg-paper font-sans text-base leading-[1.65] text-ink antialiased";
+const BODY_CLASSES = "bg-paper font-sans text-base text-ink antialiased";
 
 // Stacked reading layout below the wide breakpoint; sidebar plus one content
 // column above it. The wide column contains a standard desktop wireframe
@@ -71,13 +70,13 @@ const TOC_GROUPED_LINK_CLASSES =
 // it sits flush with the Contents label rather than sharing the rule and inset
 // its section links use.
 const TOC_PART_HEADER_CLASSES =
-  "mt-3 mb-1 block pr-3 text-[0.6875rem] font-semibold tracking-[0.1em] uppercase text-subtle hover:text-ink";
+  "mt-3 mb-1 block pr-3 text-2xs font-semibold tracking-caps uppercase text-subtle hover:text-ink";
 const MOBILE_TOC_LINK_CLASSES =
   "block border-l-2 border-transparent px-6 py-3 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 const MOBILE_TOC_GROUPED_LINK_CLASSES =
   "block border-l-2 border-transparent py-3 pr-6 pl-8 leading-snug text-ink hover:bg-surface aria-[current=true]:border-accent aria-[current=true]:bg-surface aria-[current=true]:text-accent";
 const MOBILE_TOC_PART_HEADER_CLASSES =
-  "block border-l-2 border-transparent px-6 pt-3 pb-1 text-[0.6875rem] font-semibold tracking-[0.1em] uppercase text-subtle hover:text-ink";
+  "block border-l-2 border-transparent px-6 pt-3 pb-1 text-2xs font-semibold tracking-caps uppercase text-subtle hover:text-ink";
 
 // Allocates the shell-owned overview anchor alongside document-owned ids.
 const createOverviewId = (contentIds: ReadonlyArray<string>): string => {
@@ -246,7 +245,7 @@ const renderDesktopToc = ({
     partHeaderClasses: TOC_PART_HEADER_CLASSES,
   });
   return `<nav class="hidden text-sm leading-normal wide:sticky wide:top-[5.75rem] wide:block wide:self-start" aria-label="Contents">
-<p class="mb-3 flex items-center justify-between gap-2 border-b border-edge pb-2 text-xs font-semibold uppercase tracking-[0.08em]" data-toc-header><a class="rounded-sm text-subtle hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
+<p class="mb-3 flex items-center justify-between gap-2 border-b border-edge pb-2 text-xs font-semibold uppercase tracking-caps" data-toc-header><a class="rounded-sm text-subtle hover:text-ink aria-[current=true]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" data-overview-link href="#${encodeURIComponent(overviewId)}">Contents</a>${renderBulkCollapseControls()}</p>
 <ol>
 ${items}
 </ol>
