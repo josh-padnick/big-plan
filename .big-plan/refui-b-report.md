@@ -198,6 +198,28 @@ touch-target floor.
 surface because it is the state that already exists; Planned keeps the content
 ground because it is what the reader is being asked about.
 
+## 4e. Behaviour deltas and their authority
+
+The rules of engagement say this pass changes presentation, not behaviour.
+Six changes do alter what a reader can do or see.
+Each one is listed here with the authority that asked for it.
+None of them is an accidental change, and all 70 browser tests stay green.
+
+| Delta                                                                                  | Where                 | Authority                                                                              |
+| -------------------------------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------- |
+| The note-count chip is gone. The control names the count instead.                      | `diagram-script.ts`   | Captain visual note 4: the toolbar "said the same number twice".                       |
+| The "Type to edit" and "Delete to remove" hints are gone.                              | `diagram-script.ts`   | The same note. The bar must hold one row, and the reader keeps the key.                |
+| "Show original" is a switch, not a button.                                             | `diagram-script.ts`   | The captain's note on the view mode.                                                   |
+| The separate "Revert all" control is gone. One revert action now names what it undoes. | `diagram-script.ts`   | The same note. Two controls that undid one removal read as two owners for one outcome. |
+| The empty data table has designed markup and recovery text.                            | `data-table/view.tsx` | Directive B2: do not overlook empty states.                                            |
+| A decision with no choice says "Select an option to continue."                         | `viewer-script.ts`    | The same requirement. The old text named a state; the new text names the next step.    |
+
+The tension is real, and it is in the directive itself.
+B2 asks for designed empty states, for switch affordances, and for labels as a last resort.
+A reader can see all three, so presentation and behaviour do not fully separate here.
+The rule that survives: a delta is acceptable when the captain or the directive asked for it by name.
+Every delta above does.
+
 ## 5. A coverage gap this pass found
 
 The style-history contract captures two fixture documents: `examples/mdx-components.mdx` and `examples/deck.mdx`.
@@ -208,6 +230,28 @@ That is the honest declaration, and it is also the evidence that the capture mat
 The fix is to add `examples/all-components.mdx` to the capture configuration as a new document with new capture keys, which the contract permits.
 It is not done here: extending coverage re-captures every commit in the range, and this pass is already a large review surface.
 It is the first thing worth doing after this PR lands.
+
+## 5b. Environment variants in the approved manifests
+
+The style-history check compares exact raster hashes.
+Two machines that render the same page can still disagree by one step on a colour channel, so the check needs a way to accept both.
+The manifest format already carries one: `sha256Alternates` lists further raster identities that are equally correct for a capture.
+
+This branch is the first to ask the CI runner to verify approved manifests.
+Before it, every check on `main` read one commit, and that commit was always `[visual:empty]`.
+
+Two captures disagree between the machine that authored the manifests and the runner: `components__document__phone__light` and its dark twin.
+The difference is 5 to 8 pixels in a 2 by 5 pixel box at the left edge, and every one is a plus or minus one step on a single channel.
+It is antialiasing rounding on a curved edge, not a layout, font, or colour difference.
+The count of changed pixels is identical on both machines, which is what proves the design change itself matches.
+
+Adding the alternates is not possible without rewriting history.
+The check reads each manifest from the commit that added it, with `git show <commit>:<manifest>`, so a manifest edited at the branch tip is never read.
+Only a rewrite of the eight affected commits would put the alternates where the check looks.
+
+That rewrite is not worth doing here.
+The durable fix is one pinned environment that owns the pixels, which is captain-approved work in a parallel task.
+When that lands, the two machines agree and no alternate is needed at all.
 
 ## 6. Verification
 
