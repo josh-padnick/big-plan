@@ -280,13 +280,16 @@ const WeightControl = ({
 }) => (
   <div
     className="decision-weight-group mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1"
-    role="radiogroup"
-    aria-label={`Impact of ${title}`}
     data-decision-weight-group=""
+    data-decision-radiogroup-label={`Impact of ${title}`}
     data-criterion-index={criterionIndex}
     data-decision-weight-value={impact}
   >
-    <span className="inline-flex items-center gap-1">
+    <span
+      className="data-[shown]:inline-flex items-center gap-1"
+      hidden
+      data-decision-weight-control=""
+    >
       {[1, 2, 3, 4, 5].map((value) => (
         <button
           className="decision-weight-step"
@@ -332,9 +335,8 @@ const ScoreControl = ({
 }) => (
   <div
     className="decision-score-control inline-flex flex-col items-center"
-    role="radiogroup"
-    aria-label={`Score ${optionTitle} on ${criterionTitle}`}
     data-decision-score-group=""
+    data-decision-radiogroup-label={`Score ${optionTitle} on ${criterionTitle}`}
     data-option-index={optionIndex}
     data-criterion-index={criterionIndex}
     data-decision-score-value={score}
@@ -345,7 +347,11 @@ const ScoreControl = ({
       kind="value"
       liveScore={true}
     />
-    <span className="decision-score-stars mt-1 inline-flex items-center">
+    <span
+      className="decision-score-stars data-[shown]:inline-flex mt-1 items-center"
+      hidden
+      data-decision-score-control=""
+    >
       {[1, 2, 3, 4, 5].map((value) => (
         <button
           className="decision-score-star"

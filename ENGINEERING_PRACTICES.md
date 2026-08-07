@@ -218,9 +218,10 @@ Generated drift is fixed by changing the authored input and regenerating, never 
 
 ## Browser runtime and UI
 
-The delivered review document has a vanilla-JavaScript browser runtime.
-Do not introduce React or another client framework into it.
-Existing React code is a static presentation-edge implementation detail; browser state and interaction rules must remain framework-neutral.
+The delivered review document currently has a vanilla-JavaScript browser runtime.
+The future interaction tier uses React with off-the-shelf shadcn/ui for new commenting and similar interaction surfaces, themed through design tokens.
+React is limited to interaction islands: it may own island state and interaction rules, but it must not render, replace, or gate the server-rendered plan content.
+The HTML content floor remains complete and readable with scripts disabled.
 
 - Keep rendering pure and put side effects in explicit event or lifecycle handlers.
   Each piece of state has one owner; derive secondary values rather than synchronizing duplicate mutable copies.
@@ -244,7 +245,7 @@ Existing React code is a static presentation-edge implementation detail; browser
 - Build desktop and narrow-screen behavior together.
   Interactive touch targets on phone-sized surfaces should be at least 44 by 44 CSS pixels, and text-like inputs must compute to at least 16 CSS pixels to prevent mobile focus zoom.
 - Respect reduced-motion preferences.
-  Scripts enhance a fully readable inert document; no plan-authored content may become executable, and core reading must remain available with scripts disabled.
+  Interactive affordances may require the embedded viewer scripts, but core plan content must remain readable with scripts disabled. No plan-authored content may become executable, and script-dependent controls should stay dormant until their behavior is wired.
 
 ### Styling owned markup
 

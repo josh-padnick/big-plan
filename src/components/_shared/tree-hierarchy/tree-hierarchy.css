@@ -1,35 +1,9 @@
 /* CSS escape hatch: selector relationships over nested shared tree markup.
-   Tree-hierarchy row, connector, icon, folding, summary, and status
+   Tree-hierarchy row, connector, icon, and status
    variants, colocated with the shared component that emits this markup for
    FileTree and every FileTreeDiff view. */
 
 @layer components {
-  article .file-tree-item[data-tree-collapsed] > .file-tree-children {
-    display: none;
-  }
-  /* The chevron points down while a directory is expanded and right while
-     collapsed, matching the familiar tree affordance. */
-  article .file-tree-toggle svg {
-    transform: rotate(90deg);
-  }
-  article
-    .file-tree-item[data-tree-collapsed]
-    > .file-tree-row
-    .file-tree-toggle
-    svg {
-    transform: none;
-  }
-  /* Folded-away changes surface as a compact count so a reader knows
-     whether a collapsed directory is worth expanding. */
-  article .file-tree-dir-summary {
-    display: none;
-  }
-  article
-    .file-tree-item[data-tree-collapsed]
-    > .file-tree-row
-    .file-tree-dir-summary {
-    display: inline-flex;
-  }
   article .file-tree-row > svg {
     color: var(--color-subtle);
   }

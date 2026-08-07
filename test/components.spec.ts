@@ -85,6 +85,13 @@ test("should preserve component content without controls when JavaScript is disa
   const page = await context.newPage();
   await page.goto(componentsViewerUrl);
 
+  await expect(page.locator("[data-noscript-notice]")).toBeVisible();
+  await expect(page.locator("[data-noscript-notice]")).toContainText(
+    "The full plan content is readable",
+  );
+  await expect(page.locator("[data-noscript-notice]")).toContainText(
+    "sorting, collapse, maximize, and comments",
+  );
   await expect(page.locator("[data-callout]")).toHaveCount(4);
   await expect(page.locator("[data-callout]").first()).toBeVisible();
   const diffs = page.locator("[data-code-diff]");
@@ -163,5 +170,27 @@ test("should stack the labeled DDL bands when JavaScript is disabled", async ({
   await expect(ddlPanels.first()).toContainText("ENABLE ROW LEVEL SECURITY");
   await expect(ddlPanels.last()).toBeVisible();
   await expect(ddlPanels.last()).toContainText("CREATE TRIGGER");
+  await context.close();
+});
+
+test("should keep every script-only control dormant in the complete gallery without JavaScript", async ({
+  browser,
+  allComponentsViewerUrl,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto(allComponentsViewerUrl);
+
+  const controls = page.locator(
+    "[data-diff-toggle-group], [data-tree-toggle-group], [data-diff-menu-button], [data-schema-menu-button], [data-copy-source], [data-code-diff] [data-figure-maximize], [data-database-table-schema] [data-figure-maximize], [data-collapse-toggle], [data-decision-weight-control], [data-decision-score-control], [data-decision-proposal-cancel]",
+  );
+  // The exact count is intentional: it covers the existing dormant viewer
+  // controls plus the phase-3 deck and decision families. Removed FileTree
+  // and FileTreeDiff controls do not contribute dead hidden markup.
+  await expect(controls).toHaveCount(18);
+  for (const control of await controls.all()) {
+    await expect(control).toBeHidden();
+  }
+
   await context.close();
 });

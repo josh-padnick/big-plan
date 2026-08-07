@@ -10,7 +10,8 @@
 // highlight, rationale swap, and confirm step, wireframe screen navigation
 // driven entirely by renderer-emitted data attributes plus true-width scaling,
 // and the diagram leg in ./diagram-script.ts. Plan content never contributes
-// script, and every affordance keeps a no-JS fallback.
+// script. The content floor stays readable with scripts disabled; controls that
+// depend on these enhancements remain dormant until this script wires them.
 //
 // The collapse leg reads the DOM contract owned by markdown/deck-collapse.ts:
 // one header per collapsible, holding chrome only, with the body as its
@@ -1289,6 +1290,9 @@ const installColumnPointerReorder = ({
     const header = headerFor(block);
     const button = toggleFor(block);
     if (header === null || button === null) continue;
+    button.removeAttribute("hidden");
+    button.setAttribute("data-shown", "");
+    header.setAttribute("data-shown", "");
     const toggle = () =>
       setCollapsed(block, !block.hasAttribute("data-collapsed"));
     // The chevron stays the keyboard and assistive-technology control;
@@ -2332,6 +2336,17 @@ const installColumnPointerReorder = ({
       const maxTotals = Array.from(
         weighting.querySelectorAll("[data-decision-max-total]"),
       );
+      for (const group of [...weightGroups, ...scoreGroups]) {
+        const label = group.getAttribute("data-decision-radiogroup-label");
+        group.setAttribute("role", "radiogroup");
+        if (label !== null) group.setAttribute("aria-label", label);
+      }
+      for (const control of weighting.querySelectorAll(
+        "[data-decision-weight-control], [data-decision-score-control]",
+      )) {
+        control.removeAttribute("hidden");
+        control.setAttribute("data-shown", "");
+      }
       const syncScoring = () => {
         const weights = weightGroups.map((group) =>
           Number(group.getAttribute("data-decision-weight-value") || "0"),
@@ -2551,6 +2566,8 @@ const installColumnPointerReorder = ({
       proposalCancel.click();
     });
     if (proposalCancel !== null) {
+      proposalCancel.removeAttribute("hidden");
+      proposalCancel.setAttribute("data-shown", "");
       proposalCancel.addEventListener("click", () => {
         const proposalChoice = choices.find(proposes) || null;
         if (proposalChoice !== null) proposalChoice.checked = false;
@@ -2569,6 +2586,7 @@ const installColumnPointerReorder = ({
 
     const compress = (answered) => {
       if (footer !== null) footer.hidden = answered;
+      if (proposalCancel !== null) proposalCancel.hidden = answered;
       answer.hidden = !answered;
       const choice = picked();
       const proposing = proposes(choice);

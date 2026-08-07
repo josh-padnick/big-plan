@@ -61,7 +61,7 @@ export type CollapseKind = "part" | "slide" | "subslide";
 // layout concerns owned by deck.css, never per-kind margin insets.
 const TOGGLE_CLASSES = [
   "plan-collapse-toggle",
-  "inline-flex",
+  "data-[shown]:inline-flex",
   "shrink-0",
   "cursor-pointer",
   "items-center",
@@ -79,7 +79,7 @@ const HEADER_CLASSES = [
   "plan-collapse-header",
   "relative",
   "min-w-0",
-  "cursor-pointer",
+  "data-[shown]:cursor-pointer",
 ] as const;
 
 // Builds the inert collapse control; the viewer script wires behavior and the
@@ -94,6 +94,7 @@ const createCollapseToggle = (): Element => ({
   properties: {
     type: "button",
     [COLLAPSE_TOGGLE_ATTRIBUTE]: "",
+    hidden: true,
     "aria-expanded": "true",
     "aria-label": "Collapse",
     className: [...TOGGLE_CLASSES],

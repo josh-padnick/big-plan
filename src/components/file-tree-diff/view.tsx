@@ -12,7 +12,6 @@ import { ROWS_2_ICON } from "../../icons/lucide/rows-2.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import {
-  TreeFoldControls,
   TreeHierarchy,
   treeChangeCountsToReact,
 } from "../_shared/tree-hierarchy/tree-hierarchy.js";
@@ -111,9 +110,6 @@ const DiffHeader = ({
     )}
     <ChangeSummary entries={entries} />
     <span className="file-tree-diff-controls flex shrink-0 items-center gap-2">
-      <span className="file-tree-fold-group inline-flex items-center gap-0.5">
-        <TreeFoldControls tone="standard" />
-      </span>
       <ViewToggleGroup />
       <span className="figure-action-group inline-flex items-center gap-0.5">
         <MaximizeButton subject="tree" />
@@ -142,45 +138,6 @@ const CombinedView = ({
   </div>
 );
 
-// The switch shape and data-slot/data-state contract come from the shadcn/ui
-// registry Switch (sm size), translated to static markup with this palette:
-// primary -> accent, input -> edge, background -> paper. State transitions are
-// driven by the live review application instead of Radix.
-const SWITCH_CLASSES =
-  "file-tree-changes-toggle inline-flex h-3.5 w-6 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-raised transition-all outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/50 data-[state=checked]:bg-accent data-[state=unchecked]:bg-edge";
-const SWITCH_THUMB_CLASSES =
-  "pointer-events-none block size-3 rounded-full bg-paper ring-0 transition-transform data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0";
-
-// The switch lives in the After caption because only that pane has two
-// truths to swap between: the annotated change set and the plain final
-// state the plan produces.
-const ShowDiffSwitch = ({ checked }: { readonly checked: boolean }) => (
-  <span
-    className="file-tree-changes flex shrink-0 items-center gap-1.5"
-    hidden
-    data-tree-changes-control=""
-  >
-    {"Show diff"}
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked ? "true" : "false"}
-      aria-label="Show diff"
-      className={SWITCH_CLASSES}
-      data-tree-changes-toggle=""
-      data-slot="switch"
-      data-size="sm"
-      data-state={checked ? "checked" : "unchecked"}
-    >
-      <span
-        className={SWITCH_THUMB_CLASSES}
-        data-slot="switch-thumb"
-        data-state={checked ? "checked" : "unchecked"}
-      />
-    </button>
-  </span>
-);
-
 const PaneBody = ({
   entries,
   variant,
@@ -205,12 +162,10 @@ const StatePane = ({
   entries,
   afterPlainEntries = [],
   side,
-  showDiff = true,
 }: {
   readonly entries: ReadonlyArray<TreeEntry>;
   readonly afterPlainEntries?: ReadonlyArray<TreeEntry>;
   readonly side: "before" | "after";
-  readonly showDiff?: boolean;
 }) => (
   <section
     className={[
@@ -225,10 +180,6 @@ const StatePane = ({
   >
     <div className="file-tree-diff-pane-caption flex min-w-0 items-center justify-between gap-2 border-b border-edge bg-[var(--diff-hunk-bg)] px-3 py-1.5 font-sans text-xs font-semibold text-muted">
       {side === "before" ? "Current" : "Planned"}
-      <span className="file-tree-pane-controls flex shrink-0 items-center gap-1.5">
-        <TreeFoldControls tone="quiet" />
-        {side === "after" ? <ShowDiffSwitch checked={showDiff} /> : null}
-      </span>
     </div>
     {side === "before" ? (
       <PaneBody entries={entries} />
@@ -243,10 +194,8 @@ const StatePane = ({
 
 const BeforeAfterView = ({
   entries,
-  showDiff,
 }: {
   readonly entries: ReadonlyArray<TreeEntry>;
-  readonly showDiff: boolean;
 }) => (
   <div
     className="file-tree-diff-before-after min-w-0 grid-cols-[minmax(0,1fr)] wide:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
@@ -264,7 +213,6 @@ const BeforeAfterView = ({
         showChanges: false,
       })}
       side="after"
-      showDiff={showDiff}
     />
   </div>
 );
@@ -283,6 +231,6 @@ export const FileTreeDiff = ({
   >
     <DiffHeader title={model.title} entries={model.entries} />
     <CombinedView entries={model.entries} />
-    <BeforeAfterView entries={model.entries} showDiff={!model.hideDiff} />
+    <BeforeAfterView entries={model.entries} />
   </figure>
 );

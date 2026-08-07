@@ -335,6 +335,7 @@ ${renderHeaderActions()}
 </div>
 </header>
 ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
+<noscript><aside class="mx-auto mt-4 mb-0 max-w-[var(--measure)] rounded-md border border-edge bg-surface px-4 py-3 text-sm leading-normal text-muted" data-noscript-notice role="note"><strong class="font-semibold text-ink">JavaScript is disabled.</strong> The full plan content is readable. Interactive affordances such as sorting, collapse, maximize, and comments are unavailable.</aside></noscript>
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="min-w-0" id="${overviewId}">

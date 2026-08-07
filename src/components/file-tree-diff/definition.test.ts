@@ -125,32 +125,30 @@ describe("renderFileTreeDiff", () => {
     expect(after).not.toContain('"value":"old.ts"');
   });
 
-  it("should let hideDiff author the switch off while defaulting to on", () => {
+  it("should let hideDiff author the static planned tree variant", () => {
     const shown = render({ attributes: { title: "Changes" } }).element;
     expect(shown.properties["data-tree-changes"]).toBe("shown");
-    expect(JSON.stringify(shown)).toContain('"data-state":"checked"');
+    expect(JSON.stringify(shown)).not.toContain('"data-tree-changes-control"');
 
     const { element, diagnostics } = render({
       attributes: { title: "Changes", hideDiff: true },
     });
     expect(diagnostics).toEqual([]);
     expect(element.properties["data-tree-changes"]).toBe("hidden");
-    expect(JSON.stringify(element)).toContain('"data-state":"unchecked"');
+    expect(JSON.stringify(element)).not.toContain(
+      '"data-tree-changes-control"',
+    );
   });
 
-  it("should label header controls with a fast hint instead of a native title", () => {
+  it("should label the live header controls with a fast hint instead of a native title", () => {
     const serialized = JSON.stringify(render().element);
 
-    expect(serialized).toContain('"data-tooltip":"Collapse all folders"');
     expect(serialized).toContain('"data-tooltip":"Maximize tree"');
     expect(serialized).toContain('"data-tooltip":"Side-by-side view"');
     expect(serialized).not.toContain('"title":');
   });
 
-  // These states have to ride on utilities. Expressed as stylesheet rules in
-  // the components layer they lose to the buttons' resting background utility,
-  // which is how both silently stopped rendering.
-  it("should carry header-control hover and pressed backgrounds as utilities", () => {
+  it("should carry live view-control hover and pressed backgrounds as utilities", () => {
     const controls = JSON.stringify(render().element);
 
     expect(controls).toContain("hover:bg-edge");
