@@ -129,7 +129,7 @@ test("should account for every registered component in the interaction gate", as
   }
 });
 
-test("should keep column drag cursors through native gestures in both themes", async ({
+test("should keep column drag cursors through pointer gestures in both themes", async ({
   page,
   allComponentsViewerUrl,
 }) => {
@@ -172,6 +172,7 @@ test("should keep column drag cursors through native gestures in both themes", a
       await test.step(`${theme}: ${surface.name}`, async () => {
         const header = page.locator(surface.selector).first();
         await header.scrollIntoViewIfNeeded();
+        await expect(header).toHaveJSProperty("draggable", false);
         const headerBox = await header.boundingBox();
         const controlBox = await pointerControl.boundingBox();
         if (headerBox === null || controlBox === null) {
@@ -382,20 +383,28 @@ test("should exercise every live component affordance with browser gestures", as
 
     const first = headers.first();
     const firstKey = await first.getAttribute("data-schema-grid-column");
-    await expect(first).toHaveAttribute("draggable", "true");
+    await expect(first).toHaveJSProperty("draggable", false);
     await expect(first).toHaveAttribute(
       "aria-keyshortcuts",
       "ArrowLeft ArrowRight",
     );
     const second = headers.nth(1);
+    await first.scrollIntoViewIfNeeded();
+    const firstBox = await first.boundingBox();
     const secondBox = await second.boundingBox();
+    expect(firstBox).not.toBeNull();
     expect(secondBox).not.toBeNull();
-    await first.dragTo(second, {
-      targetPosition: {
-        x: (secondBox?.width ?? 2) - 2,
-        y: (secondBox?.height ?? 2) / 2,
-      },
-    });
+    await page.mouse.move(
+      (firstBox?.x ?? 0) + (firstBox?.width ?? 0) / 2,
+      (firstBox?.y ?? 0) + (firstBox?.height ?? 0) / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      (secondBox?.x ?? 0) + (secondBox?.width ?? 0) - 2,
+      (secondBox?.y ?? 0) + (secondBox?.height ?? 0) / 2,
+      { steps: 8 },
+    );
+    await page.mouse.up();
     await expect(headers.nth(1)).toHaveAttribute(
       "data-schema-grid-column",
       firstKey ?? "",
@@ -507,14 +516,22 @@ test("should exercise every live component affordance with browser gestures", as
     const headers = table.locator("thead [data-table-column]");
     const firstColumn = await headers.first().getAttribute("data-table-column");
     const second = headers.nth(1);
+    await headers.first().scrollIntoViewIfNeeded();
+    const firstBox = await headers.first().boundingBox();
     const secondBox = await second.boundingBox();
+    expect(firstBox).not.toBeNull();
     expect(secondBox).not.toBeNull();
-    await headers.first().dragTo(second, {
-      targetPosition: {
-        x: (secondBox?.width ?? 2) - 2,
-        y: (secondBox?.height ?? 2) / 2,
-      },
-    });
+    await page.mouse.move(
+      (firstBox?.x ?? 0) + (firstBox?.width ?? 0) / 2,
+      (firstBox?.y ?? 0) + (firstBox?.height ?? 0) / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      (secondBox?.x ?? 0) + (secondBox?.width ?? 0) - 2,
+      (secondBox?.y ?? 0) + (secondBox?.height ?? 0) / 2,
+      { steps: 8 },
+    );
+    await page.mouse.up();
     await expect(headers.nth(1)).toHaveAttribute(
       "data-table-column",
       firstColumn ?? "",
