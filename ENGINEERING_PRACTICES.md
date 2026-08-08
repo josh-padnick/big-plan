@@ -204,7 +204,7 @@ Follow these authoring rules:
 - Name tests `should ... when ...` so the promised behavior and triggering condition are visible from the title.
 - Avoid broad serialized snapshots.
   Prefer focused assertions that tell the reviewer what changed.
-  The visual style-history system is a deliberate pixel-contract workflow governed by [CONTRIBUTING.md](CONTRIBUTING.md), not a general-purpose unit snapshot pattern.
+  Visual quality is not asserted by pixel comparison; it is established by human review of the rendered document, as [CONTRIBUTING.md](CONTRIBUTING.md) describes.
 - Mock only an external boundary such as filesystem, process, or browser I/O; do not mock internal modules to manufacture an implementation-shaped test.
 - Keep browser specs independent and use user-facing roles, accessible names, and stable domain-scope identifiers.
   Use `data-*` attributes for unambiguous domain or component scoping when role and name alone cannot identify the scope, then locate controls within it by role and accessible name and assert their native or `aria-*` state.
