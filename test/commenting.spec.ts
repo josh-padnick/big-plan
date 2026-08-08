@@ -705,16 +705,14 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
     .poll(() =>
       summaryComposer.evaluate((node) => ({
         composer: getComputedStyle(node).backgroundColor,
-        page: getComputedStyle(document.documentElement)
-          .getPropertyValue("--bg")
-          .trim(),
+        page: getComputedStyle(document.body).backgroundColor,
         textarea: getComputedStyle(node.querySelector("textarea") ?? node)
           .backgroundColor,
       })),
     )
     .toEqual({
       composer: "rgb(247, 245, 240)",
-      page: "#f7f5f0",
+      page: "rgb(247, 245, 240)",
       textarea: "rgb(255, 255, 255)",
     });
   await summaryComposer.getByRole("button", { name: "Cancel" }).click();
