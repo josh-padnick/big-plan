@@ -131,7 +131,7 @@ src/render/global.css owns the two-attribute model and the ramps.
   }
   article .hljs-section {
     color: var(--syntax-constant-c);
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
   }
   article .hljs-bullet {
     color: var(--syntax-variable-c);
@@ -140,7 +140,7 @@ src/render/global.css owns the two-attribute model and the ramps.
     font-style: italic;
   }
   article .hljs-strong {
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
   }
   article .hljs-addition {
     color: var(--syntax-addition-c);

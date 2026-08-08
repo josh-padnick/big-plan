@@ -2,7 +2,7 @@
 // falls below WCAG AA, and accepts a palette that satisfies both.
 
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -13,10 +13,6 @@ import {
   resolveValue,
   splitArguments,
 } from "./palettes.mjs";
-
-const PREFERENCES = `export const PALETTES = ["default", "sample"] as const;
-export const STORED_PALETTES = ["sample"] as const;
-`;
 
 const BASE_CSS = `:root {
   --grey-50: #ffffff;
@@ -35,14 +31,16 @@ const SYNTAX_CSS =
 const runAgainst = async ({ paletteCss }) => {
   const root = await mkdtemp(join(tmpdir(), "big-plan-palettes-"));
   try {
-    await mkdir(root, { recursive: true });
     const globalCss = join(root, "global.css");
     const syntaxCss = join(root, "syntax-highlighting.css");
-    const preferencesModule = join(root, "preferences.ts");
     await writeFile(globalCss, `${BASE_CSS}\n${paletteCss}`, "utf8");
     await writeFile(syntaxCss, SYNTAX_CSS, "utf8");
-    await writeFile(preferencesModule, PREFERENCES, "utf8");
-    return await checkPalettes({ globalCss, syntaxCss, preferencesModule });
+    return await checkPalettes({
+      globalCss,
+      syntaxCss,
+      paletteIds: ["default", "sample"],
+      storedPaletteIds: ["sample"],
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

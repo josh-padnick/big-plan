@@ -24,7 +24,9 @@ const PREFERENCES_HEAD_SCRIPT = `(() => {
     const raw = localStorage.getItem(${JSON.stringify(PREFERENCES_STORAGE_KEY)});
     if (raw === null) return;
     const record = JSON.parse(raw);
-    if (record?.version !== ${PREFERENCES_RECORD_VERSION}) return;
+    if (record?.version !== ${PREFERENCES_RECORD_VERSION} ||
+        (record.mode !== undefined && ${JSON.stringify(STORED_APPEARANCE_MODES)}.indexOf(record.mode) === -1) ||
+        (record.palette !== undefined && ${JSON.stringify(STORED_PALETTES)}.indexOf(record.palette) === -1)) return;
     if (${JSON.stringify(STORED_APPEARANCE_MODES)}.indexOf(record.mode) !== -1) {
       document.documentElement.setAttribute("data-theme", record.mode);
     }

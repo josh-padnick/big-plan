@@ -166,6 +166,8 @@ document painted in another and never restate a colour to preview it.
      is scoped to that one role and never becomes a utility. */
   --neutral-100: #eeeeee;
   --neutral-800: #2b2b2b;
+
+  --ink-c: light-dark(var(--grey-925), var(--grey-150));
 }
 
 /*

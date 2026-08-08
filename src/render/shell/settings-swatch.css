@@ -25,6 +25,6 @@ and no colour is restated here. src/render/global.css owns the ramps.
     background: light-dark(var(--primary-700), var(--primary-300));
   }
   [data-palette-swatch] > [data-swatch="ink"] {
-    background: light-dark(var(--grey-700), var(--grey-150));
+    background: var(--ink-c);
   }
 }

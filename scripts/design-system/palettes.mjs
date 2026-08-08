@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import postcss from "postcss";
+import { PALETTES, STORED_PALETTES } from "../../src/render/preferences.ts";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const GLOBAL_CSS = resolve(REPO_ROOT, "src/render/global.css");
@@ -19,7 +20,6 @@ const SYNTAX_CSS = resolve(
   REPO_ROOT,
   "src/render/markdown/syntax-highlighting.css",
 );
-const PREFERENCES_MODULE = resolve(REPO_ROOT, "src/render/preferences.ts");
 
 // The ramp namespaces a palette owns. A role may only reach a shade through one
 // of these, which is what makes "a palette is its ramps" a complete statement.
@@ -243,34 +243,19 @@ const contrastRatio = (left, right) => {
   return (lighter + 0.05) / (darker + 0.05);
 };
 
-/** Reads one literal string-array export from the preferences contract. */
-const readPaletteList = async (preferencesModule, name) => {
-  const source = await readFile(preferencesModule, "utf8");
-  const match = new RegExp(`export const ${name} = \\[([^\\]]*)\\]`).exec(
-    source,
-  );
-  if (match === null) {
-    throw new Error(
-      `src/render/preferences.ts must export ${name} as a literal array`,
-    );
-  }
-  return [...match[1].matchAll(/"([a-z-]+)"/g)].map(([, id]) => id);
-};
-
 /**
  * Checks one palette set and returns every failure it found, so the caller
- * decides how to report. Paths are injectable because the test exercises the
+ * decides how to report. Inputs are injectable because the test exercises the
  * contract against a throwaway palette rather than today's five.
  */
 export const checkPalettes = async ({
   globalCss = GLOBAL_CSS,
   syntaxCss = SYNTAX_CSS,
-  preferencesModule = PREFERENCES_MODULE,
+  paletteIds = PALETTES,
+  storedPaletteIds = STORED_PALETTES,
 } = {}) => {
   const failures = [];
   const { base, palettes } = await readDeclarations([globalCss, syntaxCss]);
-  const paletteIds = await readPaletteList(preferencesModule, "PALETTES");
-  const storedIds = await readPaletteList(preferencesModule, "STORED_PALETTES");
   const themed = paletteIds.filter((id) => id !== "default");
 
   if (paletteIds[0] !== "default") {
@@ -278,7 +263,7 @@ export const checkPalettes = async ({
       "preferences.ts: PALETTES must offer the product's own palette first",
     );
   }
-  if (storedIds.join(",") !== themed.join(",")) {
+  if (storedPaletteIds.join(",") !== themed.join(",")) {
     failures.push(
       "preferences.ts: STORED_PALETTES must be PALETTES without the default, in the same order",
     );

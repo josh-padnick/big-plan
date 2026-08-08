@@ -518,12 +518,17 @@ test("should repaint the whole document from the colour-theme row", async ({
     for (const palette of ["solarized", "cole", "everforest"]) {
       await page.evaluate(
         ([key, value]) =>
-          localStorage.setItem(key, `{"version":1,"palette":"${value}"}`),
+          localStorage.setItem(
+            key,
+            `{"version":1,"mode":"dark","palette":"${value}"}`,
+          ),
         [PREFERENCES_STORAGE_KEY, palette] as const,
       );
       await page.reload();
+      await expect(page.locator("html")).not.toHaveAttribute("data-theme");
       await expect(page.locator("html")).not.toHaveAttribute("data-palette");
       await settings.click();
+      await expect(page.getByRole("radio", { name: "System" })).toBeChecked();
       await expect(page.getByRole("radio", { name: "Default" })).toBeChecked();
       await page.keyboard.press("Escape");
     }
@@ -554,6 +559,8 @@ test("should make Brutalist a change of shape, not only of hue", async ({
         slideShadow: of("[data-slide]", "boxShadow"),
         codeRadius: of("article pre", "borderRadius"),
         calloutRadius: of("[data-callout]", "borderRadius"),
+        decisionInputRadius: of(".decision-proposal-input", "borderRadius"),
+        decisionButtonRadius: of(".decision-confirm", "borderRadius"),
         headingWeight: of("article h2", "fontWeight"),
       };
     });
@@ -569,6 +576,10 @@ test("should make Brutalist a change of shape, not only of hue", async ({
   expect(stark.slideRadius).toBe("0px");
   expect(stark.codeRadius).toBe("0px");
   expect(stark.calloutRadius).toBe("0px");
+  expect(soft.decisionInputRadius).not.toBe("0px");
+  expect(stark.decisionInputRadius).toBe("0px");
+  expect(soft.decisionButtonRadius).not.toBe("0px");
+  expect(stark.decisionButtonRadius).toBe("0px");
   // A hard offset slab rather than a soft multi-layer shadow: every remaining
   // shadow step is zero-blur.
   expect(soft.slideShadow).not.toBe(stark.slideShadow);
@@ -591,9 +602,16 @@ test("should preview each theme in its own colours inside the sheet", async ({
   page,
   sampleViewerUrl,
 }) => {
+  await page.emulateMedia({ colorScheme: "light" });
   await page.goto(sampleViewerUrl);
   await page.getByRole("button", { name: "Open settings" }).click();
+  const defaultInk = await page
+    .locator("body")
+    .evaluate((body) => getComputedStyle(body).color);
   await page.getByRole("radio", { name: "Rosé Pine" }).check();
+  const documentInk = await page
+    .locator("body")
+    .evaluate((body) => getComputedStyle(body).color);
 
   const strips = await page
     .locator("[data-palette-swatch]")
@@ -616,6 +634,11 @@ test("should preview each theme in its own colours inside the sheet", async ({
   for (const strip of strips) {
     expect(strip.chips, `${strip.palette} shows four shades`).toHaveLength(4);
   }
+  const inkChips = strips.map(({ chips }) => chips[3]);
+  expect(new Set(inkChips).size).toBe(5);
+  expect(inkChips[0]).toBe(defaultInk);
+  expect(inkChips[1]).toBe(documentInk);
+  expect(inkChips[0]).not.toBe(documentInk);
   // A swatch reads its own theme's ramps, so no two strips agree even though
   // the document behind the sheet is painted in one of them.
   expect(new Set(strips.map(({ chips }) => chips.join("|"))).size).toBe(5);

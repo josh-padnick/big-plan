@@ -33,7 +33,7 @@
     "test": "bun run gen && vitest run && bun run test:contracts",
     "test:contracts": "node --test scripts/style-contract/*.test.mjs scripts/design-system/*.test.mjs",
     "test:e2e": "playwright test",
-    "lint": "eslint . && node scripts/style-contract/check.mjs && node scripts/design-system/check.mjs && node scripts/design-system/palettes.mjs && prettier --check .",
+    "lint": "eslint . && node scripts/style-contract/check.mjs && node scripts/design-system/check.mjs && bun scripts/design-system/palettes.mjs && prettier --check .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

@@ -66,7 +66,7 @@ is styled by its owning module, not here.
      normal: the approved plan title reads better upright, and the captain's
      preference outranks the book's rule for tightening large type. */
   article :is(h1, h2, h3, h4, h5, h6)[data-authored-prose] {
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     margin: 2rem 0 0.75rem;
   }
   article h1[data-authored-prose] {
@@ -300,7 +300,7 @@ is styled by its owning module, not here.
   }
   article th[data-authored-prose] {
     background: var(--color-surface);
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
   }
   article
     tbody[data-authored-prose]
@@ -328,7 +328,7 @@ is styled by its owning module, not here.
     border-bottom: 0;
     padding-bottom: 0;
     font-size: var(--text-2xs);
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     letter-spacing: var(--tracking-caps);
     text-transform: uppercase;
     color: var(--color-subtle);
