@@ -76,7 +76,7 @@ test("should choose and persist appearance from the settings dialog", async ({
           PREFERENCES_STORAGE_KEY,
         ),
       )
-      .toBe(serializePreferencesRecord("dark"));
+      .toBe(serializePreferencesRecord({ mode: "dark", palette: "default" }));
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -93,7 +93,7 @@ test("should choose and persist appearance from the settings dialog", async ({
           PREFERENCES_STORAGE_KEY,
         ),
       )
-      .toBe(serializePreferencesRecord("system"));
+      .toBe(serializePreferencesRecord({ mode: "system", palette: "default" }));
     const lightBackground = await page
       .locator("body")
       .evaluate((body) => getComputedStyle(body).backgroundColor);

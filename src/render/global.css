@@ -301,6 +301,294 @@ its light counterpart so the three-deep ladder keeps the same separation.
   color-scheme: dark;
 }
 
+/*
+THE PALETTES
+
+`data-theme` and `data-palette` are two attributes doing two jobs. The mode
+decides which half of every `light-dark()` above is used; the palette decides
+what the shades in both halves are. A palette is therefore a set of ramps and
+nothing else: it restates no role, so a role added above is themed everywhere at
+once, and a palette costs one block rather than two.
+
+The absent attribute, and the `default` id, both mean the warm paper ramps at
+the top of this file, so a document with no stored preference renders exactly
+what Big Plan has always rendered.
+
+Each theme below is an adaptation, not a port. A terminal palette names a
+foreground, a background, and eight accents; Big Plan names surfaces, three
+weights of text, edges, and six semantic families across two modes. Anchors come
+from the official palette; steps between them are interpolated, and any step
+that would fail WCAG AA against a ground the renderer can put it on is moved
+along its own hue until it passes. scripts/design-system/palettes.mjs enforces
+both halves of that promise: every ramp step the roles reach is declared here,
+and every pairing clears AA.
+
+One role is declared per palette rather than derived. Light primary text is the
+only role whose two halves cannot share a ramp position: the default palette's
+ink happens to be a dark surface shade, while a themed palette's light text is
+its own mid-dark colour and would be far too light to serve as the dark hunk
+band that shares `--grey-925`.
+*/
+
+/* Rosé Pine: Dawn for light, Main for dark (https://rosepinetheme.com).
+   Rosé Pine has no green, so the tip and pro family is a sage derived from foam
+   rather than a colour the palette ships. */
+:root[data-palette="rose-pine"] {
+  --grey-0: #fffaf3;
+  --grey-25: #fffaf3;
+  --grey-50: #faf4ed;
+  --grey-75: #f8f2ea;
+  --grey-100: #f4ede8;
+  --grey-125: #f2e9e1;
+  --grey-150: #e0def4;
+  --grey-200: #dfdad9;
+  --grey-300: #b6b2c9;
+  --grey-400: #908caa;
+  --grey-600: #6e6a86;
+  --grey-700: #575279;
+  --grey-800: #403d52;
+  --grey-875: #302c47;
+  --grey-900: #26233a;
+  --grey-925: #1f1d2e;
+  --grey-950: #191724;
+
+  --primary-50: #edeaf0;
+  --primary-100: #dfd7ea;
+  --primary-300: #c4a7e7;
+  --primary-700: #785f93;
+  --primary-900: #271839;
+
+  --success-50: #e8f2ee;
+  --success-100: #d9e8e0;
+  --success-300: #8fd3b0;
+  --success-700: #387760;
+  --success-900: #1c3528;
+
+  --warning-50: #f8efe2;
+  --warning-100: #efe3d2;
+  --warning-300: #f6c177;
+  --warning-700: #995f10;
+  --warning-900: #422d10;
+
+  --danger-50: #f2e8eb;
+  --danger-100: #edd4db;
+  --danger-300: #eb6f92;
+  --danger-700: #a44f67;
+  --danger-900: #3e131f;
+
+  --info-50: #e6f0f4;
+  --info-100: #d9e6e8;
+  --info-300: #9ccfd8;
+  --info-700: #286983;
+  --info-900: #1c3135;
+
+  --note-50: #f4e7e6;
+  --note-100: #ead8d7;
+  --note-300: #ebbcba;
+  --note-400: #d7827e;
+  --note-500: #b83f39;
+  --note-900: #391a19;
+
+  --neutral-100: #efe6de;
+  --neutral-800: #2b2740;
+
+  --ink-c: light-dark(#403a5e, var(--grey-150));
+}
+
+/* Cole: warm cream on near-black (https://github.com/thekylehuang/cole-tmux,
+   https://github.com/thekylehuang/cole.nvim). Cole ships only a dark variant,
+   so the light half is its own inversion: the foreground cream becomes the
+   page and the background near-black becomes the ink. */
+:root[data-palette="cole"] {
+  --grey-0: #fffdf7;
+  --grey-25: #fdf8ec;
+  --grey-50: #f2e6cf;
+  --grey-75: #efe2c8;
+  --grey-100: #eadbbd;
+  --grey-125: #e5d4b2;
+  --grey-150: #f2e6cf;
+  --grey-200: #dcc9a4;
+  --grey-300: #cdcdcd;
+  --grey-400: #a5a5a5;
+  --grey-600: #5c5240;
+  --grey-700: #463b28;
+  --grey-800: #3d3d3d;
+  --grey-875: #242424;
+  --grey-900: #1a1a1a;
+  --grey-925: #121212;
+  --grey-950: #0c0c0c;
+
+  --primary-50: #f2eee8;
+  --primary-100: #eae2d7;
+  --primary-300: #cc9b52;
+  --primary-700: #775c37;
+  --primary-900: #382c19;
+
+  --success-50: #e6f4ee;
+  --success-100: #d8e9d8;
+  --success-300: #66cc69;
+  --success-700: #216e4b;
+  --success-900: #1b371b;
+
+  --warning-50: #f8f0e2;
+  --warning-100: #ece4d5;
+  --warning-300: #e3b25c;
+  --warning-700: #84580f;
+  --warning-900: #3d2e15;
+
+  --danger-50: #f5e8e6;
+  --danger-100: #ebd9d6;
+  --danger-300: #d96a59;
+  --danger-700: #a6402f;
+  --danger-900: #3b1b17;
+
+  --info-50: #e7eaf3;
+  --info-100: #d8dfe8;
+  --info-300: #668ec8;
+  --info-700: #435dad;
+  --info-900: #1b2636;
+
+  --note-50: #f0eaf0;
+  --note-100: #e6dbe6;
+  --note-300: #bf86bf;
+  --note-400: #ab78ab;
+  --note-500: #815081;
+  --note-900: #322032;
+
+  --neutral-100: #e8d8b8;
+  --neutral-800: #1f1f1f;
+
+  --ink-c: light-dark(#101010, var(--grey-150));
+}
+
+/* Catppuccin: Latte for light, Mocha for dark
+   (https://github.com/catppuccin/catppuccin). */
+:root[data-palette="catppuccin"] {
+  --grey-0: #fbfcfe;
+  --grey-25: #f7f8fb;
+  --grey-50: #eff1f5;
+  --grey-75: #e9ebf1;
+  --grey-100: #e6e9ef;
+  --grey-125: #dce0e8;
+  --grey-150: #cdd6f4;
+  --grey-200: #ccd0da;
+  --grey-300: #bac2de;
+  --grey-400: #a6adc8;
+  --grey-600: #66697e;
+  --grey-700: #5c5f77;
+  --grey-800: #45475a;
+  --grey-875: #3a3c4f;
+  --grey-900: #313244;
+  --grey-925: #26263a;
+  --grey-950: #1e1e2e;
+
+  --primary-50: #ece2f9;
+  --primary-100: #dfd2ee;
+  --primary-300: #cba6f7;
+  --primary-700: #8534ef;
+  --primary-900: #271141;
+
+  --success-50: #e8f5e5;
+  --success-100: #d9ead7;
+  --success-300: #a6e3a1;
+  --success-700: #307820;
+  --success-900: #1c3819;
+
+  --warning-50: #f7efe3;
+  --warning-100: #efe6d2;
+  --warning-300: #f9e2af;
+  --warning-700: #925d13;
+  --warning-900: #413210;
+
+  --danger-50: #f9e2e7;
+  --danger-100: #eed3da;
+  --danger-300: #f38ba8;
+  --danger-700: #cd0f38;
+  --danger-900: #40121f;
+
+  --info-50: #e1e9f9;
+  --info-100: #d1ddf0;
+  --info-300: #89b4fa;
+  --info-700: #0d5af4;
+  --info-900: #0f2343;
+
+  --note-50: #e0e4fa;
+  --note-100: #d0d4f1;
+  --note-300: #b4befe;
+  --note-400: #7287fd;
+  --note-500: #314ffc;
+  --note-900: #0d1545;
+
+  --neutral-100: #e2e5ec;
+  --neutral-800: #2b2c3f;
+
+  --ink-c: light-dark(#4c4f69, var(--grey-150));
+}
+
+/* Everforest: the medium-contrast light and dark variants
+   (https://github.com/sainnhe/everforest). */
+:root[data-palette="everforest"] {
+  --grey-0: #fffbef;
+  --grey-25: #fffbef;
+  --grey-50: #fdf6e3;
+  --grey-75: #f4f0d9;
+  --grey-100: #efebd4;
+  --grey-125: #e6e2cc;
+  --grey-150: #d3c6aa;
+  --grey-200: #e0dcc7;
+  --grey-300: #c0c8bf;
+  --grey-400: #acb6ae;
+  --grey-600: #616f77;
+  --grey-700: #4e5b62;
+  --grey-800: #4f585e;
+  --grey-875: #475258;
+  --grey-900: #3d484d;
+  --grey-925: #343f44;
+  --grey-950: #2d353b;
+
+  --primary-50: #f7fae0;
+  --primary-100: #e2e6db;
+  --primary-300: #a7c080;
+  --primary-700: #616e01;
+  --primary-900: #2b321f;
+
+  --success-50: #e6f4ef;
+  --success-100: #dbe6de;
+  --success-300: #85c193;
+  --success-700: #267758;
+  --success-900: #1f3224;
+
+  --warning-50: #fbf3e0;
+  --warning-100: #eae3d7;
+  --warning-300: #dbbc7f;
+  --warning-700: #886200;
+  --warning-900: #392e19;
+
+  --danger-50: #f9e1e1;
+  --danger-100: #ecd5d5;
+  --danger-300: #eda0a2;
+  --danger-700: #cf0c08;
+  --danger-900: #3c1616;
+
+  --info-50: #e6eff4;
+  --info-100: #dbe6e4;
+  --info-300: #86bfb7;
+  --info-700: #2c7096;
+  --info-900: #20322f;
+
+  --note-50: #f6e4f0;
+  --note-100: #e8d9e0;
+  --note-300: #dba6bf;
+  --note-400: #df69ba;
+  --note-500: #bc288e;
+  --note-900: #351d28;
+
+  --neutral-100: #eae6d0;
+  --neutral-800: #3a4449;
+
+  --ink-c: light-dark(#333f46, var(--grey-150));
+}
+
 @layer components {
   /* The branding bar swaps logo art with the theme, following the same
      override order as the palette: OS preference unless data-theme wins. */

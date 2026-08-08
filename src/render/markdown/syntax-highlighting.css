@@ -3,6 +3,13 @@ CSS escape hatch: externally owned markup and token definitions.
 The syntax-highlighting palette and highlight.js token styles emitted by
 rehype-highlight. Palette variables follow the viewer's OS preference or its
 explicit theme override while staying independent of the surrounding shell.
+
+A code block is part of the reading surface, so the reviewer's colour theme
+reaches it too: each `data-palette` block below restates the seven token hues in
+that palette's own accents. The added and removed lines take the palette's tip
+and danger families instead of a hue of their own, so a diff inside a snippet
+agrees with a diff anywhere else in the document.
+src/render/global.css owns the two-attribute model and the ramps.
 */
 
 :root {
@@ -17,6 +24,62 @@ explicit theme override while staying independent of the surrounding shell.
   --syntax-addition-bg: light-dark(#dafbe1, #033a16);
   --syntax-deletion-c: light-dark(#82071e, #ffdcd7);
   --syntax-deletion-bg: light-dark(#ffebe9, #67060c);
+}
+
+:root[data-palette="rose-pine"] {
+  --syntax-keyword-c: light-dark(#286983, #3d90b1);
+  --syntax-entity-c: light-dark(#7e649b, #c4a7e7);
+  --syntax-constant-c: light-dark(#44757e, #9ccfd8);
+  --syntax-string-c: light-dark(#9b6010, #f6c177);
+  --syntax-variable-c: light-dark(#c2423c, #ebbcba);
+  --syntax-comment-c: light-dark(#6f6b89, #908caa);
+  --syntax-tag-c: light-dark(#ab526c, #eb6f92);
+  --syntax-addition-c: light-dark(var(--success-700), var(--success-300));
+  --syntax-addition-bg: light-dark(var(--success-50), var(--success-900));
+  --syntax-deletion-c: light-dark(var(--danger-700), var(--danger-300));
+  --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
+}
+
+:root[data-palette="cole"] {
+  --syntax-keyword-c: light-dark(#ac4231, #d96857);
+  --syntax-entity-c: light-dark(#4661b5, #5582c2);
+  --syntax-constant-c: light-dark(#865386, #bf86bf);
+  --syntax-string-c: light-dark(#22724e, #66cc69);
+  --syntax-variable-c: light-dark(#7c6039, #cc9b52);
+  --syntax-comment-c: light-dark(#656565, #858585);
+  --syntax-tag-c: light-dark(#276f77, #73bfbf);
+  --syntax-addition-c: light-dark(var(--success-700), var(--success-300));
+  --syntax-addition-bg: light-dark(var(--success-50), var(--success-900));
+  --syntax-deletion-c: light-dark(var(--danger-700), var(--danger-300));
+  --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
+}
+
+:root[data-palette="catppuccin"] {
+  --syntax-keyword-c: light-dark(#8839ef, #cba6f7);
+  --syntax-entity-c: light-dark(#0f5cf4, #89b4fa);
+  --syntax-constant-c: light-dark(#b94401, #fab387);
+  --syntax-string-c: light-dark(#307820, #a6e3a1);
+  --syntax-variable-c: light-dark(#cf1c2b, #eba0ac);
+  --syntax-comment-c: light-dark(#66697b, #9399b2);
+  --syntax-tag-c: light-dark(#12747a, #94e2d5);
+  --syntax-addition-c: light-dark(var(--success-700), var(--success-300));
+  --syntax-addition-bg: light-dark(var(--success-50), var(--success-900));
+  --syntax-deletion-c: light-dark(var(--danger-700), var(--danger-300));
+  --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
+}
+
+:root[data-palette="everforest"] {
+  --syntax-keyword-c: light-dark(#d90d09, #e98f91);
+  --syntax-entity-c: light-dark(#657301, #a7c080);
+  --syntax-constant-c: light-dark(#c12991, #d699b6);
+  --syntax-string-c: light-dark(#277a5b, #83c092);
+  --syntax-variable-c: light-dark(#b25008, #e69875);
+  --syntax-comment-c: light-dark(#647062, #a0aaa3);
+  --syntax-tag-c: light-dark(#2d739a, #7fbbb3);
+  --syntax-addition-c: light-dark(var(--success-700), var(--success-300));
+  --syntax-addition-bg: light-dark(var(--success-50), var(--success-900));
+  --syntax-deletion-c: light-dark(var(--danger-700), var(--danger-300));
+  --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
 }
 
 @layer components {

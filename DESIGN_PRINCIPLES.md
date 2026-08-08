@@ -112,9 +112,9 @@ Rules:
 
 ## Colour
 
-The palette is seven ramps: `grey`, `primary`, `success`, `warning`, `danger`, `info`, and `note`.
-Each ramp was built in HSL from its middle shade outward.
-The greys are warm through their whole range, which is what makes the page read as paper.
+A palette is seven ramps: `grey`, `primary`, `success`, `warning`, `danger`, `info`, and `note`.
+The product's own ramps were built in HSL from each middle shade outward.
+Its greys are warm through their whole range, which is what makes the page read as paper.
 
 Markup never names a ramp step.
 Markup names a **role**.
@@ -154,6 +154,26 @@ Rules:
 6. **Accent is scarce.**
    One accent per surface.
    If two things are both the most important, neither is.
+
+### Colour themes
+
+A reviewer can swap the ramps without swapping the roles.
+`data-theme` picks light or dark; `data-palette` picks whose shades fill both halves.
+A colour theme is therefore a set of ramps and never a restated role, so a role added here is themed everywhere at once.
+
+Rules:
+
+1. **A role is declared once.**
+   Every role is `light-dark(light, dark)` in `src/render/global.css`.
+   A palette that restates a role has found a missing ramp step; add the step instead.
+2. **A theme is an adaptation, not a port.**
+   A terminal palette names a foreground, a background, and eight accents.
+   Take its anchors, interpolate the steps between them, and derive a family it does not ship rather than reusing one it does.
+3. **The product's own look is what absence means.**
+   No attribute and the `default` id are the same document, pixel for pixel.
+4. **Every theme meets the bar every theme meets.**
+   Rule 5 above is not relaxed for a guest palette; move a shade along its own hue until it passes.
+   `scripts/design-system/palettes.mjs` owns the enforced pairings.
 
 ## Elevation
 
