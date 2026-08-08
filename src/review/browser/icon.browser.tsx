@@ -8,13 +8,14 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 export const Icon = ({ icon }: { readonly icon: LucideIcon }) => (
   <svg
     viewBox="0 0 24 24"
+    width="1em"
+    height="1em"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2"
+    strokeWidth="1.5"
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
-    className="size-4"
   >
     {icon.node.map(([tagName, properties], index) =>
       createElement(tagName, {

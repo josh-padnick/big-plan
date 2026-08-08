@@ -5,31 +5,46 @@
 import type {
   ButtonHTMLAttributes,
   HTMLAttributes,
+  KeyboardEvent,
   TextareaHTMLAttributes,
 } from "react";
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useRef } from "react";
 
 const joinClasses = (
   ...values: ReadonlyArray<string | false | null | undefined>
 ): string => values.filter(Boolean).join(" ");
 
-type ButtonVariant = "default" | "secondary" | "ghost" | "destructive";
-type ButtonSize = "default" | "sm" | "icon";
+type ButtonVariant =
+  | "default"
+  | "secondary"
+  | "outline"
+  | "accentOutline"
+  | "ghost"
+  | "destructive";
+type ButtonSize =
+  "default" | "sm" | "compact" | "micro" | "compactIcon" | "icon";
 
 const BUTTON_VARIANTS: Readonly<Record<ButtonVariant, string>> = {
   default:
-    "bg-accent text-accent-ink shadow-raised hover:shadow-lifted active:inset-shadow-pressed",
+    "rounded-md border border-transparent bg-accent font-semibold text-accent-ink shadow-raised hover:shadow-lifted active:inset-shadow-pressed",
   secondary:
-    "bg-surface text-ink shadow-raised hover:bg-raised hover:shadow-lifted active:inset-shadow-pressed",
+    "rounded-md border border-transparent bg-surface font-medium text-ink shadow-raised hover:bg-raised hover:shadow-lifted active:inset-shadow-pressed",
+  outline:
+    "rounded-md border border-edge bg-transparent font-normal text-muted shadow-none hover:bg-surface hover:text-ink hover:shadow-raised active:inset-shadow-pressed",
+  accentOutline:
+    "rounded-sm border border-accent bg-paper font-semibold text-accent shadow-none hover:shadow-raised active:inset-shadow-pressed",
   ghost:
-    "bg-transparent text-muted hover:bg-surface hover:text-ink active:inset-shadow-pressed",
+    "rounded-md border border-transparent bg-transparent font-normal text-muted hover:bg-surface hover:text-ink active:inset-shadow-pressed",
   destructive:
-    "bg-danger text-danger-ink shadow-raised hover:shadow-lifted active:inset-shadow-pressed",
+    "rounded-md border border-transparent bg-danger font-semibold text-danger-ink shadow-raised hover:shadow-lifted active:inset-shadow-pressed",
 };
 
 const BUTTON_SIZES: Readonly<Record<ButtonSize, string>> = {
   default: "h-11 px-4 py-2",
-  sm: "h-11 min-w-11 px-3 py-1.5 text-sm wide:h-9 wide:min-w-9",
+  sm: "h-11 min-w-11 px-3 py-1.5 text-xs wide:h-9 wide:min-w-9",
+  compact: "h-11 min-w-11 px-3 py-0.5 text-xs wide:h-6 wide:min-w-6",
+  micro: "h-11 min-w-11 px-3 py-0.5 text-2xs wide:h-6 wide:min-w-6",
+  compactIcon: "size-11 p-0 wide:size-6",
   icon: "size-11 p-0",
 };
 
@@ -39,24 +54,31 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 /** Token-themed shadcn Button primitive. */
-export const Button = ({
-  className,
-  variant = "default",
-  size = "default",
-  type = "button",
-  ...props
-}: ButtonProps) => (
-  <button
-    type={type}
-    className={joinClasses(
-      "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border-0 font-medium transition-shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none",
-      BUTTON_VARIANTS[variant],
-      BUTTON_SIZES[size],
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  (
+    {
       className,
-    )}
-    {...props}
-  />
+      variant = "default",
+      size = "default",
+      type = "button",
+      ...props
+    },
+    ref,
+  ) => (
+    <button
+      ref={ref}
+      type={type}
+      className={joinClasses(
+        "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 transition-shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:border-edge disabled:bg-surface disabled:text-subtle disabled:opacity-100 disabled:shadow-none motion-reduce:transition-none",
+        BUTTON_VARIANTS[variant],
+        BUTTON_SIZES[size],
+        className,
+      )}
+      {...props}
+    />
+  ),
 );
+Button.displayName = "Button";
 
 /** Token-themed shadcn Textarea primitive. */
 export const Textarea = forwardRef<
@@ -66,7 +88,7 @@ export const Textarea = forwardRef<
   <textarea
     ref={ref}
     className={joinClasses(
-      "flex min-h-24 w-full resize-y rounded-md border border-edge-strong bg-paper px-3 py-2 text-base text-ink shadow-raised placeholder:text-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50",
+      "flex min-h-24 w-full resize-y rounded-md border border-edge-strong bg-paper px-2 py-1.5 text-base text-ink placeholder:text-subtle focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 wide:text-xs",
       className,
     )}
     {...props}
@@ -75,13 +97,33 @@ export const Textarea = forwardRef<
 Textarea.displayName = "Textarea";
 
 /** Token-themed shadcn Card primitive. */
+type CardProps = HTMLAttributes<HTMLDivElement> & {
+  readonly density?: "default" | "compact" | "dense";
+  readonly elevation?: "floating" | "none";
+};
+
+const CARD_DENSITIES = {
+  default: "p-4",
+  compact: "p-3",
+  dense: "p-2",
+} as const;
+
+const CARD_ELEVATIONS = {
+  floating: "shadow-floating",
+  none: "shadow-none",
+} as const;
+
 export const Card = ({
   className,
+  density = "default",
+  elevation = "floating",
   ...props
-}: HTMLAttributes<HTMLDivElement>) => (
+}: CardProps) => (
   <div
     className={joinClasses(
-      "min-w-0 rounded-xl bg-raised p-4 text-ink shadow-floating",
+      "min-w-0 rounded-lg bg-raised text-ink",
+      CARD_DENSITIES[density],
+      CARD_ELEVATIONS[elevation],
       className,
     )}
     {...props}
@@ -89,15 +131,133 @@ export const Card = ({
 );
 
 /** Token-themed shadcn Badge primitive. */
+type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
+  readonly size?: "default" | "compact" | "micro";
+  readonly tone?: "neutral" | "accentOutline";
+  readonly weight?: "semibold" | "bold";
+};
+
+const BADGE_SIZES = {
+  default: "px-2 py-0.5 text-xs",
+  compact: "px-1 py-0.5 text-2xs",
+  micro: "px-0.5 py-0 text-2xs",
+} as const;
+
+const BADGE_TONES = {
+  neutral: "border border-transparent bg-surface text-muted",
+  accentOutline: "border border-accent bg-transparent text-accent",
+} as const;
+
+const BADGE_WEIGHTS = {
+  semibold: "font-semibold",
+  bold: "font-bold",
+} as const;
+
 export const Badge = ({
   className,
+  size = "default",
+  tone = "neutral",
+  weight = "semibold",
   ...props
-}: HTMLAttributes<HTMLSpanElement>) => (
+}: BadgeProps) => (
   <span
     className={joinClasses(
-      "inline-flex items-center rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-muted",
+      "inline-flex items-center rounded-full",
+      BADGE_SIZES[size],
+      BADGE_TONES[tone],
+      BADGE_WEIGHTS[weight],
       className,
     )}
     {...props}
   />
 );
+
+type AlertDialogProps = {
+  readonly open: boolean;
+  readonly title: string;
+  readonly description: string;
+  readonly cancelLabel?: string;
+  readonly actionLabel: string;
+  readonly onCancel: () => void;
+  readonly onAction: () => void;
+};
+
+/** Token-themed shadcn AlertDialog primitive for consequential choices. */
+export const AlertDialog = ({
+  open,
+  title,
+  description,
+  cancelLabel = "Cancel",
+  actionLabel,
+  onCancel,
+  onAction,
+}: AlertDialogProps) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    cancelRef.current?.focus();
+    return () => previousFocus?.focus();
+  }, [open]);
+
+  if (!open) return null;
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const controls = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>("button") ?? [],
+    );
+    if (controls.length === 0) return;
+    const current = controls.indexOf(document.activeElement as HTMLElement);
+    const next = event.shiftKey
+      ? (current - 1 + controls.length) % controls.length
+      : (current + 1) % controls.length;
+    event.preventDefault();
+    controls[next]?.focus();
+  };
+
+  const titleId = "review-alert-dialog-title";
+  const descriptionId = "review-alert-dialog-description";
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-[var(--preferences-backdrop-c)] p-4"
+      onKeyDown={handleKeyDown}
+    >
+      <div
+        ref={dialogRef}
+        className="w-full max-w-lg rounded-xl border border-edge bg-paper p-6 text-ink shadow-floating"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+      >
+        <h2 id={titleId} className="text-xl font-semibold">
+          {title}
+        </h2>
+        <p id={descriptionId} className="mt-3 text-base text-muted">
+          {description}
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
+            ref={cancelRef}
+            variant="outline"
+            size="sm"
+            onClick={onCancel}
+          >
+            {cancelLabel}
+          </Button>
+          <Button variant="destructive" size="sm" onClick={onAction}>
+            {actionLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};

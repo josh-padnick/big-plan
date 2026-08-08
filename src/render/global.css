@@ -472,6 +472,8 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-accent-soft: var(--accent-soft-c);
   --color-accent-wash: var(--accent-wash-c);
   --color-accent-ink: var(--accent-ink-c);
+  --color-danger: var(--callout-danger-c);
+  --color-danger-ink: var(--accent-ink-c);
 
   --shadow-raised: var(--elevation-raised);
   --shadow-lifted: var(--elevation-lifted);

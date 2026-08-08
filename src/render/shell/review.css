@@ -7,7 +7,8 @@ All visual choices use the document theme's closed token vocabulary.
 
 @layer components {
   [data-block-id]:not([data-block-kind="part"]),
-  [data-slide][data-review-slide-selectable] {
+  [data-slide][data-review-slide-selectable],
+  [data-quick-summary][data-review-slide-selectable] {
     position: relative;
   }
 
@@ -45,26 +46,133 @@ All visual choices use the document theme's closed token vocabulary.
     text-transform: capitalize;
   }
 
-  /* Precision targets overlay their own top edge. They never contribute to
-     the table's scroll width or appear below a header toolbar. */
-  [data-block-kind="table-cell"] > [data-review-anchor-host],
-  [data-block-kind="table-column"] > [data-review-anchor-host],
-  [data-block-kind="table-row"] > [data-review-anchor-host] {
-    top: 0;
-    right: 0.25rem;
+  [data-table-scroll-container]:has([data-review-table-host]) {
+    position: relative;
   }
 
-  [data-block-kind="table-cell"]
-    > [data-review-anchor-host]
-    .review-block-button,
-  [data-block-kind="table-column"]
-    > [data-review-anchor-host]
-    .review-block-button,
-  [data-block-kind="table-row"]
-    > [data-review-anchor-host]
-    .review-block-button {
+  [data-review-table-host] {
+    position: absolute;
+    z-index: 5;
+    top: 0;
     right: 0;
-    transform: translateY(-50%);
+    display: flex;
+    width: 2.25rem;
+    height: 100%;
+    max-height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  [data-review-toolbar-host] {
+    position: static;
+    display: inline-flex;
+    width: 1.5rem;
+    height: 1.5rem;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  [data-review-toolbar-inline] {
+    margin-left: auto;
+  }
+
+  .decision-zone-question:has(> [data-review-toolbar-overlay]) {
+    position: relative;
+    padding-right: 3rem;
+  }
+
+  [data-review-toolbar-overlay] {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+  }
+
+  .figure-control-bar:has([data-review-toolbar-host]) {
+    flex-direction: row;
+  }
+
+  .review-toolbar-comment {
+    display: inline-flex;
+    width: 1.5rem;
+    height: 1.5rem;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: var(--muted-c);
+  }
+
+  .review-toolbar-comment:hover,
+  .review-toolbar-comment:focus-visible,
+  .review-toolbar-comment[aria-pressed="true"] {
+    color: var(--ink-c);
+  }
+
+  .review-toolbar-comment > svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .review-table-comment {
+    position: relative;
+    display: inline-flex;
+    width: 1.4rem;
+    height: 1.4rem;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 0.3rem;
+    background: transparent;
+    color: var(--muted-c);
+  }
+
+  .review-table-comment:hover,
+  .review-table-comment:focus-visible,
+  .review-table-comment[aria-pressed="true"] {
+    color: var(--ink-c);
+  }
+
+  .review-table-comment > svg {
+    width: 0.84rem;
+    height: 0.84rem;
+  }
+
+  .review-table-comment [role="tooltip"] {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    width: max-content;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    background: var(--ink-c);
+    color: var(--bg);
+    font-size: var(--text-xs);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .review-table-comment:hover [role="tooltip"],
+  .review-table-comment:focus-visible [role="tooltip"] {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  :is(
+    [data-block-kind="data-table"],
+    [data-block-kind="table"]
+  )[data-review-block-selected] {
+    outline: 2px solid var(--annotation-c);
+    outline-offset: 0.25rem;
+    box-shadow: 0 0 0 0.25rem var(--annotation-bg);
   }
 
   [data-block-id]:hover:has([data-block-id]:hover) > [data-review-anchor-host] {
@@ -85,10 +193,10 @@ All visual choices use the document theme's closed token vocabulary.
   [data-review-slide-host] {
     position: absolute;
     z-index: 3;
-    top: 0;
-    right: calc(100% + 0.5rem);
-    width: 2.75rem;
-    height: 2.75rem;
+    top: calc(0.75rem - 1px);
+    right: calc(100% + 0.5625rem);
+    width: 1.4rem;
+    height: 1.4rem;
   }
 
   .review-slide-comment,
@@ -105,14 +213,14 @@ All visual choices use the document theme's closed token vocabulary.
   .review-slide-comment {
     position: relative;
     display: inline-flex;
-    width: 2.75rem;
-    height: 2.75rem;
+    width: 1.4rem;
+    height: 1.4rem;
     cursor: pointer;
     align-items: center;
     justify-content: center;
-    border: 0;
-    border-radius: 0.375rem;
-    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0.3rem;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
     color: var(--subtle-c);
     opacity: 1;
   }
@@ -137,8 +245,8 @@ All visual choices use the document theme's closed token vocabulary.
   }
 
   .review-slide-comment > svg {
-    width: 1rem;
-    height: 1rem;
+    width: 0.84rem;
+    height: 0.84rem;
   }
 
   .review-slide-comment [role="tooltip"] {
@@ -147,12 +255,12 @@ All visual choices use the document theme's closed token vocabulary.
     left: 0;
     width: max-content;
     max-width: 12rem;
-    padding: 0.5rem 0.75rem;
+    padding: 0.25rem 0.5rem;
     border-radius: 0.375rem;
     background: var(--ink-c);
     color: var(--bg);
-    font-size: var(--text-xs);
-    line-height: var(--text-xs--line-height);
+    font-size: var(--text-2xs);
+    line-height: var(--text-2xs--line-height);
     box-shadow: var(--elevation-raised);
     opacity: 0;
     visibility: hidden;
@@ -168,112 +276,110 @@ All visual choices use the document theme's closed token vocabulary.
     visibility: visible;
   }
 
-  [data-slide][data-review-slide-selected] {
-    outline: 2px solid var(--annotation-c);
+  :is([data-slide], [data-quick-summary])[data-review-slide-selected] {
+    outline: 3px solid color-mix(in srgb, var(--annotation-c) 45%, var(--bg));
     outline-offset: 0.25rem;
-    box-shadow: 0 0 0 0.25rem var(--annotation-bg);
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    [data-review-slide-host] {
-      opacity: 0;
-      transition: opacity 120ms ease;
-    }
-
-    [data-slide]:hover > [data-review-slide-host],
-    [data-review-slide-host]:focus-within,
-    [data-slide][data-review-slide-selected] > [data-review-slide-host] {
-      opacity: 1;
-    }
   }
 
   .review-selection-chip {
     position: fixed;
     z-index: 30;
     display: inline-flex;
-    min-height: 2.75rem;
     cursor: pointer;
     align-items: center;
     gap: 0.25rem;
-    padding: 0.5rem 0.75rem;
+    padding: 0.25rem 0.5rem;
     border: 1px solid var(--edge-c);
     border-radius: 9999px;
-    background: var(--raised-c);
-    color: var(--ink-c);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    line-height: var(--text-sm--line-height);
-    box-shadow: var(--elevation-floating);
+    background: var(--bg);
+    color: var(--muted-c);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    box-shadow: var(--elevation-raised);
   }
 
-  .review-selection-chip:hover {
+  .review-selection-chip:hover,
+  .review-selection-chip:focus-visible {
+    border-color: var(--accent-c);
     background: var(--surface-c);
-    box-shadow: var(--elevation-lifted);
-    transform: translateY(-0.25rem);
+    color: var(--accent-c);
   }
 
   .review-selection-chip svg {
-    width: 1rem;
-    height: 1rem;
+    width: 0.84rem;
+    height: 0.84rem;
   }
 
   ::highlight(big-plan-review-selection) {
-    background: var(--annotation-bg);
-    color: var(--annotation-ink);
+    background: color-mix(in srgb, var(--annotation-bg) 55%, transparent);
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--annotation-c);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.16em;
   }
 
   ::highlight(big-plan-review-selection-active) {
-    background: color-mix(in srgb, var(--annotation-c) 35%, transparent);
-    color: var(--ink-c);
+    background: var(--annotation-bg);
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--annotation-c);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.16em;
   }
 
   .review-comment-composer {
+    --review-compose-input-c: var(--grey-0);
+
     z-index: 30;
-    width: min(24rem, calc(100vw - 2rem));
+    width: min(17rem, calc(100vw - 2rem));
     padding: 1rem;
-    background: var(--raised-c);
+    border: 1px solid var(--edge-c);
+    background: var(--bg);
     color: var(--ink-c);
+    box-shadow: var(--elevation-floating);
   }
 
   .review-comment-composer-floating {
     position: fixed;
     right: auto !important;
-    left: 50%;
-    transform: translateX(-50%);
     transition: transform 120ms ease;
   }
 
   :root[data-review-selection-active]
     .review-comment-composer-floating[data-review-associated="true"] {
-    transform: translate(-50%, -0.25rem);
+    transform: translateY(-0.25rem);
   }
 
   [data-review-compose-inline],
-  [data-review-thread-for] {
+  [data-review-thread-for]:not([data-review-thread-side]) {
     display: flow-root;
     width: 100%;
     min-width: 0;
   }
 
+  [data-review-thread-side] {
+    position: absolute;
+    z-index: 19;
+    width: min(17rem, calc(100vw - 3rem));
+  }
+
   .review-comment-composer-inline {
     position: relative;
-    width: min(28rem, 100%);
-    margin: 0.75rem 0 1.5rem auto;
+    z-index: auto;
+    width: min(32rem, 100%);
+    margin: 0 0 1.5rem;
   }
 
   .review-compose-title {
-    margin: 0 0 0.75rem;
-    color: var(--ink-c);
-    font-size: var(--text-sm);
+    margin: 0 0 0.5rem;
+    color: var(--muted-c);
     font-weight: 600;
-    line-height: var(--text-sm--line-height);
   }
 
   .review-compose-hint {
-    margin: 0.5rem 0 0;
+    margin: 0.25rem 0 0;
     color: var(--subtle-c);
-    font-size: var(--text-xs);
-    line-height: var(--text-xs--line-height);
   }
 
   .review-compose-controls,
@@ -286,14 +392,18 @@ All visual choices use the document theme's closed token vocabulary.
   }
 
   .review-compose-controls {
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-top: 0.75rem;
+    display: block;
+    margin-top: 0.5rem;
   }
 
   .review-compose-actions,
   .review-staged-actions {
     gap: 0.25rem;
+  }
+
+  .review-compose-actions {
+    justify-content: flex-end;
+    margin-top: 0.5rem;
   }
 
   .review-submit-toggle {
@@ -305,14 +415,13 @@ All visual choices use the document theme's closed token vocabulary.
     border: 0;
     background: transparent;
     color: var(--muted-c);
-    font-size: var(--text-xs);
-    line-height: var(--text-xs--line-height);
   }
 
   .review-submit-toggle > span {
     position: relative;
     width: 2rem;
     height: 1.25rem;
+    border: 1px solid var(--edge-c);
     border-radius: 9999px;
     background: var(--surface-c);
     box-shadow: var(--elevation-well);
@@ -321,22 +430,24 @@ All visual choices use the document theme's closed token vocabulary.
   .review-submit-toggle > span::after {
     content: "";
     position: absolute;
-    top: 0.25rem;
+    top: 50%;
     left: 0.25rem;
     width: 0.75rem;
     height: 0.75rem;
     border-radius: 9999px;
     background: var(--muted-c);
+    transform: translateY(-50%);
     transition: transform 120ms ease;
   }
 
   .review-submit-toggle[aria-checked="true"] > span {
+    border-color: var(--accent-c);
     background: var(--accent-soft-c);
   }
 
   .review-submit-toggle[aria-checked="true"] > span::after {
     background: var(--accent-c);
-    transform: translateX(0.75rem);
+    transform: translate(0.75rem, -50%);
   }
 
   .review-shortcut-wrap {
@@ -367,22 +478,41 @@ All visual choices use the document theme's closed token vocabulary.
 
   .review-staged-card,
   .review-staged-collapsed {
-    width: min(28rem, 100%);
+    width: min(17rem, 100%);
     margin: 0.75rem 0 1.5rem auto;
   }
 
+  [data-review-thread-side] .review-staged-card,
+  [data-review-thread-side] .review-staged-collapsed {
+    width: 100%;
+    margin: 0;
+  }
+
   .review-staged-card {
-    padding: 0.75rem;
-    border-left: 3px solid var(--annotation-rail-c);
+    border: 1px solid var(--edge-c);
     background: var(--raised-c);
-    box-shadow: var(--elevation-raised);
     transition:
       transform 120ms ease,
       box-shadow 120ms ease;
   }
 
-  .review-staged-card[data-review-associated="true"]:hover,
-  .review-staged-collapsed[data-review-associated="true"]:hover {
+  .review-staged-card[data-review-surface="rail"] {
+    background: var(--surface-c);
+  }
+
+  .review-staged-card[data-review-surface="rail"] .review-staged-body {
+    margin-top: 0.25rem;
+  }
+
+  .review-staged-card[data-review-surface="thread"] .review-staged-meta {
+    margin: -0.75rem -0.75rem 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--edge-c);
+    border-radius: 0.5rem 0.5rem 0 0;
+    background: var(--header-c);
+  }
+
+  .review-staged-card[data-review-associated="true"]:hover {
     box-shadow: var(--elevation-lifted);
     transform: translateY(-0.25rem);
   }
@@ -392,40 +522,52 @@ All visual choices use the document theme's closed token vocabulary.
     gap: 0.5rem;
   }
 
-  .review-staged-meta time {
-    color: var(--subtle-c);
+  .review-staged-meta > time {
+    color: var(--muted-c);
     font-size: var(--text-xs);
     line-height: var(--text-xs--line-height);
+  }
+
+  .review-staged-target {
+    min-width: 0;
+    cursor: pointer;
+    flex: 1;
+    overflow-wrap: anywhere;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-c);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    line-height: var(--text-2xs--line-height);
+    text-align: left;
+    text-transform: uppercase;
+    white-space: normal;
+  }
+
+  .review-staged-target:hover,
+  .review-staged-target:focus-visible {
+    text-decoration: underline;
   }
 
   .review-staged-actions {
     margin-left: auto;
   }
 
-  .review-staged-actions button {
-    width: 2.75rem;
-    height: 2.75rem;
+  .review-staged-actions > button {
+    color: var(--muted-c);
   }
 
-  .review-staged-collapse {
-    cursor: pointer;
-    padding: 0;
-    border: 0;
-    background: transparent;
-  }
-
-  .review-staged-collapse span,
-  .review-staged-collapsed span:first-child {
-    background: var(--annotation-bg);
-    color: var(--annotation-ink);
-    letter-spacing: 0.08em;
+  .review-staged-actions > button svg {
+    width: 0.875rem;
+    height: 0.875rem;
   }
 
   .review-staged-body {
-    margin-top: 0.75rem;
+    margin-top: 0.5rem;
     color: var(--ink-c);
-    font-size: var(--text-sm);
-    line-height: var(--text-sm--line-height);
+    overflow-wrap: anywhere;
   }
 
   .review-comment-markdown p {
@@ -453,7 +595,7 @@ All visual choices use the document theme's closed token vocabulary.
 
   .review-staged-footer {
     justify-content: flex-end;
-    margin-top: 0.75rem;
+    margin-top: 0.5rem;
   }
 
   .review-staged-collapsed {
@@ -461,14 +603,19 @@ All visual choices use the document theme's closed token vocabulary.
     min-width: 0;
     cursor: pointer;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border: 0;
-    border-left: 3px solid var(--annotation-rail-c);
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--edge-c);
     border-radius: 0.375rem;
-    background: var(--surface-c);
-    color: var(--ink-c);
+    background: var(--raised-c);
+    color: var(--muted-c);
+    font-size: var(--text-xs);
     box-shadow: var(--elevation-raised);
+    transition: color 120ms ease;
+  }
+
+  .review-staged-collapsed:hover {
+    color: var(--ink-c);
   }
 
   .review-staged-collapsed > span:last-child {
@@ -478,6 +625,10 @@ All visual choices use the document theme's closed token vocabulary.
     white-space: nowrap;
   }
 
+  .review-staged-collapsed-rail {
+    box-shadow: none;
+  }
+
   [data-review-feedback-host] {
     display: inline-flex;
     align-items: center;
@@ -485,18 +636,17 @@ All visual choices use the document theme's closed token vocabulary.
 
   .review-feedback-toggle {
     display: inline-flex;
-    min-height: 2.75rem;
+    min-height: 1.875rem;
     cursor: pointer;
     align-items: center;
     gap: 0.375rem;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid transparent;
-    border-radius: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    border: 0;
+    border-radius: 0.25rem;
     background: transparent;
     color: var(--muted-c);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    line-height: var(--text-sm--line-height);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
   }
 
   .review-feedback-toggle:hover {
@@ -505,9 +655,9 @@ All visual choices use the document theme's closed token vocabulary.
   }
 
   .review-feedback-toggle[aria-expanded="true"] {
-    border-color: var(--accent-c);
-    background: var(--accent-soft-c);
-    color: var(--accent-soft-ink-c);
+    background: var(--surface-c);
+    color: var(--ink-c);
+    box-shadow: inset 0 0 0 1px var(--edge-c);
   }
 
   .review-feedback-toggle > svg {
@@ -526,37 +676,42 @@ All visual choices use the document theme's closed token vocabulary.
     top: 2.75rem;
     right: 0;
     bottom: 0;
-    display: grid;
-    width: min(24rem, 100vw);
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    display: flex;
+    width: min(22rem, 100vw);
+    flex-direction: column;
+    border-left: 1px solid var(--edge-c);
     background: var(--bg);
     color: var(--ink-c);
     box-shadow: var(--elevation-floating);
   }
 
   .review-feedback-tabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: stretch;
     gap: 0.25rem;
-    padding: 0.75rem;
-    background: var(--raised-c);
+    padding: 0.375rem 0.5rem 0;
+    border-bottom: 1px solid var(--edge-c);
+    background: var(--bg);
   }
 
   .review-feedback-tabs > button {
     display: inline-flex;
     min-width: 0;
-    min-height: 2.75rem;
+    min-height: 2rem;
     cursor: pointer;
     align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-    padding: 0.5rem;
+    justify-content: flex-start;
+    gap: 0.375rem;
+    padding: 0.375rem 0.5rem;
     border: 0;
-    border-radius: 0.375rem;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
     background: transparent;
     color: var(--muted-c);
     font-size: var(--text-xs);
     font-weight: 600;
+    line-height: var(--text-xs--line-height);
   }
 
   .review-feedback-tabs > button:hover {
@@ -565,19 +720,38 @@ All visual choices use the document theme's closed token vocabulary.
   }
 
   .review-feedback-tabs > button[aria-selected="true"] {
-    background: var(--accent-soft-c);
-    color: var(--accent-soft-ink-c);
+    border-bottom-color: var(--accent-c);
+    background: transparent;
+    color: var(--ink-c);
+  }
+
+  .review-feedback-tabs > button:last-child {
+    align-self: center;
+    min-height: 0;
+    margin-left: auto;
+    border-bottom: 0;
+  }
+
+  .review-feedback-tabs > button > span {
+    min-width: 1.25rem;
+    justify-content: center;
+    background: var(--annotation-bg);
+    color: var(--annotation-c);
+    font-size: var(--text-2xs);
   }
 
   .review-feedback-tabs > button svg {
-    width: 1rem;
-    height: 1rem;
+    flex: none;
+    width: 0.875rem;
+    height: 0.875rem;
   }
 
   .review-feedback-panel {
     min-height: 0;
+    flex: 1 1 auto;
+    overflow-x: hidden;
     overflow-y: auto;
-    padding: 1rem;
+    padding: 0.75rem;
   }
 
   .review-feedback-list {
@@ -590,7 +764,7 @@ All visual choices use the document theme's closed token vocabulary.
   .review-feedback-list .review-staged-card,
   .review-feedback-list .review-staged-collapsed {
     width: 100%;
-    margin: 0 0 0.75rem;
+    margin: 0 0 0.5rem;
   }
 
   .review-feedback-empty {
@@ -650,11 +824,17 @@ All visual choices use the document theme's closed token vocabulary.
 
   .review-feedback-status {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
+    flex: 0 0 auto;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.5rem;
     padding: 0.75rem;
-    background: var(--raised-c);
+    border-top: 1px solid var(--edge-c);
+    background: var(--bg);
+  }
+
+  .review-send-all {
+    width: 100%;
   }
 
   .review-feedback-status p {
@@ -666,7 +846,7 @@ All visual choices use the document theme's closed token vocabulary.
 
   @media (min-width: 80rem) {
     html[data-review-kernel-open] [data-reading-layout] {
-      margin-right: 24rem;
+      margin-right: 22rem;
       transition: margin-right 180ms ease;
     }
   }
@@ -692,10 +872,18 @@ All visual choices use the document theme's closed token vocabulary.
     }
 
     .review-feedback-tabs > button {
-      flex-direction: column;
-      gap: 0.125rem;
       font-size: var(--text-2xs);
     }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .review-comment-composer {
+      --review-compose-input-c: var(--grey-875);
+    }
+  }
+
+  :root[data-theme="dark"] .review-comment-composer {
+    --review-compose-input-c: var(--grey-875);
   }
 
   @media (prefers-reduced-motion: reduce) {

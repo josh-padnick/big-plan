@@ -12,13 +12,13 @@ Review every built-in component whose owned markup changed in the commenting fou
 
 <What>
 
-- Review QuickSummary facets and DataTable targets together with the slide-level and Feedback affordances.
+- Review QuickSummary as one whole surface alongside precise DataTable targets and the shared Feedback affordances.
 
 </What>
 
 <How>
 
-- Comment on each summary facet, then target a table row, column, and cell without introducing horizontal scroll.
+- Comment on the whole summary, then use the table's single header icon for the whole table or select text inside a row, column, or cell.
 
 </How>
 
@@ -26,23 +26,23 @@ Review every built-in component whose owned markup changed in the commenting fou
 
 <Part title="Changed components" />
 
-## QuickSummary keeps three independent targets
+## QuickSummary has one review target
 
-*Hover Why, What, and How separately; each should reveal its own comment control.*
+*Use the quiet, always-visible icon at the summary's left edge.*
 
-The component stays visually unchanged until a reviewer asks to comment. The
-whole slide still has one quiet left-margin comment route.
+The compact composer opens to the right without obscuring the summary. Why,
+What, and How remain readable structure rather than three competing controls.
 
 ## DataTable exposes the full grid
 
-*Hover a header, cell, and row to verify each target is precise.*
+*Use the single icon at the table header's far right; row, column, and cell identities stay available through text selection without extra icon chrome.*
 
 <DataTable title="Comment targeting matrix">
 
 ```table
 | Surface | Target | Expected label |
 | --- | --- | --- |
-| QuickSummary | Facet | Why, What, or How |
+| QuickSummary | Whole summary | Quick summary |
 | DataTable | Column | Column: Target |
 | DataTable | Cell | Surface: DataTable |
 | DataTable | Row | DataTable |

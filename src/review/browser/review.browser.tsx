@@ -17,19 +17,24 @@ import { createRoot } from "react-dom/client";
 import { ACTIVITY_ICON } from "../../icons/lucide/activity.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { MESSAGES_SQUARE_ICON } from "../../icons/lucide/messages-square.js";
+import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 import { PENCIL_ICON } from "../../icons/lucide/pencil.js";
-import { SCAN_ICON } from "../../icons/lucide/scan.js";
 import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import type { CommentTarget, ReviewComment } from "../comment.js";
 import { parseCommentMarkdownLine } from "../comment-markdown.js";
 import { Icon } from "./icon.browser.js";
-import { Badge, Button, Card, Textarea } from "./ui.browser.js";
+import { AlertDialog, Badge, Button, Card, Textarea } from "./ui.browser.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT = 4000;
 const LONG_COMMENT = 180;
 const PROSE_KINDS = new Set(["heading", "paragraph", "list", "blockquote"]);
+const TABLE_PRECISION_KINDS = new Set([
+  "table-cell",
+  "table-column",
+  "table-row",
+]);
 
 type RuntimeIdentity = {
   readonly planId: string;
@@ -45,6 +50,7 @@ type ReviewSnapshot = {
 type ComposeState = {
   readonly target: CommentTarget;
   readonly top: number;
+  readonly left: number;
   readonly draftId?: string;
   readonly initialBody?: string;
 };
@@ -56,8 +62,22 @@ type SelectionControlState = {
 };
 
 type FeedbackTab = "comments" | "chat" | "agent";
+type StagedCardSurface = "rail" | "thread";
+type SelectionTarget = Extract<CommentTarget, { readonly type: "selection" }>;
 
 const rootElement = document.documentElement;
+
+/** Formats the compact freshness label used by contextual thread cards. */
+const threadTime = (createdAt: string): string => {
+  const elapsed = Math.max(0, Date.now() - Date.parse(createdAt));
+  if (elapsed < 60_000) return "Just now";
+  if (elapsed < 3_600_000)
+    return `${Math.max(1, Math.floor(elapsed / 60_000))}m`;
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(createdAt));
+};
 
 const runtimeIdentity = (): RuntimeIdentity | null => {
   const planId = rootElement.getAttribute("data-plan-id") ?? "";
@@ -163,7 +183,9 @@ const blockIdentity = (block: HTMLElement) => ({
     : { section: block.dataset.blockSection }),
 });
 
-const targetForBlock = (block: HTMLElement): CommentTarget => ({
+const targetForBlock = (
+  block: HTMLElement,
+): Extract<CommentTarget, { readonly type: "block" }> => ({
   type: "block",
   ...blockIdentity(block),
 });
@@ -186,10 +208,32 @@ const targetForSlide = (
   };
 };
 
-const targetLabel = (target: CommentTarget): string => {
-  if (target.type === "document") return "Whole plan";
-  if (target.type === "selection") return `Selected text in ${target.label}`;
-  return target.label;
+const targetForReviewContainer = (
+  container: HTMLElement,
+): Extract<CommentTarget, { readonly type: "block" }> | null =>
+  container.matches("[data-quick-summary]")
+    ? targetForBlock(container)
+    : targetForSlide(container);
+
+const targetLabel = (
+  target: CommentTarget,
+  includeSlideReference = false,
+): string => {
+  let label: string;
+  if (target.type === "document") label = "Whole plan";
+  else if (target.type === "selection")
+    label = `Selected text in ${target.label}`;
+  else if (target.kind === "table" || target.kind === "data-table")
+    label = [target.section, "Table"].filter(Boolean).join(" · ");
+  else label = target.label;
+
+  if (!includeSlideReference || target.type === "document") return label;
+  const kicker = targetElement(target)
+    ?.closest<HTMLElement>("[data-slide]")
+    ?.querySelector<HTMLElement>("[data-slide-kicker]")
+    ?.textContent?.trim();
+  const slideReference = kicker?.match(/^(\d+(?:\.\d+)*)\s*\//u)?.[1];
+  return slideReference === undefined ? label : `${slideReference} · ${label}`;
 };
 
 const parentElementFor = (node: Node): Element | null =>
@@ -280,9 +324,9 @@ const selectionRange = (
   return null;
 };
 
-const setSelectionHighlight = (
-  target: Extract<CommentTarget, { readonly type: "selection" }> | null,
-  active: boolean,
+const setSelectionHighlights = (
+  targets: ReadonlyArray<SelectionTarget>,
+  activeTarget: SelectionTarget | null,
 ): void => {
   const registry = (CSS as unknown as { highlights?: HighlightRegistry })
     .highlights;
@@ -293,15 +337,19 @@ const setSelectionHighlight = (
       Highlight?: new (...ranges: ReadonlyArray<Range>) => unknown;
     }
   ).Highlight;
-  if (target === null || registry === undefined || HighlightClass === undefined)
-    return;
-  const range = selectionRange(target);
-  if (range !== null) {
+  if (registry === undefined || HighlightClass === undefined) return;
+  const ranges = targets
+    .map((target) => selectionRange(target))
+    .filter((range): range is Range => range !== null);
+  if (ranges.length > 0)
+    registry.set("big-plan-review-selection", new HighlightClass(...ranges));
+  const activeRange =
+    activeTarget === null ? null : selectionRange(activeTarget);
+  if (activeRange !== null)
     registry.set(
-      active ? "big-plan-review-selection-active" : "big-plan-review-selection",
-      new HighlightClass(range),
+      "big-plan-review-selection-active",
+      new HighlightClass(activeRange),
     );
-  }
 };
 
 const errorMessage = (error: unknown): string =>
@@ -338,17 +386,14 @@ const MarkdownBody = ({
   </div>
 );
 
-const relativeTime = (createdAt: string): string => {
-  const seconds = Math.max(
-    0,
-    Math.round((Date.now() - Date.parse(createdAt)) / 1000),
-  );
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
-};
+/** Finds chrome owned by one block without borrowing controls from a nested block. */
+const ownedDescendant = (
+  block: HTMLElement,
+  selector: string,
+): HTMLElement | null =>
+  Array.from(block.querySelectorAll<HTMLElement>(selector)).find(
+    (element) => element.closest<HTMLElement>("[data-block-id]") === block,
+  ) ?? null;
 
 const useBlockHosts = () => {
   const [hosts, setHosts] = useState<
@@ -363,11 +408,58 @@ const useBlockHosts = () => {
         '[data-block-id]:not([data-block-kind="part"])',
       ),
     )
-      .filter((block) => !PROSE_KINDS.has(block.dataset.blockKind ?? ""))
+      .filter(
+        (block) =>
+          !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
+          !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
+          block.closest("[data-quick-summary]") === null,
+      )
       .map((block) => {
         const host = document.createElement("span");
-        host.dataset.reviewAnchorHost = "";
-        block.append(host);
+        if (
+          block.dataset.blockKind === "data-table" ||
+          block.dataset.blockKind === "table"
+        ) {
+          host.dataset.reviewTableHost = "";
+          (
+            ownedDescendant(block, "[data-table-scroll-container]") ?? block
+          ).append(host);
+        } else {
+          host.dataset.reviewAnchorHost = "";
+          const copyControl = ownedDescendant(
+            block,
+            "[data-copy-source], [data-copy-code]",
+          );
+          const actionGroup = ownedDescendant(
+            block,
+            ".figure-action-group, .figure-control-bar",
+          );
+          const inlineHeader = ownedDescendant(
+            block,
+            ".file-tree-header, .callout-header",
+          );
+          const overlayHeader = ownedDescendant(
+            block,
+            ".decision-zone-question",
+          );
+          if (copyControl !== null) {
+            host.dataset.reviewToolbarHost = "";
+            copyControl.before(host);
+          } else if (actionGroup !== null) {
+            host.dataset.reviewToolbarHost = "";
+            actionGroup.prepend(host);
+          } else if (inlineHeader !== null) {
+            host.dataset.reviewToolbarHost = "";
+            host.dataset.reviewToolbarInline = "";
+            inlineHeader.append(host);
+          } else if (overlayHeader !== null) {
+            host.dataset.reviewToolbarHost = "";
+            host.dataset.reviewToolbarOverlay = "";
+            overlayHeader.append(host);
+          } else {
+            block.append(host);
+          }
+        }
         return { block, host };
       });
     setHosts(mounted);
@@ -376,29 +468,37 @@ const useBlockHosts = () => {
   return hosts;
 };
 
-const useSlideHosts = () => {
+const useReviewContainerHosts = () => {
   const [hosts, setHosts] = useState<
     ReadonlyArray<{
-      readonly slide: HTMLElement;
+      readonly container: HTMLElement;
       readonly host: HTMLSpanElement;
     }>
   >([]);
   useEffect(() => {
     const mounted = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-slide]"),
-    ).map((slide) => {
-      const host = document.createElement("span");
-      host.dataset.reviewSlideHost = "";
-      slide.append(host);
-      slide.dataset.reviewSlideSelectable = "";
-      return { slide, host };
-    });
+      document.querySelectorAll<HTMLElement>(
+        "[data-slide], [data-quick-summary]",
+      ),
+    )
+      .filter(
+        (container) =>
+          !container.matches("[data-quick-summary]") ||
+          container.closest("[data-slide]") === null,
+      )
+      .map((container) => {
+        const host = document.createElement("span");
+        host.dataset.reviewSlideHost = "";
+        container.append(host);
+        container.dataset.reviewSlideSelectable = "";
+        return { container, host };
+      });
     setHosts(mounted);
     return () =>
-      mounted.forEach(({ slide, host }) => {
+      mounted.forEach(({ container, host }) => {
         host.remove();
-        delete slide.dataset.reviewSlideSelectable;
-        delete slide.dataset.reviewSlideSelected;
+        delete container.dataset.reviewSlideSelectable;
+        delete container.dataset.reviewSlideSelected;
       });
   }, []);
   return hosts;
@@ -434,8 +534,17 @@ const useInlineComposeHost = (
   isOpen: boolean,
 ): HTMLDivElement | null => {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
+  const [isNarrow, setIsNarrow] = useState(
+    () => window.matchMedia("(width < 80rem)").matches,
+  );
   useEffect(() => {
-    if (!isOpen || compose === null) {
+    const query = window.matchMedia("(width < 80rem)");
+    const update = () => setIsNarrow(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    if ((!isOpen && !isNarrow) || compose === null) {
       setHost(null);
       return;
     }
@@ -445,36 +554,93 @@ const useInlineComposeHost = (
     next.dataset.reviewComposeInline = "";
     anchor.after(next);
     setHost(next);
-    return () => next.remove();
-  }, [compose, isOpen]);
+    return () => {
+      next.remove();
+    };
+  }, [compose, isNarrow, isOpen]);
   return host;
 };
 
 const useThreadHosts = (
   drafts: ReadonlyArray<ReviewComment>,
+  isOpen: boolean,
 ): ReadonlyMap<string, HTMLDivElement> => {
   const [hosts, setHosts] = useState<ReadonlyMap<string, HTMLDivElement>>(
     new Map(),
   );
+  const [isWide, setIsWide] = useState(
+    () => window.matchMedia("(min-width: 80rem)").matches,
+  );
 
   useEffect(() => {
+    const query = window.matchMedia("(min-width: 80rem)");
+    const update = () => setIsWide(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen || !isWide) {
+      setHosts(new Map());
+      return;
+    }
     const mounted = new Map<string, HTMLDivElement>();
-    const lastHostByAnchor = new Map<HTMLElement, HTMLDivElement>();
     for (const comment of drafts) {
       const anchor = targetElement(comment.target);
       if (anchor === null) continue;
       const host = document.createElement("div");
       host.dataset.reviewThreadFor = comment.id;
-      const lastHost = lastHostByAnchor.get(anchor);
-      (lastHost ?? anchor).after(host);
-      lastHostByAnchor.set(anchor, host);
+      host.dataset.reviewThreadSide = "";
+      document.body.append(host);
       mounted.set(comment.id, host);
     }
+    const position = () => {
+      const viewportWidth = document.documentElement.clientWidth;
+      const edge = 24;
+      const threadWidth = 17 * 16;
+      const lastBottomByAnchor = new Map<HTMLElement, number>();
+      for (const comment of drafts) {
+        const host = mounted.get(comment.id);
+        const target = targetElement(comment.target);
+        if (host === undefined || target === null) continue;
+        const anchor =
+          target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
+          target;
+        const anchorRect = anchor.getBoundingClientRect();
+        const targetRect =
+          comment.target.type === "selection"
+            ? selectionRange(comment.target)?.getBoundingClientRect()
+            : null;
+        const cardHeight = Math.max(
+          1,
+          host.firstElementChild?.getBoundingClientRect().height ?? 1,
+        );
+        const desiredTop = (targetRect?.top ?? anchorRect.top) + window.scrollY;
+        const previousBottom = lastBottomByAnchor.get(anchor) ?? 0;
+        const top = Math.max(previousBottom, desiredTop);
+        host.style.top = `${top}px`;
+        host.style.left = `${Math.max(
+          edge + window.scrollX,
+          Math.min(
+            anchorRect.right + window.scrollX,
+            window.scrollX + viewportWidth - threadWidth - edge,
+          ),
+        )}px`;
+        lastBottomByAnchor.set(anchor, top + cardHeight + 8);
+      }
+    };
+    const frame = requestAnimationFrame(position);
+    const observer = new ResizeObserver(position);
+    for (const host of mounted.values()) observer.observe(host);
+    window.addEventListener("resize", position, { passive: true });
     setHosts(mounted);
     return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", position);
       for (const host of mounted.values()) host.remove();
     };
-  }, [drafts]);
+  }, [drafts, isOpen, isWide]);
 
   return hosts;
 };
@@ -509,9 +675,12 @@ const CommentComposer = ({
       save();
     }
   };
-  const style: CSSProperties | undefined = inline
-    ? undefined
-    : { top: `${compose.top}px` };
+  const style: CSSProperties = {
+    backgroundColor: "var(--bg)",
+    borderRadius: "0.5rem",
+    padding: "0.75rem",
+    ...(inline ? {} : { top: `${compose.top}px`, left: `${compose.left}px` }),
+  };
   return (
     <Card
       className={
@@ -526,21 +695,24 @@ const CommentComposer = ({
         compose.target.type === "selection" ? "true" : undefined
       }
     >
-      <p className="review-compose-title">Add a comment</p>
+      <p className="review-compose-title text-xs">Add a comment</p>
       <Textarea
         ref={inputRef}
         aria-label="Add a comment"
+        style={{ backgroundColor: "var(--review-compose-input-c)" }}
         value={body}
         maxLength={BODY_LIMIT}
         placeholder="What should the agent change here?"
         onChange={(event) => setBody(event.target.value)}
         onKeyDown={handleKeyDown}
       />
-      <p className="review-compose-hint">Escape cancels · {shortcut} adds</p>
+      <p className="review-compose-hint text-2xs">
+        Escape cancels · {shortcut} adds
+      </p>
       <div className="review-compose-controls">
         <button
           type="button"
-          className="review-submit-toggle"
+          className="review-submit-toggle text-xs"
           role="switch"
           aria-checked={submitRightAway}
           onClick={() => setSubmitRightAway((current) => !current)}
@@ -549,11 +721,11 @@ const CommentComposer = ({
           Submit right away
         </button>
         <div className="review-compose-actions">
-          <Button variant="ghost" size="sm" onClick={onCancel}>
+          <Button variant="outline" size="compact" onClick={onCancel}>
             Cancel
           </Button>
           <span className="review-shortcut-wrap">
-            <Button size="sm" disabled={body.trim() === ""} onClick={save}>
+            <Button size="compact" disabled={body.trim() === ""} onClick={save}>
               Submit Now
             </Button>
             <span role="tooltip" className="review-shortcut-tooltip">
@@ -568,6 +740,7 @@ const CommentComposer = ({
 
 const StagedCard = ({
   comment,
+  surface,
   collapsed,
   expanded,
   onCollapse,
@@ -576,8 +749,10 @@ const StagedCard = ({
   onDelete,
   onJump,
   onSubmit,
+  onAssociate,
 }: {
   readonly comment: ReviewComment;
+  readonly surface: StagedCardSurface;
   readonly collapsed: boolean;
   readonly expanded: boolean;
   readonly onCollapse: () => void;
@@ -586,26 +761,38 @@ const StagedCard = ({
   readonly onDelete: () => void;
   readonly onJump: () => void;
   readonly onSubmit: () => void;
+  readonly onAssociate: (target: SelectionTarget | null) => void;
 }) => {
   const setAssociated = (active: boolean) => {
     const target = comment.target.type === "selection" ? comment.target : null;
-    setSelectionHighlight(active ? target : null, active);
+    onAssociate(active ? target : null);
   };
   if (collapsed) {
     return (
       <button
         type="button"
-        className="review-staged-collapsed"
+        className={`review-staged-collapsed review-staged-collapsed-${surface}`}
         onClick={onCollapse}
         onPointerEnter={() => setAssociated(true)}
         onPointerLeave={() => setAssociated(false)}
+        onFocus={() => setAssociated(true)}
+        onBlur={() => setAssociated(false)}
         data-review-associated={
           comment.target.type === "selection" ? "true" : undefined
         }
         aria-label={`Expand staged comment on ${targetLabel(comment.target)}`}
       >
-        <Badge>STAGED</Badge>
-        <span>{comment.body}</span>
+        <Badge
+          size="micro"
+          tone="accentOutline"
+          weight="bold"
+          className="tracking-caps"
+        >
+          STAGED
+        </Badge>
+        <span>
+          {surface === "rail" ? targetLabel(comment.target) : comment.body}
+        </span>
       </button>
     );
   }
@@ -616,37 +803,76 @@ const StagedCard = ({
       : comment.body;
   return (
     <Card
-      className="review-staged-card"
+      className="review-staged-card rounded-lg"
+      density={surface === "rail" ? "dense" : "compact"}
+      elevation={surface === "rail" ? "none" : "floating"}
+      style={{
+        backgroundColor: surface === "rail" ? "var(--surface-c)" : "var(--bg)",
+      }}
       onPointerEnter={() => setAssociated(true)}
       onPointerLeave={() => setAssociated(false)}
+      onFocus={() => setAssociated(true)}
+      onBlur={(event) => {
+        if (
+          !(event.relatedTarget instanceof Node) ||
+          !event.currentTarget.contains(event.relatedTarget)
+        )
+          setAssociated(false);
+      }}
       data-review-associated={
         comment.target.type === "selection" ? "true" : undefined
       }
+      data-review-surface={surface}
     >
       <div className="review-staged-meta">
-        <button
-          type="button"
-          className="review-staged-collapse"
-          onClick={onCollapse}
-          aria-label="Collapse staged comment"
-        >
-          <Badge>STAGED</Badge>
-        </button>
-        <time dateTime={comment.createdAt}>
-          {relativeTime(comment.createdAt)}
-        </time>
-        <div className="review-staged-actions">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Jump to comment target"
+        {surface === "rail" ? (
+          <button
+            type="button"
+            className="review-staged-target"
             onClick={onJump}
+            title="Jump to this target"
           >
-            <Icon icon={SCAN_ICON} />
-          </Button>
+            {targetLabel(comment.target, true)}
+          </button>
+        ) : (
+          <>
+            <Badge
+              size="micro"
+              tone="accentOutline"
+              weight="bold"
+              className="tracking-caps"
+            >
+              STAGED
+            </Badge>
+            <time dateTime={comment.createdAt}>
+              {threadTime(comment.createdAt)}
+            </time>
+          </>
+        )}
+        {surface === "rail" ? (
+          <Badge
+            size="micro"
+            tone="accentOutline"
+            weight="bold"
+            className="tracking-caps"
+          >
+            STAGED
+          </Badge>
+        ) : null}
+        <div className="review-staged-actions">
+          {surface === "thread" ? (
+            <Button
+              variant="ghost"
+              size="compactIcon"
+              aria-label="Minimize staged comment"
+              onClick={onCollapse}
+            >
+              <Icon icon={MINIMIZE_2_ICON} />
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
-            size="icon"
+            size="compactIcon"
             aria-label="Edit staged comment"
             onClick={onEdit}
           >
@@ -654,7 +880,7 @@ const StagedCard = ({
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="compactIcon"
             aria-label="Delete staged comment"
             onClick={onDelete}
           >
@@ -662,14 +888,18 @@ const StagedCard = ({
           </Button>
         </div>
       </div>
-      <MarkdownBody body={visibleBody} className="review-staged-body" />
+      <MarkdownBody body={visibleBody} className="review-staged-body text-xs" />
       {long && !expanded ? (
         <button type="button" className="review-more" onClick={onExpandBody}>
           … more
         </button>
       ) : null}
       <div className="review-staged-footer">
-        <Button size="sm" onClick={onSubmit}>
+        <Button
+          variant="accentOutline"
+          size={surface === "rail" ? "compact" : "micro"}
+          onClick={onSubmit}
+        >
           Submit Now
         </Button>
       </div>
@@ -682,7 +912,7 @@ const ReviewKernel = () => {
   const planId =
     identity?.planId ?? rootElement.getAttribute("data-plan-id") ?? "";
   const blockHosts = useBlockHosts();
-  const slideHosts = useSlideHosts();
+  const reviewContainerHosts = useReviewContainerHosts();
   const feedbackHost = useFeedbackHost();
   const [drafts, setDrafts] = useState<ReadonlyArray<ReviewComment>>([]);
   const [sent, setSent] = useState<ReadonlyArray<ReviewComment>>([]);
@@ -697,6 +927,11 @@ const ReviewKernel = () => {
   const [expandedBodies, setExpandedBodies] = useState<ReadonlySet<string>>(
     new Set(),
   );
+  const [pendingDelete, setPendingDelete] = useState<ReviewComment | null>(
+    null,
+  );
+  const [associatedSelection, setAssociatedSelection] =
+    useState<SelectionTarget | null>(null);
   const [associationActive, setAssociationActive] = useState(false);
   const [status, setStatus] = useState(
     identity === null
@@ -704,7 +939,7 @@ const ReviewKernel = () => {
       : "Loading review…",
   );
   const inlineComposeHost = useInlineComposeHost(compose, isOpen);
-  const threadHosts = useThreadHosts(drafts);
+  const threadHosts = useThreadHosts(drafts, isOpen);
 
   useEffect(() => {
     rootElement.toggleAttribute("data-review-kernel-open", isOpen);
@@ -712,18 +947,26 @@ const ReviewKernel = () => {
   }, [isOpen]);
 
   useEffect(() => {
-    const selection =
+    const composeSelection =
       compose?.target.type === "selection" ? compose.target : null;
-    setSelectionHighlight(selection, associationActive);
+    const persistentSelections = drafts
+      .map((comment) => comment.target)
+      .filter(
+        (target): target is SelectionTarget => target.type === "selection",
+      );
+    if (composeSelection !== null) persistentSelections.push(composeSelection);
+    const activeSelection =
+      associatedSelection ?? (associationActive ? composeSelection : null);
+    setSelectionHighlights(persistentSelections, activeSelection);
     rootElement.toggleAttribute(
       "data-review-selection-active",
-      selection !== null && associationActive,
+      activeSelection !== null,
     );
     return () => {
-      setSelectionHighlight(null, false);
+      setSelectionHighlights([], null);
       rootElement.removeAttribute("data-review-selection-active");
     };
-  }, [associationActive, compose]);
+  }, [associatedSelection, associationActive, compose, drafts]);
 
   useEffect(() => {
     const selection =
@@ -745,14 +988,22 @@ const ReviewKernel = () => {
   }, [compose]);
 
   useEffect(() => {
-    for (const { slide } of slideHosts) {
+    for (const { container } of reviewContainerHosts) {
       const selected =
         compose?.target.type === "block" &&
-        compose.target.kind === "slide" &&
-        targetElement(compose.target) === slide;
-      slide.toggleAttribute("data-review-slide-selected", selected);
+        targetElement(compose.target) === container;
+      container.toggleAttribute("data-review-slide-selected", selected);
     }
-  }, [compose, slideHosts]);
+  }, [compose, reviewContainerHosts]);
+
+  useEffect(() => {
+    for (const { block } of blockHosts) {
+      const selected =
+        compose?.target.type === "block" &&
+        targetElement(compose.target) === block;
+      block.toggleAttribute("data-review-block-selected", selected);
+    }
+  }, [blockHosts, compose]);
 
   useEffect(() => {
     let current = true;
@@ -836,13 +1087,28 @@ const ReviewKernel = () => {
     ) => {
       setCompose(
         (current) =>
-          current ?? {
-            target,
-            top: Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
-            ...(draft === undefined
-              ? {}
-              : { draftId: draft.id, initialBody: draft.body }),
-          },
+          current ??
+          (() => {
+            const targetRect = targetElement(target)?.getBoundingClientRect();
+            const composerWidth = 17 * 16;
+            const edge = 24;
+            const gap = 12;
+            const viewportWidth = document.documentElement.clientWidth;
+            return {
+              target,
+              top: Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
+              left: Math.max(
+                edge,
+                Math.min(
+                  (targetRect?.right ?? viewportWidth) + gap,
+                  viewportWidth - composerWidth - edge,
+                ),
+              ),
+              ...(draft === undefined
+                ? {}
+                : { draftId: draft.id, initialBody: draft.body }),
+            };
+          })(),
       );
     },
     [],
@@ -907,8 +1173,11 @@ const ReviewKernel = () => {
     if (submitRightAway) void sendComments([comment]);
   };
 
-  const deleteDraft = (id: string) =>
+  const deleteDraft = (id: string) => {
     setDrafts((current) => current.filter((comment) => comment.id !== id));
+    setPendingDelete(null);
+    setStatus("Staged comment deleted.");
+  };
   const jumpTo = (comment: ReviewComment) =>
     targetElement(comment.target)?.scrollIntoView({
       behavior: "smooth",
@@ -922,24 +1191,28 @@ const ReviewKernel = () => {
 
   return (
     <>
-      {slideHosts.map(({ slide, host }) => {
-        const target = targetForSlide(slide);
+      {reviewContainerHosts.map(({ container, host }) => {
+        const target = targetForReviewContainer(container);
         if (target === null) return null;
         const pressed =
           compose?.target.type === "block" &&
-          compose.target.kind === "slide" &&
-          targetElement(compose.target) === slide;
+          targetElement(compose.target) === container;
+        const label = container.matches("[data-quick-summary]")
+          ? "Comment on quick summary"
+          : "Comment on slide";
         return createPortal(
           <button
             type="button"
             className="review-slide-comment"
-            aria-label="Comment on slide"
+            aria-label={label}
             aria-pressed={pressed}
             disabled={compose !== null && !pressed}
-            onClick={() => beginTarget(target, slide.getBoundingClientRect())}
+            onClick={() =>
+              beginTarget(target, container.getBoundingClientRect())
+            }
           >
             <Icon icon={MESSAGE_SQUARE_ICON} />
-            <span role="tooltip">Comment on slide</span>
+            <span role="tooltip">{label}</span>
           </button>,
           host,
           target.blockId,
@@ -947,24 +1220,70 @@ const ReviewKernel = () => {
       })}
       {blockHosts.map(({ block, host }) =>
         createPortal(
-          <Button
-            variant="secondary"
-            size="sm"
-            className="review-block-button"
-            aria-label={`Comment on ${block.dataset.blockLabel ?? "this component"}`}
-            disabled={compose !== null}
-            data-review-block-button=""
-            data-review-target-name={
-              block.dataset.blockKind?.startsWith("table-")
-                ? block.dataset.blockKind.replace("table-", "")
-                : undefined
-            }
-            onClick={() =>
-              beginTarget(targetForBlock(block), block.getBoundingClientRect())
-            }
-          >
-            <Icon icon={MESSAGE_SQUARE_ICON} />
-          </Button>,
+          block.dataset.blockKind === "data-table" ||
+            block.dataset.blockKind === "table" ? (
+            <button
+              type="button"
+              className="review-table-comment"
+              aria-label={`Comment on ${block.dataset.blockLabel ?? "this table"}`}
+              aria-pressed={
+                compose?.target.type === "block" &&
+                targetElement(compose.target) === block
+              }
+              disabled={
+                compose !== null && targetElement(compose.target) !== block
+              }
+              onClick={() =>
+                beginTarget(
+                  targetForBlock(block),
+                  block.getBoundingClientRect(),
+                )
+              }
+            >
+              <Icon icon={MESSAGE_SQUARE_ICON} />
+              <span role="tooltip">Comment on table</span>
+            </button>
+          ) : host.dataset.reviewToolbarHost !== undefined ? (
+            <button
+              type="button"
+              className="review-toolbar-comment"
+              aria-label={`Comment on ${block.dataset.blockLabel ?? "this component"}`}
+              aria-pressed={
+                compose?.target.type === "block" &&
+                targetElement(compose.target) === block
+              }
+              disabled={
+                compose !== null && targetElement(compose.target) !== block
+              }
+              data-tooltip={`Comment on ${block.dataset.blockLabel ?? "component"}`}
+              data-tooltip-delay="1s"
+              onClick={() =>
+                beginTarget(
+                  targetForBlock(block),
+                  block.getBoundingClientRect(),
+                )
+              }
+            >
+              <Icon icon={MESSAGE_SQUARE_ICON} />
+            </button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="review-block-button"
+              aria-label={`Comment on ${block.dataset.blockLabel ?? "this component"}`}
+              disabled={compose !== null}
+              data-review-block-button=""
+              onClick={() =>
+                beginTarget(
+                  targetForBlock(block),
+                  block.getBoundingClientRect(),
+                )
+              }
+            >
+              <Icon icon={MESSAGE_SQUARE_ICON} />
+            </Button>
+          ),
           host,
           block.dataset.blockId,
         ),
@@ -1000,7 +1319,9 @@ const ReviewKernel = () => {
             >
               <Icon icon={MESSAGE_SQUARE_ICON} />
               Feedback
-              {drafts.length > 0 ? <Badge>{drafts.length}</Badge> : null}
+              {drafts.length > 0 ? (
+                <Badge size="compact">{drafts.length}</Badge>
+              ) : null}
             </button>,
             feedbackHost,
           )}
@@ -1023,6 +1344,9 @@ const ReviewKernel = () => {
             >
               <Icon icon={MESSAGE_SQUARE_ICON} />
               Comments
+              {drafts.length > 0 ? (
+                <Badge size="compact">{drafts.length}</Badge>
+              ) : null}
             </button>
             <button
               type="button"
@@ -1044,7 +1368,7 @@ const ReviewKernel = () => {
             </button>
             <Button
               variant="ghost"
-              size="icon"
+              size="compactIcon"
               aria-label="Close feedback"
               onClick={() => setIsOpen(false)}
             >
@@ -1071,7 +1395,8 @@ const ReviewKernel = () => {
                     <li key={comment.id}>
                       <StagedCard
                         comment={comment}
-                        collapsed={collapsed.has(comment.id)}
+                        surface="rail"
+                        collapsed={false}
                         expanded={expandedBodies.has(comment.id)}
                         onCollapse={() =>
                           setCollapsed((current) => {
@@ -1087,9 +1412,10 @@ const ReviewKernel = () => {
                           )
                         }
                         onEdit={() => editDraft(comment)}
-                        onDelete={() => deleteDraft(comment.id)}
+                        onDelete={() => setPendingDelete(comment)}
                         onJump={() => jumpTo(comment)}
                         onSubmit={() => void sendComments([comment])}
+                        onAssociate={setAssociatedSelection}
                       />
                     </li>
                   ))}
@@ -1135,15 +1461,17 @@ const ReviewKernel = () => {
             </div>
           ) : null}
           <div className="review-feedback-status">
-            <p role="status">{status}</p>
             {tab === "comments" ? (
               <Button
+                className="review-send-all"
+                size="sm"
                 disabled={drafts.length === 0 || isSending}
                 onClick={() => void sendComments(drafts)}
               >
-                {isSending ? "Submitting…" : "Submit all"}
+                {isSending ? "Sending…" : "Send all comments to agent"}
               </Button>
             ) : null}
+            <p role="status">{status}</p>
           </div>
         </aside>
       ) : null}
@@ -1153,6 +1481,7 @@ const ReviewKernel = () => {
         return createPortal(
           <StagedCard
             comment={comment}
+            surface="thread"
             collapsed={collapsed.has(comment.id)}
             expanded={expandedBodies.has(comment.id)}
             onCollapse={() =>
@@ -1167,9 +1496,10 @@ const ReviewKernel = () => {
               setExpandedBodies((current) => new Set(current).add(comment.id))
             }
             onEdit={() => editDraft(comment)}
-            onDelete={() => deleteDraft(comment.id)}
+            onDelete={() => setPendingDelete(comment)}
             onJump={() => jumpTo(comment)}
             onSubmit={() => void sendComments([comment])}
+            onAssociate={setAssociatedSelection}
           />,
           host,
           comment.id,
@@ -1195,6 +1525,16 @@ const ReviewKernel = () => {
           inlineComposeHost,
         )
       )}
+      <AlertDialog
+        open={pendingDelete !== null}
+        title="Delete comment?"
+        description="This permanently removes your staged comment. This action cannot be undone."
+        actionLabel="Delete"
+        onCancel={() => setPendingDelete(null)}
+        onAction={() => {
+          if (pendingDelete !== null) deleteDraft(pendingDelete.id);
+        }}
+      />
     </>
   );
 };
