@@ -135,3 +135,23 @@ test("should reject nonvisual support owners, nested layers, and root descendant
   assert.match(failures.join("\n"), /nested layer blocks/);
   assert.match(failures.join("\n"), /Override invariant:/);
 });
+
+test("should accept a palette-scoped token rule and reject a palette-scoped style rule", async () => {
+  const accepted = await checkSource({
+    "render/global.css": `${HEADER}
+@layer theme, base, components, utilities, bp-state;
+:root, [data-palette="default"] { --color-example: red; }
+[data-palette="guest"] { --color-example: blue; }
+`,
+  });
+  assert.deepEqual(accepted, []);
+
+  const rejected = await checkSource({
+    "render/global.css": `${HEADER}
+@layer theme, base, components, utilities, bp-state;
+[data-palette="guest"] { color: blue; }
+`,
+  });
+  assert.equal(rejected.length, 1);
+  assert.match(rejected[0], /presentation rule is unlayered/);
+});

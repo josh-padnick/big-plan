@@ -180,6 +180,7 @@ test("should review a static Mermaid SVG through the diagram canvas", async ({
     "data-flow-removed-kind",
     "edge",
   );
+  await expect(removedEdgeMarker).toBeVisible();
   const removedEdgeBox = await removedEdgeMarker.boundingBox();
   expect(removedEdgeBox?.width).toBeCloseTo(16, 0);
   expect(removedEdgeBox?.height).toBeCloseTo(16, 0);

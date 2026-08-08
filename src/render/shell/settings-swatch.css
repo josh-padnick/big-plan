@@ -1,0 +1,30 @@
+/*
+CSS escape hatch: token definitions.
+The colour-theme swatch in the settings sheet. A swatch has to paint raw ramp
+steps, and a ramp step deliberately never becomes a utility, so this is the one
+place in the shell that names shades instead of roles.
+
+Each chip reads the ramps of whichever theme its own [data-palette] carries, so
+the strip previews a theme correctly inside a document painted in another one
+and no colour is restated here. src/render/global.css owns the ramps.
+*/
+
+@layer components {
+  [data-palette-swatch] > [data-swatch] {
+    display: block;
+    width: 0.6875rem;
+    height: 1.375rem;
+  }
+  [data-palette-swatch] > [data-swatch="paper"] {
+    background: light-dark(var(--grey-50), var(--grey-950));
+  }
+  [data-palette-swatch] > [data-swatch="edge"] {
+    background: light-dark(var(--grey-200), var(--grey-800));
+  }
+  [data-palette-swatch] > [data-swatch="accent"] {
+    background: light-dark(var(--primary-700), var(--primary-300));
+  }
+  [data-palette-swatch] > [data-swatch="ink"] {
+    background: var(--ink-c);
+  }
+}

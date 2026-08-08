@@ -112,28 +112,28 @@ Rules:
 
 ## Colour
 
-The palette is seven ramps: `grey`, `primary`, `success`, `warning`, `danger`, `info`, and `note`.
-Each ramp was built in HSL from its middle shade outward.
-The greys are warm through their whole range, which is what makes the page read as paper.
+A palette is eight ramps: `grey`, `neutral`, `primary`, `success`, `warning`, `danger`, `info`, and `note`.
+The product's own ramps were built in HSL from each middle shade outward.
+Its greys are warm through their whole range, which is what makes the page read as paper.
 
 Markup never names a ramp step.
 Markup names a **role**.
 
-| Role          | Meaning                                                           |
-| ------------- | ----------------------------------------------------------------- |
-| `paper`       | The page                                                          |
-| `raised`      | A card, lifted off the page                                       |
-| `surface`     | A quiet separated area: a hover state, a chip, a table head       |
-| `well`        | A recessed area inside a card: a code body, a diff body           |
-| `header`      | A chrome band inside a card                                       |
-| `ink`         | Primary text, the thing being read                                |
-| `muted`       | Secondary text, supporting the primary                            |
-| `subtle`      | Tertiary text, a label the reader consults rather than reads      |
-| `edge`        | A hairline, when a border is genuinely the answer                 |
-| `edge-strong` | The edge of a control that must read as an input                  |
-| `accent`      | The brand green, for the one thing that matters most on a surface |
-| `accent-soft` | A tinted ground for accent content                                |
-| `accent-ink`  | Text on an accent-filled surface                                  |
+| Role          | Meaning                                                          |
+| ------------- | ---------------------------------------------------------------- |
+| `paper`       | The page                                                         |
+| `raised`      | A card, lifted off the page                                      |
+| `surface`     | A quiet separated area: a hover state, a chip, a table head      |
+| `well`        | A recessed area inside a card: a code body, a diff body          |
+| `header`      | A chrome band inside a card                                      |
+| `ink`         | Primary text, the thing being read                               |
+| `muted`       | Secondary text, supporting the primary                           |
+| `subtle`      | Tertiary text, a label the reader consults rather than reads     |
+| `edge`        | A hairline, when a border is genuinely the answer                |
+| `edge-strong` | The edge of a control that must read as an input                 |
+| `accent`      | The theme's emphasis colour, for the one thing that matters most |
+| `accent-soft` | A tinted ground for accent content                               |
+| `accent-ink`  | Text on an accent-filled surface                                 |
 
 Rules:
 
@@ -149,11 +149,38 @@ Rules:
    Anywhere colour carries meaning - a diff side, a status, a recommendation - an icon, a word, or a weight carries it too.
    A reader who cannot see the difference still gets the plan.
 5. **Every pairing meets WCAG AA.**
-   Both themes, every change.
+   Every colour theme in both light and dark appearances, every change.
    When white on a colour fails, flip to dark text on a light tint of that colour.
 6. **Accent is scarce.**
    One accent per surface.
    If two things are both the most important, neither is.
+
+### Colour themes
+
+A reviewer can swap the ramps without swapping the roles.
+`data-theme` picks light or dark; `data-palette` picks whose shades fill both halves.
+A colour theme is therefore a set of ramps behind a shared role mapping, so a role added here is themed everywhere at once.
+The sole role exception is `--ink-c`, whose light half cannot share a ramp position with the dark hunk band; Brutalist also restates the shape scales under rule 5 below.
+
+Rules:
+
+1. **The role mapping is declared once.**
+   Every role is `light-dark(light, dark)` in `src/render/global.css`.
+   A palette that needs to restate a role has found a missing ramp step; add the step instead.
+   `--edge-strong-c` has its own two steps for exactly that reason: a strong edge and a secondary text colour want the same lightness in the warm greys and nothing like it anywhere else.
+   `--ink-c` is the one exception: a guest palette's light primary text is its own mid-dark colour, which cannot also serve as the dark hunk band on `--grey-925`.
+2. **A theme is an adaptation, not a port.**
+   A terminal palette names a foreground, a background, and eight accents.
+   Take its anchors, interpolate the steps between them, and derive a family it does not ship rather than reusing one it does.
+3. **The product's own look is what absence means.**
+   No attribute and the `default` id are the same document, pixel for pixel.
+4. **Every theme meets the bar every theme meets.**
+   Rule 5 above is not relaxed for a guest palette; move a shade along its own hue until it passes.
+   `scripts/design-system/palettes.mjs` owns the enforced pairings.
+5. **A theme may restate a closed scale.**
+   Some characters are a shape as much as a colour: Brutalist squares cards and controls, drops the soft light source for a hard offset slab, and sets one step heavier; pill-shaped badges stay round.
+   A theme may therefore also restate the closed radius, weight, tracking, and elevation scales, because those are scales this document already owns and a check can already close.
+   It may not restate another role beyond the `--ink-c` exception in rule 1, because that is how a theme stops sharing the vocabulary every other theme is read in.
 
 ## Elevation
 

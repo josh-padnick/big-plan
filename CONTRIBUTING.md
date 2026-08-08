@@ -17,7 +17,7 @@ Visual quality is established by human review of the rendered review document pl
 When you change anything a reader sees:
 
 - Pick values from the scales in [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) rather than inventing new ones.
-- Render an affected example, such as `node bin/big-plan.mjs render examples/all-components.mdx`, and read the result in both themes at desktop and phone widths before opening the pull request.
+- Render an affected example, such as `node bin/big-plan.mjs render examples/all-components.mdx`, and read the result in both light and dark appearances at desktop and phone widths before opening the pull request. For colour-theme work, exercise every affected theme.
 - Keep `bun run lint` green: the stylesheet-contract and design-system checks enforce the CSS escape-hatch rules and the declaration ratchet.
 - Describe the intended visual change in the pull request so a reviewer knows what to look at.
 
