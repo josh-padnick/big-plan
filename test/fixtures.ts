@@ -764,6 +764,22 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
 export { expect };
 export type { Page };
 
+/** Stages an offline-first slide comment without depending on saved switch state. */
+export const stageComment = async (page: Page, body: string): Promise<void> => {
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/ });
+  await composer.getByLabel("Add a comment").fill(body);
+  const submitRightAway = composer.getByRole("switch", {
+    name: "Submit right away",
+  });
+  if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+    await submitRightAway.click();
+  }
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+};
+
 /**
  * Returns the locator's bounding box, failing the test when the element has
  * none, so geometry assertions read as arithmetic instead of null handling.

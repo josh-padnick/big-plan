@@ -2,7 +2,7 @@
 // commenting chrome: server-backed restoration and one real feedback handoff.
 
 import { readFile, stat } from "node:fs/promises";
-import { expect, test } from "./fixtures";
+import { expect, stageComment, test } from "./fixtures";
 
 test("should restore and submit staged comments through the local review runtime", async ({
   page,
@@ -10,15 +10,7 @@ test("should restore and submit staged comments through the local review runtime
 }) => {
   await page.goto(reviewRuntimeUrl);
 
-  const slide = page.locator("[data-slide]").first();
-  await slide.hover();
-  await slide.getByRole("button", { name: "Comment on slide" }).click();
-  const composer = page.getByRole("dialog", { name: /Comment on/ });
-  await composer
-    .getByLabel("Add a comment")
-    .fill("Clarify the failure boundary.");
-  await composer.getByRole("switch", { name: "Submit right away" }).click();
-  await composer.getByRole("button", { name: "Add Comment" }).click();
+  await stageComment(page, "Clarify the failure boundary.");
 
   const rail = page.getByRole("complementary", { name: "Feedback" });
   await expect(rail).toBeHidden();

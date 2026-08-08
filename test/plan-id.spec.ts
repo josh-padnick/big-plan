@@ -1,18 +1,7 @@
 // Browser regression for persistence identity: same-title plans stay isolated,
 // and an unstamped page remains interactive without touching browser storage.
 
-import type { Page } from "./fixtures";
-import { expect, test } from "./fixtures";
-
-const stageComment = async (page: Page, body: string): Promise<void> => {
-  const slide = page.locator("[data-slide]").first();
-  await slide.hover();
-  await slide.getByRole("button", { name: "Comment on slide" }).click();
-  const composer = page.getByRole("dialog", { name: /Comment on/ });
-  await composer.getByLabel("Add a comment").fill(body);
-  await composer.getByRole("switch", { name: "Submit right away" }).click();
-  await composer.getByRole("button", { name: "Add Comment" }).click();
-};
+import { expect, stageComment, test } from "./fixtures";
 
 test("should scope persisted viewer state to the stamped plan identity", async ({
   page,
