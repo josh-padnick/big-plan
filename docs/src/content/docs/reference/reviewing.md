@@ -13,16 +13,18 @@ npx big-plan review plans/checkout-retry.mdx
 The command prints a `http://127.0.0.1:<port>/` address and keeps running.
 Open that address, review the plan, and stop the runtime with `Ctrl+C`.
 
-## The thin thread kernel
+## Commenting workflow
 
-PR1 of the commenting stack deliberately ships the smallest complete review
-loop, before the final Feedback tray:
-
-1. Hover or focus a plan block and choose **Comment**.
-2. Write a plain-text note and choose **Add note**. `Cmd/Ctrl+Enter` does the
-   same thing; `Escape` cancels.
-3. Open **Review notes** to inspect the simple staged-thread list.
-4. Delete a note or choose **Send notes** to write one feedback package.
+1. Use a slide's comment icon, a component toolbar comment icon, or select text
+   and choose **Comment**.
+2. Write a Markdown comment and choose **Submit Now**. Turn off **Submit right
+   away** to stage it with **Add Comment** instead. `Cmd/Ctrl+Enter` performs
+   the visible primary action; `Escape` cancels.
+3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
+   **Chat** and **Agent** tabs identify the later stack capabilities they will
+   own without pretending those loops are connected yet.
+4. Edit or delete an individual staged comment, or choose **Send all comments
+   to agent** to write one feedback package.
 
 The kernel is a typed React interaction island built from token-themed
 shadcn/ui primitives. The plan content stays server-rendered HTML: React adds

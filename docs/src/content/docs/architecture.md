@@ -90,7 +90,6 @@ An MDX syntax error can stop parsing before component validation begins, so fix 
 
 ## The HTML review document is self-contained
 
-The rendered document embeds everything it needs: styles, branding, favicons, a tiny first-paint preference bootstrap, and the shell's viewer scripts for enhanced affordances.
-Those scripts also apply the reviewer's saved appearance choice, zoom promoted diagrams, and paint a reviewer's comments and proposals over them without touching the plan source.
-Plan content never contributes executable code, the document makes no external requests and works offline. A plan ships as two review artifacts: the authoritative MDX source and one self-contained interactive HTML render. The render stays readable with scripts disabled; its interactive affordances, including reading and navigation enhancements, may require the embedded viewer scripts.
+The rendered document embeds everything it needs, makes no external requests, and works offline.
+See the [two-artifact delivery ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0001-two-artifact-plan-delivery.md) for the authoritative artifact definitions and script-dependent behavior.
 Nothing about rendering or reviewing a plan touches a server, an account, or anyone else's machine.

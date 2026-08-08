@@ -218,8 +218,9 @@ Generated drift is fixed by changing the authored input and regenerating, never 
 
 ## Browser runtime and UI
 
-The delivered review document currently has a vanilla-JavaScript browser runtime.
-The future interaction tier uses React with off-the-shelf shadcn/ui for new commenting and similar interaction surfaces, themed through design tokens.
+The delivered review document has vanilla-JavaScript shell interactions and a
+typed React interaction island for commenting.
+New commenting and similar interaction surfaces use React with off-the-shelf shadcn/ui, themed through design tokens.
 React is limited to interaction islands: it may own island state and interaction rules, but it must not render, replace, or gate the server-rendered plan content.
 The HTML content floor remains complete and readable with scripts disabled.
 

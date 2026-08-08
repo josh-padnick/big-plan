@@ -83,7 +83,13 @@ Machine delivery collects that data as JSON.
 Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
 Validation renders the plan in memory while collecting the same component models in one pass.
 It discards the generated HTML, then applies its registered linting rules to the authored plan.
-React is a presentation-edge implementation tool; no React runtime ships in a rendered document, and the only browser scripts are the page envelope's first-paint preference bootstrap and the shell's self-contained viewer scripts for the [documented reader interactions](docs/src/content/docs/intro/features.md). Big Plan ships no script-free HTML variant.
+React is a presentation-edge implementation tool. A rendered document ships a
+typed React interaction island for commenting plus the page envelope's
+first-paint preference bootstrap and the shell's self-contained viewer scripts
+for the [documented reader interactions](docs/src/content/docs/intro/features.md).
+React never renders, replaces, or gates the server-rendered plan content, which
+remains fully readable when scripts are disabled. Big Plan ships no separate
+script-free HTML variant.
 Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
 
 Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
