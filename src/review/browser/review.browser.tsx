@@ -72,11 +72,13 @@ const threadTime = (createdAt: string): string => {
   const elapsed = Math.max(0, Date.now() - Date.parse(createdAt));
   if (elapsed < 60_000) return "Just now";
   if (elapsed < 3_600_000)
-    return `${Math.max(1, Math.floor(elapsed / 60_000))}m`;
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(createdAt));
+    return `${Math.max(1, Math.floor(elapsed / 60_000))}m ago`;
+  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)}h ago`;
+  if (elapsed < 2_592_000_000)
+    return `${Math.floor(elapsed / 86_400_000)}d ago`;
+  if (elapsed < 31_536_000_000)
+    return `${Math.floor(elapsed / 2_592_000_000)}mo ago`;
+  return `${Math.floor(elapsed / 31_536_000_000)}y ago`;
 };
 
 const runtimeIdentity = (): RuntimeIdentity | null => {
@@ -622,7 +624,7 @@ const useThreadHosts = (
         host.style.left = `${Math.max(
           edge + window.scrollX,
           Math.min(
-            anchorRect.right + window.scrollX,
+            anchorRect.right + window.scrollX - 12,
             window.scrollX + viewportWidth - threadWidth - edge,
           ),
         )}px`;
@@ -786,7 +788,7 @@ const StagedCard = ({
           size="micro"
           tone="accentOutline"
           weight="bold"
-          className="tracking-caps"
+          className="review-staged-badge tracking-caps"
         >
           STAGED
         </Badge>
@@ -806,9 +808,6 @@ const StagedCard = ({
       className="review-staged-card rounded-lg"
       density={surface === "rail" ? "dense" : "compact"}
       elevation={surface === "rail" ? "none" : "floating"}
-      style={{
-        backgroundColor: surface === "rail" ? "var(--surface-c)" : "var(--bg)",
-      }}
       onPointerEnter={() => setAssociated(true)}
       onPointerLeave={() => setAssociated(false)}
       onFocus={() => setAssociated(true)}
@@ -840,7 +839,7 @@ const StagedCard = ({
               size="micro"
               tone="accentOutline"
               weight="bold"
-              className="tracking-caps"
+              className="review-staged-badge tracking-caps"
             >
               STAGED
             </Badge>
@@ -854,7 +853,7 @@ const StagedCard = ({
             size="micro"
             tone="accentOutline"
             weight="bold"
-            className="tracking-caps"
+            className="review-staged-badge tracking-caps"
           >
             STAGED
           </Badge>
@@ -873,6 +872,7 @@ const StagedCard = ({
           <Button
             variant="ghost"
             size="compactIcon"
+            className="review-staged-edit"
             aria-label="Edit staged comment"
             onClick={onEdit}
           >
@@ -881,6 +881,7 @@ const StagedCard = ({
           <Button
             variant="ghost"
             size="compactIcon"
+            className="review-staged-delete"
             aria-label="Delete staged comment"
             onClick={onDelete}
           >
@@ -895,11 +896,7 @@ const StagedCard = ({
         </button>
       ) : null}
       <div className="review-staged-footer">
-        <Button
-          variant="accentOutline"
-          size={surface === "rail" ? "compact" : "micro"}
-          onClick={onSubmit}
-        >
+        <Button variant="accentOutline" size="compact" onClick={onSubmit}>
           Submit Now
         </Button>
       </div>

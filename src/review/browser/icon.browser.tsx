@@ -12,7 +12,7 @@ export const Icon = ({ icon }: { readonly icon: LucideIcon }) => (
     height="1em"
     fill="none"
     stroke="currentColor"
-    strokeWidth="1.5"
+    strokeWidth={icon.strokeWidth ?? "1.5"}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"

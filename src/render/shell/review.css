@@ -509,10 +509,10 @@ All visual choices use the document theme's closed token vocabulary.
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--edge-c);
     border-radius: 0.5rem 0.5rem 0 0;
-    background: var(--header-c);
+    background: var(--comment-header-c);
   }
 
-  .review-staged-card[data-review-associated="true"]:hover {
+  .review-staged-card[data-review-surface="thread"][data-review-associated="true"]:hover {
     box-shadow: var(--elevation-lifted);
     transform: translateY(-0.25rem);
   }
@@ -839,7 +839,7 @@ All visual choices use the document theme's closed token vocabulary.
 
   .review-feedback-status p {
     min-width: 0;
-    color: var(--muted-c);
+    color: var(--grey-400);
     font-size: var(--text-xs);
     line-height: var(--text-xs--line-height);
   }
@@ -895,5 +895,43 @@ All visual choices use the document theme's closed token vocabulary.
     html[data-review-kernel-open] [data-reading-layout] {
       transition: none;
     }
+  }
+}
+
+@layer bp-state {
+  /* Captain-approved legacy action label, deliberately between scale steps.
+     Override invariant: the 13px rail action beats Button's resting text-xs
+     size utility. */
+  .review-send-all {
+    font-size: 13px;
+  }
+
+  /* Captain-approved legacy status metric. The standard shadcn Badge remains
+     the primitive; only this product-specific instance yields below the 11px
+     type scale.
+     Override invariant: the product status metric beats Badge's resting size
+     utilities without creating a status-specific primitive API. */
+  .review-staged-badge {
+    padding: 1px 5px;
+    font-size: 9px;
+    line-height: 1.5;
+  }
+
+  /* Override invariant: the explicit edit hover beats the ghost button's
+     resting transparent background. */
+  .review-staged-actions > .review-staged-edit:hover {
+    border-color: transparent;
+    background: var(--surface-c);
+    color: var(--ink-c);
+    box-shadow: var(--elevation-raised);
+  }
+
+  /* Override invariant: the destructive affordance beats the ghost button's
+     generic hover surface and neutral ink. */
+  .review-staged-actions > .review-staged-delete:hover {
+    border-color: var(--callout-danger-c);
+    background: var(--callout-danger-bg);
+    color: var(--callout-danger-c);
+    box-shadow: none;
   }
 }

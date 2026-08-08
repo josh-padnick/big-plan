@@ -32,7 +32,7 @@ const BUTTON_VARIANTS: Readonly<Record<ButtonVariant, string>> = {
   outline:
     "rounded-md border border-edge bg-transparent font-normal text-muted shadow-none hover:bg-surface hover:text-ink hover:shadow-raised active:inset-shadow-pressed",
   accentOutline:
-    "rounded-sm border border-accent bg-paper font-semibold text-accent shadow-none hover:shadow-raised active:inset-shadow-pressed",
+    "rounded-sm border border-accent bg-paper font-semibold text-accent shadow-none hover:bg-accent-wash hover:shadow-raised active:inset-shadow-pressed",
   ghost:
     "rounded-md border border-transparent bg-transparent font-normal text-muted hover:bg-surface hover:text-ink active:inset-shadow-pressed",
   destructive:
@@ -40,10 +40,10 @@ const BUTTON_VARIANTS: Readonly<Record<ButtonVariant, string>> = {
 };
 
 const BUTTON_SIZES: Readonly<Record<ButtonSize, string>> = {
-  default: "h-11 px-4 py-2",
-  sm: "h-11 min-w-11 px-3 py-1.5 text-xs wide:h-9 wide:min-w-9",
-  compact: "h-11 min-w-11 px-3 py-0.5 text-xs wide:h-6 wide:min-w-6",
-  micro: "h-11 min-w-11 px-3 py-0.5 text-2xs wide:h-6 wide:min-w-6",
+  default: "min-h-11 px-3 py-2 wide:min-h-0",
+  sm: "min-h-11 min-w-11 px-3 py-2 text-xs wide:min-h-0 wide:min-w-0",
+  compact: "min-h-11 min-w-11 px-3 py-2 text-xs wide:min-h-0 wide:min-w-0",
+  micro: "min-h-11 min-w-11 px-3 py-2 text-2xs wide:min-h-0 wide:min-w-0",
   compactIcon: "size-11 p-0 wide:size-6",
   icon: "size-11 p-0",
 };

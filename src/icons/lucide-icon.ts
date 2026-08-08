@@ -7,4 +7,5 @@ type IconNode = ReadonlyArray<
 export type LucideIcon = {
   readonly name: string;
   readonly node: IconNode;
+  readonly strokeWidth?: string;
 };

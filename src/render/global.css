@@ -182,6 +182,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --tray-c: var(--grey-100);
   --well-c: var(--grey-100);
   --header-bg: var(--grey-125);
+  --comment-header-c: var(--header-bg);
 
   /* Text, in three weights of attention. */
   --ink-c: var(--grey-925);
@@ -283,6 +284,9 @@ same separation.
     --tray-c: var(--grey-900);
     --well-c: var(--grey-950);
     --header-bg: var(--grey-875);
+    /* Captain-approved local colour: the thread band stays distinct from both
+       the raised comment body and the page in dark mode. */
+    --comment-header-c: #1c1a14;
 
     --ink-c: var(--grey-150);
     --muted-c: var(--grey-300);
@@ -359,6 +363,8 @@ same separation.
   --tray-c: var(--grey-900);
   --well-c: var(--grey-950);
   --header-bg: var(--grey-875);
+  /* Captain-approved local colour; see the OS-dark role above. */
+  --comment-header-c: #1c1a14;
 
   --ink-c: var(--grey-150);
   --muted-c: var(--grey-300);

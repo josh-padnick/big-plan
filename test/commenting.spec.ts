@@ -55,11 +55,12 @@ test("should stage and restore a slide comment through the legacy chrome", async
   );
   const cancel = dialog.getByRole("button", { name: "Cancel" });
   const submit = dialog.getByRole("button", { name: "Submit Now" });
-  await expect(cancel).toHaveCSS("height", "24px");
+  await expect(cancel).toHaveCSS("height", "34px");
   await expect(cancel).toHaveCSS("padding-left", "12px");
+  await expect(cancel).toHaveCSS("padding-top", "8px");
   await expect(cancel).toHaveCSS("border-top-width", "1px");
   await expect(submit).toBeDisabled();
-  await expect(submit).toHaveCSS("height", "24px");
+  await expect(submit).toHaveCSS("height", "34px");
   await expect(submit).toHaveCSS("padding-left", "12px");
   await expect(submit).toHaveCSS("background-color", "rgb(239, 236, 227)");
   await expect(submit).toHaveCSS("color", "rgb(111, 105, 92)");
@@ -86,17 +87,37 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "color",
     "rgb(22, 101, 52)",
   );
-  await expect(staged.getByText("STAGED")).toHaveCSS("font-size", "11px");
-  await expect(staged.getByText("STAGED")).toHaveCSS("height", "18.5px");
+  await expect(staged.getByText("STAGED")).toHaveCSS("font-size", "9px");
+  await expect(staged.getByText("STAGED")).toHaveJSProperty("tagName", "SPAN");
+  await expect(staged.getByText("STAGED")).toHaveCSS("padding-left", "5px");
+  await expect(staged.getByText("STAGED")).toHaveCSS("padding-top", "1px");
   await expect(
     staged.locator(".review-staged-actions button").first(),
   ).toHaveCSS("width", "24px");
   await expect(
     staged.locator(".review-staged-actions button").first().locator("svg"),
   ).toHaveCSS("width", "14px");
+  await expect(
+    staged.getByRole("button", { name: "Edit staged comment" }).locator("svg"),
+  ).toHaveAttribute("stroke-width", "1.8");
+  const editButton = staged.getByRole("button", {
+    name: "Edit staged comment",
+  });
+  await editButton.hover();
+  await expect(editButton).toHaveCSS("background-color", "rgb(239, 236, 227)");
+  const deleteButton = staged.getByRole("button", {
+    name: "Delete staged comment",
+  });
+  await deleteButton.hover();
+  await expect(deleteButton).toHaveCSS("border-top-color", "rgb(119, 41, 34)");
+  await expect(deleteButton).toHaveCSS(
+    "background-color",
+    "rgb(248, 235, 231)",
+  );
   const stagedSubmit = staged.getByRole("button", { name: "Submit Now" });
-  await expect(stagedSubmit).toHaveCSS("height", "24px");
+  await expect(stagedSubmit).toHaveCSS("height", "34px");
   await expect(stagedSubmit).toHaveCSS("padding-left", "12px");
+  await expect(stagedSubmit).toHaveCSS("padding-top", "8px");
   await expect(stagedSubmit).toHaveCSS("font-size", "12px");
   await expect(stagedSubmit).toHaveCSS("font-weight", "600");
   await expect(
@@ -112,9 +133,15 @@ test("should stage and restore a slide comment through the legacy chrome", async
   const sendAll = rail.getByRole("button", {
     name: "Send all comments to agent",
   });
-  await expect(sendAll).toHaveCSS("height", "36px");
-  await expect(sendAll).toHaveCSS("font-size", "12px");
+  await expect(sendAll).toHaveCSS("font-size", "13px");
+  await expect(sendAll).toHaveCSS("padding-top", "8px");
+  await expect(sendAll).toHaveCSS("padding-left", "12px");
   await expect(sendAll).toHaveCSS("font-weight", "600");
+  await expect(rail.getByRole("status")).toHaveCSS(
+    "color",
+    "rgb(164, 156, 139)",
+  );
+  await expect(rail.getByRole("status")).toHaveCSS("font-size", "12px");
   await expect
     .poll(() =>
       rail
@@ -131,7 +158,15 @@ test("should stage and restore a slide comment through the legacy chrome", async
     ".review-staged-card[data-review-surface='thread']",
   );
   await expect(thread).toContainText("Just now");
-  await expect(thread).toHaveCSS("background-color", "rgb(247, 245, 240)");
+  await expect(thread).toHaveCSS("background-color", "rgb(254, 253, 251)");
+  await expect
+    .poll(() =>
+      Promise.all([
+        slide.evaluate((node) => node.getBoundingClientRect().right),
+        threadHost.evaluate((node) => node.getBoundingClientRect().left),
+      ]).then(([slideRight, threadLeft]) => slideRight - threadLeft),
+    )
+    .toBeGreaterThan(0);
   await expect
     .poll(() =>
       threadHost.evaluate((node) => {
@@ -148,6 +183,28 @@ test("should stage and restore a slide comment through the legacy chrome", async
     .poll(() => threadHost.evaluate((node) => node.getBoundingClientRect().top))
     .toBeLessThanOrEqual(threadTop - 190);
   await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => {
+    document.documentElement.dataset["theme"] = "dark";
+  });
+  await expect(thread).toHaveCSS("background-color", "rgb(36, 33, 25)");
+  await expect(thread.locator(".review-staged-meta")).toHaveCSS(
+    "background-color",
+    "rgb(28, 26, 20)",
+  );
+  const restingSubmitBackground = await thread
+    .getByRole("button", { name: "Submit Now" })
+    .evaluate((node) => getComputedStyle(node).backgroundColor);
+  await thread.getByRole("button", { name: "Submit Now" }).hover();
+  await expect
+    .poll(() =>
+      thread
+        .getByRole("button", { name: "Submit Now" })
+        .evaluate((node) => getComputedStyle(node).backgroundColor),
+    )
+    .not.toBe(restingSubmitBackground);
+  await page.evaluate(() => {
+    document.documentElement.dataset["theme"] = "light";
+  });
   await thread.getByRole("button", { name: "Minimize staged comment" }).click();
   const minimizedThread = page.locator(
     "[data-review-thread-side] .review-staged-collapsed-thread",
@@ -166,7 +223,22 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await minimizedThread.click();
   await expect(thread).toBeVisible();
 
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((candidate) =>
+      candidate.startsWith("big-plan:review:drafts:"),
+    );
+    if (key === undefined) return;
+    const drafts = JSON.parse(localStorage.getItem(key) ?? "[]") as Array<{
+      createdAt: string;
+    }>;
+    if (drafts[0] !== undefined)
+      drafts[0].createdAt = new Date(Date.now() - 90_000).toISOString();
+    localStorage.setItem(key, JSON.stringify(drafts));
+  });
   await page.reload();
+  await expect(
+    page.locator("[data-review-thread-side]").getByText("1m ago"),
+  ).toBeVisible();
   const feedback = page.getByRole("button", { name: /Feedback/ });
   await feedback.click();
   await expect(rail.locator("code")).toHaveText("leaseOwner");
@@ -257,6 +329,14 @@ test("should preserve a text selection while its compact composer is open", asyn
 
   const rail = page.getByRole("complementary", { name: "Feedback" });
   await expect(rail.locator("code")).toHaveText("leaseOwner");
+  const railCard = rail.locator(".review-staged-card").first();
+  const railCardTop = await railCard.evaluate(
+    (node) => node.getBoundingClientRect().top,
+  );
+  await railCard.hover();
+  await expect
+    .poll(() => railCard.evaluate((node) => node.getBoundingClientRect().top))
+    .toBe(railCardTop);
   const stored = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((candidate) =>
       candidate.startsWith("big-plan:review:drafts:"),
@@ -469,7 +549,7 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
   );
   await expect(
     tableRail.locator(".review-staged-card svg").first(),
-  ).toHaveAttribute("stroke-width", "1.5");
+  ).toHaveAttribute("stroke-width", "1.8");
   await expect(tableRail.locator(".review-staged-meta > span")).toHaveCSS(
     "font-weight",
     "700",
