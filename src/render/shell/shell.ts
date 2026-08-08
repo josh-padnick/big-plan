@@ -237,7 +237,7 @@ const renderPaletteOption = ({
 }): string =>
   `<label class="group relative flex min-h-11 min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-edge bg-paper px-3 py-2 text-ink transition-colors hover:bg-surface has-[:checked]:border-accent has-[:checked]:bg-surface has-[:checked]:text-accent has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-accent">
 <input class="order-last size-4 shrink-0 accent-accent" id="big-plan-palette-${palette}" type="radio" name="big-plan-palette" value="${palette}" data-preference-palette="${palette}" aria-label="${escapeHtml(title)}">
-<span class="flex shrink-0 overflow-hidden rounded-sm border border-edge" data-palette-swatch data-palette="${palette}" aria-hidden="true"><span data-swatch="paper"></span><span data-swatch="edge"></span><span data-swatch="accent"></span><span data-swatch="ink"></span></span>
+<span class="flex shrink-0 overflow-hidden rounded-sm border border-edge" data-palette-swatch data-palette="${palette}" aria-hidden="true"><span class="palette-swatch-paper block h-[1.375rem] w-[0.6875rem]" data-swatch="paper"></span><span class="palette-swatch-edge block h-[1.375rem] w-[0.6875rem]" data-swatch="edge"></span><span class="palette-swatch-accent block h-[1.375rem] w-[0.6875rem]" data-swatch="accent"></span><span class="palette-swatch-ink block h-[1.375rem] w-[0.6875rem]" data-swatch="ink"></span></span>
 <span class="min-w-0 grow truncate text-sm font-semibold leading-tight">${escapeHtml(title)}</span>
 </label>`;
 

@@ -35,7 +35,6 @@ palette in inert exports.
 @import "../components/flow-diagram/styles.css";
 @import "../components/mermaid-diagram/styles.css";
 @import "../components/http-endpoint/styles.css";
-@import "./shell/settings-swatch.css";
 @import "./fonts.generated.css";
 @import "../components/wireframe/styles.css";
 
@@ -55,6 +54,24 @@ palette in inert exports.
 
 /* Only authored source emits utility candidates; examples and docs do not. */
 @source "../";
+
+/* A palette preview paints raw ramp steps rather than the active document
+   roles, so these missing colour primitives are named utilities. */
+@utility palette-swatch-paper {
+  background: light-dark(var(--grey-50), var(--grey-950));
+}
+
+@utility palette-swatch-edge {
+  background: light-dark(var(--grey-200), var(--grey-800));
+}
+
+@utility palette-swatch-accent {
+  background: light-dark(var(--primary-700), var(--primary-300));
+}
+
+@utility palette-swatch-ink {
+  background: var(--ink-c);
+}
 
 /*
 THE PALETTE
