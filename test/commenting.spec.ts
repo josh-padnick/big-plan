@@ -736,3 +736,32 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
     )
     .toBe(true);
 });
+
+test("should keep Feedback closed when QuickSummary submits offline", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto(allComponentsViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const quickSummary = page.locator("[data-quick-summary]");
+  await quickSummary
+    .getByRole("button", { name: "Comment on quick summary" })
+    .click();
+  const composer = page.getByRole("dialog", {
+    name: "Comment on Quick summary",
+  });
+  await composer.getByLabel("Add a comment").fill("Keep this summary concise.");
+  await composer.getByRole("button", { name: "Submit Now" }).click();
+
+  await expect(
+    page.getByRole("complementary", { name: "Feedback" }),
+  ).not.toBeVisible();
+  const contextualComment = page.locator(
+    "[data-review-thread-side] .review-staged-card",
+  );
+  await expect(contextualComment).toBeVisible();
+  await expect(contextualComment).toContainText("Keep this summary concise.");
+});

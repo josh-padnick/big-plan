@@ -1405,7 +1405,6 @@ const ReviewKernel = () => {
       setStatus(
         "Start `big-plan review` to submit comments. Your drafts are saved.",
       );
-      setIsOpen(true);
       return;
     }
     setIsSending(true);
