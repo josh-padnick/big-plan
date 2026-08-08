@@ -39,6 +39,20 @@ palette in inert exports.
 @import "./fonts.generated.css";
 @import "../components/wireframe/styles.css";
 
+@keyframes boost-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 /* Only authored source emits utility candidates; examples and docs do not. */
 @source "../";
 
