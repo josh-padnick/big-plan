@@ -39,13 +39,11 @@ const BUTTON_VARIANTS: Readonly<Record<ButtonVariant, string>> = {
 };
 
 const BUTTON_SIZES: Readonly<Record<ButtonSize, string>> = {
-  default: "review-button-padded min-h-11 wide:min-h-0",
-  md: "review-button-padded min-h-11 text-sm wide:min-h-0",
-  sm: "review-button-padded min-h-11 min-w-11 text-xs wide:min-h-0 wide:min-w-0",
-  compact:
-    "review-button-padded min-h-11 min-w-11 text-xs wide:min-h-0 wide:min-w-0",
-  micro:
-    "review-button-padded min-h-11 min-w-11 text-2xs wide:min-h-0 wide:min-w-0",
+  default: "min-h-11 px-2 py-1 wide:min-h-0",
+  md: "min-h-11 px-2 py-1 text-sm wide:min-h-0",
+  sm: "min-h-11 min-w-11 px-2 py-1 text-xs wide:min-h-0 wide:min-w-0",
+  compact: "min-h-11 min-w-11 px-2 py-1 text-xs wide:min-h-0 wide:min-w-0",
+  micro: "min-h-11 min-w-11 px-2 py-1 text-2xs wide:min-h-0 wide:min-w-0",
   compactIcon: "size-11 p-0 wide:size-6",
   icon: "size-11 p-0",
 };

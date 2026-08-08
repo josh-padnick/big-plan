@@ -23,6 +23,7 @@ import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import type { CommentTarget, ReviewComment } from "../comment.js";
 import { parseCommentMarkdownLine } from "../comment-markdown.js";
+import { deriveAgentStatus, type AgentStatus } from "../thread-status.js";
 import { Icon } from "./icon.browser.js";
 import { AlertDialog, Badge, Button, Card, Textarea } from "./ui.browser.js";
 
@@ -52,6 +53,72 @@ type ReviewSnapshot = {
   readonly sent: ReadonlyArray<ReviewComment>;
 };
 
+type AgentOutcome = {
+  readonly commentId: string;
+  readonly state: "changed" | "question" | "outside";
+  readonly message: string;
+  readonly changeTargets: ReadonlyArray<string>;
+};
+
+type AgentRequest = {
+  readonly requestId: string;
+  readonly sourceRevision: string;
+  readonly claimedFromRevision?: string;
+  readonly claimedAt?: string;
+  readonly createdAt: string;
+  readonly kind: "feedback" | "reply" | "chat";
+  readonly body?: string;
+  readonly commentId?: string;
+};
+
+type AgentResponse = {
+  readonly requestId: string;
+  readonly sourceRevision: string;
+  readonly createdAt: string;
+  readonly kind: "feedback" | "reply" | "chat";
+  readonly outcomes: ReadonlyArray<AgentOutcome>;
+  readonly message?: string;
+};
+
+type AgentPresence = {
+  readonly connected: boolean;
+  readonly state: "waiting" | "working";
+  readonly requestId?: string;
+  readonly updatedAtMs?: number;
+};
+
+type AgentSnapshot = {
+  readonly sourceRevision: string;
+  readonly presence: AgentPresence;
+  readonly requests: ReadonlyArray<AgentRequest>;
+  readonly responses: ReadonlyArray<AgentResponse>;
+};
+
+type ProgressEvent = {
+  readonly requestId?: string;
+  readonly atMs?: number;
+  readonly seq: number;
+  readonly step: string;
+  readonly state: "waiting" | "live" | "done" | "failed";
+  readonly detail?: string;
+};
+
+type DiffRun = {
+  readonly op: "same" | "del" | "ins";
+  readonly text: string;
+};
+
+type DiffLocation = {
+  readonly status: "changed" | "added" | "removed";
+  readonly label: string;
+  readonly section: string;
+  readonly runs: ReadonlyArray<DiffRun>;
+};
+
+type RuntimeSession = {
+  readonly plan: string;
+};
+
 type ComposeState = {
   readonly target: CommentTarget;
   readonly top: number;
@@ -65,7 +132,12 @@ type SelectionControlState = {
 };
 
 type FeedbackTab = "comments" | "chat" | "agent";
-const FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = ["comments", "chat", "agent"];
+const LIVE_FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = [
+  "comments",
+  "chat",
+  "agent",
+];
+const STATIC_FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = ["comments", "chat"];
 const WIDE_QUERY = "(min-width: 80rem)";
 const MODIFIER_SHORTCUT = /Mac|iPhone|iPad/u.test(navigator.platform)
   ? "⌘+Enter"
@@ -166,6 +238,19 @@ const runtimeIdentity = (): RuntimeIdentity | null => {
     : { planId, sessionId, token };
 };
 
+const bootstrapSourceRevision = (): string => {
+  try {
+    const value: unknown = JSON.parse(
+      rootElement.getAttribute("data-review-bootstrap") ?? "{}",
+    );
+    return isRecord(value) && typeof value.sourceRevision === "string"
+      ? value.sourceRevision
+      : "";
+  } catch {
+    return "";
+  }
+};
+
 const isComment = (value: unknown): value is ReviewComment => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -180,6 +265,9 @@ const isComment = (value: unknown): value is ReviewComment => {
   );
 };
 
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const parseSnapshot = (value: unknown): ReviewSnapshot => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { drafts: [], sent: [] };
@@ -189,6 +277,192 @@ const parseSnapshot = (value: unknown): ReviewSnapshot => {
     drafts: Array.isArray(record.drafts) ? record.drafts.filter(isComment) : [],
     sent: Array.isArray(record.sent) ? record.sent.filter(isComment) : [],
   };
+};
+
+const emptyAgentSnapshot = (): AgentSnapshot => ({
+  sourceRevision: "",
+  presence: { connected: false, state: "waiting" },
+  requests: [],
+  responses: [],
+});
+
+const parseAgentSnapshot = (value: unknown): AgentSnapshot => {
+  if (!isRecord(value)) return emptyAgentSnapshot();
+  const requests = Array.isArray(value.requests)
+    ? value.requests.flatMap((request): ReadonlyArray<AgentRequest> => {
+        if (
+          !isRecord(request) ||
+          typeof request.requestId !== "string" ||
+          typeof request.sourceRevision !== "string" ||
+          typeof request.createdAt !== "string" ||
+          (request.kind !== "feedback" &&
+            request.kind !== "reply" &&
+            request.kind !== "chat")
+        ) {
+          return [];
+        }
+        return [
+          {
+            requestId: request.requestId,
+            sourceRevision: request.sourceRevision,
+            createdAt: request.createdAt,
+            kind: request.kind,
+            ...(typeof request.claimedFromRevision === "string"
+              ? { claimedFromRevision: request.claimedFromRevision }
+              : {}),
+            ...(typeof request.claimedAt === "string"
+              ? { claimedAt: request.claimedAt }
+              : {}),
+            ...(typeof request.body === "string" ? { body: request.body } : {}),
+            ...(typeof request.commentId === "string"
+              ? { commentId: request.commentId }
+              : {}),
+          },
+        ];
+      })
+    : [];
+  const responses = Array.isArray(value.responses)
+    ? value.responses.flatMap((response): ReadonlyArray<AgentResponse> => {
+        if (
+          !isRecord(response) ||
+          typeof response.requestId !== "string" ||
+          typeof response.sourceRevision !== "string" ||
+          typeof response.createdAt !== "string" ||
+          (response.kind !== "feedback" &&
+            response.kind !== "reply" &&
+            response.kind !== "chat")
+        ) {
+          return [];
+        }
+        const outcomes = Array.isArray(response.outcomes)
+          ? response.outcomes.flatMap(
+              (outcome): ReadonlyArray<AgentOutcome> => {
+                if (
+                  !isRecord(outcome) ||
+                  typeof outcome.commentId !== "string" ||
+                  typeof outcome.message !== "string" ||
+                  (outcome.state !== "changed" &&
+                    outcome.state !== "question" &&
+                    outcome.state !== "outside")
+                ) {
+                  return [];
+                }
+                return [
+                  {
+                    commentId: outcome.commentId,
+                    state: outcome.state,
+                    message: outcome.message,
+                    changeTargets: Array.isArray(outcome.changeTargets)
+                      ? outcome.changeTargets.filter(
+                          (target): target is string =>
+                            typeof target === "string",
+                        )
+                      : [],
+                  },
+                ];
+              },
+            )
+          : [];
+        return [
+          {
+            requestId: response.requestId,
+            sourceRevision: response.sourceRevision,
+            createdAt: response.createdAt,
+            kind: response.kind,
+            outcomes,
+            ...(typeof response.message === "string"
+              ? { message: response.message }
+              : {}),
+          },
+        ];
+      })
+    : [];
+  const presence = isRecord(value.presence)
+    ? {
+        connected: value.presence.connected === true,
+        state:
+          value.presence.state === "working"
+            ? ("working" as const)
+            : ("waiting" as const),
+        ...(typeof value.presence.requestId === "string"
+          ? { requestId: value.presence.requestId }
+          : {}),
+        ...(typeof value.presence.updatedAtMs === "number"
+          ? { updatedAtMs: value.presence.updatedAtMs }
+          : {}),
+      }
+    : { connected: false, state: "waiting" as const };
+  return {
+    sourceRevision:
+      typeof value.sourceRevision === "string" ? value.sourceRevision : "",
+    presence,
+    requests,
+    responses,
+  };
+};
+
+const parseProgress = (value: unknown): ReadonlyArray<ProgressEvent> => {
+  if (!isRecord(value) || !Array.isArray(value.events)) return [];
+  return value.events.flatMap((event): ReadonlyArray<ProgressEvent> => {
+    if (
+      !isRecord(event) ||
+      typeof event.seq !== "number" ||
+      typeof event.step !== "string" ||
+      (event.state !== "waiting" &&
+        event.state !== "live" &&
+        event.state !== "done" &&
+        event.state !== "failed")
+    ) {
+      return [];
+    }
+    return [
+      {
+        seq: event.seq,
+        step: event.step,
+        state: event.state,
+        ...(typeof event.requestId === "string"
+          ? { requestId: event.requestId }
+          : {}),
+        ...(typeof event.atMs === "number" ? { atMs: event.atMs } : {}),
+        ...(typeof event.detail === "string" ? { detail: event.detail } : {}),
+      },
+    ];
+  });
+};
+
+const parseDiffLocations = (value: unknown): ReadonlyArray<DiffLocation> => {
+  if (!isRecord(value) || !Array.isArray(value.locations)) return [];
+  return value.locations.flatMap((location): ReadonlyArray<DiffLocation> => {
+    if (
+      !isRecord(location) ||
+      (location.status !== "changed" &&
+        location.status !== "added" &&
+        location.status !== "removed") ||
+      typeof location.label !== "string" ||
+      typeof location.section !== "string" ||
+      !Array.isArray(location.runs)
+    ) {
+      return [];
+    }
+    const runs = location.runs.flatMap((run): ReadonlyArray<DiffRun> => {
+      if (
+        !isRecord(run) ||
+        (run.op !== "same" && run.op !== "del" && run.op !== "ins") ||
+        typeof run.text !== "string"
+      ) {
+        return [];
+      }
+      return [{ op: run.op, text: run.text }];
+    });
+    return [
+      {
+        status: location.status,
+        label: location.label,
+        section: location.section,
+        runs,
+      },
+    ];
+  });
 };
 
 const localStorageKey = (planId: string): string =>
@@ -488,7 +762,7 @@ const MarkdownBody = ({
   readonly body: string;
   readonly className?: string;
 }) => (
-  <div className={`review-comment-markdown ${className}`}>
+  <div className={className}>
     {body.split(/\n{2,}/u).map((paragraph, index) => (
       <p key={`${index}-${paragraph}`}>
         {paragraph
@@ -827,9 +1101,6 @@ const CommentComposer = ({
     }
   };
   const style: CSSProperties = {
-    backgroundColor: "var(--bg)",
-    borderRadius: "0.5rem",
-    padding: "0.75rem",
     ...(inline
       ? {}
       : {
@@ -842,8 +1113,8 @@ const CommentComposer = ({
       ref={composerRef}
       className={
         inline
-          ? "review-comment-composer review-comment-composer-inline"
-          : "review-comment-composer review-comment-composer-floating"
+          ? "review-comment-composer-inline relative z-auto mb-6 w-full max-w-lg border border-edge bg-paper! p-3 text-ink shadow-floating"
+          : "review-comment-composer-floating fixed z-30 w-[min(17rem,calc(100vw-2rem))] border border-edge bg-paper! p-3 text-ink shadow-floating"
       }
       style={style}
       role="dialog"
@@ -852,45 +1123,48 @@ const CommentComposer = ({
         compose.target.type === "selection" ? "true" : undefined
       }
     >
-      <p className="review-compose-title text-xs">Add a comment</p>
+      <p className="review-compose-title m-0 mb-2 text-xs font-semibold text-muted">
+        Add a comment
+      </p>
       <Textarea
         ref={inputRef}
         aria-label="Add a comment"
-        style={{ backgroundColor: "var(--review-compose-input-c)" }}
+        className="bg-input!"
         value={body}
         maxLength={BODY_LIMIT}
         placeholder="What should the agent change here?"
         onChange={(event) => setBody(event.target.value)}
         onKeyDown={handleKeyDown}
       />
-      <p className="review-compose-hint text-2xs">
+      <p className="review-compose-hint mt-1 mb-0 text-2xs text-subtle">
         Escape cancels · {MODIFIER_SHORTCUT} adds
       </p>
-      <div className="review-compose-controls">
+      <div className="mt-2 block">
         <button
           type="button"
-          className="review-submit-toggle text-xs"
+          className="group inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-xs text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           role="switch"
           aria-checked={submitRightAway}
           onClick={() => setSubmitRightAway((current) => !current)}
         >
-          <span aria-hidden="true" />
+          <span
+            className="relative h-5 w-8 rounded-full border border-edge bg-surface inset-shadow-well after:absolute after:top-1/2 after:left-1 after:size-3 after:-translate-y-1/2 after:rounded-full after:bg-muted after:transition-transform group-aria-checked:border-accent group-aria-checked:bg-accent-soft group-aria-checked:after:translate-x-3 group-aria-checked:after:bg-accent"
+            aria-hidden="true"
+          />
           Submit right away
         </button>
-        <div className="review-compose-actions">
+        <div className="mt-2 flex items-center justify-end gap-1">
           <Button variant="outline" size="compact" onClick={onCancel}>
             Cancel
           </Button>
-          <span className="review-shortcut-wrap">
-            <Button
-              size="compact"
-              className="review-primary-comment-action"
-              disabled={body.trim() === ""}
-              onClick={save}
-            >
+          <span className="group relative inline-flex">
+            <Button size="micro" disabled={body.trim() === ""} onClick={save}>
               {submitRightAway ? "Submit Now" : "Add Comment"}
             </Button>
-            <span role="tooltip" className="review-shortcut-tooltip">
+            <span
+              role="tooltip"
+              className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-ink px-2 py-1 text-2xs font-medium text-bg opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
+            >
               {MODIFIER_SHORTCUT}
             </span>
           </span>
@@ -946,7 +1220,7 @@ const StagedCard = ({
     return (
       <button
         type="button"
-        className={`review-staged-collapsed review-staged-collapsed-${surface}`}
+        className={`review-staged-collapsed-${surface} flex min-w-0 w-full max-w-[17rem] cursor-pointer items-center gap-1.5 rounded-md border border-edge bg-raised px-2 py-1 text-xs text-muted shadow-raised transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted`}
         onClick={onCollapse}
         onPointerEnter={() => setAssociated(true)}
         onPointerLeave={() => setAssociated(false)}
@@ -960,7 +1234,7 @@ const StagedCard = ({
           size="micro"
           tone="secondary"
           weight="bold"
-          className="review-staged-badge tracking-caps"
+          className="px-1.5 py-px text-2xs leading-normal tracking-caps"
         >
           STAGED
         </Badge>
@@ -977,7 +1251,7 @@ const StagedCard = ({
       : comment.body;
   return (
     <Card
-      className="review-staged-card rounded-lg"
+      className={`review-staged-card w-full max-w-[17rem] border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted ${surface === "rail" ? "bg-surface" : "bg-comment-body!"}`}
       density={surface === "rail" ? "dense" : "compact"}
       elevation={surface === "rail" ? "none" : "floating"}
       onPointerEnter={() => setAssociated(true)}
@@ -994,11 +1268,13 @@ const StagedCard = ({
       data-review-associated={associated ? "true" : undefined}
       data-review-surface={surface}
     >
-      <div className="review-staged-meta">
+      <div
+        className={`review-staged-meta flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar! px-3 py-2" : ""}`}
+      >
         {surface === "rail" ? (
           <button
             type="button"
-            className="review-staged-target"
+            className="review-staged-target min-w-0 flex-1 cursor-pointer [overflow-wrap:anywhere] border-0 bg-transparent p-0 text-left text-2xs font-semibold uppercase leading-normal tracking-caps text-ink hover:underline focus-visible:underline"
             onClick={onJump}
             title="Jump to this target"
           >
@@ -1010,11 +1286,11 @@ const StagedCard = ({
               size="micro"
               tone="secondary"
               weight="bold"
-              className="review-staged-badge tracking-caps"
+              className="px-1.5 py-px text-2xs leading-normal tracking-caps"
             >
               STAGED
             </Badge>
-            <time dateTime={comment.createdAt}>
+            <time className="text-xs text-muted" dateTime={comment.createdAt}>
               {threadTime(comment.createdAt)}
             </time>
           </>
@@ -1024,17 +1300,17 @@ const StagedCard = ({
             size="micro"
             tone="secondary"
             weight="bold"
-            className="review-staged-badge tracking-caps"
+            className="px-1.5 py-px text-2xs leading-normal tracking-caps"
           >
             STAGED
           </Badge>
         ) : null}
-        <div className="review-staged-actions">
+        <div className="review-staged-actions ml-auto flex items-center gap-1 [&_svg]:size-3.5">
           {surface === "thread" ? (
             <Button
               variant="ghost"
               size="compactIcon"
-              className="review-staged-collapse"
+              className="hover:bg-edge! hover:text-ink hover:shadow-raised focus:outline-1 focus:outline-offset-2 focus:outline-accent"
               aria-label="Minimize staged comment"
               onClick={onCollapse}
             >
@@ -1044,7 +1320,7 @@ const StagedCard = ({
           <Button
             variant="ghost"
             size="compactIcon"
-            className="review-staged-edit"
+            className="hover:bg-edge! hover:text-ink hover:shadow-raised focus:outline-1 focus:outline-offset-2 focus:outline-accent"
             aria-label="Edit staged comment"
             onClick={() => {
               setEditBody(comment.body);
@@ -1056,7 +1332,7 @@ const StagedCard = ({
           <Button
             variant="ghost"
             size="compactIcon"
-            className="review-staged-delete"
+            className="hover:border-danger! hover:bg-[var(--callout-danger-bg)]! hover:text-danger focus:outline-1 focus:outline-offset-2 focus:outline-accent"
             aria-label="Delete staged comment"
             onClick={onDelete}
           >
@@ -1068,7 +1344,7 @@ const StagedCard = ({
         <>
           <Textarea
             ref={editRef}
-            className="review-staged-edit-body"
+            className="mt-2 bg-well"
             aria-label="Edit comment"
             value={editBody}
             maxLength={BODY_LIMIT}
@@ -1087,10 +1363,10 @@ const StagedCard = ({
               }
             }}
           />
-          <p className="review-staged-edit-hint text-2xs">
+          <p className="mt-1 text-2xs text-muted">
             Escape cancels · {MODIFIER_SHORTCUT} saves
           </p>
-          <div className="review-staged-edit-actions">
+          <div className="mt-2 flex justify-end gap-1">
             <Button
               variant="outline"
               size="compact"
@@ -1098,16 +1374,18 @@ const StagedCard = ({
             >
               Cancel
             </Button>
-            <span className="review-shortcut-wrap">
+            <span className="group relative inline-flex">
               <Button
-                size="compact"
-                className="review-primary-comment-action"
+                size="micro"
                 disabled={editBody.trim() === ""}
                 onClick={saveEdit}
               >
                 Save
               </Button>
-              <span role="tooltip" className="review-shortcut-tooltip">
+              <span
+                role="tooltip"
+                className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-ink px-2 py-1 text-2xs font-medium text-bg opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
+              >
                 {MODIFIER_SHORTCUT}
               </span>
             </span>
@@ -1116,20 +1394,28 @@ const StagedCard = ({
       ) : (
         <MarkdownBody
           body={visibleBody}
-          className="review-staged-body text-xs"
+          className="review-staged-body mt-2 [overflow-wrap:anywhere] text-xs text-ink [&_p]:m-0 [&_p+p]:mt-2"
         />
       )}
       {!isEditing && long && !expanded ? (
-        <button type="button" className="review-more" onClick={onExpandBody}>
+        <button
+          type="button"
+          className="cursor-pointer border-0 bg-transparent px-0 py-1 text-xs font-semibold text-muted hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+          onClick={onExpandBody}
+        >
           … more
         </button>
       ) : null}
       {isEditing ? null : (
-        <div className="review-staged-footer">
+        <div className="mt-2 flex items-center justify-end">
           <Button
             variant="accentOutline"
-            size="compact"
-            className="review-primary-comment-action"
+            size="micro"
+            className={
+              surface === "rail"
+                ? "border-edge bg-transparent text-2xs text-subtle hover:border-edge-strong hover:bg-surface hover:text-muted"
+                : undefined
+            }
             onClick={onSubmit}
           >
             {surface === "rail" ? "Send this" : "Submit Now"}
@@ -1140,8 +1426,216 @@ const StagedCard = ({
   );
 };
 
+const SentThread = ({
+  comment,
+  identity,
+  agent,
+  onJump,
+  onAssociate,
+  onReplySent,
+}: {
+  readonly comment: ReviewComment;
+  readonly identity: RuntimeIdentity | null;
+  readonly agent: AgentSnapshot;
+  readonly onJump: () => void;
+  readonly onAssociate: (target: CommentTarget | null) => void;
+  readonly onReplySent: (message: string) => void;
+}) => {
+  const [locations, setLocations] =
+    useState<ReadonlyArray<DiffLocation> | null>(null);
+  const [diffError, setDiffError] = useState("");
+  const [reply, setReply] = useState("");
+  const [isReplying, setIsReplying] = useState(false);
+  const response = [...agent.responses]
+    .reverse()
+    .find((candidate) =>
+      candidate.outcomes.some((outcome) => outcome.commentId === comment.id),
+    );
+  const outcome = response?.outcomes.find(
+    (candidate) => candidate.commentId === comment.id,
+  );
+  const request = agent.requests.find(
+    (candidate) => candidate.requestId === response?.requestId,
+  );
+  const targetPresent = targetElement(comment.target) !== null;
+  const outcomeLabel =
+    outcome?.state === "changed"
+      ? "Changed"
+      : outcome?.state === "question"
+        ? "Needs your answer"
+        : outcome?.state === "outside"
+          ? "Outside this plan"
+          : "Waiting for agent";
+
+  const loadDiff = async () => {
+    if (identity === null || request === undefined || response === undefined)
+      return;
+    try {
+      const value = await requestJson({
+        path: `/api/revision-diff?from=${encodeURIComponent(request.claimedFromRevision ?? request.sourceRevision)}&to=${encodeURIComponent(response.sourceRevision)}`,
+        identity,
+      });
+      setLocations(parseDiffLocations(value));
+      setDiffError("");
+    } catch (error) {
+      setDiffError(errorMessage(error));
+    }
+  };
+
+  const sendReply = async () => {
+    const body = reply.trim();
+    if (identity === null || body === "") return;
+    setIsReplying(true);
+    try {
+      await requestJson({
+        path: "/api/agent-requests",
+        identity,
+        method: "POST",
+        body: { kind: "reply", commentId: comment.id, body },
+      });
+      setReply("");
+      onReplySent("Reply sent to the coding agent.");
+    } catch (error) {
+      onReplySent(errorMessage(error));
+    } finally {
+      setIsReplying(false);
+    }
+  };
+
+  return (
+    <Card
+      className="mt-3 border border-edge bg-surface p-3 shadow-raised"
+      onPointerEnter={() => onAssociate(comment.target)}
+      onPointerLeave={() => onAssociate(null)}
+      onFocus={() => onAssociate(comment.target)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget))
+          onAssociate(null);
+      }}
+    >
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <button
+          type="button"
+          className="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left text-xs font-semibold uppercase tracking-caps text-ink hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+          onClick={onJump}
+        >
+          {targetLabel(comment.target, true)}
+        </button>
+        <Badge tone="secondary" size="compact">
+          {outcomeLabel}
+        </Badge>
+      </div>
+      <p className="mt-2 mb-0 text-sm text-ink">{comment.body}</p>
+      {!targetPresent ? (
+        <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]">
+          Original target unavailable in this revision. This thread keeps its
+          recorded address; Big Plan did not guess a replacement.
+        </p>
+      ) : null}
+      {outcome === undefined ? (
+        <p className="mt-3 mb-0 text-xs text-subtle">
+          Waiting for the coding agent to claim this request.
+        </p>
+      ) : (
+        <div className="mt-3 border-t border-edge pt-3">
+          <p className="m-0 text-xs font-semibold text-ink">Agent</p>
+          <p className="mt-1 mb-0 text-sm text-muted">{outcome.message}</p>
+          {outcome.state === "changed" && request !== undefined ? (
+            <Button
+              variant="ghost"
+              size="compact"
+              className="mt-2"
+              onClick={() => void loadDiff()}
+            >
+              What changed
+            </Button>
+          ) : null}
+        </div>
+      )}
+      {locations === null ? null : (
+        <div className="mt-3 grid gap-2" aria-label="Revision changes">
+          {locations.length === 0 ? (
+            <p className="m-0 text-xs text-subtle">
+              No authored block changes were found between these revisions.
+            </p>
+          ) : (
+            locations.slice(0, 4).map((location, index) => (
+              <div
+                key={`${location.status}-${location.label}-${index}`}
+                className="min-w-0 rounded-md border border-edge p-2 text-xs"
+              >
+                <p className="m-0 font-semibold text-ink">
+                  {location.status} · {location.label}
+                </p>
+                <p className="mt-1 mb-0 min-w-0 break-words text-muted">
+                  {location.runs.map((run, runIndex) =>
+                    run.op === "del" ? (
+                      <del
+                        key={runIndex}
+                        className="bg-[var(--diff-remove-bg)] text-[var(--diff-remove-c)]"
+                      >
+                        {run.text}
+                      </del>
+                    ) : run.op === "ins" ? (
+                      <ins
+                        key={runIndex}
+                        className="bg-[var(--diff-add-bg)] text-[var(--diff-add-c)] no-underline"
+                      >
+                        {run.text}
+                      </ins>
+                    ) : (
+                      <span key={runIndex}>{run.text}</span>
+                    ),
+                  )}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+      {diffError === "" ? null : (
+        <p className="mt-2 mb-0 text-xs text-danger">{diffError}</p>
+      )}
+      {identity === null ? null : (
+        <div className="mt-3 border-t border-edge pt-3">
+          <label
+            className="text-xs font-medium text-ink"
+            htmlFor={`reply-${comment.id}`}
+          >
+            Reply
+          </label>
+          <Textarea
+            id={`reply-${comment.id}`}
+            className="mt-1 min-h-20"
+            value={reply}
+            maxLength={BODY_LIMIT}
+            placeholder="Continue this thread…"
+            onChange={(event) => setReply(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault();
+                void sendReply();
+              }
+            }}
+          />
+          <div className="mt-2 flex justify-end">
+            <Button
+              size="compact"
+              disabled={reply.trim() === "" || isReplying}
+              onClick={() => void sendReply()}
+            >
+              {isReplying ? "Sending…" : "Reply"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+};
+
 const ReviewKernel = () => {
   const identity = useMemo(runtimeIdentity, []);
+  const initialSourceRevision = useMemo(bootstrapSourceRevision, []);
   const planId =
     identity?.planId ?? rootElement.getAttribute("data-plan-id") ?? "";
   const blockHosts = useBlockHosts();
@@ -1156,6 +1650,15 @@ const ReviewKernel = () => {
   const [tab, setTab] = useState<FeedbackTab>("comments");
   const [isHydrated, setIsHydrated] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isSendingChat, setIsSendingChat] = useState(false);
+  const [chatBody, setChatBody] = useState("");
+  const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
+  const [progress, setProgress] = useState<ReadonlyArray<ProgressEvent>>([]);
+  const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(
+    null,
+  );
+  const [pollFailures, setPollFailures] = useState(0);
+  const [statusNowMs, setStatusNowMs] = useState(Date.now());
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [expandedBodies, setExpandedBodies] = useState<ReadonlySet<string>>(
     new Set(),
@@ -1171,6 +1674,7 @@ const ReviewKernel = () => {
       ? "Reading offline: drafts stay in this browser."
       : "Loading review…",
   );
+  const reviewComments = useMemo(() => [...drafts, ...sent], [drafts, sent]);
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
   const serializeRuntimeWrite = useCallback(
     <Value,>(write: () => Promise<Value>): Promise<Value> => {
@@ -1184,7 +1688,9 @@ const ReviewKernel = () => {
     [],
   );
   const inlineComposeHost = useInlineComposeHost(compose, isOpen);
-  const threadHosts = useThreadHosts(drafts, isOpen);
+  const threadHosts = useThreadHosts(reviewComments, isOpen);
+  const feedbackTabs =
+    identity === null ? STATIC_FEEDBACK_TABS : LIVE_FEEDBACK_TABS;
   const selectFeedbackTab = (next: FeedbackTab) => {
     setTab(next);
     requestAnimationFrame(() =>
@@ -1192,15 +1698,15 @@ const ReviewKernel = () => {
     );
   };
   const handleFeedbackTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    let index = FEEDBACK_TABS.indexOf(tab);
-    if (event.key === "ArrowRight") index = (index + 1) % FEEDBACK_TABS.length;
+    let index = feedbackTabs.indexOf(tab);
+    if (event.key === "ArrowRight") index = (index + 1) % feedbackTabs.length;
     else if (event.key === "ArrowLeft")
-      index = (index - 1 + FEEDBACK_TABS.length) % FEEDBACK_TABS.length;
+      index = (index - 1 + feedbackTabs.length) % feedbackTabs.length;
     else if (event.key === "Home") index = 0;
-    else if (event.key === "End") index = FEEDBACK_TABS.length - 1;
+    else if (event.key === "End") index = feedbackTabs.length - 1;
     else return;
     event.preventDefault();
-    const next = FEEDBACK_TABS[index];
+    const next = feedbackTabs[index];
     if (next !== undefined) selectFeedbackTab(next);
   };
 
@@ -1212,7 +1718,7 @@ const ReviewKernel = () => {
   useEffect(() => {
     const composeSelection =
       compose?.target.type === "selection" ? compose.target : null;
-    const persistentSelections = drafts
+    const persistentSelections = reviewComments
       .map((comment) => comment.target)
       .filter(
         (target): target is SelectionTarget => target.type === "selection",
@@ -1231,7 +1737,7 @@ const ReviewKernel = () => {
       setSelectionHighlights([], null);
       rootElement.removeAttribute("data-review-selection-active");
     };
-  }, [associatedTarget, associationActive, compose, drafts]);
+  }, [associatedTarget, associationActive, compose, reviewComments]);
 
   useEffect(() => {
     if (associatedTarget === null || associatedTarget.type === "selection") {
@@ -1254,7 +1760,7 @@ const ReviewKernel = () => {
 
   useEffect(() => {
     const marked = new Set<HTMLElement>();
-    const entries = drafts.flatMap((comment) => {
+    const entries = reviewComments.flatMap((comment) => {
       const element = targetElement(comment.target);
       if (element === null) return [];
       if (comment.target.type !== "selection") {
@@ -1351,7 +1857,7 @@ const ReviewKernel = () => {
       window.removeEventListener("resize", refresh);
       for (const element of marked) delete element.dataset.reviewHasComment;
     };
-  }, [drafts]);
+  }, [reviewComments]);
 
   useEffect(() => {
     const selection =
@@ -1408,6 +1914,13 @@ const ReviewKernel = () => {
         ) {
           throw new Error("This page is not connected to its review runtime.");
         }
+        if (
+          isRecord(session) &&
+          "plan" in session &&
+          typeof session.plan === "string"
+        ) {
+          setRuntimeSession({ plan: session.plan });
+        }
         const snapshot = parseSnapshot(
           await requestJson({ path: "/api/drafts", identity }),
         );
@@ -1440,10 +1953,45 @@ const ReviewKernel = () => {
         path: "/api/drafts",
         identity,
         method: "PUT",
-        body: { drafts },
+        body: { drafts, activeDraft: "", resolvedCommentIds: [] },
       }),
     ).catch((error: unknown) => setStatus(errorMessage(error)));
   }, [drafts, identity, isHydrated, planId, serializeRuntimeWrite]);
+
+  useEffect(() => {
+    if (identity === null) return;
+    let current = true;
+    let pending = false;
+    const refresh = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const [agentValue, progressValue] = await Promise.all([
+          requestJson({ path: "/api/agent", identity }),
+          requestJson({ path: "/api/progress", identity }),
+        ]);
+        if (current) {
+          setAgent(parseAgentSnapshot(agentValue));
+          setProgress(parseProgress(progressValue));
+          setPollFailures(0);
+          setStatusNowMs(Date.now());
+        }
+      } catch {
+        if (current) {
+          setPollFailures((failures) => Math.min(2, failures + 1));
+          setStatusNowMs(Date.now());
+        }
+      } finally {
+        pending = false;
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 1_500);
+    return () => {
+      current = false;
+      window.clearInterval(timer);
+    };
+  }, [identity]);
 
   useEffect(() => {
     if (compose !== null) return;
@@ -1567,6 +2115,88 @@ const ReviewKernel = () => {
     setStatus("Comment updated locally.");
   };
 
+  const sendChat = async () => {
+    const body = chatBody.trim();
+    if (identity === null) {
+      setStatus("Start `big-plan review` to ask the coding agent.");
+      return;
+    }
+    if (body === "") return;
+    setIsSendingChat(true);
+    try {
+      await requestJson({
+        path: "/api/agent-requests",
+        identity,
+        method: "POST",
+        body: { kind: "chat", body },
+      });
+      setChatBody("");
+      setAgent(
+        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
+      );
+      setStatus("Plan question sent to the coding agent.");
+    } catch (error) {
+      setStatus(errorMessage(error));
+    } finally {
+      setIsSendingChat(false);
+    }
+  };
+
+  const latestRequest = agent.requests.at(-1);
+  const latestResponse = agent.responses.find(
+    (response) => response.requestId === latestRequest?.requestId,
+  );
+  const requestProgress =
+    latestRequest === undefined
+      ? []
+      : progress.filter((event) => event.requestId === latestRequest.requestId);
+  const failure = [...requestProgress]
+    .reverse()
+    .find((event) => event.state === "failed")?.detail;
+  const lastAgentSignalAtMs = Math.max(
+    0,
+    ...requestProgress.map((event) => event.atMs ?? 0),
+    latestRequest?.claimedAt === undefined
+      ? 0
+      : Date.parse(latestRequest.claimedAt),
+    agent.presence.requestId === latestRequest?.requestId
+      ? (agent.presence.updatedAtMs ?? 0)
+      : 0,
+  );
+  const agentStatus: AgentStatus = deriveAgentStatus({
+    runtime:
+      identity === null ? "static" : pollFailures >= 2 ? "offline" : "online",
+    request:
+      latestRequest === undefined
+        ? "none"
+        : latestResponse === undefined
+          ? "pending"
+          : "answered",
+    agentConnected: agent.presence.connected,
+    pickedUp:
+      latestRequest?.claimedAt !== undefined || requestProgress.length > 0,
+    ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
+    ...(failure === undefined ? {} : { failure }),
+    nowMs: statusNowMs,
+  });
+  const agentActivity = requestProgress
+    .filter((event) => event.state !== "waiting")
+    .filter(
+      (event, index, events) =>
+        index === 0 ||
+        event.step !== events[index - 1]?.step ||
+        event.state !== events[index - 1]?.state,
+    )
+    .slice(-8)
+    .reverse();
+  const chatRequests = agent.requests.filter(
+    (request) => request.kind === "chat",
+  );
+  const newerRevisionAvailable =
+    initialSourceRevision !== "" &&
+    agent.sourceRevision !== "" &&
+    initialSourceRevision !== agent.sourceRevision;
+
   return (
     <>
       {reviewContainerHosts.map(({ container, host }) => {
@@ -1581,7 +2211,7 @@ const ReviewKernel = () => {
         return createPortal(
           <button
             type="button"
-            className="review-slide-comment"
+            className="group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] p-0 text-subtle hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:bg-surface aria-pressed:text-ink [&>svg]:size-3.5"
             aria-label={label}
             aria-pressed={pressed}
             disabled={compose !== null && !pressed}
@@ -1590,7 +2220,12 @@ const ReviewKernel = () => {
             }
           >
             <Icon icon={MESSAGE_SQUARE_ICON} />
-            <span role="tooltip">{label}</span>
+            <span
+              role="tooltip"
+              className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] left-0 z-50 w-max max-w-48 rounded-md bg-ink px-2 py-1 text-2xs leading-normal text-bg opacity-0 shadow-raised delay-1000 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100 max-sm:right-0 max-sm:left-auto"
+            >
+              {label}
+            </span>
           </button>,
           host,
           target.blockId,
@@ -1602,7 +2237,7 @@ const ReviewKernel = () => {
             block.dataset.blockKind === "table" ? (
             <button
               type="button"
-              className="review-table-comment"
+              className="review-table-comment group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent p-0 text-muted hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
               aria-label={`Comment on ${block.dataset.blockLabel ?? "this table"}`}
               aria-pressed={
                 compose?.target.type === "block" &&
@@ -1619,12 +2254,17 @@ const ReviewKernel = () => {
               }
             >
               <Icon icon={MESSAGE_SQUARE_ICON} />
-              <span role="tooltip">Comment on table</span>
+              <span
+                role="tooltip"
+                className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] right-0 z-50 w-max rounded-md bg-ink px-2 py-1 text-xs text-bg opacity-0 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
+              >
+                Comment on table
+              </span>
             </button>
           ) : host.dataset.reviewToolbarHost !== undefined ? (
             <button
               type="button"
-              className="review-toolbar-comment"
+              className="review-toolbar-comment inline-flex size-6 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
               aria-label={`Comment on ${block.dataset.blockLabel ?? "this component"}`}
               aria-pressed={
                 compose?.target.type === "block" &&
@@ -1669,7 +2309,7 @@ const ReviewKernel = () => {
       {selectionControl === null || compose !== null ? null : (
         <button
           type="button"
-          className="review-selection-chip"
+          className="fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-edge bg-paper px-2 py-1 text-xs text-muted shadow-raised hover:border-accent hover:bg-surface hover:text-ink focus-visible:border-accent focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
           style={{
             top: `${selectionControl.top}px`,
             left: `${selectionControl.left}px`,
@@ -1690,7 +2330,7 @@ const ReviewKernel = () => {
         : createPortal(
             <button
               type="button"
-              className="review-feedback-toggle"
+              className="inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 rounded-sm border-0 bg-transparent px-2 py-1 text-xs text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-expanded:bg-surface aria-expanded:text-ink aria-expanded:inset-shadow-well [&>svg]:size-4 [&>span]:bg-accent [&>span]:text-accent-ink"
               aria-expanded={isOpen}
               aria-controls="big-plan-feedback-rail"
               onClick={() => setIsOpen((current) => !current)}
@@ -1706,12 +2346,12 @@ const ReviewKernel = () => {
       {isOpen ? (
         <aside
           id="big-plan-feedback-rail"
-          className="review-feedback-rail"
+          className="fixed top-11 right-0 bottom-0 z-20 flex w-[min(22rem,100vw)] flex-col border-l border-edge bg-paper text-ink shadow-floating"
           aria-label="Feedback"
         >
-          <div className="review-feedback-tabbar">
+          <div className="flex flex-none items-stretch border-b border-edge bg-paper">
             <div
-              className="review-feedback-tabs"
+              className="flex min-w-0 flex-1 items-stretch gap-1 pt-1.5 pl-2 [&_button]:inline-flex [&_button]:min-h-8 [&_button]:min-w-0 [&_button]:cursor-pointer [&_button]:items-center [&_button]:justify-start [&_button]:gap-1.5 [&_button]:rounded-none [&_button]:border-0 [&_button]:border-b-2 [&_button]:border-transparent [&_button]:bg-transparent [&_button]:px-2 [&_button]:py-1.5 [&_button]:text-xs [&_button]:font-semibold [&_button]:text-muted [&_button]:hover:bg-surface [&_button]:hover:text-ink [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-accent [&_button][aria-selected=true]:border-accent [&_button][aria-selected=true]:bg-transparent [&_button][aria-selected=true]:text-ink [&_button>svg]:size-3.5 [&_button>svg]:shrink-0 [&_button>span]:min-w-5 [&_button>span]:justify-center [&_button>span]:bg-[var(--annotation-bg)] [&_button>span]:text-2xs [&_button>span]:text-[var(--annotation-c)] max-sm:[&_button]:text-2xs"
               role="tablist"
               aria-label="Feedback views"
               onKeyDown={handleFeedbackTabKeyDown}
@@ -1743,38 +2383,59 @@ const ReviewKernel = () => {
                 <Icon icon={MESSAGES_SQUARE_ICON} />
                 Chat
               </button>
-              <button
-                id="review-tab-agent"
-                type="button"
-                role="tab"
-                aria-controls="review-panel-agent"
-                aria-selected={tab === "agent"}
-                tabIndex={tab === "agent" ? 0 : -1}
-                onClick={() => setTab("agent")}
-              >
-                <Icon icon={ACTIVITY_ICON} />
-                Agent
-              </button>
+              {identity === null ? null : (
+                <button
+                  id="review-tab-agent"
+                  type="button"
+                  role="tab"
+                  aria-controls="review-panel-agent"
+                  aria-selected={tab === "agent"}
+                  tabIndex={tab === "agent" ? 0 : -1}
+                  onClick={() => setTab("agent")}
+                >
+                  <Icon icon={ACTIVITY_ICON} />
+                  Agent
+                </button>
+              )}
             </div>
             <Button
               variant="ghost"
               size="compactIcon"
-              className="review-feedback-close"
+              className="mr-2 ml-auto min-h-0 self-center"
               aria-label="Close feedback"
               onClick={() => setIsOpen(false)}
             >
               <Icon icon={X_ICON} />
             </Button>
           </div>
+          {newerRevisionAvailable ? (
+            <Card className="m-3 mb-0 border border-accent bg-accent-wash p-3 shadow-raised">
+              <p className="m-0 text-sm font-semibold text-ink">
+                A revised plan is ready.
+              </p>
+              <p className="mt-1 mb-0 text-xs text-muted">
+                Reload to review the accepted revision. Threads keep their exact
+                recorded addresses.
+              </p>
+              <Button
+                variant="secondary"
+                size="compact"
+                className="mt-2"
+                onClick={() => window.location.reload()}
+              >
+                Reload plan
+              </Button>
+            </Card>
+          ) : null}
           {tab === "comments" ? (
             <div
               id="review-panel-comments"
-              className="review-feedback-panel"
+              className="review-feedback-panel min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3"
               role="tabpanel"
               aria-labelledby="review-tab-comments"
             >
               {drafts.length === 0 ? (
-                <div className="review-feedback-empty">
+                <div className="rounded-xl bg-surface p-6 text-center text-sm text-muted [&_p]:m-0 [&_p+p]:mt-2">
                   <p>
                     {identity === null
                       ? "Reading offline: drafts stay in this browser until you start the local review runtime."
@@ -1786,7 +2447,7 @@ const ReviewKernel = () => {
                   </p>
                 </div>
               ) : (
-                <ol className="review-feedback-list">
+                <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
                   {drafts.map((comment) => (
                     <li key={comment.id}>
                       <StagedCard
@@ -1817,17 +2478,38 @@ const ReviewKernel = () => {
                 </ol>
               )}
               {sent.length > 0 ? (
-                <p className="review-sent-count">
-                  {sent.length} comment{sent.length === 1 ? "" : "s"} handed
-                  off.
-                </p>
+                <section className="mt-6 border-t border-edge pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="m-0 text-xs font-semibold uppercase tracking-caps text-subtle">
+                      Sent threads
+                    </p>
+                    <Badge tone="secondary" size="compact">
+                      {sent.length}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 mb-0 text-xs text-subtle">
+                    {sent.length} comment{sent.length === 1 ? "" : "s"} handed
+                    off.
+                  </p>
+                  {sent.map((comment) => (
+                    <SentThread
+                      key={comment.id}
+                      comment={comment}
+                      identity={identity}
+                      agent={agent}
+                      onJump={() => jumpTo(comment)}
+                      onAssociate={setAssociatedTarget}
+                      onReplySent={setStatus}
+                    />
+                  ))}
+                </section>
               ) : null}
               {drafts.length > 0 ? (
                 <div className="mt-1 flex justify-end">
                   <Button
                     variant="outline"
                     size="compact"
-                    className="review-delete-all border-danger text-danger hover:border-danger hover:text-danger"
+                    className="border-danger text-danger hover:border-danger hover:text-danger"
                     onClick={() =>
                       setPendingDelete({ kind: "all", count: drafts.length })
                     }
@@ -1842,48 +2524,195 @@ const ReviewKernel = () => {
           {tab === "chat" ? (
             <div
               id="review-panel-chat"
-              className="review-feedback-panel"
+              className="review-feedback-panel min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 grid content-start gap-3"
               role="tabpanel"
               aria-labelledby="review-tab-chat"
             >
-              <div className="review-feedback-empty">
-                <Icon icon={MESSAGES_SQUARE_ICON} />
-                <p>
-                  <strong>Plan-wide chat</strong>
-                </p>
-                <p>
-                  Ask about the plan as a whole. The connected agent loop
-                  arrives in the next stack slice.
-                </p>
-              </div>
+              {identity === null ? (
+                <Card className="border border-edge bg-surface p-3 shadow-none">
+                  <p className="m-0 text-sm font-semibold text-ink">
+                    Plan-wide chat needs the local runtime
+                  </p>
+                  <p className="mt-1 mb-0 text-xs text-muted">
+                    Open this file with `big-plan review &lt;plan.mdx&gt;`.
+                    Browser drafts remain safe here.
+                  </p>
+                </Card>
+              ) : (
+                <>
+                  <div>
+                    <label
+                      className="text-xs font-semibold text-ink"
+                      htmlFor="review-agent-chat"
+                    >
+                      Ask about the whole plan
+                    </label>
+                    <Textarea
+                      id="review-agent-chat"
+                      className="mt-1 min-h-24"
+                      value={chatBody}
+                      maxLength={BODY_LIMIT}
+                      placeholder="What should I understand before accepting this plan?"
+                      onChange={(event) => setChatBody(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (
+                          (event.metaKey || event.ctrlKey) &&
+                          event.key === "Enter"
+                        ) {
+                          event.preventDefault();
+                          void sendChat();
+                        }
+                      }}
+                    />
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <span className="text-2xs text-subtle">
+                        {MODIFIER_SHORTCUT}
+                      </span>
+                      <Button
+                        size="compact"
+                        disabled={chatBody.trim() === "" || isSendingChat}
+                        onClick={() => void sendChat()}
+                      >
+                        {isSendingChat ? "Sending…" : "Ask agent"}
+                      </Button>
+                    </div>
+                  </div>
+                  {chatRequests.length === 0 ? (
+                    <p className="m-0 text-xs text-subtle">
+                      No plan-wide questions yet.
+                    </p>
+                  ) : (
+                    <ol className="m-0 grid list-none gap-3 p-0">
+                      {chatRequests
+                        .slice()
+                        .reverse()
+                        .map((request) => {
+                          const response = agent.responses.find(
+                            (candidate) =>
+                              candidate.requestId === request.requestId &&
+                              candidate.kind === "chat",
+                          );
+                          return (
+                            <li key={request.requestId}>
+                              <Card className="border border-edge bg-surface p-3 shadow-none">
+                                <p className="m-0 text-2xs font-semibold uppercase tracking-caps text-subtle">
+                                  You
+                                </p>
+                                <p className="mt-1 mb-0 text-sm text-ink">
+                                  {request.body}
+                                </p>
+                                <div className="mt-3 border-t border-edge pt-3">
+                                  <p className="m-0 text-2xs font-semibold uppercase tracking-caps text-subtle">
+                                    Agent
+                                  </p>
+                                  <p className="mt-1 mb-0 text-sm text-muted">
+                                    {response?.message ?? agentStatus.headline}
+                                  </p>
+                                </div>
+                              </Card>
+                            </li>
+                          );
+                        })}
+                    </ol>
+                  )}
+                </>
+              )}
             </div>
           ) : null}
-          {tab === "agent" ? (
+          {tab === "agent" && identity !== null ? (
             <div
               id="review-panel-agent"
-              className="review-feedback-panel"
+              className="review-feedback-panel min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 grid content-start gap-3"
               role="tabpanel"
               aria-labelledby="review-tab-agent"
             >
-              <Card className="review-agent-card">
-                <Icon icon={ACTIVITY_ICON} />
-                <div>
-                  <p>
-                    <strong>No agent work in progress</strong>
-                  </p>
-                  <p>
-                    {identity === null
-                      ? "No agent connected. Start the local review runtime to hand off feedback."
-                      : "The review runtime is connected and waiting for feedback."}
-                  </p>
+              <Card className="border border-edge bg-surface p-3 shadow-none">
+                <div className="flex items-start gap-3">
+                  <Icon icon={ACTIVITY_ICON} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="m-0 text-sm font-semibold text-ink">
+                        {agentStatus.headline}
+                      </p>
+                      <Badge
+                        tone={
+                          agentStatus.tone === "positive"
+                            ? "accentOutline"
+                            : "secondary"
+                        }
+                        size="compact"
+                      >
+                        {agentStatus.label}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 mb-0 text-xs text-muted">
+                      {agentStatus.detail}
+                    </p>
+                  </div>
                 </div>
               </Card>
+              {!agent.presence.connected && runtimeSession !== null ? (
+                <Card className="border border-edge bg-well p-3 shadow-none">
+                  <p className="m-0 text-xs font-semibold text-ink">
+                    Connect a coding agent
+                  </p>
+                  <code className="mt-2 block min-w-0 overflow-x-auto rounded-md bg-paper p-2 text-2xs text-ink">
+                    big-plan agent {runtimeSession.plan}
+                  </code>
+                  <p className="mt-2 mb-0 text-2xs text-subtle">
+                    Paste the returned prompt into Codex or Claude. Your drafts
+                    are safe while no agent is connected.
+                  </p>
+                </Card>
+              ) : null}
+              <section>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="m-0 text-xs font-semibold uppercase tracking-caps text-subtle">
+                    Agent activity
+                  </p>
+                  <Badge tone="secondary" size="compact">
+                    {agentActivity.length}
+                  </Badge>
+                </div>
+                {agentActivity.length === 0 ? (
+                  <p className="mt-2 mb-0 text-xs text-subtle">
+                    No coding-agent work has been reported for this request.
+                  </p>
+                ) : (
+                  <ol className="mt-2 grid list-none gap-2 p-0">
+                    {agentActivity.map((event) => (
+                      <li
+                        key={event.seq}
+                        className="rounded-md border border-edge bg-surface p-2"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="m-0 text-xs font-medium text-ink">
+                            {event.step}
+                          </p>
+                          <Badge tone="secondary" size="micro">
+                            {event.state}
+                          </Badge>
+                        </div>
+                        {event.detail === undefined ? null : (
+                          <p className="mt-1 mb-0 text-2xs text-muted">
+                            {event.detail}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+              <p className="m-0 text-2xs text-subtle">
+                Big Plan shows recorded agent signals only. Reviewer actions do
+                not count as agent work.
+              </p>
             </div>
           ) : null}
-          <div className="review-feedback-status">
+          <div className="review-feedback-status flex flex-none flex-col items-stretch gap-2 border-t border-edge bg-paper p-3 text-xs text-subtle">
             {tab === "comments" ? (
               <Button
-                className="review-send-all"
+                className="w-full px-3! py-2! text-xs"
                 size="sm"
                 disabled={drafts.length === 0 || isSending}
                 onClick={() => void sendComments(drafts)}
@@ -1891,7 +2720,23 @@ const ReviewKernel = () => {
                 {isSending ? "Sending…" : "Send all comments to agent"}
               </Button>
             ) : null}
-            <p role="status">{status}</p>
+            {identity === null ? (
+              <p className="m-0 text-xs text-support" role="status">
+                {status}
+              </p>
+            ) : (
+              <div role="status" aria-live="polite">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="m-0 text-xs font-semibold text-ink">
+                    {agentStatus.headline}
+                  </p>
+                  <Badge tone="secondary" size="compact">
+                    {agentStatus.label}
+                  </Badge>
+                </div>
+                <p className="mt-1 mb-0 text-xs text-support">{status}</p>
+              </div>
+            )}
           </div>
         </aside>
       ) : null}
@@ -1927,6 +2772,22 @@ const ReviewKernel = () => {
           />,
           host,
           comment.id,
+        );
+      })}
+      {sent.map((comment) => {
+        const host = threadHosts.get(comment.id);
+        if (host === undefined) return null;
+        return createPortal(
+          <SentThread
+            comment={comment}
+            identity={identity}
+            agent={agent}
+            onJump={() => jumpTo(comment)}
+            onAssociate={setAssociatedTarget}
+            onReplySent={setStatus}
+          />,
+          host,
+          `sent-${comment.id}`,
         );
       })}
       {compose === null ? null : inlineComposeHost === null ? (

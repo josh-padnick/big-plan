@@ -183,8 +183,11 @@ it that way: a band carries primary or secondary text, never tertiary.
   --surface-c: var(--grey-100);
   --tray-c: var(--grey-100);
   --well-c: var(--grey-100);
+  --input-c: var(--grey-0);
   --header-bg: var(--grey-125);
   --comment-header-c: var(--header-bg);
+  --comment-body-c: var(--raised-c);
+  --comment-toolbar-c: var(--comment-header-c);
   /* Modal backdrops dim both palettes with the same neutral black overlay. */
   --backdrop-c: rgb(0 0 0);
 
@@ -192,6 +195,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --ink-c: var(--grey-925);
   --muted-c: var(--grey-700);
   --subtle-c: var(--grey-600);
+  --support-c: var(--grey-400);
 
   /* Lines. Kept because a few separations genuinely need one; depth is the
      first choice and a border is the exception. */
@@ -287,14 +291,18 @@ same separation.
     --surface-c: var(--grey-900);
     --tray-c: var(--grey-900);
     --well-c: var(--grey-950);
+    --input-c: var(--grey-950);
     --header-bg: var(--grey-875);
     /* Captain-approved local colour: the thread band stays distinct from both
        the raised comment body and the page in dark mode. */
     --comment-header-c: #1c1a14;
+    --comment-body-c: var(--comment-header-c);
+    --comment-toolbar-c: var(--raised-c);
 
     --ink-c: var(--grey-150);
     --muted-c: var(--grey-300);
     --subtle-c: var(--grey-400);
+    --support-c: var(--grey-400);
 
     --edge-c: var(--grey-800);
     --edge-strong-c: var(--grey-700);
@@ -366,13 +374,17 @@ same separation.
   --surface-c: var(--grey-900);
   --tray-c: var(--grey-900);
   --well-c: var(--grey-950);
+  --input-c: var(--grey-950);
   --header-bg: var(--grey-875);
   /* Captain-approved local colour; see the OS-dark role above. */
   --comment-header-c: #1c1a14;
+  --comment-body-c: var(--comment-header-c);
+  --comment-toolbar-c: var(--raised-c);
 
   --ink-c: var(--grey-150);
   --muted-c: var(--grey-300);
   --subtle-c: var(--grey-400);
+  --support-c: var(--grey-400);
 
   --edge-c: var(--grey-800);
   --edge-strong-c: var(--grey-700);
@@ -473,10 +485,14 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-surface: var(--surface-c);
   --color-tray: var(--tray-c);
   --color-well: var(--well-c);
+  --color-input: var(--input-c);
   --color-header: var(--header-bg);
+  --color-comment-body: var(--comment-body-c);
+  --color-comment-toolbar: var(--comment-toolbar-c);
   --color-ink: var(--ink-c);
   --color-muted: var(--muted-c);
   --color-subtle: var(--subtle-c);
+  --color-support: var(--support-c);
   --color-edge: var(--edge-c);
   --color-edge-strong: var(--edge-strong-c);
   --color-accent: var(--accent-c);
