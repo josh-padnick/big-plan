@@ -5,14 +5,17 @@
 //
 // This check owns the exact required pairings and the exact contrast floor;
 // DESIGN_PRINCIPLES.md owns why colour is expressed as roles over ramps. The
-// palette id list is owned by src/render/preferences.ts, which is the contract
-// the stored preference and both delivered scripts already share.
+// palette id list is authored in src/render/preference-options.js and
+// re-exported by src/render/preferences.ts for application consumers.
 
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import postcss from "postcss";
-import { PALETTES, STORED_PALETTES } from "../../src/render/preferences.ts";
+import {
+  PALETTES,
+  STORED_PALETTES,
+} from "../../src/render/preference-options.js";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const GLOBAL_CSS = resolve(REPO_ROOT, "src/render/global.css");
@@ -94,6 +97,7 @@ const requiredPairings = () => {
     add("--accent-c", ground);
   }
   add("--accent-c", "--surface-c");
+  add("--accent-c", "--accent-soft-c");
   add("--accent-soft-ink-c", "--accent-soft-c");
   add("--accent-ink-c", "--accent-c");
   for (const tone of ["note", "tip", "warning", "danger"]) {

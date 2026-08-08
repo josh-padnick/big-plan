@@ -3,35 +3,15 @@
 // edges; this module keeps parsing and serialization policy in one place, and
 // both delivered scripts derive their key, version, and allow-lists here.
 
+import { PALETTES, STORED_PALETTES } from "./preference-options.js";
+
+export { PALETTES, STORED_PALETTES };
+
 export const PREFERENCES_STORAGE_KEY = "big-plan:prefs:v1";
 
 export const PREFERENCES_RECORD_VERSION = 1;
 
 export const STORED_APPEARANCE_MODES = ["light", "dark"] as const;
-
-// The colour themes a reviewer can choose, in the order the settings dialog
-// offers them. "default" is the product's own warm paper palette and is the
-// value absence means, so it is never written to storage; the rest name a
-// :root[data-palette] block in src/render/global.css.
-export const PALETTES = [
-  "default",
-  "rose-pine",
-  "nord",
-  "catppuccin",
-  "brutalist",
-] as const;
-
-// The subset a record may carry. Keeping the default out of storage is the
-// same rule the System appearance mode already follows: absence is the value.
-// A theme that has been withdrawn simply leaves this list, which makes an old
-// record naming it indistinguishable from a corrupt one and sends the reviewer
-// back to the product palette rather than to a theme that no longer exists.
-export const STORED_PALETTES = [
-  "rose-pine",
-  "nord",
-  "catppuccin",
-  "brutalist",
-] as const;
 
 type StoredAppearanceMode = (typeof STORED_APPEARANCE_MODES)[number];
 

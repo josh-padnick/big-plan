@@ -20,7 +20,7 @@ import { X_ICON } from "../../icons/lucide/x.js";
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
-import type { Palette } from "../preferences.js";
+import { PALETTES, type Palette } from "../preferences.js";
 import { lucideIconToHtml } from "./lucide-icon-html.js";
 import { PREFERENCES_SCRIPT } from "./preferences-script.js";
 import { VIEWER_SCRIPT } from "./viewer-script.js";
@@ -211,16 +211,18 @@ const renderPreferenceOption = ({
 // palette first, then the guests. PALETTES owns the ids; this list adds only
 // the reviewer-facing name, which is the one fact the contract has no opinion
 // about.
-const PALETTE_OPTIONS: ReadonlyArray<{
-  readonly palette: Palette;
-  readonly title: string;
-}> = [
-  { palette: "default", title: "Default" },
-  { palette: "rose-pine", title: "Rosé Pine" },
-  { palette: "nord", title: "Nord" },
-  { palette: "catppuccin", title: "Catppuccin" },
-  { palette: "brutalist", title: "Brutalist" },
-];
+const PALETTE_TITLES = {
+  default: "Default",
+  "rose-pine": "Rosé Pine",
+  nord: "Nord",
+  catppuccin: "Catppuccin",
+  brutalist: "Brutalist",
+} as const satisfies Readonly<Record<Palette, string>>;
+
+const PALETTE_OPTIONS = PALETTES.map((palette) => ({
+  palette,
+  title: PALETTE_TITLES[palette],
+}));
 
 // A row rather than a card: five themes read faster stacked than wrapped, and
 // the strip does the describing so the name never has to. The swatch carries

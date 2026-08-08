@@ -2,10 +2,12 @@
 // falls below WCAG AA, and accepts a palette that satisfies both.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   checkPalettes,
   contrastRatio,
@@ -26,6 +28,23 @@ const BASE_CSS = `:root {
 
 const SYNTAX_CSS =
   ":root {\n  --syntax-keyword-c: light-dark(#333333, #dddddd);\n}\n";
+
+test("runs without Node TypeScript support or a prior build", () => {
+  const disableTypeStripping = [
+    "--no-strip-types",
+    "--no-experimental-strip-types",
+  ].find((flag) => process.allowedNodeEnvironmentFlags.has(flag));
+  const result = spawnSync(
+    process.execPath,
+    [
+      ...(disableTypeStripping === undefined ? [] : [disableTypeStripping]),
+      fileURLToPath(new URL("./palettes.mjs", import.meta.url)),
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /palettes: passed \(5 palettes\)/);
+});
 
 /** Checks a throwaway palette set rather than today's five. */
 const runAgainst = async ({ paletteCss }) => {
