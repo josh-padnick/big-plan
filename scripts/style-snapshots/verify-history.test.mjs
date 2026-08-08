@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -13,7 +13,11 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { PNG } from "pngjs";
 import { availableDocuments } from "./available-documents.mjs";
-import { verifyHistory, visualContract } from "./verify-history.mjs";
+import {
+  capturePlan,
+  verifyHistory,
+  visualContract,
+} from "./verify-history.mjs";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = join(
@@ -73,6 +77,33 @@ const pngIdentity = (buffer) => {
 const artifactPath = ({ repoRoot, name }) =>
   join(repoRoot, "test-results", "style-history", name);
 
+const copyBuildableRepository = async (destination) => {
+  const excludedPrefixes = [
+    ".big-plan/",
+    ".github/",
+    ".style-snapshots/manifests/",
+    "docs/",
+    "test/",
+  ];
+  const files = (
+    await git({
+      repoRoot: repositoryRoot,
+      arguments_: ["ls-files", "-z"],
+    })
+  )
+    .split("\0")
+    .filter(
+      (path) =>
+        path.length > 0 &&
+        !excludedPrefixes.some((prefix) => path.startsWith(prefix)),
+    );
+  for (const path of files) {
+    const destinationPath = join(destination, path);
+    await mkdir(dirname(destinationPath), { recursive: true });
+    await cp(join(repositoryRoot, path), destinationPath);
+  }
+};
+
 test("reads visual contracts from direct and squash commit messages", () => {
   assert.deepEqual(
     visualContract({
@@ -104,6 +135,68 @@ test("reads visual contracts from direct and squash commit messages", () => {
   );
 });
 
+test("should select owned components and retain the global safety net", () => {
+  const config = {
+    schemaVersion: 2,
+    capturePolicy: { globalFilePatterns: ["^src/render/"] },
+    documents: [
+      {
+        name: "showcase",
+        captures: [
+          { name: "document", scope: "full-document" },
+          {
+            name: "callout",
+            scope: "component",
+            ownerPatterns: ["^src/components/callout/"],
+          },
+          {
+            name: "wireframe",
+            scope: "component",
+            ownerPatterns: ["^src/components/wireframe/"],
+          },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(
+    capturePlan({
+      config,
+      stylingFiles: ["src/components/callout/styles.css"],
+      isTip: false,
+    }),
+    ["showcase/document", "showcase/callout"],
+  );
+  assert.deepEqual(
+    capturePlan({
+      config,
+      stylingFiles: ["src/render/global.generated.ts"],
+      isTip: false,
+    }),
+    ["showcase/document", "showcase/callout", "showcase/wireframe"],
+  );
+  assert.throws(
+    () =>
+      capturePlan({
+        config,
+        stylingFiles: ["src/components/unknown/styles.css"],
+        isTip: true,
+      }),
+    /no component owner/u,
+  );
+  assert.throws(
+    () =>
+      capturePlan({
+        config,
+        stylingFiles: [
+          "src/render/global.generated.ts",
+          "src/components/unknown/styles.css",
+        ],
+        isTip: false,
+      }),
+    /no component owner/u,
+  );
+});
+
 const createMinimalRepository = async ({
   stylingFilePatterns = ["^irrelevant\\.txt$"],
   documents = [
@@ -128,6 +221,8 @@ const createMinimalRepository = async ({
     arguments_: ["config", "user.email", "style-history@example.invalid"],
   });
   await mkdir(join(repoRoot, ".style-snapshots"), { recursive: true });
+  await writeFile(join(repoRoot, "package.json"), "{}\n", "utf8");
+  await writeFile(join(repoRoot, "bun.lock"), "\n", "utf8");
   await writeFile(join(repoRoot, "fixture.txt"), "fixture\n", "utf8");
   await writeFile(join(repoRoot, "style.txt"), "red\n", "utf8");
   const capture = onePixelPng({ red: 255, green: 0, blue: 0 });
@@ -214,6 +309,265 @@ test("should require explicit named animated-surface exemptions", async () => {
         invalid.message,
       );
     }
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should reject an approved styling commit without a manifest", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "red\napproved move\n",
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "style: claim an approved move [visual:approved]",
+    });
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "approved-without-manifest",
+        }),
+      }),
+      /approved commit requires 1 manifest.*Repair this history entry/u,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should absorb only edge-anchored two-channel antialias drift", async () => {
+  const { repoRoot, configPath } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    const rowPng = (pixels) => {
+      const png = new PNG({ width: pixels.length, height: 1 });
+      for (const [index, [red, green, blue]] of pixels.entries()) {
+        png.data[index * 4] = red;
+        png.data[index * 4 + 1] = green;
+        png.data[index * 4 + 2] = blue;
+        png.data[index * 4 + 3] = 255;
+      }
+      return PNG.sync.write(png).toString("base64");
+    };
+    const captures = {
+      base: rowPng([
+        [40, 38, 32],
+        [40, 38, 32],
+        [40, 38, 32],
+      ]),
+      edge: rowPng([
+        [41, 39, 33],
+        [42, 39, 33],
+        [40, 38, 32],
+      ]),
+      uniform: rowPng([
+        [43, 41, 35],
+        [44, 41, 35],
+        [42, 40, 34],
+      ]),
+    };
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
+const state = (await readFile(join(process.env.STYLE_SNAPSHOT_CHECKOUT, "style.txt"), "utf8")).trim();
+const captures = ${JSON.stringify(captures)};
+await mkdir(output, { recursive: true });
+await writeFile(join(output, "state.png"), Buffer.from(captures[state], "base64"));
+`,
+      "utf8",
+    );
+    await writeFile(join(repoRoot, "style.txt"), "base\n", "utf8");
+    await git({ repoRoot, arguments_: ["add", "."] });
+    await git({
+      repoRoot,
+      arguments_: [
+        "commit",
+        "--amend",
+        "-m",
+        "test: establish antialias fixture",
+      ],
+    });
+    const antialiasBase = await git({
+      repoRoot,
+      arguments_: ["rev-parse", "HEAD"],
+    });
+    await writeFile(join(repoRoot, "style.txt"), "edge\n", "utf8");
+    const toleratedCommit = await commit({
+      repoRoot,
+      subject: "style: preserve an antialiased edge [visual:empty]",
+    });
+
+    const results = await verifyHistory({
+      repoRoot,
+      base: antialiasBase,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "antialias-edge" }),
+    });
+    assert.equal(results[0].changedPixels, 0);
+    const ledger = JSON.parse(
+      await readFile(
+        join(
+          artifactPath({ repoRoot, name: "antialias-edge" }),
+          toleratedCommit.slice(0, 12),
+          "evidence.json",
+        ),
+        "utf8",
+      ),
+    );
+    assert.equal(ledger.captures[0].toleratedPixels, 2);
+
+    await writeFile(join(repoRoot, "style.txt"), "uniform\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: shift the whole edge [visual:empty]",
+    });
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base: antialiasBase,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "uniform-two-channel-shift",
+        }),
+      }),
+      /expected zero changed pixels/u,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("excludes bookkeeping merges and their side-only ancestry from the contract", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "red\nbranch-line comment\n",
+      "utf8",
+    );
+    const branchStyleCommit = await commit({
+      repoRoot,
+      subject: "style: keep red on the branch line [visual:empty]",
+    });
+
+    await git({ repoRoot, arguments_: ["checkout", "-b", "recovery", base] });
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "red\nuncontracted recovery repair\n",
+      "utf8",
+    );
+    const recoveryCommit = await commit({
+      repoRoot,
+      subject: "no-mistakes(review): repair the pipeline",
+    });
+    await git({ repoRoot, arguments_: ["checkout", "main"] });
+    await git({
+      repoRoot,
+      arguments_: [
+        "merge",
+        "-s",
+        "ours",
+        "recovery",
+        "-m",
+        `Merge commit '${recoveryCommit}' into main`,
+      ],
+    });
+    const bookkeepingMerge = await git({
+      repoRoot,
+      arguments_: ["rev-parse", "HEAD"],
+    });
+
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "red\nbranch-line comment after recovery\n",
+      "utf8",
+    );
+    const tipStyleCommit = await commit({
+      repoRoot,
+      subject: "style: keep red after the recovery merge [visual:empty]",
+    });
+
+    const results = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "bookkeeping-merge" }),
+    });
+    const verifiedCommits = results.map((result) => result.commit);
+    assert.ok(
+      verifiedCommits.includes(branchStyleCommit),
+      "the branch-line styling commit before the merge must stay contracted",
+    );
+    assert.ok(
+      verifiedCommits.includes(tipStyleCommit),
+      "the branch-line styling commit after the merge must stay contracted",
+    );
+    assert.ok(
+      !verifiedCommits.includes(recoveryCommit),
+      "the recovery commit reachable only through the bookkeeping merge must be excluded",
+    );
+    assert.ok(
+      !verifiedCommits.includes(bookkeepingMerge),
+      "the bookkeeping merge itself must be excluded",
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("keeps real net-zero branch commits in the visual contract", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    await git({ repoRoot, arguments_: ["checkout", "-b", "real-branch"] });
+    await writeFile(join(repoRoot, "style.txt"), "blue\n", "utf8");
+    const changedCommit = await commit({
+      repoRoot,
+      subject: "style: change then restore color [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "style.txt"), "red\n", "utf8");
+    const restoredCommit = await commit({
+      repoRoot,
+      subject: "style: restore original color [visual:empty]",
+    });
+    await git({ repoRoot, arguments_: ["checkout", "main"] });
+    await git({
+      repoRoot,
+      arguments_: [
+        "merge",
+        "--no-ff",
+        "real-branch",
+        "-m",
+        "Merge real net-zero branch into main",
+      ],
+    });
+
+    const results = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "real-net-zero-branch" }),
+    });
+    const verifiedCommits = results.map((result) => result.commit);
+    assert.ok(verifiedCommits.includes(changedCommit));
+    assert.ok(verifiedCommits.includes(restoredCommit));
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }
@@ -619,6 +973,396 @@ await writeFile(join(output, "state.png"), Buffer.from(colors[style], "base64"))
   }
 });
 
+test("reports every visual-contract failure from one run", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    const colors = {
+      red: onePixelPng({ red: 255, green: 0, blue: 0 }),
+      blue: onePixelPng({ red: 0, green: 0, blue: 255 }),
+      green: onePixelPng({ red: 0, green: 255, blue: 0 }),
+    };
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const style = (await readFile(join(process.env.STYLE_SNAPSHOT_CHECKOUT, "style.txt"), "utf8")).split(/\\s/)[0];
+const colors = ${JSON.stringify(
+        Object.fromEntries(
+          Object.entries(colors).map(([name, value]) => [
+            name,
+            value.toString("base64"),
+          ]),
+        ),
+      )};
+await mkdir(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, { recursive: true });
+await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer.from(colors[style], "base64"));
+`,
+      "utf8",
+    );
+    await writeFile(join(repoRoot, "style.txt"), "blue\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: blue without approval [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "style.txt"), "green\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: green without approval [visual:empty]",
+    });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({ repoRoot, name: "aggregate-failures" }),
+      }),
+      (error) =>
+        /verification failed for 2 commits/u.test(error.message) &&
+        error.message.indexOf("style: blue without approval") <
+          error.message.indexOf("style: green without approval"),
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("aggregates discovery and pixel failures by commit", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  try {
+    const colors = {
+      red: onePixelPng({ red: 255, green: 0, blue: 0 }),
+      blue: onePixelPng({ red: 0, green: 0, blue: 255 }),
+      green: onePixelPng({ red: 0, green: 255, blue: 0 }),
+    };
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const style = (await readFile(join(process.env.STYLE_SNAPSHOT_CHECKOUT, "style.txt"), "utf8")).split(/\\s/)[0];
+const colors = ${JSON.stringify(
+        Object.fromEntries(
+          Object.entries(colors).map(([name, value]) => [
+            name,
+            value.toString("base64"),
+          ]),
+        ),
+      )};
+await mkdir(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, { recursive: true });
+await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer.from(colors[style], "base64"));
+`,
+      "utf8",
+    );
+    await writeFile(join(repoRoot, "style.txt"), "blue\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: omit the visual contract",
+    });
+    await writeFile(join(repoRoot, "style.txt"), "green\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: violate the empty contract [visual:empty]",
+    });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "aggregate-discovery-and-pixels",
+        }),
+      }),
+      (error) =>
+        /verification failed for 2 commits/u.test(error.message) &&
+        /omit the visual contract.*styling commits must end/u.test(
+          error.message,
+        ) &&
+        /violate the empty contract.*expected zero changed pixels/u.test(
+          error.message,
+        ),
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("reuses receipts for an unchanged tree prefix and invalidates changed trees", async () => {
+  const { repoRoot, configPath, config, base } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  const receiptDirectory = join(repoRoot, "receipts");
+  const previousReceiptDirectory = process.env.STYLE_HISTORY_RECEIPT_DIR;
+  const previousAuthority = process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS;
+  process.env.STYLE_HISTORY_RECEIPT_DIR = receiptDirectory;
+  process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS = "local";
+  try {
+    const colors = {
+      red: onePixelPng({ red: 255, green: 0, blue: 0 }),
+      blue: onePixelPng({ red: 0, green: 0, blue: 255 }),
+    };
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const style = (await readFile(join(process.env.STYLE_SNAPSHOT_CHECKOUT, "style.txt"), "utf8")).split(/\\s/)[0];
+const colors = ${JSON.stringify(
+        Object.fromEntries(
+          Object.entries(colors).map(([name, value]) => [
+            name,
+            value.toString("base64"),
+          ]),
+        ),
+      )};
+await mkdir(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, { recursive: true });
+await mkdir(process.env.STYLE_HISTORY_RECEIPT_DIR, { recursive: true });
+await appendFile(join(process.env.STYLE_HISTORY_RECEIPT_DIR, "capture-count"), "1\\n");
+await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer.from(colors[style], "base64"));
+`,
+      "utf8",
+    );
+    await writeFile(join(repoRoot, "style.txt"), "red\ncomment one\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: preserve red one [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "style.txt"), "red\ncomment two\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: preserve red two [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "style.txt"), "blue\n", "utf8");
+    const changedCommit = await commit({
+      repoRoot,
+      subject: "style: blue without approval [visual:empty]",
+    });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({ repoRoot, name: "receipt-first" }),
+      }),
+      /expected zero changed pixels/u,
+    );
+    const firstCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    const receipts = JSON.parse(
+      await readFile(join(receiptDirectory, "receipts.json"), "utf8"),
+    );
+    assert.equal(Object.keys(receipts.receipts).length, 2);
+    const receiptEnvironment = Object.values(receipts.receipts)[0].environment;
+    const { stdout: bunVersion } = await execFileAsync("bun", ["--version"]);
+    assert.deepEqual(receiptEnvironment.runtime, {
+      node: process.version,
+      bun: bunVersion.trim(),
+    });
+
+    await writeFile(join(repoRoot, "style.txt"), "red\n", "utf8");
+    await git({
+      repoRoot,
+      arguments_: ["add", "style.txt"],
+    });
+    await git({
+      repoRoot,
+      arguments_: [
+        "commit",
+        "--amend",
+        "-m",
+        "style: restore red after rerun [visual:empty]",
+      ],
+    });
+    const rerun = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "receipt-second" }),
+    });
+    const secondCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(rerun.length, 3);
+    assert.equal(rerun[0].cached, true);
+    assert.equal(rerun[1].cached, true);
+    assert.equal(secondCount - firstCount, 2);
+    assert.notEqual(changedCommit, rerun[2].commit);
+
+    const unchangedRerun = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "receipt-unchanged-tip",
+      }),
+    });
+    const unchangedCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.ok(unchangedRerun.every((result) => result.cached === true));
+    assert.equal(unchangedCount, secondCount);
+
+    await writeFile(join(repoRoot, "non-style.txt"), "advance HEAD\n", "utf8");
+    await git({ repoRoot, arguments_: ["add", "non-style.txt"] });
+    await git({
+      repoRoot,
+      arguments_: ["commit", "-m", "test: advance non-styling HEAD"],
+    });
+    const advancedRerun = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "receipt-non-styling-head",
+      }),
+    });
+    const advancedCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.ok(advancedRerun.every((result) => result.cached === true));
+    assert.equal(advancedCount, unchangedCount);
+
+    const fullHead = await git({ repoRoot, arguments_: ["rev-parse", "HEAD"] });
+    await git({
+      repoRoot,
+      arguments_: ["reset", "--hard", rerun[1].commit],
+    });
+    const rewound = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "receipt-tip-rewind" }),
+    });
+    const tipRewindCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(rewound.length, 2);
+    assert.equal(rewound[0].cached, true);
+    assert.notEqual(rewound[1].cached, true);
+    assert.equal(
+      tipRewindCount - unchangedCount,
+      2,
+      "a mid-branch receipt must not stand in for tip-scope verification",
+    );
+    await git({ repoRoot, arguments_: ["reset", "--hard", fullHead] });
+
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        { ...config, stylingFilePatterns: ["^style\\.txt$", "^other\\.txt$"] },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({ repoRoot, name: "receipt-policy-change" }),
+    });
+    const policyChangeCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(policyChangeCount - tipRewindCount, 4);
+
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `${await readFile(join(repoRoot, "capture.mjs"), "utf8")}\n`,
+      "utf8",
+    );
+    await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "receipt-executable-policy-change",
+      }),
+    });
+    const executablePolicyChangeCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(executablePolicyChangeCount - policyChangeCount, 4);
+
+    await writeFile(
+      join(repoRoot, "package.json"),
+      '{"version":"2"}\n',
+      "utf8",
+    );
+    await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "receipt-package-policy-change",
+      }),
+    });
+    const packagePolicyChangeCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(packagePolicyChangeCount - executablePolicyChangeCount, 4);
+
+    await writeFile(
+      join(repoRoot, "bun.lock"),
+      "lockfileVersion = 1\n",
+      "utf8",
+    );
+    await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "receipt-lockfile-policy-change",
+      }),
+    });
+    const lockfilePolicyChangeCount = (
+      await readFile(join(receiptDirectory, "capture-count"), "utf8")
+    )
+      .trim()
+      .split("\n").length;
+    assert.equal(lockfilePolicyChangeCount - packagePolicyChangeCount, 4);
+  } finally {
+    if (previousReceiptDirectory === undefined) {
+      delete process.env.STYLE_HISTORY_RECEIPT_DIR;
+    } else {
+      process.env.STYLE_HISTORY_RECEIPT_DIR = previousReceiptDirectory;
+    }
+    if (previousAuthority === undefined) {
+      delete process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS;
+    } else {
+      process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS = previousAuthority;
+    }
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("should retain relevance from every config revision", async () => {
   const { repoRoot, configPath, config, base } = await createMinimalRepository({
     stylingFilePatterns: ["^custom-pixel\\.txt$"],
@@ -653,6 +1397,145 @@ test("should retain relevance from every config revision", async () => {
       /styling commits must end with \[visual:empty\] or \[visual:approved\]/,
     );
   } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should reject a cross-component leak at its originating commit", async () => {
+  const { repoRoot, configPath } = await createMinimalRepository({
+    stylingFilePatterns: ["^style\\.txt$"],
+  });
+  const previousAuthority = process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS;
+  process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS = "local";
+  try {
+    const colors = {
+      red: onePixelPng({ red: 255, green: 0, blue: 0 }).toString("base64"),
+      blue: onePixelPng({ red: 0, green: 0, blue: 255 }).toString("base64"),
+    };
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
+const checkout = process.env.STYLE_SNAPSHOT_CHECKOUT;
+const selected = JSON.parse(process.env.STYLE_SNAPSHOT_CAPTURE_KEYS ?? "[]");
+const style = await readFile(join(checkout, "style.txt"), "utf8");
+const captures = [];
+await mkdir(output, { recursive: true });
+for (const key of selected) {
+  const path = key.replace("/", "__") + "__desktop__light.png";
+  const bytes = key === "sample/full-document" && style.includes("leak")
+    ? ${JSON.stringify(colors.blue)}
+    : ${JSON.stringify(colors.red)};
+  await writeFile(join(output, path), Buffer.from(bytes, "base64"));
+  captures.push({ key, viewport: "desktop", theme: "light", path });
+}
+await writeFile(join(output, "capture-manifest.json"), JSON.stringify({
+  schemaVersion: 2,
+  selectedCaptureKeys: selected,
+  captures,
+}));
+`,
+      "utf8",
+    );
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 2,
+          fixturePaths: ["fixture.txt"],
+          stylingFilePatterns: ["^style\\.txt$"],
+          manifestDirectory: ".style-snapshots/manifests",
+          capturePolicy: { globalFilePatterns: ["^global/"] },
+          captureEnvironment: { authorityClass: "local" },
+          captureCommand: ["node", "{harnessRoot}/capture.mjs"],
+          documents: [
+            {
+              name: "sample",
+              source: "fixture.txt",
+              captures: [
+                {
+                  name: "full-document",
+                  scope: "full-document",
+                  selector: "article",
+                  themes: ["light"],
+                  viewports: [{ name: "desktop", width: 1440, height: 900 }],
+                  actions: [],
+                },
+                {
+                  name: "component",
+                  scope: "component",
+                  ownerPatterns: ["^style\\.txt$"],
+                  selector: "[data-component]",
+                  themes: ["light"],
+                  viewports: [{ name: "desktop", width: 1440, height: 900 }],
+                  actions: [],
+                },
+              ],
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await git({ repoRoot, arguments_: ["add", "."] });
+    await git({
+      repoRoot,
+      arguments_: [
+        "commit",
+        "--amend",
+        "-m",
+        "test: establish scoped safety-net fixture",
+      ],
+    });
+    const base = await git({
+      repoRoot,
+      arguments_: ["rev-parse", "HEAD"],
+    });
+    await writeFile(join(repoRoot, "style.txt"), "leak\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "style: leak outside component ownership [visual:empty]",
+    });
+    await writeFile(
+      join(repoRoot, "style.txt"),
+      "leak\nlater component edit\n",
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "style: preserve the leak in a later commit [visual:empty]",
+    });
+    await writeFile(join(repoRoot, "non-style.txt"), "advance tip\n", "utf8");
+    await commit({
+      repoRoot,
+      subject: "test: advance tip after styling commit",
+    });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "latest-styling-safety-net",
+        }),
+      }),
+      (error) =>
+        /style: leak outside component ownership/u.test(error.message) &&
+        /sample__full-document__desktop__light\.png \(1 changed pixels\)/u.test(
+          error.message,
+        ),
+    );
+  } finally {
+    if (previousAuthority === undefined) {
+      delete process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS;
+    } else {
+      process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS = previousAuthority;
+    }
     await rm(repoRoot, { recursive: true, force: true });
   }
 });
@@ -872,7 +1755,7 @@ test("should reject a styling conflict resolved to one parent's version", async 
   }
 });
 
-test("should validate final HEAD capture completeness unconditionally", async () => {
+test("should validate completeness at the latest styling capture", async () => {
   const { repoRoot, configPath, config, base } =
     await createMinimalRepository();
   try {
@@ -920,6 +1803,73 @@ test("should validate final HEAD capture completeness unconditionally", async ()
         }),
       }),
       /Final style fixture produced 1 of 2 configured captures/,
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("should require every configured viewport and theme for fixture policy", async () => {
+  const { repoRoot, configPath, base } = await createMinimalRepository({
+    documents: [
+      {
+        name: "sample",
+        source: "fixture.txt",
+        captures: [
+          {
+            name: "document",
+            selector: "article",
+            themes: ["light", "dark"],
+            viewports: [{ name: "desktop", width: 1440, height: 900 }],
+            actions: [],
+          },
+        ],
+      },
+    ],
+  });
+  try {
+    const capture = onePixelPng({ red: 255, green: 0, blue: 0 });
+    await writeFile(
+      join(repoRoot, "capture.mjs"),
+      `import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
+await mkdir(output, { recursive: true });
+await writeFile(
+  join(output, "sample__document__desktop__light.png"),
+  Buffer.from(${JSON.stringify(capture.toString("base64"))}, "base64"),
+);
+await writeFile(
+  join(output, "capture-manifest.json"),
+  JSON.stringify({
+    schemaVersion: 1,
+    selectedCaptureKeys: JSON.parse(process.env.STYLE_SNAPSHOT_CAPTURE_KEYS ?? "[]"),
+    captures: [
+      {
+        key: "sample/document",
+        viewport: "desktop",
+        theme: "light",
+        path: "sample__document__desktop__light.png",
+      },
+    ],
+  }),
+);
+`,
+      "utf8",
+    );
+    await commit({ repoRoot, subject: "test: capture only the light theme" });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "head-theme-coverage",
+        }),
+      }),
+      /did not produce a visible target for sample\/document at desktop\/dark/u,
     );
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
@@ -1302,6 +2252,190 @@ test("should allow initial capture configuration after the merge base", async ()
   }
 });
 
+test("should tile a masked full-document capture below the viewport", async () => {
+  const outputDirectory = await mkdtemp(
+    join(tmpdir(), "style-history-capture-regression-"),
+  );
+  try {
+    await execFileAsync(
+      process.execPath,
+      [join(repositoryRoot, "scripts", "style-snapshots", "capture.mjs")],
+      {
+        cwd: repositoryRoot,
+        env: {
+          ...process.env,
+          STYLE_SNAPSHOT_CHECKOUT: repositoryRoot,
+          STYLE_SNAPSHOT_OUTPUT_DIR: outputDirectory,
+          STYLE_SNAPSHOT_CONFIG: join(
+            repositoryRoot,
+            ".style-snapshots",
+            "config.json",
+          ),
+          STYLE_SNAPSHOT_HARNESS_ROOT: outputDirectory,
+          STYLE_SNAPSHOT_CAPTURE_KEYS: JSON.stringify([
+            "all-components/full-document",
+          ]),
+        },
+        maxBuffer: 20 * 1024 * 1024,
+      },
+    );
+    const captureManifest = JSON.parse(
+      await readFile(join(outputDirectory, "capture-manifest.json"), "utf8"),
+    );
+    assert.equal(captureManifest.captures.length, 4);
+    const widths = { desktop: [], phone: [] };
+    for (const entry of captureManifest.captures) {
+      const image = PNG.sync.read(
+        await readFile(join(outputDirectory, entry.path)),
+      );
+      assert.ok(
+        image.height > 900,
+        `${entry.path} must include content below one viewport`,
+      );
+      widths[entry.viewport].push(image.width);
+    }
+    for (const desktopWidth of widths.desktop) {
+      for (const phoneWidth of widths.phone) {
+        assert.ok(
+          desktopWidth > phoneWidth,
+          `desktop capture width ${desktopWidth} must exceed phone capture width ${phoneWidth}; a narrower desktop means isolation restore squeezed the layout`,
+        );
+      }
+    }
+  } finally {
+    await rm(outputDirectory, { recursive: true, force: true });
+  }
+});
+
+test("should reject a real below-fold owned-surface regression", async () => {
+  const temporaryRoot = await mkdtemp(
+    join(tmpdir(), "style-history-below-fold-regression-"),
+  );
+  const repoRoot = join(temporaryRoot, "repository");
+  const previousAuthority = process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS;
+  process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS = "local";
+  try {
+    await copyBuildableRepository(repoRoot);
+    await execFileAsync("bun", ["install", "--frozen-lockfile"], {
+      cwd: repoRoot,
+    });
+    await git({ repoRoot, arguments_: ["init", "-b", "main"] });
+    await git({
+      repoRoot,
+      arguments_: ["config", "user.name", "Style History Test"],
+    });
+    await git({
+      repoRoot,
+      arguments_: ["config", "user.email", "style-history@example.invalid"],
+    });
+    const configPath = join(repoRoot, ".style-snapshots", "config.json");
+    const activeConfig = JSON.parse(await readFile(configPath, "utf8"));
+    const allComponents = activeConfig.documents.find(
+      (document) => document.name === "all-components",
+    );
+    const selectedCaptures = allComponents.captures
+      .filter((capture) =>
+        ["full-document", "wireframe"].includes(capture.name),
+      )
+      .map((capture) => ({
+        ...capture,
+        themes: ["light"],
+        viewports: [{ name: "desktop", width: 1440, height: 900 }],
+      }));
+    const fixturePath = "examples/below-fold-wireframe.mdx";
+    await writeFile(
+      join(repoRoot, fixturePath),
+      `${Array.from(
+        { length: 60 },
+        (_, index) =>
+          `Paragraph ${index + 1} keeps the owned surface below the viewport.`,
+      ).join("\n\n")}
+
+<Wireframe id="below-fold" title="Below-fold workspace">
+
+<Screen id="workspace" name="Workspace" device="desktop" url="/workspace">
+
+<Panel title="Owned surface">
+<Text text="This real Wireframe surface changes color." />
+</Panel>
+
+</Screen>
+
+</Wireframe>
+`,
+      "utf8",
+    );
+    const config = {
+      schemaVersion: 2,
+      fixturePaths: [fixturePath],
+      stylingFilePatterns: ["^src/components/wireframe/.*\\.css$"],
+      manifestDirectory: ".style-snapshots/manifests",
+      capturePolicy: {
+        globalFilePatterns: ["^\\.style-snapshots/"],
+      },
+      captureEnvironment: { authorityClass: "local" },
+      captureCommand: [
+        "node",
+        "{harnessRoot}/scripts/style-snapshots/capture.mjs",
+      ],
+      documents: [
+        {
+          name: "below-fold",
+          source: fixturePath,
+          captures: selectedCaptures,
+        },
+      ],
+    };
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    const base = await commit({
+      repoRoot,
+      subject: "test: establish below-fold fixture",
+    });
+    const wireframeStylesPath = join(
+      repoRoot,
+      "src",
+      "components",
+      "wireframe",
+      "styles.css",
+    );
+    await writeFile(
+      wireframeStylesPath,
+      `${await readFile(wireframeStylesPath, "utf8")}
+@layer components {
+  .wireframe {
+    --wf-fill: #ff00ff;
+  }
+}
+`,
+      "utf8",
+    );
+    await commit({
+      repoRoot,
+      subject: "style: regress below-fold wireframe [visual:empty]",
+    });
+
+    await assert.rejects(
+      verifyHistory({
+        repoRoot,
+        base,
+        configPath,
+        artifactRoot: artifactPath({
+          repoRoot,
+          name: "below-fold-owned-surface",
+        }),
+      }),
+      /below-fold__wireframe.*changed pixels/u,
+    );
+  } finally {
+    if (previousAuthority === undefined) {
+      delete process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS;
+    } else {
+      process.env.STYLE_HISTORY_PIXEL_AUTHORITY_CLASS = previousAuthority;
+    }
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
 test("should capture each unique SHA at configured bounded concurrency", async () => {
   const { repoRoot, configPath, base } = await createMinimalRepository({
     stylingFilePatterns: ["^style\\.txt$"],
@@ -1309,15 +2443,32 @@ test("should capture each unique SHA at configured bounded concurrency", async (
   try {
     const capture = onePixelPng({ red: 255, green: 0, blue: 0 });
     const encodedCapture = capture.toString("base64");
+    const requestedConcurrency = Number.parseInt(
+      process.env.STYLE_HISTORY_CAPTURE_CONCURRENCY ?? "4",
+      10,
+    );
+    const expectedConcurrency = Number.isInteger(requestedConcurrency)
+      ? Math.min(3, Math.max(1, requestedConcurrency))
+      : 3;
     await writeFile(
       join(repoRoot, "capture.mjs"),
-      `import { appendFile, mkdir, writeFile } from "node:fs/promises";
+      `import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 const checkout = process.env.STYLE_SNAPSHOT_CHECKOUT;
 const output = process.env.STYLE_SNAPSHOT_OUTPUT_DIR;
 const logPath = join(process.env.STYLE_SNAPSHOT_HARNESS_ROOT, "capture-events.log");
 await appendFile(logPath, "start:" + basename(checkout) + "\\n");
-await new Promise((resolve) => setTimeout(resolve, 150));
+const deadline = Date.now() + 5000;
+while (Date.now() < deadline) {
+  const events = (await readFile(logPath, "utf8")).trim().split("\\n");
+  const active =
+    events.filter((event) => event.startsWith("start:")).length -
+    events.filter((event) => event.startsWith("end:")).length;
+  if (active >= ${expectedConcurrency}) {
+    break;
+  }
+  await new Promise((resolve) => setTimeout(resolve, 25));
+}
 await mkdir(output, { recursive: true });
 await writeFile(join(output, "state.png"), Buffer.from(${JSON.stringify(encodedCapture)}, "base64"));
 await appendFile(logPath, "end:" + basename(checkout) + "\\n");
@@ -1363,13 +2514,6 @@ await appendFile(logPath, "end:" + basename(checkout) + "\\n");
       activeCaptures += event.startsWith("start:") ? 1 : -1;
       maximumActiveCaptures = Math.max(maximumActiveCaptures, activeCaptures);
     }
-    const requestedConcurrency = Number.parseInt(
-      process.env.STYLE_HISTORY_CAPTURE_CONCURRENCY ?? "2",
-      10,
-    );
-    const expectedConcurrency = Number.isInteger(requestedConcurrency)
-      ? Math.min(4, Math.max(1, requestedConcurrency))
-      : 2;
     assert.equal(maximumActiveCaptures, expectedConcurrency);
   } finally {
     await rm(repoRoot, { recursive: true, force: true });

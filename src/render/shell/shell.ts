@@ -198,9 +198,9 @@ const renderPreferenceOption = ({
   readonly description: string;
   readonly icon: typeof SUN_ICON;
 }): string =>
-  `<label class="group relative flex min-h-28 min-w-0 cursor-pointer flex-col justify-between gap-3 rounded-lg border border-edge bg-paper p-3 text-ink transition-colors hover:bg-surface has-[:checked]:border-accent has-[:checked]:bg-surface has-[:checked]:text-accent has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-accent">
-<input class="absolute top-3 right-3 size-4 accent-accent" id="big-plan-appearance-${mode}" type="radio" name="big-plan-appearance" value="${mode}" data-preference-mode="${mode}" aria-label="${title}">
-<span class="flex size-8 items-center justify-center rounded-md bg-surface text-muted group-has-[input:checked]:text-accent">${lucideIconToHtml({ icon, className: "size-4" })}</span>
+  `<label class="group relative flex min-h-[4.25rem] min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-edge bg-paper p-3 text-ink transition-colors hover:bg-surface has-[:checked]:border-accent has-[:checked]:bg-surface has-[:checked]:text-accent has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-accent wide:min-h-28 wide:flex-col wide:items-stretch wide:justify-between wide:gap-3">
+<input class="absolute top-1/2 right-3 size-4 -translate-y-1/2 accent-accent wide:top-3 wide:translate-y-0" id="big-plan-appearance-${mode}" type="radio" name="big-plan-appearance" value="${mode}" data-preference-mode="${mode}" aria-label="${title}">
+<span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-surface text-muted group-has-[input:checked]:text-accent">${lucideIconToHtml({ icon, className: "size-4" })}</span>
 <span class="min-w-0 pr-6">
 <span class="block text-sm font-semibold leading-tight">${title}</span>
 <span class="mt-1 block text-xs leading-normal text-muted">${description}</span>
@@ -211,8 +211,8 @@ const renderPreferenceOption = ({
 // join only when actionable, so an unavailable roadmap item never competes
 // with the reviewer's one current decision.
 const renderPreferencesDialog = (): string =>
-  `<div class="fixed inset-0 z-50 grid place-items-center bg-[var(--preferences-backdrop-c)] p-4" data-preferences-backdrop hidden>
-<section class="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-edge bg-paper p-6 text-ink shadow-floating wide:p-8" data-preferences-dialog role="dialog" aria-modal="true" aria-labelledby="big-plan-preferences-title">
+  `<div class="fixed inset-0 z-50 flex items-center justify-center bg-backdrop/70 p-3 wide:grid wide:place-items-center wide:p-4" data-preferences-backdrop hidden>
+<section class="max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-edge bg-paper p-4 text-ink shadow-floating wide:max-h-[calc(100dvh-2rem)] wide:p-8" data-preferences-dialog role="dialog" aria-modal="true" aria-labelledby="big-plan-preferences-title">
 <div class="flex items-start justify-between gap-4">
 <div>
 <h2 class="m-0 text-lg font-semibold leading-tight" id="big-plan-preferences-title">Settings</h2>
@@ -220,16 +220,16 @@ const renderPreferencesDialog = (): string =>
 </div>
 <button class="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-close aria-label="Close settings">${lucideIconToHtml({ icon: X_ICON, className: "size-4" })}</button>
 </div>
-<div class="mt-6 border-t border-edge pt-6">
+<div class="mt-4 border-t border-edge pt-4 wide:mt-6 wide:pt-6">
 <h3 class="m-0 text-sm font-semibold" id="big-plan-appearance-label">Appearance</h3>
 <p class="mt-1 text-sm leading-normal text-muted">Choose how Big Plan looks.</p>
-<fieldset class="mt-4 grid min-w-0 grid-cols-1 gap-3 border-0 p-0 min-[32rem]:grid-cols-3" aria-labelledby="big-plan-appearance-label" role="radiogroup">
+<fieldset class="mt-3 grid min-w-0 grid-cols-1 gap-2 border-0 p-0 wide:mt-4 wide:grid-cols-3 wide:gap-3" aria-labelledby="big-plan-appearance-label" role="radiogroup">
 <legend class="sr-only">Appearance</legend>
 ${renderPreferenceOption({ mode: "light", title: "Light", description: "Always light", icon: SUN_ICON })}
 ${renderPreferenceOption({ mode: "dark", title: "Dark", description: "Always dark", icon: MOON_ICON })}
 ${renderPreferenceOption({ mode: "system", title: "System", description: "Match device", icon: MONITOR_ICON })}
 </fieldset>
-<p class="mt-4 flex items-center gap-2 text-xs leading-normal text-muted">${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes apply immediately and are saved automatically.</span></p>
+<p class="mt-3 flex items-center gap-2 text-xs leading-normal text-muted wide:mt-4" data-preferences-status>${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes apply immediately and are saved automatically.</span></p>
 </div>
 </section>
 </div>`;
@@ -352,8 +352,8 @@ export const renderShell = ({
 <p class="truncate text-center text-sm leading-none text-subtle"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>
 ${renderHeaderActions()}
 </div>
-</header>
-${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
+  </header>
+  ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
 ${renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}

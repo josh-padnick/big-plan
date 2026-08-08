@@ -21,6 +21,7 @@ Light and dark follow the reader's OS in inert exports.
 @import "./markdown/syntax-highlighting.css";
 @import "./shell/review.css";
 @import "../components/_shared/comparison-matrix/comparison-matrix.css";
+@import "../components/_shared/column-reorder/styles.css";
 @import "../components/_shared/figure-controls/figure-controls.css";
 @import "../components/_shared/tooltip/tooltip.css";
 @import "../components/_shared/tree-hierarchy/tree-hierarchy.css";
@@ -183,6 +184,8 @@ it that way: a band carries primary or secondary text, never tertiary.
   --well-c: var(--grey-100);
   --header-bg: var(--grey-125);
   --comment-header-c: var(--header-bg);
+  /* Modal backdrops dim both palettes with the same neutral black overlay. */
+  --backdrop-c: rgb(0 0 0);
 
   /* Text, in three weights of attention. */
   --ink-c: var(--grey-925);
@@ -464,6 +467,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
 /* The roles, and only the roles, become utilities. */
 @theme inline {
   --color-paper: var(--bg);
+  --color-backdrop: var(--backdrop-c);
   --color-raised: var(--raised-c);
   --color-surface: var(--surface-c);
   --color-tray: var(--tray-c);
@@ -550,6 +554,30 @@ are declared, so a role or a scale step is the only thing a utility can name.
   [data-preferences-focus-quiet]:focus-visible {
     outline: none;
     box-shadow: none;
+  }
+
+  /* Override invariant: the settings sheet must clear the device safe area
+     after the resting twelve-pixel mobile viewport margin. */
+  @media (width < 56rem) {
+    /* Override invariant: safe-area padding must beat the resting pb-3 utility. */
+    [data-preferences-backdrop] {
+      padding-top: max(0.75rem, env(safe-area-inset-top));
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+  }
+
+  /* Override invariant: dark mode needs stronger modal separation than the
+     resting light-mode backdrop utility. */
+  @media (prefers-color-scheme: dark) {
+    /* Override invariant: System dark mode must use the approved 80% dim. */
+    :root:not([data-theme]) [data-preferences-backdrop] {
+      background-color: color-mix(in srgb, var(--backdrop-c) 80%, transparent);
+    }
+  }
+
+  /* Override invariant: explicit Dark mode must use the approved 80% dim. */
+  :root[data-theme="dark"] [data-preferences-backdrop] {
+    background-color: color-mix(in srgb, var(--backdrop-c) 80%, transparent);
   }
 
   /* Override invariant: floated popover geometry must beat the body's resting

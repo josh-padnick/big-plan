@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "fix(viewer): center mobile settings and deepen dark dim [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/render/global.css",
+      "propertyDeltas": [
+        {
+          "property": "dark-mode Settings modal dim",
+          "from": "seventy-percent neutral black",
+          "to": "eighty-percent neutral black in System dark and explicit Dark modes"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded dark-mode backdrop styles",
+          "from": "one dim strength in both palettes",
+          "to": "the generated stronger dark-mode dim"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/shell.ts",
+      "propertyDeltas": [
+        {
+          "property": "mobile Settings alignment",
+          "from": "top-aligned",
+          "to": "vertically centered"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__settings-open__desktop__dark.png",
+      "changedPixels": 1032027,
+      "before": {
+        "width": 1440,
+        "height": 900,
+        "sha256": "6ae2189a7e9dde5ae38ccbbf65e4f3288ca2c2e83dc4ed947458972ab0313414"
+      },
+      "after": {
+        "width": 1440,
+        "height": 900,
+        "sha256": "28d458f440d71ddd788a4b010993d44047d9d5dc1ecbf28049554118d193dbae"
+      },
+      "propertyDeltas": [
+        {
+          "property": "open Settings alignment and dark-mode dim",
+          "from": "top-aligned with a seventy-percent neutral-black dim",
+          "to": "centered with an eighty-percent neutral-black dark-mode dim"
+        }
+      ]
+    },
+    {
+      "capture": "components__settings-open__phone__dark.png",
+      "changedPixels": 244844,
+      "before": {
+        "width": 390,
+        "height": 844,
+        "sha256": "20cd8b8f236c0a51e468b58538beb319105215552a70034c9fb4ffc4b7b7d70e"
+      },
+      "after": {
+        "width": 390,
+        "height": 844,
+        "sha256": "2a6f54112f2e85fb45282930ee947e38280b57cfd5b30fe1d2fbd63a83f9837a"
+      },
+      "propertyDeltas": [
+        {
+          "property": "open Settings alignment and dark-mode dim",
+          "from": "top-aligned with a seventy-percent neutral-black dim",
+          "to": "centered with an eighty-percent neutral-black dark-mode dim"
+        }
+      ]
+    },
+    {
+      "capture": "components__settings-open__phone__light.png",
+      "changedPixels": 184524,
+      "before": {
+        "width": 390,
+        "height": 844,
+        "sha256": "b2f961e379cfc64e030b2f36f05a1e3da3e6d87324c35632200240a6431bd8be"
+      },
+      "after": {
+        "width": 390,
+        "height": 844,
+        "sha256": "1362633eb55bab53e75d89f55bff5441bd7c3c28bcf1d30ba846e8343cdb84c7"
+      },
+      "propertyDeltas": [
+        {
+          "property": "open Settings alignment",
+          "from": "top-aligned",
+          "to": "vertically centered"
+        }
+      ]
+    }
+  ]
+}

@@ -42,11 +42,9 @@
     opacity: 1;
   }
 
-  /* Reorderable headers advertise the drag; the drop target draws an accent
-     insertion edge. Both exist only once the script enables them. */
-  article [data-table-reorderable] .data-table-head {
-    cursor: grab;
-  }
+  /* Reorderable headers advertise the drag through the shared column-reorder
+     primitive; the drop target draws an accent insertion edge. Both exist
+     only once the script enables them. */
   article .data-table-head [data-lucide="grip-vertical"] {
     width: 0.7rem;
     height: 0.7rem;

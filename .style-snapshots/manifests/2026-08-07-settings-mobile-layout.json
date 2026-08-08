@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "commitSubject": "fix(viewer): improve settings sheet on mobile [visual:approved]",
+  "stylingFiles": [
+    {
+      "path": "src/render/global.css",
+      "propertyDeltas": [
+        {
+          "property": "mobile Settings safe-area spacing",
+          "from": "fixed viewport padding without a bottom safe-area allowance",
+          "to": "a twelve-pixel minimum margin that clears the bottom safe area"
+        }
+      ]
+    },
+    {
+      "path": "src/render/global.generated.ts",
+      "propertyDeltas": [
+        {
+          "property": "embedded mobile Settings styles",
+          "from": "the desktop-oriented Settings layout",
+          "to": "the generated responsive Settings layout"
+        }
+      ]
+    },
+    {
+      "path": "src/render/shell/shell.ts",
+      "propertyDeltas": [
+        {
+          "property": "mobile Settings sheet and appearance rows",
+          "from": "desktop cards and spacing compressed into a narrow viewport",
+          "to": "compact full-width rows in a safe-area-aware scrolling sheet"
+        }
+      ]
+    }
+  ],
+  "captureChanges": [
+    {
+      "capture": "components__settings-open__desktop__dark.png",
+      "changedPixels": 15828,
+      "before": {
+        "width": 1440,
+        "height": 900,
+        "sha256": "f5dffacf566c2167601c3fd43f642fca7a388e43035e153c03619ef34a8a447e"
+      },
+      "after": {
+        "width": 1440,
+        "height": 900,
+        "sha256": "37b7720c59f7d725daddaed8707a8e4d3425af4386d68df8ce70e14bf4fa59e7"
+      },
+      "propertyDeltas": [
+        {
+          "property": "open Settings presentation",
+          "from": "desktop-only card geometry",
+          "to": "responsive row geometry with the desktop breakpoint retained"
+        }
+      ]
+    },
+    {
+      "capture": "components__settings-open__desktop__light.png",
+      "changedPixels": 17869,
+      "before": {
+        "width": 1440,
+        "height": 900,
+        "sha256": "a2eb2f84ed55eb45e4dcc8db1123fa277bfe01e63fc8fe947e64358533046524"
+      },
+      "after": {
+        "width": 1440,
+        "height": 900,
+        "sha256": "b17bdaef1ab1134d76fb8c35645358763d90c46da8d639167ca546c121bddebf"
+      },
+      "propertyDeltas": [
+        {
+          "property": "open Settings presentation",
+          "from": "desktop-only card geometry",
+          "to": "responsive row geometry with the desktop breakpoint retained"
+        }
+      ]
+    },
+    {
+      "capture": "components__settings-open__phone__dark.png",
+      "changedPixels": 90613,
+      "before": {
+        "width": 390,
+        "height": 844,
+        "sha256": "ed80fd7829730daf0e19a9f4064a20ec87e6e9e4d01df4186f75a0da225c62e6"
+      },
+      "after": {
+        "width": 390,
+        "height": 844,
+        "sha256": "f72cd809ecf31285227ef91af3090659f814e16a99172f9e415681114d538fb3"
+      },
+      "propertyDeltas": [
+        {
+          "property": "open Settings presentation",
+          "from": "three desktop cards compressed into the phone sheet",
+          "to": "three compact full-width rows in a scrolling phone sheet"
+        }
+      ]
+    },
+    {
+      "capture": "components__settings-open__phone__light.png",
+      "changedPixels": 98559,
+      "before": {
+        "width": 390,
+        "height": 844,
+        "sha256": "f21859a84e1f59554036310d804fe9ca11c08f3f65b348496e124810540e50ee"
+      },
+      "after": {
+        "width": 390,
+        "height": 844,
+        "sha256": "215d7fd0d0d175c44c00f2ff7071f91c1c1f72906591013a943785207c54bea8"
+      },
+      "propertyDeltas": [
+        {
+          "property": "open Settings presentation",
+          "from": "three desktop cards compressed into the phone sheet",
+          "to": "three compact full-width rows in a scrolling phone sheet"
+        }
+      ]
+    }
+  ]
+}
