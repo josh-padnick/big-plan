@@ -139,9 +139,12 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
     await settings.click();
     const geometry = await dialog.evaluate((element) => {
       const rect = element.getBoundingClientRect();
-      const options = Array.from(element.querySelectorAll("label")).map(
-        (option) => option.getBoundingClientRect().height,
-      );
+      const options = Array.from(
+        element.querySelectorAll("[data-preference-mode]"),
+      ).map((option) => option.closest("label").getBoundingClientRect().height);
+      const themes = Array.from(
+        element.querySelectorAll("[data-preference-palette]"),
+      ).map((option) => option.closest("label").getBoundingClientRect());
       return {
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
@@ -149,6 +152,8 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
         right: rect.right,
         verticalCenter: (rect.top + rect.bottom) / 2,
         optionHeights: options,
+        themeCount: themes.length,
+        themeRight: Math.max(...themes.map((theme) => theme.right)),
         documentScrollWidth: document.documentElement.scrollWidth,
       };
     });
@@ -158,22 +163,37 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
     expect(geometry.right).toBe(width - 12);
     expect(geometry.verticalCenter).toBeCloseTo(geometry.viewportHeight / 2);
     expect(geometry.optionHeights).toEqual([68, 68, 68]);
+    expect(geometry.themeCount).toBe(5);
+    expect(geometry.themeRight).toBeLessThanOrEqual(geometry.right);
     expect(geometry.documentScrollWidth).toBe(geometry.viewportWidth);
     await page.keyboard.press("Escape");
   }
 
-  await test.step("desktop keeps the three appearance cards", async () => {
+  await test.step("desktop keeps three appearance cards and one theme column", async () => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await settings.click();
-    const cards = await dialog.locator("label").evaluateAll((options) =>
-      options.map((option) => {
-        const rect = option.getBoundingClientRect();
-        return { height: rect.height, left: rect.left, top: rect.top };
-      }),
-    );
+    const cards = await dialog
+      .locator("label:has([data-preference-mode])")
+      .evaluateAll((options) =>
+        options.map((option) => {
+          const rect = option.getBoundingClientRect();
+          return { height: rect.height, left: rect.left, top: rect.top };
+        }),
+      );
     expect(cards.map(({ height }) => height)).toEqual([112, 112, 112]);
     expect(new Set(cards.map(({ left }) => left)).size).toBe(3);
     expect(new Set(cards.map(({ top }) => top)).size).toBe(1);
+    const themes = await dialog
+      .locator("label:has([data-preference-palette])")
+      .evaluateAll((options) =>
+        options.map((option) => {
+          const rect = option.getBoundingClientRect();
+          return { left: rect.left, top: rect.top };
+        }),
+      );
+    expect(themes).toHaveLength(5);
+    expect(new Set(themes.map(({ left }) => left)).size).toBe(1);
+    expect(new Set(themes.map(({ top }) => top)).size).toBe(5);
     await page.keyboard.press("Escape");
   });
 
@@ -381,4 +401,161 @@ test("should apply every appearance row under light and dark OS schemes", async 
   expect(palettes.get("light-dark")).toBe(palettes.get("dark-dark"));
   expect(palettes.get("light-system")).toBe(palettes.get("light-light"));
   expect(palettes.get("dark-system")).toBe(palettes.get("dark-dark"));
+});
+
+test("should repaint the whole document from the colour-theme row", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+  await page.evaluate(
+    (key) => localStorage.removeItem(key),
+    PREFERENCES_STORAGE_KEY,
+  );
+  await page.reload();
+  const settings = page.getByRole("button", { name: "Open settings" });
+
+  // One sample of each thing a theme has to reach: the page itself, prose, a
+  // heading, a link, a code token, a callout, and a table band.
+  const surfaces = () =>
+    page.evaluate(() => {
+      const colorOf = (selector, property) => {
+        const element = document.querySelector(selector);
+        return element === null
+          ? null
+          : getComputedStyle(element)[property as "color"];
+      };
+      return {
+        page: colorOf("body", "backgroundColor"),
+        prose: colorOf("article p", "color"),
+        heading: colorOf("article h2", "color"),
+        link: colorOf("article a[href]", "color"),
+        code: colorOf("article .hljs-keyword", "color"),
+        callout: colorOf("[data-callout]", "backgroundColor"),
+        tableHead: colorOf("article table th", "backgroundColor"),
+        sidebar: colorOf("[data-section-link]", "color"),
+      };
+    });
+
+  await test.step("Default is the first-run theme and carries no attribute", async () => {
+    await expect(page.locator("html")).not.toHaveAttribute("data-palette");
+    await settings.click();
+    await expect(page.getByRole("radio", { name: "Default" })).toBeChecked();
+  });
+
+  const seen = new Map<string, string>();
+  for (const mode of ["Light", "Dark"] as const) {
+    await page.getByRole("radio", { name: mode }).check();
+    for (const theme of [
+      { title: "Default", id: null },
+      { title: "Rosé Pine", id: "rose-pine" },
+      { title: "Cole", id: "cole" },
+      { title: "Catppuccin", id: "catppuccin" },
+      { title: "Everforest", id: "everforest" },
+    ]) {
+      await page.getByRole("radio", { name: theme.title }).check();
+      if (theme.id === null) {
+        await expect(page.locator("html")).not.toHaveAttribute("data-palette");
+      } else {
+        await expect(page.locator("html")).toHaveAttribute(
+          "data-palette",
+          theme.id,
+        );
+      }
+      const painted = await surfaces();
+      for (const [surface, color] of Object.entries(painted)) {
+        expect(
+          color,
+          `${theme.title}/${mode} paints ${surface}`,
+        ).not.toBeNull();
+      }
+      seen.set(`${mode}/${theme.title}`, JSON.stringify(painted));
+    }
+  }
+
+  await test.step("every theme and mode paints a distinct document", async () => {
+    expect(new Set(seen.values()).size).toBe(seen.size);
+  });
+
+  await test.step("the choice survives a reload without a wrong-theme frame", async () => {
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => localStorage.getItem(key),
+          PREFERENCES_STORAGE_KEY,
+        ),
+      )
+      .toBe(
+        serializePreferencesRecord({ mode: "dark", palette: "everforest" }),
+      );
+    await page.reload();
+    // The head script runs before the first paint, so the attributes are
+    // already right when the document body is first parsed.
+    const atFirstBody = await page.evaluate(() => ({
+      theme: document.documentElement.getAttribute("data-theme"),
+      palette: document.documentElement.getAttribute("data-palette"),
+    }));
+    expect(atFirstBody).toEqual({ theme: "dark", palette: "everforest" });
+    await settings.click();
+    await expect(page.getByRole("radio", { name: "Everforest" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
+  });
+
+  await test.step("returning to Default clears the field and the attribute", async () => {
+    await page.getByRole("radio", { name: "Default" }).check();
+    await expect(page.locator("html")).not.toHaveAttribute("data-palette");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => localStorage.getItem(key),
+          PREFERENCES_STORAGE_KEY,
+        ),
+      )
+      .toBe(serializePreferencesRecord({ mode: "dark", palette: "default" }));
+  });
+
+  await test.step("an unknown stored theme falls back to the product palette", async () => {
+    await page.evaluate(
+      (key) => localStorage.setItem(key, '{"version":1,"palette":"solarized"}'),
+      PREFERENCES_STORAGE_KEY,
+    );
+    await page.reload();
+    await expect(page.locator("html")).not.toHaveAttribute("data-palette");
+    await settings.click();
+    await expect(page.getByRole("radio", { name: "Default" })).toBeChecked();
+  });
+});
+
+test("should preview each theme in its own colours inside the sheet", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("radio", { name: "Rosé Pine" }).check();
+
+  const strips = await page
+    .locator("[data-palette-swatch]")
+    .evaluateAll((swatches) =>
+      swatches.map((swatch) => ({
+        palette: swatch.getAttribute("data-palette"),
+        chips: Array.from(swatch.children).map(
+          (chip) => getComputedStyle(chip).backgroundColor,
+        ),
+      })),
+    );
+
+  expect(strips.map(({ palette }) => palette)).toEqual([
+    "default",
+    "rose-pine",
+    "cole",
+    "catppuccin",
+    "everforest",
+  ]);
+  for (const strip of strips) {
+    expect(strip.chips, `${strip.palette} shows four shades`).toHaveLength(4);
+  }
+  // A swatch reads its own theme's ramps, so no two strips agree even though
+  // the document behind the sheet is painted in one of them.
+  expect(new Set(strips.map(({ chips }) => chips.join("|"))).size).toBe(5);
 });

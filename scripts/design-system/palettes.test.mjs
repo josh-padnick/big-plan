@@ -82,7 +82,7 @@ test("measures contrast the way WCAG defines it", () => {
 
 test("accepts a complete palette that clears the contrast floor", async () => {
   const result = await runAgainst({
-    paletteCss: `:root[data-palette="sample"] {
+    paletteCss: `[data-palette="sample"] {
   --grey-50: #fdfdfd;
   --grey-925: #202020;
   --grey-150: #eeeeee;
@@ -96,7 +96,7 @@ test("accepts a complete palette that clears the contrast floor", async () => {
 
 test("rejects a palette that omits a ramp step the roles reach", async () => {
   const result = await runAgainst({
-    paletteCss: `:root[data-palette="sample"] {
+    paletteCss: `[data-palette="sample"] {
   --grey-50: #fdfdfd;
   --grey-925: #202020;
   --grey-150: #eeeeee;
@@ -110,7 +110,7 @@ test("rejects a palette that omits a ramp step the roles reach", async () => {
 
 test("rejects a palette pairing below WCAG AA", async () => {
   const result = await runAgainst({
-    paletteCss: `:root[data-palette="sample"] {
+    paletteCss: `[data-palette="sample"] {
   --grey-50: #fdfdfd;
   --grey-925: #cccccc;
   --grey-150: #eeeeee;

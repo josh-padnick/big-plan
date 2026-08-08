@@ -142,12 +142,22 @@ const isRootCompoundSelector = (selector) => {
   return true;
 };
 
-/** Returns true only for root-scoped primitive declarations, never styling. */
+// A colour theme is a set of token declarations that has to be selectable
+// below the root as well as on it, so a settings swatch can carry one theme's
+// shades inside a document painted in another. It declares tokens and nothing
+// else, which is what keeps it a primitive rather than a styling rule.
+const PALETTE_COMPOUND_SELECTOR = /^\[data-palette="[a-z0-9-]+"\]$/;
+
+const isPrimitiveScopeSelector = (selector) =>
+  isRootCompoundSelector(selector) ||
+  PALETTE_COMPOUND_SELECTOR.test(selector.trim());
+
+/** Returns true only for token-scope primitive declarations, never styling. */
 const isRootPrimitiveRule = (rule) => {
   const selectors = rule.selectors;
   if (
     selectors.length === 0 ||
-    selectors.some((selector) => !isRootCompoundSelector(selector))
+    selectors.some((selector) => !isPrimitiveScopeSelector(selector))
   ) {
     return false;
   }

@@ -26,7 +26,7 @@ src/render/global.css owns the two-attribute model and the ramps.
   --syntax-deletion-bg: light-dark(#ffebe9, #67060c);
 }
 
-:root[data-palette="rose-pine"] {
+[data-palette="rose-pine"] {
   --syntax-keyword-c: light-dark(#286983, #3d90b1);
   --syntax-entity-c: light-dark(#7e649b, #c4a7e7);
   --syntax-constant-c: light-dark(#44757e, #9ccfd8);
@@ -40,7 +40,7 @@ src/render/global.css owns the two-attribute model and the ramps.
   --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
 }
 
-:root[data-palette="cole"] {
+[data-palette="cole"] {
   --syntax-keyword-c: light-dark(#ac4231, #d96857);
   --syntax-entity-c: light-dark(#4661b5, #5582c2);
   --syntax-constant-c: light-dark(#865386, #bf86bf);
@@ -54,7 +54,7 @@ src/render/global.css owns the two-attribute model and the ramps.
   --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
 }
 
-:root[data-palette="catppuccin"] {
+[data-palette="catppuccin"] {
   --syntax-keyword-c: light-dark(#8839ef, #cba6f7);
   --syntax-entity-c: light-dark(#0f5cf4, #89b4fa);
   --syntax-constant-c: light-dark(#b94401, #fab387);
@@ -68,7 +68,7 @@ src/render/global.css owns the two-attribute model and the ramps.
   --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
 }
 
-:root[data-palette="everforest"] {
+[data-palette="everforest"] {
   --syntax-keyword-c: light-dark(#d90d09, #e98f91);
   --syntax-entity-c: light-dark(#657301, #a7c080);
   --syntax-constant-c: light-dark(#c12991, #d699b6);

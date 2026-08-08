@@ -9,6 +9,7 @@ Everything on this page is shipped and works today.
 
 - One reading column with warm, paper-like light and dark palettes.
 - A `Settings` dialog behind the branding bar's gear, offering `Light`, `Dark`, and `System` appearance; phones get compact full-width choices in a centered, internally scrollable sheet, while wider screens keep the three-card layout. The choice applies immediately, is saved for every review document in this browser, and is applied before the first paint so the other palette never flashes.
+- A `Color theme` row in the same dialog, offering `Default`, `Rose Pine`, `Cole`, `Catppuccin`, and `Everforest`. A theme is a palette rather than a mode: each one works in both light and dark, appearance still decides which, and every swatch previews that theme's own shades. `Default` is Big Plan's warm paper look and is what a document with no saved choice renders.
 - `System` follows your OS preference, and is the value you get on a first run or when the browser refuses storage.
 - A sticky branding bar whose logo follows the active theme.
 - In-document `Maximize` controls for fenced code, code snippets and diffs, tree diffs, data tables, database schemas, [flow diagrams](/components/flow-diagram/), and [wireframes](/components/wireframe/), with Escape restoring the reading view after any pending-feedback prompt is resolved.
@@ -48,6 +49,9 @@ Everything on this page is shipped and works today.
 ## Output
 
 - Local, self-contained review delivery; the [two-artifact delivery ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0001-two-artifact-plan-delivery.md) owns the artifact and script-behavior contract.
+- With JavaScript disabled, the render explains that its full content remains readable while interactive affordances such as sorting, collapse, maximize, and comments are unavailable.
+- One self-contained HTML file with styling and branding embedded.
+- A tiny embedded head script that applies a saved appearance and colour theme before the first paint, an embedded settings script for the appearance dialog, and one embedded viewer script (TOC scroll-spy, hover popovers, CodeDiff and FileTreeDiff view selection, deck collapse, database-schema columns and index jumps, comment drafts, figure maximize, flow-diagram review, and wireframe navigation and scaling); content stays fully readable with scripts disabled.
 - No external requests, ever.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 

@@ -111,14 +111,16 @@ const readDeclarations = async (paths) => {
   for (const path of paths) {
     const root = postcss.parse(await readFile(path, "utf8"), { from: path });
     root.walkRules((rule) => {
-      const selector = rule.selector.trim();
-      const paletteMatch = /^:root\[data-palette="([a-z-]+)"\]$/.exec(selector);
-      if (selector !== ":root" && paletteMatch === null) return;
+      const selector = rule.selector.trim().replaceAll(/\s+/g, " ");
+      const paletteMatch = /^\[data-palette="([a-z-]+)"\]$/.exec(selector);
+      const isBase =
+        selector === ":root" || selector === ':root, [data-palette="default"]';
+      if (!isBase && paletteMatch === null) return;
+      const id = paletteMatch?.[1];
       const target =
-        paletteMatch === null
+        id === undefined || id === "default"
           ? base
-          : (palettes.get(paletteMatch[1]) ??
-            palettes.set(paletteMatch[1], new Map()).get(paletteMatch[1]));
+          : (palettes.get(id) ?? palettes.set(id, new Map()).get(id));
       rule.walkDecls((declaration) => {
         if (declaration.prop.startsWith("--")) {
           target.set(declaration.prop.slice(2), declaration.value);

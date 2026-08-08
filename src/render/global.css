@@ -34,6 +34,7 @@ Light and dark follow the reader's OS in inert exports.
 @import "../components/flow-diagram/styles.css";
 @import "../components/mermaid-diagram/styles.css";
 @import "../components/http-endpoint/styles.css";
+@import "./shell/settings-swatch.css";
 @import "./fonts.generated.css";
 @import "../components/wireframe/styles.css";
 
@@ -59,8 +60,13 @@ fourteen on the dark one, which moved every dark surface at once. The ramp is
 anchored on the approved shades instead, and the steps between them are
 interpolated. They stay warm through the whole range, which is what makes the
 reading surface read as paper rather than as white.
+
+Every ramp block, here and in THE PALETTES below, matches any element rather
+than only the root, so a settings swatch can carry one theme's shades inside a
+document painted in another and never restate a colour to preview it.
 */
-:root {
+:root,
+[data-palette="default"] {
   --grey-0: #ffffff;
   --grey-25: #fefdfb;
   --grey-50: #f7f5f0;
@@ -333,7 +339,7 @@ band that shares `--grey-925`.
 /* Rosé Pine: Dawn for light, Main for dark (https://rosepinetheme.com).
    Rosé Pine has no green, so the tip and pro family is a sage derived from foam
    rather than a colour the palette ships. */
-:root[data-palette="rose-pine"] {
+[data-palette="rose-pine"] {
   --grey-0: #fffaf3;
   --grey-25: #fffaf3;
   --grey-50: #faf4ed;
@@ -399,7 +405,7 @@ band that shares `--grey-925`.
    https://github.com/thekylehuang/cole.nvim). Cole ships only a dark variant,
    so the light half is its own inversion: the foreground cream becomes the
    page and the background near-black becomes the ink. */
-:root[data-palette="cole"] {
+[data-palette="cole"] {
   --grey-0: #fffdf7;
   --grey-25: #fdf8ec;
   --grey-50: #f2e6cf;
@@ -463,7 +469,7 @@ band that shares `--grey-925`.
 
 /* Catppuccin: Latte for light, Mocha for dark
    (https://github.com/catppuccin/catppuccin). */
-:root[data-palette="catppuccin"] {
+[data-palette="catppuccin"] {
   --grey-0: #fbfcfe;
   --grey-25: #f7f8fb;
   --grey-50: #eff1f5;
@@ -527,7 +533,7 @@ band that shares `--grey-925`.
 
 /* Everforest: the medium-contrast light and dark variants
    (https://github.com/sainnhe/everforest). */
-:root[data-palette="everforest"] {
+[data-palette="everforest"] {
   --grey-0: #fffbef;
   --grey-25: #fffbef;
   --grey-50: #fdf6e3;
