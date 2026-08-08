@@ -8,9 +8,11 @@ import { basename, extname, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import {
+  claimAgentRequest,
   commentsFromExchange,
   deriveSourceRevision,
   nextPendingAgentRequest,
+  requestBaselineRevision,
   readAgentExchange,
   responseTemplateFor,
   validateAgentResponseDraft,
@@ -31,6 +33,7 @@ import {
   reviewStoreFor,
   sessionHeartbeatIsFresh,
   writeAgentPrompt,
+  writeAgentHeartbeat,
   writeRevisionSnapshot,
 } from "../../review/store.js";
 import { renderDocument } from "../../render/render-document.js";
@@ -40,6 +43,7 @@ const USAGE = [
   "Usage:",
   "  big-plan agent <input.mdx>",
   "  big-plan agent next <input.mdx> [--wait]",
+  '  big-plan agent note <input.mdx> "<progress>"',
   "  big-plan agent respond <input.mdx> <response.json>",
 ].join("\n");
 
@@ -281,6 +285,11 @@ const nextWork = async ({
   });
   let request = nextPendingAgentRequest(snapshot);
   while (request === undefined && shouldWait) {
+    await writeAgentHeartbeat({
+      store: session.store,
+      sessionId: session.sessionId,
+      state: "waiting",
+    });
     if (
       !(await sessionHeartbeatIsFresh({
         store: session.store,
@@ -306,6 +315,25 @@ const nextWork = async ({
       help: ["Run again with --wait to wait for the reviewer's next message"],
     };
   }
+  const claimedSource = await readFile(session.planPath, "utf8");
+  const claimedRevision = deriveSourceRevision(claimedSource);
+  await writeRevisionSnapshot({
+    store: session.store,
+    revision: claimedRevision,
+    source: claimedSource,
+  });
+  request = await claimAgentRequest({
+    store: session.store,
+    request,
+    sourceRevision: claimedRevision,
+    now: new Date().toISOString(),
+  });
+  await writeAgentHeartbeat({
+    store: session.store,
+    sessionId: session.sessionId,
+    state: "working",
+    requestId: request.requestId,
+  });
   const progress = await readProgress({
     store: session.store,
     sessionId: session.sessionId,
@@ -314,6 +342,8 @@ const nextWork = async ({
     store: session.store,
     event: {
       sessionId: session.sessionId,
+      requestId: request.requestId,
+      atMs: Date.now(),
       seq:
         progress.reduce((highest, event) => Math.max(highest, event.seq), 0) +
         1,
@@ -401,7 +431,7 @@ const respond = async ({
   });
   const previousMarkdown = await readRevisionSnapshot({
     store: session.store,
-    revision: request.sourceRevision,
+    revision: requestBaselineRevision(request),
   });
   const previousRendered = renderDocument({
     markdown: previousMarkdown,
@@ -440,6 +470,8 @@ const respond = async ({
     store: session.store,
     event: {
       sessionId: session.sessionId,
+      requestId: request.requestId,
+      atMs: Date.now(),
       seq: highest + 1,
       step: "Agent response ready",
       state: "done",
@@ -466,6 +498,52 @@ const respond = async ({
   };
 };
 
+const note = async ({
+  planArgument,
+  detail,
+}: {
+  readonly planArgument: string;
+  readonly detail: string;
+}): Promise<Record<string, unknown>> => {
+  const session = await readPlanSession(planArgument);
+  const snapshot = await readAgentExchange({
+    store: session.store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = nextPendingAgentRequest(snapshot);
+  if (request === undefined)
+    return fail("There is no pending request to update");
+  const message = detail.trim();
+  if (message === "" || message.length > 160) {
+    return fail("Progress must be between 1 and 160 characters");
+  }
+  const progress = await readProgress({
+    store: session.store,
+    sessionId: session.sessionId,
+  });
+  await appendProgress({
+    store: session.store,
+    event: {
+      sessionId: session.sessionId,
+      requestId: request.requestId,
+      atMs: Date.now(),
+      seq:
+        progress.reduce((highest, event) => Math.max(highest, event.seq), 0) +
+        1,
+      step: message,
+      state: "live",
+    },
+  });
+  await writeAgentHeartbeat({
+    store: session.store,
+    sessionId: session.sessionId,
+    state: "working",
+    requestId: request.requestId,
+  });
+  return { noted: message, requestId: request.requestId };
+};
+
 /** Dispatches the coding-agent exchange helpers. */
 export const agentCommand = async (
   args: ReadonlyArray<string>,
@@ -487,6 +565,9 @@ export const agentCommand = async (
       planArgument: args[1] ?? "",
       responseArgument: args[2] ?? "",
     });
+  }
+  if (args[0] === "note" && args.length === 3) {
+    return note({ planArgument: args[1] ?? "", detail: args[2] ?? "" });
   }
   return fail(USAGE);
 };

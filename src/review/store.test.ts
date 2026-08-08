@@ -14,12 +14,14 @@ import {
   deriveReviewPlanId,
   prepareStore,
   readActiveDraft,
+  readAgentPresence,
   readProgress,
   readResolvedCommentIds,
   readRevisionSnapshot,
   reviewStoreFor,
   sessionHeartbeatIsFresh,
   writeActiveDraft,
+  writeAgentHeartbeat,
   writeResolvedCommentIds,
   writeRevisionSnapshot,
   writeSessionHeartbeat,
@@ -68,6 +70,7 @@ describe("review store placement", () => {
       store.resolvedPath,
       store.sessionPath,
       store.heartbeatPath,
+      store.agentHeartbeatPath,
     ]) {
       expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
     }
@@ -213,6 +216,47 @@ describe("review store session heartbeat", () => {
         now: 14_000,
       }),
     ).resolves.toBe(false);
+  });
+});
+
+describe("review store agent presence", () => {
+  it("reports only a fresh heartbeat from the matching agent session", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "working",
+      requestId: "bbbbbbbbbbbbbbbb",
+      now: 10_000,
+    });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 12_000,
+      }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "working",
+      requestId: "bbbbbbbbbbbbbbbb",
+      updatedAtMs: 10_000,
+    });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "cccccccccccccccc",
+        now: 12_000,
+      }),
+    ).resolves.toEqual({ connected: false, state: "waiting" });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 14_000,
+      }),
+    ).resolves.toEqual({ connected: false, state: "waiting" });
   });
 });
 

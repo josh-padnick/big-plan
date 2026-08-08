@@ -53,6 +53,7 @@ import {
   prepareStore,
   randomId,
   readActiveDraft,
+  readAgentPresence,
   readComments,
   readProgress,
   readResolvedCommentIds,
@@ -409,6 +410,7 @@ export const startReviewRuntime = async ({
         store,
         event: {
           sessionId,
+          atMs: Date.now(),
           seq: progressSeq,
           step: "Feedback package received",
           state: "done",
@@ -431,6 +433,7 @@ export const startReviewRuntime = async ({
     if (route.path === "/api/agent") {
       const exchange = await readAgentExchange({ store, sessionId, planId });
       const latestResponse = exchange.responses.at(-1);
+      const presence = await readAgentPresence({ store, sessionId });
       sendJson({
         response,
         status: 200,
@@ -441,6 +444,7 @@ export const startReviewRuntime = async ({
           // is midway through editing the authoritative MDX.
           sourceRevision:
             latestResponse?.sourceRevision ?? initialSourceRevision,
+          presence,
           ...exchange,
         },
       });
@@ -493,6 +497,7 @@ export const startReviewRuntime = async ({
         store,
         event: {
           sessionId,
+          atMs: Date.now(),
           seq: progressSeq,
           step:
             agentRequest.kind === "reply"

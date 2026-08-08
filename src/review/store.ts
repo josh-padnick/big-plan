@@ -39,6 +39,8 @@ const REVIEW_PLAN_ID_LENGTH = 16;
 /** One relayed agent progress event, after checking. */
 export type ProgressEvent = {
   readonly sessionId: string;
+  readonly requestId?: string;
+  readonly atMs?: number;
   readonly seq: number;
   readonly step: string;
   readonly state: string;
@@ -62,6 +64,7 @@ export type ReviewStore = {
   readonly resolvedPath: string;
   readonly sessionPath: string;
   readonly heartbeatPath: string;
+  readonly agentHeartbeatPath: string;
 };
 
 /**
@@ -141,6 +144,10 @@ export const reviewStoreFor = ({
     resolvedPath: inside({ base: reviewDirectory, leaf: "resolved.json" }),
     sessionPath: inside({ base: root, leaf: "session.json" }),
     heartbeatPath: inside({ base: root, leaf: "session-heartbeat.json" }),
+    agentHeartbeatPath: inside({
+      base: agentDirectory,
+      leaf: "agent-heartbeat.json",
+    }),
   };
 };
 
@@ -508,6 +515,13 @@ const asProgressEvent = ({
   }
   return {
     sessionId,
+    ...(typeof event.requestId === "string" &&
+    /^[a-f0-9]{16}$/.test(event.requestId)
+      ? { requestId: event.requestId }
+      : {}),
+    ...(typeof event.atMs === "number" && Number.isFinite(event.atMs)
+      ? { atMs: event.atMs }
+      : {}),
     seq: event.seq,
     step: event.step.slice(0, PROGRESS_TEXT_LIMIT),
     state: event.state,
@@ -630,4 +644,79 @@ export const sessionHeartbeatIsFresh = async ({
     now - value.updatedAtMs >= 0 &&
     now - value.updatedAtMs <= maximumAgeMs
   );
+};
+
+export type AgentPresence = {
+  readonly connected: boolean;
+  readonly state: "waiting" | "working";
+  readonly requestId?: string;
+  readonly updatedAtMs?: number;
+};
+
+/** Refreshes the coding-agent liveness signal with its observable state. */
+export const writeAgentHeartbeat = async ({
+  store,
+  sessionId,
+  state,
+  requestId,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly state: "waiting" | "working";
+  readonly requestId?: string;
+  readonly now?: number;
+}): Promise<void> => {
+  await writeJson({
+    path: store.agentHeartbeatPath,
+    value: {
+      sessionId,
+      state,
+      ...(requestId === undefined ? {} : { requestId }),
+      updatedAtMs: now,
+    },
+  });
+};
+
+/** Reads the coding-agent presence signal without turning stale data into work. */
+export const readAgentPresence = async ({
+  store,
+  sessionId,
+  now = Date.now(),
+  maximumAgeMs = 3_500,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly now?: number;
+  readonly maximumAgeMs?: number;
+}): Promise<AgentPresence> => {
+  const value = await readJson(store.agentHeartbeatPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId ||
+    !("state" in value) ||
+    (value.state !== "waiting" && value.state !== "working") ||
+    !("updatedAtMs" in value) ||
+    typeof value.updatedAtMs !== "number" ||
+    !Number.isFinite(value.updatedAtMs) ||
+    now - value.updatedAtMs < 0 ||
+    now - value.updatedAtMs > maximumAgeMs
+  ) {
+    return { connected: false, state: "waiting" };
+  }
+  const requestId =
+    "requestId" in value &&
+    typeof value.requestId === "string" &&
+    /^[a-f0-9]{16}$/.test(value.requestId)
+      ? value.requestId
+      : undefined;
+  return {
+    connected: true,
+    state: value.state,
+    ...(requestId === undefined ? {} : { requestId }),
+    updatedAtMs: value.updatedAtMs,
+  };
 };

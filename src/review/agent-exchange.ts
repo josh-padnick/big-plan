@@ -29,6 +29,8 @@ type AgentRequestBase = {
   readonly planId: string;
   readonly sourceRevision: string;
   readonly createdAt: string;
+  readonly claimedFromRevision?: string;
+  readonly claimedAt?: string;
 };
 
 export type AgentFeedbackRequest = AgentRequestBase & {
@@ -229,6 +231,17 @@ const requestBase = (
   if (value.version !== 1) {
     throw new AgentExchangeRejected("Unsupported agent request version");
   }
+  const claimedFromRevision =
+    value.claimedFromRevision === undefined
+      ? undefined
+      : sourceRevision(value.claimedFromRevision);
+  const claimedAt =
+    value.claimedAt === undefined ? undefined : timestamp(value.claimedAt);
+  if ((claimedFromRevision === undefined) !== (claimedAt === undefined)) {
+    throw new AgentExchangeRejected(
+      '"claimedFromRevision" and "claimedAt" must appear together',
+    );
+  }
   return {
     version: 1,
     requestId: id(value.requestId, "requestId"),
@@ -236,6 +249,9 @@ const requestBase = (
     planId: id(value.planId, "planId"),
     sourceRevision: sourceRevision(value.sourceRevision),
     createdAt: timestamp(value.createdAt),
+    ...(claimedFromRevision === undefined
+      ? {}
+      : { claimedFromRevision, claimedAt }),
   };
 };
 
@@ -344,7 +360,9 @@ const outcome = ({
   if (state !== "changed") {
     return result;
   }
-  if (currentRevision === request.sourceRevision) {
+  if (
+    currentRevision === (request.claimedFromRevision ?? request.sourceRevision)
+  ) {
     throw new AgentExchangeRejected(
       'A "changed" outcome requires a revision to the plan source',
     );
@@ -378,6 +396,36 @@ const outcome = ({
   }
   return { ...result, changeTargets };
 };
+
+/** Freezes the source baseline when an agent first claims a pending request. */
+export const claimAgentRequest = async ({
+  store,
+  request,
+  sourceRevision: claimedFromRevision,
+  now,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+  readonly sourceRevision: string;
+  readonly now: string;
+}): Promise<AgentRequest> => {
+  if (request.claimedFromRevision !== undefined) return request;
+  const claimed = validateAgentRequest({
+    ...request,
+    claimedFromRevision,
+    claimedAt: now,
+  });
+  await writeAgentRequestValue({
+    store,
+    requestId: request.requestId,
+    value: claimed,
+  });
+  return claimed;
+};
+
+/** The immutable revision an agent actually saw when it claimed the work. */
+export const requestBaselineRevision = (request: AgentRequest): string =>
+  request.claimedFromRevision ?? request.sourceRevision;
 
 /** Validates an agent-authored draft and fills trusted session metadata. */
 export const validateAgentResponseDraft = ({

@@ -9,12 +9,14 @@ import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./comment.js";
 import {
   AgentExchangeRejected,
+  claimAgentRequest,
   commentsFromExchange,
   deriveSourceRevision,
   feedbackAgentRequest,
   messageAgentRequest,
   nextPendingAgentRequest,
   readAgentExchange,
+  requestBaselineRevision,
   validateAgentResponseDraft,
   writeAgentRequest,
   writeAgentResponse,
@@ -224,6 +226,38 @@ describe("agent exchange response contract", () => {
 });
 
 describe("agent exchange filesystem", () => {
+  it("freezes the first claim revision when work is picked up again", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-claim-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, before);
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    await writeAgentRequest({ store, request });
+    const firstClaim = await claimAgentRequest({
+      store,
+      request,
+      sourceRevision: "aaaaaaaaaaaaaaaa",
+      now: "2026-08-02T12:00:30.000Z",
+    });
+    const repeatedClaim = await claimAgentRequest({
+      store,
+      request: firstClaim,
+      sourceRevision: "bbbbbbbbbbbbbbbb",
+      now: "2026-08-02T12:01:00.000Z",
+    });
+    expect(requestBaselineRevision(repeatedClaim)).toBe("aaaaaaaaaaaaaaaa");
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({
+      requests: [
+        {
+          claimedFromRevision: "aaaaaaaaaaaaaaaa",
+          claimedAt: "2026-08-02T12:00:30.000Z",
+        },
+      ],
+    });
+  });
+
   it("should round-trip validated requests and responses under the plan store", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-"));
     const planPath = join(directory, "plan.mdx");
