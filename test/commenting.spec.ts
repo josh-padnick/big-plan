@@ -174,6 +174,12 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(sendAll).toHaveCSS("padding-top", "8px");
   await expect(sendAll).toHaveCSS("padding-left", "12px");
   await expect(sendAll).toHaveCSS("font-weight", "600");
+  await sendAll.hover();
+  await expect(sendAll).toHaveCSS("filter", "brightness(0.95)");
+  await expect(sendAll).toHaveCSS(
+    "transition-property",
+    /background-color.*box-shadow.*filter/,
+  );
   await expect(rail.locator(".review-feedback-status")).toHaveCSS(
     "border-top-width",
     "1px",
