@@ -449,9 +449,9 @@ test("should repaint the whole document from the colour-theme row", async ({
     for (const theme of [
       { title: "Default", id: null },
       { title: "Rosé Pine", id: "rose-pine" },
-      { title: "Cole", id: "cole" },
+      { title: "Nord", id: "nord" },
       { title: "Catppuccin", id: "catppuccin" },
-      { title: "Everforest", id: "everforest" },
+      { title: "Brutalist", id: "brutalist" },
     ]) {
       await page.getByRole("radio", { name: theme.title }).check();
       if (theme.id === null) {
@@ -485,9 +485,7 @@ test("should repaint the whole document from the colour-theme row", async ({
           PREFERENCES_STORAGE_KEY,
         ),
       )
-      .toBe(
-        serializePreferencesRecord({ mode: "dark", palette: "everforest" }),
-      );
+      .toBe(serializePreferencesRecord({ mode: "dark", palette: "brutalist" }));
     await page.reload();
     // The head script runs before the first paint, so the attributes are
     // already right when the document body is first parsed.
@@ -495,9 +493,9 @@ test("should repaint the whole document from the colour-theme row", async ({
       theme: document.documentElement.getAttribute("data-theme"),
       palette: document.documentElement.getAttribute("data-palette"),
     }));
-    expect(atFirstBody).toEqual({ theme: "dark", palette: "everforest" });
+    expect(atFirstBody).toEqual({ theme: "dark", palette: "brutalist" });
     await settings.click();
-    await expect(page.getByRole("radio", { name: "Everforest" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Brutalist" })).toBeChecked();
     await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
   });
 
@@ -514,15 +512,78 @@ test("should repaint the whole document from the colour-theme row", async ({
       .toBe(serializePreferencesRecord({ mode: "dark", palette: "default" }));
   });
 
-  await test.step("an unknown stored theme falls back to the product palette", async () => {
-    await page.evaluate(
-      (key) => localStorage.setItem(key, '{"version":1,"palette":"solarized"}'),
-      PREFERENCES_STORAGE_KEY,
-    );
-    await page.reload();
-    await expect(page.locator("html")).not.toHaveAttribute("data-palette");
-    await settings.click();
-    await expect(page.getByRole("radio", { name: "Default" })).toBeChecked();
+  // Cole and Everforest were offered before the captain replaced them, so a
+  // browser that still holds one takes the same route a corrupt record takes.
+  await test.step("an unknown or withdrawn stored theme falls back to the product palette", async () => {
+    for (const palette of ["solarized", "cole", "everforest"]) {
+      await page.evaluate(
+        ([key, value]) =>
+          localStorage.setItem(key, `{"version":1,"palette":"${value}"}`),
+        [PREFERENCES_STORAGE_KEY, palette] as const,
+      );
+      await page.reload();
+      await expect(page.locator("html")).not.toHaveAttribute("data-palette");
+      await settings.click();
+      await expect(page.getByRole("radio", { name: "Default" })).toBeChecked();
+      await page.keyboard.press("Escape");
+    }
+  });
+});
+
+test("should make Brutalist a change of shape, not only of hue", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+  await page.evaluate(
+    (key) => localStorage.removeItem(key),
+    PREFERENCES_STORAGE_KEY,
+  );
+  await page.reload();
+
+  const shape = () =>
+    page.evaluate(() => {
+      const of = (selector: string, property: string) => {
+        const element = document.querySelector(selector);
+        return element === null
+          ? null
+          : getComputedStyle(element)[property as "borderRadius"];
+      };
+      return {
+        slideRadius: of("[data-slide]", "borderRadius"),
+        slideShadow: of("[data-slide]", "boxShadow"),
+        codeRadius: of("article pre", "borderRadius"),
+        calloutRadius: of("[data-callout]", "borderRadius"),
+        headingWeight: of("article h2", "fontWeight"),
+      };
+    });
+
+  const settings = page.getByRole("button", { name: "Open settings" });
+  await settings.click();
+  await page.getByRole("radio", { name: "Light" }).check();
+  const soft = await shape();
+  await page.getByRole("radio", { name: "Brutalist" }).check();
+  const stark = await shape();
+
+  expect(soft.slideRadius).not.toBe("0px");
+  expect(stark.slideRadius).toBe("0px");
+  expect(stark.codeRadius).toBe("0px");
+  expect(stark.calloutRadius).toBe("0px");
+  // A hard offset slab rather than a soft multi-layer shadow: every remaining
+  // shadow step is zero-blur.
+  expect(soft.slideShadow).not.toBe(stark.slideShadow);
+  expect(stark.slideShadow).toMatch(/2px 2px 0px 0px/u);
+  expect(Number(stark.headingWeight)).toBeGreaterThan(
+    Number(soft.headingWeight),
+  );
+
+  await test.step("the shape follows the theme into dark and back out again", async () => {
+    await page.getByRole("radio", { name: "Dark" }).check();
+    expect((await shape()).slideRadius).toBe("0px");
+    await page.getByRole("radio", { name: "Nord" }).check();
+    const nord = await shape();
+    expect(nord.slideRadius).toBe(soft.slideRadius);
+    expect(nord.headingWeight).toBe(soft.headingWeight);
   });
 });
 
@@ -548,9 +609,9 @@ test("should preview each theme in its own colours inside the sheet", async ({
   expect(strips.map(({ palette }) => palette)).toEqual([
     "default",
     "rose-pine",
-    "cole",
+    "nord",
     "catppuccin",
-    "everforest",
+    "brutalist",
   ]);
   for (const strip of strips) {
     expect(strip.chips, `${strip.palette} shows four shades`).toHaveLength(4);

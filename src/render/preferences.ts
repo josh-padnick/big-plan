@@ -16,18 +16,21 @@ export const STORED_APPEARANCE_MODES = ["light", "dark"] as const;
 export const PALETTES = [
   "default",
   "rose-pine",
-  "cole",
+  "nord",
   "catppuccin",
-  "everforest",
+  "brutalist",
 ] as const;
 
 // The subset a record may carry. Keeping the default out of storage is the
 // same rule the System appearance mode already follows: absence is the value.
+// A theme that has been withdrawn simply leaves this list, which makes an old
+// record naming it indistinguishable from a corrupt one and sends the reviewer
+// back to the product palette rather than to a theme that no longer exists.
 export const STORED_PALETTES = [
   "rose-pine",
-  "cole",
+  "nord",
   "catppuccin",
-  "everforest",
+  "brutalist",
 ] as const;
 
 type StoredAppearanceMode = (typeof STORED_APPEARANCE_MODES)[number];

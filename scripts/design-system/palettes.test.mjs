@@ -128,3 +128,20 @@ test("rejects a palette pairing below WCAG AA", async () => {
     result.failures.join("\n"),
   );
 });
+
+test("rejects a palette that restates a role instead of a shade", async () => {
+  const result = await runAgainst({
+    paletteCss: `[data-palette="sample"] {
+  --grey-50: #fdfdfd;
+  --grey-925: #202020;
+  --grey-150: #eeeeee;
+  --grey-950: #121212;
+  --radius-md: 0;
+  --bg: light-dark(#ff0000, #00ff00);
+}
+`,
+  });
+  assert.deepEqual(result.failures.slice(0, 1), [
+    'global.css: palette "sample" declares --bg; a palette may declare ramp steps, syntax tokens, the closed radius, weight, tracking, and elevation scales, and --ink-c',
+  ]);
+});

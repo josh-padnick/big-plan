@@ -38,6 +38,20 @@ const RAMP_STEP_PATTERN = new RegExp(
   `^(?:${RAMP_NAMESPACES.join("|")})-[0-9]+$`,
 );
 
+// What a palette block is allowed to say, beyond its ramps. A theme is its
+// shades; the shape scales are open to it because a stark reading surface is a
+// shape as much as a colour, and both are closed scales the design system
+// already owns. A role is not on this list on purpose: restating one would let
+// a theme drift from the role vocabulary every other theme shares.
+const PALETTE_SCALE_PATTERN =
+  /^(?:radius|font-weight|tracking|elevation)-[a-z0-9-]+$/;
+
+// The one role a palette may restate, because its two halves cannot share a
+// ramp position. src/render/global.css states why at the palette blocks.
+const PALETTE_ROLE_EXCEPTIONS = new Set(["ink-c"]);
+
+const SYNTAX_TOKEN_PATTERN = /^syntax-[a-z]+-(?:c|bg)$/;
+
 // WCAG AA for body text. Every pairing below is text on a ground, so the large
 // text allowance never applies: a plan is read at reading size.
 const CONTRAST_FLOOR = 4.5;
@@ -281,6 +295,23 @@ export const checkPalettes = async ({
     if (!themed.includes(id)) {
       failures.push(
         `global.css: palette "${id}" is declared but is not in STORED_PALETTES in preferences.ts`,
+      );
+    }
+  }
+
+  for (const [id, declarations] of palettes) {
+    const stray = [...declarations.keys()]
+      .filter(
+        (name) =>
+          !RAMP_STEP_PATTERN.test(name) &&
+          !PALETTE_SCALE_PATTERN.test(name) &&
+          !SYNTAX_TOKEN_PATTERN.test(name) &&
+          !PALETTE_ROLE_EXCEPTIONS.has(name),
+      )
+      .sort();
+    if (stray.length > 0) {
+      failures.push(
+        `global.css: palette "${id}" declares ${stray.map((name) => `--${name}`).join(", ")}; a palette may declare ramp steps, syntax tokens, the closed radius, weight, tracking, and elevation scales, and ${[...PALETTE_ROLE_EXCEPTIONS].map((name) => `--${name}`).join(", ")}`,
       );
     }
   }

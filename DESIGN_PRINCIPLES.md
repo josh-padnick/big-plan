@@ -160,12 +160,14 @@ Rules:
 A reviewer can swap the ramps without swapping the roles.
 `data-theme` picks light or dark; `data-palette` picks whose shades fill both halves.
 A colour theme is therefore a set of ramps and never a restated role, so a role added here is themed everywhere at once.
+One theme, Brutalist, also restates the shape scales, under rule 5 below.
 
 Rules:
 
 1. **A role is declared once.**
    Every role is `light-dark(light, dark)` in `src/render/global.css`.
    A palette that restates a role has found a missing ramp step; add the step instead.
+   `--edge-strong-c` has its own two steps for exactly that reason: a strong edge and a secondary text colour want the same lightness in the warm greys and nothing like it anywhere else.
 2. **A theme is an adaptation, not a port.**
    A terminal palette names a foreground, a background, and eight accents.
    Take its anchors, interpolate the steps between them, and derive a family it does not ship rather than reusing one it does.
@@ -174,6 +176,10 @@ Rules:
 4. **Every theme meets the bar every theme meets.**
    Rule 5 above is not relaxed for a guest palette; move a shade along its own hue until it passes.
    `scripts/design-system/palettes.mjs` owns the enforced pairings.
+5. **A theme may restate a scale, never a role.**
+   Some characters are a shape as much as a colour: Brutalist squares every corner, drops the soft light source for a hard offset slab, and sets one step heavier.
+   A theme may therefore also restate the closed radius, weight, tracking, and elevation scales, because those are scales this document already owns and a check can already close.
+   It may not restate a role, because that is how a theme stops sharing the vocabulary every other theme is read in.
 
 ## Elevation
 

@@ -25,7 +25,6 @@ src/render/global.css owns the two-attribute model and the ramps.
   --syntax-deletion-c: light-dark(#82071e, #ffdcd7);
   --syntax-deletion-bg: light-dark(#ffebe9, #67060c);
 }
-
 [data-palette="rose-pine"] {
   --syntax-keyword-c: light-dark(#286983, #3d90b1);
   --syntax-entity-c: light-dark(#7e649b, #c4a7e7);
@@ -40,14 +39,14 @@ src/render/global.css owns the two-attribute model and the ramps.
   --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
 }
 
-[data-palette="cole"] {
-  --syntax-keyword-c: light-dark(#ac4231, #d96857);
-  --syntax-entity-c: light-dark(#4661b5, #5582c2);
-  --syntax-constant-c: light-dark(#865386, #bf86bf);
-  --syntax-string-c: light-dark(#22724e, #66cc69);
-  --syntax-variable-c: light-dark(#7c6039, #cc9b52);
-  --syntax-comment-c: light-dark(#656565, #858585);
-  --syntax-tag-c: light-dark(#276f77, #73bfbf);
+[data-palette="nord"] {
+  --syntax-keyword-c: light-dark(#496e93, #88a6c4);
+  --syntax-entity-c: light-dark(#347283, #88c0d0);
+  --syntax-constant-c: light-dark(#8a5c82, #bb99b5);
+  --syntax-string-c: light-dark(#577140, #a3be8c);
+  --syntax-variable-c: light-dark(#a85237, #d5947f);
+  --syntax-comment-c: light-dark(#4c566a, #98a4b7);
+  --syntax-tag-c: light-dark(#447170, #8fbcbb);
   --syntax-addition-c: light-dark(var(--success-700), var(--success-300));
   --syntax-addition-bg: light-dark(var(--success-50), var(--success-900));
   --syntax-deletion-c: light-dark(var(--danger-700), var(--danger-300));
@@ -68,14 +67,14 @@ src/render/global.css owns the two-attribute model and the ramps.
   --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
 }
 
-[data-palette="everforest"] {
-  --syntax-keyword-c: light-dark(#d90d09, #e98f91);
-  --syntax-entity-c: light-dark(#657301, #a7c080);
-  --syntax-constant-c: light-dark(#c12991, #d699b6);
-  --syntax-string-c: light-dark(#277a5b, #83c092);
-  --syntax-variable-c: light-dark(#b25008, #e69875);
-  --syntax-comment-c: light-dark(#647062, #a0aaa3);
-  --syntax-tag-c: light-dark(#2d739a, #7fbbb3);
+[data-palette="brutalist"] {
+  --syntax-keyword-c: light-dark(#c02d0e, #ff6a3d);
+  --syntax-entity-c: light-dark(#0b57c2, #4d9dff);
+  --syntax-constant-c: light-dark(#8c1ca8, #e07bff);
+  --syntax-string-c: light-dark(#1e781e, #3ddc57);
+  --syntax-variable-c: light-dark(#945900, #ffc300);
+  --syntax-comment-c: light-dark(#5c594e, #a5a294);
+  --syntax-tag-c: light-dark(#0e6d6d, #3ee0e0);
   --syntax-addition-c: light-dark(var(--success-700), var(--success-300));
   --syntax-addition-bg: light-dark(var(--success-50), var(--success-900));
   --syntax-deletion-c: light-dark(var(--danger-700), var(--danger-300));

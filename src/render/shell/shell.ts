@@ -217,9 +217,9 @@ const PALETTE_OPTIONS: ReadonlyArray<{
 }> = [
   { palette: "default", title: "Default" },
   { palette: "rose-pine", title: "Rosé Pine" },
-  { palette: "cole", title: "Cole" },
+  { palette: "nord", title: "Nord" },
   { palette: "catppuccin", title: "Catppuccin" },
-  { palette: "everforest", title: "Everforest" },
+  { palette: "brutalist", title: "Brutalist" },
 ];
 
 // A row rather than a card: five themes read faster stacked than wrapped, and
