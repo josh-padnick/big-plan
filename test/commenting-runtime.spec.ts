@@ -174,7 +174,8 @@ test("should restore and submit staged comments through the local review runtime
 
   await page.reload();
   await page.getByRole("button", { name: /Feedback/ }).click();
-  await expect(rail).toContainText(
+  await expect(rail).toContainText("1 · Details");
+  await expect(rail).not.toContainText(
     "Original target unavailable in this revision.",
   );
 });

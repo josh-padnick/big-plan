@@ -55,7 +55,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   const cancel = dialog.getByRole("button", { name: "Cancel" });
   const submit = dialog.getByRole("button", { name: "Submit Now" });
   await expect(cancel).toHaveCSS("padding-left", "8px");
-  await expect(cancel).toHaveCSS("padding-top", "3.2px");
+  await expect(cancel).toHaveCSS("padding-top", "4px");
   await expect(cancel).toHaveCSS("border-top-width", "1px");
   await expect(submit).toBeDisabled();
   await expect(submit).toHaveCSS("padding-left", "8px");
@@ -118,9 +118,9 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "background-color",
     "rgb(239, 236, 227)",
   );
-  await expect(staged.getByText("STAGED")).toHaveCSS("font-size", "9px");
+  await expect(staged.getByText("STAGED")).toHaveCSS("font-size", "11px");
   await expect(staged.getByText("STAGED")).toHaveJSProperty("tagName", "SPAN");
-  await expect(staged.getByText("STAGED")).toHaveCSS("padding-left", "5px");
+  await expect(staged.getByText("STAGED")).toHaveCSS("padding-left", "6px");
   await expect(staged.getByText("STAGED")).toHaveCSS("padding-top", "1px");
   await expect(
     staged.locator(".review-staged-actions button").first(),
@@ -151,7 +151,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   );
   const stagedSubmit = staged.getByRole("button", { name: "Send this" });
   await expect(stagedSubmit).toHaveCSS("padding-left", "8px");
-  await expect(stagedSubmit).toHaveCSS("padding-top", "3.2px");
+  await expect(stagedSubmit).toHaveCSS("padding-top", "4px");
   await expect(stagedSubmit).toHaveCSS("font-size", "11px");
   await expect(stagedSubmit).toHaveCSS("font-weight", "600");
   await expect(
@@ -167,7 +167,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   const sendAll = rail.getByRole("button", {
     name: "Send all comments to agent",
   });
-  await expect(sendAll).toHaveCSS("font-size", "13px");
+  await expect(sendAll).toHaveCSS("font-size", "12px");
   await expect(sendAll).toHaveCSS("padding-top", "8px");
   await expect(sendAll).toHaveCSS("padding-left", "12px");
   await expect(sendAll).toHaveCSS("font-weight", "600");
@@ -374,9 +374,8 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(rail.locator("code")).toHaveText("leaseOwner");
   await expect(rail.getByRole("tab", { name: "Comments" })).toBeVisible();
   await rail.getByRole("tab", { name: "Chat" }).click();
-  await expect(rail).toContainText("Plan-wide chat");
-  await rail.getByRole("tab", { name: "Agent" }).click();
-  await expect(rail).toContainText("No agent work in progress");
+  await expect(rail).toContainText("Plan-wide chat needs the local runtime");
+  await expect(rail.getByRole("tab", { name: "Agent" })).toHaveCount(0);
 
   for (const theme of ["light", "dark"]) {
     await page.evaluate(
