@@ -30,6 +30,9 @@ describe("guidanceCommand", () => {
 
     expect(output).toContain("# How to write a plan a human loves to review");
     expect(output).toContain("quick summary");
+    expect(output).toContain(
+      "supported static sequence, class, state, entity-relationship, schedule, journey, pie, mindmap, timeline, and git views",
+    );
     expect(await readdir(stateDirectory)).toHaveLength(1);
   });
 

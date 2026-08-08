@@ -1,0 +1,511 @@
+/*
+CSS escape hatch: selector relationships for static SVG theme variants and
+attribute-based target rings cannot be expressed by utility classes. FlowDiagram
+   owns the canvas and feedback chrome; this file owns only SVG-specific paint. */
+
+@layer components {
+  .mermaid-diagram-static {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  /* The shared canvas transforms the artboard. Mermaid comment markers live
+     in this HTML overlay rather than inside SVG groups, so they can use the
+     existing MessageSquare furniture and remain screen-sized while the SVG
+     zooms and pans underneath them. */
+  .mermaid-diagram .flow-diagram-artboard {
+    position: relative;
+  }
+
+  .mermaid-diagram-comment-layer {
+    position: absolute;
+    inset: 0;
+    /* Keep saved threads above SVG selection rings and removal marks, while
+       the viewer toolbar and fixed composer remain higher-level chrome. */
+    z-index: 20;
+    pointer-events: none;
+  }
+
+  .mermaid-diagram .flow-diagram-comment-marker {
+    width: 1.25rem;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0;
+    z-index: 21;
+    cursor: pointer;
+    pointer-events: auto;
+    transform: scale(var(--flow-comment-marker-scale, 1));
+    transform-origin: center;
+  }
+
+  .mermaid-diagram .flow-diagram-comment-marker:focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 2px;
+  }
+
+  .mermaid-diagram .flow-diagram-comment-marker > span {
+    position: absolute;
+    right: -0.35rem;
+    top: -0.35rem;
+    display: grid;
+    width: 0.75rem;
+    height: 0.75rem;
+    place-items: center;
+    border: 1px solid var(--bg);
+    border-radius: 999px;
+    background: var(--accent-c);
+    color: var(--bg);
+    font-size: 0.5rem;
+  }
+
+  /* The viewer cluster never wraps. On a narrow or coarse-pointer surface,
+     grow only its targets to the 44px touch floor while preserving the
+     desktop 36px chrome. */
+  @media (max-width: 40rem), (pointer: coarse) {
+    .mermaid-diagram .mermaid-diagram-viewer-cluster {
+      gap: 0.25rem;
+    }
+
+    .mermaid-diagram .mermaid-diagram-viewer-cluster > .flow-diagram-zoom,
+    .mermaid-diagram .mermaid-diagram-viewer-cluster > .flow-diagram-fit,
+    .mermaid-diagram
+      .mermaid-diagram-viewer-cluster
+      > .flow-diagram-figure-comment,
+    .mermaid-diagram .mermaid-diagram-viewer-cluster > [data-figure-maximize] {
+      min-height: 2.75rem;
+    }
+
+    .mermaid-diagram
+      .mermaid-diagram-viewer-cluster
+      > .flow-diagram-zoom
+      > button,
+    .mermaid-diagram .mermaid-diagram-viewer-cluster > .flow-diagram-fit,
+    .mermaid-diagram
+      .mermaid-diagram-viewer-cluster
+      > .flow-diagram-figure-comment,
+    .mermaid-diagram .mermaid-diagram-viewer-cluster > [data-figure-maximize] {
+      min-width: 2.75rem;
+      min-height: 2.75rem;
+    }
+  }
+
+  /* Reading a saved marker in inline mode uses a small fixed thread card. It
+     sits below the action bar/composer but above the transformed artboard. */
+  .mermaid-diagram .flow-diagram-comment-thread {
+    position: fixed;
+    z-index: 74;
+    width: min(20rem, calc(100vw - 2rem));
+    padding: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--ink-c) 15%, transparent);
+    border-radius: 0.6rem;
+    background: var(--bg);
+    box-shadow: var(--elevation-floating);
+  }
+
+  .mermaid-diagram .flow-diagram-comment-thread[hidden] {
+    display: none;
+  }
+
+  .mermaid-diagram .flow-diagram-comment-thread-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .mermaid-diagram .flow-diagram-comment-thread-title {
+    min-width: 0;
+    margin: 0;
+    color: var(--ink-c);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .mermaid-diagram .flow-diagram-comment-thread-close {
+    display: grid;
+    flex: none;
+    width: 1.5rem;
+    height: 1.5rem;
+    place-items: center;
+    border-radius: 0.25rem;
+    color: var(--muted-c);
+    cursor: pointer;
+  }
+
+  .mermaid-diagram .flow-diagram-comment-thread-close:hover {
+    background: var(--surface-c);
+    color: var(--ink-c);
+  }
+
+  .mermaid-diagram .flow-diagram-comment-thread-close:focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 2px;
+  }
+
+  .mermaid-diagram .flow-diagram-comment-thread-close svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .mermaid-diagram .flow-diagram-comment-thread-body {
+    margin: 0;
+    padding-top: 0.5rem;
+    border-top: 1px solid color-mix(in srgb, var(--ink-c) 9%, transparent);
+    color: var(--muted-c);
+    font-size: 0.75rem;
+    line-height: 1.45;
+  }
+
+  .mermaid-diagram
+    .flow-diagram-comment-thread-body
+    + .flow-diagram-comment-thread-body {
+    margin-top: 0.5rem;
+  }
+
+  .mermaid-diagram .mermaid-diagram-toolbar-comment-marker {
+    position: relative;
+    z-index: 80;
+    top: auto;
+    right: auto;
+    display: inline-flex;
+    width: 1.25rem;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    min-height: 1.25rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 2px solid var(--bg);
+    border-radius: 999px;
+    background: var(--accent-c);
+    color: var(--bg);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .mermaid-diagram .mermaid-diagram-toolbar-comment-marker:focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 2px;
+  }
+
+  .mermaid-diagram .mermaid-diagram-toolbar-comment-marker svg {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
+  /* A marker click in maximize mode keeps the tray open and gives its matching
+     row a durable, short-lived focus cue instead of moving the canvas. */
+  .mermaid-diagram .flow-collector-item[data-flow-comment-flash] {
+    outline: 2px solid var(--accent-c);
+    outline-offset: -2px;
+    background: var(--accent-soft-c);
+  }
+
+  .mermaid-diagram-svg {
+    width: max-content;
+  }
+
+  .mermaid-diagram-svg > svg {
+    display: block;
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    height: auto;
+  }
+
+  .mermaid-diagram-svg-dark {
+    display: none;
+  }
+
+  :root[data-theme="dark"] .mermaid-diagram-svg-light {
+    display: none;
+  }
+
+  :root[data-theme="dark"] .mermaid-diagram-svg-dark {
+    display: block;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .mermaid-diagram-svg-light {
+      display: none;
+    }
+
+    :root:not([data-theme]) .mermaid-diagram-svg-dark {
+      display: block;
+    }
+  }
+
+  .mermaid-diagram [data-flow-element="node"],
+  .mermaid-diagram [data-flow-element="edge"],
+  .mermaid-diagram [data-flow-edge-label-target],
+  .mermaid-diagram [data-flow-diagram-footer] {
+    cursor: pointer;
+  }
+
+  .mermaid-diagram [data-flow-element="node"]:hover {
+    filter: drop-shadow(0 1px 4px rgb(0 0 0 / 0.18));
+  }
+
+  /* Mermaid's node groups can contain text and shape layers that compete for
+     the pointer. Give the semantic group the full rendered bounding box so a
+     click anywhere in a node card selects the node, without changing paint. */
+  .mermaid-diagram [data-flow-element="node"] {
+    pointer-events: all;
+    pointer-events: bounding-box;
+  }
+
+  .mermaid-diagram [data-flow-element="node"][data-flow-selected],
+  .mermaid-diagram [data-flow-element="node"]:focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 3px;
+  }
+
+  .mermaid-diagram
+    [data-flow-element="edge"][data-flow-selected]:not(
+      [data-flow-proposed~="removed"]
+    ),
+  .mermaid-diagram
+    [data-flow-element="edge"]:focus-visible:not(
+      [data-flow-proposed~="removed"]
+    ) {
+    stroke: var(--accent-c) !important;
+    stroke-width: 3.5px !important;
+  }
+
+  .mermaid-diagram
+    [data-flow-element="edge"]:hover:not([data-flow-proposed~="removed"]) {
+    stroke: color-mix(in srgb, var(--accent-c) 70%, var(--muted-c)) !important;
+    stroke-width: 3px !important;
+  }
+
+  .mermaid-diagram [data-flow-edge-label-target]:hover,
+  .mermaid-diagram [data-flow-edge-label-target][data-flow-selected] {
+    filter: drop-shadow(0 0 2px var(--accent-c));
+  }
+
+  .mermaid-diagram [data-flow-diagram-footer][data-flow-selected] {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 4px;
+    border-radius: 0.25rem;
+  }
+
+  .mermaid-diagram
+    [data-flow-edge-label-target][data-flow-proposed~="removed"] {
+    opacity: 0.72;
+    text-decoration: line-through;
+    text-decoration-color: var(--diff-remove-c);
+  }
+
+  .mermaid-diagram [data-flow-edge-hit] {
+    pointer-events: stroke;
+    stroke: transparent !important;
+    stroke-width: 24px !important;
+    fill: none !important;
+  }
+
+  .mermaid-diagram [data-flow-edge-hit]:hover,
+  .mermaid-diagram [data-flow-edge-hit][data-flow-selected] {
+    stroke: transparent !important;
+  }
+}
+
+@layer bp-state {
+  /* FlowDiagram's proposed-removal vocabulary is shared by the shell script.
+     Mermaid targets are SVG groups, so paint the actual node and edge shapes
+     rather than relying on HTML card borders. Geometry stays fixed. */
+  /* Override invariant: removed node paint beats Mermaid's resting shape fill and stroke. */
+  /* Override invariant: removed edge-label paint beats Mermaid's label background and text. */
+  .mermaid-diagram
+    [data-flow-element="node"][data-flow-proposed~="removed"]
+    :is(rect, path, polygon, circle, ellipse) {
+    fill: color-mix(in srgb, var(--diff-remove-c) 12%, transparent) !important;
+    stroke: color-mix(
+      in srgb,
+      var(--diff-remove-c) 65%,
+      var(--edge-c)
+    ) !important;
+    stroke-dasharray: 0.35rem 0.2rem !important;
+  }
+
+  /* Override invariant: removed node text paint beats Mermaid's resting label fill. */
+  .mermaid-diagram
+    [data-flow-element="node"][data-flow-proposed~="removed"]
+    :is(text, tspan) {
+    fill: var(--diff-remove-c) !important;
+    opacity: 0.8;
+  }
+
+  /* Override invariant: removed edge paint beats Mermaid's resting connector stroke. */
+  .mermaid-diagram
+    :is(
+      [data-flow-element="edge"][data-flow-proposed~="removed"]:is(
+          path,
+          polyline,
+          line
+        ),
+      [data-flow-element="edge"][data-flow-proposed~="removed"]
+        :is(path, polyline, line)
+    ) {
+    stroke: var(--diff-remove-c) !important;
+    stroke-width: 3px !important;
+    stroke-dasharray: 0.35rem 0.2rem !important;
+    opacity: 0.9;
+  }
+
+  /* Override invariant: removed edge-label paint beats Mermaid's label background and text. */
+  .mermaid-diagram
+    [data-flow-edge-label-target][data-flow-proposed~="removed"]
+    :is(rect, path, text, tspan) {
+    fill: color-mix(in srgb, var(--diff-remove-c) 18%, transparent) !important;
+    stroke: var(--diff-remove-c) !important;
+    color: var(--diff-remove-c) !important;
+  }
+
+  /* Override invariant: removed arrowhead paint beats Mermaid's marker fill. */
+  .mermaid-diagram
+    marker[data-flow-proposed~="removed"]
+    :is(path, polyline, line, polygon) {
+    fill: var(--diff-remove-c) !important;
+    stroke: var(--diff-remove-c) !important;
+  }
+
+  /* Override invariant: selected arrowhead paint beats Mermaid's resting marker fill. */
+  .mermaid-diagram
+    marker[data-flow-selected]:not([data-flow-proposed~="removed"])
+    :is(path, polyline, line, polygon) {
+    fill: var(--accent-c) !important;
+    stroke: var(--accent-c) !important;
+  }
+
+  /* Override invariant: incident edge paint beats Mermaid's resting connector stroke. */
+  .mermaid-diagram
+    :is(
+      [data-flow-element="edge"][data-flow-proposed~="removed-incident"]:is(
+          path,
+          polyline,
+          line
+        ),
+      [data-flow-element="edge"][data-flow-proposed~="removed-incident"]
+        :is(path, polyline, line)
+    ) {
+    stroke: color-mix(in srgb, var(--muted-c) 45%, transparent) !important;
+    stroke-dasharray: 0.25rem 0.25rem !important;
+    opacity: 0.65;
+  }
+
+  /* Override invariant: incident target opacity beats Mermaid's resting SVG group paint. */
+  .mermaid-diagram [data-flow-element][data-flow-proposed~="removed-incident"] {
+    opacity: 0.55;
+  }
+
+  /* Override invariant: incident edge-label opacity beats Mermaid's resting label paint. */
+  .mermaid-diagram
+    [data-flow-edge-label-target][data-flow-proposed~="removed-incident"] {
+    opacity: 0.55;
+  }
+
+  /* Override invariant: the removal marker follows the scaled SVG geometry;
+     comment markers opt into the inverse scale separately. */
+  .mermaid-diagram-removed-marker {
+    position: absolute;
+    z-index: 6;
+    display: block;
+    overflow: visible;
+    pointer-events: none;
+    transform: none;
+  }
+
+  /* Override invariant: the SVG silhouette must fill the geometry-sized marker. */
+  .mermaid-diagram-removed-marker > svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  /* Override invariant: thin-X removal paint beats Mermaid's resting label paint. */
+  .mermaid-diagram-removed-marker polygon {
+    fill: var(--diff-remove-c);
+    opacity: 0.44;
+  }
+
+  /* Override invariant: the closed dialog must beat its resting overlay display. */
+  .mermaid-diagram-revert-alert[hidden] {
+    display: none;
+  }
+
+  /* Override invariant: the open dialog must cover the diagram and trap attention. */
+  .mermaid-diagram-revert-alert {
+    position: fixed;
+    z-index: 80;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgb(0 0 0 / 0.36);
+  }
+
+  /* Override invariant: dialog card chrome beats the resting diagram surface. */
+  .mermaid-diagram-revert-alert-card {
+    width: min(25rem, calc(100vw - 2rem));
+    padding: 1rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.6rem;
+    background: var(--bg);
+    box-shadow: 0 16px 40px rgb(0 0 0 / 0.28);
+  }
+
+  /* Override invariant: dialog title hierarchy beats resting body typography. */
+  .mermaid-diagram-revert-alert-title {
+    color: var(--ink-c);
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+
+  /* Override invariant: dialog explanation beats resting paragraph spacing. */
+  .mermaid-diagram-revert-alert-description {
+    margin-top: 0.375rem;
+    color: var(--muted-c);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  /* Override invariant: dialog actions align against the card edge. */
+  .mermaid-diagram-revert-alert-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  /* Override invariant: dialog controls beat the resting link and button chrome. */
+  .mermaid-diagram-revert-alert-button {
+    display: inline-flex;
+    min-height: 2.25rem;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0 0.75rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.35rem;
+    background: var(--surface-c);
+    color: var(--ink-c);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* Override invariant: destructive confirmation beats the neutral button tone. */
+  .mermaid-diagram-revert-alert-button[data-variant="danger"] {
+    border-color: color-mix(in srgb, var(--diff-remove-c) 60%, var(--edge-c));
+    background: color-mix(in srgb, var(--diff-remove-c) 10%, var(--surface-c));
+    color: var(--diff-remove-c);
+  }
+
+  /* Override invariant: dialog keyboard focus beats resting button outlines. */
+  .mermaid-diagram-revert-alert-button:focus-visible {
+    outline: 2px solid var(--accent-c);
+    outline-offset: 2px;
+  }
+}

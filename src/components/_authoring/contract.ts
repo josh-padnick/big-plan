@@ -129,6 +129,9 @@ export type ComponentCompilerInput = {
   readonly position: NodePosition;
   readonly diagnostics: DiagnosticCollector;
   readonly ids?: ComponentIdAllocator;
+  readonly validationOnly?: boolean;
+  /** Compile-time artifacts prepared by the document renderer for components that need them. */
+  readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 };
 
 /** Compiles one authored component into a framework-free plan model. */

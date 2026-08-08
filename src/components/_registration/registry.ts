@@ -12,6 +12,7 @@ import { DECISION_ANALYSIS_COMPONENT_DEFINITION } from "../decision-analysis/def
 import { FILE_TREE_DIFF_COMPONENT_DEFINITION } from "../file-tree-diff/definition.js";
 import { FILE_TREE_COMPONENT_DEFINITION } from "../file-tree/definition.js";
 import { FLOW_DIAGRAM_COMPONENT_DEFINITION } from "../flow-diagram/definition.js";
+import { MERMAID_DIAGRAM_COMPONENT_DEFINITION } from "../mermaid-diagram/definition.js";
 import { GRAPHQL_OPERATION_COMPONENT_DEFINITION } from "../graphql-operation/definition.js";
 import { GRPC_METHOD_COMPONENT_DEFINITION } from "../grpc-method/definition.js";
 import { HTTP_ENDPOINT_COMPONENT_DEFINITION } from "../http-endpoint/definition.js";
@@ -35,6 +36,7 @@ export const COMPONENT_REGISTRY: Readonly<Record<string, ComponentDefinition>> =
     FileTree: FILE_TREE_COMPONENT_DEFINITION,
     FileTreeDiff: FILE_TREE_DIFF_COMPONENT_DEFINITION,
     FlowDiagram: FLOW_DIAGRAM_COMPONENT_DEFINITION,
+    MermaidDiagram: MERMAID_DIAGRAM_COMPONENT_DEFINITION,
     GraphqlOperation: GRAPHQL_OPERATION_COMPONENT_DEFINITION,
     GrpcMethod: GRPC_METHOD_COMPONENT_DEFINITION,
     HttpEndpoint: HTTP_ENDPOINT_COMPONENT_DEFINITION,

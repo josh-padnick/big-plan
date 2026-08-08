@@ -1,0 +1,419 @@
+# MermaidDiagram gallery
+
+This gallery exercises the accepted Mermaid surface: semantic flowchart directions, node shapes, edge styles, graph structures, long labels, Unicode, realistic plan excerpts, and every supported static diagram type.
+
+## Directions and shapes
+
+### Top to bottom
+
+#### A top-to-bottom graph keeps the decision branch visible
+
+<MermaidDiagram>
+
+```mermaid
+flowchart TB
+  intake([Receive]) --> review{Review}
+  review --> approved((Approved))
+  review -.-> retry[Retry]
+```
+
+The decision branch remains visible in the static figure.
+
+</MermaidDiagram>
+
+### Top down
+
+#### A top-down graph shows a short build path
+
+<MermaidDiagram>
+
+```mermaid
+graph TD
+  source[Source] --> build[[Build step]]
+  build --> ship[/Ship/]
+```
+
+</MermaidDiagram>
+
+### Bottom to top
+
+#### A bottom-up graph makes validation lead to source data
+
+<MermaidDiagram>
+
+```mermaid
+flowchart BT
+  result((Result)) --> validate{Validate}
+  validate --> source[(Source data)]
+```
+
+</MermaidDiagram>
+
+### Right to left
+
+#### A right-to-left graph reverses the reading direction
+
+<MermaidDiagram>
+
+```mermaid
+graph RL
+  done[[Done]] --> work[Work]
+  work --> start([Start])
+```
+
+</MermaidDiagram>
+
+### Node shapes
+
+#### One graph exercises the supported node shapes
+
+<MermaidDiagram>
+
+```mermaid
+flowchart LR
+  rect[Rectangle] --> round(Round)
+  round --> circle((Circle))
+  circle --> diamond{Decision}
+  diamond --> hex{{Hexagon}}
+  hex --> stadium([Stadium])
+  stadium --> cylinder[(Cylinder)]
+  cylinder --> sub[[Subroutine]]
+  sub --> para[/Parallelogram/]
+  para --> lean[\Parallelogram alt\]
+  lean --> trap[/Trapezoid\]
+  trap --> alttrap[\Trapezoid alt/]
+  alttrap --> asym>Asymmetric]
+```
+
+Node ids are never shown as a second card line; the authored label is the content.
+
+</MermaidDiagram>
+
+## Edges and graph structure
+
+### Edge styles and labels
+
+#### Edge paint and labels distinguish relationship types
+
+<MermaidDiagram>
+
+```mermaid
+flowchart LR
+  start[Fan out] -->|solid| one[Solid]
+  start -.->|dotted| two[Dotted]
+  start ==> three[Thick]
+  start --o four[Open]
+  start --x five[Cross]
+  start -- inline text --> six[Labeled]
+  one <--> two
+  two <==> three
+  three <-.-> four
+  four --- five
+  five === six
+```
+
+</MermaidDiagram>
+
+### Fan-in, fan-out, cycles, and parallel edges
+
+#### A review graph combines branching, merging, cycles, and parallel edges
+
+<MermaidDiagram>
+
+```mermaid
+flowchart LR
+  source[Source] --> left[Left path]
+  source --> right[Right path]
+  left --> merge{Merge}
+  right --> merge
+  merge -.->|loop| source
+  source ==> merge
+```
+
+The graph contains a cycle, fan-out, fan-in, and parallel paths between the same endpoints.
+
+</MermaidDiagram>
+
+### Rank skipping and long labels
+
+#### A wide graph tests rank skipping, long labels, and Unicode
+
+<MermaidDiagram>
+
+```mermaid
+graph LR
+  start[开始 · Start] --> middle[Long label: validation, review, and delivery]
+  middle --> finish[✅ Done]
+  start --> finish
+```
+
+The direct edge skips the middle rank; Fit and Maximize keep the wide result reviewable.
+
+</MermaidDiagram>
+
+## Realistic plan excerpts
+
+### Compile and deliver
+
+#### A realistic plan graph connects source, compilation, and delivery
+
+<MermaidDiagram>
+
+```mermaid
+flowchart LR
+  source[MDX plan] --> parse[Parse]
+  parse --> semantic{Semantic model}
+  semantic -->|agent| json[Machine JSON]
+  semantic -->|human| svg[Static SVG review]
+  svg --> reader[Reviewer]
+```
+
+</MermaidDiagram>
+
+### Review feedback loop
+
+#### A realistic review graph closes the feedback loop
+
+<MermaidDiagram>
+
+```mermaid
+flowchart TB
+  draft[Draft plan] --> compile[Compile]
+  compile --> review[Human review]
+  review -->|feedback| revise[Revise source]
+  revise --> compile
+  review --> accept[Accept plan]
+```
+
+</MermaidDiagram>
+
+### Rejected syntax, shown as source text
+
+The following cases are intentionally not compiled. They demonstrate the diagnostics an author receives:
+
+````text
+<MermaidDiagram>
+```mermaid
+flowchart LR
+  subgraph Unsupported
+    a[Node]
+  end
+```
+</MermaidDiagram>
+````
+
+Big Plan reports that subgraphs are not supported in v1 and asks the author to use explicit nodes and edges instead. The unsupported `zenuml` example below receives the unsupported-type diagnostic.
+
+## Static Mermaid type gallery
+
+The compile-time renderer also accepts these Mermaid types. They are shipped as
+sanitized light and dark SVGs with no Mermaid runtime in the review document.
+Every supported type has a stable figure anchor and footer target. Where
+Mermaid exposes identifiable static geometry, Big Plan also adds review targets:
+sequence participants and messages, class/state/ER nodes and labeled relationships,
+Gantt and journey tasks, pie slices, mindmap nodes, timeline events, and git
+graph commits. Flowchart and graph keep the richer semantic node/edge model;
+these static types derive anchors and accessible names from source labels and
+leave unlabeled geometry out of the review target set.
+
+### Sequence
+
+#### A sequence keeps the review handoff visible
+
+<MermaidDiagram>
+
+```mermaid
+sequenceDiagram
+  participant Reviewer
+  participant Compiler
+  Reviewer->>Compiler: Submit source
+  Compiler-->>Reviewer: Return static SVG
+```
+
+Participants and messages are selectable; the whole diagram and footer are also
+commentable.
+
+</MermaidDiagram>
+
+### Class
+
+#### A class diagram makes the compile boundary concrete
+
+<MermaidDiagram>
+
+```mermaid
+classDiagram
+  class Plan {
+    +String title
+    +compile()
+  }
+  class Renderer
+  Plan --> Renderer
+```
+
+</MermaidDiagram>
+
+Class boxes are selectable. Unlabelled relationships remain visible in the
+static SVG, while the whole diagram and footer remain figure-level targets.
+
+### State
+
+#### A state diagram shows the review lifecycle
+
+<MermaidDiagram>
+
+```mermaid
+stateDiagram-v2
+  [*] --> Draft
+  Draft --> Review
+  Review --> Accepted
+  Accepted --> [*]
+```
+
+</MermaidDiagram>
+
+States are selectable. Unlabelled transitions remain visible in the static SVG,
+while the whole diagram and footer remain figure-level targets.
+
+### Entity relationship
+
+#### An entity relationship diagram shows review records
+
+<MermaidDiagram>
+
+```mermaid
+erDiagram
+  PLAN ||--o{ REVIEW : receives
+  REVIEW ||--|{ COMMENT : contains
+```
+
+</MermaidDiagram>
+
+Entities and relationships are selectable; the whole diagram and footer remain
+available as figure-level targets.
+
+### Gantt
+
+#### A Gantt chart makes the delivery window legible
+
+<MermaidDiagram>
+
+```mermaid
+gantt
+  title Plan delivery
+  dateFormat YYYY-MM-DD
+  section Build
+  Compile :done, compile, 2026-01-01, 2d
+  Review :review, after compile, 2d
+```
+
+</MermaidDiagram>
+
+Gantt tasks are static SVG geometry; the whole diagram and footer are
+commentable.
+
+### Pie
+
+#### A pie chart shows where review effort goes
+
+<MermaidDiagram>
+
+```mermaid
+pie title Review effort
+  "Authoring" : 40
+  "Validation" : 35
+  "Review" : 25
+```
+
+</MermaidDiagram>
+
+Pie slices are selectable; the whole diagram and footer remain available as
+figure-level targets.
+
+### User journey
+
+#### A journey follows a reviewer through the plan
+
+<MermaidDiagram>
+
+```mermaid
+journey
+  title Plan review
+  section Understand
+    Read the diagram: 5: Reviewer
+    Leave feedback: 4: Reviewer
+```
+
+</MermaidDiagram>
+
+Journey tasks are selectable; the whole diagram and footer remain available as
+figure-level targets.
+
+### Mindmap
+
+#### A mindmap groups the plan's source and output
+
+<MermaidDiagram>
+
+```mermaid
+mindmap
+  root((Plan review))
+    Source
+      MDX
+    Output
+      Static SVG
+```
+
+</MermaidDiagram>
+
+Mindmap nodes are selectable; the whole diagram and footer remain available as
+figure-level targets.
+
+### Timeline
+
+#### A timeline records the renderer release
+
+<MermaidDiagram>
+
+```mermaid
+timeline
+  title Release history
+  2026 : Mermaid shipped
+       : Gallery expanded
+```
+
+</MermaidDiagram>
+
+Timeline events are selectable; the whole diagram and footer remain available
+as figure-level targets.
+
+### Git graph
+
+#### A git graph shows the gallery branch
+
+<MermaidDiagram>
+
+```mermaid
+gitGraph
+  commit id: "base"
+  branch review
+  checkout review
+  commit id: "gallery"
+```
+
+</MermaidDiagram>
+
+Commits are selectable. Unlabelled graph edges remain visible in the static SVG,
+while the whole diagram and footer remain figure-level targets.
+
+ZenUML is intentionally shown as text rather than compiled: Mermaid 11.16.0
+does not ship a ZenUML renderer, and Big Plan does not add a separate runtime.
+
+~~~~text
+<MermaidDiagram>
+```mermaid
+zenuml
+  Alice->Bob: Hello
+```
+</MermaidDiagram>
+~~~~

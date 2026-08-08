@@ -51,6 +51,8 @@ type WorkerFixtures = {
   readonly decisionViewerUrl: string;
   readonly nestedDecisionMatrixViewerUrl: string;
   readonly flowDiagramViewerUrl: string;
+  readonly mermaidDiagramViewerUrl: string;
+  readonly mermaidGalleryViewerUrl: string;
   readonly slideCraftViewerUrl: string;
   readonly nestedDecisionViewerUrl: string;
   readonly planIdCollisionViewerUrls: {
@@ -106,6 +108,27 @@ export const summarize = (title: string): string =>
 \`\`\`
 
 </CodeSnippet>
+`;
+
+const MERMAID_REVIEW_MDX = `# Mermaid diagram review
+
+This fixture proves review state survives every viewer transition.
+
+## Review state survives a hidden theme change
+
+The graph remains reviewable before and after the slide is collapsed.
+
+<MermaidDiagram>
+
+\`\`\`mermaid
+flowchart LR
+  source[Source] -->|ships| result((Result))
+  source -.-> result
+\`\`\`
+
+Static SVG content remains readable with scripts disabled.
+
+</MermaidDiagram>
 `;
 
 // Two Decisions, one inside the other's context, so the specs can prove an
@@ -483,6 +506,36 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const outputPath = join(outputDir, "flow-diagram.html");
       await renderThroughCli({
         inputPath: join(repoRoot, "examples", "flow-diagram.mdx"),
+        outputPath,
+        outputDir,
+      });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  mermaidDiagramViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-mermaid-diagram-"),
+      );
+      const inputPath = join(outputDir, "mermaid-diagram.mdx");
+      const outputPath = join(outputDir, "mermaid-diagram.html");
+      await writeFile(inputPath, MERMAID_REVIEW_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  mermaidGalleryViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-mermaid-gallery-"),
+      );
+      const outputPath = join(outputDir, "mermaid-gallery.html");
+      await renderThroughCli({
+        inputPath: join(repoRoot, "examples", "mermaid-gallery.mdx"),
         outputPath,
         outputDir,
       });

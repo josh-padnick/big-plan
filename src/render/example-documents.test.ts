@@ -20,11 +20,15 @@ describe("example documents", () => {
     expect(exampleFiles.length).toBeGreaterThan(0);
   });
 
-  it.each(exampleFiles)("should render %s without diagnostics", (name) => {
-    const markdown = readFileSync(join(EXAMPLES_DIR, name), "utf8");
-    const { html } = renderDocument({ markdown, fallbackTitle: name });
-    expect(html).toContain("<!doctype html>");
-  });
+  it.each(exampleFiles)(
+    "should render %s without diagnostics",
+    (name) => {
+      const markdown = readFileSync(join(EXAMPLES_DIR, name), "utf8");
+      const { html } = renderDocument({ markdown, fallbackTitle: name });
+      expect(html).toContain("<!doctype html>");
+    },
+    15000,
+  );
 
   it.each(exampleFiles)("should lint %s without findings", (name) => {
     const markdown = readFileSync(join(EXAMPLES_DIR, name), "utf8");

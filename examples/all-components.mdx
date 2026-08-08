@@ -182,6 +182,22 @@ One source file, one feedback stream, and two coordinated readers.
 
 </FlowDiagram>
 
+*Review acceptance can also cycle a plan back to its source before execution begins.*
+
+<MermaidDiagram>
+
+```mermaid
+flowchart LR
+  plan[Plan source] --> compile[[Compile]]
+  compile --> review{Review}
+  review -->|accept| execute([Execute])
+  review -.->|revise| plan
+```
+
+Revision feedback cycles back to the authoritative plan source.
+
+</MermaidDiagram>
+
 <FileTree title="Review module layout">
 
 ```tree

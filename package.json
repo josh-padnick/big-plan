@@ -38,10 +38,14 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@playwright/test": "1.61.1",
     "axi-sdk-js": "^0.1.8",
     "hast-util-from-html": "^2.0.3",
+    "hast-util-to-html": "9.0.5",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "lowlight": "^3.3.0",
+    "mermaid": "11.16.0",
+    "property-information": "^7.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "rehype-highlight": "^7.0.2",
@@ -55,7 +59,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.53.0",
     "@tailwindcss/cli": "^4.3.2",
     "@types/hast": "^3.0.5",
     "@types/node": "^22.15.0",

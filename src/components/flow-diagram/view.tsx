@@ -313,8 +313,8 @@ const ProposalControls = () => (
       type="button"
       className={`${VIEWER_CONTROL_CLASSES} flow-diagram-revert-all w-9 rounded-md px-0`}
       data-flow-revert-all
-      aria-label="Revert all changes"
-      data-tooltip="Revert all changes"
+      aria-label="Revert edits and deletions"
+      data-tooltip="Revert edits and deletions"
     >
       {lucideIconToReact({ icon: ROTATE_CCW_ICON, hidden: false })}
     </button>

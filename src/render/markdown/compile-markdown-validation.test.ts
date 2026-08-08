@@ -122,6 +122,133 @@ describe("compileMarkdown static MDX validation", () => {
     ]);
   });
 
+  it("should report malformed MDX before Mermaid browser preparation", () => {
+    const previous = process.env["PLAYWRIGHT_BROWSERS_PATH"];
+    process.env["PLAYWRIGHT_BROWSERS_PATH"] =
+      ".missing-playwright-browsers-for-mdx-validation";
+    try {
+      const diagnostics = diagnosticsFor(`# Plan
+
+<MermaidDiagram>
+
+\`\`\`mermaid
+flowchart LR
+  a[Alpha] --> b[Beta]
+\`\`\`
+
+</MermaidDiagram>
+
+<Callout>
+`);
+      expect(diagnostics).toEqual([
+        expect.objectContaining({
+          line: 12,
+          message: expect.stringContaining("Expected a closing tag"),
+        }),
+      ]);
+    } finally {
+      if (previous === undefined) {
+        delete process.env["PLAYWRIGHT_BROWSERS_PATH"];
+      } else {
+        process.env["PLAYWRIGHT_BROWSERS_PATH"] = previous;
+      }
+    }
+  });
+
+  it("should report structural MDX diagnostics before Mermaid browser preparation", () => {
+    const previous = process.env["PLAYWRIGHT_BROWSERS_PATH"];
+    process.env["PLAYWRIGHT_BROWSERS_PATH"] =
+      ".missing-playwright-browsers-for-structure-validation";
+    try {
+      const diagnostics = diagnosticsFor(`# Plan
+
+<MermaidDiagram>
+
+\`\`\`mermaid
+flowchart LR
+  a[Alpha] --> b[Beta]
+\`\`\`
+
+<Slide />
+
+</MermaidDiagram>
+`);
+      expect(diagnostics).toEqual([
+        expect.objectContaining({
+          line: 10,
+          message: expect.stringContaining("Slide must be a top-level"),
+        }),
+      ]);
+    } finally {
+      if (previous === undefined) {
+        delete process.env["PLAYWRIGHT_BROWSERS_PATH"];
+      } else {
+        process.env["PLAYWRIGHT_BROWSERS_PATH"] = previous;
+      }
+    }
+  });
+
+  it.each([
+    {
+      name: "an unknown component",
+      body: "<Unknown />",
+      message: 'Unknown component "Unknown"',
+    },
+    {
+      name: "an invalid component attribute",
+      body: '<Callout type="note" unsupported />',
+      message: 'Unknown attribute "unsupported" on Callout',
+    },
+    {
+      name: "an additional Mermaid fence",
+      body: `<MermaidDiagram>
+
+\`\`\`mermaid
+flowchart LR
+  a[Alpha] --> b[Beta]
+\`\`\`
+
+\`\`\`text
+extra
+\`\`\`
+
+</MermaidDiagram>`,
+      message:
+        "MermaidDiagram does not accept additional fenced code blocks; keep only the one ```mermaid block",
+    },
+  ])(
+    "should report $name before Mermaid browser preparation",
+    ({ body, message }) => {
+      const previous = process.env["PLAYWRIGHT_BROWSERS_PATH"];
+      process.env["PLAYWRIGHT_BROWSERS_PATH"] =
+        ".missing-playwright-browsers-for-semantic-validation";
+      try {
+        const diagnostics = diagnosticsFor(`# Plan
+
+<MermaidDiagram>
+
+\`\`\`mermaid
+flowchart LR
+  a[Alpha] --> b[Beta]
+\`\`\`
+
+</MermaidDiagram>
+
+${body}
+`);
+        expect(diagnostics).toContainEqual(
+          expect.objectContaining({ message }),
+        );
+      } finally {
+        if (previous === undefined) {
+          delete process.env["PLAYWRIGHT_BROWSERS_PATH"];
+        } else {
+          process.env["PLAYWRIGHT_BROWSERS_PATH"] = previous;
+        }
+      }
+    },
+  );
+
   it("should collect every diagnostic when invalid constructs coexist", () => {
     expect(
       diagnosticsFor("export const plan = true\n\n{plan}\n\n<Unknown />\n"),
