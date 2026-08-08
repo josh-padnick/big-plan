@@ -47,7 +47,10 @@ export const reviewCommand = async (
     );
   }
 
+  let stopping = false;
   const stop = () => {
+    if (stopping) return;
+    stopping = true;
     void runtime
       .close()
       .catch((error: unknown) => {

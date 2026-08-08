@@ -87,9 +87,9 @@ React is a presentation-edge implementation tool. A rendered document ships a
 typed React interaction island for commenting plus the page envelope's
 first-paint preference bootstrap and the shell's self-contained viewer scripts
 for the [documented reader interactions](docs/src/content/docs/intro/features.md).
-React never renders, replaces, or gates the server-rendered plan content, which
-remains fully readable when scripts are disabled. Big Plan ships no separate
-script-free HTML variant.
+The browser React interaction island never renders, replaces, or gates the
+server-rendered plan content, which remains fully readable when scripts are
+disabled. Big Plan ships no separate script-free HTML variant.
 Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
 
 Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
