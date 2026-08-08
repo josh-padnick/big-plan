@@ -932,6 +932,7 @@ const StagedCard = ({
         onPointerLeave={() => setAssociated(false)}
         onFocus={() => setAssociated(true)}
         onBlur={() => setAssociated(false)}
+        data-review-comment-ui=""
         data-review-associated={associated ? "true" : undefined}
         aria-label={`Expand staged comment on ${targetLabel(comment.target)}`}
       >
@@ -969,6 +970,7 @@ const StagedCard = ({
         )
           setAssociated(false);
       }}
+      data-review-comment-ui=""
       data-review-associated={associated ? "true" : undefined}
       data-review-surface={surface}
     >
@@ -1213,9 +1215,18 @@ const ReviewKernel = () => {
     });
     const move = (event: PointerEvent) => {
       const eventTarget = event.target;
+      const eventElement =
+        eventTarget instanceof Element
+          ? eventTarget
+          : eventTarget instanceof Node
+            ? eventTarget.parentElement
+            : null;
       if (
-        eventTarget instanceof Node &&
-        document.querySelector("#big-plan-review-root")?.contains(eventTarget)
+        (eventTarget instanceof Node &&
+          document
+            .querySelector("#big-plan-review-root")
+            ?.contains(eventTarget)) ||
+        Boolean(eventElement?.closest("[data-review-comment-ui]"))
       ) {
         return;
       }

@@ -281,14 +281,6 @@ All visual choices use the document theme's closed token vocabulary.
     outline-offset: 0.25rem;
   }
 
-  /* Override invariant: an actively associated comment target beats the
-     target's resting border and shadow without using the selected state. */
-  [data-review-comment-associated] {
-    outline: 2px solid color-mix(in srgb, var(--annotation-c) 55%, var(--bg));
-    outline-offset: 0.25rem;
-    box-shadow: 0 0 0 0.25rem var(--annotation-bg);
-  }
-
   /* Override invariant: the durable comment marker is visible over a target's
      resting outline without using the stronger active-association treatment. */
   [data-review-has-comment] {
@@ -298,6 +290,14 @@ All visual choices use the document theme's closed token vocabulary.
 
   [data-review-has-comment]:hover {
     outline-color: color-mix(in srgb, var(--annotation-c) 55%, var(--bg));
+    box-shadow: 0 0 0 0.25rem var(--annotation-bg);
+  }
+
+  /* Override invariant: an actively associated comment target beats the
+     target's resting and hovered marker without using the selected state. */
+  [data-review-comment-associated] {
+    outline: 2px solid color-mix(in srgb, var(--annotation-c) 55%, var(--bg));
+    outline-offset: 0.25rem;
     box-shadow: 0 0 0 0.25rem var(--annotation-bg);
   }
 

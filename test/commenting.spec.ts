@@ -229,6 +229,8 @@ test("should stage and restore a slide comment through the legacy chrome", async
     (node) => node.getBoundingClientRect().top + window.scrollY,
   );
   await thread.hover();
+  await expect(slide).toHaveAttribute("data-review-comment-associated", "");
+  await expect(slide).toHaveCSS("outline-width", "2px");
   await expect
     .poll(() =>
       threadHost.evaluate(
@@ -467,6 +469,23 @@ test("should preserve a text selection while its compact composer is open", asyn
       ),
     )
     .toBe(true);
+  await rail.getByRole("button", { name: "Close feedback" }).click();
+  const selectionThread = page.locator(
+    "[data-review-thread-side] .review-staged-card",
+  );
+  await selectionThread.hover();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          CSS as unknown as {
+            highlights?: { has(name: string): boolean };
+          }
+        ).highlights?.has("big-plan-review-selection-active"),
+      ),
+    )
+    .toBe(true);
+  await page.getByRole("button", { name: /Feedback/ }).click();
   const selectedPoint = await block.evaluate((element) => {
     const text = document
       .createTreeWalker(element, NodeFilter.SHOW_TEXT)
