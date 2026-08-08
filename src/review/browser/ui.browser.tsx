@@ -130,7 +130,8 @@ export const Card = ({
 /** Token-themed shadcn Badge primitive. */
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
   readonly size?: "default" | "compact" | "micro";
-  readonly tone?: "neutral" | "accentOutline" | "secondary";
+  readonly shape?: "badge" | "pill";
+  readonly tone?: "neutral" | "accent" | "accentOutline" | "secondary";
   readonly weight?: "semibold" | "bold";
 };
 
@@ -142,8 +143,14 @@ const BADGE_SIZES = {
 
 const BADGE_TONES = {
   neutral: "border border-transparent bg-surface text-muted",
+  accent: "border border-transparent bg-accent text-accent-ink",
   accentOutline: "border border-accent bg-transparent text-accent",
   secondary: "border border-transparent bg-well text-muted",
+} as const;
+
+const BADGE_SHAPES = {
+  badge: "rounded-md",
+  pill: "rounded-full",
 } as const;
 
 const BADGE_WEIGHTS = {
@@ -154,14 +161,16 @@ const BADGE_WEIGHTS = {
 export const Badge = ({
   className,
   size = "default",
+  shape = "pill",
   tone = "neutral",
   weight = "semibold",
   ...props
 }: BadgeProps) => (
   <span
     className={joinClasses(
-      "inline-flex items-center rounded-full",
+      "inline-flex items-center",
       BADGE_SIZES[size],
+      BADGE_SHAPES[shape],
       BADGE_TONES[tone],
       BADGE_WEIGHTS[weight],
       className,

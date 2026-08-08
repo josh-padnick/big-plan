@@ -138,6 +138,8 @@ const LIVE_FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = [
   "agent",
 ];
 const STATIC_FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = ["comments", "chat"];
+const FEEDBACK_TAB_CLASS =
+  "relative inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-start gap-1.5 rounded-none border-0 bg-transparent px-2 py-1.5 text-xs font-semibold text-muted after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent after:content-[''] hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-selected:text-ink aria-selected:after:bg-accent max-sm:text-2xs [&>svg]:size-3.5 [&>svg]:shrink-0 [&>span]:min-w-5 [&>span]:justify-center [&>span]:bg-[var(--annotation-bg)] [&>span]:text-2xs [&>span]:text-[var(--annotation-c)]";
 const WIDE_QUERY = "(min-width: 80rem)";
 const MODIFIER_SHORTCUT = /Mac|iPhone|iPad/u.test(navigator.platform)
   ? "⌘+Enter"
@@ -1230,14 +1232,16 @@ const StagedCard = ({
         data-review-associated={associated ? "true" : undefined}
         aria-label={`Expand staged comment on ${targetLabel(comment.target)}`}
       >
-        <Badge
-          size="micro"
-          tone="secondary"
-          weight="bold"
-          className="px-1.5 py-px text-2xs leading-normal tracking-caps"
-        >
-          STAGED
-        </Badge>
+        {surface === "thread" ? (
+          <Badge
+            size="compact"
+            shape="badge"
+            tone="secondary"
+            className="leading-normal tracking-caps"
+          >
+            STAGED
+          </Badge>
+        ) : null}
         <span>
           {surface === "rail" ? targetLabel(comment.target) : comment.body}
         </span>
@@ -1269,7 +1273,8 @@ const StagedCard = ({
       data-review-surface={surface}
     >
       <div
-        className={`review-staged-meta flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar! px-3 py-2" : ""}`}
+        className={`review-staged-meta flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : ""}`}
+        style={surface === "thread" ? { padding: "3px 5px" } : undefined}
       >
         {surface === "rail" ? (
           <button
@@ -1283,10 +1288,10 @@ const StagedCard = ({
         ) : (
           <>
             <Badge
-              size="micro"
+              size="compact"
+              shape="badge"
               tone="secondary"
-              weight="bold"
-              className="px-1.5 py-px text-2xs leading-normal tracking-caps"
+              className="leading-normal tracking-caps"
             >
               STAGED
             </Badge>
@@ -1295,16 +1300,6 @@ const StagedCard = ({
             </time>
           </>
         )}
-        {surface === "rail" ? (
-          <Badge
-            size="micro"
-            tone="secondary"
-            weight="bold"
-            className="px-1.5 py-px text-2xs leading-normal tracking-caps"
-          >
-            STAGED
-          </Badge>
-        ) : null}
         <div className="review-staged-actions ml-auto flex items-center gap-1 [&_svg]:size-3.5">
           {surface === "thread" ? (
             <Button
@@ -1516,7 +1511,7 @@ const SentThread = ({
       <div className="flex min-w-0 items-start justify-between gap-3">
         <button
           type="button"
-          className="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left text-xs font-semibold uppercase tracking-caps text-ink hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+          className="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left text-2xs font-semibold uppercase tracking-caps text-ink hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
           onClick={onJump}
         >
           {targetLabel(comment.target, true)}
@@ -2330,7 +2325,7 @@ const ReviewKernel = () => {
         : createPortal(
             <button
               type="button"
-              className="inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 rounded-sm border-0 bg-transparent px-2 py-1 text-xs text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-expanded:bg-surface aria-expanded:text-ink aria-expanded:inset-shadow-well [&>svg]:size-4 [&>span]:bg-accent [&>span]:text-accent-ink"
+              className="inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:bg-surface hover:text-ink hover:shadow-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-accent aria-expanded:bg-accent-wash aria-expanded:text-accent aria-expanded:shadow-raised [&>svg]:size-4"
               aria-expanded={isOpen}
               aria-controls="big-plan-feedback-rail"
               onClick={() => setIsOpen((current) => !current)}
@@ -2338,7 +2333,13 @@ const ReviewKernel = () => {
               <Icon icon={MESSAGE_SQUARE_ICON} />
               Feedback
               {drafts.length > 0 ? (
-                <Badge size="compact">{drafts.length}</Badge>
+                <Badge
+                  size="compact"
+                  tone="accent"
+                  className="h-5 min-w-5 justify-center px-1 py-0 leading-none"
+                >
+                  {drafts.length}
+                </Badge>
               ) : null}
             </button>,
             feedbackHost,
@@ -2351,7 +2352,7 @@ const ReviewKernel = () => {
         >
           <div className="flex flex-none items-stretch border-b border-edge bg-paper">
             <div
-              className="flex min-w-0 flex-1 items-stretch gap-1 pt-1.5 pl-2 [&_button]:inline-flex [&_button]:min-h-8 [&_button]:min-w-0 [&_button]:cursor-pointer [&_button]:items-center [&_button]:justify-start [&_button]:gap-1.5 [&_button]:rounded-none [&_button]:border-0 [&_button]:border-b-2 [&_button]:border-transparent [&_button]:bg-transparent [&_button]:px-2 [&_button]:py-1.5 [&_button]:text-xs [&_button]:font-semibold [&_button]:text-muted [&_button]:hover:bg-surface [&_button]:hover:text-ink [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-accent [&_button][aria-selected=true]:border-accent [&_button][aria-selected=true]:bg-transparent [&_button][aria-selected=true]:text-ink [&_button>svg]:size-3.5 [&_button>svg]:shrink-0 [&_button>span]:min-w-5 [&_button>span]:justify-center [&_button>span]:bg-[var(--annotation-bg)] [&_button>span]:text-2xs [&_button>span]:text-[var(--annotation-c)] max-sm:[&_button]:text-2xs"
+              className="flex min-w-0 flex-1 items-stretch gap-1 pt-1.5 pl-2"
               role="tablist"
               aria-label="Feedback views"
               onKeyDown={handleFeedbackTabKeyDown}
@@ -2359,6 +2360,7 @@ const ReviewKernel = () => {
               <button
                 id="review-tab-comments"
                 type="button"
+                className={FEEDBACK_TAB_CLASS}
                 role="tab"
                 aria-controls="review-panel-comments"
                 aria-selected={tab === "comments"}
@@ -2374,6 +2376,7 @@ const ReviewKernel = () => {
               <button
                 id="review-tab-chat"
                 type="button"
+                className={FEEDBACK_TAB_CLASS}
                 role="tab"
                 aria-controls="review-panel-chat"
                 aria-selected={tab === "chat"}
@@ -2387,6 +2390,7 @@ const ReviewKernel = () => {
                 <button
                   id="review-tab-agent"
                   type="button"
+                  className={FEEDBACK_TAB_CLASS}
                   role="tab"
                   aria-controls="review-panel-agent"
                   aria-selected={tab === "agent"}
@@ -2505,7 +2509,7 @@ const ReviewKernel = () => {
                 </section>
               ) : null}
               {drafts.length > 0 ? (
-                <div className="mt-1 flex justify-end">
+                <div className="mt-3 flex justify-end">
                   <Button
                     variant="outline"
                     size="compact"
