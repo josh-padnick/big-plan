@@ -94,7 +94,7 @@ const renderCompiledDocument = ({
   });
   const html = renderPage({
     title: resolvedTitle,
-    styles: shell.styles,
+    styles: [shell.styles, ...compiled.embeddedStyles].join("\n"),
     bodyClassName: shell.bodyClassName,
     bodyHtml: shell.html,
     rootAttributes: rootAttributesFor(identity),

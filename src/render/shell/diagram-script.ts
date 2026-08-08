@@ -67,6 +67,9 @@ export const DIAGRAM_SCRIPT = `
   // Set by a pan that actually moved, read by the click that follows it.
   let suppressClick = false;
   let activeExitAlert = null;
+  let activeRevertAllAlert = null;
+  const hasActiveAlert = () =>
+    activeExitAlert !== null || activeRevertAllAlert !== null;
 
   const clamp = (value, low, high) => Math.max(low, Math.min(value, high));
   const el = (tag, className, text) => {
@@ -75,6 +78,8 @@ export const DIAGRAM_SCRIPT = `
     if (text !== undefined) node.textContent = text;
     return node;
   };
+  const svgEl = (tag) =>
+    document.createElementNS("http://www.w3.org/2000/svg", tag);
   const quote = (v) => String.fromCharCode(8220) + v + String.fromCharCode(8221);
   const isTextEditor = (target) =>
     target &&
@@ -102,8 +107,15 @@ export const DIAGRAM_SCRIPT = `
   const kindOf = (n) => n.getAttribute("data-flow-element");
   const nameOf = (n) => n.getAttribute("data-flow-name") || "element";
   const anchorOf = (n) => n.getAttribute("data-flow-anchor") || "";
+  // A diagram may ship the same targets once per theme variant; only the
+  // variant the theme currently displays takes part in selection and roving.
+  const inHiddenVariant = (n) => {
+    const variant = n.closest("[data-flow-variant]");
+    return variant !== null && variant.getClientRects().length === 0;
+  };
   const elementsIn = (diagram) =>
-    Array.from(diagram.querySelectorAll("[data-flow-element]"));
+    Array.from(diagram.querySelectorAll("[data-flow-element]"))
+      .filter((n) => !inHiddenVariant(n));
   const targetsIn = (diagram) => [diagram].concat(elementsIn(diagram));
   const fieldsIn = (node) => {
     const own = [];
@@ -112,8 +124,101 @@ export const DIAGRAM_SCRIPT = `
     }
     return own;
   };
-  const nodesIn = (d) => Array.from(d.querySelectorAll('[data-flow-element="node"]'));
-  const edgesIn = (d) => Array.from(d.querySelectorAll('[data-flow-element="edge"]'));
+  const nodesIn = (d) =>
+    Array.from(d.querySelectorAll('[data-flow-element="node"]'))
+      .filter((n) => !inHiddenVariant(n));
+  const edgesIn = (d) =>
+    Array.from(d.querySelectorAll('[data-flow-element="edge"]'))
+      .filter((n) => !inHiddenVariant(n));
+  const isMermaidDiagram = (diagram) =>
+    diagram.classList.contains("mermaid-diagram");
+  const visibleTargetForAnchor = (diagram, anchor) =>
+    elementsIn(diagram).find((element) => anchorOf(element) === anchor) || null;
+  const targetForAnchor = (diagram, anchor) =>
+    anchor === anchorOf(diagram)
+      ? diagram
+      : visibleTargetForAnchor(diagram, anchor);
+  const draftMatchesNode = (draft, node) => {
+    if (draft.element === node) return true;
+    if (!draft.anchor || !node) return false;
+    const diagram = node.closest("[data-flow-diagram]");
+    return diagram === draft.diagram && anchorOf(node) === draft.anchor;
+  };
+  const mermaidMarkerLayer = (diagram) => {
+    const artboard = diagram.querySelector("[data-flow-artboard]");
+    if (!artboard) return null;
+    let layer = artboard.querySelector("[data-mermaid-overlay-layer]");
+    if (!layer) {
+      layer = el("div", "mermaid-diagram-comment-layer");
+      layer.setAttribute("data-mermaid-overlay-layer", "");
+      artboard.appendChild(layer);
+    }
+    return layer;
+  };
+  const mermaidEdgeLabelFor = (target) => {
+    const label = target.closest("[data-flow-edge-label-target]");
+    if (!label) return null;
+    const diagram = label.closest("[data-flow-diagram]");
+    return diagram
+      ? visibleTargetForAnchor(
+          diagram,
+          label.getAttribute("data-flow-edge-anchor") || "",
+        )
+      : null;
+  };
+  const targetForEvent = (target) => {
+    const hit = target.closest && target.closest("[data-flow-edge-hit]");
+    if (hit) {
+      const diagram = hit.closest("[data-flow-diagram]");
+      const anchor = hit.getAttribute("data-flow-edge-anchor");
+      if (diagram && anchor) return visibleTargetForAnchor(diagram, anchor);
+    }
+    const semantic = target.closest("[data-flow-element]");
+    if (semantic && kindOf(semantic) !== "figure") return semantic;
+    return mermaidEdgeLabelFor(target);
+  };
+  const setProposedState = (node, state, present) => {
+    const current = (node.getAttribute("data-flow-proposed") || "")
+      .split(" ")
+      .filter(Boolean)
+      .filter((candidate) => candidate !== state);
+    if (present) current.push(state);
+    if (current.length > 0) node.setAttribute("data-flow-proposed", current.join(" "));
+    else node.removeAttribute("data-flow-proposed");
+  };
+  const addProposedState = (node, state) => setProposedState(node, state, true);
+  const syncEdgeDecorations = (edge) => {
+    if (kindOf(edge) !== "edge") return;
+    const diagram = edge.closest("[data-flow-diagram]");
+    const anchor = anchorOf(edge);
+    if (!diagram || !anchor) return;
+    const selected = edge.hasAttribute("data-flow-selected");
+    const removed = (edge.getAttribute("data-flow-proposed") || "")
+      .split(" ")
+      .includes("removed");
+    const paint = edge.matches("[marker-start], [marker-mid], [marker-end]")
+      ? edge
+      : edge.querySelector("[marker-start], [marker-mid], [marker-end]");
+    for (const label of diagram.querySelectorAll(
+      "[data-flow-edge-label-target]",
+    )) {
+      if (label.getAttribute("data-flow-edge-anchor") !== anchor) continue;
+      label.toggleAttribute("data-flow-selected", selected);
+      setProposedState(label, "removed", removed);
+    }
+    for (const attribute of ["marker-start", "marker-mid", "marker-end"]) {
+      const reference = paint && paint.getAttribute(attribute);
+      const match =
+        reference && new RegExp("url\\\\(#([^)]+)\\\\)", "u").exec(reference);
+      if (!match || !paint.ownerSVGElement) continue;
+      const marker = Array.from(
+        paint.ownerSVGElement.querySelectorAll("marker[id]"),
+      ).find((candidate) => candidate.getAttribute("id") === match[1]);
+      if (!marker) continue;
+      marker.toggleAttribute("data-flow-selected", selected);
+      setProposedState(marker, "removed", removed);
+    }
+  };
 
   // Originals live here rather than in attributes: a proposal repaints the
   // document and must be able to put back exactly what the agent wrote.
@@ -127,7 +232,9 @@ export const DIAGRAM_SCRIPT = `
   }
   const labelOfNode = (node) => {
     const field = node.querySelector('[data-flow-field="label"]');
-    return field ? originalText.get(field) : node.getAttribute("data-flow-node");
+    return field
+      ? originalText.get(field)
+      : node.getAttribute("data-flow-label") || node.getAttribute("data-flow-node");
   };
 
   // A node label alone rarely says where you were, so a tray line carries the
@@ -153,7 +260,9 @@ export const DIAGRAM_SCRIPT = `
     }
     if (kind === "edge") {
       const field = node.querySelector('[data-flow-field="label"]');
-      const text = field ? originalText.get(field) : "";
+      const text = field
+        ? originalText.get(field)
+        : node.getAttribute("data-flow-label") || "";
       return text ? "labelled " + quote(text) : "";
     }
     return node.getAttribute("data-flow-where") || "";
@@ -163,7 +272,7 @@ export const DIAGRAM_SCRIPT = `
   let drafts = [];
   let nextId = 1;
   const removalOn = (node) =>
-    drafts.find((d) => d.kind === "remove-element" && d.element === node);
+    drafts.find((d) => d.kind === "remove-element" && draftMatchesNode(d, node));
 
   // Undo is a stack of draft-list snapshots. The list is small and every
   // entry is a plain object, so a shallow copy is a complete restore point -
@@ -207,6 +316,7 @@ export const DIAGRAM_SCRIPT = `
     c.sizer.style.transform =
       "translate(" + c.x + "px," + c.y + "px) scale(" + c.zoom + ")";
     c.sizer.style.setProperty("--flow-marker-scale", String(1 / c.zoom));
+    c.sizer.style.setProperty("--flow-comment-marker-scale", String(1 / c.zoom));
     const readout = diagram.querySelector("[data-flow-zoom-readout]");
     if (readout) readout.textContent = Math.round(c.zoom * 100) + "%";
     reanchor();
@@ -420,7 +530,11 @@ export const DIAGRAM_SCRIPT = `
 
   const select = (node) => {
     if (selected === node) { reanchor(); return; }
-    if (selected) selected.removeAttribute("data-flow-selected");
+    closeCommentThread();
+    if (selected) {
+      selected.removeAttribute("data-flow-selected");
+      syncEdgeDecorations(selected);
+    }
     selected = node;
     if (selected) {
       // The figure is a keyboard entry point, not an authored target. Keep it
@@ -428,14 +542,19 @@ export const DIAGRAM_SCRIPT = `
       // but do not paint a whole-canvas selection ring after Escape.
       if (kindOf(selected) !== "figure") {
         selected.setAttribute("data-flow-selected", "");
+        syncEdgeDecorations(selected);
       }
       announce("Selected " + nameOf(selected));
     }
     buildActionBar();
   };
   const deselect = () => {
+    closeCommentThread();
     stopEditing(false);
-    if (selected) selected.removeAttribute("data-flow-selected");
+    if (selected) {
+      selected.removeAttribute("data-flow-selected");
+      syncEdgeDecorations(selected);
+    }
     selected = null;
     buildActionBar();
   };
@@ -444,10 +563,22 @@ export const DIAGRAM_SCRIPT = `
     const c = canvas.get(diagram);
     if (!c) continue;
     diagram.addEventListener("click", (event) => {
+      const marker = event.target.closest?.(
+        ".mermaid-diagram-toolbar-comment-marker",
+      );
+      if (!marker) return;
+      event.stopPropagation();
+      openCommentFromMarker(
+        diagram,
+        marker.getAttribute("data-flow-comment-anchor") || "",
+        marker,
+      );
+    }, true);
+    diagram.addEventListener("click", (event) => {
       const inViewport = c.viewport.contains(event.target);
       if (inViewport && suppressClick) { suppressClick = false; return; }
       if (event.target.closest("[data-flow-editing]")) return;
-      const node = event.target.closest("[data-flow-element]");
+      const node = targetForEvent(event.target);
       if (node && node !== diagram) select(node);
       else if (inViewport) deselect();
     });
@@ -509,7 +640,7 @@ export const DIAGRAM_SCRIPT = `
     // proposal, it is a change of mind, so the draft goes away entirely.
     if (next !== before.trim()) pushHistory();
     drafts = drafts.filter(
-      (d) => !(d.kind === "edit-text" && d.element === node && d.fieldName === name),
+      (d) => !(d.kind === "edit-text" && draftMatchesNode(d, node) && d.fieldName === name),
     );
     // Empty is still an edit. Dropping that draft left the contenteditable
     // field empty in the live DOM, so deleting every character silently
@@ -529,7 +660,7 @@ export const DIAGRAM_SCRIPT = `
   };
 
   document.addEventListener("keydown", (event) => {
-    if (activeExitAlert !== null) return;
+    if (hasActiveAlert()) return;
     // Undo first: it must work whether or not something is selected, and
     // whether or not the pointer is anywhere near the diagram.
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
@@ -542,7 +673,7 @@ export const DIAGRAM_SCRIPT = `
       else if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); stopEditing(false); }
       return;
     }
-    if (!compose.hidden) return;
+    if (!compose.hidden || !commentThread.hidden) return;
     if (!selected) return;
     // The selected canvas element keeps its state while focus moves through
     // viewer chrome. Native button/link activation must win over the canvas's
@@ -615,8 +746,12 @@ export const DIAGRAM_SCRIPT = `
     } else {
       // A removal supersedes text edits on the same element: two contradictory
       // instructions on one element make the agent guess.
-      const withdrawn = drafts.filter((d) => d.kind === "edit-text" && d.element === node);
-      drafts = drafts.filter((d) => !(d.kind === "edit-text" && d.element === node));
+      const withdrawn = drafts.filter(
+        (d) => d.kind === "edit-text" && draftMatchesNode(d, node),
+      );
+      drafts = drafts.filter(
+        (d) => !(d.kind === "edit-text" && draftMatchesNode(d, node)),
+      );
       const note = withdrawn.length
         ? "Withdrew " + withdrawn.length + " pending edit" + (withdrawn.length === 1 ? "" : "s") +
           " on this element (" +
@@ -635,18 +770,28 @@ export const DIAGRAM_SCRIPT = `
 
   // --- Consequences -------------------------------------------------------
   const incidentEdges = (diagram, ids) =>
-    edgesIn(diagram).filter(
-      (e) => ids.indexOf(e.getAttribute("data-flow-edge-from")) !== -1 ||
-             ids.indexOf(e.getAttribute("data-flow-edge-to")) !== -1,
-    );
+    ids.length === 0
+      ? []
+      : edgesIn(diagram).filter((edge) => {
+          const from = edge.getAttribute("data-flow-edge-from");
+          const to = edge.getAttribute("data-flow-edge-to");
+          return (
+            (from !== null && ids.indexOf(from) !== -1) ||
+            (to !== null && ids.indexOf(to) !== -1)
+          );
+        });
   const removedNodeIdsFor = (node) => {
     const kind = kindOf(node);
-    if (kind === "node") return [node.getAttribute("data-flow-node")];
+    if (kind === "node") {
+      const id = node.getAttribute("data-flow-node");
+      return id === null ? [] : [id];
+    }
     if (kind === "stage") {
       const stage = node.getAttribute("data-flow-stage");
       return nodesIn(node.closest("[data-flow-diagram]"))
         .filter((n) => n.getAttribute("data-flow-in-stage") === stage)
-        .map((n) => n.getAttribute("data-flow-node"));
+        .map((n) => n.getAttribute("data-flow-node"))
+        .filter((id) => id !== null);
     }
     return [];
   };
@@ -693,6 +838,9 @@ export const DIAGRAM_SCRIPT = `
       for (const marker of diagram.querySelectorAll("[data-flow-comment-marker]")) {
         marker.remove();
       }
+      for (const marker of diagram.querySelectorAll("[data-flow-removed-marker]")) {
+        marker.remove();
+      }
       for (const n of diagram.querySelectorAll("[data-flow-proposed]")) {
         n.removeAttribute("data-flow-proposed");
       }
@@ -703,12 +851,6 @@ export const DIAGRAM_SCRIPT = `
       }
     }
   };
-  const addProposedState = (node, state) => {
-    const current = (node.getAttribute("data-flow-proposed") || "").split(" ").filter(Boolean);
-    if (current.indexOf(state) === -1) current.push(state);
-    node.setAttribute("data-flow-proposed", current.join(" "));
-  };
-
   const baseName = new WeakMap();
   const restateName = (node, suffix) => {
     if (!baseName.has(node)) baseName.set(node, node.getAttribute("aria-label") || "");
@@ -722,15 +864,121 @@ export const DIAGRAM_SCRIPT = `
     }
   };
 
+  // The removal X is one filled silhouette rather than two strokes. Its
+  // bounds follow the target, while its arm thickness is rebuilt from the
+  // shared inverse marker scale so zoom changes do not make the arms heavy.
+  const removedMarkerScale = (diagram) => {
+    const c = canvas.get(diagram);
+    if (!c) return 1;
+    const value = Number.parseFloat(
+      getComputedStyle(c.sizer).getPropertyValue("--flow-marker-scale"),
+    );
+    return Number.isFinite(value) ? value : 1 / c.zoom;
+  };
+  const updateRemovedMarker = (marker, scale) => {
+    const svg = marker.querySelector("svg");
+    const polygon = svg && svg.querySelector("polygon");
+    if (!svg || !polygon) return;
+    const width = Number.parseFloat(svg.getAttribute("data-x-width") || "0");
+    const height = Number.parseFloat(svg.getAttribute("data-x-height") || "0");
+    const arm = Math.min(2.55 * scale, width / 2, height / 2);
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const points = [
+      [arm, 0],
+      [centerX, centerY - arm],
+      [width - arm, 0],
+      [width, arm],
+      [centerX + arm, centerY],
+      [width, height - arm],
+      [width - arm, height],
+      [centerX, centerY + arm],
+      [arm, height],
+      [0, height - arm],
+      [centerX - arm, centerY],
+      [0, arm],
+    ];
+    polygon.setAttribute(
+      "points",
+      points.map(([x, y]) => x + "," + y).join(" "),
+    );
+  };
+  const edgeGeometry = (node) => {
+    if (typeof node.getTotalLength === "function") return node;
+    return node.querySelector("path, line, polyline") || null;
+  };
+  const edgePointOnScreen = (node) => {
+    const geometry = edgeGeometry(node);
+    if (!geometry || typeof geometry.getPointAtLength !== "function") {
+      const rect = node.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+    try {
+      const length = geometry.getTotalLength();
+      const point = geometry.getPointAtLength(length * 0.55);
+      const matrix = geometry.getScreenCTM();
+      if (matrix) {
+        const screen = new DOMPoint(point.x, point.y).matrixTransform(matrix);
+        return { x: screen.x, y: screen.y };
+      }
+    } catch {
+      // Geometry can be unavailable for a just-swapped hidden theme variant.
+    }
+    const rect = node.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  };
+  const createRemovedMarker = (node, diagram) => {
+    const marker = el("span", "mermaid-diagram-removed-marker");
+    marker.setAttribute("data-flow-removed-marker", "");
+    marker.setAttribute("data-flow-removed-anchor", anchorOf(node));
+    marker.setAttribute("aria-hidden", "true");
+    const c = canvas.get(diagram);
+    const scale = removedMarkerScale(diagram);
+    const rect = node.getBoundingClientRect();
+    const edge = kindOf(node) === "edge";
+    const width = (edge ? 16 : rect.width * 0.46) * scale;
+    const height = (edge ? 16 : rect.height * 0.46) * scale;
+    const svg = svgEl("svg");
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    svg.setAttribute("width", String(width));
+    svg.setAttribute("height", String(height));
+    svg.setAttribute("data-x-width", String(width));
+    svg.setAttribute("data-x-height", String(height));
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    const polygon = svgEl("polygon");
+    polygon.setAttribute("fill", "currentColor");
+    svg.appendChild(polygon);
+    marker.appendChild(svg);
+    marker.style.width = width + "px";
+    marker.style.height = height + "px";
+    marker.style.setProperty("--flow-marker-scale", String(scale));
+    marker.setAttribute("data-flow-removed-kind", edge ? "edge" : "node");
+    marker.setAttribute("data-flow-removed-size", edge ? "16" : "46-percent");
+    updateRemovedMarker(marker, scale);
+    if (c) marker.dataset.flowRemovedScale = String(scale);
+    return marker;
+  };
+
   const paint = () => {
+    closeCommentThread();
     clearLayer();
     resetNames();
     for (const draft of drafts) {
       if (draft.kind !== "remove-element") continue;
       if (showingOriginal(draft.diagram)) continue;
-      const node = draft.element;
+      const node = isMermaidDiagram(draft.diagram)
+        ? visibleTargetForAnchor(draft.diagram, draft.anchor) || draft.element
+        : draft.element;
       addProposedState(node, "removed");
+      syncEdgeDecorations(node);
       restateName(node, ", proposed for removal");
+      if (isMermaidDiagram(draft.diagram) && kindOf(node) !== "figure") {
+        const layer = mermaidMarkerLayer(draft.diagram);
+        if (layer) {
+          layer.appendChild(createRemovedMarker(node, draft.diagram));
+        }
+      }
       const diagram = node.closest("[data-flow-diagram]");
       const gone = removedNodeIdsFor(node);
       if (kindOf(node) !== "edge" && diagram) {
@@ -752,14 +1000,24 @@ export const DIAGRAM_SCRIPT = `
         }
       }
     }
+    for (const diagram of diagrams) {
+      for (const edge of edgesIn(diagram)) syncEdgeDecorations(edge);
+    }
     for (const draft of drafts) {
       if (draft.kind !== "edit-text") continue;
       if (showingOriginal(draft.diagram)) continue;
-      const field = draft.field;
+      const target = isMermaidDiagram(draft.diagram)
+        ? visibleTargetForAnchor(draft.diagram, draft.anchor) || draft.element
+        : draft.element;
+      const field = isMermaidDiagram(draft.diagram)
+        ? fieldsIn(target).find(
+            (candidate) => candidate.getAttribute("data-flow-field") === draft.fieldName,
+          )
+        : draft.field;
       if (!field) continue;
       field.textContent = draft.after;
       field.setAttribute("data-flow-edited", "");
-      restateName(draft.element, ", edited from " + quote(draft.before));
+      restateName(target, ", edited from " + quote(draft.before));
       // The original is a clone of the field's own tag and classes, so it
       // renders in the same face and size as the text it sits beside - a
       // monospace identifier's original stays monospace. It is always shown,
@@ -774,7 +1032,10 @@ export const DIAGRAM_SCRIPT = `
     const counts = new Map();
     for (const draft of drafts) {
       if (draft.kind !== "comment") continue;
-      counts.set(draft.element, (counts.get(draft.element) || 0) + 1);
+      const subject = isMermaidDiagram(draft.diagram)
+        ? visibleTargetForAnchor(draft.diagram, draft.anchor) || draft.element
+        : draft.element;
+      counts.set(subject, (counts.get(subject) || 0) + 1);
     }
     for (const entry of counts) {
       const subject = entry[0];
@@ -783,12 +1044,60 @@ export const DIAGRAM_SCRIPT = `
       // The document already uses MessageSquare for comments. Repeating that
       // glyph at the subject makes the saved comment visible without making
       // every untouched element carry permanent review chrome.
-      const marker = el("span", "flow-diagram-comment-marker");
+      const diagram = subject.closest("[data-flow-diagram]");
+      const isInteractiveMarker = Boolean(
+        diagram && isMermaidDiagram(diagram),
+      );
+      const marker = el(
+        isInteractiveMarker ? "button" : "span",
+        "flow-diagram-comment-marker",
+      );
       marker.setAttribute("data-flow-comment-marker", "");
-      marker.setAttribute("aria-hidden", "true");
+      if (isInteractiveMarker) {
+        marker.type = "button";
+        marker.setAttribute(
+          "aria-label",
+          count === 1
+            ? "Open comment on " + nameOf(subject)
+            : "Open " + count + " comments on " + nameOf(subject),
+        );
+        marker.setAttribute("data-flow-comment-anchor", anchorOf(subject));
+      } else {
+        marker.setAttribute("aria-hidden", "true");
+      }
       marker.innerHTML = ICON.comment;
       if (count > 1) marker.appendChild(el("span", "", String(count)));
-      subject.appendChild(marker);
+      if (diagram && isMermaidDiagram(diagram) && kindOf(subject) === "figure") {
+        marker.classList.add("mermaid-diagram-toolbar-comment-marker");
+        marker.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const anchor = anchorOf(subject);
+          if (diagram.hasAttribute("data-figure-maximized")) {
+            flashTrayComment(diagram, anchor);
+          }
+          openCommentFromMarker(diagram, anchor, marker);
+        });
+        const figureComment = diagram.querySelector("[data-flow-figure-comment]");
+        if (figureComment?.parentElement) {
+          figureComment.parentElement.insertBefore(marker, figureComment.nextSibling);
+        }
+      } else if (
+        diagram &&
+        isMermaidDiagram(diagram) &&
+        subject.closest("[data-flow-artboard]")
+      ) {
+        const layer = mermaidMarkerLayer(diagram);
+        if (layer) {
+          marker.addEventListener("click", (event) => {
+            event.stopPropagation();
+            openCommentFromMarker(diagram, anchorOf(subject), marker);
+          });
+          layer.appendChild(marker);
+        }
+        else subject.appendChild(marker);
+      } else {
+        subject.appendChild(marker);
+      }
     }
     for (const diagram of diagrams) {
       const mine = drafts.filter((d) => d.diagram === diagram);
@@ -920,6 +1229,7 @@ export const DIAGRAM_SCRIPT = `
 
   const buildActionBar = () => {
     actionBar.textContent = "";
+    if (!compose.hidden) { actionBar.hidden = true; return; }
     if (!selected) { actionBar.hidden = true; return; }
     // Selection IS the edit mode. There is no Edit button and no Delete
     // button, because clicking one made this feel like a mode you enter
@@ -937,7 +1247,7 @@ export const DIAGRAM_SCRIPT = `
     // node is restored and a retyped label is put back. Removal itself has no
     // button: the reader already has the key, and a second control that undid
     // the same removal read as two owners for one outcome.
-    const mine = drafts.filter((d) => d.element === selected);
+    const mine = drafts.filter((d) => draftMatchesNode(d, selected));
     if (mine.length > 0) {
       const only = mine.length === 1 ? mine[0] : null;
       const hint = only === null
@@ -960,9 +1270,9 @@ export const DIAGRAM_SCRIPT = `
   };
 
   const revertElement = (node) => {
-    if (!drafts.some((d) => d.element === node)) return;
+    if (!drafts.some((d) => draftMatchesNode(d, node))) return;
     pushHistory();
-    drafts = drafts.filter((d) => d.element !== node);
+    drafts = drafts.filter((d) => !draftMatchesNode(d, node));
     announce("Reverted every change on " + nameOf(node));
     paint();
   };
@@ -1013,12 +1323,23 @@ export const DIAGRAM_SCRIPT = `
   const dismissOrphanedChrome = () => {
     if (selected && !onScreen(selected)) {
       if (editing) stopEditing(false);
-      selected.removeAttribute("data-flow-selected");
-      selected = null;
       actionBar.hidden = true;
       actionBar.textContent = "";
+      const owner = selected.closest("[data-flow-diagram]");
+      const counterpart =
+        owner && isMermaidDiagram(owner)
+          ? visibleTargetForAnchor(owner, anchorOf(selected))
+          : null;
+      if (
+        !selected.closest("[data-collapsible][data-collapsed]") &&
+        !counterpart
+      ) {
+        selected.removeAttribute("data-flow-selected");
+        selected = null;
+      }
     }
     if (composeSubject && !onScreen(composeSubject)) closeCompose();
+    if (commentThreadSubject && !onScreen(commentThreadSubject)) closeCommentThread();
   };
 
   // Everything anchored to the artboard is re-placed together, because every
@@ -1032,6 +1353,62 @@ export const DIAGRAM_SCRIPT = `
       dismissOrphanedChrome();
       positionActionBar();
       positionCompose();
+      positionCommentThread();
+      for (const diagram of diagrams) {
+        if (!isMermaidDiagram(diagram)) continue;
+        const c = canvas.get(diagram);
+        const artboard = diagram.querySelector("[data-flow-artboard]");
+        if (!c || !artboard) continue;
+        const artboardRect = artboard.getBoundingClientRect();
+        const zoom = c.zoom || 1;
+        for (const marker of diagram.querySelectorAll(
+          "[data-mermaid-overlay-layer] [data-flow-comment-marker]",
+        )) {
+          const target = visibleTargetForAnchor(
+            diagram,
+            marker.getAttribute("data-flow-comment-anchor") || "",
+          );
+          if (!target) {
+            marker.hidden = true;
+            continue;
+          }
+          const rect = target.getBoundingClientRect();
+          marker.hidden = false;
+          marker.style.left =
+            ((rect.right - artboardRect.left) / zoom - 10) + "px";
+          marker.style.top =
+            ((rect.top - artboardRect.top) / zoom - 10) + "px";
+        }
+        for (const marker of diagram.querySelectorAll(
+          "[data-mermaid-overlay-layer] [data-flow-removed-marker]",
+        )) {
+          const target = visibleTargetForAnchor(
+            diagram,
+            marker.getAttribute("data-flow-removed-anchor") || "",
+          );
+          if (!target) {
+            marker.hidden = true;
+            continue;
+          }
+          updateRemovedMarker(
+            marker,
+            Number.parseFloat(
+              getComputedStyle(c.sizer).getPropertyValue("--flow-marker-scale"),
+            ) || 1 / zoom,
+          );
+          const rect = target.getBoundingClientRect();
+          marker.hidden = false;
+          const center = kindOf(target) === "edge"
+            ? edgePointOnScreen(target)
+            : { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+          marker.style.left =
+            ((center.x - artboardRect.left) / zoom - marker.offsetWidth / 2) +
+            "px";
+          marker.style.top =
+            ((center.y - artboardRect.top) / zoom - marker.offsetHeight / 2) +
+            "px";
+        }
+      }
     });
   };
 
@@ -1061,12 +1438,43 @@ export const DIAGRAM_SCRIPT = `
   compose.setAttribute("role", "dialog");
   document.body.appendChild(compose);
   let composeSubject = null;
+  let composeReturnFocus = null;
 
-  const closeCompose = (discard) => {
+  // Inline mode has no tray, but a saved marker still opens the comment it
+  // represents. This small thread surface is intentionally separate from the
+  // composer: clicking a saved comment reads it; Comment in the selection bar
+  // remains the explicit route to write another note.
+  const commentThread = el("aside", "flow-diagram-comment-thread");
+  commentThread.hidden = true;
+  commentThread.setAttribute("role", "dialog");
+  document.body.appendChild(commentThread);
+  let commentThreadSubject = null;
+  let commentThreadReturnFocus = null;
+
+  const closeCommentThread = (restoreFocus = false) => {
+    commentThread.hidden = true;
+    commentThread.textContent = "";
+    commentThreadSubject = null;
+    if (
+      restoreFocus &&
+      commentThreadReturnFocus &&
+      commentThreadReturnFocus.isConnected
+    ) {
+      commentThreadReturnFocus.focus({ preventScroll: true });
+    }
+    commentThreadReturnFocus = null;
+  };
+
+  const closeCompose = (discard, restoreFocus = false) => {
     if (!discard && composeText()) return commitCompose();
     compose.hidden = true;
     compose.textContent = "";
     composeSubject = null;
+    buildActionBar();
+    if (restoreFocus && composeReturnFocus && composeReturnFocus.isConnected) {
+      composeReturnFocus.focus({ preventScroll: true });
+    }
+    composeReturnFocus = null;
     return true;
   };
 
@@ -1090,7 +1498,7 @@ export const DIAGRAM_SCRIPT = `
       element: node, anchor: anchorOf(node), body: value,
     });
     announce("Comment saved on " + nameOf(node));
-    closeCompose(true);
+    closeCompose(true, true);
     paint();
     return true;
   };
@@ -1139,10 +1547,24 @@ export const DIAGRAM_SCRIPT = `
         : below) + "px";
   };
 
-  const openCompose = (node) => {
+  const positionCommentThread = () => {
+    if (commentThread.hidden || !commentThreadSubject) return;
+    const subject = commentThreadSubject.getBoundingClientRect();
+    const size = commentThread.getBoundingClientRect();
+    commentThread.style.left = clamp(subject.left, 8, innerWidth - size.width - 8) + "px";
+    const below = subject.bottom + 8;
+    commentThread.style.top =
+      (below + size.height > innerHeight - 8
+        ? clamp(subject.top - size.height - 8, 8, innerHeight - size.height - 8)
+        : below) + "px";
+  };
+
+  const openCompose = (node, opener = node) => {
     if (composeSubject) closeCompose();
+    closeCommentThread();
     compose.textContent = "";
     composeSubject = node;
+    composeReturnFocus = opener;
     compose.appendChild(el("p", "flow-diagram-compose-target", "Comment on " + nameOf(node)));
     const textarea = document.createElement("textarea");
     textarea.placeholder = "Write a comment...";
@@ -1166,7 +1588,7 @@ export const DIAGRAM_SCRIPT = `
     row.appendChild(el("span", "flow-diagram-compose-hint", shortcut + "+Enter to comment"));
     const cancel = el("button", "flow-diagram-button", "Cancel");
     cancel.type = "button";
-    cancel.addEventListener("click", () => closeCompose(true));
+    cancel.addEventListener("click", () => closeCompose(true, true));
     const save = el("button", "flow-diagram-button", "Comment");
     save.type = "button";
     save.setAttribute("data-variant", "primary");
@@ -1177,12 +1599,13 @@ export const DIAGRAM_SCRIPT = `
 
     adopt(compose, node);
     compose.hidden = false;
+    actionBar.hidden = true;
     positionCompose();
     textarea.focus();
   };
 
   document.addEventListener("keydown", (event) => {
-    if (activeExitAlert !== null || event.key !== "Escape" || compose.hidden) return;
+    if (hasActiveAlert() || event.key !== "Escape" || compose.hidden) return;
     const diagram = composeSubject && composeSubject.closest("[data-flow-diagram]");
     if (
       diagram &&
@@ -1190,8 +1613,7 @@ export const DIAGRAM_SCRIPT = `
       pendingCountFor(diagram) > 0
     ) return;
     event.stopPropagation();
-    closeCompose();
-    if (selected) selected.focus({ preventScroll: true });
+    closeCompose(undefined, true);
   }, true);
 
   // --- Guarded maximize exit ---------------------------------------------
@@ -1416,13 +1838,18 @@ export const DIAGRAM_SCRIPT = `
     c.list.textContent = "";
     for (const draft of mine) {
       const item = el("li", "flow-collector-item");
+      item.setAttribute("data-flow-comment-anchor", draft.anchor || "");
+      item.setAttribute("data-flow-comment-id", String(draft.id));
       const line = el("div", "flow-collector-item-head");
-      const target = el("button", "flow-collector-target", "Flow: " + nameOf(draft.element));
+      const targetNode = isMermaidDiagram(diagram)
+        ? visibleTargetForAnchor(diagram, draft.anchor) || draft.element
+        : draft.element;
+      const target = el("button", "flow-collector-target", "Flow: " + nameOf(targetNode));
       target.type = "button";
       target.addEventListener("click", (event) => {
         event.stopPropagation();
-        select(draft.element);
-        bringIntoView(draft.element);
+        select(targetNode);
+        bringIntoView(targetNode);
       });
       line.appendChild(target);
       const kind = el("span", "flow-collector-kind",
@@ -1480,8 +1907,213 @@ export const DIAGRAM_SCRIPT = `
     for (const diagram of diagrams) renderCollector(diagram);
   };
 
+  const trayFlashTimers = new WeakMap();
+  const flashTrayComment = (diagram, anchor) => {
+    const collector = collectors.get(diagram);
+    if (!collector) return;
+    const items = Array.from(collector.list.querySelectorAll(".flow-collector-item"))
+      .filter((candidate) => candidate.getAttribute("data-flow-comment-anchor") === anchor);
+    if (items.length === 0) return;
+    items[0].scrollIntoView({ block: "nearest" });
+    for (const item of items) {
+      item.setAttribute("data-flow-comment-flash", "");
+      const previous = trayFlashTimers.get(item);
+      if (previous) clearTimeout(previous);
+      trayFlashTimers.set(item, setTimeout(() => {
+        item.removeAttribute("data-flow-comment-flash");
+        trayFlashTimers.delete(item);
+      }, 1600));
+    }
+  };
+
+  // Toolbar markers are chrome, not artboard content. Capture their click at
+  // the document boundary as well as on the marker itself so a maximized
+  // marker cannot be covered by a selected-element action bar before it gets
+  // a chance to flash its matching tray row.
+  document.addEventListener("click", (event) => {
+    const marker = event.target.closest?.(
+      ".mermaid-diagram-toolbar-comment-marker",
+    );
+    const diagram = marker?.closest?.("[data-flow-diagram]");
+    if (!marker || !diagram || !diagram.hasAttribute("data-figure-maximized")) {
+      return;
+    }
+    flashTrayComment(
+      diagram,
+      marker.getAttribute("data-flow-comment-anchor") || "",
+    );
+  }, true);
+
+  const showCommentThread = (diagram, anchor, opener) => {
+    const target = targetForAnchor(diagram, anchor);
+    const comments = drafts.filter(
+      (draft) =>
+        draft.kind === "comment" &&
+        draft.diagram === diagram &&
+        draft.anchor === anchor,
+    );
+    if (!target || comments.length === 0) return;
+    commentThread.textContent = "";
+    commentThread.setAttribute(
+      "aria-label",
+      comments.length === 1
+        ? "Comment on " + nameOf(target)
+        : comments.length + " comments on " + nameOf(target),
+    );
+    const head = el("div", "flow-diagram-comment-thread-head");
+    head.appendChild(el("p", "flow-diagram-comment-thread-title", nameOf(target)));
+    const close = el("button", "flow-diagram-comment-thread-close");
+    close.type = "button";
+    close.setAttribute("aria-label", "Close comment");
+    close.setAttribute("data-tooltip", "Close comment");
+    close.innerHTML = ICON.close;
+    close.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeCommentThread(true);
+    });
+    head.appendChild(close);
+    commentThread.appendChild(head);
+    for (const draft of comments) {
+      commentThread.appendChild(el("p", "flow-diagram-comment-thread-body", draft.body));
+    }
+    commentThreadSubject = target;
+    commentThreadReturnFocus = opener || target;
+    adopt(commentThread, target);
+    commentThread.hidden = false;
+    positionCommentThread();
+    close.focus({ preventScroll: true });
+  };
+
+  const openCommentFromMarker = (diagram, anchor, opener) => {
+    const target = targetForAnchor(diagram, anchor);
+    if (!target) return;
+    if (diagram.hasAttribute("data-figure-maximized")) {
+      select(target);
+      setTimeout(() => flashTrayComment(diagram, anchor), 0);
+      return;
+    }
+    select(target);
+    showCommentThread(diagram, anchor, opener);
+  };
+
+  document.addEventListener("keydown", (event) => {
+    if (hasActiveAlert() || event.key !== "Escape" || commentThread.hidden) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeCommentThread(true);
+  }, true);
+
+  const buildRevertAllAlert = (diagram, index) => {
+    const overlay = el("div", "mermaid-diagram-revert-alert");
+    overlay.hidden = true;
+    const card = el("div", "mermaid-diagram-revert-alert-card");
+    card.setAttribute("role", "alertdialog");
+    card.setAttribute("aria-modal", "true");
+    const title = el(
+      "h3",
+      "mermaid-diagram-revert-alert-title",
+      "Revert edits and deletions?",
+    );
+    title.id = "mermaid-revert-all-title-" + index;
+    const description = el("p", "mermaid-diagram-revert-alert-description");
+    description.id = "mermaid-revert-all-description-" + index;
+    description.textContent =
+      "This removes every pending edit and deletion from this diagram. Saved comments remain.";
+    card.setAttribute("aria-labelledby", title.id);
+    card.setAttribute("aria-describedby", description.id);
+    const actions = el("div", "mermaid-diagram-revert-alert-actions");
+    const cancel = el("button", "mermaid-diagram-revert-alert-button", "Cancel");
+    cancel.type = "button";
+    const confirm = el(
+      "button",
+      "mermaid-diagram-revert-alert-button",
+      "Revert all",
+    );
+    confirm.type = "button";
+    confirm.setAttribute("data-variant", "danger");
+    confirm.innerHTML = ICON.revert + "<span>Revert all</span>";
+    actions.appendChild(cancel);
+    actions.appendChild(confirm);
+    card.appendChild(title);
+    card.appendChild(description);
+    card.appendChild(actions);
+    overlay.appendChild(card);
+    diagram.appendChild(overlay);
+
+    let returnFocus = null;
+    let isolated = [];
+    const close = (restoreFocus) => {
+      overlay.hidden = true;
+      if (activeRevertAllAlert === overlay) activeRevertAllAlert = null;
+      for (const element of isolated) element.inert = false;
+      isolated = [];
+      if (restoreFocus && returnFocus && returnFocus.isConnected) {
+        returnFocus.focus({ preventScroll: true });
+      }
+      returnFocus = null;
+    };
+    const open = () => {
+      returnFocus = document.activeElement;
+      isolated = Array.from(diagram.children).filter(
+        (element) => element !== overlay && !element.inert,
+      );
+      for (const element of isolated) element.inert = true;
+      overlay.hidden = false;
+      activeRevertAllAlert = overlay;
+      confirm.focus({ preventScroll: true });
+    };
+    cancel.addEventListener("click", (event) => {
+      event.stopPropagation();
+      close(true);
+    });
+    confirm.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const count = drafts.filter(
+        (draft) => draft.diagram === diagram && draft.kind !== "comment",
+      ).length;
+      if (count === 0) {
+        close(true);
+        return;
+      }
+      pushHistory();
+      drafts = drafts.filter(
+        (draft) => draft.diagram !== diagram || draft.kind === "comment",
+      );
+      diagram.removeAttribute("data-flow-original");
+      diagram.dispatchEvent(new CustomEvent("flow-original-reset"));
+      close(false);
+      paint();
+      requestAnimationFrame(() => {
+        if (diagram.isConnected) diagram.focus({ preventScroll: true });
+        announce("Reverted all edits and deletions on this diagram");
+      });
+    });
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close(true);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const target = document.activeElement === cancel ? confirm : cancel;
+      target.focus();
+    });
+    return { open };
+  };
+
   // --- Figure-level proposal chrome --------------------------------------
   for (const diagram of diagrams) {
+    const revertAllAlert = buildRevertAllAlert(diagram, diagrams.indexOf(diagram));
+    const figureComment = diagram.querySelector("[data-flow-figure-comment]");
+    if (figureComment) {
+      figureComment.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openCompose(diagram, figureComment);
+      });
+    }
     // The switch carries the state itself: on means the original is on screen.
     // Nothing has to be read as a verb and translated into a current view.
     const modeSwitch = diagram.querySelector("[data-flow-mode]");
@@ -1506,19 +2138,21 @@ export const DIAGRAM_SCRIPT = `
     if (revertAll) {
       revertAll.addEventListener("click", (event) => {
         event.stopPropagation();
-        const count = drafts.filter((d) => d.diagram === diagram && d.kind !== "comment").length;
-        pushHistory();
-        drafts = drafts.filter((d) => !(d.diagram === diagram && d.kind !== "comment"));
-        announce("Reverted " + count + " proposals in this diagram");
-        paint();
+        revertAllAlert.open();
       });
     }
   }
 
   document.addEventListener("pointerdown", (event) => {
-    if (compose.contains(event.target) || actionBar.contains(event.target)) return;
+    if (
+      compose.contains(event.target) ||
+      commentThread.contains(event.target) ||
+      actionBar.contains(event.target)
+    ) return;
     if (event.target.closest && event.target.closest(".flow-collector, .flow-collector-add")) return;
     if (event.target.closest("[data-flow-diagram]")) return;
+    const collapsing = event.target.closest("[data-collapsible]");
+    if (collapsing && selected && collapsing.contains(selected)) return;
     // Pointerdown precedes the field's focusout, so commit explicitly before
     // deselection. Keep non-empty comment text open for an intentional
     // Comment/Cancel choice; an outside click is never a silent discard.
@@ -1550,11 +2184,78 @@ export const DIAGRAM_SCRIPT = `
           !diagram.hasAttribute("data-figure-maximized")
         ) {
           refitIfUntouched(diagram);
+          if (isMermaidDiagram(diagram)) scheduleMermaidVariantRefresh();
         }
       }
       reanchor();
     });
     for (const diagram of diagrams) sizes.observe(diagram);
+  }
+
+  let themeFrame = null;
+  const refreshMermaidVariants = () => {
+    themeFrame = null;
+    const thread =
+      commentThread.hidden || !commentThreadSubject
+        ? null
+        : {
+            diagram:
+              commentThreadSubject.closest("[data-flow-diagram]") ||
+              commentThreadSubject,
+            anchor: anchorOf(commentThreadSubject),
+          };
+    const visibleCounterpart = (subject) => {
+      if (!subject) return subject;
+      const diagram = subject.closest("[data-flow-diagram]") || subject;
+      return isMermaidDiagram(diagram)
+        ? targetForAnchor(diagram, anchorOf(subject)) || subject
+        : subject;
+    };
+    const nextSelected = visibleCounterpart(selected);
+    if (selected && nextSelected !== selected) {
+      const hadFocus = document.activeElement === selected;
+      selected.removeAttribute("data-flow-selected");
+      syncEdgeDecorations(selected);
+      selected = nextSelected;
+      if (kindOf(selected) !== "figure") {
+        selected.setAttribute("data-flow-selected", "");
+        syncEdgeDecorations(selected);
+      }
+      if (hadFocus) selected.focus({ preventScroll: true });
+    }
+    composeSubject = visibleCounterpart(composeSubject);
+    composeReturnFocus = visibleCounterpart(composeReturnFocus);
+    paint();
+    positionCompose();
+    if (thread && isMermaidDiagram(thread.diagram)) {
+      const opener = Array.from(
+        thread.diagram.querySelectorAll("[data-flow-comment-marker]"),
+      ).find(
+        (marker) =>
+          marker.getAttribute("data-flow-comment-anchor") === thread.anchor,
+      );
+      showCommentThread(
+        thread.diagram,
+        thread.anchor,
+        opener || targetForAnchor(thread.diagram, thread.anchor),
+      );
+    }
+  };
+  const scheduleMermaidVariantRefresh = () => {
+    if (themeFrame !== null) cancelAnimationFrame(themeFrame);
+    themeFrame = requestAnimationFrame(refreshMermaidVariants);
+  };
+  if (diagrams.some(isMermaidDiagram)) {
+    new MutationObserver(scheduleMermaidVariantRefresh).observe(
+      document.documentElement,
+      { attributes: true, attributeFilter: ["data-theme"] },
+    );
+    const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+    systemTheme.addEventListener("change", () => {
+      if (!document.documentElement.hasAttribute("data-theme")) {
+        scheduleMermaidVariantRefresh();
+      }
+    });
   }
 
   addEventListener("scroll", reanchor, { passive: true, capture: true });

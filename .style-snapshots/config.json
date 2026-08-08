@@ -203,6 +203,19 @@
           "actions": []
         },
         {
+          "name": "mermaid-diagram",
+          "scope": "component",
+          "ownerPatterns": ["^src/components/mermaid-diagram/"],
+          "selector": "[data-flow-diagram][data-mermaid-type]",
+          "multiple": true,
+          "themes": ["light", "dark"],
+          "viewports": [
+            { "name": "desktop", "width": 1440, "height": 900 },
+            { "name": "phone", "width": 390, "height": 844 }
+          ],
+          "actions": []
+        },
+        {
           "name": "graphql-operation",
           "scope": "component",
           "ownerPatterns": ["^src/components/graphql-operation/"],

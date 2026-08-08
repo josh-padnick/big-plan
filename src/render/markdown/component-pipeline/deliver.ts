@@ -39,6 +39,9 @@ export type CollectedComponentModel = {
 
 type ComponentDelivery =
   | {
+      readonly kind: "validation";
+    }
+  | {
       readonly kind: "html";
       readonly adapt: ReactHastAdapter;
       readonly collected?: Array<CollectedComponentModel>;
@@ -137,6 +140,7 @@ const renderFlowElement = ({
   ids,
   delivery,
   materializeModel,
+  renderArtifacts,
 }: {
   readonly node: MdxJsxFlowElement;
   readonly diagnostics: DiagnosticCollector;
@@ -144,6 +148,7 @@ const renderFlowElement = ({
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
   readonly materializeModel: boolean;
+  readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): Element | undefined => {
   const name = node.name;
   const definition = definitionFor({ name, registry });
@@ -165,6 +170,7 @@ const renderFlowElement = ({
     // presentation inside its parent body. Top-level model entries stop
     // before adaptation.
     materializeModels: delivery.kind === "model",
+    ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
   });
   if (definition === undefined) {
     return undefined;
@@ -176,7 +182,12 @@ const renderFlowElement = ({
     position: node.position,
     diagnostics,
     ids,
+    ...(delivery.kind === "validation" ? { validationOnly: true } : {}),
+    renderArtifacts,
   });
+  if (delivery.kind === "validation") {
+    return undefined;
+  }
   if (name !== null && delivery.collected !== undefined) {
     delivery.collected.push({
       component: name,
@@ -241,6 +252,7 @@ const renderChildren = ({
   ids,
   delivery,
   materializeModels,
+  renderArtifacts,
 }: {
   readonly parent: ParentNode;
   readonly scopedDefinitions?: ScopedParentDefinition["scopedChildren"];
@@ -249,6 +261,7 @@ const renderChildren = ({
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
   readonly materializeModels: boolean;
+  readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
   let index = 0;
@@ -276,6 +289,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModels,
+        ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
       scopedChildren.push({
         name: childName,
@@ -297,6 +311,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModels,
+        ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
     }
     if (child.type === "mdxJsxFlowElement") {
@@ -307,6 +322,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModel: materializeModels,
+        ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
       parent.children.splice(
         index,
@@ -360,6 +376,7 @@ export const rehypeRenderComponents =
     collectModels,
     deferOutline,
     adapt = reactToHast,
+    renderArtifacts,
   }: {
     readonly diagnostics: DiagnosticCollector;
     readonly registry?: ComponentRegistry;
@@ -367,6 +384,7 @@ export const rehypeRenderComponents =
     readonly collectModels?: Array<CollectedComponentModel>;
     readonly deferOutline?: DeferredOutlinePresentations;
     readonly adapt?: ReactHastAdapter;
+    readonly renderArtifacts?: ReadonlyMap<string, unknown>;
   }) =>
   (tree: Root): void => {
     if (models !== undefined && collectModels !== undefined) {
@@ -381,6 +399,7 @@ export const rehypeRenderComponents =
       registry,
       ids: createComponentIdAllocator({ reservedIds }),
       materializeModels: false,
+      ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       delivery:
         models === undefined
           ? {
@@ -397,6 +416,27 @@ export const rehypeRenderComponents =
               adapt,
               ...(deferOutline === undefined ? {} : { deferOutline }),
             },
+    });
+    reportSurvivors({ parent: tree, diagnostics });
+  };
+
+export const rehypeValidateComponentSemantics =
+  ({
+    diagnostics,
+    registry = COMPONENT_REGISTRY,
+  }: {
+    readonly diagnostics: DiagnosticCollector;
+    readonly registry?: ComponentRegistry;
+  }) =>
+  (tree: Root): void => {
+    const reservedIds = collectExistingIds(tree);
+    renderChildren({
+      parent: tree,
+      diagnostics,
+      registry,
+      ids: createComponentIdAllocator({ reservedIds }),
+      materializeModels: false,
+      delivery: { kind: "validation" },
     });
     reportSurvivors({ parent: tree, diagnostics });
   };

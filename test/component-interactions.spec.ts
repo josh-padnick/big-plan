@@ -71,6 +71,13 @@ const COMPONENT_INTERACTIONS = {
     selector: "[data-flow-diagram]",
     affordances: ["zoom", "reset zoom", "fit", "maximize", "comment"],
   },
+  // The shared canvas affordances run against a Mermaid figure in
+  // mermaid-diagram-review.spec.ts, so this gate only proves presence.
+  MermaidDiagram: {
+    selector: "[data-mermaid-theme]",
+    affordances: [],
+    deferred: ["zoom", "reset zoom", "fit", "maximize", "comment"],
+  },
   GraphqlOperation: {
     selector: "[data-graphql-operation]",
     affordances: [],

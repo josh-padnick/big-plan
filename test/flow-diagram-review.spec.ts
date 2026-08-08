@@ -65,6 +65,7 @@ test("should hold the original-view switch state and revert every proposal", asy
   await page.goto(flowDiagramViewerUrl);
 
   const diagram = page.locator("[data-flow-diagram]").first();
+  const node = diagram.locator('[data-flow-node="authored"]');
   const label = diagram.locator(
     '[data-flow-node="authored"] [data-flow-field="label"]',
   );
@@ -75,12 +76,30 @@ test("should hold the original-view switch state and revert every proposal", asy
   await expect(modeSwitch).toBeHidden();
   await expect(revertAll).toBeHidden();
 
+  await node.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await diagram
+    .locator(".flow-diagram-compose textarea")
+    .fill("Preserve this saved comment.");
+  await diagram
+    .locator('.flow-diagram-compose button[data-variant="primary"]')
+    .click();
+  const commentMarker = node.locator("[data-flow-comment-marker]");
+  await expect(commentMarker).toBeVisible();
+  await expect(commentMarker).toHaveAttribute("aria-hidden", "true");
+  await expect(node.getByRole("button", { name: /Open comment/u })).toHaveCount(
+    0,
+  );
+
   await label.dblclick();
   await label.fill("Author carefully");
   await page.getByRole("heading").first().click();
   await expect(modeSwitch).toBeVisible();
   await expect(revertAll).toBeVisible();
-  await expect(revertAll).toHaveAttribute("aria-label", "Revert all changes");
+  await expect(revertAll).toHaveAttribute(
+    "aria-label",
+    "Revert edits and deletions",
+  );
 
   // The switch reports its own state, so a reader can see which view is on
   // without reading the diagram to work it out.
@@ -98,10 +117,29 @@ test("should hold the original-view switch state and revert every proposal", asy
   // clears the switch with it, so the control never outlives its subject.
   await modeSwitch.click();
   await revertAll.click();
+  const revertAllDialog = diagram.getByRole("alertdialog");
+  await expect(revertAllDialog).toContainText("Revert edits and deletions?");
+  await expect(revertAllDialog).toContainText(
+    "This removes every pending edit and deletion from this diagram. Saved comments remain.",
+  );
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(revertAllDialog).toBeVisible();
+  await revertAllDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(revertAll).toBeVisible();
+  await revertAll.click();
+  await revertAllDialog.getByRole("button", { name: "Revert all" }).click();
   await expect(label).toHaveText("Author once");
+  await expect(commentMarker).toBeVisible();
+  await expect(diagram.locator(".flow-collector-add").first()).toHaveText(
+    "Add 1 note to plan feedback",
+  );
   await expect(diagram).not.toHaveAttribute("data-flow-original");
   await expect(modeSwitch).toBeHidden();
   await expect(revertAll).toBeHidden();
+  await expect(diagram).toBeFocused();
+  await expect(page.locator(".flow-diagram-live")).toHaveText(
+    "Reverted all edits and deletions on this diagram",
+  );
 });
 
 test("should preserve work when focus moves outside the diagram", async ({
@@ -168,6 +206,7 @@ test("should preserve work across diagram interaction transitions", async ({
   await firstNode.click();
   await diagram.locator('[data-flow-action="comment"]').click();
   await compose.locator("textarea").fill("Keep the first target explicit.");
+  await compose.getByRole("button", { name: "Comment" }).click();
   await secondNode.click();
   await diagram.locator('[data-flow-action="comment"]').click();
   await expect(compose.locator(".flow-diagram-compose-target")).toHaveText(

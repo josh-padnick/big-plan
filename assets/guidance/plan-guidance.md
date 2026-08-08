@@ -127,6 +127,7 @@ Big Plan ships components that present specific kinds of information better than
 - `Slide` to apply a catalog type and its specific authoring guidance when the slide's purpose matches.
 - `Decision` for a tradeoff read option by option; `DecisionAnalysis` for a full criteria matrix; `QuickDecision` for quick calls.
 - `FlowDiagram` for genuinely relational content - a flow, dependency, or fan-out - drawn as staged cards with directed connectors.
+- `MermaidDiagram` for general graphs beyond a staged left-to-right story, plus supported static sequence, class, state, entity-relationship, schedule, journey, pie, mindmap, timeline, and git views. Every type compiles to light and dark SVG; static types retain figure and footer comments.
 - `CodeDiff` and `CodeSnippet` for concrete code the reviewer should see.
 - `FileTree` and `FileTreeDiff` for layout and placement changes.
 - `DataTable` for a reference dataset the reviewer needs to sort, filter, or reshape.
