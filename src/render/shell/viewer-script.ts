@@ -372,6 +372,7 @@ const wireCopyControls = () => {
 
   const wireCopy = ({ button, source, label }) => {
     let resetTimer;
+    let copyAttempt = 0;
     const setCopiedState = (copied) => {
       const copyIcon = button.querySelector('[data-lucide="copy"]');
       const checkIcon = button.querySelector('[data-lucide="check"]');
@@ -388,16 +389,22 @@ const wireCopyControls = () => {
     };
     button.hidden = false;
     button.addEventListener("click", async () => {
+      const attempt = ++copyAttempt;
       clearTimeout(resetTimer);
+      button.setAttribute("aria-label", label);
+      button.setAttribute("data-tooltip", label);
+      setCopiedState(false);
       try {
         await clipboardWrite(
           typeof source === "function" ? source() : source,
         );
+        if (attempt !== copyAttempt) return;
         const copiedLabel = "Copied " + label.slice("Copy ".length).toLowerCase();
         button.setAttribute("aria-label", copiedLabel);
         button.setAttribute("data-tooltip", copiedLabel);
         setCopiedState(true);
       } catch (_) {
+        if (attempt !== copyAttempt) return;
         button.setAttribute("aria-label", "Copy failed");
         button.setAttribute("data-tooltip", "Copy failed");
         setCopiedState(false);
