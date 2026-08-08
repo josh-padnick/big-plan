@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -22,8 +29,12 @@ const temporaryPlan = async () => {
   return { directory, planPath };
 };
 
-afterEach(() => {
-  created.length = 0;
+afterEach(async () => {
+  await Promise.all(
+    created
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 describe("review store placement", () => {
@@ -98,6 +109,16 @@ describe("review store creation", () => {
     expect(await readFile(join(store.root, ".gitignore"), "utf8")).toContain(
       "*",
     );
+  });
+
+  it("should restore owner-only mode when rewriting existing state", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeFile(store.activeDraftPath, '"exposed"\n');
+    await chmod(store.activeDraftPath, 0o644);
+    await writeActiveDraft({ path: store.activeDraftPath, value: "private" });
+    expect((await stat(store.activeDraftPath)).mode & 0o777).toBe(0o600);
   });
 });
 
@@ -183,6 +204,19 @@ describe("review store progress relay", () => {
         state: "done",
       },
     });
-    expect(await readProgress({ store, sessionId: "s1" })).toHaveLength(1);
+    await appendProgress({
+      store,
+      event: {
+        sessionId: "s1",
+        seq: 2,
+        step: "Agent started",
+        state: "live",
+      },
+    });
+    expect(
+      (await readProgress({ store, sessionId: "s1" })).map(
+        (event) => event.step,
+      ),
+    ).toEqual(["Feedback package received", "Agent started"]);
   });
 });

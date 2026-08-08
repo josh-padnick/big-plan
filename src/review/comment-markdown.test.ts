@@ -23,4 +23,10 @@ describe("review comment Markdown", () => {
       { type: "text", value: "<strong>Reviewer text</strong>" },
     ]);
   });
+
+  it("should preserve underscores inside identifiers", () => {
+    expect(parseCommentMarkdownLine("Keep plan_id_value unchanged.")).toEqual([
+      { type: "text", value: "Keep plan_id_value unchanged." },
+    ]);
+  });
 });

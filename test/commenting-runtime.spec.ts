@@ -18,10 +18,13 @@ test("should restore and submit staged comments through the local review runtime
     .getByLabel("Add a comment")
     .fill("Clarify the failure boundary.");
   await composer.getByRole("switch", { name: "Submit right away" }).click();
-  await composer.getByRole("button", { name: "Submit Now" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
 
   const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).toBeHidden();
+  await page.getByRole("button", { name: /Feedback/ }).click();
   await expect(rail).toContainText("Clarify the failure boundary.");
+  await expect(rail).toContainText("1 · Details");
   await expect(rail).toContainText("Comment staged locally.");
 
   await page.reload();
@@ -33,7 +36,9 @@ test("should restore and submit staged comments through the local review runtime
       response.url().endsWith("/api/feedback") &&
       response.request().method() === "POST",
   );
-  await rail.getByRole("button", { name: "Submit all" }).click();
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
   const response = await responsePromise;
   expect(response.ok()).toBe(true);
 
@@ -55,5 +60,7 @@ test("should restore and submit staged comments through the local review runtime
   );
 
   await expect(rail).toContainText("1 comment handed off.");
-  await expect(rail.getByRole("button", { name: "Submit all" })).toBeDisabled();
+  await expect(
+    rail.getByRole("button", { name: "Send all comments to agent" }),
+  ).toBeDisabled();
 });

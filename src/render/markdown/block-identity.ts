@@ -17,6 +17,7 @@
 // comment can name a line range the way an authored Annotation does.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
+import { COMPONENT_NAME_ATTRIBUTE } from "./component-pipeline/component-name.js";
 
 /** The document-order block descriptors one compile produced. */
 export type BlockDescriptor = {
@@ -105,8 +106,26 @@ const idSegment = (raw: string): string => {
   return safe.length > 0 ? safe : "block";
 };
 
+const allocateScopeName = ({
+  raw,
+  used,
+}: {
+  readonly raw: string;
+  readonly used: Set<string>;
+}): string => {
+  const base = idSegment(raw);
+  for (let ordinal = 1; ; ordinal += 1) {
+    const suffix = ordinal === 1 ? "" : `-${ordinal}`;
+    const scope = `section/${base.slice(0, 48 - suffix.length)}${suffix}`;
+    if (!used.has(scope)) {
+      used.add(scope);
+      return scope;
+    }
+  }
+};
+
 const componentName = (node: Element): string | undefined => {
-  const name = node.properties["data-component"];
+  const name = node.properties[COMPONENT_NAME_ATTRIBUTE];
   return typeof name === "string" && name.length > 0 ? name : undefined;
 };
 
@@ -289,9 +308,10 @@ const allocateId = ({
   readonly kind: string;
   readonly counter: ScopeCounter;
 }): string => {
-  const next = (counter.get(kind) ?? 0) + 1;
-  counter.set(kind, next);
-  return `${scope}/${idSegment(kind)}-${next}`;
+  const segment = idSegment(kind);
+  const next = (counter.get(segment) ?? 0) + 1;
+  counter.set(segment, next);
+  return `${scope}/${segment}-${next}`;
 };
 
 const stampBlock = ({
@@ -421,7 +441,7 @@ const stampDeclaredTargets = ({
       const fallback = summarize(textOf(candidate));
       const label =
         typeof declaredLabel === "string" && declaredLabel.length > 0
-          ? declaredLabel
+          ? summarize(declaredLabel).replaceAll("`", "")
           : fallback.length > 0
             ? fallback
             : readableKind(kind);
@@ -507,10 +527,12 @@ const scopeNameFor = ({
   node,
   headingTag,
   fallback,
+  used,
 }: {
   readonly node: Element;
   readonly headingTag: string;
   readonly fallback: string;
+  readonly used: Set<string>;
 }): string => {
   const heading = findDescendant({
     node,
@@ -519,7 +541,11 @@ const scopeNameFor = ({
       typeof candidate.properties.id === "string",
   });
   const id = heading?.properties.id;
-  return typeof id === "string" ? `section/${idSegment(id)}` : fallback;
+  if (typeof id !== "string") {
+    used.add(fallback);
+    return fallback;
+  }
+  return allocateScopeName({ raw: id, used });
 };
 
 /**
@@ -547,6 +573,7 @@ export const rehypeBlockIdentity =
       section: "Overview",
       blocks: collected,
     });
+    const usedScopes = new Set(["document"]);
     let slideIndex = 0;
     const stampSlides = (container: Root | Element): void => {
       for (const child of container.children) {
@@ -564,6 +591,7 @@ export const rehypeBlockIdentity =
           node: child,
           headingTag: isSubSlide ? "h3" : "h2",
           fallback: `slide/${slideIndex}`,
+          used: usedScopes,
         });
         const sectionHeading = findDescendant({
           node: child,

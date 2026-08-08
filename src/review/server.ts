@@ -195,6 +195,7 @@ export const startReviewRuntime = async ({
   // render still resolves after the agent revises the plan. Phase 1 does not
   // re-anchor; it simply refuses to forget what it once addressed.
   const blocks = new Map<string, BlockMapEntry>();
+  let blockMapMarkdown: string | undefined;
   let progressSeq = 0;
 
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
@@ -212,13 +213,16 @@ export const startReviewRuntime = async ({
 
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");
-    const firstPass = renderDocument({
-      markdown,
-      fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
-      identity: { planId, reviewSessionId: sessionId, reviewToken: token },
-    });
-    for (const block of firstPass.blocks) {
-      blocks.set(block.id, block);
+    if (blockMapMarkdown !== markdown) {
+      const blockMapRender = renderDocument({
+        markdown,
+        fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+        identity: { planId, reviewSessionId: sessionId, reviewToken: token },
+      });
+      for (const block of blockMapRender.blocks) {
+        blocks.set(block.id, block);
+      }
+      blockMapMarkdown = markdown;
     }
     return renderDocument({
       markdown,
@@ -338,9 +342,11 @@ export const startReviewRuntime = async ({
         path: store.sentPath,
         validate,
       });
+      const sentIds = new Set(alreadySent.map((comment) => comment.id));
+      const newlySent = comments.filter((comment) => !sentIds.has(comment.id));
       await writeComments({
         path: store.sentPath,
-        comments: [...alreadySent, ...comments],
+        comments: [...alreadySent, ...newlySent],
       });
       await writeComments({ path: store.draftsPath, comments: [] });
       await writeActiveDraft({ path: store.activeDraftPath, value: "" });
@@ -369,12 +375,16 @@ export const startReviewRuntime = async ({
       });
       return;
     }
-    const events = await readProgress({ store, sessionId });
-    progressSeq = Math.max(
-      progressSeq,
-      events.reduce((highest, event) => Math.max(highest, event.seq), 0),
-    );
-    sendJson({ response, status: 200, value: { events } });
+    if (route.path === "/api/progress") {
+      const events = await readProgress({ store, sessionId });
+      progressSeq = Math.max(
+        progressSeq,
+        events.reduce((highest, event) => Math.max(highest, event.seq), 0),
+      );
+      sendJson({ response, status: 200, value: { events } });
+      return;
+    }
+    throw new Error(`Unhandled review route ${route.path}`);
   };
 
   const server: Server = createServer((request, response) => {
@@ -411,17 +421,14 @@ export const startReviewRuntime = async ({
         return;
       }
 
-      const route = API_ROUTES.find(
+      const onPath = API_ROUTES.filter(
         (candidate) => candidate.path === target.pathname,
       );
-      if (route === undefined) {
+      if (onPath.length === 0) {
         refuse({ response, status: 404, reason: "No such route" });
         return;
       }
-      const allowed = API_ROUTES.filter(
-        (candidate) => candidate.path === target.pathname,
-      );
-      const matched = allowed.find((candidate) => candidate.method === method);
+      const matched = onPath.find((candidate) => candidate.method === method);
       if (matched === undefined) {
         refuse({ response, status: 405, reason: "Method not allowed here" });
         return;

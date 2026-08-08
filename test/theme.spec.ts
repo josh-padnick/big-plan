@@ -8,6 +8,11 @@ import {
 } from "../src/render/preferences.js";
 import { expect, test } from "./fixtures";
 
+const backdropOpacity = (color: string): number | null => {
+  const match = /(?:\/|,)\s*([\d.]+)\s*\)?$/u.exec(color);
+  return match?.[1] === undefined ? null : Number(match[1]);
+};
+
 test("should choose and persist appearance from the settings dialog", async ({
   page,
   sampleViewerUrl,
@@ -29,12 +34,14 @@ test("should choose and persist appearance from the settings dialog", async ({
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.getByRole("radio", { name: "System" })).toBeChecked();
     await expect
-      .poll(() =>
-        page
-          .locator("[data-preferences-backdrop]")
-          .evaluate((backdrop) => getComputedStyle(backdrop).backgroundColor),
+      .poll(async () =>
+        backdropOpacity(
+          await page
+            .locator("[data-preferences-backdrop]")
+            .evaluate((backdrop) => getComputedStyle(backdrop).backgroundColor),
+        ),
       )
-      .toContain("0.7");
+      .toBe(0.7);
   });
 
   await test.step("Escape closes and returns focus to the gear", async () => {
@@ -54,12 +61,14 @@ test("should choose and persist appearance from the settings dialog", async ({
     await page.getByRole("radio", { name: "Dark" }).check();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect
-      .poll(() =>
-        page
-          .locator("[data-preferences-backdrop]")
-          .evaluate((backdrop) => getComputedStyle(backdrop).backgroundColor),
+      .poll(async () =>
+        backdropOpacity(
+          await page
+            .locator("[data-preferences-backdrop]")
+            .evaluate((backdrop) => getComputedStyle(backdrop).backgroundColor),
+        ),
       )
-      .toContain("0.8");
+      .toBe(0.8);
     await expect
       .poll(() =>
         page.evaluate(
@@ -240,10 +249,9 @@ test("should isolate the document while settings is open and restore focus on cl
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(sampleViewerUrl);
   const settings = page.getByRole("button", { name: "Open settings" });
-  const commentDraft = page.getByRole("region", {
-    name: "Review comment draft",
-  });
-  await page.getByRole("button", { name: "Add review comment" }).click();
+  const slide = page.locator("[data-slide]").first();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const commentDraft = page.getByRole("dialog", { name: /Comment on/ });
   await expect(commentDraft).toBeVisible();
   await settings.click();
 
@@ -252,16 +260,19 @@ test("should isolate the document while settings is open and restore focus on cl
     const dialog = document.querySelector("[data-preferences-dialog]");
     const backdropStyle =
       backdrop instanceof HTMLElement ? getComputedStyle(backdrop) : null;
-    const backdropOpacity =
-      backdropStyle?.backgroundColor.match(/\/\s*([\d.]+)\s*\)$/)?.[1] ?? null;
+    const backdropAlpha =
+      backdropStyle === null
+        ? null
+        : (/(?:\/|,)\s*([\d.]+)\s*\)?$/u.exec(
+            backdropStyle.backgroundColor,
+          )?.[1] ?? null);
     return {
       backdropInert: backdrop instanceof HTMLElement && backdrop.inert,
       dialogInert: dialog instanceof HTMLElement && dialog.inert,
       backdropIsDimmed:
         backdropStyle !== null &&
         backdropStyle.backgroundColor !== "rgba(0, 0, 0, 0)",
-      backdropOpacity:
-        backdropOpacity === null ? null : Number(backdropOpacity),
+      backdropOpacity: backdropAlpha === null ? null : Number(backdropAlpha),
       topLevelSiblingsInert:
         backdrop instanceof HTMLElement
           ? Array.from(document.body.children)
@@ -301,14 +312,12 @@ test("should isolate the document while settings is open and restore focus on cl
   });
   await settings.click();
   await expect
-    .poll(() =>
-      page.locator("[data-preferences-backdrop]").evaluate((element) => {
-        const opacity =
-          getComputedStyle(element).backgroundColor.match(
-            /\/\s*([\d.]+)\s*\)$/,
-          )?.[1];
-        return opacity === undefined ? null : Number(opacity);
-      }),
+    .poll(async () =>
+      backdropOpacity(
+        await page
+          .locator("[data-preferences-backdrop]")
+          .evaluate((element) => getComputedStyle(element).backgroundColor),
+      ),
     )
     .toBe(0.8);
 });

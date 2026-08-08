@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BlockMapEntry } from "./comment.js";
 import {
   CommentRejected,
+  QUOTE_LIMIT,
   validateActiveDraft,
   validateComments,
 } from "./comment.js";
@@ -116,6 +117,26 @@ describe("validateComments target resolution", () => {
         }),
       ),
     ).toThrow(CommentRejected);
+  });
+
+  it("should refuse a quote beyond the highlight limit", () => {
+    expect(() =>
+      validate(
+        commentOn({
+          type: "selection",
+          blockId: "section/status-quo/paragraph-1",
+          start: 0,
+          end: 1,
+          quote: "x".repeat(QUOTE_LIMIT + 1),
+        }),
+      ),
+    ).toThrow(CommentRejected);
+  });
+
+  it("should name a malformed target in its rejection", () => {
+    expect(() =>
+      validate([{ id: "aabbccdd", body: "A note.", target: "document" }]),
+    ).toThrow('"target" must be an object');
   });
 });
 

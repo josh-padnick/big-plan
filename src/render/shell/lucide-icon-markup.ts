@@ -7,14 +7,16 @@
 // running - a comment chip, an actions popover, a tray - so their glyphs
 // cannot ship as server-rendered markup the way a dormant control's do.
 
-import type { LucideIcon } from "../../icons/lucide-icon.js";
+import {
+  DEFAULT_LUCIDE_STROKE_WIDTH,
+  type LucideIcon,
+} from "../../icons/lucide-icon.js";
 
 const ATTRIBUTES = [
   'xmlns="http://www.w3.org/2000/svg"',
   'viewBox="0 0 24 24"',
   'fill="none"',
   'stroke="currentColor"',
-  'stroke-width="2"',
   'stroke-linecap="round"',
   'stroke-linejoin="round"',
   'aria-hidden="true"',
@@ -35,5 +37,5 @@ export const lucideIconToMarkup = (icon: LucideIcon): string => {
       return `<${tagName} ${attributes}/>`;
     })
     .join("");
-  return `<svg ${ATTRIBUTES} data-lucide="${icon.name}">${children}</svg>`;
+  return `<svg ${ATTRIBUTES} stroke-width="${icon.strokeWidth ?? DEFAULT_LUCIDE_STROKE_WIDTH}" data-lucide="${icon.name}">${children}</svg>`;
 };

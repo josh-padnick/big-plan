@@ -40,6 +40,9 @@ test("should accept ordinary, primitive, and explained override rules", async ()
   [data-collapsed] { display: none; }
 }
 `,
+    "review/browser/review.css": `${HEADER}
+@layer components { .review-owned { color: var(--color-example); } }
+`,
   });
   assert.deepEqual(failures, []);
 });

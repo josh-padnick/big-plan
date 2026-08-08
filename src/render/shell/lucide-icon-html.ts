@@ -3,7 +3,10 @@
 // (components/_shared/lucide-icon) have their own adapters; none owns glyph
 // data, which lives only in the icons catalog.
 
-import type { LucideIcon } from "../../icons/lucide-icon.js";
+import {
+  DEFAULT_LUCIDE_STROKE_WIDTH,
+  type LucideIcon,
+} from "../../icons/lucide-icon.js";
 
 /**
  * Renders one decorative Lucide glyph as an inert SVG string.
@@ -27,5 +30,5 @@ export const lucideIconToHtml = ({
           .join(" ")} />`,
     )
     .join("");
-  return `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-lucide="${icon.name}">${children}</svg>`;
+  return `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${icon.strokeWidth ?? DEFAULT_LUCIDE_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-lucide="${icon.name}">${children}</svg>`;
 };

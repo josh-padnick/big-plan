@@ -9,3 +9,5 @@ export type LucideIcon = {
   readonly node: IconNode;
   readonly strokeWidth?: string;
 };
+
+export const DEFAULT_LUCIDE_STROKE_WIDTH = "1.5";

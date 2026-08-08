@@ -29,6 +29,7 @@ import { AlertDialog, Badge, Button, Card, Textarea } from "./ui.browser.js";
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT = 4000;
 const LONG_COMMENT = 180;
+const REQUEST_TIMEOUT_MS = 10_000;
 const PROSE_KINDS = new Set(["heading", "paragraph", "list", "blockquote"]);
 const TABLE_PRECISION_KINDS = new Set([
   "table-cell",
@@ -64,6 +65,11 @@ type SelectionControlState = {
 };
 
 type FeedbackTab = "comments" | "chat" | "agent";
+const FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = ["comments", "chat", "agent"];
+const WIDE_QUERY = "(min-width: 80rem)";
+const MODIFIER_SHORTCUT = /Mac|iPhone|iPad/u.test(navigator.platform)
+  ? "⌘+Enter"
+  : "Ctrl+Enter";
 type StagedCardSurface = "rail" | "thread";
 type SelectionTarget = Extract<CommentTarget, { readonly type: "selection" }>;
 
@@ -220,22 +226,39 @@ const requestJson = async ({
   readonly method?: "GET" | "PUT" | "POST";
   readonly body?: unknown;
 }): Promise<unknown> => {
-  const response = await fetch(path, {
-    method,
-    mode: "same-origin",
-    credentials: "omit",
-    cache: "no-store",
-    redirect: "error",
-    headers: {
-      [TOKEN_HEADER]: identity.token,
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-  if (!response.ok) {
-    throw new Error(`Review runtime refused the request (${response.status})`);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    REQUEST_TIMEOUT_MS,
+  );
+  try {
+    const response = await fetch(path, {
+      method,
+      mode: "same-origin",
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      signal: controller.signal,
+      headers: {
+        [TOKEN_HEADER]: identity.token,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Review runtime refused the request (${response.status})`,
+      );
+    }
+    return await response.json();
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("Review runtime request timed out.", { cause: error });
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
   }
-  return response.json();
 };
 
 const randomId = (): string => {
@@ -622,27 +645,35 @@ const useFeedbackHost = (): HTMLSpanElement | null => {
   return host;
 };
 
+const useWide = (): boolean => {
+  const [isWide, setIsWide] = useState(
+    () => window.matchMedia(WIDE_QUERY).matches,
+  );
+  useEffect(() => {
+    const query = window.matchMedia(WIDE_QUERY);
+    const update = () => setIsWide(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return isWide;
+};
+
 const useInlineComposeHost = (
   compose: ComposeState | null,
   isOpen: boolean,
 ): HTMLDivElement | null => {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
-  const [isNarrow, setIsNarrow] = useState(
-    () => window.matchMedia("(width < 80rem)").matches,
-  );
-  useEffect(() => {
-    const query = window.matchMedia("(width < 80rem)");
-    const update = () => setIsNarrow(query.matches);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
+  const isNarrow = !useWide();
   useEffect(() => {
     if ((!isOpen && !isNarrow) || compose === null) {
       setHost(null);
       return;
     }
     const anchor = targetElement(compose.target);
-    if (anchor === null) return;
+    if (anchor === null) {
+      setHost(null);
+      return;
+    }
     const next = document.createElement("div");
     next.dataset.reviewComposeInline = "";
     anchor.after(next);
@@ -661,16 +692,7 @@ const useThreadHosts = (
   const [hosts, setHosts] = useState<ReadonlyMap<string, HTMLDivElement>>(
     new Map(),
   );
-  const [isWide, setIsWide] = useState(
-    () => window.matchMedia("(min-width: 80rem)").matches,
-  );
-
-  useEffect(() => {
-    const query = window.matchMedia("(min-width: 80rem)");
-    const update = () => setIsWide(query.matches);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
+  const isWide = useWide();
 
   useEffect(() => {
     if (isOpen || !isWide) {
@@ -795,9 +817,6 @@ const CommentComposer = ({
     };
   }, [compose.left, compose.top, inline]);
   const save = () => body.trim() !== "" && onSave(body.trim(), submitRightAway);
-  const shortcut = /Mac|iPhone|iPad/u.test(navigator.platform)
-    ? "⌘+Enter"
-    : "Ctrl+Enter";
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -845,7 +864,7 @@ const CommentComposer = ({
         onKeyDown={handleKeyDown}
       />
       <p className="review-compose-hint text-2xs">
-        Escape cancels · {shortcut} adds
+        Escape cancels · {MODIFIER_SHORTCUT} adds
       </p>
       <div className="review-compose-controls">
         <button
@@ -872,7 +891,7 @@ const CommentComposer = ({
               {submitRightAway ? "Submit Now" : "Add Comment"}
             </Button>
             <span role="tooltip" className="review-shortcut-tooltip">
-              {shortcut}
+              {MODIFIER_SHORTCUT}
             </span>
           </span>
         </div>
@@ -900,7 +919,7 @@ const StagedCard = ({
   readonly associated: boolean;
   readonly collapsed: boolean;
   readonly expanded: boolean;
-  readonly onCollapse: () => void;
+  readonly onCollapse?: () => void;
   readonly onExpandBody: () => void;
   readonly onUpdate: (body: string) => void;
   readonly onDelete: () => void;
@@ -914,9 +933,6 @@ const StagedCard = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editBody, setEditBody] = useState(comment.body);
   const editRef = useRef<HTMLTextAreaElement>(null);
-  const editShortcut = /Mac|iPhone|iPad/u.test(navigator.platform)
-    ? "⌘+Enter"
-    : "Ctrl+Enter";
   const saveEdit = () => {
     const nextBody = editBody.trim();
     if (nextBody === "") return;
@@ -1072,7 +1088,7 @@ const StagedCard = ({
             }}
           />
           <p className="review-staged-edit-hint text-2xs">
-            Escape cancels · {editShortcut} saves
+            Escape cancels · {MODIFIER_SHORTCUT} saves
           </p>
           <div className="review-staged-edit-actions">
             <Button
@@ -1092,7 +1108,7 @@ const StagedCard = ({
                 Save
               </Button>
               <span role="tooltip" className="review-shortcut-tooltip">
-                {editShortcut}
+                {MODIFIER_SHORTCUT}
               </span>
             </span>
           </div>
@@ -1116,7 +1132,7 @@ const StagedCard = ({
             className="review-primary-comment-action"
             onClick={onSubmit}
           >
-            Submit Now
+            {surface === "rail" ? "Send this" : "Submit Now"}
           </Button>
         </div>
       )}
@@ -1155,8 +1171,38 @@ const ReviewKernel = () => {
       ? "Reading offline: drafts stay in this browser."
       : "Loading review…",
   );
+  const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
+  const serializeRuntimeWrite = useCallback(
+    <Value,>(write: () => Promise<Value>): Promise<Value> => {
+      const result = persistenceQueue.current.then(write, write);
+      persistenceQueue.current = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result;
+    },
+    [],
+  );
   const inlineComposeHost = useInlineComposeHost(compose, isOpen);
   const threadHosts = useThreadHosts(drafts, isOpen);
+  const selectFeedbackTab = (next: FeedbackTab) => {
+    setTab(next);
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>(`#review-tab-${next}`)?.focus(),
+    );
+  };
+  const handleFeedbackTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    let index = FEEDBACK_TABS.indexOf(tab);
+    if (event.key === "ArrowRight") index = (index + 1) % FEEDBACK_TABS.length;
+    else if (event.key === "ArrowLeft")
+      index = (index - 1 + FEEDBACK_TABS.length) % FEEDBACK_TABS.length;
+    else if (event.key === "Home") index = 0;
+    else if (event.key === "End") index = FEEDBACK_TABS.length - 1;
+    else return;
+    event.preventDefault();
+    const next = FEEDBACK_TABS[index];
+    if (next !== undefined) selectFeedbackTab(next);
+  };
 
   useEffect(() => {
     rootElement.toggleAttribute("data-review-kernel-open", isOpen);
@@ -1215,10 +1261,42 @@ const ReviewKernel = () => {
         element.dataset.reviewHasComment = "";
         marked.add(element);
       }
-      return [{ target: comment.target, element }];
+      return [
+        {
+          target: comment.target,
+          element,
+          selectionRects: [] as ReadonlyArray<DOMRect>,
+          area: 0,
+        },
+      ];
     });
-    const move = (event: PointerEvent) => {
-      const eventTarget = event.target;
+    const refreshGeometry = () => {
+      for (const entry of entries) {
+        if (entry.target.type === "selection") {
+          const range = selectionRange(entry.target);
+          entry.selectionRects =
+            range === null ? [] : Array.from(range.getClientRects());
+        } else {
+          const rect = entry.element.getBoundingClientRect();
+          entry.area = rect.width * rect.height;
+        }
+      }
+    };
+    refreshGeometry();
+    let frame = 0;
+    let pending:
+      | {
+          readonly x: number;
+          readonly y: number;
+          readonly target: EventTarget | null;
+        }
+      | undefined;
+    const inspect = () => {
+      frame = 0;
+      const current = pending;
+      pending = undefined;
+      if (current === undefined) return;
+      const eventTarget = current.target;
       const eventElement =
         eventTarget instanceof Element
           ? eventTarget
@@ -1234,18 +1312,14 @@ const ReviewKernel = () => {
       ) {
         return;
       }
-      const selected = entries.find(({ target }) => {
+      const selected = entries.find(({ target, selectionRects }) => {
         if (target.type !== "selection") return false;
-        const range = selectionRange(target);
-        return (
-          range !== null &&
-          [...range.getClientRects()].some(
-            (rect) =>
-              event.clientX >= rect.left &&
-              event.clientX <= rect.right &&
-              event.clientY >= rect.top &&
-              event.clientY <= rect.bottom,
-          )
+        return selectionRects.some(
+          (rect) =>
+            current.x >= rect.left &&
+            current.x <= rect.right &&
+            current.y >= rect.top &&
+            current.y <= rect.bottom,
         );
       });
       if (selected !== undefined) {
@@ -1259,19 +1333,22 @@ const ReviewKernel = () => {
             eventTarget instanceof Node &&
             element.contains(eventTarget),
         )
-        .sort((left, right) => {
-          const leftRect = left.element.getBoundingClientRect();
-          const rightRect = right.element.getBoundingClientRect();
-          return (
-            leftRect.width * leftRect.height -
-            rightRect.width * rightRect.height
-          );
-        })[0];
+        .sort((left, right) => left.area - right.area)[0];
       setAssociatedTarget(containing?.target ?? null);
     };
+    const move = (event: PointerEvent) => {
+      pending = { x: event.clientX, y: event.clientY, target: event.target };
+      if (frame === 0) frame = requestAnimationFrame(inspect);
+    };
+    const refresh = () => refreshGeometry();
     document.addEventListener("pointermove", move, { passive: true });
+    window.addEventListener("scroll", refresh, { passive: true });
+    window.addEventListener("resize", refresh, { passive: true });
     return () => {
+      cancelAnimationFrame(frame);
       document.removeEventListener("pointermove", move);
+      window.removeEventListener("scroll", refresh);
+      window.removeEventListener("resize", refresh);
       for (const element of marked) delete element.dataset.reviewHasComment;
     };
   }, [drafts]);
@@ -1358,13 +1435,15 @@ const ReviewKernel = () => {
       if (planId !== "") writeLocalDrafts(planId, drafts);
       return;
     }
-    void requestJson({
-      path: "/api/drafts",
-      identity,
-      method: "PUT",
-      body: { drafts },
-    }).catch((error: unknown) => setStatus(errorMessage(error)));
-  }, [drafts, identity, isHydrated, planId]);
+    void serializeRuntimeWrite(() =>
+      requestJson({
+        path: "/api/drafts",
+        identity,
+        method: "PUT",
+        body: { drafts },
+      }),
+    ).catch((error: unknown) => setStatus(errorMessage(error)));
+  }, [drafts, identity, isHydrated, planId, serializeRuntimeWrite]);
 
   useEffect(() => {
     if (compose !== null) return;
@@ -1425,12 +1504,14 @@ const ReviewKernel = () => {
     setIsSending(true);
     try {
       const result = parseSnapshot(
-        await requestJson({
-          path: "/api/feedback",
-          identity,
-          method: "POST",
-          body: { comments },
-        }),
+        await serializeRuntimeWrite(() =>
+          requestJson({
+            path: "/api/feedback",
+            identity,
+            method: "POST",
+            body: { comments },
+          }),
+        ),
       );
       const ids = new Set(comments.map((comment) => comment.id));
       setDrafts((current) => current.filter((comment) => !ids.has(comment.id)));
@@ -1628,44 +1709,57 @@ const ReviewKernel = () => {
           className="review-feedback-rail"
           aria-label="Feedback"
         >
-          <div
-            className="review-feedback-tabs"
-            role="tablist"
-            aria-label="Feedback views"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "comments"}
-              onClick={() => setTab("comments")}
+          <div className="review-feedback-tabbar">
+            <div
+              className="review-feedback-tabs"
+              role="tablist"
+              aria-label="Feedback views"
+              onKeyDown={handleFeedbackTabKeyDown}
             >
-              <Icon icon={MESSAGE_SQUARE_ICON} />
-              Comments
-              {drafts.length > 0 ? (
-                <Badge size="compact">{drafts.length}</Badge>
-              ) : null}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "chat"}
-              onClick={() => setTab("chat")}
-            >
-              <Icon icon={MESSAGES_SQUARE_ICON} />
-              Chat
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "agent"}
-              onClick={() => setTab("agent")}
-            >
-              <Icon icon={ACTIVITY_ICON} />
-              Agent
-            </button>
+              <button
+                id="review-tab-comments"
+                type="button"
+                role="tab"
+                aria-controls="review-panel-comments"
+                aria-selected={tab === "comments"}
+                tabIndex={tab === "comments" ? 0 : -1}
+                onClick={() => setTab("comments")}
+              >
+                <Icon icon={MESSAGE_SQUARE_ICON} />
+                Comments
+                {drafts.length > 0 ? (
+                  <Badge size="compact">{drafts.length}</Badge>
+                ) : null}
+              </button>
+              <button
+                id="review-tab-chat"
+                type="button"
+                role="tab"
+                aria-controls="review-panel-chat"
+                aria-selected={tab === "chat"}
+                tabIndex={tab === "chat" ? 0 : -1}
+                onClick={() => setTab("chat")}
+              >
+                <Icon icon={MESSAGES_SQUARE_ICON} />
+                Chat
+              </button>
+              <button
+                id="review-tab-agent"
+                type="button"
+                role="tab"
+                aria-controls="review-panel-agent"
+                aria-selected={tab === "agent"}
+                tabIndex={tab === "agent" ? 0 : -1}
+                onClick={() => setTab("agent")}
+              >
+                <Icon icon={ACTIVITY_ICON} />
+                Agent
+              </button>
+            </div>
             <Button
               variant="ghost"
               size="compactIcon"
+              className="review-feedback-close"
               aria-label="Close feedback"
               onClick={() => setIsOpen(false)}
             >
@@ -1673,7 +1767,12 @@ const ReviewKernel = () => {
             </Button>
           </div>
           {tab === "comments" ? (
-            <div className="review-feedback-panel" role="tabpanel">
+            <div
+              id="review-panel-comments"
+              className="review-feedback-panel"
+              role="tabpanel"
+              aria-labelledby="review-tab-comments"
+            >
               {drafts.length === 0 ? (
                 <div className="review-feedback-empty">
                   <p>
@@ -1700,14 +1799,6 @@ const ReviewKernel = () => {
                         }
                         collapsed={false}
                         expanded={expandedBodies.has(comment.id)}
-                        onCollapse={() =>
-                          setCollapsed((current) => {
-                            const next = new Set(current);
-                            if (next.has(comment.id)) next.delete(comment.id);
-                            else next.add(comment.id);
-                            return next;
-                          })
-                        }
                         onExpandBody={() =>
                           setExpandedBodies((current) =>
                             new Set(current).add(comment.id),
@@ -1749,7 +1840,12 @@ const ReviewKernel = () => {
             </div>
           ) : null}
           {tab === "chat" ? (
-            <div className="review-feedback-panel" role="tabpanel">
+            <div
+              id="review-panel-chat"
+              className="review-feedback-panel"
+              role="tabpanel"
+              aria-labelledby="review-tab-chat"
+            >
               <div className="review-feedback-empty">
                 <Icon icon={MESSAGES_SQUARE_ICON} />
                 <p>
@@ -1763,7 +1859,12 @@ const ReviewKernel = () => {
             </div>
           ) : null}
           {tab === "agent" ? (
-            <div className="review-feedback-panel" role="tabpanel">
+            <div
+              id="review-panel-agent"
+              className="review-feedback-panel"
+              role="tabpanel"
+              aria-labelledby="review-tab-agent"
+            >
               <Card className="review-agent-card">
                 <Icon icon={ACTIVITY_ICON} />
                 <div>

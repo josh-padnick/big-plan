@@ -11,7 +11,7 @@ const stageComment = async (page: Page, body: string): Promise<void> => {
   const composer = page.getByRole("dialog", { name: /Comment on/ });
   await composer.getByLabel("Add a comment").fill(body);
   await composer.getByRole("switch", { name: "Submit right away" }).click();
-  await composer.getByRole("button", { name: "Submit Now" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
 };
 
 test("should scope persisted viewer state to the stamped plan identity", async ({
@@ -225,6 +225,7 @@ for (const identity of ["absent", "empty"] as const) {
     await dataTable.getByRole("menuitemcheckbox", { name: "Note" }).click();
     await expect(dataTable.locator('th[data-table-column="2"]')).toBeHidden();
     await stageComment(page, "Memory-only draft");
+    await page.getByRole("button", { name: /Feedback/ }).click();
     await expect(
       page.getByRole("complementary", { name: "Feedback" }),
     ).toContainText("Memory-only draft");

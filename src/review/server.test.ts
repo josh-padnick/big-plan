@@ -2,11 +2,11 @@
 // is covered here as behavior rather than as intent: each test is one refusal
 // the design promises, exercised against a real listening runtime.
 
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 
@@ -21,15 +21,13 @@ Today's reality is that feedback does not reach the agent.
 
 let runtime: ReviewRuntime;
 let token: string;
-
-const running: Array<ReviewRuntime> = [];
+let planDirectory: string;
 
 beforeAll(async () => {
-  const directory = await mkdtemp(join(tmpdir(), "big-plan-server-"));
-  const planPath = join(directory, "plan.mdx");
+  planDirectory = await mkdtemp(join(tmpdir(), "big-plan-server-"));
+  const planPath = join(planDirectory, "plan.mdx");
   await writeFile(planPath, PLAN);
   runtime = await startReviewRuntime({ planPath });
-  running.push(runtime);
   const descriptor: unknown = JSON.parse(
     await readFile(runtime.store.sessionPath, "utf8"),
   );
@@ -40,6 +38,11 @@ beforeAll(async () => {
     typeof descriptor.token === "string"
       ? descriptor.token
       : "";
+});
+
+afterAll(async () => {
+  await runtime.close();
+  await rm(planDirectory, { recursive: true, force: true });
 });
 
 const call = ({
@@ -252,21 +255,77 @@ describe("review runtime feedback", () => {
     );
   });
 
+  it("should keep a retried feedback id unique in sent state", async () => {
+    const body = {
+      comments: [
+        {
+          id: "a1b2c3d4",
+          body: "Retry this exact feedback package.",
+          target: { type: "document" },
+        },
+      ],
+    };
+    expect(
+      (await call({ path: "/api/feedback", method: "POST", body })).status,
+    ).toBe(200);
+    expect(
+      (await call({ path: "/api/feedback", method: "POST", body })).status,
+    ).toBe(200);
+    const sent: unknown = JSON.parse(
+      await readFile(runtime.store.sentPath, "utf8"),
+    );
+    expect(
+      Array.isArray(sent)
+        ? sent.filter(
+            (comment) =>
+              typeof comment === "object" &&
+              comment !== null &&
+              "id" in comment &&
+              comment.id === "a1b2c3d4",
+          )
+        : [],
+    ).toHaveLength(1);
+  });
+
   it("should report having received the package on its own progress channel", async () => {
+    const response = await call({
+      path: "/api/feedback",
+      method: "POST",
+      body: {
+        comments: [
+          {
+            id: "deadbeef",
+            body: "Emit an independent progress event.",
+            target: { type: "document" },
+          },
+        ],
+      },
+    });
+    expect(response.status).toBe(200);
     const answer: unknown = await (
       await call({ path: "/api/progress" })
     ).json();
-    expect(answer).toMatchObject({
-      events: [{ sessionId: runtime.sessionId, state: "done" }],
-    });
+    expect(answer).toMatchObject({ events: expect.any(Array) });
+    expect(
+      (answer as { events: Array<{ sessionId: string; state: string }> })
+        .events,
+    ).toContainEqual(
+      expect.objectContaining({ sessionId: runtime.sessionId, state: "done" }),
+    );
   });
 });
 
 describe("review runtime shutdown", () => {
   it("should stop listening when the reviewer closes it", async () => {
-    for (const instance of running) {
-      await instance.close();
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-close-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const closing = await startReviewRuntime({ planPath });
+    try {
+      await closing.close();
+      await expect(fetch(closing.url)).rejects.toThrow();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
-    await expect(fetch(runtime.url)).rejects.toThrow();
   });
 });

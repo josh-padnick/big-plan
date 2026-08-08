@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { Root } from "hast";
 import { compileMarkdown } from "./compile-markdown.js";
+import { rehypeBlockIdentity } from "./block-identity.js";
 import { serializeHtml } from "../serialize-html.js";
 
 const compile = (markdown: string) => {
@@ -140,6 +142,54 @@ describe("block identity kinds and labels", () => {
       expect(block.id).toMatch(/^[a-z0-9/-]+$/);
     }
   });
+
+  it("should keep truncated heading scopes globally unique", () => {
+    const prefix = "a".repeat(56);
+    const { blocks } = compile(
+      `## ${prefix} first\n\nA.\n\n## ${prefix} second\n\nB.\n`,
+    );
+    const paragraphIds = blocks
+      .filter((block) => block.kind === "paragraph")
+      .map((block) => block.id);
+    expect(paragraphIds).toHaveLength(2);
+    expect(new Set(paragraphIds).size).toBe(2);
+    expect(paragraphIds[0]).toMatch(/^section\/a{48}\/paragraph-1$/u);
+    expect(paragraphIds[1]).toMatch(/^section\/a{46}-2\/paragraph-1$/u);
+  });
+
+  it("should count kinds by their rendered id segment", () => {
+    const tree: Root = {
+      type: "root",
+      children: [
+        {
+          type: "element",
+          tagName: "div",
+          properties: { "data-component": "Custom" },
+          children: [
+            {
+              type: "element",
+              tagName: "span",
+              properties: { "data-commentable-kind": "table cell" },
+              children: [{ type: "text", value: "First" }],
+            },
+            {
+              type: "element",
+              tagName: "span",
+              properties: { "data-commentable-kind": "table-cell" },
+              children: [{ type: "text", value: "Second" }],
+            },
+          ],
+        },
+      ],
+    };
+    const blocks: Array<{ readonly id: string }> = [];
+    rehypeBlockIdentity({ blocks })(tree);
+    expect(blocks.map((block) => block.id)).toEqual([
+      "document/custom-1",
+      "document/table-cell-1",
+      "document/table-cell-2",
+    ]);
+  });
 });
 
 describe("block identity boundaries", () => {
@@ -198,7 +248,7 @@ describe("block identity boundaries", () => {
   });
 
   it("should expose each QuickSummary facet without opening private component markup", () => {
-    const { blocks } = compile(
+    const { html, blocks } = compile(
       "## Summary\n\n<QuickSummary>\n\n<Why>\n\n- Value.\n\n</Why>\n\n<What>\n\n- Build it.\n\n</What>\n\n<How>\n\n- Carefully.\n\n</How>\n\n</QuickSummary>\n",
     );
     expect(
@@ -206,6 +256,13 @@ describe("block identity boundaries", () => {
         .filter((block) => block.kind === "quick-summary-facet")
         .map((block) => block.label),
     ).toEqual(["Why", "What", "How"]);
+    const summary = blocks.find((block) => block.kind === "quick-summary");
+    expect(summary).toBeDefined();
+    expect(html).toMatch(
+      new RegExp(
+        `<aside[^>]*data-quick-summary[^>]*data-block-id="${summary?.id}"`,
+      ),
+    );
   });
 
   it("should expose DataTable rows, cells, and columns as semantic sub-targets", () => {

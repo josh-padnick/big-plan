@@ -9,7 +9,7 @@ export type CommentMarkdownToken =
   | { readonly type: "emphasis"; readonly value: string };
 
 const INLINE_MARKDOWN =
-  /(`+)([^`\n]+?)\1|\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|\*([^*\n]+?)\*/gu;
+  /(`+)([^`\n]+?)\1|\*\*([^*\n]+?)\*\*|(?<![\p{L}\p{N}_])_([^_\n]+?)_(?![\p{L}\p{N}_])|\*([^*\n]+?)\*/gu;
 
 /** Parses code spans and the two basic emphasis forms without accepting HTML. */
 export const parseCommentMarkdownLine = (

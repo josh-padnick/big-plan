@@ -14,7 +14,13 @@
 //    re-checked on read exactly as if they had arrived over the wire.
 
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  chmod,
+  mkdir,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import type { ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
@@ -123,6 +129,7 @@ export const prepareStore = async (store: ReviewStore): Promise<void> => {
   } catch {
     await writeFile(ignorePath, IGNORE_ALL, { mode: FILE_MODE });
   }
+  await chmod(ignorePath, FILE_MODE);
 };
 
 const readJson = async (path: string): Promise<unknown> => {
@@ -144,6 +151,7 @@ const writeJson = async ({
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, {
     mode: FILE_MODE,
   });
+  await chmod(path, FILE_MODE);
 };
 
 /** Reads a stored comment list back through the caller's own validator. */
@@ -322,10 +330,10 @@ export const appendProgress = async ({
   readonly store: ReviewStore;
   readonly event: ProgressEvent;
 }): Promise<void> => {
-  const existing = await readFile(store.progressPath, "utf8").catch(() => "");
-  await writeFile(store.progressPath, `${existing}${JSON.stringify(event)}\n`, {
+  await appendFile(store.progressPath, `${JSON.stringify(event)}\n`, {
     mode: FILE_MODE,
   });
+  await chmod(store.progressPath, FILE_MODE);
 };
 
 /** Records the running session so a reviewer (and only they) can find it. */

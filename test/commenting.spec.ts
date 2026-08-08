@@ -27,7 +27,6 @@ test("should stage and restore a slide comment through the legacy chrome", async
   const tooltip = comment.getByRole("tooltip");
   await expect(tooltip).not.toBeVisible();
   await comment.hover();
-  await page.waitForTimeout(1_100);
   await expect(tooltip).toBeVisible();
   await expect(comment).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
   await expect(tooltip).toHaveCSS("font-size", "11px");
@@ -83,9 +82,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   );
   const shortcutTooltip = dialog.getByRole("tooltip");
   await submit.hover();
-  await page.waitForTimeout(500);
   await expect(shortcutTooltip).not.toBeVisible();
-  await page.waitForTimeout(600);
   await expect(shortcutTooltip).toBeVisible();
   await expect(shortcutTooltip).toHaveCSS("font-size", "11px");
   const submitBox = await submit.boundingBox();
@@ -152,7 +149,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "background-color",
     "rgb(248, 235, 231)",
   );
-  const stagedSubmit = staged.getByRole("button", { name: "Submit Now" });
+  const stagedSubmit = staged.getByRole("button", { name: "Send this" });
   await expect(stagedSubmit).toHaveCSS("padding-left", "8px");
   await expect(stagedSubmit).toHaveCSS("padding-top", "3.2px");
   await expect(stagedSubmit).toHaveCSS("font-size", "11px");
@@ -296,7 +293,6 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await reopenedEdit.fill("Keep `leaseOwner` explicit in this card.");
   const editSave = thread.getByRole("button", { name: "Save" });
   await editSave.hover();
-  await page.waitForTimeout(1_100);
   await expect(thread.getByRole("tooltip")).toBeVisible();
   const editShortcut = await page.evaluate(() =>
     /Mac|iPhone|iPad/u.test(navigator.platform) ? "Meta" : "Control",
@@ -604,6 +600,9 @@ test("should confirm deleting every staged comment from Comments", async ({
 
   await deleteAll.click();
   await expect(deleteDialog).toBeFocused();
+  await deleteDialog.dispatchEvent("keydown", { key: "Enter", repeat: true });
+  await expect(deleteDialog).toBeVisible();
+  await expect(rail.locator(".review-staged-card")).toHaveCount(2);
   await page.keyboard.press("Enter");
   await expect(deleteDialog).not.toBeVisible();
   await expect(rail.locator(".review-staged-card")).toHaveCount(0);

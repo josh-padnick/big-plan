@@ -194,7 +194,7 @@ All visual choices use the document theme's closed token vocabulary.
     position: absolute;
     z-index: 3;
     top: calc(0.75rem - 1px);
-    right: calc(100% + 0.5625rem);
+    right: calc(100% + 3rem);
     width: 1.4rem;
     height: 1.4rem;
   }
@@ -322,7 +322,7 @@ All visual choices use the document theme's closed token vocabulary.
   .review-selection-chip:focus-visible {
     border-color: var(--accent-c);
     background: var(--surface-c);
-    color: var(--accent-c);
+    color: var(--ink-c);
   }
 
   .review-selection-chip svg {
@@ -566,7 +566,7 @@ All visual choices use the document theme's closed token vocabulary.
     padding: 0;
     border: 0;
     background: transparent;
-    color: var(--accent-c);
+    color: var(--ink-c);
     font-size: var(--text-2xs);
     font-weight: 600;
     letter-spacing: 0.06em;
@@ -579,6 +579,20 @@ All visual choices use the document theme's closed token vocabulary.
   .review-staged-target:hover,
   .review-staged-target:focus-visible {
     text-decoration: underline;
+  }
+
+  .review-staged-card[data-review-surface="rail"]
+    .review-primary-comment-action {
+    border-color: var(--edge-c);
+    background: transparent;
+    color: var(--subtle-c);
+  }
+
+  .review-staged-card[data-review-surface="rail"]
+    .review-primary-comment-action:hover {
+    border-color: var(--edge-strong-c);
+    background: var(--surface-c);
+    color: var(--muted-c);
   }
 
   .review-staged-actions {
@@ -737,14 +751,21 @@ All visual choices use the document theme's closed token vocabulary.
     box-shadow: var(--elevation-floating);
   }
 
-  .review-feedback-tabs {
+  .review-feedback-tabbar {
     display: flex;
     flex: 0 0 auto;
     align-items: stretch;
-    gap: 0.25rem;
-    padding: 0.375rem 0.5rem 0;
     border-bottom: 1px solid var(--edge-c);
     background: var(--bg);
+  }
+
+  .review-feedback-tabs {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: stretch;
+    gap: 0.25rem;
+    padding: 0.375rem 0 0 0.5rem;
   }
 
   .review-feedback-tabs > button {
@@ -777,11 +798,11 @@ All visual choices use the document theme's closed token vocabulary.
     color: var(--ink-c);
   }
 
-  .review-feedback-tabs > button:last-child {
+  .review-feedback-close {
     align-self: center;
     min-height: 0;
     margin-left: auto;
-    border-bottom: 0;
+    margin-right: 0.5rem;
   }
 
   .review-feedback-tabs > button > span {

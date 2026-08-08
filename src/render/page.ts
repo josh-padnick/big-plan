@@ -7,6 +7,7 @@
 
 import { FAVICON_DARK_SRC, FAVICON_LIGHT_SRC } from "./branding.generated.js";
 import { escapeHtml } from "./escape-html.js";
+import { REVIEW_SCRIPT_BODY } from "./review-script.generated.js";
 import {
   PREFERENCES_RECORD_VERSION,
   PREFERENCES_STORAGE_KEY,
@@ -62,6 +63,7 @@ export const renderPage = ({
 </head>
 <body class="${escapeHtml(bodyClassName)}">
 ${bodyHtml}
+<script>${REVIEW_SCRIPT_BODY}</script>
 </body>
 </html>
 `;

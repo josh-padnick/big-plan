@@ -3,12 +3,11 @@
 // mapping every visual choice onto Big Plan's closed design-token vocabulary.
 
 import type {
-  ButtonHTMLAttributes,
+  ComponentPropsWithRef,
   HTMLAttributes,
   KeyboardEvent,
-  TextareaHTMLAttributes,
 } from "react";
-import { forwardRef, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 const joinClasses = (
   ...values: ReadonlyArray<string | false | null | undefined>
@@ -51,43 +50,39 @@ const BUTTON_SIZES: Readonly<Record<ButtonSize, string>> = {
   icon: "size-11 p-0",
 };
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = ComponentPropsWithRef<"button"> & {
   readonly variant?: ButtonVariant;
   readonly size?: ButtonSize;
 };
 
 /** Token-themed shadcn Button primitive. */
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
+export const Button = ({
+  className,
+  variant = "default",
+  size = "default",
+  type = "button",
+  ref,
+  ...props
+}: ButtonProps) => (
+  <button
+    ref={ref}
+    type={type}
+    className={joinClasses(
+      "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 transition hover:brightness-95 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:border-edge disabled:bg-surface disabled:text-subtle disabled:opacity-100 disabled:shadow-none motion-reduce:transition-none",
+      BUTTON_VARIANTS[variant],
+      BUTTON_SIZES[size],
       className,
-      variant = "default",
-      size = "default",
-      type = "button",
-      ...props
-    },
-    ref,
-  ) => (
-    <button
-      ref={ref}
-      type={type}
-      className={joinClasses(
-        "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 transition hover:brightness-95 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:border-edge disabled:bg-surface disabled:text-subtle disabled:opacity-100 disabled:shadow-none motion-reduce:transition-none",
-        BUTTON_VARIANTS[variant],
-        BUTTON_SIZES[size],
-        className,
-      )}
-      {...props}
-    />
-  ),
+    )}
+    {...props}
+  />
 );
-Button.displayName = "Button";
 
 /** Token-themed shadcn Textarea primitive. */
-export const Textarea = forwardRef<
-  HTMLTextAreaElement,
-  TextareaHTMLAttributes<HTMLTextAreaElement>
->(({ className, ...props }, ref) => (
+export const Textarea = ({
+  className,
+  ref,
+  ...props
+}: ComponentPropsWithRef<"textarea">) => (
   <textarea
     ref={ref}
     className={joinClasses(
@@ -96,11 +91,10 @@ export const Textarea = forwardRef<
     )}
     {...props}
   />
-));
-Textarea.displayName = "Textarea";
+);
 
 /** Token-themed shadcn Card primitive. */
-type CardProps = HTMLAttributes<HTMLDivElement> & {
+type CardProps = ComponentPropsWithRef<"div"> & {
   readonly density?: "default" | "compact" | "dense";
   readonly elevation?: "floating" | "none";
 };
@@ -116,24 +110,24 @@ const CARD_ELEVATIONS = {
   none: "shadow-none",
 } as const;
 
-export const Card = forwardRef<HTMLDivElement, CardProps>(
-  (
-    { className, density = "default", elevation = "floating", ...props },
-    ref,
-  ) => (
-    <div
-      ref={ref}
-      className={joinClasses(
-        "min-w-0 rounded-lg bg-raised text-ink",
-        CARD_DENSITIES[density],
-        CARD_ELEVATIONS[elevation],
-        className,
-      )}
-      {...props}
-    />
-  ),
+export const Card = ({
+  className,
+  density = "default",
+  elevation = "floating",
+  ref,
+  ...props
+}: CardProps) => (
+  <div
+    ref={ref}
+    className={joinClasses(
+      "min-w-0 rounded-lg bg-raised text-ink",
+      CARD_DENSITIES[density],
+      CARD_ELEVATIONS[elevation],
+      className,
+    )}
+    {...props}
+  />
 );
-Card.displayName = "Card";
 
 /** Token-themed shadcn Badge primitive. */
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
@@ -217,7 +211,11 @@ export const AlertDialog = ({
       onCancel();
       return;
     }
-    if (event.key === "Enter" && event.target === dialogRef.current) {
+    if (
+      event.key === "Enter" &&
+      !event.repeat &&
+      event.target === dialogRef.current
+    ) {
       event.preventDefault();
       onAction();
       return;

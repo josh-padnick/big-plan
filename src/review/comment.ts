@@ -65,13 +65,19 @@ export class CommentRejected extends Error {
 // Bounds exist so one submit cannot fill the disk or produce a brief no agent
 // can read; they are limits, not sanitization.
 const BODY_LIMIT = 4000;
-const QUOTE_LIMIT = 400;
+export const QUOTE_LIMIT = 400;
 const ID_LIMIT = 64;
 const COMMENT_LIMIT = 200;
 
-const asRecord = (value: unknown): Readonly<Record<string, unknown>> => {
+const asRecord = ({
+  value,
+  field,
+}: {
+  readonly value: unknown;
+  readonly field: string;
+}): Readonly<Record<string, unknown>> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new CommentRejected("A comment must be an object");
+    throw new CommentRejected(`"${field}" must be an object`);
   }
   return value as Readonly<Record<string, unknown>>;
 };
@@ -126,7 +132,7 @@ const asTimestamp = (value: unknown, fallback: string): string => {
   return new Date(value).toISOString();
 };
 
-const asLineNumber = ({
+const asOffset = ({
   value,
   field,
 }: {
@@ -168,7 +174,7 @@ const validateTarget = ({
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
 }): CommentTarget => {
-  const target = asRecord(value);
+  const target = asRecord({ value, field: "target" });
   const type = target.type;
   if (type === "document") {
     return { type: "document" };
@@ -186,8 +192,8 @@ const validateTarget = ({
     return { type: "block", ...identity };
   }
   if (type === "selection" || type === "lines") {
-    const start = asLineNumber({ value: target.start, field: "start" });
-    const end = asLineNumber({ value: target.end, field: "end" });
+    const start = asOffset({ value: target.start, field: "start" });
+    const end = asOffset({ value: target.end, field: "end" });
     if (end < start) {
       throw new CommentRejected("A range must end at or after it starts");
     }
@@ -229,7 +235,7 @@ export const validateComments = ({
     );
   }
   return value.map((entry) => {
-    const comment = asRecord(entry);
+    const comment = asRecord({ value: entry, field: "comment" });
     const body = asText({
       value: comment.body,
       field: "body",

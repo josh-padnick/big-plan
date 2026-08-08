@@ -48,7 +48,15 @@ export const reviewCommand = async (
   }
 
   const stop = () => {
-    void runtime.close().then(() => process.exit(0));
+    void runtime
+      .close()
+      .catch((error: unknown) => {
+        process.stderr.write(
+          `Cannot stop the review runtime: ${String(error)}\n`,
+        );
+        process.exitCode = 1;
+      })
+      .finally(() => process.exit(process.exitCode ?? 0));
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);

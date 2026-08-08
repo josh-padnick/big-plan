@@ -2,7 +2,10 @@
 
 import { createElement } from "react";
 import type { ReactNode } from "react";
-import type { LucideIcon } from "../../../icons/lucide-icon.js";
+import {
+  DEFAULT_LUCIDE_STROKE_WIDTH,
+  type LucideIcon,
+} from "../../../icons/lucide-icon.js";
 
 /** Renders one decorative Lucide SVG as a React node. */
 export const lucideIconToReact = ({
@@ -19,7 +22,7 @@ export const lucideIconToReact = ({
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2"
+    strokeWidth={icon.strokeWidth ?? DEFAULT_LUCIDE_STROKE_WIDTH}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"

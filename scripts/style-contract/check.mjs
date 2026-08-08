@@ -31,6 +31,9 @@ const ownsVisualPresentation = (relativePath) => {
   if (segments[1] === "render") {
     return true;
   }
+  if (segments[1] === "review" && segments[2] === "browser") {
+    return true;
+  }
   if (segments[1] !== "components") {
     return false;
   }
@@ -196,7 +199,7 @@ export const checkStylesheetContract = async ({ sourceRoot }) => {
     });
     if (!ownsVisualPresentation(relativePath)) {
       failures.push(
-        `${relativePath}:1: stylesheet is outside a visual owner; use an authorable component folder, _shared/<visual-primitive>, or src/render.`,
+        `${relativePath}:1: stylesheet is outside a visual owner; use an authorable component folder, _shared/<visual-primitive>, src/review/browser, or src/render.`,
       );
     }
     const firstNode = root.first;
