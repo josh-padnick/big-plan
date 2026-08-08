@@ -30,6 +30,7 @@ Everything on this page is shipped and works today.
 
 - Syntax highlighting for fenced code blocks with a declared language.
 - Unknown and undeclared languages stay plain and readable.
+- Keyboard-accessible copy controls for fenced code, code snippets and diffs, data tables, and database schemas; success replaces the copy icon with a check without shifting the toolbar, updates the accessible name, and suppresses the tooltip until the control resets.
 
 ## Plan authoring
 

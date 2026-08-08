@@ -1,6 +1,6 @@
 /* CSS escape hatch: shared visual primitive and selector relationships.
-   Owns the maximized panel and its document-level backdrop, shared by every
-   figure family a reader can promote to the viewport.
+   Owns transient copy feedback plus the maximized panel and its
+   document-level backdrop, shared by rendered figure families.
 
    THE PANEL
    A maximized figure keeps an equal inset on all four sides and rounds every

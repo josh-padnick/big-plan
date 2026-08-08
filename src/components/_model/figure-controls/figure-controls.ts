@@ -1,5 +1,5 @@
-// Owns the figure-control contract shared by every rendered code figure: the
-// maximize and copy attribute vocabulary, labels, and fixed control styling.
+// Owns the figure-control contract shared by rendered figures: the maximize
+// and copy attribute vocabulary, labels, and fixed control styling.
 //
 // WHY THIS MODULE EXISTS
 // Maximize and copy are drawn three different ways - React views for
@@ -11,7 +11,7 @@
 // stylesheet cite this module rather than importing it, because one is a
 // string template and the other is CSS.
 //
-// DOM CONTRACT
+// MAXIMIZE DOM CONTRACT
 //  1. The maximizable element carries MAXIMIZABLE_ATTRIBUTE and is the frame
 //     the reader sees promoted. There is no separate wrapper.
 //  2. Exactly one descendant carries TRIGGER_ATTRIBUTE and is a real button

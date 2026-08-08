@@ -1,5 +1,5 @@
-// Wraps every plain fenced code block in a figure carrying the shared
-// maximize control, so a dense sketch a reviewer must actually read is not
+// Wraps every plain fenced code block in a figure carrying the shared copy and
+// maximize controls, so a dense sketch a reviewer must actually read is not
 // stuck at the width of the reading column.
 //
 // A fence rendered by a component (CodeSnippet, CodeDiff, DataTable, and the
