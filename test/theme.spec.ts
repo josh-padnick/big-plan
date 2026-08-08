@@ -1,6 +1,7 @@
-// Browser tests of the rendered export's appearance preferences: the document
-// follows the OS by default, supports a live explicit mode, and persists one
-// global record. Render-health failures are enforced by the fixtures module.
+// Browser tests of the rendered export's appearance and colour-theme
+// preferences: the document follows the OS and warm-paper defaults, supports
+// live explicit choices, and persists one global record. Render-health failures
+// are enforced by the fixtures module.
 
 import {
   PREFERENCES_STORAGE_KEY,

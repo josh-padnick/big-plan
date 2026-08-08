@@ -2,13 +2,14 @@
 CSS escape hatch: token definitions and document-wide behavior.
 The stylesheet entry point, authored for Tailwind v4 and compiled by
 scripts/gen-css.mjs into an inlined <style> block, so rendered documents stay
-fully self-contained. This file owns the design system: the shade palette, the
+fully self-contained. This file owns the design system: the shade palettes, the
 type scale, the spacing scale, the elevation scale, the light and dark role
-tokens built from them, the layout breakpoint, and page-level rules.
+tokens built from those scales, the layout breakpoint, and page-level rules.
 DESIGN_PRINCIPLES.md owns the rules for choosing among these tokens.
 It imports prose, syntax-token, and component styles colocated with the
 modules that emit their markup.
-Light and dark follow the reader's OS in inert exports.
+Appearance follows the reader's OS and colour defaults to the warm paper
+palette in inert exports.
 */
 
 /* Ordinary escape-hatch CSS yields to local utilities; exceptional state
