@@ -3,7 +3,10 @@
 // components/_shared/lucide-icon; neither owns glyph data.
 
 import type { Element } from "hast";
-import type { LucideIcon } from "../../icons/lucide-icon.js";
+import {
+  DEFAULT_LUCIDE_STROKE_WIDTH,
+  type LucideIcon,
+} from "../../icons/lucide-icon.js";
 
 /**
  * Renders one decorative Lucide glyph as an inert HAST SVG.
@@ -30,7 +33,7 @@ export const lucideIconToHast = ({
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "currentColor",
-    "stroke-width": "2",
+    "stroke-width": icon.strokeWidth ?? DEFAULT_LUCIDE_STROKE_WIDTH,
     "stroke-linecap": "round",
     "stroke-linejoin": "round",
     "aria-hidden": "true",

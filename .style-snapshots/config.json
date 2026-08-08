@@ -38,6 +38,16 @@
       "^src/render/"
     ]
   },
+  "mergeResolutionWaivers": [
+    {
+      "commit": "a94aaee25f779a560819935eaaeedf5884ec617b",
+      "reason": "Forward-only reconciliation preserved the reviewed commenting shell while accepting main's generated renderer and component-test changes; rewriting the active review branch was explicitly forbidden."
+    },
+    {
+      "commit": "459e6696cf8d445f52f84981971ec8a514b986f7",
+      "reason": "Forward-only reconciliation combined main's Mermaid renderer with the approved commenting bundle; rewriting the active review branch was explicitly forbidden."
+    }
+  ],
   "captureEnvironment": {
     "authorityClass": "ci-runner"
   },
@@ -319,6 +329,26 @@
         },
         {
           "name": "shell-header",
+          "selector": "body > header",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            },
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": []
+        },
+        {
+          "name": "commenting-shell-header",
+          "scope": "component",
+          "ownerPatterns": ["^src/review/browser/"],
           "selector": "body > header",
           "themes": ["light", "dark"],
           "viewports": [

@@ -19,6 +19,7 @@ Light and dark follow the reader's OS in inert exports.
 @import "./markdown/prose.css";
 @import "./markdown/deck.css";
 @import "./markdown/syntax-highlighting.css";
+@import "../review/browser/review.css";
 @import "../components/_shared/comparison-matrix/comparison-matrix.css";
 @import "../components/_shared/column-reorder/styles.css";
 @import "../components/_shared/figure-controls/figure-controls.css";
@@ -183,6 +184,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --tray-c: var(--grey-100);
   --well-c: var(--grey-100);
   --header-bg: var(--grey-125);
+  --comment-header-c: var(--header-bg);
   /* Modal backdrops dim both palettes with the same neutral black overlay. */
   --backdrop-c: rgb(0 0 0);
 
@@ -238,6 +240,12 @@ it that way: a band carries primary or secondary text, never tertiary.
   --table-head-bg: var(--neutral-100);
   --diff-hunk-c: var(--grey-600);
   --diff-header-bg: var(--header-bg);
+  /* approved-metric: captain-restored settings dim, 40% on paper */
+  --preferences-backdrop-c: color-mix(
+    in srgb,
+    var(--grey-950) 40%,
+    transparent
+  );
 
   /*
     ELEVATION
@@ -280,6 +288,9 @@ same separation.
     --tray-c: var(--grey-900);
     --well-c: var(--grey-950);
     --header-bg: var(--grey-875);
+    /* Captain-approved local colour: the thread band stays distinct from both
+       the raised comment body and the page in dark mode. */
+    --comment-header-c: #1c1a14;
 
     --ink-c: var(--grey-150);
     --muted-c: var(--grey-300);
@@ -325,6 +336,12 @@ same separation.
     --table-head-bg: var(--neutral-800);
     --diff-hunk-c: var(--grey-400);
     --diff-header-bg: var(--header-bg);
+    /* approved-metric: captain-restored settings dim, 70% in dark mode */
+    --preferences-backdrop-c: color-mix(
+      in srgb,
+      var(--grey-950) 70%,
+      transparent
+    );
 
     --elevation-raised:
       0 1px 2px -1px rgb(0 0 0 / 0.5), 0 1px 3px 0 rgb(0 0 0 / 0.32);
@@ -350,6 +367,8 @@ same separation.
   --tray-c: var(--grey-900);
   --well-c: var(--grey-950);
   --header-bg: var(--grey-875);
+  /* Captain-approved local colour; see the OS-dark role above. */
+  --comment-header-c: #1c1a14;
 
   --ink-c: var(--grey-150);
   --muted-c: var(--grey-300);
@@ -395,6 +414,12 @@ same separation.
   --table-head-bg: var(--neutral-800);
   --diff-hunk-c: var(--grey-400);
   --diff-header-bg: var(--header-bg);
+  /* approved-metric: captain-restored settings dim, 70% in dark mode */
+  --preferences-backdrop-c: color-mix(
+    in srgb,
+    var(--grey-950) 70%,
+    transparent
+  );
 
   --elevation-raised:
     0 1px 2px -1px rgb(0 0 0 / 0.5), 0 1px 3px 0 rgb(0 0 0 / 0.32);
@@ -458,6 +483,8 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-accent-soft: var(--accent-soft-c);
   --color-accent-wash: var(--accent-wash-c);
   --color-accent-ink: var(--accent-ink-c);
+  --color-danger: var(--callout-danger-c);
+  --color-danger-ink: var(--accent-ink-c);
 
   --shadow-raised: var(--elevation-raised);
   --shadow-lifted: var(--elevation-lifted);
@@ -522,6 +549,14 @@ are declared, so a role or a scale step is the only thing a utility can name.
 }
 
 @layer bp-state {
+  /* A pointer-opened settings dialog returns keyboard position without
+     painting a focus halo the pointer reader never asked to see.
+     Override invariant: quiet restoration beats the trigger's focus utility. */
+  [data-preferences-focus-quiet]:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
   /* Override invariant: the settings sheet must clear the device safe area
      after the resting twelve-pixel mobile viewport margin. */
   @media (width < 56rem) {

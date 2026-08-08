@@ -5,6 +5,7 @@ node_modules/
 *.generated.css
 examples/*.html
 .big-plan/*.html
+data/**/*.html
 docs/public/demo/
 playwright-report/
 test-results/

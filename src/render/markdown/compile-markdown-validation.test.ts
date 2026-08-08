@@ -269,7 +269,8 @@ ${body}
         "# Plan\n\nA **safe** [link](https://example.com).\n",
       ),
     ).toBe(
-      '<h1 id="plan" data-authored-prose="">Plan</h1>\n<p data-authored-prose="">A <strong data-authored-prose="">safe</strong> <a href="https://example.com" data-authored-prose="">link</a>.</p>',
+      '<h1 id="plan" data-authored-prose="" data-block-id="document/heading-1" data-block-kind="heading" data-block-label="Plan" data-block-section="Overview">Plan</h1>\n' +
+        '<p data-authored-prose="" data-block-id="document/paragraph-1" data-block-kind="paragraph" data-block-label="A safe link." data-block-section="Overview">A <strong data-authored-prose="">safe</strong> <a href="https://example.com" data-authored-prose="">link</a>.</p>',
     );
   });
 });

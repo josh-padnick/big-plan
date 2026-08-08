@@ -7,6 +7,7 @@
 
 import { FAVICON_DARK_SRC, FAVICON_LIGHT_SRC } from "./branding.generated.js";
 import { escapeHtml } from "./escape-html.js";
+import { REVIEW_SCRIPT_BODY } from "./review-script.generated.js";
 import {
   PREFERENCES_RECORD_VERSION,
   PREFERENCES_STORAGE_KEY,
@@ -37,20 +38,20 @@ export const renderPage = ({
   styles,
   bodyClassName,
   bodyHtml,
-  planId,
+  rootAttributes = {},
 }: {
   readonly title: string;
   readonly styles: string;
   readonly bodyClassName: string;
   readonly bodyHtml: string;
-  // Absence is meaningful: an unstamped document gets no persisted viewer
-  // state, so the viewer never guesses an identity from presentation text.
-  readonly planId?: string;
+  readonly rootAttributes?: Readonly<Record<string, string>>;
 }): string => {
-  const planAttribute =
-    planId === undefined ? "" : ` data-plan-id="${escapeHtml(planId)}"`;
+  const root = Object.entries(rootAttributes)
+    .filter(([name]) => /^data-[a-z-]+$/.test(name))
+    .map(([name, value]) => ` ${name}="${escapeHtml(value)}"`)
+    .join("");
   return `<!doctype html>
-<html lang="en"${planAttribute}>
+<html lang="en"${root}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -62,6 +63,7 @@ export const renderPage = ({
 </head>
 <body class="${escapeHtml(bodyClassName)}">
 ${bodyHtml}
+<script>${REVIEW_SCRIPT_BODY}</script>
 </body>
 </html>
 `;

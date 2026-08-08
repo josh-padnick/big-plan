@@ -196,22 +196,26 @@ test("should keep decision content readable and script-only controls dormant wit
   const analysisPage = await context.newPage();
   await analysisPage.goto(decisionAnalysisViewerUrl);
   await expect(analysisPage.locator("[data-noscript-notice]")).toBeVisible();
+  const dormantControls = analysisPage.locator(
+    "[data-decision-weight-control], [data-decision-score-control]",
+  );
+  expect(await dormantControls.count()).toBeGreaterThan(0);
   expect(
-    await analysisPage
-      .locator("[data-decision-weight-control], [data-decision-score-control]")
-      .evaluateAll((controls) =>
-        controls.every((control) => (control as HTMLElement).hidden),
-      ),
+    await dormantControls.evaluateAll((controls) =>
+      controls.every((control) => (control as HTMLElement).hidden),
+    ),
   ).toBe(true);
+  const dormantGroups = analysisPage.locator(
+    "[data-decision-weight-group], [data-decision-score-group]",
+  );
+  expect(await dormantGroups.count()).toBeGreaterThan(0);
   expect(
-    await analysisPage
-      .locator("[data-decision-weight-group], [data-decision-score-group]")
-      .evaluateAll((groups) =>
-        groups.every(
-          (group) =>
-            !group.hasAttribute("role") && !group.hasAttribute("aria-label"),
-        ),
+    await dormantGroups.evaluateAll((groups) =>
+      groups.every(
+        (group) =>
+          !group.hasAttribute("role") && !group.hasAttribute("aria-label"),
       ),
+    ),
   ).toBe(true);
   await expect(
     analysisPage.locator("[data-decision-weight-output]").first(),

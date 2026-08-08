@@ -115,9 +115,13 @@ describe("renderDocument affordances", () => {
   it("should be self-contained when the document links to external sites", () => {
     // The browser only fetches src/link/script resources; <a href> is inert
     // navigation, so external content links do not break self-containment.
+    const resourceMarkup = html.replace(
+      /<script\b[^>]*>[\s\S]*?<\/script>/g,
+      "<script></script>",
+    );
     const fetchedValues = [
-      ...html.matchAll(/\b(?:src|srcset)="([^"]*)"/g),
-      ...html.matchAll(/<link\b[^>]*\bhref="([^"]*)"/g),
+      ...resourceMarkup.matchAll(/\b(?:src|srcset)="([^"]*)"/g),
+      ...resourceMarkup.matchAll(/<link\b[^>]*\bhref="([^"]*)"/g),
     ].map((match) => match[1]);
     expect(fetchedValues.length).toBeGreaterThan(0);
     for (const value of fetchedValues) {
@@ -169,11 +173,12 @@ The lede.
 
   it("should inline the stylesheet and viewer scripts when rendering", () => {
     expect(html.match(/<style>/g)).toHaveLength(1);
-    // The head preference bootstrap and deferred shell behavior are the only
-    // scripts; plan content can never contribute another, and nothing external
-    // is referenced.
-    expect(html.match(/<script>/g)).toHaveLength(3);
+    // The head preference bootstrap plus the deferred shell and review
+    // behaviors are the only scripts; plan content can never contribute
+    // another, and nothing external is referenced.
+    expect(html.match(/<script\b[^>]*>[\s\S]*?<\/script>/g)).toHaveLength(4);
     expect(html).toContain("data-section-link");
+    expect(html).toContain("data-block-id");
     expect(html).not.toContain('src="http');
   });
 

@@ -156,7 +156,7 @@ test("should keep every table-chrome focus state subtle in every palette", async
         table.getByRole("button", { name: "Text fit" }),
         table.getByRole("button", { name: "Reset table layout" }),
         table.getByRole("button", { name: "Maximize table" }),
-        table.getByRole("button", { name: "Processor" }),
+        table.getByRole("button", { name: "Processor", exact: true }),
       ];
       for (const target of focusTargets) {
         await tabTo(target);
@@ -198,7 +198,7 @@ test("should restore authored group order when resetting a regrouped table", asy
   await expect(table.locator("tbody")).toHaveCount(1);
   await expect(table.locator("tbody[data-table-row-group]")).toHaveCount(0);
   await columnsButton.click();
-  const tierSort = table.getByRole("button", { name: "Tier" });
+  const tierSort = table.getByRole("button", { name: "Tier", exact: true });
   await tierSort.click();
   await tierSort.click();
   await expect(tierSort.locator("..")).toHaveAttribute(

@@ -15,6 +15,15 @@ test("should reveal line numbers only while maximized and keep them highlighted"
   const numberRail = frame.locator(".code-snippet-line-number").first();
   const trigger = frame.locator("[data-figure-maximize]");
 
+  await expect
+    .poll(() =>
+      frame.evaluate(
+        (node) =>
+          (node.parentElement?.getBoundingClientRect().width ?? 0) -
+          node.getBoundingClientRect().width,
+      ),
+    )
+    .toBeGreaterThan(100);
   await expect(frame).not.toHaveAttribute("data-line-numbers");
   await expect(numberRail).toBeAttached();
   await expect(numberRail).toBeHidden();

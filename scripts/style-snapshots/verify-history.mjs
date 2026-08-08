@@ -269,6 +269,38 @@ const parseConfig = (source) => {
       names.add(exemption.name);
     }
   }
+  if (config.mergeResolutionWaivers !== undefined) {
+    if (
+      !Array.isArray(config.mergeResolutionWaivers) ||
+      config.mergeResolutionWaivers.length === 0
+    ) {
+      throw new Error(
+        "Style screenshot mergeResolutionWaivers must be a non-empty array when present.",
+      );
+    }
+    const commits = new Set();
+    for (const waiver of config.mergeResolutionWaivers) {
+      if (
+        typeof waiver.commit !== "string" ||
+        !/^[0-9a-f]{40}$/u.test(waiver.commit)
+      ) {
+        throw new Error(
+          "Style screenshot merge-resolution waiver requires a full lowercase commit SHA.",
+        );
+      }
+      if (typeof waiver.reason !== "string" || waiver.reason.trim() === "") {
+        throw new Error(
+          "Style screenshot merge-resolution waiver requires a non-empty reason.",
+        );
+      }
+      if (commits.has(waiver.commit)) {
+        throw new Error(
+          `Style screenshot merge-resolution waiver commit "${waiver.commit}" is duplicated.`,
+        );
+      }
+      commits.add(waiver.commit);
+    }
+  }
   if (config.schemaVersion === 2) {
     if (
       config.capturePolicy === undefined ||
@@ -1358,6 +1390,9 @@ export const verifyHistory = async ({
   ].map((pattern) => new RegExp(pattern));
   const relevant = [];
   const discoveryFailures = [];
+  const mergeResolutionWaivers = new Set(
+    (config.mergeResolutionWaivers ?? []).map(({ commit }) => commit),
+  );
 
   for (const commit of commits) {
     const parents = parentsByCommit.get(commit);
@@ -1407,6 +1442,9 @@ export const verifyHistory = async ({
       cwd: repoRoot,
     });
     if (parents.length > 1) {
+      if (mergeResolutionWaivers.has(commit)) {
+        continue;
+      }
       discoveryFailures.push({
         entry: { commit, subject },
         error: new Error(
@@ -1443,7 +1481,6 @@ export const verifyHistory = async ({
   const capturesByCommit = new Map();
   const completeCaptureCommits = new Set();
   const worktreeOperations = createSerialQueue();
-  const safetyNetCommit = relevant.at(-1)?.commit;
 
   const captureCommit = async (commit, captureKeys) => {
     const cacheKey = `${commit}:${JSON.stringify(captureKeys)}`;
@@ -1528,7 +1565,7 @@ export const verifyHistory = async ({
   };
 
   const results = [];
-  const hasSafetyNetScope = (entry) => entry.commit === safetyNetCommit;
+  const hasSafetyNetScope = (entry) => entry.commit === head;
   const receiptFor = (entry) =>
     receiptStore.receipts[receiptKey(entry.treePair)];
   const entryCaptureKeys = (entry) =>
@@ -1539,15 +1576,20 @@ export const verifyHistory = async ({
     });
   const reusableReceipt = (entry) => {
     const receipt = receiptFor(entry);
+    const requiredCaptureKeys = entryCaptureKeys(entry);
+    const receiptCaptureKeys = receipt?.captureKeys ?? [];
+    const reusableCaptureScope = hasSafetyNetScope(entry)
+      ? receipt?.completeCaptureSet === true &&
+        JSON.stringify(receiptCaptureKeys) ===
+          JSON.stringify(requiredCaptureKeys)
+      : requiredCaptureKeys.every((key) => receiptCaptureKeys.includes(key));
     return (
       pixelAuthority &&
       receiptDirectory !== null &&
       receipt?.schemaVersion === 2 &&
       receipt.policyFingerprint === activePolicyFingerprint &&
       sameEnvironment(receipt.environment, environment) &&
-      receipt.completeCaptureSet === hasSafetyNetScope(entry) &&
-      JSON.stringify(receipt.captureKeys) ===
-        JSON.stringify(entryCaptureKeys(entry)) &&
+      reusableCaptureScope &&
       receipt.visualKind === entry.visualKind &&
       JSON.stringify(receipt.stylingFiles) ===
         JSON.stringify([...entry.stylingFiles].sort()) &&
@@ -1605,7 +1647,7 @@ export const verifyHistory = async ({
     if (activeSafetyNetEntry !== undefined) {
       completeCaptureCommits.add(activeSafetyNetEntry.commit);
     }
-    const safetyNetEntry = relevant.at(-1);
+    const safetyNetEntry = relevant.find(hasSafetyNetScope);
     const reusableSafetyNetCompleteness =
       safetyNetEntry !== undefined &&
       reusableReceipt(safetyNetEntry) &&

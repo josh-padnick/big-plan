@@ -35,7 +35,7 @@ Validation checks that the plan can be compiled and rendered, then applies linti
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
 Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
-The rendered HTML embeds all styling and branding assets, makes no external requests, and never executes plan-authored code; its tiny head preference bootstrap and shell viewer scripts provide the [documented reader interactions](docs/src/content/docs/intro/features.md). A plan ships as two review artifacts: the authoritative MDX source and one self-contained interactive HTML render. The render stays readable with scripts disabled; its interactive affordances may require the embedded viewer scripts.
+See the [two-artifact delivery contract](adr/0001-two-artifact-plan-delivery.md).
 MermaidDiagram rendering additionally uses the pinned headless Chromium renderer at compile time; on a clean install, provision it once with `bunx playwright@1.61.1 install chromium`.
 A responsive table of contents links to the document's level-two headings and highlights the section being read, and a `Settings` dialog lets a reviewer pick a `Light`, `Dark`, or `System` appearance that is saved for every review document in that browser.
 

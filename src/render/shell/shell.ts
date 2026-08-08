@@ -15,6 +15,7 @@ import { MONITOR_ICON } from "../../icons/lucide/monitor.js";
 import { MOON_ICON } from "../../icons/lucide/moon.js";
 import { SETTINGS_ICON } from "../../icons/lucide/settings.js";
 import { SUN_ICON } from "../../icons/lucide/sun.js";
+import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
@@ -240,6 +241,23 @@ ${renderCommentDraftControl()}
 ${renderPreferencesControl()}
 </div>`;
 
+// Browsers do not execute script inside noscript, so this dismissal is a
+// native checkbox rather than a dead button. It can hide the warning for the
+// current document without weakening the content floor. A cross-load
+// localStorage preference is impossible in the exact state this notice names:
+// reading or writing localStorage itself requires JavaScript.
+const renderNoScriptNotice = (): string =>
+  `<noscript>
+<div class="mx-auto mt-4 mb-0 max-w-[var(--measure)] px-4">
+<input class="peer sr-only" id="big-plan-noscript-dismiss" type="checkbox" aria-label="Dismiss JavaScript warning">
+<aside class="flex items-start gap-3 rounded-lg border-l-[3px] border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] px-4 py-3 text-sm leading-normal text-[var(--callout-danger-ink)] peer-checked:hidden peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent" data-noscript-notice role="note">
+<span class="mt-0.5 inline-flex size-5 shrink-0 text-[var(--callout-danger-c)]">${lucideIconToHtml({ icon: TRIANGLE_ALERT_ICON, className: "size-5" })}</span>
+<span class="min-w-0 flex-1"><strong class="font-semibold">JavaScript is disabled.</strong> The full plan content is readable. Interactive affordances such as sorting, collapse, maximize, and comments are unavailable.</span>
+<label class="shrink-0 cursor-pointer rounded-md px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:underline" for="big-plan-noscript-dismiss" data-noscript-dismiss>Dismiss</label>
+</aside>
+</div>
+</noscript>`;
+
 // Builds the desktop sidebar navigation; its "Contents" label doubles as the
 // way back to the very top of the document.
 const renderDesktopToc = ({
@@ -271,7 +289,7 @@ const MOBILE_FOLD_CONTROL_CLASSES = "float-right mr-5 mb-1";
 // approved-metric: the mobile bar's hairline shadow, which lifts the sticky bar
 // off the text scrolling under it without the weight of a resting shadow.
 const MOBILE_TOC_BAR_CLASSES =
-  "sticky top-11 z-10 h-11 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden";
+  "sticky top-11 z-40 h-11 border-b border-edge bg-paper/95 text-sm leading-normal shadow-[0_1px_0_rgb(0_0_0/0.03)] backdrop-blur-sm wide:hidden";
 
 const renderMobileToc = ({
   nav,
@@ -324,7 +342,7 @@ export const renderShell = ({
 }): ShellResult => {
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
-  const html = `<header class="sticky top-0 z-10 h-11 border-b border-edge bg-paper/90 backdrop-blur">
+  const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-paper/90 backdrop-blur">
 <div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-6">
 <a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
@@ -333,9 +351,9 @@ export const renderShell = ({
 <p class="truncate text-center text-sm leading-none text-subtle"><span class="italic" data-plan-title title="${escapeHtml(title)}" aria-hidden="true">${escapeHtml(title)}</span></p>
 ${renderHeaderActions()}
 </div>
-</header>
-${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
-<noscript><aside class="mx-auto mt-4 mb-0 max-w-[var(--measure)] rounded-md border border-edge bg-surface px-4 py-3 text-sm leading-normal text-muted" data-noscript-notice role="note"><strong class="font-semibold text-ink">JavaScript is disabled.</strong> The full plan content is readable. Interactive affordances such as sorting, collapse, maximize, and comments are unavailable.</aside></noscript>
+  </header>
+  ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
+${renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="min-w-0" id="${overviewId}">

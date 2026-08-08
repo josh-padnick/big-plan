@@ -28,6 +28,7 @@ export const PREFERENCES_SCRIPT = `<script>
   const version = ${PREFERENCES_RECORD_VERSION};
   let isolatedElements = [];
   let open = false;
+  let openedByKeyboard = false;
 
   const saveMode = (mode) => {
     try {
@@ -99,7 +100,11 @@ export const PREFERENCES_SCRIPT = `<script>
       (selected || closeButton).focus();
     } else {
       restoreIsolation();
-      if (returnFocus) openButton.focus();
+      if (returnFocus) {
+        openButton.focus({ focusVisible: openedByKeyboard });
+        if (!openedByKeyboard)
+          openButton.setAttribute("data-preferences-focus-quiet", "");
+      }
     }
   };
 
@@ -112,6 +117,7 @@ export const PREFERENCES_SCRIPT = `<script>
   control.hidden = false;
   openButton.addEventListener("click", (event) => {
     event.preventDefault();
+    openedByKeyboard = event.detail === 0;
     setOpen(true);
   });
   closeButton.addEventListener("click", (event) => {
@@ -152,5 +158,15 @@ export const PREFERENCES_SCRIPT = `<script>
       tabbable[event.shiftKey ? tabbable.length - 1 : 0].focus();
     }
   });
+  for (const type of ["keydown", "pointerdown", "blur"]) {
+    document.addEventListener(
+      type,
+      (event) => {
+        if (event.type === "keydown" && event.key === "Escape") return;
+        openButton.removeAttribute("data-preferences-focus-quiet");
+      },
+      true,
+    );
+  }
 })();
 </script>`;

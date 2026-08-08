@@ -64,7 +64,11 @@ export const QuickSummary = ({
       <dl className="m-0">
         {why === undefined ? null : (
           // approved-metric: the why hero size and its gap to the pair below
-          <div className="quick-summary-why mb-[0.875rem] rounded-r-lg border-l-[3px] border-accent bg-accent-wash px-4 py-3 text-[1.0625rem] text-ink">
+          <div
+            className="quick-summary-why mb-[0.875rem] rounded-r-lg border-l-[3px] border-accent bg-accent-wash px-4 py-3 text-[1.0625rem] text-ink"
+            data-commentable-kind="quick-summary-facet"
+            data-commentable-label="Why"
+          >
             <Label text="Why" />
             <dd className="m-0">
               <FacetBody items={why.items} />
@@ -75,6 +79,8 @@ export const QuickSummary = ({
           {rest.map((facet) => (
             <div
               key={facet.name}
+              data-commentable-kind="quick-summary-facet"
+              data-commentable-label={facet.name}
               // approved-metric: the facet block inset and hairline
               className="rounded-lg border border-edge bg-paper px-4 pt-2.5 pb-3"
             >

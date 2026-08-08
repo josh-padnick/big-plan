@@ -548,8 +548,10 @@ test("should preserve diagram drafts when undoing review text", async ({
   });
 
   await test.step("use native undo in the page review composer", async () => {
-    await page.locator("[data-comment-draft-open]").click();
-    const input = page.locator("[data-comment-draft-input]");
+    const slide = page.locator("[data-slide]").first();
+    await slide.getByRole("button", { name: "Comment on slide" }).click();
+    const composer = page.getByRole("dialog", { name: /Comment on/ });
+    const input = composer.getByLabel("Add a comment");
     await input.fill("Page review text");
     await page.keyboard.type("!");
     await expect(input).toHaveValue("Page review text!");
@@ -857,15 +859,21 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       if (add === null) return null;
       const barRect = element.getBoundingClientRect();
       const addRect = add.getBoundingClientRect();
+      const firstProductControl = Array.from(element.children).find(
+        (child) => !child.hasAttribute("data-review-toolbar-host"),
+      );
       return {
-        first: element.firstElementChild === add,
-        leftInset: addRect.left - barRect.left,
-        paddingLeft: Number.parseFloat(getComputedStyle(element).paddingLeft),
+        first: firstProductControl === add,
+        followsReviewAction: add.previousElementSibling?.hasAttribute(
+          "data-review-toolbar-host",
+        ),
+        contained: addRect.left >= barRect.left,
       };
     });
     expect(placement).not.toBeNull();
     expect(placement?.first).toBe(true);
-    expect(placement?.leftInset).toBeCloseTo(placement?.paddingLeft ?? -1);
+    expect(placement?.followsReviewAction).toBe(true);
+    expect(placement?.contained).toBe(true);
   });
 
   for (const theme of ["light", "dark"]) {

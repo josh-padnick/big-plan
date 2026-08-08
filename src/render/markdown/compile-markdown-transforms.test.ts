@@ -100,7 +100,7 @@ describe("compileMarkdown code highlighting", () => {
     );
     // The fence itself is the panel body, so it carries the body mark.
     expect(
-      bodyHtml.match(/<pre data-authored-prose="" data-figure-body="">/gu),
+      bodyHtml.match(/<pre data-authored-prose="" data-figure-body=""[^>]*>/gu),
     ).toHaveLength(2);
     // A dense sketch a reviewer must read should not be stuck at the width of
     // the reading column, so every block gets the shared maximize control.

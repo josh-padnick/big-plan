@@ -25,5 +25,5 @@ But take a look at the **code diff** and the warning under **Risks and mitigatio
 Those use [`CodeDiff`](/components/code-diff/) and [`Callout`](/components/callout/), two of the [typed components](/components/) Big Plan ships for presenting common plan information in a first-class way.
 The diff adds line numbers, counts, change coloring, and a line-anchored annotation without asking the agent to design custom HTML.
 
-The output runs locally without a third-party service. The full plan content stays readable with JavaScript disabled; interactive affordances may require the embedded viewer scripts.
+The output runs locally without a third-party service. The [two-artifact delivery ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0001-two-artifact-plan-delivery.md) owns the delivery and script-behavior contract.
 To see it in action, [install it](/intro/installation/).

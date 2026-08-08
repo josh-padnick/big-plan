@@ -47,10 +47,7 @@ Everything on this page is shipped and works today.
 
 ## Output
 
-- A plan ships as two review artifacts: the authoritative MDX source and one self-contained interactive HTML render. The render stays readable with scripts disabled; its interactive affordances may require the embedded viewer scripts.
-- With JavaScript disabled, the render explains that its full content remains readable while interactive affordances such as sorting, collapse, maximize, and comments are unavailable.
-- One self-contained HTML file with styling and branding embedded.
-- A tiny embedded head script that applies a saved appearance before the first paint, an embedded settings script for the appearance dialog, and one embedded viewer script (TOC scroll-spy, hover popovers, CodeDiff and FileTreeDiff view selection, deck collapse, database-schema columns and index jumps, comment drafts, figure maximize, flow-diagram review, and wireframe navigation and scaling); content stays fully readable with scripts disabled.
+- Local, self-contained review delivery; the [two-artifact delivery ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0001-two-artifact-plan-delivery.md) owns the artifact and script-behavior contract.
 - No external requests, ever.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 

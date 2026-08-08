@@ -10,8 +10,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
+import { startReviewRuntime } from "../src/review/server.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -266,7 +267,42 @@ const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
 </Wireframe>
 `;
 
+const REVIEW_RUNTIME_MDX = `# Review persistence
+
+Keep every reviewer note safe while the plan is discussed.
+
+## Details
+
+The table has adjacent targets that must remain distinguishable.
+
+| Field | Meaning |
+| --- | --- |
+| \`versionId\` | Content hash of the snapshot |
+| \`number\` | Position in this plan's history |
+
+## Delivery
+
+Sending writes one real feedback package beside this plan.
+`;
+
 export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
+  reviewRuntimeUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-review-runtime-"),
+      );
+      const inputPath = join(outputDir, "plan.mdx");
+      await writeFile(inputPath, REVIEW_RUNTIME_MDX, "utf8");
+      const runtime = await startReviewRuntime({ planPath: inputPath });
+      try {
+        await use(runtime.url);
+      } finally {
+        await runtime.close();
+        await rm(outputDir, { recursive: true, force: true });
+      }
+    },
+    { scope: "worker" },
+  ],
   annotationCodeViewerUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(
@@ -726,6 +762,25 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
 });
 
 export { expect };
+export type { Page };
+
+/** Stages an offline-first slide comment without depending on saved switch state. */
+export const stageComment = async (page: Page, body: string): Promise<void> => {
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/ });
+  const submitRightAway = composer.getByRole("switch", {
+    name: "Submit right away",
+  });
+  if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+    await submitRightAway.click();
+  }
+  await composer.getByLabel("Add a comment").fill(body);
+  const addComment = composer.getByRole("button", { name: "Add Comment" });
+  await expect(addComment).toBeEnabled();
+  await addComment.click();
+};
 
 /**
  * Returns the locator's bounding box, failing the test when the element has

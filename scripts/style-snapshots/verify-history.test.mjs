@@ -1284,7 +1284,7 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
     )
       .trim()
       .split("\n").length;
-    assert.equal(policyChangeCount - tipRewindCount, 4);
+    assert.equal(policyChangeCount - tipRewindCount, 5);
 
     await writeFile(
       join(repoRoot, "capture.mjs"),
@@ -1305,7 +1305,7 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
     )
       .trim()
       .split("\n").length;
-    assert.equal(executablePolicyChangeCount - policyChangeCount, 4);
+    assert.equal(executablePolicyChangeCount - policyChangeCount, 5);
 
     await writeFile(
       join(repoRoot, "package.json"),
@@ -1326,7 +1326,7 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
     )
       .trim()
       .split("\n").length;
-    assert.equal(packagePolicyChangeCount - executablePolicyChangeCount, 4);
+    assert.equal(packagePolicyChangeCount - executablePolicyChangeCount, 5);
 
     await writeFile(
       join(repoRoot, "bun.lock"),
@@ -1347,7 +1347,7 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
     )
       .trim()
       .split("\n").length;
-    assert.equal(lockfilePolicyChangeCount - packagePolicyChangeCount, 4);
+    assert.equal(lockfilePolicyChangeCount - packagePolicyChangeCount, 5);
   } finally {
     if (previousReceiptDirectory === undefined) {
       delete process.env.STYLE_HISTORY_RECEIPT_DIR;
@@ -1720,6 +1720,10 @@ test("should reject a styling conflict resolved to one parent's version", async 
       repoRoot,
       subject: "style: change main color [visual:empty]",
     });
+    const mainStyleCommit = await git({
+      repoRoot,
+      arguments_: ["rev-parse", "HEAD"],
+    });
     await assert.rejects(
       git({
         repoRoot,
@@ -1737,6 +1741,10 @@ test("should reject a styling conflict resolved to one parent's version", async 
       repoRoot,
       subject: "Merge pull request #3 from example/style-feature",
     });
+    const mergeCommit = await git({
+      repoRoot,
+      arguments_: ["rev-parse", "HEAD"],
+    });
 
     await assert.rejects(
       verifyHistory({
@@ -1749,6 +1757,43 @@ test("should reject a styling conflict resolved to one parent's version", async 
         }),
       }),
       /merge commit resolved a configured styling file.*Rebase and record the resolution as a single-parent/,
+    );
+
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          ...config,
+          mergeResolutionWaivers: [
+            {
+              commit: mergeCommit,
+              reason:
+                "The delivery contract forbids rewriting this reviewed merge resolution.",
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const passing = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "parent-equal-merge-waived",
+      }),
+    });
+    assert.ok(
+      passing.every((result) => result.commit !== mergeCommit),
+      "an exact waiver skips only the unisolatable merge resolution",
+    );
+    assert.ok(
+      passing.some((result) => result.commit === mainStyleCommit),
+      "an exact waiver preserves unwaived styling commits",
     );
   } finally {
     await rm(repoRoot, { recursive: true, force: true });

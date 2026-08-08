@@ -1,0 +1,105 @@
+# Review a retry-queue rollout
+
+Use the thin thread kernel to leave durable notes before the retry queue ships.
+
+<QuickSummary>
+
+<Why>
+
+- Failed payments need one visible recovery path.
+
+</Why>
+
+<What>
+
+- Add a bounded queue with explicit ownership and operator recovery.
+
+</What>
+
+<How>
+
+- Persist attempts, lease one job at a time, and stop after the declared budget.
+
+</How>
+
+</QuickSummary>
+
+<Callout type="tip" title="Try the commenting foundation">
+
+Use a slide's quiet, always-visible left-margin comment icon, or select text to
+reveal the compact Comment chip. The composer opens beside the content instead
+of obscuring it. In the composer, turn off **Submit right
+away**, type ``Keep `leaseOwner` explicit``, and choose **Add Comment**. Treat
+QuickSummary like a slide: it has one quiet whole-summary comment route. Confirm
+the selection stays highlighted, the staged card renders the code span, and
+the card can collapse and expand. Open **Feedback** to review the Comments,
+Chat, and Agent tabs; while the rail is open, a new composer should sit inline
+with its target instead of covering the rail.
+
+</Callout>
+
+<Part title="Proposal" />
+
+## One queue, one owner
+
+*The worker owns retry timing; checkout only records the failed attempt.*
+
+The API writes a job and returns immediately. A worker leases the oldest ready
+job, applies exponential backoff, and records the terminal outcome.
+
+| Field | Meaning |
+| --- | --- |
+| `attempt` | Number of completed delivery attempts |
+| `readyAt` | Earliest time another worker may lease the job |
+| `leaseOwner` | Worker currently responsible for the attempt |
+
+<CodeSnippet file="src/retry/next-delay.ts" startLine="1" showLineNumbers>
+
+```ts
+export const nextDelay = (attempt: number): number =>
+  Math.min(30_000, 500 * 2 ** attempt);
+```
+
+</CodeSnippet>
+
+## Pick the recovery boundary
+
+*Choose where an exhausted payment stays visible.*
+
+<Decision question="Where should an exhausted payment go?">
+
+<Option
+  title="Operator queue"
+  recommended
+  summary="Keep the failure visible until a human resolves it."
+>
+
+<Consideration label="Audit trail" verdict="Complete" tone="good" />
+
+<Consideration label="Operations" verdict="One explicit queue" tone="good" />
+
+</Option>
+
+<Option
+  title="Discard after alert"
+  summary="Emit an alert and remove the failed job."
+>
+
+<Consideration label="Audit trail" verdict="Split across systems" tone="bad" />
+
+<Consideration label="Operations" verdict="Less queue state" tone="mixed" />
+
+</Option>
+
+</Decision>
+
+<Part title="Shipping" />
+
+<Slide type="acceptance-criteria" />
+
+## Ready when the loop is honest
+
+- Every failed payment has one durable state.
+- A lease expiry makes the job available without duplicating a successful send.
+- Exhausted jobs remain visible to an operator.
+- Metrics distinguish queued, leased, retried, succeeded, and exhausted work.
