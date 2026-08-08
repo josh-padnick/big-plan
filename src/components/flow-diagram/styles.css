@@ -54,9 +54,9 @@ classes.
        value - and a selected one can thicken them the same way. */
     --flow-line-c: var(--muted-c);
     --flow-line-w: 1.5px;
-    /* A washed edit clears AA against the document ink in both themes; the
-       mix is taken from the theme's own warning hue rather than a fixed
-       yellow, which is unreadable on the dark shell. */
+    /* A washed edit clears AA against the document ink in every theme and
+       appearance; the mix is taken from the theme's own warning hue rather
+       than a fixed yellow, which is unreadable on the dark shell. */
     --flow-edit-bg: color-mix(in srgb, var(--callout-warning-c) 30%, var(--bg));
     --flow-edit-edge: color-mix(
       in srgb,
@@ -70,8 +70,9 @@ classes.
      viewport pixels, and a token scoped to .flow-diagram simply does not
      resolve out there - the label drew transparent-on-paper and vanished.
      The warning hue at full strength is only 3.6:1 on its own wash in the
-     light theme; pulled 30 percent toward the document ink it clears AA in
-     both themes wherever a proposal writes warning-toned text. */
+     light appearance; pulled 30 percent toward the document ink it clears AA
+     in every theme and appearance wherever a proposal writes warning-toned
+     text. */
   :root {
     --flow-warn-ink: color-mix(
       in srgb,

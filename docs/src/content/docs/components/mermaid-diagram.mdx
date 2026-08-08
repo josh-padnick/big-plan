@@ -37,7 +37,7 @@ The same graph is available to a human reader and an agent.
 
 ## Reading and marking up a diagram
 
-- Both light and dark SVG variants are embedded in the document. CSS selects one from `data-theme`; theme changes do not rerender Mermaid.
+- Both light and dark SVG variants are embedded in the document. CSS selects one from `data-theme`; appearance and colour-theme changes do not rerender Mermaid.
 - A diagram's surfaces, borders, text, and edges are delivered as colour roles rather than baked shades, so a compiled diagram follows whichever colour theme the reviewer picks. The alternate node tints some diagram types use have no role of their own and stay fixed.
 - Flowchart and graph nodes and edges receive semantic anchors such as `component/MermaidDiagram#1/node/source`. Supported static types use their rendered source labels for stable semantic anchors and accessible names; unlabeled geometry is not exposed as a review target.
 - Every type supports whole-figure comments from the toolbar and an optional footer comment. Selectable nodes, relationships, tasks, slices, events, or commits also support element comments and deletion proposals when Mermaid exposes stable target geometry.
@@ -48,4 +48,4 @@ Run `big-plan guidance MermaidDiagram` for authoring judgment guidance.
 
 ## Upgrade probe
 
-Mermaid `11.16.0`, Playwright `1.61.1`/Chromium, and the repository-shipped Noto Sans and targeted Noto Sans SC faces are exact rendering pins. The compiler loads and awaits the Latin, Chinese, and symbol glyphs used by the fixture corpus before Mermaid measures text, and the delivered document embeds the same files. Before changing any package or font pin, run the renderer and fixture suites, render `examples/mermaid-gallery.mdx` in both themes, and inspect the semantic anchor assertions and screenshot diffs. Confirm that Chromium is available with `bunx playwright install chromium` and that scripts-off output still contains both the accessible figure text and the selected static SVG. Only then update the pins and commit the resulting lockfile and reviewed visual baselines together.
+Mermaid `11.16.0`, Playwright `1.61.1`/Chromium, and the repository-shipped Noto Sans and targeted Noto Sans SC faces are exact rendering pins. The compiler loads and awaits the Latin, Chinese, and symbol glyphs used by the fixture corpus before Mermaid measures text, and the delivered document embeds the same files. Before changing any package or font pin, run the renderer and fixture suites, render `examples/mermaid-gallery.mdx` in every colour theme and both appearances, and inspect the semantic anchor assertions and screenshot diffs. Confirm that Chromium is available with `bunx playwright install chromium` and that scripts-off output still contains both the accessible figure text and the selected static SVG. Only then update the pins and commit the resulting lockfile and reviewed visual baselines together.

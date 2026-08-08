@@ -37,7 +37,7 @@ Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.m
 Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
 See the [two-artifact delivery contract](adr/0001-two-artifact-plan-delivery.md).
 MermaidDiagram rendering additionally uses the pinned headless Chromium renderer at compile time; on a clean install, provision it once with `bunx playwright@1.61.1 install chromium`.
-A responsive table of contents links to the document's level-two headings and highlights the section being read, and a `Settings` dialog lets a reviewer pick a `Light`, `Dark`, or `System` appearance that is saved for every review document in that browser.
+A responsive table of contents links to the document's level-two headings and highlights the section being read, and a `Settings` dialog lets a reviewer choose a saved `Light`, `Dark`, or `System` appearance separately from one of five colour themes.
 
 Plans are prose plus validated components, like this callout:
 
@@ -80,7 +80,7 @@ The full authoring contract lives in the documentation:
 - [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `skill`, `validate`, `render`, and `compile` in detail.
 
 To preview components locally from a source checkout, run `bun run build` first. Then run `node bin/big-plan.mjs guidance` once and render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`. The local executable reads the compiled files in `dist/`.
-To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.
+To inspect supported fences in both light and dark appearances, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.
 To see every DatabaseTableSchema scenario in one document, render the [table-schema showcase](examples/database-table-schema.mdx).
 Generated previews remain ignored by Git.
 

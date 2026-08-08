@@ -213,7 +213,7 @@ const renderPreferenceOption = ({
 // about.
 const PALETTE_TITLES = {
   default: "Default",
-  "rose-pine": "Rosé Pine",
+  "rose-pine": "Rose Pine",
   nord: "Nord",
   catppuccin: "Catppuccin",
   brutalist: "Brutalist",

@@ -448,7 +448,7 @@ test("should repaint the whole document from the colour-theme row", async ({
     await page.getByRole("radio", { name: mode }).check();
     for (const theme of [
       { title: "Default", id: null },
-      { title: "Rosé Pine", id: "rose-pine" },
+      { title: "Rose Pine", id: "rose-pine" },
       { title: "Nord", id: "nord" },
       { title: "Catppuccin", id: "catppuccin" },
       { title: "Brutalist", id: "brutalist" },
@@ -608,7 +608,7 @@ test("should preview each theme in its own colours inside the sheet", async ({
   const defaultInk = await page
     .locator("body")
     .evaluate((body) => getComputedStyle(body).color);
-  await page.getByRole("radio", { name: "Rosé Pine" }).check();
+  await page.getByRole("radio", { name: "Rose Pine" }).check();
   const documentInk = await page
     .locator("body")
     .evaluate((body) => getComputedStyle(body).color);

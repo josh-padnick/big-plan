@@ -209,7 +209,7 @@ its light counterpart so the three-deep ladder keeps the same separation.
   /* Captain-approved local colour: the thread band stays distinct from both
      the raised comment body and the page in dark mode. */
   --comment-header-c: light-dark(var(--grey-125), #1c1a14);
-  /* Modal backdrops dim both palettes with the same neutral black overlay. */
+  /* Modal backdrops dim every theme with the same neutral black overlay. */
   --backdrop-c: rgb(0 0 0);
 
   /* Text, in three weights of attention. */
@@ -321,9 +321,10 @@ THE PALETTES
 
 `data-theme` and `data-palette` are two attributes doing two jobs. The mode
 decides which half of every `light-dark()` above is used; the palette decides
-what the shades in both halves are. A palette is therefore a set of ramps and
-nothing else: it restates no role, so a role added above is themed everywhere at
-once, and a palette costs one block rather than two.
+what the shades in both halves are. A palette is therefore a set of ramps behind
+one shared role mapping, so a role added above is themed everywhere at once and
+a palette costs one block rather than two. The sole role exception is --ink-c,
+explained below.
 
 The absent attribute, and the `default` id, both mean the warm paper ramps at
 the top of this file, so a document with no stored preference renders exactly
@@ -613,8 +614,9 @@ band that shares `--grey-925`.
   /*
     Brutalist is the sanctioned exception to "a theme is only its ramps": a
     stark reading surface is a shape as much as a colour, so it also restates
-    the closed radius, weight, tracking, and elevation scales. It restates no
-    role, so nothing here can drift from the role vocabulary.
+    the closed radius, weight, tracking, and elevation scales. Beyond the
+    documented --ink-c exception, it restates no role, so nothing here can
+    drift from the role vocabulary.
   */
 
   /* Corners are square. Every card, control, band, and figure follows. */
