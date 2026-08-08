@@ -544,6 +544,14 @@ are declared, so a role or a scale step is the only thing a utility can name.
 }
 
 @layer bp-state {
+  /* A pointer-opened settings dialog returns keyboard position without
+     painting a focus halo the pointer reader never asked to see.
+     Override invariant: quiet restoration beats the trigger's focus utility. */
+  [data-preferences-focus-quiet]:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
   /* Override invariant: floated popover geometry must beat the body's resting
      max-width and in-flow utility values after the viewer script promotes it. */
   [data-info-popover-floating] > [data-info-popover-body] {

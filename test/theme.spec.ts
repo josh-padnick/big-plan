@@ -43,6 +43,10 @@ test("should choose and persist appearance from the settings dialog", async ({
     await expect(
       page.getByRole("button", { name: "Open settings" }),
     ).toBeFocused();
+    await expect(page.getByRole("button", { name: "Open settings" })).toHaveCSS(
+      "outline-style",
+      "none",
+    );
   });
 
   await test.step("Dark applies live and persists one record", async () => {

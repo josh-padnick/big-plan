@@ -51,8 +51,6 @@ type ComposeState = {
   readonly target: CommentTarget;
   readonly top: number;
   readonly left: number;
-  readonly draftId?: string;
-  readonly initialBody?: string;
 };
 
 type SelectionControlState = {
@@ -65,7 +63,75 @@ type FeedbackTab = "comments" | "chat" | "agent";
 type StagedCardSurface = "rail" | "thread";
 type SelectionTarget = Extract<CommentTarget, { readonly type: "selection" }>;
 
+type FloatingRect = {
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly left: number;
+};
+
+type FloatingPosition = {
+  readonly top: number;
+  readonly left: number;
+};
+
 const rootElement = document.documentElement;
+
+/** Keeps a viewport-anchored composer clear of contextual comment cards. */
+const floatingComposerPosition = ({
+  preferred,
+  width,
+  height,
+  obstacles,
+}: {
+  readonly preferred: FloatingPosition;
+  readonly width: number;
+  readonly height: number;
+  readonly obstacles: ReadonlyArray<FloatingRect>;
+}): FloatingPosition => {
+  const edge = 24;
+  const gap = 12;
+  const left = Math.max(
+    edge,
+    Math.min(preferred.left, window.innerWidth - width - edge),
+  );
+  const clampTop = (top: number) =>
+    Math.max(edge, Math.min(top, window.innerHeight - height - edge));
+  const candidates = [
+    clampTop(preferred.top),
+    ...obstacles.flatMap((obstacle) => [
+      clampTop(obstacle.bottom + gap),
+      clampTop(obstacle.top - height - gap),
+    ]),
+  ];
+  const score = (top: number) => {
+    const right = left + width;
+    const bottom = top + height;
+    return obstacles.reduce((total, obstacle) => {
+      const overlapWidth = Math.max(
+        0,
+        Math.min(right, obstacle.right + gap) -
+          Math.max(left, obstacle.left - gap),
+      );
+      const overlapHeight = Math.max(
+        0,
+        Math.min(bottom, obstacle.bottom + gap) -
+          Math.max(top, obstacle.top - gap),
+      );
+      return total + overlapWidth * overlapHeight;
+    }, 0);
+  };
+  const top = candidates.reduce((best, candidate) => {
+    const candidateScore = score(candidate);
+    const bestScore = score(best);
+    if (candidateScore !== bestScore)
+      return candidateScore < bestScore ? candidate : best;
+    return Math.abs(candidate - preferred.top) < Math.abs(best - preferred.top)
+      ? candidate
+      : best;
+  });
+  return { top, left };
+};
 
 /** Formats the compact freshness label used by contextual thread cards. */
 const threadTime = (createdAt: string): string => {
@@ -230,12 +296,25 @@ const targetLabel = (
   else label = target.label;
 
   if (!includeSlideReference || target.type === "document") return label;
-  const kicker = targetElement(target)
-    ?.closest<HTMLElement>("[data-slide]")
+  const reviewContainer = targetElement(target)?.closest<HTMLElement>(
+    "[data-slide], [data-quick-summary]",
+  );
+  if (reviewContainer?.matches("[data-quick-summary]") === true) {
+    return "Quick summary";
+  }
+  const kicker = reviewContainer
     ?.querySelector<HTMLElement>("[data-slide-kicker]")
     ?.textContent?.trim();
   const slideReference = kicker?.match(/^(\d+(?:\.\d+)*)\s*\//u)?.[1];
-  return slideReference === undefined ? label : `${slideReference} · ${label}`;
+  const slideTitle = reviewContainer
+    ?.querySelector<HTMLElement>(
+      "[data-collapse-header] h2, [data-collapse-header] h3",
+    )
+    ?.textContent?.trim();
+  if (slideTitle === undefined || slideTitle === "") return label;
+  return slideReference === undefined
+    ? slideTitle
+    : `${slideReference} · ${slideTitle}`;
 };
 
 const parentElementFor = (node: Node): Element | null =>
@@ -293,6 +372,14 @@ const targetElement = (target: CommentTarget): HTMLElement | null => {
   return target.type === "block" && target.kind === "slide"
     ? (block?.closest<HTMLElement>("[data-slide]") ?? block)
     : block;
+};
+
+const targetAddress = (target: CommentTarget): string => {
+  if (target.type === "document") return "document";
+  if (target.type === "selection") {
+    return `selection:${target.blockId}:${target.start}:${target.end}`;
+  }
+  return `block:${target.blockId}`;
 };
 
 type HighlightRegistry = {
@@ -599,6 +686,7 @@ const useThreadHosts = (
     const position = () => {
       const viewportWidth = document.documentElement.clientWidth;
       const edge = 24;
+      const threadTopInset = 12;
       const threadWidth = 17 * 16;
       const lastBottomByAnchor = new Map<HTMLElement, number>();
       for (const comment of drafts) {
@@ -617,7 +705,8 @@ const useThreadHosts = (
           1,
           host.firstElementChild?.getBoundingClientRect().height ?? 1,
         );
-        const desiredTop = (targetRect?.top ?? anchorRect.top) + window.scrollY;
+        const desiredTop =
+          (targetRect?.top ?? anchorRect.top) + window.scrollY + threadTopInset;
         const previousBottom = lastBottomByAnchor.get(anchor) ?? 0;
         const top = Math.max(previousBottom, desiredTop);
         host.style.top = `${top}px`;
@@ -658,12 +747,49 @@ const CommentComposer = ({
   readonly onCancel: () => void;
   readonly onSave: (body: string, submitRightAway: boolean) => void;
 }) => {
-  const [body, setBody] = useState(compose.initialBody ?? "");
-  const [submitRightAway, setSubmitRightAway] = useState(
-    compose.draftId === undefined,
-  );
+  const [body, setBody] = useState("");
+  const [submitRightAway, setSubmitRightAway] = useState(true);
+  const [floatingPosition, setFloatingPosition] = useState<FloatingPosition>({
+    top: compose.top,
+    left: compose.left,
+  });
+  const composerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => inputRef.current?.focus(), []);
+  useEffect(() => {
+    if (inline) return;
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const rect = composerRef.current?.getBoundingClientRect();
+        if (rect === undefined) return;
+        const obstacles = Array.from(
+          document.querySelectorAll<HTMLElement>("[data-review-thread-side]"),
+          (node) => node.getBoundingClientRect(),
+        ).filter((obstacle) => obstacle.width > 0 && obstacle.height > 0);
+        const next = floatingComposerPosition({
+          preferred: { top: compose.top, left: compose.left },
+          width: rect.width,
+          height: rect.height,
+          obstacles,
+        });
+        setFloatingPosition((current) =>
+          current.top === next.top && current.left === next.left
+            ? current
+            : next,
+        );
+      });
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [compose.left, compose.top, inline]);
   const save = () => body.trim() !== "" && onSave(body.trim(), submitRightAway);
   const shortcut = /Mac|iPhone|iPad/u.test(navigator.platform)
     ? "⌘+Enter"
@@ -681,10 +807,16 @@ const CommentComposer = ({
     backgroundColor: "var(--bg)",
     borderRadius: "0.5rem",
     padding: "0.75rem",
-    ...(inline ? {} : { top: `${compose.top}px`, left: `${compose.left}px` }),
+    ...(inline
+      ? {}
+      : {
+          top: `${floatingPosition.top}px`,
+          left: `${floatingPosition.left}px`,
+        }),
   };
   return (
     <Card
+      ref={composerRef}
       className={
         inline
           ? "review-comment-composer review-comment-composer-inline"
@@ -727,8 +859,13 @@ const CommentComposer = ({
             Cancel
           </Button>
           <span className="review-shortcut-wrap">
-            <Button size="compact" disabled={body.trim() === ""} onClick={save}>
-              Submit Now
+            <Button
+              size="compact"
+              className="review-primary-comment-action"
+              disabled={body.trim() === ""}
+              onClick={save}
+            >
+              {submitRightAway ? "Submit Now" : "Add Comment"}
             </Button>
             <span role="tooltip" className="review-shortcut-tooltip">
               {shortcut}
@@ -743,11 +880,12 @@ const CommentComposer = ({
 const StagedCard = ({
   comment,
   surface,
+  associated,
   collapsed,
   expanded,
   onCollapse,
   onExpandBody,
-  onEdit,
+  onUpdate,
   onDelete,
   onJump,
   onSubmit,
@@ -755,20 +893,35 @@ const StagedCard = ({
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
+  readonly associated: boolean;
   readonly collapsed: boolean;
   readonly expanded: boolean;
   readonly onCollapse: () => void;
   readonly onExpandBody: () => void;
-  readonly onEdit: () => void;
+  readonly onUpdate: (body: string) => void;
   readonly onDelete: () => void;
   readonly onJump: () => void;
   readonly onSubmit: () => void;
-  readonly onAssociate: (target: SelectionTarget | null) => void;
+  readonly onAssociate: (target: CommentTarget | null) => void;
 }) => {
   const setAssociated = (active: boolean) => {
-    const target = comment.target.type === "selection" ? comment.target : null;
-    onAssociate(active ? target : null);
+    onAssociate(active ? comment.target : null);
   };
+  const [isEditing, setIsEditing] = useState(false);
+  const [editBody, setEditBody] = useState(comment.body);
+  const editRef = useRef<HTMLTextAreaElement>(null);
+  const editShortcut = /Mac|iPhone|iPad/u.test(navigator.platform)
+    ? "⌘+Enter"
+    : "Ctrl+Enter";
+  const saveEdit = () => {
+    const nextBody = editBody.trim();
+    if (nextBody === "") return;
+    onUpdate(nextBody);
+    setIsEditing(false);
+  };
+  useEffect(() => {
+    if (isEditing) editRef.current?.focus();
+  }, [isEditing]);
   if (collapsed) {
     return (
       <button
@@ -779,14 +932,12 @@ const StagedCard = ({
         onPointerLeave={() => setAssociated(false)}
         onFocus={() => setAssociated(true)}
         onBlur={() => setAssociated(false)}
-        data-review-associated={
-          comment.target.type === "selection" ? "true" : undefined
-        }
+        data-review-associated={associated ? "true" : undefined}
         aria-label={`Expand staged comment on ${targetLabel(comment.target)}`}
       >
         <Badge
           size="micro"
-          tone="accentOutline"
+          tone="secondary"
           weight="bold"
           className="review-staged-badge tracking-caps"
         >
@@ -818,9 +969,7 @@ const StagedCard = ({
         )
           setAssociated(false);
       }}
-      data-review-associated={
-        comment.target.type === "selection" ? "true" : undefined
-      }
+      data-review-associated={associated ? "true" : undefined}
       data-review-surface={surface}
     >
       <div className="review-staged-meta">
@@ -837,7 +986,7 @@ const StagedCard = ({
           <>
             <Badge
               size="micro"
-              tone="accentOutline"
+              tone="secondary"
               weight="bold"
               className="review-staged-badge tracking-caps"
             >
@@ -851,7 +1000,7 @@ const StagedCard = ({
         {surface === "rail" ? (
           <Badge
             size="micro"
-            tone="accentOutline"
+            tone="secondary"
             weight="bold"
             className="review-staged-badge tracking-caps"
           >
@@ -863,6 +1012,7 @@ const StagedCard = ({
             <Button
               variant="ghost"
               size="compactIcon"
+              className="review-staged-collapse"
               aria-label="Minimize staged comment"
               onClick={onCollapse}
             >
@@ -874,7 +1024,10 @@ const StagedCard = ({
             size="compactIcon"
             className="review-staged-edit"
             aria-label="Edit staged comment"
-            onClick={onEdit}
+            onClick={() => {
+              setEditBody(comment.body);
+              setIsEditing(true);
+            }}
           >
             <Icon icon={PENCIL_ICON} />
           </Button>
@@ -889,17 +1042,78 @@ const StagedCard = ({
           </Button>
         </div>
       </div>
-      <MarkdownBody body={visibleBody} className="review-staged-body text-xs" />
-      {long && !expanded ? (
+      {isEditing ? (
+        <>
+          <Textarea
+            ref={editRef}
+            className="review-staged-edit-body"
+            aria-label="Edit comment"
+            value={editBody}
+            maxLength={BODY_LIMIT}
+            onChange={(event) => setEditBody(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setEditBody(comment.body);
+                setIsEditing(false);
+              } else if (
+                event.key === "Enter" &&
+                (event.metaKey || event.ctrlKey)
+              ) {
+                event.preventDefault();
+                saveEdit();
+              }
+            }}
+          />
+          <p className="review-staged-edit-hint text-2xs">
+            Escape cancels · {editShortcut} saves
+          </p>
+          <div className="review-staged-edit-actions">
+            <Button
+              variant="outline"
+              size="compact"
+              onClick={() => setIsEditing(false)}
+            >
+              Cancel
+            </Button>
+            <span className="review-shortcut-wrap">
+              <Button
+                size="compact"
+                className="review-primary-comment-action"
+                disabled={editBody.trim() === ""}
+                onClick={saveEdit}
+              >
+                Save
+              </Button>
+              <span role="tooltip" className="review-shortcut-tooltip">
+                {editShortcut}
+              </span>
+            </span>
+          </div>
+        </>
+      ) : (
+        <MarkdownBody
+          body={visibleBody}
+          className="review-staged-body text-xs"
+        />
+      )}
+      {!isEditing && long && !expanded ? (
         <button type="button" className="review-more" onClick={onExpandBody}>
           … more
         </button>
       ) : null}
-      <div className="review-staged-footer">
-        <Button variant="accentOutline" size="compact" onClick={onSubmit}>
-          Submit Now
-        </Button>
-      </div>
+      {isEditing ? null : (
+        <div className="review-staged-footer">
+          <Button
+            variant="accentOutline"
+            size="compact"
+            className="review-primary-comment-action"
+            onClick={onSubmit}
+          >
+            Submit Now
+          </Button>
+        </div>
+      )}
     </Card>
   );
 };
@@ -927,8 +1141,8 @@ const ReviewKernel = () => {
   const [pendingDelete, setPendingDelete] = useState<ReviewComment | null>(
     null,
   );
-  const [associatedSelection, setAssociatedSelection] =
-    useState<SelectionTarget | null>(null);
+  const [associatedTarget, setAssociatedTarget] =
+    useState<CommentTarget | null>(null);
   const [associationActive, setAssociationActive] = useState(false);
   const [status, setStatus] = useState(
     identity === null
@@ -952,6 +1166,8 @@ const ReviewKernel = () => {
         (target): target is SelectionTarget => target.type === "selection",
       );
     if (composeSelection !== null) persistentSelections.push(composeSelection);
+    const associatedSelection =
+      associatedTarget?.type === "selection" ? associatedTarget : null;
     const activeSelection =
       associatedSelection ?? (associationActive ? composeSelection : null);
     setSelectionHighlights(persistentSelections, activeSelection);
@@ -963,7 +1179,87 @@ const ReviewKernel = () => {
       setSelectionHighlights([], null);
       rootElement.removeAttribute("data-review-selection-active");
     };
-  }, [associatedSelection, associationActive, compose, drafts]);
+  }, [associatedTarget, associationActive, compose, drafts]);
+
+  useEffect(() => {
+    if (associatedTarget === null || associatedTarget.type === "selection") {
+      return undefined;
+    }
+    const target = targetElement(associatedTarget);
+    const associatedElement =
+      associatedTarget.type === "block" && associatedTarget.kind === "slide"
+        ? (target?.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
+          target)
+        : target;
+    if (associatedElement === null || associatedElement === undefined) {
+      return undefined;
+    }
+    associatedElement.dataset.reviewCommentAssociated = "";
+    return () => {
+      delete associatedElement.dataset.reviewCommentAssociated;
+    };
+  }, [associatedTarget]);
+
+  useEffect(() => {
+    const marked = new Set<HTMLElement>();
+    const entries = drafts.flatMap((comment) => {
+      const element = targetElement(comment.target);
+      if (element === null) return [];
+      if (comment.target.type !== "selection") {
+        element.dataset.reviewHasComment = "";
+        marked.add(element);
+      }
+      return [{ target: comment.target, element }];
+    });
+    const move = (event: PointerEvent) => {
+      const eventTarget = event.target;
+      if (
+        eventTarget instanceof Node &&
+        document.querySelector("#big-plan-review-root")?.contains(eventTarget)
+      ) {
+        return;
+      }
+      const selected = entries.find(({ target }) => {
+        if (target.type !== "selection") return false;
+        const range = selectionRange(target);
+        return (
+          range !== null &&
+          [...range.getClientRects()].some(
+            (rect) =>
+              event.clientX >= rect.left &&
+              event.clientX <= rect.right &&
+              event.clientY >= rect.top &&
+              event.clientY <= rect.bottom,
+          )
+        );
+      });
+      if (selected !== undefined) {
+        setAssociatedTarget(selected.target);
+        return;
+      }
+      const containing = entries
+        .filter(
+          ({ target, element }) =>
+            target.type !== "selection" &&
+            eventTarget instanceof Node &&
+            element.contains(eventTarget),
+        )
+        .sort((left, right) => {
+          const leftRect = left.element.getBoundingClientRect();
+          const rightRect = right.element.getBoundingClientRect();
+          return (
+            leftRect.width * leftRect.height -
+            rightRect.width * rightRect.height
+          );
+        })[0];
+      setAssociatedTarget(containing?.target ?? null);
+    };
+    document.addEventListener("pointermove", move, { passive: true });
+    return () => {
+      document.removeEventListener("pointermove", move);
+      for (const element of marked) delete element.dataset.reviewHasComment;
+    };
+  }, [drafts]);
 
   useEffect(() => {
     const selection =
@@ -1077,11 +1373,7 @@ const ReviewKernel = () => {
   }, [compose]);
 
   const beginTarget = useCallback(
-    (
-      target: CommentTarget,
-      rect: Pick<DOMRect, "top">,
-      draft?: ReviewComment,
-    ) => {
+    (target: CommentTarget, rect: Pick<DOMRect, "top">) => {
       setCompose(
         (current) =>
           current ??
@@ -1089,7 +1381,7 @@ const ReviewKernel = () => {
             const targetRect = targetElement(target)?.getBoundingClientRect();
             const composerWidth = 17 * 16;
             const edge = 24;
-            const gap = 12;
+            const overlap = 12;
             const viewportWidth = document.documentElement.clientWidth;
             return {
               target,
@@ -1097,13 +1389,10 @@ const ReviewKernel = () => {
               left: Math.max(
                 edge,
                 Math.min(
-                  (targetRect?.right ?? viewportWidth) + gap,
+                  (targetRect?.right ?? viewportWidth) - overlap,
                   viewportWidth - composerWidth - edge,
                 ),
               ),
-              ...(draft === undefined
-                ? {}
-                : { draftId: draft.id, initialBody: draft.body }),
             };
           })(),
       );
@@ -1147,24 +1436,13 @@ const ReviewKernel = () => {
   const saveComment = (body: string, submitRightAway: boolean) => {
     if (compose === null) return;
     const comment: ReviewComment = {
-      id: compose.draftId ?? randomId(),
+      id: randomId(),
       body,
-      createdAt:
-        compose.draftId === undefined
-          ? new Date().toISOString()
-          : (drafts.find((candidate) => candidate.id === compose.draftId)
-              ?.createdAt ?? new Date().toISOString()),
+      createdAt: new Date().toISOString(),
       target: compose.target,
     };
-    setDrafts((current) =>
-      compose.draftId === undefined
-        ? [...current, comment]
-        : current.map((candidate) =>
-            candidate.id === comment.id ? comment : candidate,
-          ),
-    );
+    setDrafts((current) => [...current, comment]);
     setCompose(null);
-    setIsOpen(true);
     setTab("comments");
     setStatus("Comment staged locally.");
     if (submitRightAway) void sendComments([comment]);
@@ -1180,10 +1458,13 @@ const ReviewKernel = () => {
       behavior: "smooth",
       block: "center",
     });
-  const editDraft = (comment: ReviewComment) => {
-    const element = targetElement(comment.target);
-    if (element !== null)
-      beginTarget(comment.target, element.getBoundingClientRect(), comment);
+  const updateDraft = (id: string, body: string) => {
+    setDrafts((current) =>
+      current.map((comment) =>
+        comment.id === id ? { ...comment, body } : comment,
+      ),
+    );
+    setStatus("Comment updated locally.");
   };
 
   return (
@@ -1393,6 +1674,11 @@ const ReviewKernel = () => {
                       <StagedCard
                         comment={comment}
                         surface="rail"
+                        associated={
+                          associatedTarget !== null &&
+                          targetAddress(associatedTarget) ===
+                            targetAddress(comment.target)
+                        }
                         collapsed={false}
                         expanded={expandedBodies.has(comment.id)}
                         onCollapse={() =>
@@ -1408,11 +1694,11 @@ const ReviewKernel = () => {
                             new Set(current).add(comment.id),
                           )
                         }
-                        onEdit={() => editDraft(comment)}
+                        onUpdate={(body) => updateDraft(comment.id, body)}
                         onDelete={() => setPendingDelete(comment)}
                         onJump={() => jumpTo(comment)}
                         onSubmit={() => void sendComments([comment])}
-                        onAssociate={setAssociatedSelection}
+                        onAssociate={setAssociatedTarget}
                       />
                     </li>
                   ))}
@@ -1479,6 +1765,10 @@ const ReviewKernel = () => {
           <StagedCard
             comment={comment}
             surface="thread"
+            associated={
+              associatedTarget !== null &&
+              targetAddress(associatedTarget) === targetAddress(comment.target)
+            }
             collapsed={collapsed.has(comment.id)}
             expanded={expandedBodies.has(comment.id)}
             onCollapse={() =>
@@ -1492,11 +1782,11 @@ const ReviewKernel = () => {
             onExpandBody={() =>
               setExpandedBodies((current) => new Set(current).add(comment.id))
             }
-            onEdit={() => editDraft(comment)}
+            onUpdate={(body) => updateDraft(comment.id, body)}
             onDelete={() => setPendingDelete(comment)}
             onJump={() => jumpTo(comment)}
             onSubmit={() => void sendComments([comment])}
-            onAssociate={setAssociatedSelection}
+            onAssociate={setAssociatedTarget}
           />,
           host,
           comment.id,
@@ -1504,7 +1794,11 @@ const ReviewKernel = () => {
       })}
       {compose === null ? null : inlineComposeHost === null ? (
         <CommentComposer
-          key={`${compose.draftId ?? "new"}-${compose.target.type === "document" ? "document" : compose.target.blockId}`}
+          key={
+            compose.target.type === "document"
+              ? "document"
+              : compose.target.blockId
+          }
           compose={compose}
           inline={false}
           onCancel={() => setCompose(null)}
@@ -1513,7 +1807,11 @@ const ReviewKernel = () => {
       ) : (
         createPortal(
           <CommentComposer
-            key={`${compose.draftId ?? "new"}-${compose.target.type === "document" ? "document" : compose.target.blockId}`}
+            key={
+              compose.target.type === "document"
+                ? "document"
+                : compose.target.blockId
+            }
             compose={compose}
             inline
             onCancel={() => setCompose(null)}

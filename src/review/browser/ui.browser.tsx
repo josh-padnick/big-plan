@@ -22,7 +22,7 @@ type ButtonVariant =
   | "ghost"
   | "destructive";
 type ButtonSize =
-  "default" | "sm" | "compact" | "micro" | "compactIcon" | "icon";
+  "default" | "md" | "sm" | "compact" | "micro" | "compactIcon" | "icon";
 
 const BUTTON_VARIANTS: Readonly<Record<ButtonVariant, string>> = {
   default:
@@ -40,10 +40,13 @@ const BUTTON_VARIANTS: Readonly<Record<ButtonVariant, string>> = {
 };
 
 const BUTTON_SIZES: Readonly<Record<ButtonSize, string>> = {
-  default: "min-h-11 px-3 py-2 wide:min-h-0",
-  sm: "min-h-11 min-w-11 px-3 py-2 text-xs wide:min-h-0 wide:min-w-0",
-  compact: "min-h-11 min-w-11 px-3 py-2 text-xs wide:min-h-0 wide:min-w-0",
-  micro: "min-h-11 min-w-11 px-3 py-2 text-2xs wide:min-h-0 wide:min-w-0",
+  default: "review-button-padded min-h-11 wide:min-h-0",
+  md: "review-button-padded min-h-11 text-sm wide:min-h-0",
+  sm: "review-button-padded min-h-11 min-w-11 text-xs wide:min-h-0 wide:min-w-0",
+  compact:
+    "review-button-padded min-h-11 min-w-11 text-xs wide:min-h-0 wide:min-w-0",
+  micro:
+    "review-button-padded min-h-11 min-w-11 text-2xs wide:min-h-0 wide:min-w-0",
   compactIcon: "size-11 p-0 wide:size-6",
   icon: "size-11 p-0",
 };
@@ -69,7 +72,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       type={type}
       className={joinClasses(
-        "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 transition-shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:border-edge disabled:bg-surface disabled:text-subtle disabled:opacity-100 disabled:shadow-none motion-reduce:transition-none",
+        "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 transition-shadow focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:border-edge disabled:bg-surface disabled:text-subtle disabled:opacity-100 disabled:shadow-none motion-reduce:transition-none",
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
         className,
@@ -113,27 +116,29 @@ const CARD_ELEVATIONS = {
   none: "shadow-none",
 } as const;
 
-export const Card = ({
-  className,
-  density = "default",
-  elevation = "floating",
-  ...props
-}: CardProps) => (
-  <div
-    className={joinClasses(
-      "min-w-0 rounded-lg bg-raised text-ink",
-      CARD_DENSITIES[density],
-      CARD_ELEVATIONS[elevation],
-      className,
-    )}
-    {...props}
-  />
+export const Card = forwardRef<HTMLDivElement, CardProps>(
+  (
+    { className, density = "default", elevation = "floating", ...props },
+    ref,
+  ) => (
+    <div
+      ref={ref}
+      className={joinClasses(
+        "min-w-0 rounded-lg bg-raised text-ink",
+        CARD_DENSITIES[density],
+        CARD_ELEVATIONS[elevation],
+        className,
+      )}
+      {...props}
+    />
+  ),
 );
+Card.displayName = "Card";
 
 /** Token-themed shadcn Badge primitive. */
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
   readonly size?: "default" | "compact" | "micro";
-  readonly tone?: "neutral" | "accentOutline";
+  readonly tone?: "neutral" | "accentOutline" | "secondary";
   readonly weight?: "semibold" | "bold";
 };
 
@@ -146,6 +151,7 @@ const BADGE_SIZES = {
 const BADGE_TONES = {
   neutral: "border border-transparent bg-surface text-muted",
   accentOutline: "border border-accent bg-transparent text-accent",
+  secondary: "border border-transparent bg-well text-muted",
 } as const;
 
 const BADGE_WEIGHTS = {
@@ -248,12 +254,12 @@ export const AlertDialog = ({
           <Button
             ref={cancelRef}
             variant="outline"
-            size="sm"
+            size="md"
             onClick={onCancel}
           >
             {cancelLabel}
           </Button>
-          <Button variant="destructive" size="sm" onClick={onAction}>
+          <Button variant="destructive" size="md" onClick={onAction}>
             {actionLabel}
           </Button>
         </div>

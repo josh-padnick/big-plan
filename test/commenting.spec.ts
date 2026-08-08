@@ -55,13 +55,12 @@ test("should stage and restore a slide comment through the legacy chrome", async
   );
   const cancel = dialog.getByRole("button", { name: "Cancel" });
   const submit = dialog.getByRole("button", { name: "Submit Now" });
-  await expect(cancel).toHaveCSS("height", "34px");
-  await expect(cancel).toHaveCSS("padding-left", "12px");
-  await expect(cancel).toHaveCSS("padding-top", "8px");
+  await expect(cancel).toHaveCSS("padding-left", "8px");
+  await expect(cancel).toHaveCSS("padding-top", "3.2px");
   await expect(cancel).toHaveCSS("border-top-width", "1px");
   await expect(submit).toBeDisabled();
-  await expect(submit).toHaveCSS("height", "34px");
-  await expect(submit).toHaveCSS("padding-left", "12px");
+  await expect(submit).toHaveCSS("padding-left", "8px");
+  await expect(submit).toHaveCSS("font-size", "11px");
   await expect(submit).toHaveCSS("background-color", "rgb(239, 236, 227)");
   await expect(submit).toHaveCSS("color", "rgb(111, 105, 92)");
   await expect(submit).toHaveCSS("border-top-color", "rgb(226, 221, 209)");
@@ -69,13 +68,44 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(
     dialog.getByRole("switch", { name: "Submit right away" }).locator("span"),
   ).toHaveCSS("border-top-width", "1px");
+  await expect(dialog).toHaveCSS("position", "fixed");
+  const composerTop = await dialog.evaluate(
+    (node) => node.getBoundingClientRect().top,
+  );
+  await page.evaluate(() => window.scrollBy(0, 160));
+  await expect
+    .poll(() => dialog.evaluate((node) => node.getBoundingClientRect().top))
+    .toBe(composerTop);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await input.fill(
     "Keep `leaseOwner` explicit. <strong>Literal reviewer text</strong>",
   );
+  const shortcutTooltip = dialog.getByRole("tooltip");
+  await submit.hover();
+  await page.waitForTimeout(500);
+  await expect(shortcutTooltip).not.toBeVisible();
+  await page.waitForTimeout(600);
+  await expect(shortcutTooltip).toBeVisible();
+  await expect(shortcutTooltip).toHaveCSS("font-size", "11px");
+  const submitBox = await submit.boundingBox();
+  const shortcutBox = await shortcutTooltip.boundingBox();
+  if (submitBox === null || shortcutBox === null) {
+    throw new Error("Expected visible shortcut trigger and tooltip bounds");
+  }
+  expect(shortcutBox.y).toBeGreaterThan(submitBox.y + submitBox.height);
   await dialog.getByRole("switch", { name: "Submit right away" }).click();
-  await dialog.getByRole("button", { name: "Submit Now" }).click();
+  await dialog.getByRole("button", { name: "Add Comment" }).click();
 
   const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).not.toBeVisible();
+  await expect(slide).toHaveAttribute("data-review-has-comment", "");
+  const contextualDraft = page.locator(
+    "[data-review-thread-side] .review-staged-card",
+  );
+  await expect(contextualDraft).toBeVisible();
+  await expect(contextualDraft).toContainText("Keep leaseOwner explicit.");
+  await page.getByRole("button", { name: /Feedback/ }).click();
   await expect(rail).toBeVisible();
   const staged = rail.locator(".review-staged-card").first();
   await expect(staged).toContainText("STAGED");
@@ -85,7 +115,11 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(staged).toHaveCSS("padding", "8px");
   await expect(staged.getByText("STAGED")).toHaveCSS(
     "color",
-    "rgb(22, 101, 52)",
+    "rgb(79, 74, 63)",
+  );
+  await expect(staged.getByText("STAGED")).toHaveCSS(
+    "background-color",
+    "rgb(239, 236, 227)",
   );
   await expect(staged.getByText("STAGED")).toHaveCSS("font-size", "9px");
   await expect(staged.getByText("STAGED")).toHaveJSProperty("tagName", "SPAN");
@@ -100,11 +134,15 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(
     staged.getByRole("button", { name: "Edit staged comment" }).locator("svg"),
   ).toHaveAttribute("stroke-width", "1.8");
+  await staged.getByRole("button", { name: "Delete staged comment" }).focus();
+  await expect(
+    staged.getByRole("button", { name: "Delete staged comment" }),
+  ).toHaveCSS("outline-width", "1px");
   const editButton = staged.getByRole("button", {
     name: "Edit staged comment",
   });
   await editButton.hover();
-  await expect(editButton).toHaveCSS("background-color", "rgb(239, 236, 227)");
+  await expect(editButton).toHaveCSS("background-color", "rgb(226, 221, 209)");
   const deleteButton = staged.getByRole("button", {
     name: "Delete staged comment",
   });
@@ -115,10 +153,9 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "rgb(248, 235, 231)",
   );
   const stagedSubmit = staged.getByRole("button", { name: "Submit Now" });
-  await expect(stagedSubmit).toHaveCSS("height", "34px");
-  await expect(stagedSubmit).toHaveCSS("padding-left", "12px");
-  await expect(stagedSubmit).toHaveCSS("padding-top", "8px");
-  await expect(stagedSubmit).toHaveCSS("font-size", "12px");
+  await expect(stagedSubmit).toHaveCSS("padding-left", "8px");
+  await expect(stagedSubmit).toHaveCSS("padding-top", "3.2px");
+  await expect(stagedSubmit).toHaveCSS("font-size", "11px");
   await expect(stagedSubmit).toHaveCSS("font-weight", "600");
   await expect(
     rail.getByRole("tab", { name: "Comments" }).locator("svg"),
@@ -134,8 +171,8 @@ test("should stage and restore a slide comment through the legacy chrome", async
     name: "Send all comments to agent",
   });
   await expect(sendAll).toHaveCSS("font-size", "13px");
-  await expect(sendAll).toHaveCSS("padding-top", "8px");
-  await expect(sendAll).toHaveCSS("padding-left", "12px");
+  await expect(sendAll).toHaveCSS("padding-top", "3.2px");
+  await expect(sendAll).toHaveCSS("padding-left", "8px");
   await expect(sendAll).toHaveCSS("font-weight", "600");
   await expect(rail.getByRole("status")).toHaveCSS(
     "color",
@@ -149,6 +186,15 @@ test("should stage and restore a slide comment through the legacy chrome", async
         .evaluate((node) => node.scrollWidth - node.clientWidth),
     )
     .toBe(0);
+  await editButton.click();
+  await expect(page.getByRole("dialog", { name: /Comment on/ })).toHaveCount(0);
+  await expect(
+    staged.getByRole("textbox", { name: "Edit comment" }),
+  ).toBeFocused();
+  await expect(
+    staged.getByRole("button", { name: "Edit staged comment" }),
+  ).toBeVisible();
+  await staged.getByRole("button", { name: "Cancel" }).click();
   await expect(page.locator("[data-review-thread-side]")).toHaveCount(0);
 
   await rail.getByRole("button", { name: "Close feedback" }).click();
@@ -159,6 +205,10 @@ test("should stage and restore a slide comment through the legacy chrome", async
   );
   await expect(thread).toContainText("Just now");
   await expect(thread).toHaveCSS("background-color", "rgb(254, 253, 251)");
+  await expect(thread.locator(".review-staged-meta")).toHaveCSS(
+    "background-color",
+    "rgb(236, 231, 219)",
+  );
   await expect
     .poll(() =>
       Promise.all([
@@ -176,7 +226,75 @@ test("should stage and restore a slide comment through the legacy chrome", async
     )
     .toBeGreaterThanOrEqual(23);
   const threadTop = await threadHost.evaluate(
+    (node) => node.getBoundingClientRect().top + window.scrollY,
+  );
+  await thread.hover();
+  await expect
+    .poll(() =>
+      threadHost.evaluate(
+        (node) => node.getBoundingClientRect().top + window.scrollY,
+      ),
+    )
+    .toBe(threadTop);
+  const slideTop = await slide.evaluate(
     (node) => node.getBoundingClientRect().top,
+  );
+  expect(threadTop - slideTop).toBeGreaterThanOrEqual(11);
+  await comment.click();
+  await expect(dialog).toBeVisible();
+  await expect
+    .poll(async () => {
+      const composerRect = await dialog.boundingBox();
+      const stagedRect = await threadHost.boundingBox();
+      if (composerRect === null || stagedRect === null) return false;
+      return (
+        composerRect.x + composerRect.width + 12 <= stagedRect.x ||
+        stagedRect.x + stagedRect.width + 12 <= composerRect.x ||
+        composerRect.y + composerRect.height + 12 <= stagedRect.y ||
+        stagedRect.y + stagedRect.height + 12 <= composerRect.y
+      );
+    })
+    .toBe(true);
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await thread.getByRole("button", { name: "Edit staged comment" }).click();
+  await expect(page.getByRole("dialog", { name: /Comment on/ })).toHaveCount(0);
+  const inlineEdit = thread.getByRole("textbox", { name: "Edit comment" });
+  await expect(inlineEdit).toBeFocused();
+  await expect(
+    thread.getByRole("button", { name: "Minimize staged comment" }),
+  ).toBeVisible();
+  await expect(
+    thread.getByRole("button", { name: "Edit staged comment" }),
+  ).toBeVisible();
+  await expect(
+    thread.getByRole("button", { name: "Delete staged comment" }),
+  ).toBeVisible();
+  await inlineEdit.fill("Discard this edit.");
+  await inlineEdit.press("Escape");
+  await expect(
+    thread.getByRole("textbox", { name: "Edit comment" }),
+  ).toHaveCount(0);
+  await expect(thread).toContainText("Keep leaseOwner explicit.");
+  await thread.getByRole("button", { name: "Edit staged comment" }).click();
+  const reopenedEdit = thread.getByRole("textbox", { name: "Edit comment" });
+  await reopenedEdit.fill("Keep `leaseOwner` explicit in this card.");
+  const editSave = thread.getByRole("button", { name: "Save" });
+  await editSave.hover();
+  await page.waitForTimeout(1_100);
+  await expect(thread.getByRole("tooltip")).toBeVisible();
+  const editShortcut = await page.evaluate(() =>
+    /Mac|iPhone|iPad/u.test(navigator.platform) ? "Meta" : "Control",
+  );
+  await reopenedEdit.press(`${editShortcut}+Enter`);
+  await expect(thread).toContainText("Keep leaseOwner explicit in this card.");
+  await expect(thread.locator("code")).toHaveText("leaseOwner");
+  const collapseButton = thread.getByRole("button", {
+    name: "Minimize staged comment",
+  });
+  await collapseButton.hover();
+  await expect(collapseButton).toHaveCSS(
+    "background-color",
+    "rgb(226, 221, 209)",
   );
   await page.evaluate(() => window.scrollBy(0, 200));
   await expect
@@ -186,10 +304,10 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await page.evaluate(() => {
     document.documentElement.dataset["theme"] = "dark";
   });
-  await expect(thread).toHaveCSS("background-color", "rgb(36, 33, 25)");
+  await expect(thread).toHaveCSS("background-color", "rgb(28, 26, 20)");
   await expect(thread.locator(".review-staged-meta")).toHaveCSS(
     "background-color",
-    "rgb(28, 26, 20)",
+    "rgb(36, 33, 25)",
   );
   const restingSubmitBackground = await thread
     .getByRole("button", { name: "Submit Now" })
@@ -325,8 +443,9 @@ test("should preserve a text selection while its compact composer is open", asyn
     .toBe(true);
   await dialog.getByLabel("Add a comment").fill("Clarify `leaseOwner` here.");
   await dialog.getByRole("switch", { name: "Submit right away" }).click();
-  await dialog.getByRole("button", { name: "Submit Now" }).click();
+  await dialog.getByRole("button", { name: "Add Comment" }).click();
 
+  await page.getByRole("button", { name: /Feedback/ }).click();
   const rail = page.getByRole("complementary", { name: "Feedback" });
   await expect(rail.locator("code")).toHaveText("leaseOwner");
   const railCard = rail.locator(".review-staged-card").first();
@@ -337,6 +456,31 @@ test("should preserve a text selection while its compact composer is open", asyn
   await expect
     .poll(() => railCard.evaluate((node) => node.getBoundingClientRect().top))
     .toBe(railCardTop);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          CSS as unknown as {
+            highlights?: { has(name: string): boolean };
+          }
+        ).highlights?.has("big-plan-review-selection-active"),
+      ),
+    )
+    .toBe(true);
+  const selectedPoint = await block.evaluate((element) => {
+    const text = document
+      .createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      .nextNode();
+    if (!(text instanceof Text)) return null;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, Math.min(18, text.length));
+    const rect = range.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  });
+  if (selectedPoint === null) throw new Error("Expected selected text bounds");
+  await page.mouse.move(selectedPoint.x, selectedPoint.y);
+  await expect(railCard).toHaveAttribute("data-review-associated", "true");
   const stored = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((candidate) =>
       candidate.startsWith("big-plan:review:drafts:"),
@@ -372,6 +516,10 @@ test("should preserve a text selection while its compact composer is open", asyn
   await expect(
     deleteDialog.getByRole("button", { name: "Cancel" }),
   ).toBeFocused();
+  await expect(deleteDialog.getByRole("button", { name: "Cancel" })).toHaveCSS(
+    "font-size",
+    "14px",
+  );
   await page.keyboard.press("Escape");
   await expect(deleteDialog).not.toBeVisible();
   await expect(rail.locator(".review-staged-card")).toHaveCount(1);
@@ -442,7 +590,7 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
         ((summaryRect?.x ?? 0) + (summaryRect?.width ?? 0))
       );
     })
-    .toBeGreaterThanOrEqual(0);
+    .toBe(-12);
   await summaryComposer.getByRole("button", { name: "Cancel" }).click();
   await expect(quickSummary).not.toHaveAttribute(
     "data-review-slide-selected",
@@ -542,10 +690,22 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
   if ((await tableSubmitRightAway.getAttribute("aria-checked")) === "true") {
     await tableSubmitRightAway.click();
   }
-  await tableComposer.getByRole("button", { name: "Submit Now" }).click();
+  await tableComposer.getByRole("button", { name: "Add Comment" }).click();
+  await page.getByRole("button", { name: /Feedback/ }).click();
   const tableRail = page.getByRole("complementary", { name: "Feedback" });
   await expect(tableRail.locator(".review-staged-target")).toHaveText(
-    /^3\.1 · .* · Table$/u,
+    /^3\.1 · (?!.*Table).+$/u,
+  );
+  const tableTarget = page.locator("[data-block-kind='data-table']").first();
+  await tableRail.locator(".review-staged-card").hover();
+  await expect(tableTarget).toHaveAttribute(
+    "data-review-comment-associated",
+    "",
+  );
+  await tableTarget.hover();
+  await expect(tableRail.locator(".review-staged-card")).toHaveAttribute(
+    "data-review-associated",
+    "true",
   );
   await expect(
     tableRail.locator(".review-staged-card svg").first(),
