@@ -100,6 +100,7 @@ const requiredPairings = () => {
   add("--accent-c", "--accent-soft-c");
   add("--accent-soft-ink-c", "--accent-soft-c");
   add("--accent-ink-c", "--accent-c");
+  add("--bg", "--accent-c");
   for (const tone of ["note", "tip", "warning", "danger"]) {
     add(`--callout-${tone}-c`, `--callout-${tone}-bg`);
     add(`--callout-${tone}-ink`, `--callout-${tone}-bg`);
