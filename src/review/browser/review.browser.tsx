@@ -36,6 +36,10 @@ const TABLE_PRECISION_KINDS = new Set([
   "table-row",
 ]);
 
+type PendingDelete =
+  | { readonly kind: "comment"; readonly comment: ReviewComment }
+  | { readonly kind: "all"; readonly count: number };
+
 type RuntimeIdentity = {
   readonly planId: string;
   readonly sessionId: string;
@@ -1140,7 +1144,7 @@ const ReviewKernel = () => {
   const [expandedBodies, setExpandedBodies] = useState<ReadonlySet<string>>(
     new Set(),
   );
-  const [pendingDelete, setPendingDelete] = useState<ReviewComment | null>(
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
   );
   const [associatedTarget, setAssociatedTarget] =
@@ -1463,6 +1467,11 @@ const ReviewKernel = () => {
     setPendingDelete(null);
     setStatus("Staged comment deleted.");
   };
+  const deleteAllDrafts = () => {
+    setDrafts([]);
+    setPendingDelete(null);
+    setStatus("All staged comments deleted.");
+  };
   const jumpTo = (comment: ReviewComment) =>
     targetElement(comment.target)?.scrollIntoView({
       behavior: "smooth",
@@ -1705,7 +1714,9 @@ const ReviewKernel = () => {
                           )
                         }
                         onUpdate={(body) => updateDraft(comment.id, body)}
-                        onDelete={() => setPendingDelete(comment)}
+                        onDelete={() =>
+                          setPendingDelete({ kind: "comment", comment })
+                        }
                         onJump={() => jumpTo(comment)}
                         onSubmit={() => void sendComments([comment])}
                         onAssociate={setAssociatedTarget}
@@ -1719,6 +1730,21 @@ const ReviewKernel = () => {
                   {sent.length} comment{sent.length === 1 ? "" : "s"} handed
                   off.
                 </p>
+              ) : null}
+              {drafts.length > 0 ? (
+                <div className="mt-1 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="compact"
+                    className="review-delete-all border-danger text-danger hover:border-danger hover:text-danger"
+                    onClick={() =>
+                      setPendingDelete({ kind: "all", count: drafts.length })
+                    }
+                  >
+                    <Icon icon={TRASH_2_ICON} />
+                    Delete all comments
+                  </Button>
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -1793,7 +1819,7 @@ const ReviewKernel = () => {
               setExpandedBodies((current) => new Set(current).add(comment.id))
             }
             onUpdate={(body) => updateDraft(comment.id, body)}
-            onDelete={() => setPendingDelete(comment)}
+            onDelete={() => setPendingDelete({ kind: "comment", comment })}
             onJump={() => jumpTo(comment)}
             onSubmit={() => void sendComments([comment])}
             onAssociate={setAssociatedTarget}
@@ -1832,12 +1858,24 @@ const ReviewKernel = () => {
       )}
       <AlertDialog
         open={pendingDelete !== null}
-        title="Delete comment?"
-        description="This permanently removes your staged comment. This action cannot be undone."
-        actionLabel="Delete"
+        title={
+          pendingDelete?.kind === "all"
+            ? "Delete all comments?"
+            : "Delete comment?"
+        }
+        description={
+          pendingDelete?.kind === "all"
+            ? `This permanently removes all ${pendingDelete.count} staged ${pendingDelete.count === 1 ? "comment" : "comments"}. This action cannot be undone.`
+            : "This permanently removes your staged comment. This action cannot be undone."
+        }
+        actionLabel={pendingDelete?.kind === "all" ? "Delete all" : "Delete"}
         onCancel={() => setPendingDelete(null)}
         onAction={() => {
-          if (pendingDelete !== null) deleteDraft(pendingDelete.id);
+          if (pendingDelete?.kind === "comment") {
+            deleteDraft(pendingDelete.comment.id);
+          } else if (pendingDelete?.kind === "all") {
+            deleteAllDrafts();
+          }
         }}
       />
     </>

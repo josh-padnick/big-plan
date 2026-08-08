@@ -546,9 +546,7 @@ test("should preserve a text selection while its compact composer is open", asyn
     name: "Delete comment?",
   });
   await expect(deleteDialog).toBeVisible();
-  await expect(
-    deleteDialog.getByRole("button", { name: "Cancel" }),
-  ).toBeFocused();
+  await expect(deleteDialog).toBeFocused();
   await expect(deleteDialog.getByRole("button", { name: "Cancel" })).toHaveCSS(
     "font-size",
     "14px",
@@ -557,9 +555,61 @@ test("should preserve a text selection while its compact composer is open", asyn
   await expect(deleteDialog).not.toBeVisible();
   await expect(rail.locator(".review-staged-card")).toHaveCount(1);
   await deleteComment.click();
-  await deleteDialog.getByRole("button", { name: "Delete" }).click();
+  await expect(deleteDialog).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(deleteDialog).not.toBeVisible();
   await expect(rail.locator(".review-staged-card")).toHaveCount(0);
+});
+
+test("should confirm deleting every staged comment from Comments", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const slides = page.locator("[data-slide]");
+  for (const [index, body] of [
+    [0, "Clarify ownership."],
+    [1, "Name the recovery boundary."],
+  ] as const) {
+    await slides
+      .nth(index)
+      .getByRole("button", { name: "Comment on slide" })
+      .click();
+    const composer = page.getByRole("dialog", { name: /Comment on/u });
+    await composer.getByLabel("Add a comment").fill(body);
+    await composer.getByRole("switch", { name: "Submit right away" }).click();
+    await composer.getByRole("button", { name: "Add Comment" }).click();
+  }
+
+  await page.getByRole("button", { name: /Feedback 2/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail.locator(".review-staged-card")).toHaveCount(2);
+  const deleteAll = rail.getByRole("button", {
+    name: "Delete all comments",
+  });
+  await expect(deleteAll.locator("svg")).toHaveCount(1);
+  await deleteAll.click();
+  const deleteDialog = page.getByRole("alertdialog", {
+    name: "Delete all comments?",
+  });
+  await expect(deleteDialog).toContainText(
+    "This permanently removes all 2 staged comments.",
+  );
+  await page.keyboard.press("Escape");
+  await expect(deleteDialog).not.toBeVisible();
+  await expect(rail.locator(".review-staged-card")).toHaveCount(2);
+
+  await deleteAll.click();
+  await expect(deleteDialog).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(deleteDialog).not.toBeVisible();
+  await expect(rail.locator(".review-staged-card")).toHaveCount(0);
+  await expect(rail.getByRole("status")).toHaveText(
+    "All staged comments deleted.",
+  );
 });
 
 test("should treat QuickSummary as one target without adding table scroll", async ({
@@ -797,4 +847,47 @@ test("should keep Feedback closed when QuickSummary submits offline", async ({
   );
   await expect(contextualComment).toBeVisible();
   await expect(contextualComment).toContainText("Keep this summary concise.");
+
+  await page.evaluate(() => {
+    const header = document.querySelector("body > header");
+    const card = document.querySelector(
+      "[data-review-thread-side] .review-staged-card",
+    );
+    if (!(header instanceof HTMLElement) || !(card instanceof HTMLElement)) {
+      return;
+    }
+    window.scrollBy(
+      0,
+      card.getBoundingClientRect().top -
+        header.getBoundingClientRect().height / 2,
+    );
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const header = document.querySelector("body > header");
+        const card = document.querySelector(
+          "[data-review-thread-side] .review-staged-card",
+        );
+        if (
+          !(header instanceof HTMLElement) ||
+          !(card instanceof HTMLElement)
+        ) {
+          return false;
+        }
+        const headerRect = header.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          cardRect.left + 12,
+          Math.max(
+            headerRect.top + 8,
+            Math.min(headerRect.bottom - 8, cardRect.top + 12),
+          ),
+        );
+        const overlapsHeader =
+          cardRect.top < headerRect.bottom && cardRect.bottom > headerRect.top;
+        return overlapsHeader && hit !== null && header.contains(hit);
+      }),
+    )
+    .toBe(true);
 });

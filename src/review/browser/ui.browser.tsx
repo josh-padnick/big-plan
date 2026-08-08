@@ -8,7 +8,7 @@ import type {
   KeyboardEvent,
   TextareaHTMLAttributes,
 } from "react";
-import { forwardRef, useEffect, useRef } from "react";
+import { forwardRef, useLayoutEffect, useRef } from "react";
 
 const joinClasses = (
   ...values: ReadonlyArray<string | false | null | undefined>
@@ -199,13 +199,14 @@ export const AlertDialog = ({
   onAction,
 }: AlertDialogProps) => {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
-    cancelRef.current?.focus();
-    return () => previousFocus?.focus();
+    dialogRef.current?.focus();
+    return () => {
+      previousFocus?.focus();
+    };
   }, [open]);
 
   if (!open) return null;
@@ -216,15 +217,25 @@ export const AlertDialog = ({
       onCancel();
       return;
     }
+    if (event.key === "Enter" && event.target === dialogRef.current) {
+      event.preventDefault();
+      onAction();
+      return;
+    }
     if (event.key !== "Tab") return;
     const controls = Array.from(
       dialogRef.current?.querySelectorAll<HTMLElement>("button") ?? [],
     );
     if (controls.length === 0) return;
     const current = controls.indexOf(document.activeElement as HTMLElement);
-    const next = event.shiftKey
-      ? (current - 1 + controls.length) % controls.length
-      : (current + 1) % controls.length;
+    const next =
+      current === -1
+        ? event.shiftKey
+          ? controls.length - 1
+          : 0
+        : event.shiftKey
+          ? (current - 1 + controls.length) % controls.length
+          : (current + 1) % controls.length;
     event.preventDefault();
     controls[next]?.focus();
   };
@@ -240,6 +251,7 @@ export const AlertDialog = ({
         ref={dialogRef}
         className="w-full max-w-lg rounded-xl border border-edge bg-paper p-6 text-ink shadow-floating"
         role="alertdialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
@@ -251,12 +263,7 @@ export const AlertDialog = ({
           {description}
         </p>
         <div className="mt-6 flex justify-end gap-2">
-          <Button
-            ref={cancelRef}
-            variant="outline"
-            size="md"
-            onClick={onCancel}
-          >
+          <Button variant="outline" size="md" onClick={onCancel}>
             {cancelLabel}
           </Button>
           <Button variant="destructive" size="md" onClick={onAction}>

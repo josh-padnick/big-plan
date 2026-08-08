@@ -594,6 +594,11 @@ All visual choices use the document theme's closed token vocabulary.
     height: 0.875rem;
   }
 
+  .review-delete-all > svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
   .review-staged-body {
     margin-top: 0.5rem;
     color: var(--ink-c);
