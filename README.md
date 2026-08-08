@@ -89,7 +89,7 @@ Generated previews remain ignored by Git.
 ```sh
 bun install
 bun run build           # regenerate embedded modules, then compile TypeScript to dist/
-bun run test            # Vitest and Node unit tests (regenerates embedded modules first)
+bun run test            # Vitest and Node unit tests, including the stylesheet-contract and design-system script tests (regenerates embedded modules first)
 bun run lint            # ESLint, stylesheet-contract, design-system, and Prettier checks
 bun run format          # format authored files with Prettier
 bun run gen             # regenerate CSS, font, branding-asset, guidance, and skill modules
@@ -100,7 +100,7 @@ node bin/big-plan.mjs render examples/sample.mdx
 Formatting exclusions and their rationale are documented in [.prettierignore](.prettierignore).
 Use `bun run test`, not `bun test` - the latter invokes Bun's own test runner instead of the package script.
 
-See [AGENTS.md](AGENTS.md) for architecture, [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for engineering practices, and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow, including the style-history verifier's commit contract and evidence workflow.
+See [AGENTS.md](AGENTS.md) for architecture, [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for engineering practices, and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
 ## Documentation
 
