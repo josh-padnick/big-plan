@@ -43,6 +43,7 @@ export const SIDEBAR: readonly SidebarGroup[] = [
       { label: "FileTree", slug: "components/file-tree" },
       { label: "FileTreeDiff", slug: "components/file-tree-diff" },
       { label: "FlowDiagram", slug: "components/flow-diagram" },
+      { label: "MermaidDiagram", slug: "components/mermaid-diagram" },
       { label: "GraphqlOperation", slug: "components/graphql-operation" },
       { label: "GrpcMethod", slug: "components/grpc-method" },
       { label: "HttpEndpoint", slug: "components/http-endpoint" },

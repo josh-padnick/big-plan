@@ -3,6 +3,7 @@
 // final HTML serialization, and the page chrome lives in shell.ts.
 
 import type { Element, Root, RootContent } from "hast";
+import type { Root as MarkdownRoot } from "mdast";
 import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
@@ -16,7 +17,10 @@ import {
 } from "../../components/_authoring/diagnostics.js";
 import type { ComponentDiagnostic } from "../../components/_authoring/diagnostics.js";
 import { rehypeCodeFigures } from "./code-figure.js";
-import { rehypeRenderComponents } from "./component-pipeline/deliver.js";
+import {
+  rehypeRenderComponents,
+  rehypeValidateComponentSemantics,
+} from "./component-pipeline/deliver.js";
 import type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 export type { CollectedComponentModel } from "./component-pipeline/deliver.js";
 import { completeOutlinePlaceholders } from "./component-pipeline/outline-placeholder.js";
@@ -26,6 +30,10 @@ import type { MutableDocumentOutline } from "./deck-transform.js";
 import { rehypeMarkAuthoredProse } from "./mark-authored-prose.js";
 import { remarkValidateComponents } from "./component-pipeline/validate-authoring.js";
 import type { SlideTypeId } from "../../plan-vocabulary/slide-types/index.js";
+import {
+  MERMAID_FONT_CSS,
+  prepareMermaidArtifacts,
+} from "../../components/mermaid-diagram/renderer.js";
 
 export type SectionPart = {
   readonly number: number;
@@ -46,6 +54,7 @@ export type CompiledMarkdown = {
   readonly sections: ReadonlyArray<Section>;
   readonly elementIds: ReadonlyArray<string>;
   readonly title: string | undefined;
+  readonly embeddedStyles: ReadonlyArray<string>;
   // Rendered Part divider anchors in document order, so navigation can link
   // each act header to its divider; parts carry no anchor in model delivery.
   readonly partIds: ReadonlyArray<string>;
@@ -279,10 +288,12 @@ const compileMarkdownTree = ({
   markdown,
   models,
   collectModels,
+  renderArtifacts,
 }: {
   readonly markdown: string;
   readonly models?: Array<CollectedComponentModel>;
   readonly collectModels?: Array<CollectedComponentModel>;
+  readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): CompiledMarkdown => {
   const diagnostics = createDiagnosticCollector();
   const metadata: MarkdownMetadata = { title: undefined, sections: [] };
@@ -291,11 +302,35 @@ const compileMarkdownTree = ({
   // presents every placeholder against it.
   const deferredOutline: DeferredOutlinePresentations = [];
   const outline: MutableDocumentOutline = { parts: [], sections: [] };
-  const processor = unified()
-    .use(remarkParse)
-    .use(remarkGfm)
-    .use(remarkMdx)
-    .use(remarkValidateComponents, { diagnostics })
+  const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMdx);
+  let parsed: MarkdownRoot;
+  try {
+    parsed = parser.parse(markdown);
+  } catch (error: unknown) {
+    throw new MarkdownDiagnosticsError([diagnosticFromParseError(error)]);
+  }
+  remarkValidateComponents({ diagnostics })(parsed);
+  if (diagnostics.diagnostics.length > 0) {
+    throw new MarkdownDiagnosticsError(diagnostics.diagnostics);
+  }
+  const semanticPreflight = parser()
+    .use(remarkRehype, {
+      passThrough: [
+        "mdxjsEsm",
+        "mdxFlowExpression",
+        "mdxTextExpression",
+        "mdxJsxFlowElement",
+        "mdxJsxTextElement",
+      ],
+    })
+    .use(rehypeValidateComponentSemantics, { diagnostics });
+  semanticPreflight.runSync(parsed);
+  if (diagnostics.diagnostics.length > 0) {
+    throw new MarkdownDiagnosticsError(diagnostics.diagnostics);
+  }
+  const resolvedRenderArtifacts =
+    renderArtifacts ?? prepareMermaidArtifacts(parsed);
+  const processor = parser()
     .use(remarkRehype, {
       // The GFM footnotes label ships visible as a small section heading;
       // without this option remark-rehype hides it behind class="sr-only".
@@ -319,6 +354,7 @@ const compileMarkdownTree = ({
       ...(models === undefined ? {} : { models }),
       ...(collectModels === undefined ? {} : { collectModels }),
       deferOutline: deferredOutline,
+      renderArtifacts: resolvedRenderArtifacts,
     })
     // Detection stays opt-in through the fence language: undeclared and
     // unknown languages remain readable without guessed tokenization.
@@ -334,15 +370,6 @@ const compileMarkdownTree = ({
         diagnostics,
       });
     });
-  // Only parsing reflects author mistakes; a transform that throws is a
-  // renderer defect and must surface as an internal error, not as a
-  // diagnostic blaming the document.
-  let parsed: ReturnType<typeof processor.parse>;
-  try {
-    parsed = processor.parse(markdown);
-  } catch (error: unknown) {
-    throw new MarkdownDiagnosticsError([diagnosticFromParseError(error)]);
-  }
   const tree: Root = processor.runSync(parsed);
 
   if (diagnostics.diagnostics.length > 0) {
@@ -357,6 +384,8 @@ const compileMarkdownTree = ({
 
   return {
     root: tree,
+    embeddedStyles:
+      resolvedRenderArtifacts.size === 0 ? [] : [MERMAID_FONT_CSS],
     sections: metadata.sections.map((section) => {
       const outlined = outlinedById.get(section.id);
       return outlined === undefined

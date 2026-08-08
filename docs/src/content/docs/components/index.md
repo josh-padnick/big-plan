@@ -24,6 +24,7 @@ A component's attributes are strings or bare booleans, structured data arrives a
 | [FileTree](/components/file-tree/)                        | Show a plain file hierarchy with optional per-entry notes.                                                           |
 | [FileTreeDiff](/components/file-tree-diff/)               | Review per-entry change status as one combined change tree.                                                          |
 | [FlowDiagram](/components/flow-diagram/)                  | Diagram a flow, dependency, or fan-out as staged cards joined by verb-labeled, directed connectors.                  |
+| [MermaidDiagram](/components/mermaid-diagram/)            | Review a compile-time Mermaid diagram with static light/dark SVG and stable semantic review anchors.                 |
 | [GraphqlOperation](/components/graphql-operation/)        | Review one GraphQL query, mutation, or subscription with one-level input and payload shapes and executable examples. |
 | [GrpcMethod](/components/grpc-method/)                    | Review one gRPC method headed by its proto signature, with message fields, status codes, and grouped examples.       |
 | [HttpEndpoint](/components/http-endpoint/)                | Review one HTTP endpoint's contract: parameters, request body, and status-coded responses.                           |

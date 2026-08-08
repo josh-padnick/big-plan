@@ -57,6 +57,11 @@ describe("renderDocument affordances", () => {
     fallbackTitle: "Plan",
   });
 
+  it("should omit Mermaid-only fonts when a plan has no MermaidDiagram", () => {
+    expect(html).not.toContain('font-family: "Noto Sans"');
+    expect(html).not.toContain('font-family: "Noto Sans SC"');
+  });
+
   it("should emit markup for every GFM affordance when the fixture uses them all", () => {
     const expectedFragments = [
       "<h1",
