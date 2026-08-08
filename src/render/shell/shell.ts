@@ -210,10 +210,10 @@ const renderPreferenceOption = ({
 // The colour themes, in the order the sheet offers them: the product's own
 // palette first, then the guests. PALETTES owns the ids; this list adds only
 // the reviewer-facing name, which is the one fact the contract has no opinion
-// about.
+// about. Each name is the upstream project's own spelling, accents included.
 const PALETTE_TITLES = {
   default: "Default",
-  "rose-pine": "Rose Pine",
+  "rose-pine": "Rosé Pine",
   nord: "Nord",
   catppuccin: "Catppuccin",
   brutalist: "Brutalist",
