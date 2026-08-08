@@ -171,9 +171,17 @@ test("should stage and restore a slide comment through the legacy chrome", async
     name: "Send all comments to agent",
   });
   await expect(sendAll).toHaveCSS("font-size", "13px");
-  await expect(sendAll).toHaveCSS("padding-top", "3.2px");
-  await expect(sendAll).toHaveCSS("padding-left", "8px");
+  await expect(sendAll).toHaveCSS("padding-top", "8px");
+  await expect(sendAll).toHaveCSS("padding-left", "12px");
   await expect(sendAll).toHaveCSS("font-weight", "600");
+  await expect(rail.locator(".review-feedback-status")).toHaveCSS(
+    "border-top-width",
+    "1px",
+  );
+  await expect(rail.locator(".review-feedback-status")).toHaveCSS(
+    "padding-top",
+    "12px",
+  );
   await expect(rail.getByRole("status")).toHaveCSS(
     "color",
     "rgb(164, 156, 139)",

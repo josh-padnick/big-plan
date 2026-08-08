@@ -1013,8 +1013,10 @@ All visual choices use the document theme's closed token vocabulary.
 
   /* Captain-approved legacy action label, deliberately between scale steps.
      Override invariant: the 13px rail action beats Button's resting text-xs
-     size utility. */
+     size utility, while the footer action uses the nearest approved spacing
+     steps to the legacy control's taller hit area. */
   .review-send-all {
+    padding: 0.5rem 0.75rem;
     font-size: 13px;
   }
 
