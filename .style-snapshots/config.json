@@ -336,6 +336,26 @@
           "actions": []
         },
         {
+          "name": "commenting-shell-header",
+          "scope": "component",
+          "ownerPatterns": ["^src/review/browser/"],
+          "selector": "body > header",
+          "themes": ["light", "dark"],
+          "viewports": [
+            {
+              "name": "desktop",
+              "width": 1440,
+              "height": 900
+            },
+            {
+              "name": "phone",
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "actions": []
+        },
+        {
           "name": "desktop-navigation",
           "selector": "nav[aria-label=\"Contents\"]:not([data-mobile-toc])",
           "themes": ["light", "dark"],

@@ -110,7 +110,7 @@ const applyActions = async ({ page, actions }) => {
     }
     switch (action.type) {
       case "click":
-        await locator.click();
+        await locator.evaluate((element) => element.click());
         break;
       case "focus":
         await locator.focus();
@@ -511,6 +511,7 @@ try {
       outputPath: htmlPath,
       stateDirectory,
     });
+    await reportProgress("rendered document", { document: document.name });
 
     for (const capture of document.captures) {
       if (
@@ -528,19 +529,46 @@ try {
             colorScheme: theme,
             reducedMotion: "reduce",
             deviceScaleFactor: 1,
+            javaScriptEnabled: capture.actions.length > 0,
           });
           try {
+            await reportProgress("load capture page", {
+              document: document.name,
+              capture: capture.name,
+              viewport: viewport.name,
+              theme,
+            });
             await page.goto(pathToFileURL(resolve(htmlPath)).href);
+            await reportProgress("prepare capture page", {
+              document: document.name,
+              capture: capture.name,
+              viewport: viewport.name,
+              theme,
+            });
             await page.locator("html").evaluate((element, value) => {
               element.dataset.theme = value;
             }, theme);
-            await page.addStyleTag({
-              content:
-                "*,*::before,*::after{animation:none!important;caret-color:transparent!important;transition:none!important}*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important}",
+            await reportProgress("apply deterministic styles", {
+              document: document.name,
+              capture: capture.name,
+              viewport: viewport.name,
+              theme,
+            });
+            await page.locator("head").evaluate((head) => {
+              const style = globalThis.document.createElement("style");
+              style.textContent =
+                "*,*::before,*::after{animation:none!important;caret-color:transparent!important;transition:none!important}*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important}";
+              head.append(style);
             });
             const actionsAvailable = await applyActions({
               page,
               actions: capture.actions,
+            });
+            await reportProgress("prepare capture target", {
+              document: document.name,
+              capture: capture.name,
+              viewport: viewport.name,
+              theme,
             });
             if (!actionsAvailable) {
               continue;

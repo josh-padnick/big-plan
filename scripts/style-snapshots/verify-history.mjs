@@ -1443,7 +1443,6 @@ export const verifyHistory = async ({
   const capturesByCommit = new Map();
   const completeCaptureCommits = new Set();
   const worktreeOperations = createSerialQueue();
-  const safetyNetCommit = relevant.at(-1)?.commit;
 
   const captureCommit = async (commit, captureKeys) => {
     const cacheKey = `${commit}:${JSON.stringify(captureKeys)}`;
@@ -1528,7 +1527,7 @@ export const verifyHistory = async ({
   };
 
   const results = [];
-  const hasSafetyNetScope = (entry) => entry.commit === safetyNetCommit;
+  const hasSafetyNetScope = (entry) => entry.commit === head;
   const receiptFor = (entry) =>
     receiptStore.receipts[receiptKey(entry.treePair)];
   const entryCaptureKeys = (entry) =>
@@ -1539,15 +1538,20 @@ export const verifyHistory = async ({
     });
   const reusableReceipt = (entry) => {
     const receipt = receiptFor(entry);
+    const requiredCaptureKeys = entryCaptureKeys(entry);
+    const receiptCaptureKeys = receipt?.captureKeys ?? [];
+    const reusableCaptureScope = hasSafetyNetScope(entry)
+      ? receipt?.completeCaptureSet === true &&
+        JSON.stringify(receiptCaptureKeys) ===
+          JSON.stringify(requiredCaptureKeys)
+      : requiredCaptureKeys.every((key) => receiptCaptureKeys.includes(key));
     return (
       pixelAuthority &&
       receiptDirectory !== null &&
       receipt?.schemaVersion === 2 &&
       receipt.policyFingerprint === activePolicyFingerprint &&
       sameEnvironment(receipt.environment, environment) &&
-      receipt.completeCaptureSet === hasSafetyNetScope(entry) &&
-      JSON.stringify(receipt.captureKeys) ===
-        JSON.stringify(entryCaptureKeys(entry)) &&
+      reusableCaptureScope &&
       receipt.visualKind === entry.visualKind &&
       JSON.stringify(receipt.stylingFiles) ===
         JSON.stringify([...entry.stylingFiles].sort()) &&

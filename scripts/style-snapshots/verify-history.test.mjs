@@ -1284,7 +1284,7 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
     )
       .trim()
       .split("\n").length;
-    assert.equal(policyChangeCount - tipRewindCount, 4);
+    assert.equal(policyChangeCount - tipRewindCount, 5);
 
     await writeFile(
       join(repoRoot, "capture.mjs"),
@@ -1305,7 +1305,7 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
     )
       .trim()
       .split("\n").length;
-    assert.equal(executablePolicyChangeCount - policyChangeCount, 4);
+    assert.equal(executablePolicyChangeCount - policyChangeCount, 5);
 
     await writeFile(
       join(repoRoot, "package.json"),
@@ -1326,7 +1326,7 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
     )
       .trim()
       .split("\n").length;
-    assert.equal(packagePolicyChangeCount - executablePolicyChangeCount, 4);
+    assert.equal(packagePolicyChangeCount - executablePolicyChangeCount, 5);
 
     await writeFile(
       join(repoRoot, "bun.lock"),
@@ -1347,7 +1347,7 @@ await writeFile(join(process.env.STYLE_SNAPSHOT_OUTPUT_DIR, "state.png"), Buffer
     )
       .trim()
       .split("\n").length;
-    assert.equal(lockfilePolicyChangeCount - packagePolicyChangeCount, 4);
+    assert.equal(lockfilePolicyChangeCount - packagePolicyChangeCount, 5);
   } finally {
     if (previousReceiptDirectory === undefined) {
       delete process.env.STYLE_HISTORY_RECEIPT_DIR;
