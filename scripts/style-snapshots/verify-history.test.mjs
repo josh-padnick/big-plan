@@ -1737,6 +1737,10 @@ test("should reject a styling conflict resolved to one parent's version", async 
       repoRoot,
       subject: "Merge pull request #3 from example/style-feature",
     });
+    const mergeCommit = await git({
+      repoRoot,
+      arguments_: ["rev-parse", "HEAD"],
+    });
 
     await assert.rejects(
       verifyHistory({
@@ -1749,6 +1753,39 @@ test("should reject a styling conflict resolved to one parent's version", async 
         }),
       }),
       /merge commit resolved a configured styling file.*Rebase and record the resolution as a single-parent/,
+    );
+
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          ...config,
+          mergeResolutionWaivers: [
+            {
+              commit: mergeCommit,
+              reason:
+                "The delivery contract forbids rewriting this reviewed merge resolution.",
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const passing = await verifyHistory({
+      repoRoot,
+      base,
+      configPath,
+      artifactRoot: artifactPath({
+        repoRoot,
+        name: "parent-equal-merge-waived",
+      }),
+    });
+    assert.ok(
+      passing.every((result) => result.commit !== mergeCommit),
+      "an exact waiver skips only the unisolatable merge resolution",
     );
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
