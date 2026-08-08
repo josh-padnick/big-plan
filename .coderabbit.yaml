@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# Review guidance for the styling contract. The stylesheet-contract check
+# (scripts/style-contract/check.mjs) mechanically enforces placement, volume,
+# and class-only selectors; these instructions ask the review layer for the
+# judgement the check cannot make, in the vocabulary of
+# ENGINEERING_PRACTICES.md "Styling owned markup".
+language: en-US
+reviews:
+  path_instructions:
+    - path: "src/**/*.css"
+      instructions: |
+        This repository treats CSS as an escape hatch, not a styling channel.
+        Flag any added rule that styles markup the same slice renders; a
+        selector naming only classes is the strongest signal, and a semantic
+        class such as `.feature-card` introduced alongside a stylesheet rule
+        for it is a defect rather than a style choice.
+        Flag growth of an existing stylesheet whose file-level `CSS escape
+        hatch:` reason does not cover the added rules, any raise of a recorded
+        budget in scripts/style-contract/allowlist.mjs that the description
+        does not justify, and any new stylesheet outside a component slice or
+        src/review/browser.
+        Flag hex colours, raw shadows, and off-scale sizes; use the theme role
+        tokens and the closed scales instead.
+    - path: "src/review/**/*.tsx"
+      instructions: |
+        This is a browser interaction island. Markup it renders must be styled
+        with Tailwind utility classes built from theme roles (`bg-paper`,
+        `text-ink`, `border-edge`, `shadow-floating`) and the closed spacing and
+        type scales.
+        Flag semantic class names on island-rendered elements, especially any
+        introduced together with stylesheet rules that style them, and flag
+        dynamically constructed utility strings, which never reach the
+        compiled stylesheet.
+    - path: "src/render/shell/**/*.ts"
+      instructions: |
+        The shell owns viewer chrome and styles the markup it renders with
+        Tailwind utility classes from theme roles and the closed scales.
+        Flag any semantic class name introduced here, and flag chrome that
+        styles another slice's markup; that presentation belongs in the slice
+        that renders it.
