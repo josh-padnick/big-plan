@@ -770,14 +770,16 @@ export const stageComment = async (page: Page, body: string): Promise<void> => {
   await slide.hover();
   await slide.getByRole("button", { name: "Comment on slide" }).click();
   const composer = page.getByRole("dialog", { name: /Comment on/ });
-  await composer.getByLabel("Add a comment").fill(body);
   const submitRightAway = composer.getByRole("switch", {
     name: "Submit right away",
   });
   if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
     await submitRightAway.click();
   }
-  await composer.getByRole("button", { name: "Add Comment" }).click();
+  await composer.getByLabel("Add a comment").fill(body);
+  const addComment = composer.getByRole("button", { name: "Add Comment" });
+  await expect(addComment).toBeEnabled();
+  await addComment.click();
 };
 
 /**
