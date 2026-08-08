@@ -1,36 +1,39 @@
-// Critical browser journey for the local review runtime behind the React thin
-// thread kernel: server-backed restoration and one real feedback handoff.
+// Critical browser journey for the local review runtime behind the React
+// commenting chrome: server-backed restoration and one real feedback handoff.
 
 import { readFile, stat } from "node:fs/promises";
 import { expect, test } from "./fixtures";
 
-test("should restore and send notes through the local review runtime", async ({
+test("should restore and submit staged comments through the local review runtime", async ({
   page,
   reviewRuntimeUrl,
 }) => {
   await page.goto(reviewRuntimeUrl);
 
-  const firstBlock = page.locator("[data-block-kind='paragraph']").first();
-  await firstBlock.hover();
-  await firstBlock.getByRole("button", { name: "Add note" }).click();
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
   const composer = page.getByRole("dialog", { name: /Comment on/ });
-  await composer.getByLabel("Your note").fill("Clarify the failure boundary.");
-  await composer.getByRole("button", { name: "Add note" }).click();
+  await composer
+    .getByLabel("Add a comment")
+    .fill("Clarify the failure boundary.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Submit Now" }).click();
 
-  const kernel = page.getByRole("complementary", { name: "Review notes" });
-  await expect(kernel).toContainText("Clarify the failure boundary.");
-  await expect(kernel).toContainText("Note saved locally.");
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).toContainText("Clarify the failure boundary.");
+  await expect(rail).toContainText("Comment staged locally.");
 
   await page.reload();
-  await page.getByRole("button", { name: "Add review comment" }).click();
-  await expect(kernel).toContainText("Clarify the failure boundary.");
+  await page.getByRole("button", { name: /Feedback/ }).click();
+  await expect(rail).toContainText("Clarify the failure boundary.");
 
   const responsePromise = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/feedback") &&
       response.request().method() === "POST",
   );
-  await kernel.getByRole("button", { name: "Send notes" }).click();
+  await rail.getByRole("button", { name: "Submit all" }).click();
   const response = await responsePromise;
   expect(response.ok()).toBe(true);
 
@@ -51,8 +54,6 @@ test("should restore and send notes through the local review runtime", async ({
     "Clarify the failure boundary.",
   );
 
-  await expect(kernel).toContainText("1 note handed off.");
-  await expect(
-    kernel.getByRole("button", { name: "Send notes" }),
-  ).toBeDisabled();
+  await expect(rail).toContainText("1 comment handed off.");
+  await expect(rail.getByRole("button", { name: "Submit all" })).toBeDisabled();
 });

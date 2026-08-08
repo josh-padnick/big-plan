@@ -1,10 +1,10 @@
-// Critical browser journey for the React thin thread kernel over a static
-// rendered document: block and selection composition, durable browser drafts,
-// safe Markdown, keyboard focus, and both appearance themes.
+// Critical browser journeys for the React commenting chrome over a static
+// rendered document: slide and selection composition, durable staged cards,
+// precision component targets, the Feedback rail, and both appearance themes.
 
 import { expect, test } from "./fixtures";
 
-test("should stage and restore a block note in the React thread kernel", async ({
+test("should stage and restore a slide comment through the legacy chrome", async ({
   page,
   deckViewerUrl,
 }) => {
@@ -12,45 +12,55 @@ test("should stage and restore a block note in the React thread kernel", async (
   await page.evaluate(() => localStorage.clear());
   await page.reload();
 
-  const notesToggle = page.getByRole("button", {
-    name: /Review notes/,
-  });
-
-  const block = page.locator("[data-block-kind='paragraph']").first();
-  await block.hover();
-  const comment = block
-    .getByRole("button", {
-      name: "Add note",
-    })
-    .first();
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  const comment = slide.getByRole("button", { name: "Comment on slide" });
   await expect(comment).toBeVisible();
-  await comment.click();
 
+  const tooltip = comment.getByRole("tooltip");
+  await expect(tooltip).not.toBeVisible();
+  await comment.hover();
+  await page.waitForTimeout(1_100);
+  await expect(tooltip).toBeVisible();
+
+  await comment.click();
+  await expect(slide).toHaveAttribute("data-review-slide-selected", "");
   const dialog = page.getByRole("dialog", { name: /Comment on/ });
-  await expect(dialog).toBeVisible();
-  const note = dialog.getByLabel("Your note");
-  await expect(note).toBeFocused();
-  await note.fill(
+  const input = dialog.getByLabel("Add a comment");
+  await expect(input).toBeFocused();
+  await expect(input).toHaveAttribute(
+    "placeholder",
+    "What should the agent change here?",
+  );
+  await input.fill(
     "Keep `leaseOwner` explicit. <strong>Literal reviewer text</strong>",
   );
-  await expect(dialog).toContainText("Markdown supported");
-  await expect(dialog.getByLabel("Comment preview")).toHaveCount(0);
-  await note.press("Control+Enter");
+  await dialog.getByRole("switch", { name: "Submit right away" }).click();
+  await dialog.getByRole("button", { name: "Submit Now" }).click();
 
-  const kernel = page.getByRole("complementary", { name: "Review notes" });
-  await expect(kernel).toBeVisible();
-  await expect(kernel.locator("code")).toHaveText("leaseOwner");
-  await expect(kernel).toContainText("<strong>Literal reviewer text</strong>");
-  await expect(kernel.locator("strong")).toHaveCount(0);
-  await expect(kernel).toContainText("1 staged");
-  await expect(block).toHaveAttribute("data-review-note-count", "1");
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).toBeVisible();
+  const staged = rail.locator(".review-staged-card").first();
+  await expect(staged).toContainText("STAGED");
+  await expect(staged.locator("code")).toHaveText("leaseOwner");
+  await expect(staged).toContainText("<strong>Literal reviewer text</strong>");
+  await expect(staged.locator("strong")).toHaveCount(0);
+  await expect(page.locator("[data-review-thread-for]")).toHaveCount(1);
+
+  await staged.getByRole("button", { name: "Collapse staged comment" }).click();
+  await expect(rail.locator(".review-staged-collapsed")).toBeVisible();
+  await rail.locator(".review-staged-collapsed").click();
+  await expect(staged).toBeVisible();
 
   await page.reload();
-  await notesToggle.click();
-  await expect(kernel.locator("code")).toHaveText("leaseOwner");
-  await expect(kernel).toContainText("<strong>Literal reviewer text</strong>");
-  await kernel.getByRole("button", { name: "Close review notes" }).click();
-  await expect(notesToggle).toBeVisible();
+  const feedback = page.getByRole("button", { name: /Feedback/ });
+  await feedback.click();
+  await expect(rail.locator("code")).toHaveText("leaseOwner");
+  await expect(rail.getByRole("tab", { name: "Comments" })).toBeVisible();
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await expect(rail).toContainText("Plan-wide chat");
+  await rail.getByRole("tab", { name: "Agent" }).click();
+  await expect(rail).toContainText("No agent work in progress");
 
   for (const theme of ["light", "dark"]) {
     await page.evaluate(
@@ -59,10 +69,10 @@ test("should stage and restore a block note in the React thread kernel", async (
       theme,
     );
     await page.keyboard.press("Tab");
-    await notesToggle.focus();
+    await feedback.focus();
     await expect
       .poll(() =>
-        notesToggle.evaluate((node) => ({
+        feedback.evaluate((node) => ({
           focused: node.matches(":focus-visible"),
           outline: getComputedStyle(node).outlineStyle,
         })),
@@ -71,7 +81,7 @@ test("should stage and restore a block note in the React thread kernel", async (
   }
 });
 
-test("should turn an authored-text selection into a durable targeted note", async ({
+test("should preserve a text selection while its compact composer is open", async ({
   page,
   deckViewerUrl,
 }) => {
@@ -81,10 +91,9 @@ test("should turn an authored-text selection into a durable targeted note", asyn
 
   const block = page.locator("[data-block-kind='paragraph']").first();
   const selected = await block.evaluate((element) => {
-    const text = element.firstChild;
-    if (!(text instanceof Text)) {
-      return "";
-    }
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const text = walker.nextNode();
+    if (!(text instanceof Text)) return "";
     const quote = text.data.slice(0, 18);
     const range = document.createRange();
     range.setStart(text, 0);
@@ -97,37 +106,43 @@ test("should turn an authored-text selection into a durable targeted note", asyn
   });
   expect(selected).not.toBe("");
 
-  const selectionButton = page.getByRole("button", {
-    name: "Comment on selected text",
-  });
-  await expect(selectionButton).toBeVisible();
+  const chip = page.getByRole("button", { name: "Comment on selected text" });
+  await expect(chip).toHaveText(/Comment/);
   await expect
     .poll(() =>
-      selectionButton.evaluate((button) => {
+      chip.evaluate((button) => {
         const selection = window.getSelection();
-        if (selection === null || selection.rangeCount !== 1) {
-          return false;
-        }
-        const selectionRect = selection.getRangeAt(0).getBoundingClientRect();
-        const buttonRect = button.getBoundingClientRect();
-        return buttonRect.bottom <= selectionRect.top;
+        if (selection === null || selection.rangeCount !== 1) return false;
+        return (
+          button.getBoundingClientRect().bottom <=
+          selection.getRangeAt(0).getBoundingClientRect().top
+        );
       }),
     )
     .toBe(true);
-  await selectionButton.click();
+  await chip.click();
 
   const dialog = page.getByRole("dialog", {
     name: /Comment on Selected text in/,
   });
-  await expect(dialog).toContainText(selected);
-  await dialog.getByLabel("Your note").fill("Clarify `leaseOwner` here.");
-  await dialog.getByRole("button", { name: "Add note" }).click();
+  await expect(dialog).not.toContainText(selected);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          CSS as unknown as {
+            highlights?: { has(name: string): boolean };
+          }
+        ).highlights?.has("big-plan-review-selection"),
+      ),
+    )
+    .toBe(true);
+  await dialog.getByLabel("Add a comment").fill("Clarify `leaseOwner` here.");
+  await dialog.getByRole("switch", { name: "Submit right away" }).click();
+  await dialog.getByRole("button", { name: "Submit Now" }).click();
 
-  const kernel = page.getByRole("complementary", { name: "Review notes" });
-  await expect(kernel).toContainText("Selected text in");
-  await expect(kernel.locator("code")).toHaveText("leaseOwner");
-  await expect(block).toHaveAttribute("data-review-note-count", "1");
-
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail.locator("code")).toHaveText("leaseOwner");
   const stored = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((candidate) =>
       candidate.startsWith("big-plan:review:drafts:"),
@@ -143,7 +158,7 @@ test("should turn an authored-text selection into a durable targeted note", asyn
   });
 });
 
-test("should expose table cells, columns, and QuickSummary facets as comment targets", async ({
+test("should expose precision targets without adding table scroll", async ({
   page,
   allComponentsViewerUrl,
 }) => {
@@ -159,11 +174,14 @@ test("should expose table cells, columns, and QuickSummary facets as comment tar
     page.locator("[data-block-kind='quick-summary-facet']"),
   ).toHaveCount(3);
 
+  const scrollContainer = page.locator("[data-table-scroll-container]").first();
+  const before = await scrollContainer.evaluate(
+    (element) => element.scrollWidth,
+  );
   for (const kind of ["table-cell", "table-column"] as const) {
-    const targets = page.locator(`[data-block-kind='${kind}']`);
-    const target = kind === "table-column" ? targets.last() : targets.first();
+    const target = page.locator(`[data-block-kind='${kind}']`).first();
     await target.hover();
-    const button = target.getByRole("button", { name: "Add note" });
+    const button = target.locator("button[data-review-block-button]");
     await expect(button).toBeVisible();
     await expect
       .poll(() =>
@@ -177,41 +195,15 @@ test("should expose table cells, columns, and QuickSummary facets as comment tar
         }),
       )
       .toBe(true);
-    if (kind === "table-column") {
-      await expect
-        .poll(async () => {
-          const targetBox = await target.boundingBox();
-          const buttonBox = await button.boundingBox();
-          return targetBox === null || buttonBox === null
-            ? null
-            : Math.abs(buttonBox.x - targetBox.x);
-        })
-        .toBeLessThanOrEqual(1);
-      await expect
-        .poll(() =>
-          target
-            .locator("xpath=ancestor::*[@data-block-id]")
-            .evaluateAll((ancestors) =>
-              ancestors.every((ancestor) => {
-                const host = Array.from(ancestor.children).find((child) =>
-                  child.hasAttribute("data-review-anchor-host"),
-                );
-                return (
-                  host === undefined ||
-                  (getComputedStyle(host).opacity === "0" &&
-                    getComputedStyle(host).pointerEvents === "none")
-                );
-              }),
-            ),
-        )
-        .toBe(true);
-    }
   }
+  expect(await scrollContainer.evaluate((element) => element.scrollWidth)).toBe(
+    before,
+  );
 
   await page.setViewportSize({ width: 390, height: 844 });
   const phoneTarget = page.locator("[data-block-kind='table-cell']").first();
   await phoneTarget.hover();
-  const phoneButton = phoneTarget.getByRole("button", { name: "Add note" });
+  const phoneButton = phoneTarget.locator("button[data-review-block-button]");
   await expect
     .poll(() =>
       phoneButton.evaluate((node) => {

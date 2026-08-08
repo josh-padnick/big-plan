@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
 import { startReviewRuntime } from "../src/review/server.js";
 
@@ -706,6 +706,7 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
 });
 
 export { expect };
+export type { Page };
 
 /**
  * Returns the locator's bounding box, failing the test when the element has

@@ -1,7 +1,18 @@
 // Browser regression for persistence identity: same-title plans stay isolated,
 // and an unstamped page remains interactive without touching browser storage.
 
+import type { Page } from "./fixtures";
 import { expect, test } from "./fixtures";
+
+const stageComment = async (page: Page, body: string): Promise<void> => {
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/ });
+  await composer.getByLabel("Add a comment").fill(body);
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Submit Now" }).click();
+};
 
 test("should scope persisted viewer state to the stamped plan identity", async ({
   page,
@@ -50,11 +61,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     await expect(
       firstDataTable.locator('th[data-table-column="2"]'),
     ).toBeHidden();
-    await page.getByRole("button", { name: "Add review comment" }).click();
-    await page
-      .getByRole("textbox", { name: "Comment draft" })
-      .fill("First plan draft");
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await stageComment(page, "First plan draft");
     await expect
       .poll(() =>
         page.evaluate(() =>
@@ -62,7 +69,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
             .filter(
               (key) =>
                 key.startsWith("big-plan:table:") ||
-                key.startsWith("big-plan:draft:") ||
+                key.startsWith("big-plan:review:drafts:") ||
                 key.startsWith("big-plan:datatable:"),
             )
             .sort(),
@@ -71,7 +78,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
       .toEqual(
         [
           `big-plan:table:${firstPlanId ?? ""}:shared.review_items`,
-          `big-plan:draft:${firstPlanId ?? ""}:document`,
+          `big-plan:review:drafts:${firstPlanId ?? ""}`,
           `big-plan:datatable:${firstPlanId ?? ""}:${dataTableId ?? ""}`,
         ].sort(),
       );
@@ -117,10 +124,9 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     await expect(
       secondDataTable.locator('th[data-table-column="2"]'),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Add review comment" }).click();
-    await expect(
-      page.getByRole("textbox", { name: "Comment draft" }),
-    ).toHaveValue("");
+    await page.getByRole("button", { name: /Feedback/ }).click();
+    const secondRail = page.getByRole("complementary", { name: "Feedback" });
+    await expect(secondRail).not.toContainText("First plan draft");
 
     await secondTable.getByRole("button", { name: "Choose columns" }).click();
     await secondTable
@@ -138,10 +144,7 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     await expect(
       secondDataTable.locator('th[data-table-column="1"]'),
     ).toBeHidden();
-    await page
-      .getByRole("textbox", { name: "Comment draft" })
-      .fill("Second plan draft");
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await stageComment(page, "Second plan draft");
     await secondSlide
       .locator(":scope > [data-collapse-header] > [data-collapse-toggle]")
       .click();
@@ -182,10 +185,10 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     await expect(
       firstDataTable.locator('th[data-table-column="1"]'),
     ).not.toHaveAttribute("hidden");
-    await page.getByRole("button", { name: "Add review comment" }).click();
+    await page.getByRole("button", { name: /Feedback/ }).click();
     await expect(
-      page.getByRole("textbox", { name: "Comment draft" }),
-    ).toHaveValue("First plan draft");
+      page.getByRole("complementary", { name: "Feedback" }),
+    ).toContainText("First plan draft");
   });
 });
 
@@ -221,14 +224,10 @@ for (const identity of ["absent", "empty"] as const) {
     await dataTable.getByRole("button", { name: "Choose columns" }).click();
     await dataTable.getByRole("menuitemcheckbox", { name: "Note" }).click();
     await expect(dataTable.locator('th[data-table-column="2"]')).toBeHidden();
-    await page.getByRole("button", { name: "Add review comment" }).click();
-    await page
-      .getByRole("textbox", { name: "Comment draft" })
-      .fill("Memory-only draft");
-    await page.getByRole("button", { name: "Save draft" }).click();
+    await stageComment(page, "Memory-only draft");
     await expect(
-      page.getByRole("textbox", { name: "Comment draft" }),
-    ).toHaveValue("Memory-only draft");
+      page.getByRole("complementary", { name: "Feedback" }),
+    ).toContainText("Memory-only draft");
     await slide
       .locator(":scope > [data-collapse-header] > [data-collapse-toggle]")
       .click();
@@ -239,9 +238,9 @@ for (const identity of ["absent", "empty"] as const) {
     await expect(slide).not.toHaveAttribute("data-collapsed");
     await expect(table.locator(".table-schema-head-comment")).toBeVisible();
     await expect(dataTable.locator('th[data-table-column="2"]')).toBeVisible();
-    await page.getByRole("button", { name: "Add review comment" }).click();
+    await page.getByRole("button", { name: /Feedback/ }).click();
     await expect(
-      page.getByRole("textbox", { name: "Comment draft" }),
-    ).toHaveValue("");
+      page.getByRole("complementary", { name: "Feedback" }),
+    ).not.toContainText("Memory-only draft");
   });
 }
