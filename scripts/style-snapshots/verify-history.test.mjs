@@ -1720,6 +1720,10 @@ test("should reject a styling conflict resolved to one parent's version", async 
       repoRoot,
       subject: "style: change main color [visual:empty]",
     });
+    const mainStyleCommit = await git({
+      repoRoot,
+      arguments_: ["rev-parse", "HEAD"],
+    });
     await assert.rejects(
       git({
         repoRoot,
@@ -1786,6 +1790,10 @@ test("should reject a styling conflict resolved to one parent's version", async 
     assert.ok(
       passing.every((result) => result.commit !== mergeCommit),
       "an exact waiver skips only the unisolatable merge resolution",
+    );
+    assert.ok(
+      passing.some((result) => result.commit === mainStyleCommit),
+      "an exact waiver preserves unwaived styling commits",
     );
   } finally {
     await rm(repoRoot, { recursive: true, force: true });

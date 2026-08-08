@@ -1647,7 +1647,7 @@ export const verifyHistory = async ({
     if (activeSafetyNetEntry !== undefined) {
       completeCaptureCommits.add(activeSafetyNetEntry.commit);
     }
-    const safetyNetEntry = relevant.at(-1);
+    const safetyNetEntry = relevant.find(hasSafetyNetScope);
     const reusableSafetyNetCompleteness =
       safetyNetEntry !== undefined &&
       reusableReceipt(safetyNetEntry) &&
