@@ -47,6 +47,15 @@ export type ProgressEvent = {
   readonly detail?: string;
 };
 
+/** One immutable connection transition observed by the review runtime. */
+export type AgentConnectionEvent = {
+  readonly eventId?: string;
+  readonly sessionId: string;
+  readonly connected: boolean;
+  readonly at: string;
+  readonly reason?: string;
+};
+
 /** Where one plan's review state lives. */
 export type ReviewStore = {
   readonly root: string;
@@ -61,6 +70,7 @@ export type ReviewStore = {
   readonly activeDraftPath: string;
   readonly sentPath: string;
   readonly progressPath: string;
+  readonly agentConnectionDirectory: string;
   readonly resolvedPath: string;
   readonly sessionPath: string;
   readonly heartbeatPath: string;
@@ -141,6 +151,10 @@ export const reviewStoreFor = ({
     }),
     sentPath: inside({ base: reviewDirectory, leaf: "sent.json" }),
     progressPath: inside({ base: reviewDirectory, leaf: "progress.jsonl" }),
+    agentConnectionDirectory: inside({
+      base: agentDirectory,
+      leaf: "connections",
+    }),
     resolvedPath: inside({ base: reviewDirectory, leaf: "resolved.json" }),
     sessionPath: inside({ base: root, leaf: "session.json" }),
     heartbeatPath: inside({ base: root, leaf: "session-heartbeat.json" }),
@@ -174,6 +188,10 @@ export const prepareStore = async (store: ReviewStore): Promise<void> => {
     mode: DIRECTORY_MODE,
   });
   await mkdir(store.revisionDirectory, {
+    recursive: true,
+    mode: DIRECTORY_MODE,
+  });
+  await mkdir(store.agentConnectionDirectory, {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
@@ -405,6 +423,82 @@ const readJsonDirectory = async (
     }
   }
   return values;
+};
+
+const asAgentConnectionEvent = ({
+  value,
+  sessionId,
+}: {
+  readonly value: unknown;
+  readonly sessionId: string;
+}): AgentConnectionEvent | undefined => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId ||
+    !("connected" in value) ||
+    typeof value.connected !== "boolean" ||
+    !("at" in value) ||
+    typeof value.at !== "string" ||
+    Number.isNaN(Date.parse(value.at))
+  ) {
+    return undefined;
+  }
+  return {
+    ...("eventId" in value &&
+    typeof value.eventId === "string" &&
+    /^[a-f0-9]{16}$/.test(value.eventId)
+      ? { eventId: value.eventId }
+      : {}),
+    sessionId,
+    connected: value.connected,
+    at: new Date(value.at).toISOString(),
+    ...("reason" in value &&
+    typeof value.reason === "string" &&
+    value.reason.trim() !== "" &&
+    value.reason.length <= PROGRESS_TEXT_LIMIT
+      ? { reason: value.reason }
+      : {}),
+  };
+};
+
+/** Reads the append-only connection timeline for one review session. */
+export const readAgentConnectionEvents = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<ReadonlyArray<AgentConnectionEvent>> => {
+  const accepted = (await readJsonDirectory(store.agentConnectionDirectory))
+    .map((value) => asAgentConnectionEvent({ value, sessionId }))
+    .filter((event): event is AgentConnectionEvent => event !== undefined);
+  return accepted.sort((left, right) => {
+    const chronological = left.at.localeCompare(right.at);
+    return chronological !== 0
+      ? chronological
+      : (left.eventId ?? "").localeCompare(right.eventId ?? "");
+  });
+};
+
+/** Appends one runtime-observed connection transition without rewriting history. */
+export const appendAgentConnectionEvent = async ({
+  store,
+  event,
+}: {
+  readonly store: ReviewStore;
+  readonly event: AgentConnectionEvent;
+}): Promise<void> => {
+  const eventId = event.eventId ?? randomId();
+  await writeJson({
+    path: inside({
+      base: store.agentConnectionDirectory,
+      leaf: `${eventId}.json`,
+    }),
+    value: { ...event, eventId },
+  });
 };
 
 /** Reads every untrusted request value for validation by the exchange module. */

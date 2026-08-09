@@ -48,11 +48,13 @@ import {
   writeAgentRequest,
 } from "./agent-exchange.js";
 import {
+  appendAgentConnectionEvent,
   appendProgress,
   deriveReviewPlanId,
   prepareStore,
   randomId,
   readActiveDraft,
+  readAgentConnectionEvents,
   readAgentPresence,
   readComments,
   readProgress,
@@ -73,6 +75,10 @@ import { diffRevisions } from "./revision-diff.js";
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const HEARTBEAT_INTERVAL_MS = 750;
+
+/** Quotes one trusted local path as one POSIX-shell argument. */
+const shellArgument = (value: string): string =>
+  `'${value.replaceAll("'", `'"'"'`)}'`;
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
@@ -204,6 +210,15 @@ export const startReviewRuntime = async ({
   readonly planPath: string;
 }): Promise<ReviewRuntime> => {
   const resolvedPlanPath = resolve(planPath);
+  const agentCommand = `node ${shellArgument(
+    resolve(process.argv[1] ?? "bin/big-plan.mjs"),
+  )} agent ${shellArgument(resolvedPlanPath)}`;
+  const recoveryPrompt = [
+    `Reconnect to my existing Big Plan review for ${resolvedPlanPath}.`,
+    `Run ${agentCommand}.`,
+    "Read the prompt_file path it prints and follow that prompt in this agent session.",
+    "Keep the connection loop running so the review remains live.",
+  ].join(" ");
   const planId = deriveReviewPlanId({ planPath: resolvedPlanPath });
   const sessionId = randomId(8);
   const token = randomBytes(32).toString("base64url");
@@ -223,6 +238,7 @@ export const startReviewRuntime = async ({
   const blocks = new Map<string, BlockMapEntry>();
   let blockMapMarkdown: string | undefined;
   let progressSeq = 0;
+  let lastConnectionState: boolean | undefined;
 
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateComments({ value, blocks, now: new Date().toISOString() });
@@ -434,6 +450,26 @@ export const startReviewRuntime = async ({
       const exchange = await readAgentExchange({ store, sessionId, planId });
       const latestResponse = exchange.responses.at(-1);
       const presence = await readAgentPresence({ store, sessionId });
+      if (presence.connected !== lastConnectionState) {
+        const reason =
+          lastConnectionState === true && !presence.connected
+            ? "Heartbeat timed out"
+            : undefined;
+        lastConnectionState = presence.connected;
+        await appendAgentConnectionEvent({
+          store,
+          event: {
+            sessionId,
+            connected: presence.connected,
+            at: new Date().toISOString(),
+            ...(reason === undefined ? {} : { reason }),
+          },
+        });
+      }
+      const connectionLog = await readAgentConnectionEvents({
+        store,
+        sessionId,
+      });
       sendJson({
         response,
         status: 200,
@@ -445,6 +481,10 @@ export const startReviewRuntime = async ({
           sourceRevision:
             latestResponse?.sourceRevision ?? initialSourceRevision,
           presence,
+          connectionLog,
+          plan: resolvedPlanPath,
+          agentCommand,
+          recoveryPrompt,
           ...exchange,
         },
       });

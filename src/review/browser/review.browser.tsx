@@ -21,9 +21,19 @@ import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 import { PENCIL_ICON } from "../../icons/lucide/pencil.js";
 import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
+import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
+import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
+import { deriveCurrentAgentActivity } from "../agent-activity.js";
 import type { CommentTarget, ReviewComment } from "../comment.js";
 import { parseCommentMarkdownLine } from "../comment-markdown.js";
 import { deriveAgentStatus, type AgentStatus } from "../thread-status.js";
+import {
+  AgentConnectionPanel,
+  AgentHealthAlert,
+  type BrowserConnectionEvent,
+} from "./agent-connection.browser.js";
 import {
   AgentChangeDigest,
   AgentStatePill,
@@ -59,6 +69,7 @@ type RuntimeIdentity = {
 type ReviewSnapshot = {
   readonly drafts: ReadonlyArray<ReviewComment>;
   readonly sent: ReadonlyArray<ReviewComment>;
+  readonly resolvedCommentIds: ReadonlyArray<string>;
 };
 
 type AgentOutcome = {
@@ -78,6 +89,7 @@ type AgentRequest = {
   readonly body?: string;
   readonly commentId?: string;
   readonly commentIds: ReadonlyArray<string>;
+  readonly targetLabel?: string;
 };
 
 type AgentResponse = {
@@ -101,6 +113,10 @@ type AgentSnapshot = {
   readonly presence: AgentPresence;
   readonly requests: ReadonlyArray<AgentRequest>;
   readonly responses: ReadonlyArray<AgentResponse>;
+  readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
+  readonly plan: string;
+  readonly agentCommand: string;
+  readonly recoveryPrompt: string;
 };
 
 type ProgressEvent = {
@@ -281,12 +297,17 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 
 const parseSnapshot = (value: unknown): ReviewSnapshot => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { drafts: [], sent: [] };
+    return { drafts: [], sent: [], resolvedCommentIds: [] };
   }
   const record = value as Readonly<Record<string, unknown>>;
   return {
     drafts: Array.isArray(record.drafts) ? record.drafts.filter(isComment) : [],
     sent: Array.isArray(record.sent) ? record.sent.filter(isComment) : [],
+    resolvedCommentIds: Array.isArray(record.resolvedCommentIds)
+      ? record.resolvedCommentIds.filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [],
   };
 };
 
@@ -295,6 +316,10 @@ const emptyAgentSnapshot = (): AgentSnapshot => ({
   presence: { connected: false, state: "waiting" },
   requests: [],
   responses: [],
+  connectionLog: [],
+  plan: "",
+  agentCommand: "",
+  recoveryPrompt: "",
 });
 
 const parseAgentSnapshot = (value: unknown): AgentSnapshot => {
@@ -335,6 +360,18 @@ const parseAgentSnapshot = (value: unknown): AgentSnapshot => {
                     : [],
                 )
               : [],
+            ...(Array.isArray(request.comments) &&
+            isRecord(request.comments[0]) &&
+            isRecord(request.comments[0].target)
+              ? {
+                  targetLabel:
+                    typeof request.comments[0].target.section === "string"
+                      ? request.comments[0].target.section
+                      : typeof request.comments[0].target.label === "string"
+                        ? request.comments[0].target.label
+                        : "Whole plan",
+                }
+              : {}),
           },
         ];
       })
@@ -416,6 +453,32 @@ const parseAgentSnapshot = (value: unknown): AgentSnapshot => {
     presence,
     requests,
     responses,
+    connectionLog: Array.isArray(value.connectionLog)
+      ? value.connectionLog.flatMap(
+          (event): ReadonlyArray<BrowserConnectionEvent> =>
+            isRecord(event) &&
+            typeof event.connected === "boolean" &&
+            typeof event.at === "string"
+              ? [
+                  {
+                    connected: event.connected,
+                    at: event.at,
+                    ...(typeof event.eventId === "string"
+                      ? { eventId: event.eventId }
+                      : {}),
+                    ...(typeof event.reason === "string"
+                      ? { reason: event.reason }
+                      : {}),
+                  },
+                ]
+              : [],
+        )
+      : [],
+    plan: typeof value.plan === "string" ? value.plan : "",
+    agentCommand:
+      typeof value.agentCommand === "string" ? value.agentCommand : "",
+    recoveryPrompt:
+      typeof value.recoveryPrompt === "string" ? value.recoveryPrompt : "",
   };
 };
 
@@ -1135,7 +1198,7 @@ const CommentComposer = ({
       ref={composerRef}
       className={
         inline
-          ? "review-comment-composer-inline relative z-auto mb-6 w-full max-w-lg border border-edge bg-paper! p-3 text-ink shadow-floating"
+          ? `review-comment-composer-inline relative z-auto mb-6 w-full max-w-lg border border-edge bg-paper! p-3 text-ink shadow-floating ${compose.target.type === "block" && compose.target.kind === "slide" ? "-mt-4" : "mt-2"}`
           : "review-comment-composer-floating fixed z-30 w-[min(17rem,calc(100vw-2rem))] border border-edge bg-paper! p-3 text-ink shadow-floating"
       }
       style={style}
@@ -1441,10 +1504,56 @@ const StagedCard = ({
   );
 };
 
+type ThreadGroup = "needs-input" | "ready" | "working" | "queued";
+
+const threadRequests = (
+  comment: ReviewComment,
+  agent: AgentSnapshot,
+): ReadonlyArray<AgentRequest> =>
+  agent.requests.filter(
+    (request) =>
+      (request.kind === "feedback" &&
+        request.commentIds.includes(comment.id)) ||
+      (request.kind === "reply" && request.commentId === comment.id),
+  );
+
+const threadGroupFor = ({
+  comment,
+  agent,
+  statusForRequest,
+}: {
+  readonly comment: ReviewComment;
+  readonly agent: AgentSnapshot;
+  readonly statusForRequest: (
+    request: AgentRequest,
+    surface: MessageSurface,
+  ) => AgentStatus;
+}): ThreadGroup => {
+  const request = threadRequests(comment, agent).at(-1);
+  if (request === undefined) return "queued";
+  const response = agent.responses.find(
+    (candidate) => candidate.requestId === request.requestId,
+  );
+  const outcome = response?.outcomes.find(
+    (candidate) => candidate.commentId === comment.id,
+  );
+  if (outcome?.state === "question") return "needs-input";
+  if (outcome !== undefined) return "ready";
+  const status = statusForRequest(request, "thread");
+  return status.stage === "working" || status.stage === "stalled"
+    ? "working"
+    : "queued";
+};
+
 const SentThread = ({
   comment,
   identity,
   agent,
+  group,
+  expanded,
+  resolved,
+  onToggle,
+  onResolve,
   onJump,
   onAssociate,
   onReplySent,
@@ -1454,6 +1563,11 @@ const SentThread = ({
   readonly comment: ReviewComment;
   readonly identity: RuntimeIdentity | null;
   readonly agent: AgentSnapshot;
+  readonly group: ThreadGroup;
+  readonly expanded: boolean;
+  readonly resolved: boolean;
+  readonly onToggle: () => void;
+  readonly onResolve: () => void;
   readonly onJump: () => void;
   readonly onAssociate: (target: CommentTarget | null) => void;
   readonly onReplySent: (message: string) => void;
@@ -1470,12 +1584,7 @@ const SentThread = ({
   const [diffError, setDiffError] = useState("");
   const [reply, setReply] = useState("");
   const [isReplying, setIsReplying] = useState(false);
-  const requests = agent.requests.filter(
-    (request) =>
-      (request.kind === "feedback" &&
-        request.commentIds.includes(comment.id)) ||
-      (request.kind === "reply" && request.commentId === comment.id),
-  );
+  const requests = threadRequests(comment, agent);
   const exchanges = requests.map((request) => {
     const response = agent.responses.find(
       (candidate) => candidate.requestId === request.requestId,
@@ -1502,6 +1611,18 @@ const SentThread = ({
         : outcome?.state === "outside"
           ? "Outside this plan"
           : "Waiting for agent";
+  const latestStatus =
+    latestExchange === undefined || latestExchange.outcome !== undefined
+      ? undefined
+      : statusForRequest(latestExchange.request, "thread");
+  const collapsedTone =
+    group === "working"
+      ? "border-[var(--callout-note-c)] bg-[var(--callout-note-bg)]"
+      : group === "needs-input"
+        ? "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)]"
+        : group === "ready"
+          ? "border-accent bg-accent-wash"
+          : "border-edge bg-surface";
 
   const loadDiff = async () => {
     if (
@@ -1542,9 +1663,55 @@ const SentThread = ({
     }
   };
 
+  if (!expanded) {
+    return (
+      <Card
+        className={`mt-2 grid min-w-0 gap-2 border p-3 shadow-none ${collapsedTone}`}
+        data-review-sent-thread={group}
+        data-review-comment-id={comment.id}
+      >
+        <button
+          type="button"
+          className="grid min-w-0 cursor-pointer gap-2 border-0 bg-transparent p-0 text-left text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          aria-expanded="false"
+          onClick={onToggle}
+        >
+          <strong className="text-xs uppercase tracking-caps">
+            {targetLabel(comment.target, true)}
+          </strong>
+          <span className="text-sm [overflow-wrap:anywhere]">
+            {comment.body}
+          </span>
+        </button>
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
+          {group === "working" ? (
+            <span
+              className="inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+          ) : null}
+          <span className="min-w-0 flex-1 font-medium">
+            {latestStatus?.headline ?? outcomeLabel}
+            {group === "working" ? " · Just now" : ""}
+          </span>
+          {latestStatus === undefined ? null : (
+            <button
+              type="button"
+              className="cursor-not-allowed border-0 bg-transparent p-0 text-muted"
+              disabled
+              title="Request cancellation is not available in this review yet"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card
-      className="mt-3 border border-edge bg-surface p-3 shadow-raised"
+      className={`mt-2 border p-3 shadow-raised ${collapsedTone}`}
       onPointerEnter={() => onAssociate(comment.target)}
       onPointerLeave={() => onAssociate(null)}
       onFocus={() => onAssociate(comment.target)}
@@ -1552,18 +1719,33 @@ const SentThread = ({
         if (!event.currentTarget.contains(event.relatedTarget))
           onAssociate(null);
       }}
+      data-review-sent-thread={group}
+      data-review-comment-id={comment.id}
     >
-      <div className="flex min-w-0 items-start justify-between gap-3">
+      <div className="-mx-3 -mt-3 mb-3 flex min-w-0 items-center gap-2 rounded-t-lg border-b border-edge bg-header px-3 py-2">
         <button
           type="button"
-          className="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left text-2xs font-semibold uppercase tracking-caps text-ink hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+          className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left text-xs font-semibold uppercase tracking-caps text-ink hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
           onClick={onJump}
         >
           {targetLabel(comment.target, true)}
         </button>
-        <Badge tone="secondary" size="compact">
-          {outcomeLabel}
-        </Badge>
+        <Button
+          variant="ghost"
+          size="compactIcon"
+          aria-label="Minimize thread"
+          onClick={onToggle}
+        >
+          <Icon icon={MINIMIZE_2_ICON} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="compactIcon"
+          aria-label={resolved ? "Unresolve comment" : "Resolve comment"}
+          onClick={onResolve}
+        >
+          <Icon icon={CHECK_ICON} />
+        </Button>
       </div>
       {!targetPresent ? (
         <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]">
@@ -1597,7 +1779,17 @@ const SentThread = ({
                     ? "Sent"
                     : "Queued"
                 }
-              />
+              >
+                {request.kind === "feedback" &&
+                comment.target.type === "selection" &&
+                response !== undefined &&
+                response.sourceRevision !== request.sourceRevision ? (
+                  <blockquote className="mt-2 mb-0 border-l-2 border-[var(--annotation-c)] pl-2 text-xs text-muted">
+                    You commented on: “{comment.target.quote}” — this text was
+                    revised
+                  </blockquote>
+                ) : null}
+              </MessageTurn>
               {requestOutcome === undefined || response === undefined ? (
                 <RequestStatusStrip
                   status={statusForRequest(request, "thread")}
@@ -1630,18 +1822,50 @@ const SentThread = ({
       )}
       {identity === null ? null : (
         <div className="mt-3 border-t border-edge pt-3">
-          <label
-            className="text-xs font-medium text-ink"
-            htmlFor={`reply-${comment.id}`}
-          >
-            Reply
-          </label>
+          {latestExchange?.response === undefined ? null : (
+            <section className="mb-3 grid gap-2" data-review-thread-next-steps>
+              <strong className="text-2xs font-bold uppercase tracking-caps text-subtle">
+                Next steps
+              </strong>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="compactIcon"
+                  aria-label="Minimize thread"
+                  onClick={onToggle}
+                >
+                  <Icon icon={MINIMIZE_2_ICON} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="compactIcon"
+                  aria-label={
+                    resolved ? "Unresolve comment" : "Resolve comment"
+                  }
+                  onClick={onResolve}
+                >
+                  <Icon icon={CHECK_ICON} />
+                </Button>
+                {latestChanged === undefined ? null : (
+                  <Button
+                    variant="ghost"
+                    size="compactIcon"
+                    aria-label="Revert agent changes"
+                    disabled
+                    title="Revert is not available in this review yet"
+                  >
+                    <Icon icon={ROTATE_CCW_ICON} />
+                  </Button>
+                )}
+              </div>
+            </section>
+          )}
           <Textarea
             id={`reply-${comment.id}`}
             className="mt-1 min-h-20"
             value={reply}
             maxLength={BODY_LIMIT}
-            placeholder="Continue this thread…"
+            placeholder="Reply to the agent…"
             onChange={(event) => setReply(event.target.value)}
             onKeyDown={(event) => {
               if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -1753,6 +1977,9 @@ const ReviewKernel = () => {
   const feedbackHost = useFeedbackHost();
   const [drafts, setDrafts] = useState<ReadonlyArray<ReviewComment>>([]);
   const [sent, setSent] = useState<ReadonlyArray<ReviewComment>>([]);
+  const [resolvedCommentIds, setResolvedCommentIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
   const [compose, setCompose] = useState<ComposeState | null>(null);
   const [selectionControl, setSelectionControl] =
     useState<SelectionControlState | null>(null);
@@ -1773,6 +2000,9 @@ const ReviewKernel = () => {
   const [expandedBodies, setExpandedBodies] = useState<ReadonlySet<string>>(
     new Set(),
   );
+  const [expandedSentThreads, setExpandedSentThreads] = useState<
+    ReadonlySet<string>
+  >(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
   );
@@ -1824,6 +2054,17 @@ const ReviewKernel = () => {
     rootElement.toggleAttribute("data-review-kernel-open", isOpen);
     return () => rootElement.removeAttribute("data-review-kernel-open");
   }, [isOpen]);
+
+  useEffect(() => {
+    if (compose === null) return;
+    const closeComposer = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      setCompose(null);
+    };
+    document.addEventListener("keydown", closeComposer);
+    return () => document.removeEventListener("keydown", closeComposer);
+  }, [compose]);
 
   useEffect(() => {
     const composeSelection =
@@ -2037,6 +2278,7 @@ const ReviewKernel = () => {
         if (current) {
           setDrafts(snapshot.drafts);
           setSent(snapshot.sent);
+          setResolvedCommentIds(new Set(snapshot.resolvedCommentIds));
           setStatus("Connected to the local review runtime.");
           setIsHydrated(true);
         }
@@ -2063,10 +2305,21 @@ const ReviewKernel = () => {
         path: "/api/drafts",
         identity,
         method: "PUT",
-        body: { drafts, activeDraft: "", resolvedCommentIds: [] },
+        body: {
+          drafts,
+          activeDraft: "",
+          resolvedCommentIds: Array.from(resolvedCommentIds),
+        },
       }),
     ).catch((error: unknown) => setStatus(errorMessage(error)));
-  }, [drafts, identity, isHydrated, planId, serializeRuntimeWrite]);
+  }, [
+    drafts,
+    identity,
+    isHydrated,
+    planId,
+    resolvedCommentIds,
+    serializeRuntimeWrite,
+  ]);
 
   useEffect(() => {
     if (identity === null) return;
@@ -2329,23 +2582,90 @@ const ReviewKernel = () => {
       nowMs: statusNowMs,
     });
   };
-  const agentActivity = requestProgress
-    .filter((event) => event.state !== "waiting")
-    .filter(
-      (event, index, events) =>
-        index === 0 ||
-        event.step !== events[index - 1]?.step ||
-        event.state !== events[index - 1]?.state,
-    )
-    .slice(-8)
-    .reverse();
+  const currentAgentActivity = deriveCurrentAgentActivity({
+    requests: agent.requests,
+    responseRequestIds: new Set(
+      agent.responses.map((response) => response.requestId),
+    ),
+    progressEvents: progress,
+    agentConnected: agent.presence.connected,
+    runtimeOffline: pollFailures >= 2,
+    now: statusNowMs,
+    heartbeatAt: agent.presence.updatedAtMs ?? 0,
+  });
   const chatRequests = agent.requests.filter(
     (request) => request.kind === "chat",
   );
+  const unresolvedSent = sent.filter(
+    (comment) => !resolvedCommentIds.has(comment.id),
+  );
+  const sentByGroup = new Map<ThreadGroup, ReadonlyArray<ReviewComment>>(
+    (["needs-input", "ready", "working", "queued"] as const).map((group) => [
+      group,
+      unresolvedSent.filter(
+        (comment) =>
+          threadGroupFor({ comment, agent, statusForRequest }) === group,
+      ),
+    ]),
+  );
+  const resolvedSent = sent.filter((comment) =>
+    resolvedCommentIds.has(comment.id),
+  );
+  const agentHealthLabel =
+    identity === null
+      ? null
+      : pollFailures >= 2
+        ? "Review server offline"
+        : !agent.presence.connected
+          ? "Agent connection lost"
+          : agentStatus.stage === "stalled"
+            ? "Agent not responding"
+            : agentStatus.stage === "failed"
+              ? "Agent error"
+              : null;
   const newerRevisionAvailable =
     initialSourceRevision !== "" &&
     agent.sourceRevision !== "" &&
     initialSourceRevision !== agent.sourceRevision;
+  const toggleSentThread = (commentId: string) =>
+    setExpandedSentThreads((current) => {
+      const next = new Set(current);
+      if (next.has(commentId)) next.delete(commentId);
+      else next.add(commentId);
+      return next;
+    });
+  const toggleResolvedComment = (commentId: string) =>
+    setResolvedCommentIds((current) => {
+      const next = new Set(current);
+      if (next.has(commentId)) next.delete(commentId);
+      else next.add(commentId);
+      return next;
+    });
+  const viewAgentRequest = (requestId: string, kind: string) => {
+    if (kind === "chat") {
+      setTab("chat");
+      return;
+    }
+    const request = agent.requests.find(
+      (candidate) => candidate.requestId === requestId,
+    );
+    const commentId =
+      request?.kind === "feedback"
+        ? request.commentIds[0]
+        : request?.kind === "reply"
+          ? request.commentId
+          : undefined;
+    if (commentId === undefined) return;
+    setExpandedSentThreads((current) => new Set(current).add(commentId));
+    setTab("comments");
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>(
+          `[data-review-comment-id="${CSS.escape(commentId)}"]`,
+        )
+        ?.scrollIntoView({ block: "nearest" }),
+    );
+  };
 
   return (
     <>
@@ -2478,25 +2798,44 @@ const ReviewKernel = () => {
       {feedbackHost === null
         ? null
         : createPortal(
-            <button
-              type="button"
-              className="inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:bg-surface hover:text-ink hover:shadow-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-accent aria-expanded:bg-accent-wash aria-expanded:text-accent aria-expanded:shadow-raised [&>svg]:size-4"
-              aria-expanded={isOpen}
-              aria-controls="big-plan-feedback-rail"
-              onClick={() => setIsOpen((current) => !current)}
-            >
-              <Icon icon={MESSAGE_SQUARE_ICON} />
-              Feedback
-              {drafts.length > 0 ? (
-                <Badge
-                  size="compact"
-                  tone="accent"
-                  className="h-5 min-w-5 justify-center px-1 py-0 leading-none"
-                >
-                  {drafts.length}
-                </Badge>
-              ) : null}
-            </button>,
+            <span className="inline-flex items-center gap-2">
+              {agentHealthLabel === null ? (
+                identity !== null && agent.presence.connected ? (
+                  <span
+                    className="size-2 rounded-full border border-accent bg-accent"
+                    aria-label="Agent connected"
+                    role="status"
+                  />
+                ) : null
+              ) : (
+                <AgentHealthAlert
+                  label={agentHealthLabel}
+                  onOpen={() => {
+                    setIsOpen(true);
+                    setTab("agent");
+                  }}
+                />
+              )}
+              <button
+                type="button"
+                className="inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:bg-surface hover:text-ink hover:shadow-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-accent aria-expanded:bg-accent-wash aria-expanded:text-accent aria-expanded:shadow-raised [&>svg]:size-4"
+                aria-expanded={isOpen}
+                aria-controls="big-plan-feedback-rail"
+                onClick={() => setIsOpen((current) => !current)}
+              >
+                <Icon icon={MESSAGE_SQUARE_ICON} />
+                Feedback
+                {drafts.length > 0 ? (
+                  <Badge
+                    size="compact"
+                    tone="accent"
+                    className="h-5 min-w-5 justify-center px-1 py-0 leading-none"
+                  >
+                    {drafts.length}
+                  </Badge>
+                ) : null}
+              </button>
+            </span>,
             feedbackHost,
           )}
       {isOpen ? (
@@ -2594,76 +2933,197 @@ const ReviewKernel = () => {
               aria-labelledby="review-tab-comments"
             >
               {drafts.length === 0 ? (
-                <div className="rounded-xl bg-surface p-6 text-center text-sm text-muted [&_p]:m-0 [&_p+p]:mt-2">
+                <div className="border-b border-edge pb-4 text-sm text-muted [&_p]:m-0 [&_p+p]:mt-2">
+                  {sent.length > 0 ? (
+                    <p>
+                      {sent.length} comment{sent.length === 1 ? "" : "s"} sent
+                      to the agent
+                    </p>
+                  ) : null}
                   <p>
                     {identity === null
                       ? "Reading offline: drafts stay in this browser until you start the local review runtime."
-                      : "No comments staged."}
-                  </p>
-                  <p>
-                    Select text to comment, or use a slide comment icon for the
-                    whole slide.
+                      : "Select text to comment, or use a slide selector to select it all."}
                   </p>
                 </div>
               ) : (
-                <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
-                  {drafts.map((comment) => (
-                    <li key={comment.id}>
-                      <StagedCard
-                        comment={comment}
-                        surface="rail"
-                        associated={
-                          associatedTarget !== null &&
-                          targetAddress(associatedTarget) ===
-                            targetAddress(comment.target)
-                        }
-                        collapsed={false}
-                        expanded={expandedBodies.has(comment.id)}
-                        onExpandBody={() =>
-                          setExpandedBodies((current) =>
-                            new Set(current).add(comment.id),
-                          )
-                        }
-                        onUpdate={(body) => updateDraft(comment.id, body)}
-                        onDelete={() =>
-                          setPendingDelete({ kind: "comment", comment })
-                        }
-                        onJump={() => jumpTo(comment)}
-                        onSubmit={() => void sendComments([comment])}
-                        onAssociate={setAssociatedTarget}
-                      />
-                    </li>
-                  ))}
-                </ol>
-              )}
-              {sent.length > 0 ? (
-                <section className="mt-6 border-t border-edge pt-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="m-0 text-xs font-semibold uppercase tracking-caps text-subtle">
-                      Sent threads
+                <section>
+                  <div className="mb-2 flex items-center gap-2">
+                    <p className="m-0 text-xs font-bold uppercase tracking-caps text-subtle">
+                      Staged
                     </p>
-                    <Badge tone="secondary" size="compact">
-                      {sent.length}
+                    <Badge tone="secondary" size="compact" className="ml-auto">
+                      {drafts.length}
                     </Badge>
                   </div>
-                  <p className="mt-1 mb-0 text-xs text-subtle">
-                    {sent.length} comment{sent.length === 1 ? "" : "s"} handed
-                    off.
-                  </p>
-                  {sent.map((comment) => (
-                    <SentThread
-                      key={comment.id}
-                      comment={comment}
-                      identity={identity}
-                      agent={agent}
-                      onJump={() => jumpTo(comment)}
-                      onAssociate={setAssociatedTarget}
-                      onReplySent={setStatus}
-                      statusForRequest={statusForRequest}
-                      activityForRequest={activityForRequest}
-                    />
-                  ))}
+                  <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
+                    {drafts.map((comment) => (
+                      <li key={comment.id}>
+                        <StagedCard
+                          comment={comment}
+                          surface="rail"
+                          associated={
+                            associatedTarget !== null &&
+                            targetAddress(associatedTarget) ===
+                              targetAddress(comment.target)
+                          }
+                          collapsed={false}
+                          expanded={expandedBodies.has(comment.id)}
+                          onExpandBody={() =>
+                            setExpandedBodies((current) =>
+                              new Set(current).add(comment.id),
+                            )
+                          }
+                          onUpdate={(body) => updateDraft(comment.id, body)}
+                          onDelete={() =>
+                            setPendingDelete({ kind: "comment", comment })
+                          }
+                          onJump={() => jumpTo(comment)}
+                          onSubmit={() => void sendComments([comment])}
+                          onAssociate={setAssociatedTarget}
+                        />
+                      </li>
+                    ))}
+                  </ol>
                 </section>
+              )}
+              {sent.length > 0 ? (
+                <div>
+                  <div className="mt-4 flex justify-end">
+                    {unresolvedSent.some(
+                      (comment) =>
+                        threadGroupFor({
+                          comment,
+                          agent,
+                          statusForRequest,
+                        }) === "ready",
+                    ) ? (
+                      <button
+                        type="button"
+                        className="cursor-pointer border-0 bg-transparent p-0 text-xs text-muted hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        onClick={() =>
+                          setResolvedCommentIds(
+                            new Set([
+                              ...resolvedCommentIds,
+                              ...unresolvedSent
+                                .filter(
+                                  (comment) =>
+                                    threadGroupFor({
+                                      comment,
+                                      agent,
+                                      statusForRequest,
+                                    }) === "ready",
+                                )
+                                .map((comment) => comment.id),
+                            ]),
+                          )
+                        }
+                      >
+                        Resolve all
+                      </button>
+                    ) : null}
+                  </div>
+                  {(
+                    [
+                      {
+                        key: "needs-input",
+                        label: "Needs input",
+                        glyph: TRIANGLE_ALERT_ICON,
+                      },
+                      {
+                        key: "ready",
+                        label: "Ready for review",
+                        glyph: CHECK_ICON,
+                      },
+                      {
+                        key: "working",
+                        label: "Now working",
+                        glyph: null,
+                      },
+                      {
+                        key: "queued",
+                        label: "Queued",
+                        glyph: HOURGLASS_ICON,
+                      },
+                    ] as const
+                  ).map(({ key, label, glyph }) => {
+                    const comments = sentByGroup.get(key) ?? [];
+                    if (comments.length === 0) return null;
+                    return (
+                      <section
+                        key={key}
+                        className={`mt-4 border-t border-edge pt-4 ${key === "working" ? "text-[var(--callout-note-c)]" : key === "needs-input" ? "text-[var(--callout-warning-c)]" : key === "ready" ? "text-accent" : "text-muted"}`}
+                        data-review-thread-group={key}
+                      >
+                        <h3 className="m-0 mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-caps">
+                          {key === "working" ? (
+                            <span
+                              className="inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
+                              aria-hidden="true"
+                            />
+                          ) : glyph === null ? null : (
+                            <Icon icon={glyph} />
+                          )}
+                          {label}
+                          <Badge
+                            tone="secondary"
+                            size="compact"
+                            className="ml-auto"
+                          >
+                            {comments.length}
+                          </Badge>
+                        </h3>
+                        {comments.map((comment) => (
+                          <SentThread
+                            key={comment.id}
+                            comment={comment}
+                            identity={identity}
+                            agent={agent}
+                            group={key}
+                            expanded={expandedSentThreads.has(comment.id)}
+                            resolved={false}
+                            onToggle={() => toggleSentThread(comment.id)}
+                            onResolve={() => toggleResolvedComment(comment.id)}
+                            onJump={() => jumpTo(comment)}
+                            onAssociate={setAssociatedTarget}
+                            onReplySent={setStatus}
+                            statusForRequest={statusForRequest}
+                            activityForRequest={activityForRequest}
+                          />
+                        ))}
+                      </section>
+                    );
+                  })}
+                  {resolvedSent.length === 0 ? null : (
+                    <details className="mt-4 border-t border-edge pt-4">
+                      <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                        Resolved ({resolvedSent.length})
+                      </summary>
+                      {resolvedSent.map((comment) => (
+                        <SentThread
+                          key={comment.id}
+                          comment={comment}
+                          identity={identity}
+                          agent={agent}
+                          group={threadGroupFor({
+                            comment,
+                            agent,
+                            statusForRequest,
+                          })}
+                          expanded={expandedSentThreads.has(comment.id)}
+                          resolved
+                          onToggle={() => toggleSentThread(comment.id)}
+                          onResolve={() => toggleResolvedComment(comment.id)}
+                          onJump={() => jumpTo(comment)}
+                          onAssociate={setAssociatedTarget}
+                          onReplySent={setStatus}
+                          statusForRequest={statusForRequest}
+                          activityForRequest={activityForRequest}
+                        />
+                      ))}
+                    </details>
+                  )}
+                </div>
               ) : null}
               {drafts.length > 0 ? (
                 <div className="mt-3 flex justify-end">
@@ -2701,22 +3161,22 @@ const ReviewKernel = () => {
                 </Card>
               ) : (
                 <>
-                  <div>
+                  <div className="-m-3 mb-0 border-b border-edge bg-well p-3">
                     <div className="flex items-center gap-2">
                       <label
-                        className="text-xs font-semibold text-ink"
+                        className="text-sm font-bold uppercase tracking-caps text-muted"
                         htmlFor="review-agent-chat"
                       >
-                        Ask about the whole plan
+                        Plan-wide chat
                       </label>
                       <AgentStatePill status={agentStatus} />
                     </div>
                     <Textarea
                       id="review-agent-chat"
-                      className="mt-1 min-h-20!"
+                      className="mt-2 min-h-20! bg-input!"
                       value={chatBody}
                       maxLength={BODY_LIMIT}
-                      placeholder="What should I understand before accepting this plan?"
+                      placeholder="Ask about the plan as a whole…"
                       onChange={(event) => setChatBody(event.target.value)}
                       onKeyDown={(event) => {
                         if (
@@ -2728,16 +3188,14 @@ const ReviewKernel = () => {
                         }
                       }}
                     />
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <span className="text-2xs text-subtle">
-                        {MODIFIER_SHORTCUT}
-                      </span>
+                    <div className="mt-2 flex items-center gap-3">
                       <Button
-                        size="compact"
+                        variant="outline"
+                        size="sm"
                         disabled={chatBody.trim() === "" || isSendingChat}
                         onClick={() => void sendChat()}
                       >
-                        {isSendingChat ? "Sending…" : "Ask agent"}
+                        {isSendingChat ? "Sending…" : "Send"}
                       </Button>
                     </div>
                   </div>
@@ -2778,87 +3236,19 @@ const ReviewKernel = () => {
               role="tabpanel"
               aria-labelledby="review-tab-agent"
             >
-              <Card className="border border-edge bg-surface p-3 shadow-none">
-                <div className="flex items-start gap-3">
-                  <Icon icon={ACTIVITY_ICON} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="m-0 text-sm font-semibold text-ink">
-                        {agentStatus.headline}
-                      </p>
-                      <Badge
-                        tone={
-                          agentStatus.tone === "positive"
-                            ? "accentOutline"
-                            : "secondary"
-                        }
-                        size="compact"
-                      >
-                        {agentStatus.label}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 mb-0 text-xs text-muted">
-                      {agentStatus.detail}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-              {!agent.presence.connected && runtimeSession !== null ? (
-                <Card className="border border-edge bg-well p-3 shadow-none">
-                  <p className="m-0 text-xs font-semibold text-ink">
-                    Connect a coding agent
-                  </p>
-                  <code className="mt-2 block min-w-0 overflow-x-auto rounded-md bg-paper p-2 text-2xs text-ink">
-                    big-plan agent {runtimeSession.plan}
-                  </code>
-                  <p className="mt-2 mb-0 text-2xs text-subtle">
-                    Paste the returned prompt into Codex or Claude. Your drafts
-                    are safe while no agent is connected.
-                  </p>
-                </Card>
-              ) : null}
-              <section>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="m-0 text-xs font-semibold uppercase tracking-caps text-subtle">
-                    Agent activity
-                  </p>
-                  <Badge tone="secondary" size="compact">
-                    {agentActivity.length}
-                  </Badge>
-                </div>
-                {agentActivity.length === 0 ? (
-                  <p className="mt-2 mb-0 text-xs text-subtle">
-                    No coding-agent work has been reported for this request.
-                  </p>
-                ) : (
-                  <ol className="mt-2 grid list-none gap-2 p-0">
-                    {agentActivity.map((event) => (
-                      <li
-                        key={event.seq}
-                        className="rounded-md border border-edge bg-surface p-2"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="m-0 text-xs font-medium text-ink">
-                            {event.step}
-                          </p>
-                          <Badge tone="secondary" size="micro">
-                            {event.state}
-                          </Badge>
-                        </div>
-                        {event.detail === undefined ? null : (
-                          <p className="mt-1 mb-0 text-2xs text-muted">
-                            {event.detail}
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </section>
-              <p className="m-0 text-2xs text-subtle">
-                Big Plan shows recorded agent signals only. Reviewer actions do
-                not count as agent work.
-              </p>
+              <AgentConnectionPanel
+                activity={currentAgentActivity}
+                connected={agent.presence.connected}
+                heartbeatAt={agent.presence.updatedAtMs ?? 0}
+                connectionLog={agent.connectionLog}
+                recoveryPrompt={agent.recoveryPrompt}
+                agentCommand={
+                  agent.agentCommand ||
+                  `node bin/big-plan.mjs agent '${agent.plan || runtimeSession?.plan || "<plan.mdx>"}'`
+                }
+                nowMs={statusNowMs}
+                onViewRequest={viewAgentRequest}
+              />
             </div>
           ) : null}
           {tab === "comments" ? (
@@ -2934,6 +3324,11 @@ const ReviewKernel = () => {
             comment={comment}
             identity={identity}
             agent={agent}
+            group={threadGroupFor({ comment, agent, statusForRequest })}
+            expanded={expandedSentThreads.has(comment.id)}
+            resolved={resolvedCommentIds.has(comment.id)}
+            onToggle={() => toggleSentThread(comment.id)}
+            onResolve={() => toggleResolvedComment(comment.id)}
             onJump={() => jumpTo(comment)}
             onAssociate={setAssociatedTarget}
             onReplySent={setStatus}

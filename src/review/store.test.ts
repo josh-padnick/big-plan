@@ -10,10 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  appendAgentConnectionEvent,
   appendProgress,
   deriveReviewPlanId,
   prepareStore,
   readActiveDraft,
+  readAgentConnectionEvents,
   readAgentPresence,
   readProgress,
   readResolvedCommentIds,
@@ -67,6 +69,7 @@ describe("review store placement", () => {
       store.activeDraftPath,
       store.sentPath,
       store.progressPath,
+      store.agentConnectionDirectory,
       store.resolvedPath,
       store.sessionPath,
       store.heartbeatPath,
@@ -88,6 +91,50 @@ describe("review store placement", () => {
     expect(() =>
       reviewStoreFor({ planPath, planId: "../../../../etc" }),
     ).toThrow(/outside/);
+  });
+});
+
+describe("agent connection history", () => {
+  it("should preserve ordered transitions for only the running session", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "session-a",
+        connected: false,
+        at: "2026-08-08T20:00:02.000Z",
+        reason: "Heartbeat timed out",
+      },
+    });
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "session-a",
+        connected: true,
+        at: "2026-08-08T20:00:01.000Z",
+      },
+    });
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "other-session",
+        connected: true,
+        at: "2026-08-08T20:00:00.000Z",
+      },
+    });
+
+    expect(
+      await readAgentConnectionEvents({ store, sessionId: "session-a" }),
+    ).toMatchObject([
+      { connected: true, at: "2026-08-08T20:00:01.000Z" },
+      {
+        connected: false,
+        at: "2026-08-08T20:00:02.000Z",
+        reason: "Heartbeat timed out",
+      },
+    ]);
   });
 });
 

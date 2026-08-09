@@ -305,6 +305,12 @@ describe("review runtime feedback", () => {
         { kind: "reply", commentId: "55667788" },
       ],
       responses: [],
+      plan: runtime.planPath,
+      agentCommand: expect.stringContaining(`agent '${runtime.planPath}'`),
+      recoveryPrompt: expect.stringContaining(
+        "Reconnect to my existing Big Plan review",
+      ),
+      connectionLog: [{ connected: false }],
     });
     if (
       typeof answer !== "object" ||
