@@ -115,6 +115,9 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "color",
     "rgb(111, 105, 92)",
   );
+  const inlineToolbarHeight = await contextualDraft
+    .locator(".review-staged-meta")
+    .evaluate((node) => Math.round(node.getBoundingClientRect().height));
 
   const feedbackControl = page.getByRole("button", { name: /Feedback/ });
   await feedbackControl.click();
@@ -141,13 +144,22 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "background-color",
     "rgb(236, 231, 219)",
   );
+  await expect(staged.locator(".review-staged-meta")).toHaveCSS(
+    "padding",
+    "3px 5px",
+  );
+  expect(
+    await staged
+      .locator(".review-staged-meta")
+      .evaluate((node) => Math.round(node.getBoundingClientRect().height)),
+  ).toBe(inlineToolbarHeight);
   await expect(staged.locator(".review-staged-target")).toHaveCSS(
     "font-size",
     "12px",
   );
   await expect(
     staged.getByRole("button", { name: "Go to comment location" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(
     staged.locator(".review-staged-actions button").first(),
   ).toHaveCSS("width", "24px");
@@ -476,6 +488,91 @@ test("should stage and restore a slide comment through the legacy chrome", async
   }
 });
 
+test("should remember the submit-right-away choice across new composers", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const slideComments = page.getByRole("button", { name: "Comment on slide" });
+  await slideComments.nth(0).click();
+  let composer = page.getByRole("dialog", { name: /Comment on/ });
+  let preference = composer.getByRole("switch", {
+    name: "Submit right away",
+  });
+  await expect(preference).toHaveAttribute("aria-checked", "true");
+  await preference.click();
+  await composer.getByRole("button", { name: "Cancel" }).click();
+
+  await slideComments.nth(1).click();
+  composer = page.getByRole("dialog", { name: /Comment on/ });
+  preference = composer.getByRole("switch", { name: "Submit right away" });
+  await expect(preference).toHaveAttribute("aria-checked", "false");
+  await preference.click();
+  await composer.getByRole("button", { name: "Cancel" }).click();
+
+  await slideComments.nth(2).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: /Comment on/ })
+      .getByRole("switch", { name: "Submit right away" }),
+  ).toHaveAttribute("aria-checked", "true");
+});
+
+test("should minimize an expanded long comment from the feedback toolbar", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const longComment =
+    "Clarify how the retry policy remains safe when processors recover at different rates. " +
+    "Keep the explanation grounded in observable queue behavior, operator controls, and explicit failure boundaries. " +
+    "Preserve this final verification marker.";
+  await page.getByRole("button", { name: "Comment on slide" }).first().click();
+  const composer = page.getByRole("dialog", { name: /Comment on/ });
+  await composer.getByLabel("Add a comment").fill(longComment);
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  const inlineToolbarHeight = await page
+    .locator("[data-review-thread-side] .review-staged-meta")
+    .evaluate((node) => Math.round(node.getBoundingClientRect().height));
+  await page.getByRole("button", { name: /Feedback/ }).click();
+  const railCard = page
+    .getByRole("complementary", { name: "Feedback" })
+    .locator(".review-staged-card")
+    .first();
+  expect(
+    await railCard
+      .locator(".review-staged-meta")
+      .evaluate((node) => Math.round(node.getBoundingClientRect().height)),
+  ).toBe(inlineToolbarHeight);
+  await expect(
+    railCard.getByRole("button", { name: "Go to comment location" }),
+  ).toHaveCount(0);
+  await expect(
+    railCard.getByRole("button", { name: "Minimize comment" }),
+  ).toHaveCount(0);
+  await expect(railCard).not.toContainText("final verification marker");
+  await railCard.getByRole("button", { name: "… more" }).click();
+  await expect(railCard).toContainText("final verification marker");
+  await expect(
+    railCard.getByRole("button", { name: "Minimize comment" }),
+  ).toBeVisible();
+  await expect(railCard.getByRole("button", { name: "… more" })).toHaveCount(0);
+
+  await railCard.getByRole("button", { name: "Minimize comment" }).click();
+  await expect(railCard).not.toContainText("final verification marker");
+  await expect(railCard.getByRole("button", { name: "… more" })).toBeVisible();
+});
+
 test("should preserve a text selection while its compact composer is open", async ({
   page,
   deckViewerUrl,
@@ -655,7 +752,12 @@ test("should confirm deleting every staged comment from Comments", async ({
       .click();
     const composer = page.getByRole("dialog", { name: /Comment on/u });
     await composer.getByLabel("Add a comment").fill(body);
-    await composer.getByRole("switch", { name: "Submit right away" }).click();
+    const submitRightAway = composer.getByRole("switch", {
+      name: "Submit right away",
+    });
+    if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+      await submitRightAway.click();
+    }
     await composer.getByRole("button", { name: "Add Comment" }).click();
   }
 

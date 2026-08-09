@@ -1244,16 +1244,19 @@ const useThreadHosts = (
 const CommentComposer = ({
   compose,
   inline,
+  submitRightAway,
   onCancel,
   onSave,
+  onSubmitRightAwayChange,
 }: {
   readonly compose: ComposeState;
   readonly inline: boolean;
+  readonly submitRightAway: boolean;
   readonly onCancel: () => void;
   readonly onSave: (body: string, submitRightAway: boolean) => void;
+  readonly onSubmitRightAwayChange: (submitRightAway: boolean) => void;
 }) => {
   const [body, setBody] = useState("");
-  const [submitRightAway, setSubmitRightAway] = useState(true);
   const [floatingPosition, setFloatingPosition] = useState<FloatingPosition>({
     top: compose.top,
     left: compose.left,
@@ -1350,7 +1353,7 @@ const CommentComposer = ({
           className="group inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-xs text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           role="switch"
           aria-checked={submitRightAway}
-          onClick={() => setSubmitRightAway((current) => !current)}
+          onClick={() => onSubmitRightAwayChange(!submitRightAway)}
         >
           <span
             className="relative h-5 w-8 rounded-full border border-edge bg-surface inset-shadow-well after:absolute after:top-1/2 after:left-1 after:size-3 after:-translate-y-1/2 after:rounded-full after:bg-muted after:transition-transform group-aria-checked:border-accent group-aria-checked:bg-accent-soft group-aria-checked:after:translate-x-3 group-aria-checked:after:bg-accent"
@@ -1399,8 +1402,8 @@ const CommentCardHeader = ({
   readonly children: ReactNode;
 }) => (
   <div
-    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : "border-b border-edge bg-comment-toolbar px-3 py-2"} ${onHeaderClick === undefined ? "" : "cursor-pointer transition-colors hover:bg-[color-mix(in_srgb,var(--comment-toolbar-c)_94%,var(--ink-c))]!"}`}
-    style={surface === "thread" ? { padding: "3px 5px" } : undefined}
+    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : "border-b border-edge bg-comment-toolbar"} ${onHeaderClick === undefined ? "" : "cursor-pointer transition-colors hover:bg-[color-mix(in_srgb,var(--comment-toolbar-c)_94%,var(--ink-c))]!"}`}
+    style={{ padding: "3px 5px" }}
     onClick={onHeaderClick}
   >
     <button
@@ -1511,6 +1514,7 @@ const StagedCard = ({
   expanded,
   onCollapse,
   onExpandBody,
+  onMinimizeBody,
   onUpdate,
   onDelete,
   onJump,
@@ -1524,6 +1528,7 @@ const StagedCard = ({
   readonly expanded: boolean;
   readonly onCollapse?: () => void;
   readonly onExpandBody: () => void;
+  readonly onMinimizeBody: () => void;
   readonly onUpdate: (body: string) => void;
   readonly onDelete: () => void;
   readonly onJump: () => void;
@@ -1598,11 +1603,13 @@ const StagedCard = ({
           actionsClassName="review-staged-actions"
           onJump={onJump}
         >
-          <ThreadIconButton
-            label="Go to comment location"
-            icon={MAXIMIZE_2_ICON}
-            onClick={onJump}
-          />
+          {long && expanded ? (
+            <ThreadIconButton
+              label="Minimize comment"
+              icon={MINIMIZE_2_ICON}
+              onClick={onMinimizeBody}
+            />
+          ) : null}
           <ThreadIconButton
             label="Edit staged comment"
             icon={PENCIL_ICON}
@@ -2432,6 +2439,7 @@ const ReviewKernel = () => {
   const [expandedBodies, setExpandedBodies] = useState<ReadonlySet<string>>(
     new Set(),
   );
+  const [submitRightAway, setSubmitRightAway] = useState(true);
   const [expandedSentThreads, setExpandedSentThreads] = useState<
     ReadonlySet<string>
   >(new Set());
@@ -3489,6 +3497,13 @@ const ReviewKernel = () => {
                               new Set(current).add(comment.id),
                             )
                           }
+                          onMinimizeBody={() =>
+                            setExpandedBodies((current) => {
+                              const next = new Set(current);
+                              next.delete(comment.id);
+                              return next;
+                            })
+                          }
                           onUpdate={(body) => updateDraft(comment.id, body)}
                           onDelete={() =>
                             setPendingDelete({ kind: "comment", comment })
@@ -3845,6 +3860,13 @@ const ReviewKernel = () => {
             onExpandBody={() =>
               setExpandedBodies((current) => new Set(current).add(comment.id))
             }
+            onMinimizeBody={() =>
+              setExpandedBodies((current) => {
+                const next = new Set(current);
+                next.delete(comment.id);
+                return next;
+              })
+            }
             onUpdate={(body) => updateDraft(comment.id, body)}
             onDelete={() => setPendingDelete({ kind: "comment", comment })}
             onJump={() => jumpTo(comment)}
@@ -3894,8 +3916,10 @@ const ReviewKernel = () => {
           }
           compose={compose}
           inline={false}
+          submitRightAway={submitRightAway}
           onCancel={() => setCompose(null)}
           onSave={saveComment}
+          onSubmitRightAwayChange={setSubmitRightAway}
         />
       ) : (
         createPortal(
@@ -3907,8 +3931,10 @@ const ReviewKernel = () => {
             }
             compose={compose}
             inline
+            submitRightAway={submitRightAway}
             onCancel={() => setCompose(null)}
             onSave={saveComment}
+            onSubmitRightAwayChange={setSubmitRightAway}
           />,
           inlineComposeHost,
         )
