@@ -31,6 +31,7 @@ import { deriveCurrentAgentActivity } from "../agent-activity.js";
 import type { CommentTarget, ReviewComment } from "../comment.js";
 import { parseCommentMarkdownLine } from "../comment-markdown.js";
 import { deriveAgentStatus, type AgentStatus } from "../thread-status.js";
+import { stackThreadPositions } from "../thread-layout.js";
 import {
   AgentConnectionPanel,
   AgentHealthAlert,
@@ -266,7 +267,7 @@ const ThreadIconButton = ({
   <DelayedTooltip label={label}>
     <button
       type="button"
-      className="inline-flex size-[1.65rem] flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 leading-none text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent active:bg-well disabled:cursor-default disabled:bg-transparent disabled:text-subtle [&>svg]:size-4"
+      className="inline-flex size-6 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 leading-none text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent active:bg-well disabled:cursor-default disabled:bg-transparent disabled:text-subtle [&>svg]:size-3.5"
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
@@ -1135,7 +1136,7 @@ const useInlineComposeHost = (
 };
 
 const useThreadHosts = (
-  drafts: ReadonlyArray<ReviewComment>,
+  comments: ReadonlyArray<ReviewComment>,
   isOpen: boolean,
 ): ReadonlyMap<string, HTMLDivElement> => {
   const [hosts, setHosts] = useState<ReadonlyMap<string, HTMLDivElement>>(
@@ -1149,7 +1150,7 @@ const useThreadHosts = (
       return;
     }
     const mounted = new Map<string, HTMLDivElement>();
-    for (const comment of drafts) {
+    for (const comment of comments) {
       const anchor = targetElement(comment.target);
       if (anchor === null) continue;
       const host = document.createElement("div");
@@ -1163,8 +1164,13 @@ const useThreadHosts = (
       const edge = 24;
       const threadTopInset = 12;
       const threadWidth = 17 * 16;
-      const lastBottomByAnchor = new Map<HTMLElement, number>();
-      for (const comment of drafts) {
+      const positionItems: Array<{
+        readonly id: string;
+        readonly desiredTop: number;
+        readonly height: number;
+      }> = [];
+      const anchorRects = new Map<string, DOMRect>();
+      for (const comment of comments) {
         const host = mounted.get(comment.id);
         const target = targetElement(comment.target);
         if (host === undefined || target === null) continue;
@@ -1182,8 +1188,20 @@ const useThreadHosts = (
         );
         const desiredTop =
           (targetRect?.top ?? anchorRect.top) + window.scrollY + threadTopInset;
-        const previousBottom = lastBottomByAnchor.get(anchor) ?? 0;
-        const top = Math.max(previousBottom, desiredTop);
+        positionItems.push({
+          id: comment.id,
+          desiredTop,
+          height: cardHeight,
+        });
+        anchorRects.set(comment.id, anchorRect);
+      }
+      for (const { id, top } of stackThreadPositions({
+        items: positionItems,
+        gap: 8,
+      })) {
+        const host = mounted.get(id);
+        const anchorRect = anchorRects.get(id);
+        if (host === undefined || anchorRect === undefined) continue;
         host.style.top = `${top}px`;
         host.style.left = `${Math.max(
           edge + window.scrollX,
@@ -1192,7 +1210,6 @@ const useThreadHosts = (
             window.scrollX + viewportWidth - threadWidth - edge,
           ),
         )}px`;
-        lastBottomByAnchor.set(anchor, top + cardHeight + 8);
       }
     };
     const frame = requestAnimationFrame(position);
@@ -1206,7 +1223,7 @@ const useThreadHosts = (
       window.removeEventListener("resize", position);
       for (const host of mounted.values()) host.remove();
     };
-  }, [drafts, isOpen, isWide]);
+  }, [comments, isOpen, isWide]);
 
   return hosts;
 };
@@ -1349,6 +1366,43 @@ const CommentComposer = ({
   );
 };
 
+const CommentCardHeader = ({
+  target,
+  surface,
+  metaClassName,
+  targetClassName,
+  actionsClassName,
+  onJump,
+  children,
+}: {
+  readonly target: CommentTarget;
+  readonly surface: StagedCardSurface;
+  readonly metaClassName: string;
+  readonly targetClassName: string;
+  readonly actionsClassName: string;
+  readonly onJump: () => void;
+  readonly children: ReactNode;
+}) => (
+  <div
+    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : ""}`}
+    style={surface === "thread" ? { padding: "3px 5px" } : undefined}
+  >
+    <button
+      type="button"
+      className={`${targetClassName} min-w-0 flex-1 cursor-pointer [overflow-wrap:anywhere] border-0 bg-transparent p-0 text-left text-2xs font-semibold uppercase leading-normal tracking-caps text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent`}
+      onClick={onJump}
+      title="Jump to this target"
+    >
+      {targetLabel(target, true)}
+    </button>
+    <div
+      className={`${actionsClassName} ml-auto flex shrink-0 items-center gap-1`}
+    >
+      {children}
+    </div>
+  </div>
+);
+
 const StagedCard = ({
   comment,
   surface,
@@ -1445,69 +1499,45 @@ const StagedCard = ({
       data-review-associated={associated ? "true" : undefined}
       data-review-surface={surface}
     >
-      <div
-        className={`review-staged-meta flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : ""}`}
-        style={surface === "thread" ? { padding: "3px 5px" } : undefined}
+      <CommentCardHeader
+        target={comment.target}
+        surface={surface}
+        metaClassName="review-staged-meta"
+        targetClassName="review-staged-target"
+        actionsClassName="review-staged-actions"
+        onJump={onJump}
       >
-        {surface === "rail" ? (
-          <button
-            type="button"
-            className="review-staged-target min-w-0 flex-1 cursor-pointer [overflow-wrap:anywhere] border-0 bg-transparent p-0 text-left text-2xs font-semibold uppercase leading-normal tracking-caps text-ink hover:underline focus-visible:underline"
-            onClick={onJump}
-            title="Jump to this target"
+        {surface === "thread" ? (
+          <Badge
+            size="compact"
+            shape="badge"
+            tone="secondary"
+            className="leading-normal tracking-caps"
           >
-            {targetLabel(comment.target, true)}
-          </button>
-        ) : (
-          <>
-            <Badge
-              size="compact"
-              shape="badge"
-              tone="secondary"
-              className="leading-normal tracking-caps"
-            >
-              STAGED
-            </Badge>
-            <time className="text-xs text-muted" dateTime={comment.createdAt}>
-              {threadTime(comment.createdAt)}
-            </time>
-          </>
-        )}
-        <div className="review-staged-actions ml-auto flex items-center gap-1 [&_svg]:size-3.5">
-          {surface === "thread" ? (
-            <Button
-              variant="ghost"
-              size="compactIcon"
-              className="hover:bg-edge! hover:text-ink hover:shadow-raised focus:outline-1 focus:outline-offset-2 focus:outline-accent"
-              aria-label="Minimize staged comment"
-              onClick={onCollapse}
-            >
-              <Icon icon={MINIMIZE_2_ICON} />
-            </Button>
-          ) : null}
-          <Button
-            variant="ghost"
-            size="compactIcon"
-            className="hover:bg-edge! hover:text-ink hover:shadow-raised focus:outline-1 focus:outline-offset-2 focus:outline-accent"
-            aria-label="Edit staged comment"
-            onClick={() => {
-              setEditBody(comment.body);
-              setIsEditing(true);
-            }}
-          >
-            <Icon icon={PENCIL_ICON} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="compactIcon"
-            className="hover:border-danger! hover:bg-[var(--callout-danger-bg)]! hover:text-danger focus:outline-1 focus:outline-offset-2 focus:outline-accent"
-            aria-label="Delete staged comment"
-            onClick={onDelete}
-          >
-            <Icon icon={TRASH_2_ICON} />
-          </Button>
-        </div>
-      </div>
+            STAGED
+          </Badge>
+        ) : null}
+        {surface === "thread" ? (
+          <ThreadIconButton
+            label="Minimize staged comment"
+            icon={MINIMIZE_2_ICON}
+            onClick={onCollapse}
+          />
+        ) : null}
+        <ThreadIconButton
+          label="Edit staged comment"
+          icon={PENCIL_ICON}
+          onClick={() => {
+            setEditBody(comment.body);
+            setIsEditing(true);
+          }}
+        />
+        <ThreadIconButton
+          label="Delete staged comment"
+          icon={TRASH_2_ICON}
+          onClick={onDelete}
+        />
+      </CommentCardHeader>
       {isEditing ? (
         <>
           <Textarea
@@ -1560,10 +1590,19 @@ const StagedCard = ({
           </div>
         </>
       ) : (
-        <MarkdownBody
-          body={visibleBody}
-          className="review-staged-body mt-2 [overflow-wrap:anywhere] text-xs text-ink [&_p]:m-0 [&_p+p]:mt-2"
-        />
+        <>
+          <MarkdownBody
+            body={visibleBody}
+            className="review-staged-body mt-2 [overflow-wrap:anywhere] text-xs text-ink [&_p]:m-0 [&_p+p]:mt-2"
+          />
+          {surface === "thread" ? (
+            <p className="mt-2 mb-0 text-xs text-muted">
+              <time dateTime={comment.createdAt}>
+                {threadTime(comment.createdAt)}
+              </time>
+            </p>
+          ) : null}
+        </>
       )}
       {!isEditing && long && !expanded ? (
         <button
@@ -1637,6 +1676,7 @@ const threadGroupFor = ({
 
 const SentThread = ({
   comment,
+  surface,
   identity,
   agent,
   group,
@@ -1651,6 +1691,7 @@ const SentThread = ({
   activityForRequest,
 }: {
   readonly comment: ReviewComment;
+  readonly surface: StagedCardSurface;
   readonly identity: RuntimeIdentity | null;
   readonly agent: AgentSnapshot;
   readonly group: ThreadGroup;
@@ -1705,14 +1746,8 @@ const SentThread = ({
     latestExchange === undefined || latestExchange.outcome !== undefined
       ? undefined
       : statusForRequest(latestExchange.request, "thread");
-  const collapsedTone =
-    group === "working"
-      ? "border-[var(--callout-note-c)] bg-[var(--callout-note-bg)]"
-      : group === "needs-input"
-        ? "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)]"
-        : group === "ready"
-          ? "border-accent bg-accent-wash"
-          : "border-edge bg-surface";
+  const cardClass = `mt-2 w-full border border-edge ${surface === "rail" ? "max-w-none bg-surface shadow-none" : "max-w-[17rem] bg-comment-body!"}`;
+  const associate = () => onAssociate(comment.target);
 
   const loadDiff = async () => {
     if (
@@ -1756,27 +1791,57 @@ const SentThread = ({
   if (!expanded) {
     return (
       <Card
-        className={`mt-2 grid min-w-0 gap-2 border p-3 shadow-none ${collapsedTone}`}
+        className={`${cardClass} grid gap-2`}
+        density={surface === "rail" ? "dense" : "compact"}
+        elevation={surface === "rail" ? "none" : "floating"}
+        onPointerEnter={associate}
+        onPointerLeave={() => onAssociate(null)}
+        onFocus={associate}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            onAssociate(null);
+        }}
         data-review-sent-thread={group}
         data-review-comment-id={comment.id}
       >
+        <CommentCardHeader
+          target={comment.target}
+          surface={surface}
+          metaClassName="review-thread-meta"
+          targetClassName="review-sent-target"
+          actionsClassName="review-thread-actions"
+          onJump={onJump}
+        >
+          <ThreadIconButton
+            label="Expand thread"
+            icon={CHEVRON_RIGHT_ICON}
+            onClick={onToggle}
+          />
+          {latestStatus === undefined ? (
+            <ThreadIconButton
+              label={resolved ? "Unresolve comment" : "Resolve comment"}
+              icon={CHECK_ICON}
+              onClick={onResolve}
+            />
+          ) : null}
+          {latestChanged === undefined ? null : (
+            <ThreadIconButton
+              label="Revert agent changes"
+              icon={ROTATE_CCW_ICON}
+              disabled
+            />
+          )}
+        </CommentCardHeader>
         <button
           type="button"
-          className="group/thread grid min-w-0 cursor-pointer gap-2 border-0 bg-transparent p-0 text-left text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="review-sent-summary min-w-0 cursor-pointer [overflow-wrap:anywhere] border-0 bg-transparent p-0 text-left text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           aria-expanded="false"
-          onClick={onToggle}
+          onClick={() => {
+            onJump();
+            onToggle();
+          }}
         >
-          <span className="flex min-w-0 items-center gap-2">
-            <strong className="min-w-0 flex-1 text-xs tracking-caps uppercase">
-              {targetLabel(comment.target, true)}
-            </strong>
-            <span className="shrink-0 translate-x-[-0.2rem] text-muted opacity-0 transition-[opacity,transform] group-hover/thread:translate-x-0 group-hover/thread:opacity-100 group-focus-visible/thread:translate-x-0 group-focus-visible/thread:opacity-100 [&>svg]:size-4">
-              <Icon icon={CHEVRON_RIGHT_ICON} />
-            </span>
-          </span>
-          <span className="text-sm [overflow-wrap:anywhere]">
-            {comment.body}
-          </span>
+          {comment.body}
         </button>
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
           {group === "working" ? (
@@ -1799,20 +1864,6 @@ const SentThread = ({
               Cancel
             </button>
           )}
-          {latestStatus !== undefined ? null : (
-            <ThreadIconButton
-              label={resolved ? "Unresolve comment" : "Resolve comment"}
-              icon={CHECK_ICON}
-              onClick={onResolve}
-            />
-          )}
-          {latestChanged === undefined ? null : (
-            <ThreadIconButton
-              label="Revert agent changes"
-              icon={ROTATE_CCW_ICON}
-              disabled
-            />
-          )}
         </div>
       </Card>
     );
@@ -1820,8 +1871,10 @@ const SentThread = ({
 
   return (
     <Card
-      className={`mt-2 border p-3 shadow-raised ${collapsedTone}`}
-      onPointerEnter={() => onAssociate(comment.target)}
+      className={cardClass}
+      density={surface === "rail" ? "dense" : "compact"}
+      elevation={surface === "rail" ? "none" : "floating"}
+      onPointerEnter={associate}
       onPointerLeave={() => onAssociate(null)}
       onFocus={() => onAssociate(comment.target)}
       onBlur={(event) => {
@@ -1831,14 +1884,14 @@ const SentThread = ({
       data-review-sent-thread={group}
       data-review-comment-id={comment.id}
     >
-      <div className="-mx-3 -mt-3 mb-3 flex min-w-0 items-center gap-2 rounded-t-lg border-b border-edge bg-header px-3 py-2">
-        <button
-          type="button"
-          className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left text-xs font-semibold uppercase tracking-caps text-ink hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
-          onClick={onJump}
-        >
-          {targetLabel(comment.target, true)}
-        </button>
+      <CommentCardHeader
+        target={comment.target}
+        surface={surface}
+        metaClassName="review-thread-meta"
+        targetClassName="review-sent-target"
+        actionsClassName="review-thread-actions"
+        onJump={onJump}
+      >
         <ThreadIconButton
           label="Minimize thread"
           icon={MINIMIZE_2_ICON}
@@ -1856,7 +1909,7 @@ const SentThread = ({
             disabled
           />
         )}
-      </div>
+      </CommentCardHeader>
       {!targetPresent ? (
         <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]">
           Original target unavailable in this revision. This thread keeps its
@@ -2112,7 +2165,13 @@ const ReviewKernel = () => {
       ? "Reading offline: drafts stay in this browser."
       : "Loading review…",
   );
-  const reviewComments = useMemo(() => [...drafts, ...sent], [drafts, sent]);
+  const reviewComments = useMemo(
+    () => [
+      ...drafts,
+      ...sent.filter((comment) => !resolvedCommentIds.has(comment.id)),
+    ],
+    [drafts, resolvedCommentIds, sent],
+  );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
   const serializeRuntimeWrite = useCallback(
     <Value,>(write: () => Promise<Value>): Promise<Value> => {
@@ -2193,17 +2252,21 @@ const ReviewKernel = () => {
       return undefined;
     }
     const target = targetElement(associatedTarget);
-    const associatedElement =
-      associatedTarget.type === "block" && associatedTarget.kind === "slide"
-        ? (target?.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
-          target)
-        : target;
-    if (associatedElement === null || associatedElement === undefined) {
+    if (target === null) {
       return undefined;
     }
-    associatedElement.dataset.reviewCommentAssociated = "";
+    const associatedElements = new Set<HTMLElement>([target]);
+    const owningSlide = target.closest<HTMLElement>(
+      "[data-slide], [data-quick-summary]",
+    );
+    if (owningSlide !== null) associatedElements.add(owningSlide);
+    for (const element of associatedElements) {
+      element.dataset.reviewCommentAssociated = "";
+    }
     return () => {
-      delete associatedElement.dataset.reviewCommentAssociated;
+      for (const element of associatedElements) {
+        delete element.dataset.reviewCommentAssociated;
+      }
     };
   }, [associatedTarget]);
 
@@ -2562,11 +2625,13 @@ const ReviewKernel = () => {
     setPendingDelete(null);
     setStatus("All staged comments deleted.");
   };
-  const jumpTo = (comment: ReviewComment) =>
+  const jumpTo = (comment: ReviewComment) => {
+    setAssociatedTarget(comment.target);
     targetElement(comment.target)?.scrollIntoView({
       behavior: "smooth",
       block: "center",
     });
+  };
   const updateDraft = (id: string, body: string) => {
     setDrafts((current) =>
       current.map((comment) =>
@@ -2732,13 +2797,29 @@ const ReviewKernel = () => {
       else next.add(commentId);
       return next;
     });
-  const toggleResolvedComment = (commentId: string) =>
+  const toggleResolvedComment = (commentId: string) => {
+    if (!resolvedCommentIds.has(commentId)) {
+      const comment = sent.find((candidate) => candidate.id === commentId);
+      if (
+        comment !== undefined &&
+        associatedTarget !== null &&
+        targetAddress(comment.target) === targetAddress(associatedTarget)
+      ) {
+        setAssociatedTarget(null);
+      }
+      setExpandedSentThreads((current) => {
+        const next = new Set(current);
+        next.delete(commentId);
+        return next;
+      });
+    }
     setResolvedCommentIds((current) => {
       const next = new Set(current);
       if (next.has(commentId)) next.delete(commentId);
       else next.add(commentId);
       return next;
     });
+  };
   const viewAgentRequest = (requestId: string, kind: string) => {
     if (kind === "chat") {
       setTab("chat");
@@ -3188,6 +3269,7 @@ const ReviewKernel = () => {
                           <SentThread
                             key={comment.id}
                             comment={comment}
+                            surface="rail"
                             identity={identity}
                             agent={agent}
                             group={key}
@@ -3214,6 +3296,7 @@ const ReviewKernel = () => {
                         <SentThread
                           key={comment.id}
                           comment={comment}
+                          surface="rail"
                           identity={identity}
                           agent={agent}
                           group={threadGroupFor({
@@ -3435,6 +3518,7 @@ const ReviewKernel = () => {
         return createPortal(
           <SentThread
             comment={comment}
+            surface="thread"
             identity={identity}
             agent={agent}
             group={threadGroupFor({ comment, agent, statusForRequest })}

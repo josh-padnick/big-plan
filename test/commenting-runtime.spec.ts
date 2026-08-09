@@ -163,13 +163,54 @@ test("should restore and submit staged comments through the local review runtime
   });
 
   await expect(kernel).toContainText("Changed");
-  await rail.getByRole("button", { name: /1 · Details/i }).click();
+  const sentThread = rail.locator("[data-review-sent-thread]");
+  await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
+    "font-size",
+    "11px",
+  );
+  await expect(sentThread.locator(".review-sent-summary")).toHaveCSS(
+    "font-size",
+    "12px",
+  );
+  await sentThread.getByRole("button", { name: "Expand thread" }).click();
   await expect(kernel).toContainText(
     "Removed the ambiguous promise and tightened delivery.",
   );
   await expect(kernel).toContainText("A revised plan is ready.");
   await kernel.getByRole("button", { name: "See changes" }).click();
   await expect(kernel).toContainText("atomically");
+
+  await rail.getByRole("button", { name: "Close feedback" }).click();
+  const contextualThread = page.locator(
+    "[data-review-thread-side] [data-review-sent-thread]",
+  );
+  await expect
+    .poll(() =>
+      contextualThread.evaluate((card) => {
+        const toolbar = card.querySelector(".review-thread-meta");
+        if (!(toolbar instanceof HTMLElement)) return null;
+        const cardRect = card.getBoundingClientRect();
+        const toolbarRect = toolbar.getBoundingClientRect();
+        return {
+          left: Math.round(toolbarRect.left - cardRect.left),
+          right: Math.round(cardRect.right - toolbarRect.right),
+          top: Math.round(toolbarRect.top - cardRect.top),
+        };
+      }),
+    )
+    .toEqual({ left: 1, right: 1, top: 1 });
+  await contextualThread
+    .getByRole("button", { name: "1 · Details", exact: true })
+    .evaluate((button) => button.click());
+  await expect(page.locator("[data-slide]").first()).toHaveAttribute(
+    "data-review-comment-associated",
+    "",
+  );
+  await contextualThread
+    .getByRole("button", { name: "Resolve comment" })
+    .first()
+    .click();
+  await expect(page.locator("[data-review-thread-side]")).toHaveCount(0);
 
   await page.reload();
   await page.getByRole("button", { name: /Feedback/ }).click();
