@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { CurrentAgentActivity } from "../agent-activity.js";
@@ -118,7 +119,9 @@ const CurrentActivityCard = ({
               : activity.state}
         </span>
       </div>
-      {"targetLabel" in activity && activity.targetLabel !== undefined ? (
+      {activity.state !== "disconnected" &&
+      "targetLabel" in activity &&
+      activity.targetLabel !== undefined ? (
         <strong className="text-2xs uppercase tracking-caps text-ink">
           {activity.targetLabel}
         </strong>
@@ -194,11 +197,16 @@ const ConnectionLog = ({
     }).format(new Date(at));
   return (
     <details
-      className="mt-3 text-xs text-muted tabular-nums"
+      className="group mt-3 text-xs text-muted tabular-nums"
       data-review-connection-history
     >
       <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-[650] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-        Connection log
+        <span className="flex items-center gap-1">
+          Connection log
+          <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
+            <Icon icon={CHEVRON_RIGHT_ICON} />
+          </span>
+        </span>
         <span
           className="rounded-full border border-edge px-1.5 py-px text-2xs font-bold leading-[1.2] uppercase tracking-caps text-muted"
           aria-label={`${ordered.length} event${ordered.length === 1 ? "" : "s"}`}

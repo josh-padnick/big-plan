@@ -412,6 +412,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
     name: "Delete staged comment",
   });
   await expect(minimizedDelete.locator("svg")).toHaveCount(1);
+  await page.mouse.move(0, 0);
   await expect(minimizedDelete.locator("xpath=../..")).toHaveCSS(
     "opacity",
     "0",

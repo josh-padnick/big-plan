@@ -264,12 +264,14 @@ const ThreadIconButton = ({
   readonly icon: LucideIcon;
   readonly onClick?: () => void;
   readonly disabled?: boolean;
-  readonly tone?: "danger" | "neutral";
+  readonly tone?: "danger" | "neutral" | "positive";
 }) => {
   const hoverClass =
     tone === "danger"
       ? "hover:border-danger hover:bg-[var(--callout-danger-bg)] hover:text-danger hover:shadow-raised focus-visible:border-danger focus-visible:bg-[var(--callout-danger-bg)] focus-visible:text-danger"
-      : "hover:bg-surface hover:text-ink hover:shadow-raised focus-visible:bg-surface focus-visible:text-ink";
+      : tone === "positive"
+        ? "hover:border-accent hover:bg-accent-wash hover:text-accent hover:shadow-raised focus-visible:border-accent focus-visible:bg-accent-wash focus-visible:text-accent"
+        : "hover:bg-surface hover:text-ink hover:shadow-raised focus-visible:bg-surface focus-visible:text-ink";
   return (
     <DelayedTooltip label={label}>
       <button
@@ -1397,13 +1399,13 @@ const CommentCardHeader = ({
   readonly children: ReactNode;
 }) => (
   <div
-    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : "border-b border-edge bg-comment-toolbar px-3 py-2"} ${onHeaderClick === undefined ? "" : "cursor-pointer"}`}
+    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : "border-b border-edge bg-comment-toolbar px-3 py-2"} ${onHeaderClick === undefined ? "" : "cursor-pointer transition-colors hover:bg-[color-mix(in_srgb,var(--comment-toolbar-c)_94%,var(--ink-c))]!"}`}
     style={surface === "thread" ? { padding: "3px 5px" } : undefined}
     onClick={onHeaderClick}
   >
     <button
       type="button"
-      className={`${targetClassName} min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 text-left leading-normal hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${surface === "thread" ? "pl-0.5 text-2xs font-medium text-subtle" : "text-xs font-semibold text-muted"}`}
+      className={`${targetClassName} min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 text-left leading-normal focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${onHeaderClick === undefined ? "hover:underline" : ""} ${surface === "thread" ? "pl-0.5 text-2xs font-medium text-subtle" : "text-xs font-semibold text-muted"}`}
       onClick={(event) => {
         event.stopPropagation();
         (onHeaderClick ?? onJump)();
@@ -2148,32 +2150,27 @@ const SentThread = ({
         targetClassName="review-sent-target"
         actionsClassName="review-thread-actions"
         onJump={onJump}
-        onHeaderClick={surface === "thread" ? onToggle : undefined}
+        onHeaderClick={onToggle}
       >
-        {surface === "rail" ? (
-          <ThreadIconButton
-            label="Go to comment location"
-            icon={MAXIMIZE_2_ICON}
-            onClick={onJump}
-          />
-        ) : null}
         <ThreadIconButton
           label="Minimize thread"
           icon={MINIMIZE_2_ICON}
           onClick={onToggle}
-        />
-        <ThreadIconButton
-          label={resolved ? "Unresolve comment" : "Resolve comment"}
-          icon={CHECK_ICON}
-          onClick={onResolve}
         />
         {latestChanged === undefined ? null : (
           <ThreadIconButton
             label="Revert agent changes"
             icon={ROTATE_CCW_ICON}
             disabled
+            tone="danger"
           />
         )}
+        <ThreadIconButton
+          label={resolved ? "Unresolve comment" : "Resolve comment"}
+          icon={CHECK_ICON}
+          onClick={onResolve}
+          tone="positive"
+        />
       </CommentCardHeader>
       <div className={surface === "rail" ? "p-3" : ""}>
         {!targetPresent ? (

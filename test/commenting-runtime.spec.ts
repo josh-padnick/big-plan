@@ -93,10 +93,15 @@ test("should restore and submit staged comments through the local review runtime
     "disconnected",
   );
   await expect(currentActivity).toContainText("The agent is disconnected");
+  await expect(currentActivity).not.toContainText("1 · Details");
   await expect(currentActivity.getByText("offline")).toHaveCSS(
     "text-transform",
     "uppercase",
   );
+  const connectionLog = rail
+    .getByText("Connection log", { exact: true })
+    .locator("xpath=ancestor::summary");
+  await expect(connectionLog.locator("svg")).toHaveCount(1);
   await currentActivity.getByRole("button", { name: "View thread →" }).click();
   await expect(rail.getByRole("tab", { name: "Comments" })).toHaveAttribute(
     "aria-selected",
@@ -110,6 +115,23 @@ test("should restore and submit staged comments through the local review runtime
   );
   const reply = selectedThread.getByPlaceholder("Reply to the agent…");
   await expect(reply).toBeFocused();
+  const selectedToolbar = selectedThread.locator(".review-thread-meta");
+  const restingToolbarBackground = await selectedToolbar.evaluate(
+    (node) => getComputedStyle(node).backgroundColor,
+  );
+  await selectedToolbar.hover();
+  await expect
+    .poll(() =>
+      selectedToolbar.evaluate(
+        (node) => getComputedStyle(node).backgroundColor,
+      ),
+    )
+    .not.toBe(restingToolbarBackground);
+  const selectedTitle = selectedToolbar.getByRole("button", {
+    name: "1 · Details",
+    exact: true,
+  });
+  await expect(selectedTitle).toHaveCSS("text-decoration-line", "none");
   await rail
     .getByRole("button", {
       name: "Blocked - no agent connected — view Agent tab",
@@ -121,10 +143,12 @@ test("should restore and submit staged comments through the local review runtime
   );
   await currentActivity.getByRole("button", { name: "View thread →" }).click();
   await expect(reply).toBeFocused();
-  await selectedThread
-    .getByRole("button", { name: "Minimize thread" })
-    .first()
-    .click();
+  await selectedTitle.click();
+  await expect(
+    selectedThread.getByRole("button", {
+      name: "Expand thread: Clarify the failure boundary.",
+    }),
+  ).toBeVisible();
 
   const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
@@ -237,6 +261,19 @@ test("should restore and submit staged comments through the local review runtime
   await expect(kernel).toContainText("A revised plan is ready.");
   await kernel.getByRole("button", { name: "See changes" }).click();
   await expect(kernel).toContainText("atomically");
+  const resolve = sentThread
+    .getByRole("button", { name: "Resolve comment" })
+    .first();
+  const restingResolveBackground = await resolve.evaluate(
+    (node) => getComputedStyle(node).backgroundColor,
+  );
+  await resolve.hover();
+  await expect
+    .poll(() =>
+      resolve.evaluate((node) => getComputedStyle(node).backgroundColor),
+    )
+    .not.toBe(restingResolveBackground);
+  await expect(resolve).toHaveCSS("color", "rgb(22, 101, 52)");
   await sentThread
     .getByRole("button", { name: "Minimize thread" })
     .first()
