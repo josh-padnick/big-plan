@@ -110,8 +110,10 @@ test("should restore and submit staged comments through the local review runtime
   );
   const reply = selectedThread.getByPlaceholder("Reply to the agent…");
   await expect(reply).toBeFocused();
-  await selectedThread
-    .getByRole("button", { name: "Show setup instructions →" })
+  await rail
+    .getByRole("button", {
+      name: "Blocked - no agent connected — view Agent tab",
+    })
     .click();
   await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
     "aria-selected",
@@ -222,13 +224,13 @@ test("should restore and submit staged comments through the local review runtime
   const sentThread = rail.locator("[data-review-sent-thread]");
   await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
     "font-size",
-    "11px",
+    "12px",
   );
   await expect(sentThread.locator(".review-sent-summary")).toHaveCSS(
     "font-size",
-    "12px",
+    "14px",
   );
-  await sentThread.getByRole("button", { name: "Expand thread" }).click();
+  await sentThread.getByRole("button", { name: /^Expand thread:/u }).click();
   await expect(kernel).toContainText(
     "Removed the ambiguous promise and tightened delivery.",
   );

@@ -17,12 +17,12 @@ import { createRoot } from "react-dom/client";
 import { ACTIVITY_ICON } from "../../icons/lucide/activity.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { MESSAGES_SQUARE_ICON } from "../../icons/lucide/messages-square.js";
+import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 import { PENCIL_ICON } from "../../icons/lucide/pencil.js";
 import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
-import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
@@ -1397,20 +1397,22 @@ const CommentCardHeader = ({
   readonly children: ReactNode;
 }) => (
   <div
-    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : ""} ${onHeaderClick === undefined ? "" : "cursor-pointer"}`}
+    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : "border-b border-edge bg-comment-toolbar px-3 py-2"} ${onHeaderClick === undefined ? "" : "cursor-pointer"}`}
     style={surface === "thread" ? { padding: "3px 5px" } : undefined}
     onClick={onHeaderClick}
   >
     <button
       type="button"
-      className={`${targetClassName} min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left leading-normal hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${surface === "thread" ? "truncate pl-0.5 text-2xs font-medium text-subtle" : "[overflow-wrap:anywhere] text-2xs font-semibold uppercase tracking-caps text-ink"}`}
+      className={`${targetClassName} min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 text-left leading-normal hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${surface === "thread" ? "pl-0.5 text-2xs font-medium text-subtle" : "text-xs font-semibold text-muted"}`}
       onClick={(event) => {
         event.stopPropagation();
         (onHeaderClick ?? onJump)();
       }}
       aria-expanded={onHeaderClick === undefined ? undefined : true}
       title={
-        onHeaderClick === undefined ? "Jump to this target" : "Minimize comment"
+        onHeaderClick === undefined
+          ? targetLabel(target, true)
+          : "Minimize comment"
       }
     >
       {targetLabel(target, true)}
@@ -1566,11 +1568,130 @@ const StagedCard = ({
     long && !expanded
       ? `${comment.body.slice(0, LONG_COMMENT).trimEnd()}…`
       : comment.body;
+  if (surface === "rail") {
+    return (
+      <Card
+        className="review-staged-card w-full max-w-none overflow-hidden border border-edge bg-comment-body! p-0! shadow-raised transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted"
+        density="dense"
+        elevation="none"
+        onPointerEnter={() => setAssociated(true)}
+        onPointerLeave={() => setAssociated(false)}
+        onFocus={() => setAssociated(true)}
+        onBlur={(event) => {
+          if (
+            !(event.relatedTarget instanceof Node) ||
+            !event.currentTarget.contains(event.relatedTarget)
+          )
+            setAssociated(false);
+        }}
+        data-review-comment-ui=""
+        data-review-associated={associated ? "true" : undefined}
+        data-review-surface="rail"
+      >
+        <CommentCardHeader
+          target={comment.target}
+          surface="rail"
+          metaClassName="review-staged-meta"
+          targetClassName="review-staged-target"
+          actionsClassName="review-staged-actions"
+          onJump={onJump}
+        >
+          <ThreadIconButton
+            label="Go to comment location"
+            icon={MAXIMIZE_2_ICON}
+            onClick={onJump}
+          />
+          <ThreadIconButton
+            label="Edit staged comment"
+            icon={PENCIL_ICON}
+            onClick={() => {
+              setEditBody(comment.body);
+              setIsEditing(true);
+            }}
+          />
+          <ThreadIconButton
+            label="Delete staged comment"
+            icon={TRASH_2_ICON}
+            onClick={onDelete}
+            tone="danger"
+          />
+        </CommentCardHeader>
+        {isEditing ? (
+          <div className="p-3">
+            <Textarea
+              ref={editRef}
+              className="bg-input!"
+              aria-label="Edit comment"
+              value={editBody}
+              maxLength={BODY_LIMIT}
+              onChange={(event) => setEditBody(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setEditBody(comment.body);
+                  setIsEditing(false);
+                } else if (
+                  event.key === "Enter" &&
+                  (event.metaKey || event.ctrlKey)
+                ) {
+                  event.preventDefault();
+                  saveEdit();
+                }
+              }}
+            />
+            <p className="mt-1 text-2xs text-muted">
+              Escape cancels · {MODIFIER_SHORTCUT} saves
+            </p>
+            <div className="mt-2 flex justify-end gap-1">
+              <Button
+                variant="outline"
+                size="compact"
+                onClick={() => setIsEditing(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="micro"
+                disabled={editBody.trim() === ""}
+                onClick={saveEdit}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-3">
+            <MarkdownBody
+              body={visibleBody}
+              className={`review-staged-body [overflow-wrap:anywhere] text-sm text-ink [&_p]:m-0 [&_p+p]:mt-2 ${expanded ? "" : "line-clamp-3"}`}
+            />
+            {long && !expanded ? (
+              <button
+                type="button"
+                className="mt-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-muted hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+                onClick={onExpandBody}
+              >
+                … more
+              </button>
+            ) : null}
+            <div className="mt-3 flex min-w-0 items-center justify-between gap-2 text-xs text-muted">
+              <time dateTime={comment.createdAt}>
+                {threadTime(comment.createdAt)}
+              </time>
+              <Button variant="accentOutline" size="micro" onClick={onSubmit}>
+                Send this
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+    );
+  }
   return (
     <Card
-      className={`review-staged-card w-full max-w-[17rem] border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted ${surface === "rail" ? "bg-surface" : "bg-comment-body!"}`}
-      density={surface === "rail" ? "dense" : "compact"}
-      elevation={surface === "rail" ? "none" : "floating"}
+      className="review-staged-card w-full max-w-[17rem] border border-edge bg-comment-body! transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted"
+      density="compact"
+      elevation="floating"
       onPointerEnter={() => setAssociated(true)}
       onPointerLeave={() => setAssociated(false)}
       onFocus={() => setAssociated(true)}
@@ -1592,15 +1713,13 @@ const StagedCard = ({
         targetClassName="review-staged-target"
         actionsClassName="review-staged-actions"
         onJump={onJump}
-        onHeaderClick={surface === "thread" ? onCollapse : undefined}
+        onHeaderClick={onCollapse}
       >
-        {surface === "thread" ? (
-          <ThreadIconButton
-            label="Minimize staged comment"
-            icon={MINIMIZE_2_ICON}
-            onClick={onCollapse}
-          />
-        ) : null}
+        <ThreadIconButton
+          label="Minimize staged comment"
+          icon={MINIMIZE_2_ICON}
+          onClick={onCollapse}
+        />
         <ThreadIconButton
           label="Edit staged comment"
           icon={PENCIL_ICON}
@@ -1673,13 +1792,11 @@ const StagedCard = ({
             body={visibleBody}
             className="review-staged-body mt-2 [overflow-wrap:anywhere] text-xs text-ink [&_p]:m-0 [&_p+p]:mt-2"
           />
-          {surface === "thread" ? (
-            <p className="mt-2 mb-0 text-xs text-muted">
-              <time dateTime={comment.createdAt}>
-                {threadTime(comment.createdAt)}
-              </time>
-            </p>
-          ) : null}
+          <p className="mt-2 mb-0 text-xs text-muted">
+            <time dateTime={comment.createdAt}>
+              {threadTime(comment.createdAt)}
+            </time>
+          </p>
         </>
       )}
       {!isEditing && long && !expanded ? (
@@ -1693,17 +1810,8 @@ const StagedCard = ({
       ) : null}
       {isEditing ? null : (
         <div className="mt-2 flex items-center justify-end">
-          <Button
-            variant="accentOutline"
-            size="micro"
-            className={
-              surface === "rail"
-                ? "border-edge bg-transparent text-2xs text-subtle hover:border-edge-strong hover:bg-surface hover:text-muted"
-                : undefined
-            }
-            onClick={onSubmit}
-          >
-            {surface === "rail" ? "Send this" : "Submit Now"}
+          <Button variant="accentOutline" size="micro" onClick={onSubmit}>
+            Submit Now
           </Button>
         </div>
       )}
@@ -1830,8 +1938,27 @@ const SentThread = ({
     latestExchange === undefined || latestExchange.outcome !== undefined
       ? undefined
       : statusForRequest(latestExchange.request, "thread");
-  const cardClass = `mt-2 w-full border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${surface === "rail" ? "max-w-none bg-surface shadow-none" : "max-w-[17rem] bg-comment-body!"}`;
+  const cardClass = `mt-2 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
   const associate = () => onAssociate(comment.target);
+  const railFreshness = threadTime(
+    latestExchange?.response?.createdAt ??
+      latestExchange?.request.createdAt ??
+      comment.createdAt,
+  );
+  const railState = resolved
+    ? "Resolved"
+    : group === "needs-input"
+      ? "Needs input"
+      : group === "ready"
+        ? outcome?.state === "changed"
+          ? "Changed"
+          : outcome?.state === "outside"
+            ? "Outside plan"
+            : "Ready"
+        : group === "working"
+          ? "Working"
+          : "Queued";
+  const railMetadata = `${railState} ${railFreshness === "Just now" ? "just now" : railFreshness}`;
 
   const loadDiff = async () => {
     if (
@@ -1918,9 +2045,9 @@ const SentThread = ({
     }
     return (
       <Card
-        className={`${cardClass} grid gap-2`}
-        density={surface === "rail" ? "dense" : "compact"}
-        elevation={surface === "rail" ? "none" : "floating"}
+        className={cardClass}
+        density="dense"
+        elevation="none"
         onPointerEnter={associate}
         onPointerLeave={() => onAssociate(null)}
         onFocus={associate}
@@ -1942,57 +2069,56 @@ const SentThread = ({
           onJump={onJump}
         >
           <ThreadIconButton
-            label="Expand thread"
-            icon={CHEVRON_RIGHT_ICON}
-            onClick={onToggle}
+            label="Go to comment location"
+            icon={MAXIMIZE_2_ICON}
+            onClick={onJump}
           />
-          {latestStatus === undefined ? (
-            <ThreadIconButton
-              label={resolved ? "Unresolve comment" : "Resolve comment"}
-              icon={CHECK_ICON}
-              onClick={onResolve}
-            />
-          ) : null}
-          {latestChanged === undefined ? null : (
-            <ThreadIconButton
-              label="Revert agent changes"
-              icon={ROTATE_CCW_ICON}
-              disabled
-            />
-          )}
         </CommentCardHeader>
-        <button
-          type="button"
-          className="review-sent-summary min-w-0 cursor-pointer [overflow-wrap:anywhere] border-0 bg-transparent p-0 text-left text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          aria-expanded="false"
-          onClick={() => {
-            onJump();
-            onToggle();
-          }}
-        >
-          {comment.body}
-        </button>
-        <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
-          {group === "working" ? (
-            <span
-              className="inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
-              aria-hidden="true"
-            />
-          ) : null}
-          <span className="min-w-0 flex-1 font-medium">
-            {latestStatus?.headline ?? outcomeLabel}
-            {group === "working" ? " · Just now" : ""}
-          </span>
-          {latestStatus === undefined ? null : (
-            <button
-              type="button"
-              className="cursor-not-allowed border-0 bg-transparent p-0 text-muted"
-              disabled
-              title="Request cancellation is not available in this review yet"
-            >
-              Cancel
-            </button>
-          )}
+        <div className="p-3">
+          <button
+            type="button"
+            className="review-sent-summary line-clamp-3 min-w-0 w-full cursor-pointer [overflow-wrap:anywhere] border-0 bg-transparent p-0 text-left text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            aria-label={`Expand thread: ${comment.body}`}
+            aria-expanded="false"
+            onClick={() => {
+              onJump();
+              onToggle();
+            }}
+          >
+            {comment.body}
+          </button>
+          <div className="mt-3 flex min-w-0 items-center justify-between gap-2 text-xs text-muted">
+            <span className="min-w-0 truncate font-medium">{railMetadata}</span>
+            {resolved ? (
+              <button
+                type="button"
+                className="shrink-0 cursor-pointer border-0 bg-transparent p-0 text-muted hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                onClick={onResolve}
+              >
+                Unresolve
+              </button>
+            ) : latestStatus === undefined ? (
+              <button
+                type="button"
+                className="shrink-0 cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                onClick={() => {
+                  onJump();
+                  onToggle();
+                }}
+              >
+                {group === "needs-input" ? "Reply" : "Review"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="shrink-0 cursor-not-allowed border-0 bg-transparent p-0 text-subtle"
+                disabled
+                title="Request cancellation is not available in this review yet"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
       </Card>
     );
@@ -2024,6 +2150,13 @@ const SentThread = ({
         onJump={onJump}
         onHeaderClick={surface === "thread" ? onToggle : undefined}
       >
+        {surface === "rail" ? (
+          <ThreadIconButton
+            label="Go to comment location"
+            icon={MAXIMIZE_2_ICON}
+            onClick={onJump}
+          />
+        ) : null}
         <ThreadIconButton
           label="Minimize thread"
           icon={MINIMIZE_2_ICON}
@@ -2042,133 +2175,148 @@ const SentThread = ({
           />
         )}
       </CommentCardHeader>
-      {!targetPresent ? (
-        <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]">
-          Original target unavailable in this revision. This thread keeps its
-          recorded address; Big Plan did not guess a replacement.
-        </p>
-      ) : null}
-      <div className="mt-2 min-w-0">
-        {exchanges.length === 0 ? (
-          <MessageTurn
-            role="user"
-            surface="thread"
-            body={comment.body}
-            createdAt={comment.createdAt}
-            delivery="Saved"
-          />
-        ) : (
-          exchanges.map(({ request, response, outcome: requestOutcome }) => (
-            <div key={request.requestId}>
-              <MessageTurn
-                role="user"
-                surface="thread"
-                body={
-                  request.kind === "feedback"
-                    ? comment.body
-                    : (request.body ?? "")
-                }
-                createdAt={request.createdAt}
-                delivery={
-                  response !== undefined || request.claimedAt !== undefined
-                    ? "Sent"
-                    : "Queued"
-                }
+      <div className={surface === "rail" ? "p-3" : ""}>
+        {!targetPresent ? (
+          <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]">
+            Original target unavailable in this revision. This thread keeps its
+            recorded address; Big Plan did not guess a replacement.
+          </p>
+        ) : null}
+        <div className="mt-2 min-w-0">
+          {exchanges.length === 0 ? (
+            <MessageTurn
+              role="user"
+              surface="thread"
+              body={comment.body}
+              createdAt={comment.createdAt}
+              delivery="Saved"
+            />
+          ) : (
+            exchanges.map(({ request, response, outcome: requestOutcome }) => {
+              const requestStatus = statusForRequest(request, "thread");
+              const sharedConnectionState =
+                surface === "rail" &&
+                (requestStatus.stage === "blocked" ||
+                  requestStatus.stage === "offline");
+              return (
+                <div key={request.requestId}>
+                  <MessageTurn
+                    role="user"
+                    surface="thread"
+                    body={
+                      request.kind === "feedback"
+                        ? comment.body
+                        : (request.body ?? "")
+                    }
+                    createdAt={request.createdAt}
+                    delivery={
+                      response !== undefined || request.claimedAt !== undefined
+                        ? "Sent"
+                        : "Queued"
+                    }
+                  >
+                    {request.kind === "feedback" &&
+                    comment.target.type === "selection" &&
+                    response !== undefined &&
+                    response.sourceRevision !== request.sourceRevision ? (
+                      <blockquote className="mt-2 mb-0 border-l-2 border-[var(--annotation-c)] pl-2 text-xs text-muted">
+                        You commented on: “{comment.target.quote}” — this text
+                        was revised
+                      </blockquote>
+                    ) : null}
+                  </MessageTurn>
+                  {requestOutcome === undefined || response === undefined ? (
+                    sharedConnectionState ? null : (
+                      <RequestStatusStrip
+                        status={requestStatus}
+                        activity={activityForRequest(request)}
+                        surface="thread"
+                        onShowAgent={onShowAgent}
+                      />
+                    )
+                  ) : (
+                    <MessageTurn
+                      role="agent"
+                      surface="thread"
+                      body={requestOutcome.message}
+                      createdAt={response.createdAt}
+                    >
+                      {requestOutcome.state === "changed" &&
+                      response.requestId ===
+                        latestChanged?.response?.requestId ? (
+                        <AgentChangeDigest
+                          changes={locations}
+                          isLoading={false}
+                          onLoad={() => void loadDiff()}
+                        />
+                      ) : null}
+                    </MessageTurn>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+        {diffError === "" ? null : (
+          <p className="mt-2 mb-0 text-xs text-danger">{diffError}</p>
+        )}
+        {identity === null ? null : (
+          <div className="mt-3 border-t border-edge pt-3">
+            {latestExchange?.response === undefined ? null : (
+              <section
+                className="mb-3 grid gap-2"
+                data-review-thread-next-steps
               >
-                {request.kind === "feedback" &&
-                comment.target.type === "selection" &&
-                response !== undefined &&
-                response.sourceRevision !== request.sourceRevision ? (
-                  <blockquote className="mt-2 mb-0 border-l-2 border-[var(--annotation-c)] pl-2 text-xs text-muted">
-                    You commented on: “{comment.target.quote}” — this text was
-                    revised
-                  </blockquote>
-                ) : null}
-              </MessageTurn>
-              {requestOutcome === undefined || response === undefined ? (
-                <RequestStatusStrip
-                  status={statusForRequest(request, "thread")}
-                  activity={activityForRequest(request)}
-                  surface="thread"
-                  onShowAgent={onShowAgent}
-                />
-              ) : (
-                <MessageTurn
-                  role="agent"
-                  surface="thread"
-                  body={requestOutcome.message}
-                  createdAt={response.createdAt}
-                >
-                  {requestOutcome.state === "changed" &&
-                  response.requestId === latestChanged?.response?.requestId ? (
-                    <AgentChangeDigest
-                      changes={locations}
-                      isLoading={false}
-                      onLoad={() => void loadDiff()}
+                <strong className="text-2xs font-bold uppercase tracking-caps text-subtle">
+                  Next steps
+                </strong>
+                <div className="flex items-center gap-1">
+                  <ThreadIconButton
+                    label="Minimize thread"
+                    icon={MINIMIZE_2_ICON}
+                    onClick={onToggle}
+                  />
+                  <ThreadIconButton
+                    label={resolved ? "Unresolve comment" : "Resolve comment"}
+                    icon={CHECK_ICON}
+                    onClick={onResolve}
+                  />
+                  {latestChanged === undefined ? null : (
+                    <ThreadIconButton
+                      label="Revert agent changes"
+                      icon={ROTATE_CCW_ICON}
+                      disabled
                     />
-                  ) : null}
-                </MessageTurn>
-              )}
+                  )}
+                </div>
+              </section>
+            )}
+            <Textarea
+              id={`reply-${comment.id}`}
+              className="mt-1 min-h-20"
+              value={reply}
+              maxLength={BODY_LIMIT}
+              placeholder="Reply to the agent…"
+              onChange={(event) => setReply(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  void sendReply();
+                }
+              }}
+            />
+            <div className="mt-2 flex justify-end">
+              <Button
+                size="compact"
+                disabled={reply.trim() === "" || isReplying}
+                onClick={() => void sendReply()}
+              >
+                {isReplying ? "Sending…" : "Reply"}
+              </Button>
             </div>
-          ))
+          </div>
         )}
       </div>
-      {diffError === "" ? null : (
-        <p className="mt-2 mb-0 text-xs text-danger">{diffError}</p>
-      )}
-      {identity === null ? null : (
-        <div className="mt-3 border-t border-edge pt-3">
-          {latestExchange?.response === undefined ? null : (
-            <section className="mb-3 grid gap-2" data-review-thread-next-steps>
-              <strong className="text-2xs font-bold uppercase tracking-caps text-subtle">
-                Next steps
-              </strong>
-              <div className="flex items-center gap-1">
-                <ThreadIconButton
-                  label="Minimize thread"
-                  icon={MINIMIZE_2_ICON}
-                  onClick={onToggle}
-                />
-                <ThreadIconButton
-                  label={resolved ? "Unresolve comment" : "Resolve comment"}
-                  icon={CHECK_ICON}
-                  onClick={onResolve}
-                />
-                {latestChanged === undefined ? null : (
-                  <ThreadIconButton
-                    label="Revert agent changes"
-                    icon={ROTATE_CCW_ICON}
-                    disabled
-                  />
-                )}
-              </div>
-            </section>
-          )}
-          <Textarea
-            id={`reply-${comment.id}`}
-            className="mt-1 min-h-20"
-            value={reply}
-            maxLength={BODY_LIMIT}
-            placeholder="Reply to the agent…"
-            onChange={(event) => setReply(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                event.preventDefault();
-                void sendReply();
-              }
-            }}
-          />
-          <div className="mt-2 flex justify-end">
-            <Button
-              size="compact"
-              disabled={reply.trim() === "" || isReplying}
-              onClick={() => void sendReply()}
-            >
-              {isReplying ? "Sending…" : "Reply"}
-            </Button>
-          </div>
-        </div>
-      )}
     </Card>
   );
 };
@@ -3657,9 +3805,14 @@ const ReviewKernel = () => {
               ) : (
                 <div role="status" aria-live="polite">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="m-0 text-xs font-semibold text-ink">
+                    <button
+                      type="button"
+                      className="m-0 min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left text-xs font-semibold text-ink hover:underline hover:underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      aria-label={`${agentStatus.headline} — view Agent tab`}
+                      onClick={() => setTab("agent")}
+                    >
                       {agentStatus.headline}
-                    </p>
+                    </button>
                     <Badge tone="secondary" size="compact">
                       {agentStatus.label}
                     </Badge>

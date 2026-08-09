@@ -135,11 +135,19 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(staged.locator("code")).toHaveText("leaseOwner");
   await expect(staged).toContainText("<strong>Literal reviewer text</strong>");
   await expect(staged.locator("strong")).toHaveCount(0);
-  await expect(staged).toHaveCSS("padding", "8px");
+  await expect(staged).toHaveCSS("padding", "0px");
+  await expect(staged).toHaveCSS("background-color", "rgb(254, 253, 251)");
+  await expect(staged.locator(".review-staged-meta")).toHaveCSS(
+    "background-color",
+    "rgb(236, 231, 219)",
+  );
   await expect(staged.locator(".review-staged-target")).toHaveCSS(
     "font-size",
-    "11px",
+    "12px",
   );
+  await expect(
+    staged.getByRole("button", { name: "Go to comment location" }),
+  ).toBeVisible();
   await expect(
     staged.locator(".review-staged-actions button").first(),
   ).toHaveCSS("width", "24px");
@@ -253,9 +261,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "padding-left",
     "2px",
   );
-  await thread.locator(".review-staged-meta").click({
-    position: { x: 1, y: 1 },
-  });
+  await thread.locator(".review-staged-target").click();
   const headerCollapsedThread = page.locator(
     "[data-review-thread-side] .review-staged-collapsed-thread",
   );
@@ -872,7 +878,9 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
     "true",
   );
   await expect(
-    tableRail.locator(".review-staged-card svg").first(),
+    tableRail
+      .getByRole("button", { name: "Edit staged comment" })
+      .locator("svg"),
   ).toHaveAttribute("stroke-width", "1.8");
   await expect(tableRail.locator(".review-staged-meta > span")).toHaveCount(0);
   await expect
