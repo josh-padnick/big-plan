@@ -27,6 +27,8 @@ export type AgentStatusInput = {
   readonly request: "none" | "pending" | "answered";
   readonly agentConnected: boolean;
   readonly pickedUp: boolean;
+  readonly sessionBusy?: boolean;
+  readonly surface?: "thread" | "chat";
   readonly lastAgentSignalAtMs?: number;
   readonly failure?: string;
   readonly nowMs: number;
@@ -47,8 +49,9 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     return {
       stage: "offline",
       label: "Runtime offline",
-      headline: "The local review runtime cannot be reached",
-      detail: "Drafts are safe. Restart `big-plan review <plan.mdx>`.",
+      headline: "The review server is unreachable",
+      detail:
+        "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
       tone: "danger",
     };
   }
@@ -56,7 +59,7 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     return {
       stage: "failed",
       label: "Needs attention",
-      headline: "The coding agent reported a failure",
+      headline: "The agent reported a problem",
       detail: input.failure,
       tone: "danger",
     };
@@ -87,17 +90,20 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     return input.agentConnected
       ? {
           stage: "waiting",
-          label: "Waiting for agent",
-          headline: "Feedback is queued",
-          detail: "The connected agent has not picked up this request yet.",
+          label: "Waiting",
+          headline:
+            input.sessionBusy === true
+              ? "Waiting - the agent is working on another request"
+              : "Waiting for an agent",
+          detail: "",
           tone: "neutral",
         }
       : {
           stage: "blocked",
-          label: "Agent disconnected",
-          headline: "Feedback is waiting for a coding agent",
+          label: "Blocked",
+          headline: "Blocked - no agent connected",
           detail:
-            "Drafts are safe. Start the agent command shown below to continue.",
+            "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.",
           tone: "warning",
         };
   }
@@ -108,17 +114,22 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
   if (quietFor > AGENT_QUIET_MS) {
     return {
       stage: "stalled",
-      label: "Agent quiet",
-      headline: "The agent has not reported progress recently",
-      detail: "The request is still open. Check the coding-agent session.",
+      label: "Working",
+      headline: `No progress for ${Math.max(1, Math.round(quietFor / 60_000))}m`,
+      detail:
+        (input.agentConnected ? "The agent session is still connected. " : "") +
+        "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This thread updates by itself once the agent resumes.",
       tone: "warning",
     };
   }
   return {
     stage: "working",
     label: "Agent working",
-    headline: "The coding agent is working on this request",
-    detail: "Progress below comes directly from the agent session.",
+    headline:
+      input.surface === "chat"
+        ? "Agent is working on your feedback"
+        : "Agent is working on this",
+    detail: "",
     tone: "positive",
   };
 };

@@ -1,0 +1,442 @@
+// Owns the shared legacy-compatible You/Agent turn, status-strip, activity,
+// Markdown, panel-pill, and change-digest presentation for the review island.
+
+import { useState, type ReactNode } from "react";
+import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
+import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
+import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
+import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
+import { parseMessageMarkdown, type MessageNode } from "../message-markdown.js";
+import { messageTimeLabel } from "../time-label.js";
+import type { AgentStatus } from "../thread-status.js";
+import { Icon } from "./icon.browser.js";
+
+export type MessageSurface = "thread" | "chat";
+
+export type MessageActivity = {
+  readonly seq: number;
+  readonly step: string;
+  readonly state: "waiting" | "live" | "done" | "failed";
+  readonly detail?: string;
+  readonly atMs?: number;
+};
+
+export type MessageChange = {
+  readonly status: "changed" | "added" | "removed";
+  readonly label: string;
+  readonly section: string;
+};
+
+const THREAD_BASE =
+  "mt-2 min-w-0 max-w-full w-[calc(100%_-_1rem)] rounded-lg border border-edge px-2 py-2";
+const CHAT_BASE =
+  "min-w-0 w-[calc(100%_-_1.5rem)] rounded-lg border border-edge px-2 py-2";
+const ROLE_CLASSES = {
+  user: "ml-4 border-r-2 border-r-[var(--annotation-c)] bg-[color-mix(in_srgb,var(--annotation-bg)_30%,var(--bg))]",
+  agent:
+    "mr-4 border-l-2 border-l-[var(--callout-note-c)] bg-[color-mix(in_srgb,var(--callout-note-bg)_46%,var(--bg))]",
+} as const;
+
+const absoluteTime = (at: number): string =>
+  new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(at));
+
+/** Renders only the bounded Markdown node vocabulary owned by the parser. */
+const renderMessageNode = (node: MessageNode, key: string): ReactNode => {
+  if (node.type === "text") return node.value;
+  if (node.type === "inlineCode") {
+    return (
+      <code
+        key={key}
+        className="max-w-full rounded-sm border border-edge bg-surface px-1 font-mono text-[0.9em] [overflow-wrap:anywhere]"
+      >
+        {node.value}
+      </code>
+    );
+  }
+  if (node.type === "code") {
+    return (
+      <pre
+        key={key}
+        className="relative mt-1 min-w-0 max-w-full overflow-x-auto rounded-md border border-edge bg-surface p-2 whitespace-pre-wrap [overflow-wrap:anywhere]"
+      >
+        {node.language === undefined ? null : (
+          <span className="mb-1 block text-2xs text-muted uppercase tracking-caps">
+            {node.language}
+          </span>
+        )}
+        <code className="min-w-0 max-w-full font-mono text-2xs whitespace-pre-wrap [overflow-wrap:anywhere]">
+          {node.value}
+        </code>
+      </pre>
+    );
+  }
+  const children = node.children.map((child, index) =>
+    renderMessageNode(child, `${key}-${index}`),
+  );
+  if (node.type === "paragraph") {
+    return (
+      <p key={key} className="mt-1 mb-0">
+        {children}
+      </p>
+    );
+  }
+  if (node.type === "strong") return <strong key={key}>{children}</strong>;
+  if (node.type === "emphasis") return <em key={key}>{children}</em>;
+  if (node.type === "blockquote") {
+    return (
+      <blockquote
+        key={key}
+        className="mt-1 border-l-2 border-edge pl-2 text-muted"
+      >
+        {children}
+      </blockquote>
+    );
+  }
+  if (node.type === "listItem") return <li key={key}>{children}</li>;
+  if (node.type === "list") {
+    const className =
+      "mt-1 mb-0 pl-4 " + (node.ordered ? "list-decimal" : "list-disc");
+    return node.ordered ? (
+      <ol key={key} className={className}>
+        {children}
+      </ol>
+    ) : (
+      <ul key={key} className={className}>
+        {children}
+      </ul>
+    );
+  }
+  if (node.type !== "link") return null;
+  return (
+    <a
+      key={key}
+      className="text-accent underline"
+      href={node.url}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </a>
+  );
+};
+
+const MessageBody = ({
+  body,
+  isStructured,
+}: {
+  readonly body: string;
+  readonly isStructured: boolean;
+}) =>
+  isStructured ? (
+    <div
+      className="min-w-0 max-w-full text-xs text-ink [line-height:1.45] whitespace-pre-wrap [overflow-wrap:anywhere]"
+      data-review-message-body="structured"
+    >
+      {parseMessageMarkdown(body).map((node, index) =>
+        renderMessageNode(node, String(index)),
+      )}
+    </div>
+  ) : (
+    <p className="mt-1 mb-0 min-w-0 max-w-full text-xs text-ink [line-height:1.45] whitespace-pre-wrap [overflow-wrap:anywhere]">
+      {body}
+    </p>
+  );
+
+/** Renders one exact legacy speaker turn on either feedback surface. */
+export const MessageTurn = ({
+  role,
+  surface,
+  body,
+  createdAt,
+  delivery,
+  children,
+}: {
+  readonly role: "user" | "agent";
+  readonly surface: MessageSurface;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly delivery?: "Sent" | "Queued" | "Saved";
+  readonly children?: ReactNode;
+}) => {
+  const time = messageTimeLabel({
+    now: Date.now(),
+    createdAt,
+    absoluteLabel: absoluteTime,
+  });
+  return (
+    <div
+      className={`${surface === "thread" ? THREAD_BASE : CHAT_BASE} ${ROLE_CLASSES[role]}`}
+      data-review-message={role}
+    >
+      <div className="flex items-center gap-1.5 text-2xs text-muted">
+        <strong className="text-2xs text-ink">
+          {role === "user" ? "You" : "Agent"}
+        </strong>
+        <time className="ml-auto" dateTime={createdAt}>
+          {role === "user" && delivery !== undefined
+            ? `${delivery} · ${time}`
+            : time}
+        </time>
+      </div>
+      <MessageBody body={body} isStructured={role === "agent"} />
+      {children}
+    </div>
+  );
+};
+
+const Spinner = () => (
+  <span
+    className="inline-block size-[0.72rem] shrink-0 animate-spin rounded-full border-[1.5px] border-current border-r-transparent [animation-duration:700ms] motion-reduce:[animation-duration:1.8s]"
+    aria-hidden="true"
+  />
+);
+
+const STATUS_TONES = {
+  neutral:
+    "border-edge bg-[color-mix(in_srgb,var(--surface-c)_60%,var(--bg))] text-muted",
+  positive:
+    "border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-c)]",
+  warning:
+    "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]",
+  danger:
+    "border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]",
+} as const;
+
+/** Places request lifecycle and narrated activity directly under its user turn. */
+export const RequestStatusStrip = ({
+  status,
+  activity,
+  surface,
+}: {
+  readonly status: AgentStatus;
+  readonly activity: ReadonlyArray<MessageActivity>;
+  readonly surface: MessageSurface;
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const meaningful = activity.filter(
+    (event) => event.state === "live" || event.state === "waiting",
+  );
+  const current = meaningful.at(-1);
+  const earlier = meaningful.slice(0, -1).reverse();
+  const isWorking = status.stage === "working";
+  const icon =
+    status.stage === "waiting" ? (
+      <Icon icon={HOURGLASS_ICON} />
+    ) : status.stage === "blocked" || status.stage === "stalled" ? (
+      <Icon icon={TRIANGLE_ALERT_ICON} />
+    ) : status.stage === "failed" || status.stage === "offline" ? (
+      <Icon icon={CIRCLE_X_ICON} />
+    ) : null;
+  return (
+    <div
+      className={`my-1.5 grid min-w-0 gap-1 rounded-md border border-l-[3px] px-2 py-2 text-2xs ${STATUS_TONES[status.tone]}`}
+      data-review-thread-status={status.stage}
+    >
+      <div className="flex items-center gap-1.5 [&>svg]:size-[0.85rem] [&>svg]:shrink-0">
+        {isWorking ? <Spinner /> : icon}
+        <strong className="min-w-0 flex-1 font-bold">{status.headline}</strong>
+      </div>
+      {status.detail === "" ? null : (
+        <p className="m-0 text-ink [overflow-wrap:anywhere]">{status.detail}</p>
+      )}
+      {status.stage === "blocked" ? (
+        <details className="mt-1.5">
+          <summary className="w-fit cursor-pointer font-semibold">
+            Show setup instructions
+          </summary>
+          <p className="mt-1 mb-0 text-ink">
+            Keep{" "}
+            <code className="rounded-sm border border-current/25 bg-paper px-1 font-mono">
+              big-plan review
+            </code>{" "}
+            running. In a second terminal, run{" "}
+            <code className="rounded-sm border border-current/25 bg-paper px-1 font-mono">
+              big-plan agent
+            </code>{" "}
+            and start the command it prints.
+          </p>
+        </details>
+      ) : null}
+      {isWorking && surface === "thread" ? (
+        <p className="mt-0.5 mb-0 text-muted">Updating 1 comment</p>
+      ) : null}
+      {isWorking ? (
+        <p className="mt-1.5 mb-0 flex min-w-0 items-start gap-2 text-xs text-ink [overflow-wrap:anywhere]">
+          <Spinner />
+          <span>
+            {current === undefined
+              ? "Starting work…"
+              : current.step +
+                (current.detail === undefined ? "" : ` — ${current.detail}`)}
+          </span>
+        </p>
+      ) : null}
+      {isWorking && earlier.length > 0 ? (
+        <button
+          type="button"
+          className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-sm px-1 py-0.5 text-2xs text-muted hover:text-ink [&>svg]:size-3"
+          aria-expanded={isExpanded}
+          onClick={() => setIsExpanded((value) => !value)}
+        >
+          <Icon icon={CHEVRON_RIGHT_ICON} />
+          {isExpanded
+            ? "Hide earlier updates"
+            : `Show ${earlier.length} earlier update${earlier.length === 1 ? "" : "s"}`}
+        </button>
+      ) : null}
+      {isWorking && isExpanded && earlier.length > 0 ? (
+        <ol className="m-0 grid max-h-36 min-w-0 list-none overflow-y-auto pl-1 text-ink">
+          {earlier.map((event) => (
+            <li
+              key={event.seq}
+              className="flex min-w-0 items-baseline justify-between gap-2 border-t border-current/15 py-1 first:border-t-0"
+            >
+              <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                {event.step}
+                {event.detail === undefined ? "" : ` — ${event.detail}`}
+              </span>
+              {event.atMs === undefined ? null : (
+                <time className="shrink-0 text-2xs text-muted">
+                  {messageTimeLabel({
+                    now: Date.now(),
+                    createdAt: new Date(event.atMs).toISOString(),
+                    absoluteLabel: absoluteTime,
+                  })}
+                </time>
+              )}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      <button
+        type="button"
+        className="-mx-1 justify-self-end rounded-sm px-1 text-2xs underline underline-offset-[0.16em] disabled:cursor-not-allowed disabled:opacity-50"
+        disabled
+        title="Request cancellation is not available in this review yet"
+      >
+        Cancel request
+      </button>
+    </div>
+  );
+};
+
+const PILL_STYLES = {
+  idle: "bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]",
+  working: "bg-[var(--callout-note-bg)] text-[var(--callout-note-c)]",
+  ready: "bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]",
+  failed: "bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]",
+} as const;
+
+/** Summarizes the session while leaving request truth on each message turn. */
+export const AgentStatePill = ({
+  status,
+}: {
+  readonly status: AgentStatus;
+}) => {
+  const state =
+    status.stage === "working"
+      ? ({ tone: "working", label: "Agent working" } as const)
+      : status.stage === "answered"
+        ? ({ tone: "ready", label: "Ready to re-review" } as const)
+        : status.stage === "failed"
+          ? ({ tone: "failed", label: "Agent needs attention" } as const)
+          : status.stage === "offline"
+            ? ({ tone: "failed", label: "Review server offline" } as const)
+            : status.stage === "blocked"
+              ? ({ tone: "failed", label: "No agent connected" } as const)
+              : status.stage === "stalled"
+                ? ({
+                    tone: "idle",
+                    label: "Agent silent — check terminal",
+                  } as const)
+                : status.stage === "waiting"
+                  ? ({ tone: "idle", label: "Waiting for agent" } as const)
+                  : ({ tone: "idle", label: "Waiting for you" } as const);
+  return (
+    <span
+      className={`ml-auto rounded-full px-2 py-0.5 text-2xs font-semibold whitespace-nowrap ${PILL_STYLES[state.tone]}`}
+      data-review-agent-state=""
+      data-tone={state.tone}
+    >
+      {state.label}
+    </span>
+  );
+};
+
+/** Attaches a quiet grouped revision digest to the answer that caused it. */
+export const AgentChangeDigest = ({
+  changes,
+  isLoading,
+  onLoad,
+}: {
+  readonly changes: ReadonlyArray<MessageChange> | null;
+  readonly isLoading: boolean;
+  readonly onLoad: () => void;
+}) => {
+  const [isExpanded, setIsExpanded] = useState(true);
+  if (changes === null) {
+    return (
+      <button
+        type="button"
+        className="mt-2 rounded-md border border-edge bg-paper px-2 py-1 text-2xs font-semibold text-accent hover:border-accent hover:bg-surface"
+        disabled={isLoading}
+        onClick={onLoad}
+      >
+        {isLoading ? "Loading changes…" : "See changes"}
+      </button>
+    );
+  }
+  const sections = new Map<string, Array<MessageChange>>();
+  for (const change of changes) {
+    const group = sections.get(change.section) ?? [];
+    group.push(change);
+    sections.set(change.section, group);
+  }
+  return (
+    <div className="mt-2 grid min-w-0 gap-2 border-t border-edge pt-2">
+      <button
+        type="button"
+        className="flex w-full cursor-pointer items-center gap-1 rounded-sm bg-transparent px-1 py-0.5 text-left text-2xs font-bold text-muted hover:bg-surface hover:text-accent [&>svg]:size-3"
+        aria-expanded={isExpanded}
+        onClick={() => setIsExpanded((value) => !value)}
+      >
+        <Icon icon={CHEVRON_RIGHT_ICON} />
+        {changes.length} change{changes.length === 1 ? "" : "s"} across{" "}
+        {sections.size} slide{sections.size === 1 ? "" : "s"}
+      </button>
+      {isExpanded ? (
+        <div className="min-w-0 overflow-hidden rounded-md border border-edge bg-paper">
+          {Array.from(sections).map(([section, entries]) => (
+            <div key={section}>
+              <div className="flex min-w-0 items-center gap-1 border-t border-edge bg-surface px-2 py-1 text-2xs font-bold text-muted first:border-t-0">
+                <Icon icon={CHEVRON_RIGHT_ICON} />
+                <span className="min-w-0 flex-1 truncate">{section}</span>
+                <span className="rounded-full bg-paper px-1 text-2xs">
+                  {entries.length}
+                </span>
+              </div>
+              {entries.map((entry, index) => (
+                <div
+                  key={`${entry.status}-${entry.label}-${index}`}
+                  className="border-t border-edge/60 px-6 py-1 text-xs font-medium text-ink [overflow-wrap:anywhere]"
+                >
+                  {entry.label}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className="w-fit rounded-md border border-edge bg-paper px-2 py-1 text-2xs font-semibold text-accent hover:border-accent hover:bg-surface"
+        onClick={() => setIsExpanded((value) => !value)}
+      >
+        {isExpanded ? "Hide changes" : "See changes"}
+      </button>
+    </div>
+  );
+};

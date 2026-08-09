@@ -24,6 +24,14 @@ import { X_ICON } from "../../icons/lucide/x.js";
 import type { CommentTarget, ReviewComment } from "../comment.js";
 import { parseCommentMarkdownLine } from "../comment-markdown.js";
 import { deriveAgentStatus, type AgentStatus } from "../thread-status.js";
+import {
+  AgentChangeDigest,
+  AgentStatePill,
+  MessageTurn,
+  RequestStatusStrip,
+  type MessageActivity,
+  type MessageSurface,
+} from "./agent-message.browser.js";
 import { Icon } from "./icon.browser.js";
 import { AlertDialog, Badge, Button, Card, Textarea } from "./ui.browser.js";
 
@@ -69,6 +77,7 @@ type AgentRequest = {
   readonly kind: "feedback" | "reply" | "chat";
   readonly body?: string;
   readonly commentId?: string;
+  readonly commentIds: ReadonlyArray<string>;
 };
 
 type AgentResponse = {
@@ -319,6 +328,13 @@ const parseAgentSnapshot = (value: unknown): AgentSnapshot => {
             ...(typeof request.commentId === "string"
               ? { commentId: request.commentId }
               : {}),
+            commentIds: Array.isArray(request.comments)
+              ? request.comments.flatMap((comment): ReadonlyArray<string> =>
+                  isRecord(comment) && typeof comment.id === "string"
+                    ? [comment.id]
+                    : [],
+                )
+              : [],
           },
         ];
       })
@@ -1428,6 +1444,8 @@ const SentThread = ({
   onJump,
   onAssociate,
   onReplySent,
+  statusForRequest,
+  activityForRequest,
 }: {
   readonly comment: ReviewComment;
   readonly identity: RuntimeIdentity | null;
@@ -1435,23 +1453,42 @@ const SentThread = ({
   readonly onJump: () => void;
   readonly onAssociate: (target: CommentTarget | null) => void;
   readonly onReplySent: (message: string) => void;
+  readonly statusForRequest: (
+    request: AgentRequest,
+    surface: MessageSurface,
+  ) => AgentStatus;
+  readonly activityForRequest: (
+    request: AgentRequest,
+  ) => ReadonlyArray<MessageActivity>;
 }) => {
   const [locations, setLocations] =
     useState<ReadonlyArray<DiffLocation> | null>(null);
   const [diffError, setDiffError] = useState("");
   const [reply, setReply] = useState("");
   const [isReplying, setIsReplying] = useState(false);
-  const response = [...agent.responses]
-    .reverse()
-    .find((candidate) =>
-      candidate.outcomes.some((outcome) => outcome.commentId === comment.id),
+  const requests = agent.requests.filter(
+    (request) =>
+      (request.kind === "feedback" &&
+        request.commentIds.includes(comment.id)) ||
+      (request.kind === "reply" && request.commentId === comment.id),
+  );
+  const exchanges = requests.map((request) => {
+    const response = agent.responses.find(
+      (candidate) => candidate.requestId === request.requestId,
     );
-  const outcome = response?.outcomes.find(
-    (candidate) => candidate.commentId === comment.id,
-  );
-  const request = agent.requests.find(
-    (candidate) => candidate.requestId === response?.requestId,
-  );
+    return {
+      request,
+      response,
+      outcome: response?.outcomes.find(
+        (candidate) => candidate.commentId === comment.id,
+      ),
+    };
+  });
+  const latestExchange = exchanges.at(-1);
+  const outcome = latestExchange?.outcome;
+  const latestChanged = [...exchanges]
+    .reverse()
+    .find((exchange) => exchange.outcome?.state === "changed");
   const targetPresent = targetElement(comment.target) !== null;
   const outcomeLabel =
     outcome?.state === "changed"
@@ -1463,11 +1500,15 @@ const SentThread = ({
           : "Waiting for agent";
 
   const loadDiff = async () => {
-    if (identity === null || request === undefined || response === undefined)
+    if (
+      identity === null ||
+      latestChanged?.request === undefined ||
+      latestChanged.response === undefined
+    )
       return;
     try {
       const value = await requestJson({
-        path: `/api/revision-diff?from=${encodeURIComponent(request.claimedFromRevision ?? request.sourceRevision)}&to=${encodeURIComponent(response.sourceRevision)}`,
+        path: `/api/revision-diff?from=${encodeURIComponent(latestChanged.request.claimedFromRevision ?? latestChanged.request.sourceRevision)}&to=${encodeURIComponent(latestChanged.response.sourceRevision)}`,
         identity,
       });
       setLocations(parseDiffLocations(value));
@@ -1520,74 +1561,66 @@ const SentThread = ({
           {outcomeLabel}
         </Badge>
       </div>
-      <p className="mt-2 mb-0 text-sm text-ink">{comment.body}</p>
       {!targetPresent ? (
         <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]">
           Original target unavailable in this revision. This thread keeps its
           recorded address; Big Plan did not guess a replacement.
         </p>
       ) : null}
-      {outcome === undefined ? (
-        <p className="mt-3 mb-0 text-xs text-subtle">
-          Waiting for the coding agent to claim this request.
-        </p>
-      ) : (
-        <div className="mt-3 border-t border-edge pt-3">
-          <p className="m-0 text-xs font-semibold text-ink">Agent</p>
-          <p className="mt-1 mb-0 text-sm text-muted">{outcome.message}</p>
-          {outcome.state === "changed" && request !== undefined ? (
-            <Button
-              variant="ghost"
-              size="compact"
-              className="mt-2"
-              onClick={() => void loadDiff()}
-            >
-              What changed
-            </Button>
-          ) : null}
-        </div>
-      )}
-      {locations === null ? null : (
-        <div className="mt-3 grid gap-2" aria-label="Revision changes">
-          {locations.length === 0 ? (
-            <p className="m-0 text-xs text-subtle">
-              No authored block changes were found between these revisions.
-            </p>
-          ) : (
-            locations.slice(0, 4).map((location, index) => (
-              <div
-                key={`${location.status}-${location.label}-${index}`}
-                className="min-w-0 rounded-md border border-edge p-2 text-xs"
-              >
-                <p className="m-0 font-semibold text-ink">
-                  {location.status} · {location.label}
-                </p>
-                <p className="mt-1 mb-0 min-w-0 break-words text-muted">
-                  {location.runs.map((run, runIndex) =>
-                    run.op === "del" ? (
-                      <del
-                        key={runIndex}
-                        className="bg-[var(--diff-remove-bg)] text-[var(--diff-remove-c)]"
-                      >
-                        {run.text}
-                      </del>
-                    ) : run.op === "ins" ? (
-                      <ins
-                        key={runIndex}
-                        className="bg-[var(--diff-add-bg)] text-[var(--diff-add-c)] no-underline"
-                      >
-                        {run.text}
-                      </ins>
-                    ) : (
-                      <span key={runIndex}>{run.text}</span>
-                    ),
-                  )}
-                </p>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      <div className="mt-2 min-w-0">
+        {exchanges.length === 0 ? (
+          <MessageTurn
+            role="user"
+            surface="thread"
+            body={comment.body}
+            createdAt={comment.createdAt}
+            delivery="Saved"
+          />
+        ) : (
+          exchanges.map(({ request, response, outcome: requestOutcome }) => (
+            <div key={request.requestId}>
+              <MessageTurn
+                role="user"
+                surface="thread"
+                body={
+                  request.kind === "feedback"
+                    ? comment.body
+                    : (request.body ?? "")
+                }
+                createdAt={request.createdAt}
+                delivery={
+                  response !== undefined || request.claimedAt !== undefined
+                    ? "Sent"
+                    : "Queued"
+                }
+              />
+              {requestOutcome === undefined || response === undefined ? (
+                <RequestStatusStrip
+                  status={statusForRequest(request, "thread")}
+                  activity={activityForRequest(request)}
+                  surface="thread"
+                />
+              ) : (
+                <MessageTurn
+                  role="agent"
+                  surface="thread"
+                  body={requestOutcome.message}
+                  createdAt={response.createdAt}
+                >
+                  {requestOutcome.state === "changed" &&
+                  response.requestId === latestChanged?.response?.requestId ? (
+                    <AgentChangeDigest
+                      changes={locations}
+                      isLoading={false}
+                      onLoad={() => void loadDiff()}
+                    />
+                  ) : null}
+                </MessageTurn>
+              )}
+            </div>
+          ))
+        )}
+      </div>
       {diffError === "" ? null : (
         <p className="mt-2 mb-0 text-xs text-danger">{diffError}</p>
       )}
@@ -1625,6 +1658,84 @@ const SentThread = ({
         </div>
       )}
     </Card>
+  );
+};
+
+const ChatExchange = ({
+  request,
+  response,
+  identity,
+  status,
+  activity,
+  onStatus,
+}: {
+  readonly request: AgentRequest;
+  readonly response: AgentResponse | undefined;
+  readonly identity: RuntimeIdentity;
+  readonly status: AgentStatus;
+  readonly activity: ReadonlyArray<MessageActivity>;
+  readonly onStatus: (message: string) => void;
+}) => {
+  const [locations, setLocations] =
+    useState<ReadonlyArray<DiffLocation> | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const hasChanges =
+    response !== undefined &&
+    (request.claimedFromRevision ?? request.sourceRevision) !==
+      response.sourceRevision;
+  const loadDiff = async () => {
+    if (response === undefined) return;
+    setIsLoading(true);
+    try {
+      const value = await requestJson({
+        path: `/api/revision-diff?from=${encodeURIComponent(request.claimedFromRevision ?? request.sourceRevision)}&to=${encodeURIComponent(response.sourceRevision)}`,
+        identity,
+      });
+      setLocations(parseDiffLocations(value));
+    } catch (error) {
+      onStatus(errorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  return (
+    <li className="grid min-w-0 gap-2">
+      <MessageTurn
+        role="user"
+        surface="chat"
+        body={request.body ?? ""}
+        createdAt={request.createdAt}
+        delivery={
+          response !== undefined || request.claimedAt !== undefined
+            ? "Sent"
+            : "Queued"
+        }
+      />
+      {response === undefined ? (
+        <div className="min-w-0 w-[calc(100%_-_1.5rem)] rounded-lg border border-dashed border-edge bg-paper px-2 py-2 text-muted">
+          <RequestStatusStrip
+            status={status}
+            activity={activity}
+            surface="chat"
+          />
+        </div>
+      ) : (
+        <MessageTurn
+          role="agent"
+          surface="chat"
+          body={response.message ?? ""}
+          createdAt={response.createdAt}
+        >
+          {hasChanges ? (
+            <AgentChangeDigest
+              changes={locations}
+              isLoading={isLoading}
+              onLoad={() => void loadDiff()}
+            />
+          ) : null}
+        </MessageTurn>
+      )}
+    </li>
   );
 };
 
@@ -2174,6 +2285,46 @@ const ReviewKernel = () => {
     ...(failure === undefined ? {} : { failure }),
     nowMs: statusNowMs,
   });
+  const activityForRequest = (
+    request: AgentRequest,
+  ): ReadonlyArray<MessageActivity> =>
+    progress.filter((event) => event.requestId === request.requestId);
+  const statusForRequest = (
+    request: AgentRequest,
+    surface: MessageSurface,
+  ): AgentStatus => {
+    const requestActivity = activityForRequest(request);
+    const response = agent.responses.find(
+      (candidate) => candidate.requestId === request.requestId,
+    );
+    const failed = [...requestActivity]
+      .reverse()
+      .find((event) => event.state === "failed");
+    const lastSignalAtMs = Math.max(
+      0,
+      ...requestActivity.map((event) => event.atMs ?? 0),
+      request.claimedAt === undefined ? 0 : Date.parse(request.claimedAt),
+      agent.presence.requestId === request.requestId
+        ? (agent.presence.updatedAtMs ?? 0)
+        : 0,
+    );
+    return deriveAgentStatus({
+      runtime:
+        identity === null ? "static" : pollFailures >= 2 ? "offline" : "online",
+      request: response === undefined ? "pending" : "answered",
+      agentConnected: agent.presence.connected,
+      pickedUp: request.claimedAt !== undefined || requestActivity.length > 0,
+      sessionBusy:
+        agent.presence.state === "working" &&
+        agent.presence.requestId !== request.requestId,
+      surface,
+      ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
+      ...(failed === undefined
+        ? {}
+        : { failure: failed.detail ?? failed.step }),
+      nowMs: statusNowMs,
+    });
+  };
   const agentActivity = requestProgress
     .filter((event) => event.state !== "waiting")
     .filter(
@@ -2504,6 +2655,8 @@ const ReviewKernel = () => {
                       onJump={() => jumpTo(comment)}
                       onAssociate={setAssociatedTarget}
                       onReplySent={setStatus}
+                      statusForRequest={statusForRequest}
+                      activityForRequest={activityForRequest}
                     />
                   ))}
                 </section>
@@ -2545,15 +2698,18 @@ const ReviewKernel = () => {
               ) : (
                 <>
                   <div>
-                    <label
-                      className="text-xs font-semibold text-ink"
-                      htmlFor="review-agent-chat"
-                    >
-                      Ask about the whole plan
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label
+                        className="text-xs font-semibold text-ink"
+                        htmlFor="review-agent-chat"
+                      >
+                        Ask about the whole plan
+                      </label>
+                      <AgentStatePill status={agentStatus} />
+                    </div>
                     <Textarea
                       id="review-agent-chat"
-                      className="mt-1 min-h-24"
+                      className="mt-1 min-h-20!"
                       value={chatBody}
                       maxLength={BODY_LIMIT}
                       placeholder="What should I understand before accepting this plan?"
@@ -2587,36 +2743,24 @@ const ReviewKernel = () => {
                     </p>
                   ) : (
                     <ol className="m-0 grid list-none gap-3 p-0">
-                      {chatRequests
-                        .slice()
-                        .reverse()
-                        .map((request) => {
-                          const response = agent.responses.find(
-                            (candidate) =>
-                              candidate.requestId === request.requestId &&
-                              candidate.kind === "chat",
-                          );
-                          return (
-                            <li key={request.requestId}>
-                              <Card className="border border-edge bg-surface p-3 shadow-none">
-                                <p className="m-0 text-2xs font-semibold uppercase tracking-caps text-subtle">
-                                  You
-                                </p>
-                                <p className="mt-1 mb-0 text-sm text-ink">
-                                  {request.body}
-                                </p>
-                                <div className="mt-3 border-t border-edge pt-3">
-                                  <p className="m-0 text-2xs font-semibold uppercase tracking-caps text-subtle">
-                                    Agent
-                                  </p>
-                                  <p className="mt-1 mb-0 text-sm text-muted">
-                                    {response?.message ?? agentStatus.headline}
-                                  </p>
-                                </div>
-                              </Card>
-                            </li>
-                          );
-                        })}
+                      {chatRequests.map((request) => {
+                        const response = agent.responses.find(
+                          (candidate) =>
+                            candidate.requestId === request.requestId &&
+                            candidate.kind === "chat",
+                        );
+                        return (
+                          <ChatExchange
+                            key={request.requestId}
+                            request={request}
+                            response={response}
+                            identity={identity}
+                            status={statusForRequest(request, "chat")}
+                            activity={activityForRequest(request)}
+                            onStatus={setStatus}
+                          />
+                        );
+                      })}
                     </ol>
                   )}
                 </>
@@ -2713,8 +2857,8 @@ const ReviewKernel = () => {
               </p>
             </div>
           ) : null}
-          <div className="review-feedback-status flex flex-none flex-col items-stretch gap-2 border-t border-edge bg-paper p-3 text-xs text-subtle">
-            {tab === "comments" ? (
+          {tab === "comments" ? (
+            <div className="review-feedback-status flex flex-none flex-col items-stretch gap-2 border-t border-edge bg-paper p-3 text-xs text-subtle">
               <Button
                 className="w-full px-3! py-2! text-xs"
                 size="sm"
@@ -2723,25 +2867,25 @@ const ReviewKernel = () => {
               >
                 {isSending ? "Sending…" : "Send all comments to agent"}
               </Button>
-            ) : null}
-            {identity === null ? (
-              <p className="m-0 text-xs text-support" role="status">
-                {status}
-              </p>
-            ) : (
-              <div role="status" aria-live="polite">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="m-0 text-xs font-semibold text-ink">
-                    {agentStatus.headline}
-                  </p>
-                  <Badge tone="secondary" size="compact">
-                    {agentStatus.label}
-                  </Badge>
+              {identity === null ? (
+                <p className="m-0 text-xs text-support" role="status">
+                  {status}
+                </p>
+              ) : (
+                <div role="status" aria-live="polite">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="m-0 text-xs font-semibold text-ink">
+                      {agentStatus.headline}
+                    </p>
+                    <Badge tone="secondary" size="compact">
+                      {agentStatus.label}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 mb-0 text-xs text-support">{status}</p>
                 </div>
-                <p className="mt-1 mb-0 text-xs text-support">{status}</p>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          ) : null}
         </aside>
       ) : null}
       {drafts.map((comment) => {
@@ -2789,6 +2933,8 @@ const ReviewKernel = () => {
             onJump={() => jumpTo(comment)}
             onAssociate={setAssociatedTarget}
             onReplySent={setStatus}
+            statusForRequest={statusForRequest}
+            activityForRequest={activityForRequest}
           />,
           host,
           `sent-${comment.id}`,
