@@ -258,24 +258,32 @@ const ThreadIconButton = ({
   icon,
   onClick,
   disabled = false,
+  tone = "neutral",
 }: {
   readonly label: string;
   readonly icon: LucideIcon;
   readonly onClick?: () => void;
   readonly disabled?: boolean;
-}) => (
-  <DelayedTooltip label={label}>
-    <button
-      type="button"
-      className="inline-flex size-6 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 leading-none text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent active:bg-well disabled:cursor-default disabled:bg-transparent disabled:text-subtle [&>svg]:size-3.5"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      <Icon icon={icon} />
-    </button>
-  </DelayedTooltip>
-);
+  readonly tone?: "danger" | "neutral";
+}) => {
+  const hoverClass =
+    tone === "danger"
+      ? "hover:border-danger hover:bg-[var(--callout-danger-bg)] hover:text-danger hover:shadow-raised focus-visible:border-danger focus-visible:bg-[var(--callout-danger-bg)] focus-visible:text-danger"
+      : "hover:bg-surface hover:text-ink hover:shadow-raised focus-visible:bg-surface focus-visible:text-ink";
+  return (
+    <DelayedTooltip label={label}>
+      <button
+        type="button"
+        className={`inline-flex size-6 flex-none cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent p-0 leading-none text-muted transition-[color,background-color,border-color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent active:inset-shadow-pressed disabled:cursor-default disabled:border-transparent disabled:bg-transparent disabled:text-subtle disabled:shadow-none [&>svg]:size-3.5 ${hoverClass}`}
+        aria-label={label}
+        disabled={disabled}
+        onClick={onClick}
+      >
+        <Icon icon={icon} />
+      </button>
+    </DelayedTooltip>
+  );
+};
 
 /** Keeps a viewport-anchored composer clear of contextual comment cards. */
 const floatingComposerPosition = ({
@@ -1389,7 +1397,7 @@ const CommentCardHeader = ({
   >
     <button
       type="button"
-      className={`${targetClassName} min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left leading-normal hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${surface === "thread" ? "truncate text-2xs font-medium text-subtle" : "[overflow-wrap:anywhere] text-2xs font-semibold uppercase tracking-caps text-ink"}`}
+      className={`${targetClassName} min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left leading-normal hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${surface === "thread" ? "truncate pl-0.5 text-2xs font-medium text-subtle" : "[overflow-wrap:anywhere] text-2xs font-semibold uppercase tracking-caps text-ink"}`}
       onClick={onJump}
       title="Jump to this target"
     >
@@ -1524,6 +1532,7 @@ const StagedCard = ({
           label="Delete staged comment"
           icon={TRASH_2_ICON}
           onClick={onDelete}
+          tone="danger"
         />
       </ContextualCommentSummary>
     );
@@ -1579,6 +1588,7 @@ const StagedCard = ({
           label="Delete staged comment"
           icon={TRASH_2_ICON}
           onClick={onDelete}
+          tone="danger"
         />
       </CommentCardHeader>
       {isEditing ? (

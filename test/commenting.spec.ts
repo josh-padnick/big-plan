@@ -158,15 +158,18 @@ test("should stage and restore a slide comment through the legacy chrome", async
   });
   await editButton.hover();
   await expect(editButton).toHaveCSS("background-color", "rgb(239, 236, 227)");
+  await expect(editButton).not.toHaveCSS("box-shadow", "none");
   const deleteButton = staged.getByRole("button", {
     name: "Delete staged comment",
   });
   await deleteButton.hover();
-  await expect(deleteButton).toHaveCSS("border-top-width", "0px");
+  await expect(deleteButton).toHaveCSS("border-top-width", "1px");
+  await expect(deleteButton).toHaveCSS("border-color", "rgb(119, 41, 34)");
   await expect(deleteButton).toHaveCSS(
     "background-color",
-    "rgb(239, 236, 227)",
+    "rgb(248, 235, 231)",
   );
+  await expect(deleteButton).toHaveCSS("color", "rgb(119, 41, 34)");
   const stagedSubmit = staged.getByRole("button", { name: "Send this" });
   await expect(stagedSubmit).toHaveCSS("padding-left", "8px");
   await expect(stagedSubmit).toHaveCSS("padding-top", "4px");
@@ -245,6 +248,10 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(thread.locator(".review-staged-meta")).toHaveCSS(
     "background-color",
     "rgb(236, 231, 219)",
+  );
+  await expect(thread.locator(".review-staged-target")).toHaveCSS(
+    "padding-left",
+    "2px",
   );
   await expect
     .poll(() =>
@@ -334,6 +341,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "background-color",
     "rgb(239, 236, 227)",
   );
+  await expect(collapseButton).not.toHaveCSS("box-shadow", "none");
   await page.evaluate(() => window.scrollBy(0, 200));
   await expect
     .poll(() => threadHost.evaluate((node) => node.getBoundingClientRect().top))
