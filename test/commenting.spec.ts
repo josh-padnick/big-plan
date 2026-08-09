@@ -361,17 +361,38 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "[data-review-thread-side] .review-staged-collapsed-thread",
   );
   await expect(minimizedThread).toBeVisible();
-  await expect(minimizedThread.locator("svg")).toHaveCount(0);
-  await expect(minimizedThread).toHaveCSS("font-size", "12px");
+  await expect(minimizedThread.locator(".review-staged-target")).toHaveCount(0);
+  await expect(
+    minimizedThread.getByRole("button", {
+      name: "Expand comment: Keep `leaseOwner` explicit in this card.",
+    }),
+  ).toHaveCSS("font-size", "12px");
   await expect(minimizedThread).toHaveCSS(
     "background-color",
     "rgb(254, 253, 251)",
+  );
+  const minimizedDelete = minimizedThread.getByRole("button", {
+    name: "Delete staged comment",
+  });
+  await expect(minimizedDelete.locator("svg")).toHaveCount(1);
+  await expect(minimizedDelete.locator("xpath=../..")).toHaveCSS(
+    "opacity",
+    "0",
+  );
+  await minimizedThread.hover();
+  await expect(minimizedDelete.locator("xpath=../..")).toHaveCSS(
+    "opacity",
+    "1",
   );
   await page.getByRole("button", { name: /Feedback/ }).click();
   await expect(rail.locator(".review-staged-collapsed-rail")).toHaveCount(0);
   await expect(rail.locator(".review-staged-card")).toHaveCount(1);
   await rail.getByRole("button", { name: "Close feedback" }).click();
-  await minimizedThread.click();
+  await minimizedThread
+    .getByRole("button", {
+      name: "Expand comment: Keep `leaseOwner` explicit in this card.",
+    })
+    .click();
   await expect(thread).toBeVisible();
 
   await page.evaluate(() => {

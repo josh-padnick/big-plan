@@ -179,11 +179,35 @@ test("should restore and submit staged comments through the local review runtime
   await expect(kernel).toContainText("A revised plan is ready.");
   await kernel.getByRole("button", { name: "See changes" }).click();
   await expect(kernel).toContainText("atomically");
+  await sentThread
+    .getByRole("button", { name: "Minimize thread" })
+    .first()
+    .click();
 
   await rail.getByRole("button", { name: "Close feedback" }).click();
   const contextualThread = page.locator(
     "[data-review-thread-side] [data-review-sent-thread]",
   );
+  await expect(contextualThread).toContainText("CHANGED");
+  await expect(contextualThread).toContainText("Clarify the failure boundary.");
+  await expect(contextualThread.locator(".review-sent-target")).toHaveCount(0);
+  const contextualActions = contextualThread.locator(":scope > div");
+  await expect(contextualActions).toHaveCSS("opacity", "0");
+  await contextualThread.hover();
+  await expect(contextualThread).toHaveAttribute(
+    "data-review-associated",
+    "true",
+  );
+  await expect(page.locator("[data-slide]").first()).toHaveAttribute(
+    "data-review-comment-associated",
+    "",
+  );
+  await expect(contextualActions).toHaveCSS("opacity", "1");
+  await contextualThread
+    .getByRole("button", {
+      name: "Expand comment: Clarify the failure boundary.",
+    })
+    .click();
   await expect
     .poll(() =>
       contextualThread.evaluate((card) => {

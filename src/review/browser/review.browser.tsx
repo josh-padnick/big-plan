@@ -1389,7 +1389,7 @@ const CommentCardHeader = ({
   >
     <button
       type="button"
-      className={`${targetClassName} min-w-0 flex-1 cursor-pointer [overflow-wrap:anywhere] border-0 bg-transparent p-0 text-left text-2xs font-semibold uppercase leading-normal tracking-caps text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent`}
+      className={`${targetClassName} min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left leading-normal hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${surface === "thread" ? "truncate text-xs font-medium text-muted" : "[overflow-wrap:anywhere] text-2xs font-semibold uppercase tracking-caps text-ink"}`}
       onClick={onJump}
       title="Jump to this target"
     >
@@ -1401,6 +1401,68 @@ const CommentCardHeader = ({
       {children}
     </div>
   </div>
+);
+
+const ContextualCommentSummary = ({
+  className = "",
+  status,
+  statusClassName = "",
+  body,
+  associated,
+  onExpand,
+  onAssociate,
+  threadGroup,
+  commentId,
+  children,
+}: {
+  readonly className?: string;
+  readonly status: string;
+  readonly statusClassName?: string;
+  readonly body: string;
+  readonly associated: boolean;
+  readonly onExpand: () => void;
+  readonly onAssociate: (active: boolean) => void;
+  readonly threadGroup?: string;
+  readonly commentId?: string;
+  readonly children: ReactNode;
+}) => (
+  <Card
+    className={`review-contextual-summary group/contextual mt-2 flex w-full max-w-[17rem] items-center gap-2 border border-edge bg-raised! transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted ${className}`}
+    density="dense"
+    elevation="floating"
+    onPointerEnter={() => onAssociate(true)}
+    onPointerLeave={() => onAssociate(false)}
+    onFocus={() => onAssociate(true)}
+    onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget))
+        onAssociate(false);
+    }}
+    data-review-comment-ui=""
+    data-review-associated={associated ? "true" : undefined}
+    data-review-sent-thread={threadGroup}
+    data-review-comment-id={commentId}
+  >
+    <Badge
+      size="compact"
+      shape="badge"
+      tone="secondary"
+      className={`shrink-0 leading-normal tracking-caps ${statusClassName}`}
+    >
+      {status.toUpperCase()}
+    </Badge>
+    <button
+      type="button"
+      className="min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 text-left text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+      aria-label={`Expand comment: ${body}`}
+      aria-expanded="false"
+      onClick={onExpand}
+    >
+      {body}
+    </button>
+    <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/contextual:opacity-100 group-focus-within/contextual:opacity-100">
+      {children}
+    </div>
+  </Card>
 );
 
 const StagedCard = ({
@@ -1447,32 +1509,20 @@ const StagedCard = ({
   }, [isEditing]);
   if (collapsed) {
     return (
-      <button
-        type="button"
-        className={`review-staged-collapsed-${surface} flex min-w-0 w-full max-w-[17rem] cursor-pointer items-center gap-1.5 rounded-md border border-edge bg-raised px-2 py-1 text-xs text-muted shadow-raised transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted`}
-        onClick={onCollapse}
-        onPointerEnter={() => setAssociated(true)}
-        onPointerLeave={() => setAssociated(false)}
-        onFocus={() => setAssociated(true)}
-        onBlur={() => setAssociated(false)}
-        data-review-comment-ui=""
-        data-review-associated={associated ? "true" : undefined}
-        aria-label={`Expand staged comment on ${targetLabel(comment.target)}`}
+      <ContextualCommentSummary
+        className={`review-staged-collapsed-${surface}`}
+        status="Staged"
+        body={comment.body}
+        associated={associated}
+        onExpand={() => onCollapse?.()}
+        onAssociate={setAssociated}
       >
-        {surface === "thread" ? (
-          <Badge
-            size="compact"
-            shape="badge"
-            tone="secondary"
-            className="leading-normal tracking-caps"
-          >
-            STAGED
-          </Badge>
-        ) : null}
-        <span>
-          {surface === "rail" ? targetLabel(comment.target) : comment.body}
-        </span>
-      </button>
+        <ThreadIconButton
+          label="Delete staged comment"
+          icon={TRASH_2_ICON}
+          onClick={onDelete}
+        />
+      </ContextualCommentSummary>
     );
   }
   const long = comment.body.length > LONG_COMMENT;
@@ -1677,6 +1727,7 @@ const threadGroupFor = ({
 const SentThread = ({
   comment,
   surface,
+  associated,
   identity,
   agent,
   group,
@@ -1692,6 +1743,7 @@ const SentThread = ({
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
+  readonly associated: boolean;
   readonly identity: RuntimeIdentity | null;
   readonly agent: AgentSnapshot;
   readonly group: ThreadGroup;
@@ -1746,7 +1798,7 @@ const SentThread = ({
     latestExchange === undefined || latestExchange.outcome !== undefined
       ? undefined
       : statusForRequest(latestExchange.request, "thread");
-  const cardClass = `mt-2 w-full border border-edge ${surface === "rail" ? "max-w-none bg-surface shadow-none" : "max-w-[17rem] bg-comment-body!"}`;
+  const cardClass = `mt-2 w-full border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted ${surface === "rail" ? "max-w-none bg-surface shadow-none" : "max-w-[17rem] bg-comment-body!"}`;
   const associate = () => onAssociate(comment.target);
 
   const loadDiff = async () => {
@@ -1789,6 +1841,46 @@ const SentThread = ({
   };
 
   if (!expanded) {
+    if (surface === "thread") {
+      return (
+        <ContextualCommentSummary
+          status={latestStatus?.headline ?? outcomeLabel}
+          statusClassName={
+            group === "ready"
+              ? "bg-accent-soft text-accent"
+              : group === "needs-input"
+                ? "bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
+                : group === "working"
+                  ? "bg-[var(--callout-note-bg)] text-[var(--callout-note-c)]"
+                  : ""
+          }
+          body={comment.body}
+          associated={associated}
+          threadGroup={group}
+          commentId={comment.id}
+          onExpand={() => {
+            onJump();
+            onToggle();
+          }}
+          onAssociate={(active) => onAssociate(active ? comment.target : null)}
+        >
+          {latestStatus === undefined ? (
+            <ThreadIconButton
+              label={resolved ? "Unresolve comment" : "Resolve comment"}
+              icon={CHECK_ICON}
+              onClick={onResolve}
+            />
+          ) : null}
+          {latestChanged === undefined ? null : (
+            <ThreadIconButton
+              label="Revert agent changes"
+              icon={ROTATE_CCW_ICON}
+              disabled
+            />
+          )}
+        </ContextualCommentSummary>
+      );
+    }
     return (
       <Card
         className={`${cardClass} grid gap-2`}
@@ -1803,6 +1895,7 @@ const SentThread = ({
         }}
         data-review-sent-thread={group}
         data-review-comment-id={comment.id}
+        data-review-associated={associated ? "true" : undefined}
       >
         <CommentCardHeader
           target={comment.target}
@@ -1883,6 +1976,7 @@ const SentThread = ({
       }}
       data-review-sent-thread={group}
       data-review-comment-id={comment.id}
+      data-review-associated={associated ? "true" : undefined}
     >
       <CommentCardHeader
         target={comment.target}
@@ -3270,6 +3364,11 @@ const ReviewKernel = () => {
                             key={comment.id}
                             comment={comment}
                             surface="rail"
+                            associated={
+                              associatedTarget !== null &&
+                              targetAddress(associatedTarget) ===
+                                targetAddress(comment.target)
+                            }
                             identity={identity}
                             agent={agent}
                             group={key}
@@ -3297,6 +3396,11 @@ const ReviewKernel = () => {
                           key={comment.id}
                           comment={comment}
                           surface="rail"
+                          associated={
+                            associatedTarget !== null &&
+                            targetAddress(associatedTarget) ===
+                              targetAddress(comment.target)
+                          }
                           identity={identity}
                           agent={agent}
                           group={threadGroupFor({
@@ -3519,6 +3623,10 @@ const ReviewKernel = () => {
           <SentThread
             comment={comment}
             surface="thread"
+            associated={
+              associatedTarget !== null &&
+              targetAddress(associatedTarget) === targetAddress(comment.target)
+            }
             identity={identity}
             agent={agent}
             group={threadGroupFor({ comment, agent, statusForRequest })}
