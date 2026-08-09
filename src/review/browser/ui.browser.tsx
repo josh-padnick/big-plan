@@ -131,7 +131,8 @@ export const Card = ({
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
   readonly size?: "default" | "compact" | "micro";
   readonly shape?: "badge" | "pill";
-  readonly tone?: "neutral" | "accent" | "accentOutline" | "secondary";
+  readonly tone?:
+    "neutral" | "accent" | "accentOutline" | "annotation" | "secondary";
   readonly weight?: "semibold" | "bold";
 };
 
@@ -145,6 +146,8 @@ const BADGE_TONES = {
   neutral: "border border-transparent bg-surface text-muted",
   accent: "border border-transparent bg-accent text-accent-ink",
   accentOutline: "border border-accent bg-transparent text-accent",
+  annotation:
+    "border border-[var(--annotation-c)] bg-transparent text-[var(--annotation-c)]",
   secondary: "border border-transparent bg-well text-muted",
 } as const;
 

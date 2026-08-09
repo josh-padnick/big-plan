@@ -111,7 +111,11 @@ const CurrentActivityCard = ({
           {activity.headline}
         </strong>
         <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
-          {activity.state === "stalled" ? "warning" : activity.state}
+          {activity.state === "stalled"
+            ? "warning"
+            : activity.state === "disconnected"
+              ? "offline"
+              : activity.state}
         </span>
       </div>
       {"targetLabel" in activity && activity.targetLabel !== undefined ? (

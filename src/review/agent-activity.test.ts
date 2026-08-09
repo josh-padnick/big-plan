@@ -34,6 +34,26 @@ describe("current agent activity", () => {
     });
   });
 
+  it("should distinguish a disconnected agent from an ordinary wait", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [request()],
+        responseRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: false,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: 0,
+      }),
+    ).toMatchObject({
+      state: "disconnected",
+      tone: "danger",
+      headline: "The agent is disconnected",
+      supporting:
+        "Reconnect the coding agent to continue. All comments are safe.",
+    });
+  });
+
   it.each([
     ["feedback", "Responding to a comment"],
     ["reply", "Responding in a comment thread"],

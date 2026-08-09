@@ -1389,7 +1389,7 @@ const CommentCardHeader = ({
   >
     <button
       type="button"
-      className={`${targetClassName} min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left leading-normal hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${surface === "thread" ? "truncate text-xs font-medium text-muted" : "[overflow-wrap:anywhere] text-2xs font-semibold uppercase tracking-caps text-ink"}`}
+      className={`${targetClassName} min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left leading-normal hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${surface === "thread" ? "truncate text-2xs font-medium text-subtle" : "[overflow-wrap:anywhere] text-2xs font-semibold uppercase tracking-caps text-ink"}`}
       onClick={onJump}
       title="Jump to this target"
     >
@@ -1406,6 +1406,7 @@ const CommentCardHeader = ({
 const ContextualCommentSummary = ({
   className = "",
   status,
+  statusTone = "secondary",
   statusClassName = "",
   body,
   associated,
@@ -1417,6 +1418,7 @@ const ContextualCommentSummary = ({
 }: {
   readonly className?: string;
   readonly status: string;
+  readonly statusTone?: "annotation" | "secondary";
   readonly statusClassName?: string;
   readonly body: string;
   readonly associated: boolean;
@@ -1445,14 +1447,14 @@ const ContextualCommentSummary = ({
     <Badge
       size="compact"
       shape="badge"
-      tone="secondary"
+      tone={statusTone}
       className={`shrink-0 leading-normal tracking-caps ${statusClassName}`}
     >
       {status.toUpperCase()}
     </Badge>
     <button
       type="button"
-      className="min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 text-left text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+      className="min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 text-left text-xs text-ink hover:underline hover:underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
       aria-label={`Expand comment: ${body}`}
       aria-expanded="false"
       onClick={onExpand}
@@ -1512,6 +1514,7 @@ const StagedCard = ({
       <ContextualCommentSummary
         className={`review-staged-collapsed-${surface}`}
         status="Staged"
+        statusTone="annotation"
         body={comment.body}
         associated={associated}
         onExpand={() => onCollapse?.()}
@@ -1557,16 +1560,6 @@ const StagedCard = ({
         actionsClassName="review-staged-actions"
         onJump={onJump}
       >
-        {surface === "thread" ? (
-          <Badge
-            size="compact"
-            shape="badge"
-            tone="secondary"
-            className="leading-normal tracking-caps"
-          >
-            STAGED
-          </Badge>
-        ) : null}
         {surface === "thread" ? (
           <ThreadIconButton
             label="Minimize staged comment"
@@ -1728,6 +1721,7 @@ const SentThread = ({
   comment,
   surface,
   associated,
+  selected,
   identity,
   agent,
   group,
@@ -1738,12 +1732,14 @@ const SentThread = ({
   onJump,
   onAssociate,
   onReplySent,
+  onShowAgent,
   statusForRequest,
   activityForRequest,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
   readonly associated: boolean;
+  readonly selected: boolean;
   readonly identity: RuntimeIdentity | null;
   readonly agent: AgentSnapshot;
   readonly group: ThreadGroup;
@@ -1754,6 +1750,7 @@ const SentThread = ({
   readonly onJump: () => void;
   readonly onAssociate: (target: CommentTarget | null) => void;
   readonly onReplySent: (message: string) => void;
+  readonly onShowAgent: () => void;
   readonly statusForRequest: (
     request: AgentRequest,
     surface: MessageSurface,
@@ -1798,7 +1795,7 @@ const SentThread = ({
     latestExchange === undefined || latestExchange.outcome !== undefined
       ? undefined
       : statusForRequest(latestExchange.request, "thread");
-  const cardClass = `mt-2 w-full border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted ${surface === "rail" ? "max-w-none bg-surface shadow-none" : "max-w-[17rem] bg-comment-body!"}`;
+  const cardClass = `mt-2 w-full border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${surface === "rail" ? "max-w-none bg-surface shadow-none" : "max-w-[17rem] bg-comment-body!"}`;
   const associate = () => onAssociate(comment.target);
 
   const loadDiff = async () => {
@@ -1896,6 +1893,7 @@ const SentThread = ({
         data-review-sent-thread={group}
         data-review-comment-id={comment.id}
         data-review-associated={associated ? "true" : undefined}
+        data-review-selected={selected ? "true" : undefined}
       >
         <CommentCardHeader
           target={comment.target}
@@ -1977,6 +1975,7 @@ const SentThread = ({
       data-review-sent-thread={group}
       data-review-comment-id={comment.id}
       data-review-associated={associated ? "true" : undefined}
+      data-review-selected={selected ? "true" : undefined}
     >
       <CommentCardHeader
         target={comment.target}
@@ -2052,6 +2051,7 @@ const SentThread = ({
                   status={statusForRequest(request, "thread")}
                   activity={activityForRequest(request)}
                   surface="thread"
+                  onShowAgent={onShowAgent}
                 />
               ) : (
                 <MessageTurn
@@ -2141,6 +2141,7 @@ const ChatExchange = ({
   status,
   activity,
   onStatus,
+  onShowAgent,
 }: {
   readonly request: AgentRequest;
   readonly response: AgentResponse | undefined;
@@ -2148,6 +2149,7 @@ const ChatExchange = ({
   readonly status: AgentStatus;
   readonly activity: ReadonlyArray<MessageActivity>;
   readonly onStatus: (message: string) => void;
+  readonly onShowAgent: () => void;
 }) => {
   const [locations, setLocations] =
     useState<ReadonlyArray<DiffLocation> | null>(null);
@@ -2190,6 +2192,7 @@ const ChatExchange = ({
             status={status}
             activity={activity}
             surface="chat"
+            onShowAgent={onShowAgent}
           />
         </div>
       ) : (
@@ -2253,6 +2256,9 @@ const ReviewKernel = () => {
   );
   const [associatedTarget, setAssociatedTarget] =
     useState<CommentTarget | null>(null);
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(
+    null,
+  );
   const [associationActive, setAssociationActive] = useState(false);
   const [status, setStatus] = useState(
     identity === null
@@ -2287,6 +2293,10 @@ const ReviewKernel = () => {
     requestAnimationFrame(() =>
       document.querySelector<HTMLElement>(`#review-tab-${next}`)?.focus(),
     );
+  };
+  const showAgentSetup = () => {
+    setIsOpen(true);
+    selectFeedbackTab("agent");
   };
   const handleFeedbackTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     let index = feedbackTabs.indexOf(tab);
@@ -2363,6 +2373,31 @@ const ReviewKernel = () => {
       }
     };
   }, [associatedTarget]);
+
+  useEffect(() => {
+    if (selectedCommentId === null) return undefined;
+    const comment = reviewComments.find(
+      (candidate) => candidate.id === selectedCommentId,
+    );
+    if (comment === undefined || comment.target.type === "selection") {
+      return undefined;
+    }
+    const target = targetElement(comment.target);
+    if (target === null) return undefined;
+    const selectedElements = new Set<HTMLElement>([target]);
+    const owningSlide = target.closest<HTMLElement>(
+      "[data-slide], [data-quick-summary]",
+    );
+    if (owningSlide !== null) selectedElements.add(owningSlide);
+    for (const element of selectedElements) {
+      element.dataset.reviewCommentSelected = "";
+    }
+    return () => {
+      for (const element of selectedElements) {
+        delete element.dataset.reviewCommentSelected;
+      }
+    };
+  }, [reviewComments, selectedCommentId]);
 
   useEffect(() => {
     const marked = new Set<HTMLElement>();
@@ -2893,6 +2928,7 @@ const ReviewKernel = () => {
     });
   const toggleResolvedComment = (commentId: string) => {
     if (!resolvedCommentIds.has(commentId)) {
+      if (selectedCommentId === commentId) setSelectedCommentId(null);
       const comment = sent.find((candidate) => candidate.id === commentId);
       if (
         comment !== undefined &&
@@ -2929,15 +2965,24 @@ const ReviewKernel = () => {
           ? request.commentId
           : undefined;
     if (commentId === undefined) return;
+    const comment = sent.find((candidate) => candidate.id === commentId);
+    if (comment === undefined) return;
+    setSelectedCommentId(commentId);
+    setAssociatedTarget(comment.target);
     setExpandedSentThreads((current) => new Set(current).add(commentId));
     setTab("comments");
-    requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLElement>(
-          `[data-review-comment-id="${CSS.escape(commentId)}"]`,
-        )
-        ?.scrollIntoView({ block: "nearest" }),
-    );
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLElement>(
+            `[data-review-comment-id="${CSS.escape(commentId)}"]`,
+          )
+          ?.scrollIntoView({ block: "nearest" });
+        document
+          .querySelector<HTMLTextAreaElement>(`#reply-${CSS.escape(commentId)}`)
+          ?.focus({ preventScroll: true });
+      });
+    });
   };
 
   return (
@@ -3369,6 +3414,7 @@ const ReviewKernel = () => {
                               targetAddress(associatedTarget) ===
                                 targetAddress(comment.target)
                             }
+                            selected={selectedCommentId === comment.id}
                             identity={identity}
                             agent={agent}
                             group={key}
@@ -3379,6 +3425,7 @@ const ReviewKernel = () => {
                             onJump={() => jumpTo(comment)}
                             onAssociate={setAssociatedTarget}
                             onReplySent={setStatus}
+                            onShowAgent={showAgentSetup}
                             statusForRequest={statusForRequest}
                             activityForRequest={activityForRequest}
                           />
@@ -3401,6 +3448,7 @@ const ReviewKernel = () => {
                             targetAddress(associatedTarget) ===
                               targetAddress(comment.target)
                           }
+                          selected={selectedCommentId === comment.id}
                           identity={identity}
                           agent={agent}
                           group={threadGroupFor({
@@ -3415,6 +3463,7 @@ const ReviewKernel = () => {
                           onJump={() => jumpTo(comment)}
                           onAssociate={setAssociatedTarget}
                           onReplySent={setStatus}
+                          onShowAgent={showAgentSetup}
                           statusForRequest={statusForRequest}
                           activityForRequest={activityForRequest}
                         />
@@ -3520,6 +3569,7 @@ const ReviewKernel = () => {
                             status={statusForRequest(request, "chat")}
                             activity={activityForRequest(request)}
                             onStatus={setStatus}
+                            onShowAgent={showAgentSetup}
                           />
                         );
                       })}
@@ -3627,6 +3677,7 @@ const ReviewKernel = () => {
               associatedTarget !== null &&
               targetAddress(associatedTarget) === targetAddress(comment.target)
             }
+            selected={selectedCommentId === comment.id}
             identity={identity}
             agent={agent}
             group={threadGroupFor({ comment, agent, statusForRequest })}
@@ -3637,6 +3688,7 @@ const ReviewKernel = () => {
             onJump={() => jumpTo(comment)}
             onAssociate={setAssociatedTarget}
             onReplySent={setStatus}
+            onShowAgent={showAgentSetup}
             statusForRequest={statusForRequest}
             activityForRequest={activityForRequest}
           />,

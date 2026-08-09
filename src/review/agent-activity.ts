@@ -54,6 +54,12 @@ export type CurrentAgentActivity =
       readonly headline: "The agent reported a problem";
       readonly supporting: string;
     } & ActivityRequestFacts)
+  | ({
+      readonly state: "disconnected";
+      readonly tone: "danger";
+      readonly headline: "The agent is disconnected";
+      readonly supporting: "Reconnect the coding agent to continue. All comments are safe.";
+    } & ActivityRequestFacts)
   | {
       readonly state: "offline";
       readonly tone: "danger";
@@ -152,6 +158,17 @@ export const deriveCurrentAgentActivity = ({
       supporting:
         failed.step +
         (failed.detail === undefined ? "" : ` - ${failed.detail}`),
+    };
+  }
+
+  if (!agentConnected) {
+    return {
+      ...facts,
+      state: "disconnected",
+      tone: "danger",
+      headline: "The agent is disconnected",
+      supporting:
+        "Reconnect the coding agent to continue. All comments are safe.",
     };
   }
 

@@ -210,10 +210,12 @@ export const RequestStatusStrip = ({
   status,
   activity,
   surface,
+  onShowAgent,
 }: {
   readonly status: AgentStatus;
   readonly activity: ReadonlyArray<MessageActivity>;
   readonly surface: MessageSurface;
+  readonly onShowAgent: () => void;
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const meaningful = activity
@@ -256,22 +258,13 @@ export const RequestStatusStrip = ({
         <p className="m-0 text-ink [overflow-wrap:anywhere]">{status.detail}</p>
       )}
       {status.stage === "blocked" ? (
-        <details className="mt-1.5">
-          <summary className="w-fit cursor-pointer font-semibold">
-            Show setup instructions
-          </summary>
-          <p className="mt-1 mb-0 text-ink">
-            Keep{" "}
-            <code className="rounded-sm border border-current/25 bg-paper px-1 font-mono">
-              big-plan review
-            </code>{" "}
-            running. In a second terminal, run{" "}
-            <code className="rounded-sm border border-current/25 bg-paper px-1 font-mono">
-              big-plan agent
-            </code>{" "}
-            and start the command it prints.
-          </p>
-        </details>
+        <button
+          type="button"
+          className="mt-1.5 w-fit cursor-pointer border-0 bg-transparent p-0 font-semibold text-current underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onClick={onShowAgent}
+        >
+          Show setup instructions →
+        </button>
       ) : null}
       {isWorking && surface === "thread" ? (
         <p className="mt-0.5 mb-0 text-muted">Updating 1 comment</p>

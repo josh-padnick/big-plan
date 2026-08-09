@@ -68,6 +68,44 @@ test("should restore and submit staged comments through the local review runtime
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
 
+  await rail.getByRole("tab", { name: "Agent" }).click();
+  const currentActivity = rail.locator("[data-review-current-activity]");
+  await expect(currentActivity).toHaveAttribute(
+    "data-review-current-activity",
+    "disconnected",
+  );
+  await expect(currentActivity).toContainText("The agent is disconnected");
+  await expect(currentActivity.getByText("offline")).toHaveCSS(
+    "text-transform",
+    "uppercase",
+  );
+  await currentActivity.getByRole("button", { name: "View thread →" }).click();
+  await expect(rail.getByRole("tab", { name: "Comments" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const selectedThread = rail.locator("[data-review-comment-id]");
+  await expect(selectedThread).toHaveAttribute("data-review-selected", "true");
+  await expect(selectedThread).toHaveCSS("outline-width", "3px");
+  await expect(page.locator("[data-review-comment-selected]")).not.toHaveCount(
+    0,
+  );
+  const reply = selectedThread.getByPlaceholder("Reply to the agent…");
+  await expect(reply).toBeFocused();
+  await selectedThread
+    .getByRole("button", { name: "Show setup instructions →" })
+    .click();
+  await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await currentActivity.getByRole("button", { name: "View thread →" }).click();
+  await expect(reply).toBeFocused();
+  await selectedThread
+    .getByRole("button", { name: "Minimize thread" })
+    .first()
+    .click();
+
   const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
     const sessionResponse = await fetch("/api/session", {

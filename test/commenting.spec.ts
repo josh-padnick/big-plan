@@ -106,10 +106,15 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "padding",
     "3px 5px",
   );
-  const inlineStatus = contextualDraft.getByText("STAGED");
-  await expect(inlineStatus).toHaveCSS("border-radius", "6px");
-  await expect(inlineStatus).toHaveCSS("padding-left", "4px");
-  await expect(inlineStatus).toHaveCSS("padding-top", "2px");
+  await expect(contextualDraft).not.toContainText("STAGED");
+  await expect(contextualDraft.locator(".review-staged-target")).toHaveCSS(
+    "font-size",
+    "11px",
+  );
+  await expect(contextualDraft.locator(".review-staged-target")).toHaveCSS(
+    "color",
+    "rgb(111, 105, 92)",
+  );
 
   const feedbackControl = page.getByRole("button", { name: /Feedback/ });
   await feedbackControl.click();
@@ -370,6 +375,13 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(minimizedThread).toHaveCSS(
     "background-color",
     "rgb(254, 253, 251)",
+  );
+  const minimizedStatus = minimizedThread.getByText("STAGED");
+  await expect(minimizedStatus).toHaveCSS("color", "rgb(78, 88, 145)");
+  await expect(minimizedStatus).toHaveCSS("border-color", "rgb(78, 88, 145)");
+  await expect(minimizedStatus).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
   );
   const minimizedDelete = minimizedThread.getByRole("button", {
     name: "Delete staged comment",
