@@ -897,7 +897,11 @@ const useReviewContainerHosts = () => {
       .map((container) => {
         const host = document.createElement("span");
         host.dataset.reviewSlideHost = "";
-        container.append(host);
+        const collapseHeader = container.querySelector<HTMLElement>(
+          ":scope > [data-collapse-header]",
+        );
+        if (collapseHeader === null) container.append(host);
+        else collapseHeader.prepend(host);
         container.dataset.reviewSlideSelectable = "";
         return { container, host };
       });
@@ -1181,7 +1185,7 @@ const CommentComposer = ({
             </Button>
             <span
               role="tooltip"
-              className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-ink px-2 py-1 text-2xs font-medium text-bg opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
+              className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
             >
               {MODIFIER_SHORTCUT}
             </span>
@@ -1395,7 +1399,7 @@ const StagedCard = ({
               </Button>
               <span
                 role="tooltip"
-                className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-ink px-2 py-1 text-2xs font-medium text-bg opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
+                className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
               >
                 {MODIFIER_SHORTCUT}
               </span>
@@ -2368,7 +2372,7 @@ const ReviewKernel = () => {
             <Icon icon={MESSAGE_SQUARE_ICON} />
             <span
               role="tooltip"
-              className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] left-0 z-50 w-max max-w-48 rounded-md bg-ink px-2 py-1 text-2xs leading-normal text-bg opacity-0 shadow-raised delay-1000 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100 max-sm:right-0 max-sm:left-auto"
+              className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] left-0 z-50 w-max max-w-48 rounded-md bg-[var(--ink-c)] px-2 py-1 text-2xs leading-normal text-[var(--bg)] opacity-0 shadow-raised delay-1000 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100 max-sm:right-0 max-sm:left-auto"
             >
               {label}
             </span>
@@ -2402,7 +2406,7 @@ const ReviewKernel = () => {
               <Icon icon={MESSAGE_SQUARE_ICON} />
               <span
                 role="tooltip"
-                className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] right-0 z-50 w-max rounded-md bg-ink px-2 py-1 text-xs text-bg opacity-0 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
+                className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] right-0 z-50 w-max rounded-md bg-[var(--ink-c)] px-2 py-1 text-xs text-[var(--bg)] opacity-0 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
               >
                 Comment on table
               </span>
