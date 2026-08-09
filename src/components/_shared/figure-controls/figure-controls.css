@@ -35,6 +35,11 @@
     color: var(--accent-c);
   }
 
+  /* Override invariant: copied success suppresses the resting tooltip. */
+  article [data-copy-state="copied"]::after {
+    content: none;
+  }
+
   /* A checkmark is the complete success confirmation. It uses the copied
      state colour and enters with the shared document motion token.
      Override invariant: copied success beats the resting check icon. */
