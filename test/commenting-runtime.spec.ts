@@ -63,7 +63,7 @@ test("should restore and submit staged comments through the local review runtime
     "Clarify the failure boundary.",
   );
 
-  await expect(rail).toContainText("1 comment handed off.");
+  await expect(rail).toContainText("1 comment submitted.");
   await expect(
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
@@ -163,14 +163,13 @@ test("should restore and submit staged comments through the local review runtime
   });
 
   await expect(kernel).toContainText("Changed");
+  await rail.getByRole("button", { name: /1 · Details/i }).click();
   await expect(kernel).toContainText(
     "Removed the ambiguous promise and tightened delivery.",
   );
   await expect(kernel).toContainText("A revised plan is ready.");
-  await kernel.getByRole("button", { name: "What changed" }).click();
-  await expect(kernel.locator('[aria-label="Revision changes"]')).toContainText(
-    "atomically",
-  );
+  await kernel.getByRole("button", { name: "See changes" }).click();
+  await expect(kernel).toContainText("atomically");
 
   await page.reload();
   await page.getByRole("button", { name: /Feedback/ }).click();
