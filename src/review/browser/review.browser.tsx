@@ -1339,7 +1339,7 @@ const StagedCard = ({
         <>
           <Textarea
             ref={editRef}
-            className="mt-2 bg-well"
+            className="mt-2 bg-input!"
             aria-label="Edit comment"
             value={editBody}
             maxLength={BODY_LIMIT}

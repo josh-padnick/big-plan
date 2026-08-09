@@ -220,9 +220,9 @@ test("should stage and restore a slide comment through the legacy chrome", async
     .toBe(0);
   await editButton.click();
   await expect(page.getByRole("dialog", { name: /Comment on/ })).toHaveCount(0);
-  await expect(
-    staged.getByRole("textbox", { name: "Edit comment" }),
-  ).toBeFocused();
+  const railEdit = staged.getByRole("textbox", { name: "Edit comment" });
+  await expect(railEdit).toBeFocused();
+  await expect(railEdit).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await expect(
     staged.getByRole("button", { name: "Edit staged comment" }),
   ).toBeVisible();
