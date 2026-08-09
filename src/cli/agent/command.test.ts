@@ -15,7 +15,7 @@ import {
 } from "../../review/agent-exchange.js";
 import { startReviewRuntime } from "../../review/server.js";
 import type { ReviewRuntime } from "../../review/server.js";
-import { readProgress } from "../../review/store.js";
+import { readProgress, writeSessionHeartbeat } from "../../review/store.js";
 import { renderDocument } from "../../render/render-document.js";
 import { agentCommand } from "./command.js";
 
@@ -75,6 +75,26 @@ afterAll(async () => {
 });
 
 describe("agent command", () => {
+  it("should tolerate a heartbeat file being replaced while the review server is live", async () => {
+    await writeFile(runtime.store.heartbeatPath, "");
+    const restored = new Promise<void>((settle, fail) => {
+      setTimeout(() => {
+        void writeSessionHeartbeat({
+          store: runtime.store,
+          sessionId: runtime.sessionId,
+          running: true,
+        }).then(settle, fail);
+      }, 25);
+    });
+    try {
+      await expect(agentCommand([runtime.planPath])).resolves.toMatchObject({
+        review: runtime.url,
+      });
+    } finally {
+      await restored;
+    }
+  });
+
   it("should print a ready-to-paste real-session prompt", async () => {
     const result = await agentCommand([runtime.planPath]);
     expect(result.agent_prompt).toContain("You are the coding agent");

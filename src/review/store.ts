@@ -35,6 +35,8 @@ const PROGRESS_STATES = new Set(["waiting", "live", "done", "failed"]);
 const PROGRESS_TEXT_LIMIT = 160;
 const PROGRESS_EVENT_LIMIT = 200;
 const REVIEW_PLAN_ID_LENGTH = 16;
+const HEARTBEAT_READ_RETRY_MS = 25;
+const HEARTBEAT_READ_ATTEMPTS = 3;
 
 /** One relayed agent progress event, after checking. */
 export type ProgressEvent = {
@@ -715,7 +717,7 @@ export const writeSessionHeartbeat = async ({
 export const sessionHeartbeatIsFresh = async ({
   store,
   sessionId,
-  now = Date.now(),
+  now,
   maximumAgeMs = 3_000,
 }: {
   readonly store: ReviewStore;
@@ -723,7 +725,20 @@ export const sessionHeartbeatIsFresh = async ({
   readonly now?: number;
   readonly maximumAgeMs?: number;
 }): Promise<boolean> => {
-  const value = await readJson(store.heartbeatPath);
+  let value: unknown;
+  for (let attempt = 0; attempt < HEARTBEAT_READ_ATTEMPTS; attempt += 1) {
+    value = await readJson(store.heartbeatPath);
+    if (value !== undefined || attempt === HEARTBEAT_READ_ATTEMPTS - 1) {
+      break;
+    }
+    // A heartbeat rewrite briefly truncates the file before replacing its
+    // contents. Retry that unreadable instant instead of declaring a healthy
+    // loopback server dead.
+    await new Promise<void>((settle) => {
+      setTimeout(settle, HEARTBEAT_READ_RETRY_MS);
+    });
+  }
+  const observedAtMs = now ?? Date.now();
   return (
     typeof value === "object" &&
     value !== null &&
@@ -735,8 +750,8 @@ export const sessionHeartbeatIsFresh = async ({
     "updatedAtMs" in value &&
     typeof value.updatedAtMs === "number" &&
     Number.isFinite(value.updatedAtMs) &&
-    now - value.updatedAtMs >= 0 &&
-    now - value.updatedAtMs <= maximumAgeMs
+    observedAtMs - value.updatedAtMs >= 0 &&
+    observedAtMs - value.updatedAtMs <= maximumAgeMs
   );
 };
 
