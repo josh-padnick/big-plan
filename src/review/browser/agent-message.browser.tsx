@@ -216,9 +216,22 @@ export const RequestStatusStrip = ({
   readonly surface: MessageSurface;
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const meaningful = activity.filter(
-    (event) => event.state === "live" || event.state === "waiting",
-  );
+  const meaningful = activity
+    .filter(
+      (event) =>
+        (event.state === "live" || event.state === "waiting") &&
+        !/^(reply sent to agent|plan question sent to agent)$/iu.test(
+          event.step,
+        ) &&
+        !/feedback package received/iu.test(event.step),
+    )
+    .filter(
+      (event, index, events) =>
+        index === 0 ||
+        events[index - 1]?.step.toLocaleLowerCase() !==
+          event.step.toLocaleLowerCase(),
+    )
+    .slice(-8);
   const current = meaningful.at(-1);
   const earlier = meaningful.slice(0, -1).reverse();
   const isWorking = status.stage === "working";
@@ -264,8 +277,11 @@ export const RequestStatusStrip = ({
         <p className="mt-0.5 mb-0 text-muted">Updating 1 comment</p>
       ) : null}
       {isWorking ? (
-        <p className="mt-1.5 mb-0 flex min-w-0 items-start gap-2 text-xs text-ink [overflow-wrap:anywhere]">
-          <Spinner />
+        <p
+          className="mt-1.5 mb-0 min-w-0 text-xs text-ink [overflow-wrap:anywhere]"
+          data-review-status-current-activity=""
+          aria-live="polite"
+        >
           <span>
             {current === undefined
               ? "Starting work…"

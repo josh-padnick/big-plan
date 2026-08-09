@@ -79,6 +79,7 @@ describe("agent command", () => {
     const result = await agentCommand([runtime.planPath]);
     expect(result.agent_prompt).toContain("You are the coding agent");
     expect(result.agent_prompt).toContain("agent next");
+    expect(result.agent_prompt).toContain("agent note");
     expect(result.agent_prompt).toContain(runtime.planPath);
     expect(result.codex).toContain('codex "$(cat ');
     expect(result.claude).toContain('claude "$(cat ');
@@ -114,7 +115,7 @@ describe("agent command", () => {
     ).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          step: "Coding agent reviewing feedback",
+          step: "Picked up: 1 comment",
           state: "live",
           detail: "1 comment",
         }),

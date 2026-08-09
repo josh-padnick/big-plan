@@ -33,7 +33,7 @@ export const AgentHealthAlert = ({
 }) => (
   <button
     type="button"
-    className="inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 rounded-md border border-danger bg-[var(--callout-danger-bg)] px-2 py-1 text-xs font-semibold text-danger shadow-raised hover:shadow-lifted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed [&>svg]:size-4"
+    className="inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 border-0 bg-transparent px-1 py-1 text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-4"
     aria-label={`${label} — open agent connection status`}
     onClick={onOpen}
   >
@@ -95,7 +95,7 @@ const CurrentActivityCard = ({
     activity.state === "working" ? activity.latestStep : activity.supporting;
   return (
     <article
-      className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs ${activityTone(activity.tone)}`}
+      className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${activityTone(activity.tone)}`}
       data-review-current-activity={activity.state}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -189,10 +189,16 @@ const ConnectionLog = ({
       second: "2-digit",
     }).format(new Date(at));
   return (
-    <details className="mt-3 text-xs text-muted" data-review-connection-history>
-      <summary className="flex cursor-pointer list-none items-center gap-2 border-b border-edge pb-2 text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+    <details
+      className="mt-3 text-xs text-muted tabular-nums"
+      data-review-connection-history
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-[650] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
         Connection log
-        <span className="ml-auto rounded-full border border-edge px-1.5 py-0.5 text-2xs font-bold text-muted">
+        <span
+          className="rounded-full border border-edge px-1.5 py-px text-2xs font-bold leading-[1.2] uppercase tracking-caps text-muted"
+          aria-label={`${ordered.length} event${ordered.length === 1 ? "" : "s"}`}
+        >
           {ordered.length}
         </span>
       </summary>
@@ -200,52 +206,52 @@ const ConnectionLog = ({
         <p className="mb-0">No connection events recorded yet.</p>
       ) : (
         <>
-          <dl className="grid grid-cols-2 gap-2 border-b border-edge py-3">
-            <div>
-              <dt className="text-2xs font-bold uppercase tracking-caps text-subtle">
+          <dl className="mt-3 mb-3 grid grid-cols-2 gap-x-3 gap-y-2 border-y border-edge py-3">
+            <div className="min-w-0">
+              <dt className="mb-0.5 text-2xs font-bold uppercase tracking-caps text-muted">
                 State
               </dt>
               <dd
                 className={
                   connected
-                    ? "m-0 mt-1 font-semibold text-accent"
-                    : "m-0 mt-1 font-semibold text-warning"
+                    ? "m-0 text-xs font-[750] text-[var(--diff-add-c)] [overflow-wrap:anywhere]"
+                    : "m-0 text-xs font-[750] text-warning [overflow-wrap:anywhere]"
                 }
               >
                 {connected ? "CONNECTED" : "DISCONNECTED"}
               </dd>
             </div>
-            <div>
-              <dt className="text-2xs font-bold uppercase tracking-caps text-subtle">
+            <div className="min-w-0">
+              <dt className="mb-0.5 text-2xs font-bold uppercase tracking-caps text-muted">
                 Since
               </dt>
-              <dd className="m-0 mt-1 text-ink">
+              <dd className="m-0 text-xs text-ink [overflow-wrap:anywhere]">
                 {latest === undefined ? "Unavailable" : formatTime(latest.atMs)}
               </dd>
             </div>
-            <div>
-              <dt className="text-2xs font-bold uppercase tracking-caps text-subtle">
+            <div className="min-w-0">
+              <dt className="mb-0.5 text-2xs font-bold uppercase tracking-caps text-muted">
                 Last signal
               </dt>
-              <dd className="m-0 mt-1 text-ink">
+              <dd className="m-0 text-xs text-ink [overflow-wrap:anywhere]">
                 {relativeSignalLabel({ now: nowMs, at: heartbeatAt })}
               </dd>
             </div>
-            <div>
-              <dt className="text-2xs font-bold uppercase tracking-caps text-subtle">
+            <div className="min-w-0">
+              <dt className="mb-0.5 text-2xs font-bold uppercase tracking-caps text-muted">
                 Events
               </dt>
-              <dd className="m-0 mt-1 text-ink">
+              <dd className="m-0 text-xs text-ink [overflow-wrap:anywhere]">
                 {disconnects} disconnects · {reconnects} reconnects
               </dd>
             </div>
           </dl>
           {Array.from(groups).map(([date, rows]) => (
-            <section key={date} className="mt-3">
-              <h3 className="m-0 text-2xs font-bold uppercase tracking-caps text-subtle">
+            <section key={date} className="[&+section]:mt-3">
+              <h3 className="mt-0 mb-1.5 text-2xs font-bold uppercase tracking-caps text-muted">
                 {date}
               </h3>
-              <ol className="m-0 mt-2 grid list-none gap-2 p-0">
+              <ol className="m-0 grid list-none gap-0 p-0">
                 {rows.map((event) => {
                   const index = ordered.indexOf(event);
                   const next = ordered[index + 1];
@@ -268,20 +274,29 @@ const ConnectionLog = ({
                   return (
                     <li
                       key={event.eventId ?? event.at}
-                      className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-baseline gap-x-2 gap-y-1"
+                      className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-1 py-1"
+                      data-review-connection-event={
+                        event.connected ? "connected" : "disconnected"
+                      }
+                      data-review-connection-current={
+                        event === latest ? "" : undefined
+                      }
                     >
                       <span
-                        className="size-1.5 rounded-full border border-muted"
+                        className={`relative size-[6px] self-center rounded-full border bg-paper ${event.connected ? "border-[var(--diff-add-c)] bg-[var(--diff-add-c)]" : event === latest ? "border-warning bg-warning" : "border-muted"}`}
+                        data-review-connection-marker=""
                         aria-hidden="true"
                       />
-                      <time dateTime={event.at}>{formatTime(event.atMs)}</time>
+                      <time className="text-2xs text-muted" dateTime={event.at}>
+                        {formatTime(event.atMs)}
+                      </time>
                       <strong
-                        className={event.connected ? "text-accent" : "text-ink"}
+                        className={`min-w-0 text-xs ${event.connected ? "text-[var(--diff-add-c)]" : "text-ink"}`}
                       >
                         {event.connected ? "Connected" : "Disconnected"}
                       </strong>
                       {event === latest ? (
-                        <span className="rounded-full border border-edge px-1.5 text-2xs font-bold uppercase tracking-caps">
+                        <span className="rounded-full border border-edge px-1.5 py-px text-2xs font-bold leading-[1.2] uppercase tracking-caps">
                           Current
                         </span>
                       ) : null}
@@ -326,9 +341,9 @@ export const AgentConnectionPanel = ({
   readonly nowMs: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => (
-  <div className="grid content-start gap-3">
+  <div className="min-w-0">
     <section>
-      <p className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-subtle">
+      <p className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-muted">
         Current activity
       </p>
       <CurrentActivityCard
@@ -337,12 +352,14 @@ export const AgentConnectionPanel = ({
         onViewRequest={onViewRequest}
       />
     </section>
-    <section className="grid gap-3 rounded-lg border border-edge p-3 text-xs text-muted">
+    <section className="mt-3 grid gap-2 rounded-md border border-edge px-3 py-2 text-xs text-muted">
       <div className="flex min-w-0 items-center gap-2">
         <span
-          className={`size-2 shrink-0 rounded-full border-2 border-edge ${connected ? "bg-accent" : "bg-muted"}`}
+          className={`inline-flex size-2.5 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,currentColor_34%,transparent)] ${connected ? "text-[var(--diff-add-c)]" : "text-muted"}`}
           aria-hidden="true"
-        />
+        >
+          <span className="size-1.5 rounded-full bg-current" />
+        </span>
         <strong className="text-ink">
           {connected ? "Agent session connected" : "Agent session disconnected"}
         </strong>

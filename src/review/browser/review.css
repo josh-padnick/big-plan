@@ -147,6 +147,19 @@ here; all values use the document theme's closed token vocabulary.
     align-items: center;
   }
 
+  /* Connection events are one timeline, so the island supplies markers while
+     this selector relationship joins adjacent rows into a continuous rail. */
+  [data-review-connection-event]:not(:last-child)
+    [data-review-connection-marker]::after {
+    position: absolute;
+    top: 7px;
+    left: 2px;
+    width: 1px;
+    height: 1.4rem;
+    background: var(--edge-c);
+    content: "";
+  }
+
   :is(
     [data-block-kind="data-table"],
     [data-block-kind="table"]

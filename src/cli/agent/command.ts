@@ -243,13 +243,16 @@ ${nextCommand}
 
 For each returned work item:
 1. Read the current plan source and the request plus its conversation history.
-2. For every anchored comment, choose exactly one outcome:
+2. As you work, narrate for the reviewer: run \`node ${shellQuote(binPath)} agent note ${shellQuote(
+    session.planPath,
+  )} "<one short line>"\` when you start each meaningful step - reading the request, deciding an outcome, editing the plan, validating. One line per step, present tense, no repeats.
+3. For every anchored comment, choose exactly one outcome:
    - changed: revise the plan source, explain the revision, and list every changed render block id in changeTargets, in presentation order.
    - question: do not guess; ask the precise question the reviewer must answer.
    - outside: explain why the request is beyond revising this plan.
-3. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
-4. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
-5. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
+4. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
+5. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
+6. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
 
 Never edit rendered HTML. Never invent a Changed outcome without changing the plan source.`;
   await writeAgentPrompt({ store: session.store, prompt });
@@ -349,10 +352,12 @@ const nextWork = async ({
         1,
       step:
         request.kind === "chat"
-          ? "Coding agent reviewing plan question"
+          ? "Picked up: plan question"
           : request.kind === "reply"
-            ? "Coding agent reviewing thread reply"
-            : "Coding agent reviewing feedback",
+            ? "Picked up: thread reply"
+            : `Picked up: ${request.comments.length} comment${
+                request.comments.length === 1 ? "" : "s"
+              }`,
       state: "live",
       ...(request.kind === "feedback"
         ? {

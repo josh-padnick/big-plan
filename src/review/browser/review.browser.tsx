@@ -22,9 +22,11 @@ import { PENCIL_ICON } from "../../icons/lucide/pencil.js";
 import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
+import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { deriveCurrentAgentActivity } from "../agent-activity.js";
 import type { CommentTarget, ReviewComment } from "../comment.js";
 import { parseCommentMarkdownLine } from "../comment-markdown.js";
@@ -185,6 +187,94 @@ type FloatingPosition = {
 };
 
 const rootElement = document.documentElement;
+
+const DelayedTooltip = ({
+  label,
+  children,
+}: {
+  readonly label: string;
+  readonly children: ReactNode;
+}) => {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const timerRef = useRef<number | null>(null);
+  const [position, setPosition] = useState<{
+    readonly top: number;
+    readonly left: number;
+  } | null>(null);
+  const hide = () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+    setPosition(null);
+  };
+  const show = () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => {
+      const rect = anchorRef.current?.getBoundingClientRect();
+      if (rect === undefined) return;
+      const center = rect.left + rect.width / 2;
+      const edge = Math.min(96, window.innerWidth / 2);
+      setPosition({
+        top: rect.top - 8,
+        left: Math.min(window.innerWidth - edge, Math.max(edge, center)),
+      });
+      timerRef.current = null;
+    }, 1_000);
+  };
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
+  return (
+    <span
+      ref={anchorRef}
+      className="inline-flex"
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocusCapture={show}
+      onBlurCapture={hide}
+    >
+      {children}
+      {position === null
+        ? null
+        : createPortal(
+            <span
+              role="tooltip"
+              className="pointer-events-none fixed z-[2147483647] w-max max-w-44 -translate-x-1/2 -translate-y-full rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs font-semibold leading-[1.35] text-[var(--bg)] shadow-floating"
+              style={{ top: position.top, left: position.left }}
+            >
+              {label}
+            </span>,
+            document.body,
+          )}
+    </span>
+  );
+};
+
+const ThreadIconButton = ({
+  label,
+  icon,
+  onClick,
+  disabled = false,
+}: {
+  readonly label: string;
+  readonly icon: LucideIcon;
+  readonly onClick?: () => void;
+  readonly disabled?: boolean;
+}) => (
+  <DelayedTooltip label={label}>
+    <button
+      type="button"
+      className="inline-flex size-[1.65rem] flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 leading-none text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent active:bg-well disabled:cursor-default disabled:bg-transparent disabled:text-subtle [&>svg]:size-4"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <Icon icon={icon} />
+    </button>
+  </DelayedTooltip>
+);
 
 /** Keeps a viewport-anchored composer clear of contextual comment cards. */
 const floatingComposerPosition = ({
@@ -1672,13 +1762,18 @@ const SentThread = ({
       >
         <button
           type="button"
-          className="grid min-w-0 cursor-pointer gap-2 border-0 bg-transparent p-0 text-left text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="group/thread grid min-w-0 cursor-pointer gap-2 border-0 bg-transparent p-0 text-left text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           aria-expanded="false"
           onClick={onToggle}
         >
-          <strong className="text-xs uppercase tracking-caps">
-            {targetLabel(comment.target, true)}
-          </strong>
+          <span className="flex min-w-0 items-center gap-2">
+            <strong className="min-w-0 flex-1 text-xs tracking-caps uppercase">
+              {targetLabel(comment.target, true)}
+            </strong>
+            <span className="shrink-0 translate-x-[-0.2rem] text-muted opacity-0 transition-[opacity,transform] group-hover/thread:translate-x-0 group-hover/thread:opacity-100 group-focus-visible/thread:translate-x-0 group-focus-visible/thread:opacity-100 [&>svg]:size-4">
+              <Icon icon={CHEVRON_RIGHT_ICON} />
+            </span>
+          </span>
           <span className="text-sm [overflow-wrap:anywhere]">
             {comment.body}
           </span>
@@ -1703,6 +1798,20 @@ const SentThread = ({
             >
               Cancel
             </button>
+          )}
+          {latestStatus !== undefined ? null : (
+            <ThreadIconButton
+              label={resolved ? "Unresolve comment" : "Resolve comment"}
+              icon={CHECK_ICON}
+              onClick={onResolve}
+            />
+          )}
+          {latestChanged === undefined ? null : (
+            <ThreadIconButton
+              label="Revert agent changes"
+              icon={ROTATE_CCW_ICON}
+              disabled
+            />
           )}
         </div>
       </Card>
@@ -1730,22 +1839,23 @@ const SentThread = ({
         >
           {targetLabel(comment.target, true)}
         </button>
-        <Button
-          variant="ghost"
-          size="compactIcon"
-          aria-label="Minimize thread"
+        <ThreadIconButton
+          label="Minimize thread"
+          icon={MINIMIZE_2_ICON}
           onClick={onToggle}
-        >
-          <Icon icon={MINIMIZE_2_ICON} />
-        </Button>
-        <Button
-          variant="ghost"
-          size="compactIcon"
-          aria-label={resolved ? "Unresolve comment" : "Resolve comment"}
+        />
+        <ThreadIconButton
+          label={resolved ? "Unresolve comment" : "Resolve comment"}
+          icon={CHECK_ICON}
           onClick={onResolve}
-        >
-          <Icon icon={CHECK_ICON} />
-        </Button>
+        />
+        {latestChanged === undefined ? null : (
+          <ThreadIconButton
+            label="Revert agent changes"
+            icon={ROTATE_CCW_ICON}
+            disabled
+          />
+        )}
       </div>
       {!targetPresent ? (
         <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]">
@@ -1828,34 +1938,22 @@ const SentThread = ({
                 Next steps
               </strong>
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="compactIcon"
-                  aria-label="Minimize thread"
+                <ThreadIconButton
+                  label="Minimize thread"
+                  icon={MINIMIZE_2_ICON}
                   onClick={onToggle}
-                >
-                  <Icon icon={MINIMIZE_2_ICON} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="compactIcon"
-                  aria-label={
-                    resolved ? "Unresolve comment" : "Resolve comment"
-                  }
+                />
+                <ThreadIconButton
+                  label={resolved ? "Unresolve comment" : "Resolve comment"}
+                  icon={CHECK_ICON}
                   onClick={onResolve}
-                >
-                  <Icon icon={CHECK_ICON} />
-                </Button>
+                />
                 {latestChanged === undefined ? null : (
-                  <Button
-                    variant="ghost"
-                    size="compactIcon"
-                    aria-label="Revert agent changes"
+                  <ThreadIconButton
+                    label="Revert agent changes"
+                    icon={ROTATE_CCW_ICON}
                     disabled
-                    title="Revert is not available in this review yet"
-                  >
-                    <Icon icon={ROTATE_CCW_ICON} />
-                  </Button>
+                  />
                 )}
               </div>
             </section>
@@ -2798,14 +2896,27 @@ const ReviewKernel = () => {
       {feedbackHost === null
         ? null
         : createPortal(
-            <span className="inline-flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5">
               {agentHealthLabel === null ? (
                 identity !== null && agent.presence.connected ? (
-                  <span
-                    className="size-2 rounded-full border border-accent bg-accent"
-                    aria-label="Agent connected"
-                    role="status"
-                  />
+                  <DelayedTooltip label="Agent session active">
+                    <button
+                      type="button"
+                      className="inline-flex size-[1.85rem] cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-surface focus-visible:bg-surface focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                      aria-label="Agent session active"
+                      onClick={() => {
+                        setIsOpen(true);
+                        setTab("agent");
+                      }}
+                    >
+                      <span
+                        className="inline-flex size-2.5 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--diff-add-c)_34%,transparent)]"
+                        aria-hidden="true"
+                      >
+                        <span className="size-1.5 rounded-full bg-[var(--diff-add-c)]" />
+                      </span>
+                    </button>
+                  </DelayedTooltip>
                 ) : null
               ) : (
                 <AgentHealthAlert
@@ -3189,14 +3300,16 @@ const ReviewKernel = () => {
                       }}
                     />
                     <div className="mt-2 flex items-center gap-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={chatBody.trim() === "" || isSendingChat}
-                        onClick={() => void sendChat()}
-                      >
-                        {isSendingChat ? "Sending…" : "Send"}
-                      </Button>
+                      <DelayedTooltip label={`Send · ${MODIFIER_SHORTCUT}`}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={chatBody.trim() === "" || isSendingChat}
+                          onClick={() => void sendChat()}
+                        >
+                          {isSendingChat ? "Sending…" : "Send"}
+                        </Button>
+                      </DelayedTooltip>
                     </div>
                   </div>
                   {chatRequests.length === 0 ? (
