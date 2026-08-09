@@ -253,6 +253,17 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "padding-left",
     "2px",
   );
+  await thread.locator(".review-staged-meta").click({
+    position: { x: 1, y: 1 },
+  });
+  const headerCollapsedThread = page.locator(
+    "[data-review-thread-side] .review-staged-collapsed-thread",
+  );
+  await expect(headerCollapsedThread).toBeVisible();
+  await headerCollapsedThread
+    .getByRole("button", { name: /Expand comment:/ })
+    .click();
+  await expect(thread).toBeVisible();
   await expect
     .poll(() =>
       Promise.all([

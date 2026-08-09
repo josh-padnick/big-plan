@@ -277,7 +277,10 @@ const ThreadIconButton = ({
         className={`inline-flex size-6 flex-none cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent p-0 leading-none text-muted transition-[color,background-color,border-color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent active:inset-shadow-pressed disabled:cursor-default disabled:border-transparent disabled:bg-transparent disabled:text-subtle disabled:shadow-none [&>svg]:size-3.5 ${hoverClass}`}
         aria-label={label}
         disabled={disabled}
-        onClick={onClick}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClick?.();
+        }}
       >
         <Icon icon={icon} />
       </button>
@@ -1381,6 +1384,7 @@ const CommentCardHeader = ({
   targetClassName,
   actionsClassName,
   onJump,
+  onHeaderClick,
   children,
 }: {
   readonly target: CommentTarget;
@@ -1389,17 +1393,25 @@ const CommentCardHeader = ({
   readonly targetClassName: string;
   readonly actionsClassName: string;
   readonly onJump: () => void;
+  readonly onHeaderClick?: () => void;
   readonly children: ReactNode;
 }) => (
   <div
-    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : ""}`}
+    className={`review-comment-meta ${metaClassName} flex min-w-0 items-center gap-2 ${surface === "thread" ? "-mx-3 -mt-3 mb-3 rounded-t-lg border-b border-edge bg-comment-toolbar!" : ""} ${onHeaderClick === undefined ? "" : "cursor-pointer"}`}
     style={surface === "thread" ? { padding: "3px 5px" } : undefined}
+    onClick={onHeaderClick}
   >
     <button
       type="button"
       className={`${targetClassName} min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left leading-normal hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${surface === "thread" ? "truncate pl-0.5 text-2xs font-medium text-subtle" : "[overflow-wrap:anywhere] text-2xs font-semibold uppercase tracking-caps text-ink"}`}
-      onClick={onJump}
-      title="Jump to this target"
+      onClick={(event) => {
+        event.stopPropagation();
+        (onHeaderClick ?? onJump)();
+      }}
+      aria-expanded={onHeaderClick === undefined ? undefined : true}
+      title={
+        onHeaderClick === undefined ? "Jump to this target" : "Minimize comment"
+      }
     >
       {targetLabel(target, true)}
     </button>
@@ -1414,6 +1426,7 @@ const CommentCardHeader = ({
 const ContextualCommentSummary = ({
   className = "",
   status,
+  statusIcon,
   statusTone = "secondary",
   statusClassName = "",
   body,
@@ -1426,6 +1439,7 @@ const ContextualCommentSummary = ({
 }: {
   readonly className?: string;
   readonly status: string;
+  readonly statusIcon?: LucideIcon;
   readonly statusTone?: "annotation" | "secondary";
   readonly statusClassName?: string;
   readonly body: string;
@@ -1452,14 +1466,24 @@ const ContextualCommentSummary = ({
     data-review-sent-thread={threadGroup}
     data-review-comment-id={commentId}
   >
-    <Badge
-      size="compact"
-      shape="badge"
-      tone={statusTone}
-      className={`shrink-0 leading-normal tracking-caps ${statusClassName}`}
-    >
-      {status.toUpperCase()}
-    </Badge>
+    {statusIcon === undefined ? (
+      <Badge
+        size="compact"
+        shape="badge"
+        tone={statusTone}
+        className={`shrink-0 leading-normal tracking-caps ${statusClassName}`}
+      >
+        {status.toUpperCase()}
+      </Badge>
+    ) : (
+      <span
+        role="img"
+        aria-label={status}
+        className="inline-flex size-5 shrink-0 items-center justify-center text-[var(--callout-warning-c)] [&>svg]:size-3.5"
+      >
+        <Icon icon={statusIcon} />
+      </span>
+    )}
     <button
       type="button"
       className="min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 text-left text-xs text-ink hover:underline hover:underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
@@ -1568,6 +1592,7 @@ const StagedCard = ({
         targetClassName="review-staged-target"
         actionsClassName="review-staged-actions"
         onJump={onJump}
+        onHeaderClick={surface === "thread" ? onCollapse : undefined}
       >
         {surface === "thread" ? (
           <ThreadIconButton
@@ -1852,6 +1877,9 @@ const SentThread = ({
       return (
         <ContextualCommentSummary
           status={latestStatus?.headline ?? outcomeLabel}
+          statusIcon={
+            latestStatus?.stage === "blocked" ? TRIANGLE_ALERT_ICON : undefined
+          }
           statusClassName={
             group === "ready"
               ? "bg-accent-soft text-accent"
@@ -1994,6 +2022,7 @@ const SentThread = ({
         targetClassName="review-sent-target"
         actionsClassName="review-thread-actions"
         onJump={onJump}
+        onHeaderClick={surface === "thread" ? onToggle : undefined}
       >
         <ThreadIconButton
           label="Minimize thread"

@@ -67,6 +67,24 @@ test("should restore and submit staged comments through the local review runtime
   await expect(
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
+  await page.getByRole("button", { name: /Feedback/ }).click();
+  const blockedSummary = page.locator(
+    ".review-contextual-summary[data-review-sent-thread='queued']",
+  );
+  await expect(
+    blockedSummary.getByRole("img", {
+      name: "Blocked - no agent connected",
+    }),
+  ).toBeVisible();
+  await expect(blockedSummary).not.toContainText(
+    "BLOCKED - NO AGENT CONNECTED",
+  );
+  await expect(
+    blockedSummary.getByRole("button", {
+      name: "Expand comment: Clarify the failure boundary.",
+    }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Feedback/ }).click();
 
   await rail.getByRole("tab", { name: "Agent" }).click();
   const currentActivity = rail.locator("[data-review-current-activity]");
