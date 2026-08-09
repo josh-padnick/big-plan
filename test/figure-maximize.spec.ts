@@ -424,8 +424,8 @@ test("should expose dedicated copy controls beside CodeDiff and CodeSnippet maxi
     await expect(copy).toHaveAttribute("data-tooltip-delay", "1s");
     await expect(maximize).toHaveAttribute("data-tooltip-delay", "1s");
     expect(
-      await figure
-        .locator(".figure-action-group button")
+      await toolbar
+        .locator(":scope > [data-copy-source], :scope > [data-figure-maximize]")
         .evaluateAll((buttons) =>
           buttons.map((button) => button.getAttribute("aria-label")),
         ),
@@ -562,6 +562,13 @@ test("should keep the copy success chrome icon-only in both themes", async ({
           "animation-name",
           "boost-pop",
         );
+        await expect
+          .poll(() =>
+            copy.evaluate((button) =>
+              getComputedStyle(button, "::after").getPropertyValue("content"),
+            ),
+          )
+          .toBe("none");
 
         await maximize.click();
         await expect(frame).not.toHaveAttribute("data-figure-maximized");

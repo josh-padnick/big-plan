@@ -299,7 +299,9 @@ const installColumnPointerReorder = ({
     if (!copied) throw new Error("Unable to copy code");
   };
 
-  const wireCopy = ({ button, source, label }) => {
+  const wireCopy = ({ button, source }) => {
+    const label = button.getAttribute("aria-label");
+    if (label === null) return;
     let resetTimer;
     let copyAttempt = 0;
     const setCopiedState = (copied) => {
@@ -399,7 +401,6 @@ const installColumnPointerReorder = ({
     wireCopy({
       button,
       source,
-      label: "Copy code",
     });
   }
 
@@ -416,12 +417,10 @@ const installColumnPointerReorder = ({
       !(button instanceof HTMLButtonElement)
     )
       continue;
-    const label = button.getAttribute("aria-label") || "Copy code";
     const tableSource = isTable ? () => tableToTsv(figure) : null;
     wireCopy({
       button,
       source: tableSource ?? source.value,
-      label,
     });
   }
 })();
