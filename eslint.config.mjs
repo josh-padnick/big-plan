@@ -205,7 +205,7 @@ export default tseslint.config(
       review: {
         files: ["src/review/**/*.ts", "src/review/**/*.tsx"],
         imports: ["**/review/**"],
-        mayImport: ["composer", "icons"],
+        mayImport: ["composer", "icons", "planLint"],
       },
       cli: {
         files: ["src/cli/**/*.ts"],
