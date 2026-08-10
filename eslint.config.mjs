@@ -236,7 +236,7 @@ export default tseslint.config(
         imports: ["**/cli/**"],
         // The composer files are the renderer's public entry points; granting
         // only them keeps the CLI out of the renderer's internals.
-        mayImport: ["composer", "planLint", "review"],
+        mayImport: ["composer", "planLint", "review", "reviewShared"],
       },
     };
 

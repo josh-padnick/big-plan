@@ -74,6 +74,10 @@ import {
 import type { ReviewStore } from "./store.js";
 import { diffRevisions } from "./revision-diff.js";
 import {
+  agentConnectCommand,
+  agentRecoveryPrompt,
+} from "./shared/agent-command.js";
+import {
   activateReviewSession,
   refreshReviewSessionHeartbeat,
   reviewSessionOwnsMailbox,
@@ -83,10 +87,6 @@ import {
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const HEARTBEAT_INTERVAL_MS = 750;
-
-/** Quotes one trusted local path as one POSIX-shell argument. */
-const shellArgument = (value: string): string =>
-  `'${value.replaceAll("'", `'"'"'`)}'`;
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
@@ -220,15 +220,15 @@ export const startReviewRuntime = async ({
   readonly planPath: string;
 }): Promise<ReviewRuntime> => {
   const resolvedPlanPath = resolve(planPath);
-  const agentCommand = `node ${shellArgument(
-    resolve(process.argv[1] ?? "bin/big-plan.mjs"),
-  )} agent ${shellArgument(resolvedPlanPath)}`;
-  const recoveryPrompt = [
-    `Reconnect to my existing Big Plan review for ${resolvedPlanPath}.`,
-    `Run ${agentCommand}.`,
-    "Read the prompt_file path it prints and follow that prompt in this agent session.",
-    "Keep the connection loop running so the review remains live.",
-  ].join(" ");
+  const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
+  const agentCommand = agentConnectCommand({
+    executablePath,
+    planPath: resolvedPlanPath,
+  });
+  const recoveryPrompt = agentRecoveryPrompt({
+    executablePath,
+    planPath: resolvedPlanPath,
+  });
   const planId = deriveReviewPlanId({ planPath: resolvedPlanPath });
   const sessionId = randomId(8);
   const token = randomBytes(32).toString("base64url");

@@ -7,12 +7,12 @@
 import { AxiError } from "axi-sdk-js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
-import { quoteShellArgument } from "../_shared/shell-argument.js";
 import {
   deriveInputFile,
   parseInputCommandArguments,
 } from "../_shared/input-command.js";
 import { startReviewRuntime } from "../../review/server.js";
+import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { renderDocument } from "../../render/render-document.js";
 
 const USAGE = "Usage: big-plan review <input.mdx>";

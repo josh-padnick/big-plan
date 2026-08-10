@@ -35,6 +35,10 @@ import {
   reviewSessionIsRunning,
   SessionAuthorityRejected,
 } from "./session-authority.js";
+import {
+  agentNextCommand,
+  quoteShellArgument,
+} from "./shared/agent-command.js";
 
 export type AgentWorkLoopAction =
   | {
@@ -81,10 +85,6 @@ export class AgentWorkLoopRejected extends Error {
 const fail = (message: string): never => {
   throw new AgentWorkLoopRejected(message);
 };
-
-/** Quotes trusted text as one literal POSIX-shell argument. */
-const quoteShellArgument = (value: string): string =>
-  `'${value.replaceAll("'", `'"'"'`)}'`;
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -244,9 +244,10 @@ const agentPrompt = async (
 ): Promise<Record<string, unknown>> => {
   const session = await readPlanSession(planPath);
   const binPath = resolve(executablePath);
-  const nextCommand = `node ${quoteShellArgument(binPath)} agent next ${quoteShellArgument(
-    session.planPath,
-  )} --wait`;
+  const nextCommand = agentNextCommand({
+    executablePath: binPath,
+    planPath: session.planPath,
+  });
   const prompt = `You are the coding agent responsible for the live Big Plan review of:
 ${session.planPath}
 
@@ -510,9 +511,10 @@ const respond = async ({
     kind: response.kind,
     plan: session.planPath,
     review: session.url,
-    next: `node ${quoteShellArgument(resolve(executablePath))} agent next ${quoteShellArgument(
-      session.planPath,
-    )} --wait`,
+    next: agentNextCommand({
+      executablePath: resolve(executablePath),
+      planPath: session.planPath,
+    }),
     help: [
       "The live review will replace its waiting chip with this real agent response",
       "Run next and wait so the reviewer can continue this conversation",
