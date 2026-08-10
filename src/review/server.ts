@@ -78,6 +78,13 @@ import {
   agentRecoveryPrompt,
 } from "./shared/agent-command.js";
 import {
+  encodeAgentSnapshot,
+  encodeDiffLocations,
+  encodeProgress,
+  encodeReviewSnapshot,
+  encodeRuntimeSession,
+} from "./shared/review-wire.js";
+import {
   activateReviewSession,
   refreshReviewSessionHeartbeat,
   reviewSessionOwnsMailbox,
@@ -253,15 +260,17 @@ export const startReviewRuntime = async ({
 
   const readBootstrap = async (markdown: string): Promise<string> =>
     JSON.stringify({
-      drafts: await readComments({ path: store.draftsPath, validate }),
-      sent: await readComments({ path: store.sentPath, validate }),
-      activeDraft: await readActiveDraft({
-        path: store.activeDraftPath,
-        validate: validateActiveDraft,
-      }),
-      resolvedCommentIds: await readResolvedCommentIds({
-        store,
-        validate: validateResolvedCommentIds,
+      ...encodeReviewSnapshot({
+        drafts: await readComments({ path: store.draftsPath, validate }),
+        sent: await readComments({ path: store.sentPath, validate }),
+        activeDraft: await readActiveDraft({
+          path: store.activeDraftPath,
+          validate: validateActiveDraft,
+        }),
+        resolvedCommentIds: await readResolvedCommentIds({
+          store,
+          validate: validateResolvedCommentIds,
+        }),
       }),
       agent: await readAgentExchange({ store, sessionId, planId }),
       sourceRevision: deriveSourceRevision(markdown),
@@ -350,7 +359,7 @@ export const startReviewRuntime = async ({
       sendJson({
         response,
         status: 200,
-        value: sessionView,
+        value: encodeRuntimeSession(sessionView),
       });
       return;
     }
@@ -361,7 +370,7 @@ export const startReviewRuntime = async ({
       sendJson({
         response,
         status: 200,
-        value: {
+        value: encodeReviewSnapshot({
           drafts: await readComments({ path: store.draftsPath, validate }),
           sent: await readComments({ path: store.sentPath, validate }),
           activeDraft: await readActiveDraft({
@@ -372,7 +381,7 @@ export const startReviewRuntime = async ({
             store,
             validate: validateResolvedCommentIds,
           }),
-        },
+        }),
       });
       return;
     }
@@ -583,7 +592,7 @@ export const startReviewRuntime = async ({
       sendJson({
         response,
         status: 200,
-        value: {
+        value: encodeAgentSnapshot({
           // The browser reloads only revisions the response command has
           // rendered, linted, and accepted. Watching the raw file here would
           // navigate the reviewer onto a transient parse error while an agent
@@ -595,8 +604,9 @@ export const startReviewRuntime = async ({
           plan: resolvedPlanPath,
           agentCommand,
           recoveryPrompt,
-          ...exchange,
-        },
+          requests: exchange.requests,
+          responses: exchange.responses,
+        }),
       });
       return;
     }
@@ -758,20 +768,20 @@ export const startReviewRuntime = async ({
       sendJson({
         response,
         status: 200,
-        value: {
+        value: encodeDiffLocations({
           from,
           to,
           locations: diffRevisions({
             before: before.blocks,
             after: after.blocks,
           }),
-        },
+        }),
       });
       return;
     }
     if (route.path === "/api/progress") {
       const events = await readProgress({ store, sessionId });
-      sendJson({ response, status: 200, value: { events } });
+      sendJson({ response, status: 200, value: encodeProgress({ events }) });
       return;
     }
     throw new Error(`Unhandled review route ${route.path}`);

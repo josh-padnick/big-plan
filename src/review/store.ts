@@ -28,7 +28,9 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
+  isProgressState,
   isProgressStepCode,
+  type ProgressState,
   type ProgressStepCode,
 } from "./shared/progress-code.js";
 
@@ -37,7 +39,6 @@ const FILE_MODE = 0o600;
 
 // A status file is writable by any local process, so a relayed event carries
 // only these states and a bounded amount of text.
-const PROGRESS_STATES = new Set(["waiting", "live", "done", "failed"]);
 const PROGRESS_TEXT_LIMIT = 160;
 const PROGRESS_EVENT_LIMIT = 200;
 const REVIEW_PLAN_ID_LENGTH = 16;
@@ -50,7 +51,7 @@ export type ProgressEvent = {
   readonly seq: number;
   readonly stepCode: ProgressStepCode;
   readonly step: string;
-  readonly state: string;
+  readonly state: ProgressState;
   readonly detail?: string;
 };
 
@@ -633,11 +634,8 @@ const asProgressEvent = ({
   if (
     !isProgressStepCode(event.stepCode) ||
     typeof event.step !== "string" ||
-    typeof event.state !== "string"
+    !isProgressState(event.state)
   ) {
-    return undefined;
-  }
-  if (!PROGRESS_STATES.has(event.state)) {
     return undefined;
   }
   return {

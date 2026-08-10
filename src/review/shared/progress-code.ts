@@ -13,6 +13,14 @@ export const PROGRESS_STEP_CODES = [
 ] as const;
 
 export type ProgressStepCode = (typeof PROGRESS_STEP_CODES)[number];
+export type ProgressState = "waiting" | "live" | "done" | "failed";
+
+const PROGRESS_STATES: ReadonlySet<string> = new Set([
+  "waiting",
+  "live",
+  "done",
+  "failed",
+]);
 
 const PROGRESS_STEP_CODE_SET: ReadonlySet<string> = new Set(
   PROGRESS_STEP_CODES,
@@ -21,3 +29,7 @@ const PROGRESS_STEP_CODE_SET: ReadonlySet<string> = new Set(
 /** Narrows untrusted progress data to the stable semantic vocabulary. */
 export const isProgressStepCode = (value: unknown): value is ProgressStepCode =>
   typeof value === "string" && PROGRESS_STEP_CODE_SET.has(value);
+
+/** Narrows untrusted progress data to its lifecycle state vocabulary. */
+export const isProgressState = (value: unknown): value is ProgressState =>
+  typeof value === "string" && PROGRESS_STATES.has(value);

@@ -41,10 +41,6 @@ import {
 } from "../shared/cancel-pending.js";
 import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
-  isProgressStepCode,
-  type ProgressStepCode,
-} from "../shared/progress-code.js";
-import {
   projectCommentThreads,
   projectRequestActivity,
   projectRequestStatus,
@@ -54,9 +50,24 @@ import {
   type ThreadRuntime,
 } from "../shared/thread-projection.js";
 import {
+  decodeAgentSnapshot as parseAgentSnapshot,
+  decodeDiffLocations as parseDiffLocations,
+  decodeProgress as parseProgress,
+  decodeReviewSnapshot as parseSnapshot,
+  decodeRuntimeSession as parseRuntimeSession,
+  emptyAgentSnapshot,
+  isReviewCommentValue as isComment,
+  isReviewWireRecord as isRecord,
+  type AgentRequest,
+  type AgentResponse,
+  type AgentSnapshot,
+  type DiffLocation,
+  type ProgressEvent,
+  type RuntimeSession,
+} from "../shared/review-wire.js";
+import {
   AgentConnectionPanel,
   AgentHealthAlert,
-  type BrowserConnectionEvent,
 } from "./agent-connection.browser.js";
 import {
   AgentChangeDigest,
@@ -89,88 +100,6 @@ type RuntimeIdentity = {
   readonly planId: string;
   readonly sessionId: string;
   readonly token: string;
-};
-
-type ReviewSnapshot = {
-  readonly drafts: ReadonlyArray<ReviewComment>;
-  readonly sent: ReadonlyArray<ReviewComment>;
-  readonly resolvedCommentIds: ReadonlyArray<string>;
-};
-
-type AgentOutcome = {
-  readonly commentId: string;
-  readonly state: "changed" | "question" | "outside";
-  readonly message: string;
-  readonly changeTargets: ReadonlyArray<string>;
-};
-
-type AgentRequest = {
-  readonly requestId: string;
-  readonly sourceRevision: string;
-  readonly claimedFromRevision?: string;
-  readonly claimedAt?: string;
-  readonly canceledAt?: string;
-  readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat";
-  readonly body?: string;
-  readonly commentId?: string;
-  readonly commentIds: ReadonlyArray<string>;
-  readonly targetLabel?: string;
-};
-
-type AgentResponse = {
-  readonly requestId: string;
-  readonly sourceRevision: string;
-  readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat";
-  readonly outcomes: ReadonlyArray<AgentOutcome>;
-  readonly message?: string;
-};
-
-type AgentPresence = {
-  readonly connected: boolean;
-  readonly state: "waiting" | "working";
-  readonly requestId?: string;
-  readonly updatedAtMs?: number;
-};
-
-type AgentSnapshot = {
-  readonly sourceRevision: string;
-  readonly presence: AgentPresence;
-  readonly requests: ReadonlyArray<AgentRequest>;
-  readonly responses: ReadonlyArray<AgentResponse>;
-  readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
-  readonly plan: string;
-  readonly agentCommand: string;
-  readonly recoveryPrompt: string;
-};
-
-type ProgressEvent = {
-  readonly requestId?: string;
-  readonly atMs?: number;
-  readonly seq: number;
-  readonly stepCode: ProgressStepCode;
-  readonly step: string;
-  readonly state: "waiting" | "live" | "done" | "failed";
-  readonly detail?: string;
-};
-
-type DiffRun = {
-  readonly op: "same" | "del" | "ins";
-  readonly text: string;
-};
-
-type DiffLocation = {
-  readonly status: "changed" | "added" | "removed";
-  readonly label: string;
-  readonly section: string;
-  readonly runs: ReadonlyArray<DiffRun>;
-};
-
-type RuntimeSession = {
-  readonly plan: string;
-  readonly authoritative: boolean;
-  readonly latestReviewUrl?: string;
 };
 
 type ComposeState = {
@@ -406,302 +335,6 @@ const bootstrapSourceRevision = (): string => {
   } catch {
     return "";
   }
-};
-
-const isComment = (value: unknown): value is ReviewComment => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const record = value as Readonly<Record<string, unknown>>;
-  return (
-    typeof record.id === "string" &&
-    typeof record.body === "string" &&
-    typeof record.createdAt === "string" &&
-    typeof record.target === "object" &&
-    record.target !== null
-  );
-};
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const parseRuntimeSession = ({
-  value,
-  sessionId,
-}: {
-  readonly value: unknown;
-  readonly sessionId: string;
-}): RuntimeSession | null => {
-  if (
-    !isRecord(value) ||
-    value.sessionId !== sessionId ||
-    typeof value.plan !== "string"
-  ) {
-    return null;
-  }
-  return {
-    plan: value.plan,
-    authoritative: value.authoritative !== false,
-    ...(typeof value.latestReviewUrl === "string"
-      ? { latestReviewUrl: value.latestReviewUrl }
-      : {}),
-  };
-};
-
-const parseSnapshot = (value: unknown): ReviewSnapshot => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { drafts: [], sent: [], resolvedCommentIds: [] };
-  }
-  const record = value as Readonly<Record<string, unknown>>;
-  return {
-    drafts: Array.isArray(record.drafts) ? record.drafts.filter(isComment) : [],
-    sent: Array.isArray(record.sent) ? record.sent.filter(isComment) : [],
-    resolvedCommentIds: Array.isArray(record.resolvedCommentIds)
-      ? record.resolvedCommentIds.filter(
-          (id): id is string => typeof id === "string",
-        )
-      : [],
-  };
-};
-
-const emptyAgentSnapshot = (): AgentSnapshot => ({
-  sourceRevision: "",
-  presence: { connected: false, state: "waiting" },
-  requests: [],
-  responses: [],
-  connectionLog: [],
-  plan: "",
-  agentCommand: "",
-  recoveryPrompt: "",
-});
-
-const parseAgentSnapshot = (value: unknown): AgentSnapshot => {
-  if (!isRecord(value)) return emptyAgentSnapshot();
-  const requests = Array.isArray(value.requests)
-    ? value.requests.flatMap((request): ReadonlyArray<AgentRequest> => {
-        if (
-          !isRecord(request) ||
-          typeof request.requestId !== "string" ||
-          typeof request.sourceRevision !== "string" ||
-          typeof request.createdAt !== "string" ||
-          (request.kind !== "feedback" &&
-            request.kind !== "reply" &&
-            request.kind !== "chat")
-        ) {
-          return [];
-        }
-        return [
-          {
-            requestId: request.requestId,
-            sourceRevision: request.sourceRevision,
-            createdAt: request.createdAt,
-            kind: request.kind,
-            ...(typeof request.claimedFromRevision === "string"
-              ? { claimedFromRevision: request.claimedFromRevision }
-              : {}),
-            ...(typeof request.claimedAt === "string"
-              ? { claimedAt: request.claimedAt }
-              : {}),
-            ...(typeof request.canceledAt === "string"
-              ? { canceledAt: request.canceledAt }
-              : {}),
-            ...(typeof request.body === "string" ? { body: request.body } : {}),
-            ...(typeof request.commentId === "string"
-              ? { commentId: request.commentId }
-              : {}),
-            commentIds: Array.isArray(request.comments)
-              ? request.comments.flatMap((comment): ReadonlyArray<string> =>
-                  isRecord(comment) && typeof comment.id === "string"
-                    ? [comment.id]
-                    : [],
-                )
-              : [],
-            ...(Array.isArray(request.comments) &&
-            isRecord(request.comments[0]) &&
-            isRecord(request.comments[0].target)
-              ? {
-                  targetLabel:
-                    typeof request.comments[0].target.section === "string"
-                      ? request.comments[0].target.section
-                      : typeof request.comments[0].target.label === "string"
-                        ? request.comments[0].target.label
-                        : "Whole plan",
-                }
-              : {}),
-          },
-        ];
-      })
-    : [];
-  const responses = Array.isArray(value.responses)
-    ? value.responses.flatMap((response): ReadonlyArray<AgentResponse> => {
-        if (
-          !isRecord(response) ||
-          typeof response.requestId !== "string" ||
-          typeof response.sourceRevision !== "string" ||
-          typeof response.createdAt !== "string" ||
-          (response.kind !== "feedback" &&
-            response.kind !== "reply" &&
-            response.kind !== "chat")
-        ) {
-          return [];
-        }
-        const outcomes = Array.isArray(response.outcomes)
-          ? response.outcomes.flatMap(
-              (outcome): ReadonlyArray<AgentOutcome> => {
-                if (
-                  !isRecord(outcome) ||
-                  typeof outcome.commentId !== "string" ||
-                  typeof outcome.message !== "string" ||
-                  (outcome.state !== "changed" &&
-                    outcome.state !== "question" &&
-                    outcome.state !== "outside")
-                ) {
-                  return [];
-                }
-                return [
-                  {
-                    commentId: outcome.commentId,
-                    state: outcome.state,
-                    message: outcome.message,
-                    changeTargets: Array.isArray(outcome.changeTargets)
-                      ? outcome.changeTargets.filter(
-                          (target): target is string =>
-                            typeof target === "string",
-                        )
-                      : [],
-                  },
-                ];
-              },
-            )
-          : [];
-        return [
-          {
-            requestId: response.requestId,
-            sourceRevision: response.sourceRevision,
-            createdAt: response.createdAt,
-            kind: response.kind,
-            outcomes,
-            ...(typeof response.message === "string"
-              ? { message: response.message }
-              : {}),
-          },
-        ];
-      })
-    : [];
-  const presence = isRecord(value.presence)
-    ? {
-        connected: value.presence.connected === true,
-        state:
-          value.presence.state === "working"
-            ? ("working" as const)
-            : ("waiting" as const),
-        ...(typeof value.presence.requestId === "string"
-          ? { requestId: value.presence.requestId }
-          : {}),
-        ...(typeof value.presence.updatedAtMs === "number"
-          ? { updatedAtMs: value.presence.updatedAtMs }
-          : {}),
-      }
-    : { connected: false, state: "waiting" as const };
-  return {
-    sourceRevision:
-      typeof value.sourceRevision === "string" ? value.sourceRevision : "",
-    presence,
-    requests,
-    responses,
-    connectionLog: Array.isArray(value.connectionLog)
-      ? value.connectionLog.flatMap(
-          (event): ReadonlyArray<BrowserConnectionEvent> =>
-            isRecord(event) &&
-            typeof event.connected === "boolean" &&
-            typeof event.at === "string"
-              ? [
-                  {
-                    connected: event.connected,
-                    at: event.at,
-                    ...(typeof event.eventId === "string"
-                      ? { eventId: event.eventId }
-                      : {}),
-                    ...(typeof event.reason === "string"
-                      ? { reason: event.reason }
-                      : {}),
-                  },
-                ]
-              : [],
-        )
-      : [],
-    plan: typeof value.plan === "string" ? value.plan : "",
-    agentCommand:
-      typeof value.agentCommand === "string" ? value.agentCommand : "",
-    recoveryPrompt:
-      typeof value.recoveryPrompt === "string" ? value.recoveryPrompt : "",
-  };
-};
-
-const parseProgress = (value: unknown): ReadonlyArray<ProgressEvent> => {
-  if (!isRecord(value) || !Array.isArray(value.events)) return [];
-  return value.events.flatMap((event): ReadonlyArray<ProgressEvent> => {
-    if (
-      !isRecord(event) ||
-      typeof event.seq !== "number" ||
-      !isProgressStepCode(event.stepCode) ||
-      typeof event.step !== "string" ||
-      (event.state !== "waiting" &&
-        event.state !== "live" &&
-        event.state !== "done" &&
-        event.state !== "failed")
-    ) {
-      return [];
-    }
-    return [
-      {
-        seq: event.seq,
-        stepCode: event.stepCode,
-        step: event.step,
-        state: event.state,
-        ...(typeof event.requestId === "string"
-          ? { requestId: event.requestId }
-          : {}),
-        ...(typeof event.atMs === "number" ? { atMs: event.atMs } : {}),
-        ...(typeof event.detail === "string" ? { detail: event.detail } : {}),
-      },
-    ];
-  });
-};
-
-const parseDiffLocations = (value: unknown): ReadonlyArray<DiffLocation> => {
-  if (!isRecord(value) || !Array.isArray(value.locations)) return [];
-  return value.locations.flatMap((location): ReadonlyArray<DiffLocation> => {
-    if (
-      !isRecord(location) ||
-      (location.status !== "changed" &&
-        location.status !== "added" &&
-        location.status !== "removed") ||
-      typeof location.label !== "string" ||
-      typeof location.section !== "string" ||
-      !Array.isArray(location.runs)
-    ) {
-      return [];
-    }
-    const runs = location.runs.flatMap((run): ReadonlyArray<DiffRun> => {
-      if (
-        !isRecord(run) ||
-        (run.op !== "same" && run.op !== "del" && run.op !== "ins") ||
-        typeof run.text !== "string"
-      ) {
-        return [];
-      }
-      return [{ op: run.op, text: run.text }];
-    });
-    return [
-      {
-        status: location.status,
-        label: location.label,
-        section: location.section,
-        runs,
-      },
-    ];
-  });
 };
 
 const localStorageKey = (planId: string): string =>

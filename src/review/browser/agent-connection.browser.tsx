@@ -8,18 +8,12 @@ import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { CurrentAgentActivity } from "../shared/agent-status.js";
+import type { BrowserConnectionEvent } from "../shared/review-wire.js";
 import {
   compactDurationLabel,
   relativeSignalLabel,
 } from "../shared/time-label.js";
 import { Icon } from "./icon.browser.js";
-
-export type BrowserConnectionEvent = {
-  readonly eventId?: string;
-  readonly connected: boolean;
-  readonly at: string;
-  readonly reason?: string;
-};
 
 const Spinner = () => (
   <span
