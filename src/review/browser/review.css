@@ -117,12 +117,15 @@ here; all values use the document theme's closed token vocabulary.
      insets produce a 12px visual ink gap while the chevron keeps its existing
      8px ink-to-card gap. */
   [data-collapse-header] > [data-review-slide-host] {
+    --review-slide-host-gutter: calc(
+      var(--deck-toggle-size) + var(--deck-toggle-gap) + var(--deck-toggle-gap)
+    );
+
     position: absolute;
     z-index: 3;
     top: 50%;
     right: calc(
-      100% + var(--deck-pad-x, 0rem) + var(--deck-toggle-size) +
-        var(--deck-toggle-gap) + var(--deck-toggle-gap)
+      100% + var(--deck-pad-x, 0rem) + var(--review-slide-host-gutter)
     );
     width: 1.4rem;
     height: 1.4rem;
@@ -133,10 +136,9 @@ here; all values use the document theme's closed token vocabulary.
      comment action one extra closed spacing step before the disclosure pair. */
   @media (width >= 40rem) {
     .plan-subslide-frame > [data-collapse-header] > [data-review-slide-host] {
-      right: calc(
-        100% + var(--deck-pad-x, 0rem) + var(--deck-toggle-size) +
-          var(--deck-toggle-gap) + var(--deck-toggle-gap) +
-          var(--deck-toggle-gap)
+      --review-slide-host-gutter: calc(
+        var(--deck-toggle-size) + var(--deck-toggle-gap) +
+          var(--deck-toggle-gap) + var(--deck-toggle-gap)
       );
     }
   }

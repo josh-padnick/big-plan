@@ -5,6 +5,7 @@ import {
   QUOTE_LIMIT,
   validateActiveDraft,
   validateComments,
+  validateResolvedCommentIds,
 } from "./comment.js";
 
 const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
@@ -167,6 +168,21 @@ describe("validateComments target resolution", () => {
     ).toThrow(CommentRejected);
   });
 
+  it("should refuse a reversed selection with an explicit same-block end", () => {
+    expect(() =>
+      validate(
+        commentOn({
+          type: "selection",
+          blockId: "section/status-quo/paragraph-1",
+          endBlockId: "section/status-quo/paragraph-1",
+          start: 20,
+          end: 4,
+          quote: "backwards",
+        }),
+      ),
+    ).toThrow(CommentRejected);
+  });
+
   it("should refuse a quote beyond the highlight limit", () => {
     expect(() =>
       validate(
@@ -202,6 +218,24 @@ describe("validateActiveDraft", () => {
   });
 });
 
+describe("validateResolvedCommentIds", () => {
+  it("should refuse duplicate ids", () => {
+    expect(() => validateResolvedCommentIds(["aabbccdd", "aabbccdd"])).toThrow(
+      "Resolved comment ids must be unique and bounded",
+    );
+  });
+
+  it("should refuse more than 200 ids", () => {
+    expect(() =>
+      validateResolvedCommentIds(
+        Array.from({ length: 201 }, (_, index) =>
+          index.toString(16).padStart(4, "0"),
+        ),
+      ),
+    ).toThrow("Resolved comment ids must be unique and bounded");
+  });
+});
+
 describe("validateComments shape and bounds", () => {
   it("should refuse anything that is not a list of comments", () => {
     expect(() => validate({ comments: [] })).toThrow(CommentRejected);
@@ -219,6 +253,27 @@ describe("validateComments shape and bounds", () => {
     expect(() =>
       validate([{ id: "aabbccdd", body: "   ", target: { type: "document" } }]),
     ).toThrow(CommentRejected);
+  });
+
+  it("should refuse duplicate comment ids", () => {
+    expect(() =>
+      validate([
+        { id: "aabbccdd", body: "First.", target: { type: "document" } },
+        { id: "aabbccdd", body: "Second.", target: { type: "document" } },
+      ]),
+    ).toThrow("Comment ids must be unique");
+  });
+
+  it("should refuse more than 200 comments", () => {
+    expect(() =>
+      validate(
+        Array.from({ length: 201 }, (_, index) => ({
+          id: index.toString(16).padStart(4, "0"),
+          body: `Comment ${index}`,
+          target: { type: "document" },
+        })),
+      ),
+    ).toThrow("More than 200 comments in one batch");
   });
 
   it("should refuse a body beyond the length limit", () => {

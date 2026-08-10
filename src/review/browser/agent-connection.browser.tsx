@@ -106,11 +106,25 @@ const CopyBlock = ({
   readonly label: string;
 }) => {
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
   const copy = async () => {
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
+    setCopied(false);
+    setFailed(false);
+    try {
+      if (navigator.clipboard === undefined) throw new Error("Unavailable");
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      setFailed(true);
+      return;
+    }
     window.setTimeout(() => setCopied(false), 1_500);
   };
+  const buttonLabel = failed
+    ? "Copy failed — select and copy manually"
+    : copied
+      ? `${label} copied`
+      : `Copy ${label}`;
   return (
     <div className="relative min-w-0">
       <pre className="m-0 min-w-0 overflow-x-auto rounded-md border border-edge bg-surface p-3 pr-12 font-mono text-xs whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
@@ -119,11 +133,11 @@ const CopyBlock = ({
       <button
         type="button"
         className="absolute top-2 right-2 inline-flex cursor-pointer items-center gap-1 rounded-sm border border-edge bg-surface px-1.5 py-1 text-2xs text-muted hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
-        aria-label={copied ? `${label} copied` : `Copy ${label}`}
+        aria-label={buttonLabel}
         onClick={() => void copy()}
       >
         <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
-        {copied ? "Copied" : "Copy"}
+        {failed ? "Copy failed" : copied ? "Copied" : "Copy"}
       </button>
     </div>
   );

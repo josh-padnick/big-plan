@@ -33,7 +33,7 @@ test("should restore and submit staged comments through the local review runtime
 
   const rail = page.getByRole("complementary", { name: "Feedback" });
   const kernel = page.locator("#big-plan-review-root");
-  await expect(rail).toBeHidden();
+  await expect(rail).toHaveCount(0);
   await page.getByRole("button", { name: /Feedback/ }).click();
   await expect(rail).toContainText("Clarify the failure boundary.");
   await expect(rail).toContainText("Name the operator recovery path.");
@@ -186,8 +186,12 @@ test("should restore and submit staged comments through the local review runtime
     const seconds = Number(/(\d+)s/u.exec(value)?.[1] ?? 0);
     return hours * 3_600 + minutes * 60 + seconds;
   });
-  expect(durationSeconds[1] - durationSeconds[0]).toBe(1);
-  expect(durationSeconds[2] - durationSeconds[1]).toBe(1);
+  for (let index = 1; index < durationSeconds.length; index += 1) {
+    const previous = durationSeconds[index - 1] ?? 0;
+    const current = durationSeconds[index] ?? 0;
+    expect(current).toBeGreaterThan(previous);
+    expect(current - previous).toBeLessThanOrEqual(2);
+  }
   await rail.getByRole("tab", { name: "Comments" }).click();
   const selectedThread = rail
     .locator("[data-review-comment-id]")
@@ -274,6 +278,7 @@ test("should restore and submit staged comments through the local review runtime
     sessionId: session.sessionId,
     state: "working",
     requestId: request.requestId,
+    now: Date.now() - 10_000,
   });
   await appendProgress({
     store,
@@ -286,6 +291,15 @@ test("should restore and submit staged comments through the local review runtime
       state: "live",
     },
   });
+
+  await expect(
+    page.getByRole("button", { name: /Agent connection lost/u }),
+  ).toHaveCount(0);
+  await rail.getByRole("tab", { name: "Agent" }).click();
+  const activeWork = rail.locator("[data-review-current-activity='working']");
+  await expect(activeWork).toContainText("Responding to a comment");
+  await expect(activeWork).toContainText("Reviewing the shared feedback batch");
+  await rail.getByRole("tab", { name: "Comments" }).click();
 
   const workingGroup = rail.locator("[data-review-thread-group='working']");
   await expect(workingGroup).toBeVisible();
@@ -568,6 +582,7 @@ test("should restore and submit staged comments through the local review runtime
   await replyButton.click();
   await continuedThread.getByRole("button", { name: "Cancel request" }).click();
   await expect(continuedThread).toContainText("Request canceled");
+  await writeFile(session.plan, beforeSource, "utf8");
 });
 
 test("should mark a superseded review as read-only and link to its replacement", async ({

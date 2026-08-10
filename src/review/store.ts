@@ -408,6 +408,7 @@ export const writeFeedbackPackage = async ({
   });
   await writeJson({ path: jsonPath, value: feedback });
   await writeFile(briefPath, brief, { mode: FILE_MODE });
+  await chmod(briefPath, FILE_MODE);
   return { jsonPath, briefPath };
 };
 
@@ -587,6 +588,7 @@ export const writeAgentPrompt = async ({
   readonly prompt: string;
 }): Promise<void> => {
   await writeFile(store.agentPromptPath, `${prompt}\n`, { mode: FILE_MODE });
+  await chmod(store.agentPromptPath, FILE_MODE);
 };
 
 /** Reads the owner-only descriptor through the caller's validator. */
@@ -648,18 +650,21 @@ const asProgressEvent = ({
  * they belong to the running session and advance its sequence. A foreign or
  * out-of-order event is dropped rather than shown to the reviewer as live.
  */
-export const readProgress = async ({
+const readProgressHistory = async ({
   store,
   sessionId,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
-}): Promise<ReadonlyArray<ProgressEvent>> => {
+}): Promise<{
+  readonly events: ReadonlyArray<ProgressEvent>;
+  readonly highestSequence: number;
+}> => {
   let raw: string;
   try {
     raw = await readFile(store.progressPath, "utf8");
   } catch {
-    return [];
+    return { events: [], highestSequence: 0 };
   }
   const accepted: Array<ProgressEvent> = [];
   let highest = 0;
@@ -679,12 +684,30 @@ export const readProgress = async ({
     }
     highest = event.seq;
     accepted.push(event);
-    if (accepted.length >= PROGRESS_EVENT_LIMIT) {
-      break;
-    }
   }
-  return accepted;
+  return { events: accepted, highestSequence: highest };
 };
+
+export const readProgress = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<ReadonlyArray<ProgressEvent>> => {
+  const history = await readProgressHistory({ store, sessionId });
+  return history.events.slice(-PROGRESS_EVENT_LIMIT);
+};
+
+/** Allocates the next sequence independently of the relayed display window. */
+export const readNextProgressSequence = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<number> =>
+  (await readProgressHistory({ store, sessionId })).highestSequence + 1;
 
 /** Appends one runtime-authored event to the agent's status channel. */
 export const appendProgress = async ({

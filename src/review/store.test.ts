@@ -18,6 +18,7 @@ import {
   readActiveDraft,
   readAgentConnectionEvents,
   readAgentPresence,
+  readNextProgressSequence,
   readProgress,
   readResolvedCommentIds,
   readRevisionSnapshot,
@@ -432,5 +433,25 @@ describe("review store progress relay", () => {
         (event) => event.step,
       ),
     ).toEqual(["Feedback package received", "Agent started"]);
+  });
+
+  it("should relay the latest 200 events and allocate after the full history", async () => {
+    const store = await storeWithProgress(
+      Array.from({ length: 205 }, (_, index) =>
+        line({
+          sessionId: "s1",
+          seq: index + 1,
+          step: `Step ${index + 1}`,
+          state: "live",
+        }),
+      ).join(""),
+    );
+    const events = await readProgress({ store, sessionId: "s1" });
+    expect(events).toHaveLength(200);
+    expect(events[0]?.seq).toBe(6);
+    expect(events.at(-1)?.seq).toBe(205);
+    await expect(
+      readNextProgressSequence({ store, sessionId: "s1" }),
+    ).resolves.toBe(206);
   });
 });

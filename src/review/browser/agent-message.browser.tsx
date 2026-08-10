@@ -425,7 +425,7 @@ export const AgentChangeDigest = ({
       >
         <Icon icon={CHEVRON_RIGHT_ICON} />
         {changes.length} change{changes.length === 1 ? "" : "s"} across{" "}
-        {sections.size} slide{sections.size === 1 ? "" : "s"}
+        {sections.size} location{sections.size === 1 ? "" : "s"}
       </button>
       {isExpanded ? (
         <div className="min-w-0 overflow-hidden rounded-md border border-edge bg-paper">

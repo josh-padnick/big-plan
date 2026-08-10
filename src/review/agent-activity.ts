@@ -73,6 +73,25 @@ export type CurrentAgentActivity =
       readonly supporting: "The agent is connected and waiting for feedback.";
     };
 
+/** Maps current activity to the one exceptional label shown in viewer chrome. */
+export const deriveAgentHealthLabel = ({
+  activity,
+  hasAgentRuntime,
+  isReadOnly,
+}: {
+  readonly activity: CurrentAgentActivity;
+  readonly hasAgentRuntime: boolean;
+  readonly isReadOnly: boolean;
+}): string | null => {
+  if (isReadOnly) return "Using read-only session";
+  if (!hasAgentRuntime) return null;
+  if (activity.state === "offline") return "Review server offline";
+  if (activity.state === "disconnected") return "Agent connection lost";
+  if (activity.state === "stalled") return "Agent not responding";
+  if (activity.state === "errored") return "Agent error";
+  return null;
+};
+
 const requestHeadline = (request: AgentActivityRequest): string =>
   request.kind === "feedback"
     ? "Responding to a comment"
@@ -94,8 +113,7 @@ const meaningfulWork = (
 ): boolean =>
   event.requestId === requestId &&
   (event.state === "live" || event.state === "waiting") &&
-  !/^(reply sent to agent|plan question sent to agent)$/i.test(event.step) &&
-  !/feedback package received/i.test(event.step);
+  !/^(reply sent to agent|plan question sent to agent)$/i.test(event.step);
 
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This updates by itself once the agent resumes.";
@@ -128,20 +146,19 @@ export const deriveCurrentAgentActivity = ({
     };
   }
 
-  if (!agentConnected) {
-    return {
-      state: "disconnected",
-      tone: "danger",
-      headline: "The agent is disconnected",
-      supporting:
-        "Reconnect the coding agent to continue. All comments are safe.",
-    };
-  }
-
   const request = requests.find(
     (candidate) => !responseRequestIds.has(candidate.requestId),
   );
   if (request === undefined) {
+    if (!agentConnected) {
+      return {
+        state: "disconnected",
+        tone: "danger",
+        headline: "The agent is disconnected",
+        supporting:
+          "Reconnect the coding agent to continue. All comments are safe.",
+      };
+    }
     return {
       state: "idle",
       tone: "neutral",
@@ -178,6 +195,15 @@ export const deriveCurrentAgentActivity = ({
     request.claimedFromRevision === undefined &&
     latest === undefined
   ) {
+    if (!agentConnected) {
+      return {
+        state: "disconnected",
+        tone: "danger",
+        headline: "The agent is disconnected",
+        supporting:
+          "Reconnect the coding agent to continue. All comments are safe.",
+      };
+    }
     return {
       ...facts,
       state: "waiting",

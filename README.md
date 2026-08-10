@@ -36,6 +36,8 @@ npx big-plan agent <file.mdx>
 Validation checks that the plan can be compiled and rendered, then applies linting rules to the authored plan without writing an output file.
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
+`review` serves the rendered plan locally so a reviewer can leave comments.
+`agent` runs the coding-agent side of that live review exchange.
 Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
 See the [two-artifact delivery contract](adr/0001-two-artifact-plan-delivery.md).
 MermaidDiagram rendering additionally uses the pinned headless Chromium renderer at compile time; on a clean install, provision it once with `bunx playwright@1.61.1 install chromium`.
@@ -79,7 +81,7 @@ The full authoring contract lives in the documentation:
 - [Linting rules](docs/src/content/docs/reference/lint-rules.md) - every authoring rule and its conservative matching boundaries.
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
-- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `skill`, `validate`, `render`, and `compile` in detail.
+- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `skill`, `validate`, `render`, `compile`, `review`, and `agent` in detail.
 - [Reviewing a plan](docs/src/content/docs/reference/reviewing.md) - local comments, the coding-agent exchange, and revision truth.
 
 To preview components locally from a source checkout, run `bun run build` first. Then run `node bin/big-plan.mjs guidance` once and render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`. The local executable reads the compiled files in `dist/`.

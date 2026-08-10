@@ -55,6 +55,18 @@ describe("deriveAgentStatus", () => {
     ).toBe("Agent is working on your feedback");
   });
 
+  it("should describe picked-up work before the first progress signal", () => {
+    const status = deriveAgentStatus({
+      runtime: "online",
+      request: "pending",
+      agentConnected: true,
+      pickedUp: true,
+      nowMs,
+    });
+    expect(status.stage).toBe("stalled");
+    expect(status.headline).toBe("No progress reported yet");
+  });
+
   it("should keep runtime failure language distinct from agent work", () => {
     const status = deriveAgentStatus({
       runtime: "offline",

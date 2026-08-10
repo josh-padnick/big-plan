@@ -292,6 +292,7 @@ export const startReviewRuntime = async ({
         fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
         identity: { planId, reviewSessionId: sessionId, reviewToken: token },
       });
+      blocks.clear();
       for (const block of blockMapRender.blocks) {
         blocks.set(block.id, block);
       }
@@ -307,6 +308,15 @@ export const startReviewRuntime = async ({
         reviewBootstrap: await readBootstrap(markdown),
       },
     }).html;
+  };
+
+  // Mutating requests share filesystem-backed state. Keep each full mutation
+  // atomic so overlapping browser requests cannot lose one another's writes.
+  let writeGate: Promise<unknown> = Promise.resolve();
+  const exclusively = <T>(work: () => Promise<T>): Promise<T> => {
+    const next = writeGate.then(work, work);
+    writeGate = next.catch(() => undefined);
+    return next;
   };
 
   const handleDocument = async (response: ServerResponse): Promise<void> => {
@@ -643,6 +653,16 @@ export const startReviewRuntime = async ({
         });
         return;
       }
+      const messageBody =
+        typeof payload.body === "string" ? payload.body.trim() : "";
+      if (messageBody === "") {
+        refuse({
+          response,
+          status: 400,
+          reason: "An agent request needs a body",
+        });
+        return;
+      }
       const source = await readFile(resolvedPlanPath, "utf8");
       const revision = deriveSourceRevision(source);
       await writeRevisionSnapshot({ store, revision, source });
@@ -653,7 +673,7 @@ export const startReviewRuntime = async ({
         planId,
         sourceRevision: revision,
         createdAt: new Date().toISOString(),
-        body: typeof payload.body === "string" ? payload.body : "",
+        body: messageBody,
         ...(kind === "reply" && typeof payload.commentId === "string"
           ? { commentId: payload.commentId }
           : {}),
@@ -801,10 +821,6 @@ export const startReviewRuntime = async ({
     throw new Error(`Unhandled review route ${route.path}`);
   };
 
-  const server: Server = createServer((request, response) => {
-    void handle({ request, response });
-  });
-
   const handle = async ({
     request,
     response,
@@ -891,12 +907,15 @@ export const startReviewRuntime = async ({
         }
       }
 
-      await handleApi({
-        route: matched,
-        request,
-        response,
-        query: target.searchParams,
-      });
+      const dispatch = () =>
+        handleApi({
+          route: matched,
+          request,
+          response,
+          query: target.searchParams,
+        });
+      if (matched.method === "GET") await dispatch();
+      else await exclusively(dispatch);
     } catch (error: unknown) {
       if (error instanceof CommentRejected) {
         refuse({ response, status: 400, reason: error.message });
@@ -905,6 +924,10 @@ export const startReviewRuntime = async ({
       refuse({ response, status: 500, reason: "The review runtime failed" });
     }
   };
+
+  const server: Server = createServer((request, response) => {
+    void handle({ request, response });
+  });
 
   await new Promise<void>((settle, fail) => {
     server.once("error", fail);
@@ -933,6 +956,7 @@ export const startReviewRuntime = async ({
     },
   });
   let heartbeatWrite = Promise.resolve();
+  let heartbeatFailureReported = false;
   const queueHeartbeat = (running: boolean): Promise<void> => {
     heartbeatWrite = heartbeatWrite
       .catch(() => undefined)
@@ -943,6 +967,13 @@ export const startReviewRuntime = async ({
         });
         if (currentSessionId.sessionId !== sessionId) return;
         await writeSessionHeartbeat({ store, sessionId, running });
+      })
+      .catch((error: unknown) => {
+        if (heartbeatFailureReported) return;
+        heartbeatFailureReported = true;
+        process.stderr.write(
+          `Review heartbeat failed for session ${sessionId} (${resolvedPlanPath}): ${String(error)}\n`,
+        );
       });
     return heartbeatWrite;
   };

@@ -7,6 +7,7 @@
 import { AxiError } from "axi-sdk-js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
+import { quoteShellArgument } from "../_shared/shell-argument.js";
 import {
   deriveInputFile,
   parseInputCommandArguments,
@@ -73,9 +74,7 @@ export const reviewCommand = async (
       ...warnings,
       `Open ${runtime.url} in your browser to review and comment`,
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
-      `In another terminal, run \`big-plan agent ${JSON.stringify(
-        runtime.planPath,
-      )}\`, then run its returned codex or claude command`,
+      `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,
       "Press Ctrl+C to stop the review runtime",
     ],
   };

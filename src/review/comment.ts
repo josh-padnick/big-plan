@@ -215,7 +215,7 @@ const validateTarget = ({
       type === "selection" && target.endBlockId !== undefined
         ? resolveBlock({ value: target.endBlockId, blocks })
         : undefined;
-    if (endBlock === undefined && end < start) {
+    if ((endBlock === undefined || endBlock.id === block.id) && end < start) {
       throw new CommentRejected("A range must end at or after it starts");
     }
     return {
@@ -258,7 +258,7 @@ export const validateComments = ({
       `More than ${COMMENT_LIMIT} comments in one batch`,
     );
   }
-  return value.map((entry) => {
+  const comments = value.map((entry) => {
     const comment = asRecord({ value: entry, field: "comment" });
     const body = asText({
       value: comment.body,
@@ -275,4 +275,8 @@ export const validateComments = ({
       target: validateTarget({ value: comment.target, blocks }),
     };
   });
+  if (new Set(comments.map((comment) => comment.id)).size !== comments.length) {
+    throw new CommentRejected("Comment ids must be unique");
+  }
+  return comments;
 };

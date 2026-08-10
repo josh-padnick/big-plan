@@ -21,8 +21,8 @@ Open that address, review the plan, and stop the runtime with `Ctrl+C`.
    away** to stage it with **Add Comment** instead. `Cmd/Ctrl+Enter` performs
    the visible primary action; `Escape` cancels.
 3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
-   **Chat** and **Agent** tabs identify the later stack capabilities they will
-   own without pretending those loops are connected yet.
+   **Chat** tab asks questions about the plan as a whole, while **Agent** shows
+   the connection and current work for a live review session.
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
 

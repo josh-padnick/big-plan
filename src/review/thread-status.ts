@@ -109,13 +109,16 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
   }
   const quietFor =
     input.lastAgentSignalAtMs === undefined
-      ? Number.POSITIVE_INFINITY
+      ? null
       : Math.max(0, input.nowMs - input.lastAgentSignalAtMs);
-  if (quietFor > AGENT_QUIET_MS) {
+  if (quietFor === null || quietFor > AGENT_QUIET_MS) {
     return {
       stage: "stalled",
       label: "Working",
-      headline: `No progress for ${Math.max(1, Math.round(quietFor / 60_000))}m`,
+      headline:
+        quietFor === null
+          ? "No progress reported yet"
+          : `No progress for ${Math.max(1, Math.round(quietFor / 60_000))}m`,
       detail:
         (input.agentConnected ? "The agent session is still connected. " : "") +
         "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This thread updates by itself once the agent resumes.",

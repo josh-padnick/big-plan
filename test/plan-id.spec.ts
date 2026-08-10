@@ -115,6 +115,9 @@ test("should scope persisted viewer state to the stamped plan identity", async (
     ).toBeVisible();
     await page.getByRole("button", { name: /Feedback/ }).click();
     const secondRail = page.getByRole("complementary", { name: "Feedback" });
+    await expect(secondRail).toContainText(
+      "Reading offline: drafts stay in this browser",
+    );
     await expect(secondRail).not.toContainText("First plan draft");
 
     await secondTable.getByRole("button", { name: "Choose columns" }).click();
@@ -229,8 +232,12 @@ for (const identity of ["absent", "empty"] as const) {
     await expect(table.locator(".table-schema-head-comment")).toBeVisible();
     await expect(dataTable.locator('th[data-table-column="2"]')).toBeVisible();
     await page.getByRole("button", { name: /Feedback/ }).click();
-    await expect(
-      page.getByRole("complementary", { name: "Feedback" }),
-    ).not.toContainText("Memory-only draft");
+    const reloadedRail = page.getByRole("complementary", {
+      name: "Feedback",
+    });
+    await expect(reloadedRail).toContainText(
+      "Reading offline: drafts stay in this browser",
+    );
+    await expect(reloadedRail).not.toContainText("Memory-only draft");
   });
 }

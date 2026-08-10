@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AGENT_ACTIVITY_STALL_MS,
+  deriveAgentHealthLabel,
   deriveCurrentAgentActivity,
   type AgentActivityRequest,
 } from "./agent-activity.js";
@@ -54,34 +55,54 @@ describe("current agent activity", () => {
   });
 
   it("should distinguish a disconnected agent from an ordinary wait", () => {
-    expect(
-      deriveCurrentAgentActivity({
-        requests: [request()],
-        responseRequestIds: new Set(),
-        progressEvents: [],
-        agentConnected: false,
-        runtimeOffline: false,
-        now: NOW,
-        heartbeatAt: 0,
-      }),
-    ).toMatchObject({
+    const activity = deriveCurrentAgentActivity({
+      requests: [request()],
+      responseRequestIds: new Set(),
+      progressEvents: [],
+      agentConnected: false,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: 0,
+    });
+    expect(activity).toMatchObject({
       state: "disconnected",
       tone: "danger",
       headline: "The agent is disconnected",
       supporting:
         "Reconnect the coding agent to continue. All comments are safe.",
     });
+    expect(activity).not.toHaveProperty("requestId");
+  });
+
+  it("should keep fresh claimed work active between agent commands", () => {
+    const activity = deriveCurrentAgentActivity({
+      requests: [{ ...request(), claimedAt: new Date(NOW).toISOString() }],
+      responseRequestIds: new Set(),
+      progressEvents: [
+        {
+          requestId: "1111111111111111",
+          step: "Reading the current plan",
+          state: "live",
+          atMs: NOW,
+        },
+      ],
+      agentConnected: false,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: 0,
+    });
+    expect(activity).toMatchObject({
+      state: "working",
+      headline: "Responding to a comment",
+      latestStep: "Reading the current plan",
+    });
     expect(
-      deriveCurrentAgentActivity({
-        requests: [request()],
-        responseRequestIds: new Set(),
-        progressEvents: [],
-        agentConnected: false,
-        runtimeOffline: false,
-        now: NOW,
-        heartbeatAt: 0,
+      deriveAgentHealthLabel({
+        activity,
+        hasAgentRuntime: true,
+        isReadOnly: false,
       }),
-    ).not.toHaveProperty("requestId");
+    ).toBeNull();
   });
 
   it.each([

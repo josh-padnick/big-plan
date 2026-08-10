@@ -27,7 +27,10 @@ import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
-import { deriveCurrentAgentActivity } from "../agent-activity.js";
+import {
+  deriveAgentHealthLabel,
+  deriveCurrentAgentActivity,
+} from "../agent-activity.js";
 import type { CommentTarget, ReviewComment } from "../comment.js";
 import { parseCommentMarkdownLine } from "../comment-markdown.js";
 import { deriveAgentStatus, type AgentStatus } from "../thread-status.js";
@@ -3467,20 +3470,11 @@ const ReviewKernel = () => {
   const resolvedSent = sent.filter((comment) =>
     resolvedCommentIds.has(comment.id),
   );
-  const agentHealthLabel =
-    runtimeSession?.authoritative === false
-      ? "Using read-only session"
-      : identity === null
-        ? null
-        : pollFailures >= 2
-          ? "Review server offline"
-          : !agent.presence.connected
-            ? "Agent connection lost"
-            : agentStatus.stage === "stalled"
-              ? "Agent not responding"
-              : agentStatus.stage === "failed"
-                ? "Agent error"
-                : null;
+  const agentHealthLabel = deriveAgentHealthLabel({
+    activity: currentAgentActivity,
+    hasAgentRuntime: identity !== null,
+    isReadOnly: runtimeSession?.authoritative === false,
+  });
   const newerRevisionAvailable =
     initialSourceRevision !== "" &&
     agent.sourceRevision !== "" &&

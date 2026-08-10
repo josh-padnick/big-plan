@@ -77,16 +77,8 @@ export const messageTimeLabel = ({
   readonly absoluteLabel: (at: number) => string;
 }): string => {
   const at = Date.parse(createdAt);
-  if (
-    !Number.isFinite(now) ||
-    !Number.isFinite(at) ||
-    now <= 0 ||
-    at <= 0 ||
-    at - now > MAX_FUTURE_SKEW_MS
-  ) {
-    return "Time unavailable";
-  }
-  const elapsed = Math.max(0, now - at);
+  const elapsed = elapsedFrom({ now, at });
+  if (elapsed === null) return "Time unavailable";
   if (elapsed < 60_000) return "Just now";
   if (elapsed < RELATIVE_LIMIT_MS) {
     return `${Math.max(1, Math.floor(elapsed / 60_000))}m`;

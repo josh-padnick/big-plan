@@ -30,7 +30,7 @@ export type RevisionDiffLocation = {
 };
 
 const normalized = (value: string): string =>
-  value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  value.replace(/\s+/g, " ").trim().toLowerCase();
 
 const scopeOf = (block: RevisionBlock): string => {
   const slash = block.id.lastIndexOf("/");

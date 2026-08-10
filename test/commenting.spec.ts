@@ -81,8 +81,8 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "Keep `leaseOwner` explicit. <strong>Literal reviewer text</strong>",
   );
   const shortcutTooltip = dialog.getByRole("tooltip");
-  await submit.hover();
   await expect(shortcutTooltip).not.toBeVisible();
+  await submit.hover();
   await expect(shortcutTooltip).toBeVisible();
   await expect(shortcutTooltip).toHaveCSS("font-size", "11px");
   const submitBox = await submit.boundingBox();
@@ -236,7 +236,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   );
   await expect(rail.getByRole("status")).toHaveCSS(
     "color",
-    "rgb(164, 156, 139)",
+    "rgb(111, 105, 92)",
   );
   await expect(rail.getByRole("status")).toHaveCSS("font-size", "12px");
   await expect

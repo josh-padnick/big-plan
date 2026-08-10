@@ -20,7 +20,7 @@ import { renderDocument } from "../../render/render-document.js";
 import { agentCommand } from "./command.js";
 
 let runtime: ReviewRuntime;
-let responseFile = "";
+let targetLabel = "";
 
 beforeAll(async () => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-command-"));
@@ -40,6 +40,7 @@ beforeAll(async () => {
   if (target === undefined) {
     throw new Error("The sample plan has no paragraph target");
   }
+  targetLabel = target.label;
   const feedback = buildFeedbackPackage({
     sessionId: runtime.sessionId,
     packageId: "aaaaaaaaaaaaaaaa",
@@ -71,7 +72,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await runtime.close();
+  if (runtime !== undefined) await runtime.close();
 });
 
 describe("agent command", () => {
@@ -126,7 +127,6 @@ describe("agent command", () => {
     if (typeof result.response_file !== "string") {
       throw new Error("The agent command did not provide a response path");
     }
-    responseFile = result.response_file;
     await expect(
       readProgress({
         store: runtime.store,
@@ -137,14 +137,18 @@ describe("agent command", () => {
         expect.objectContaining({
           step: "Reviewing feedback",
           state: "live",
-          detail:
-            "A durable retry pipeline takes over failed payment captures.",
+          detail: targetLabel,
         }),
       ]),
     );
   });
 
   it("should publish a complete question outcome without editing the plan", async () => {
+    const next = await agentCommand(["next", runtime.planPath]);
+    if (typeof next.response_file !== "string") {
+      throw new Error("The pending request did not provide a response path");
+    }
+    const responseFile = next.response_file;
     await writeFile(
       responseFile,
       JSON.stringify({

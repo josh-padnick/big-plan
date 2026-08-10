@@ -314,7 +314,9 @@ describe("review runtime feedback", () => {
     await expect(response.json()).resolves.toMatchObject({
       request: {
         requestId: reply.requestId,
-        canceledAt: expect.stringMatching(/^2026-/),
+        canceledAt: expect.stringMatching(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+        ),
       },
     });
     const canceled = await readAgentExchange({
@@ -353,14 +355,17 @@ describe("review runtime feedback", () => {
       throw new Error("The agent snapshot did not expose a source revision");
     }
     const acceptedRevision = answer.sourceRevision;
-    await writeFile(runtime.planPath, `${PLAN}\n<unfinished`);
-    const whileEditing: unknown = await (
-      await call({ path: "/api/agent" })
-    ).json();
-    expect(whileEditing).toMatchObject({
-      sourceRevision: acceptedRevision,
-    });
-    await writeFile(runtime.planPath, PLAN);
+    try {
+      await writeFile(runtime.planPath, `${PLAN}\n<unfinished`);
+      const whileEditing: unknown = await (
+        await call({ path: "/api/agent" })
+      ).json();
+      expect(whileEditing).toMatchObject({
+        sourceRevision: acceptedRevision,
+      });
+    } finally {
+      await writeFile(runtime.planPath, PLAN);
+    }
   });
 
   it("should keep a retried feedback id unique in sent state", async () => {
@@ -393,6 +398,53 @@ describe("review runtime feedback", () => {
           )
         : [],
     ).toHaveLength(1);
+  });
+
+  it("should preserve feedback sent by overlapping requests", async () => {
+    const comments = [
+      {
+        id: "c1c1c1c1",
+        body: "Keep the first concurrent comment.",
+        target: { type: "document" },
+      },
+      {
+        id: "d2d2d2d2",
+        body: "Keep the second concurrent comment.",
+        target: { type: "document" },
+      },
+    ];
+    const responses = await Promise.all(
+      comments.map((comment) =>
+        call({
+          path: "/api/feedback",
+          method: "POST",
+          body: { comments: [comment] },
+        }),
+      ),
+    );
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    const sent: unknown = JSON.parse(
+      await readFile(runtime.store.sentPath, "utf8"),
+    );
+    expect(sent).toEqual(
+      expect.arrayContaining(
+        comments.map((comment) => expect.objectContaining({ id: comment.id })),
+      ),
+    );
+  });
+
+  it("should refuse empty chat and reply requests", async () => {
+    for (const body of [undefined, "", "   "]) {
+      const response = await call({
+        path: "/api/agent-requests",
+        method: "POST",
+        body: { kind: "chat", body },
+      });
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: "An agent request needs a body",
+      });
+    }
   });
 
   it("should serve a deterministic diff between retained revisions", async () => {

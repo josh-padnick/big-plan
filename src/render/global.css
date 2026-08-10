@@ -195,7 +195,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --ink-c: var(--grey-925);
   --muted-c: var(--grey-700);
   --subtle-c: var(--grey-600);
-  --support-c: var(--grey-400);
+  --support-c: var(--grey-600);
 
   /* Lines. Kept because a few separations genuinely need one; depth is the
      first choice and a border is the exception. */
@@ -244,13 +244,6 @@ it that way: a band carries primary or secondary text, never tertiary.
   --table-head-bg: var(--neutral-100);
   --diff-hunk-c: var(--grey-600);
   --diff-header-bg: var(--header-bg);
-  /* approved-metric: captain-restored settings dim, 40% on paper */
-  --preferences-backdrop-c: color-mix(
-    in srgb,
-    var(--grey-950) 40%,
-    transparent
-  );
-
   /*
     ELEVATION
 
@@ -344,13 +337,6 @@ same separation.
     --table-head-bg: var(--neutral-800);
     --diff-hunk-c: var(--grey-400);
     --diff-header-bg: var(--header-bg);
-    /* approved-metric: captain-restored settings dim, 70% in dark mode */
-    --preferences-backdrop-c: color-mix(
-      in srgb,
-      var(--grey-950) 70%,
-      transparent
-    );
-
     --elevation-raised:
       0 1px 2px -1px rgb(0 0 0 / 0.5), 0 1px 3px 0 rgb(0 0 0 / 0.32);
     --elevation-lifted:
@@ -426,13 +412,6 @@ same separation.
   --table-head-bg: var(--neutral-800);
   --diff-hunk-c: var(--grey-400);
   --diff-header-bg: var(--header-bg);
-  /* approved-metric: captain-restored settings dim, 70% in dark mode */
-  --preferences-backdrop-c: color-mix(
-    in srgb,
-    var(--grey-950) 70%,
-    transparent
-  );
-
   --elevation-raised:
     0 1px 2px -1px rgb(0 0 0 / 0.5), 0 1px 3px 0 rgb(0 0 0 / 0.32);
   --elevation-lifted:
