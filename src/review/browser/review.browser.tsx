@@ -41,6 +41,15 @@ import {
 } from "../shared/cancel-pending.js";
 import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
+  clearThreadOpenOverlay,
+  isThreadOpen,
+  setThreadOpen,
+  toggleThreadOpen,
+  type ThreadKind,
+  type ThreadOpenState,
+  type ThreadSurface,
+} from "../shared/thread-open-state.js";
+import {
   projectCommentThreads,
   projectRequestActivity,
   projectRequestStatus,
@@ -2302,17 +2311,13 @@ const ReviewKernel = () => {
   );
   const [pollFailures, setPollFailures] = useState(0);
   const [statusNowMs, setStatusNowMs] = useState(Date.now());
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const [threadOpenState, setThreadOpenState] = useState<ThreadOpenState>(
+    new Map(),
+  );
   const [expandedBodies, setExpandedBodies] = useState<ReadonlySet<string>>(
     new Set(),
   );
   const [submitRightAway, setSubmitRightAway] = useState(true);
-  const [expandedSentThreads, setExpandedSentThreads] = useState<
-    ReadonlySet<string>
-  >(new Set());
-  const [feedbackInlineThreads, setFeedbackInlineThreads] = useState<
-    ReadonlySet<string>
-  >(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
   );
@@ -2388,7 +2393,7 @@ const ReviewKernel = () => {
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) setFeedbackInlineThreads(new Set());
+    if (!isOpen) setThreadOpenState(clearThreadOpenOverlay);
   }, [isOpen]);
 
   useEffect(() => {
@@ -2855,11 +2860,16 @@ const ReviewKernel = () => {
       setSent(snapshot.sent);
       setResolvedCommentIds(new Set(snapshot.resolvedCommentIds));
       acceptAgentSnapshot(parseAgentSnapshot(agentValue));
-      setExpandedSentThreads((current) => {
-        const next = new Set(current);
-        next.delete(commentId);
-        return next;
-      });
+      setThreadOpenState((current) =>
+        setThreadOpen({
+          state: current,
+          commentId,
+          kind: "sent",
+          surface: "rail",
+          isRailOpen: isOpen,
+          open: false,
+        }),
+      );
       if (selectedCommentId === commentId) setSelectedCommentId(null);
       setPendingDelete(null);
       setStatus("Queued comment deleted.");
@@ -3072,20 +3082,40 @@ const ReviewKernel = () => {
     initialSourceRevision !== "" &&
     agent.sourceRevision !== "" &&
     initialSourceRevision !== agent.sourceRevision;
-  const toggleSentThread = (commentId: string) =>
-    setExpandedSentThreads((current) => {
-      const next = new Set(current);
-      if (next.has(commentId)) next.delete(commentId);
-      else next.add(commentId);
-      return next;
+  const threadIsOpen = ({
+    commentId,
+    kind,
+    surface,
+  }: {
+    readonly commentId: string;
+    readonly kind: ThreadKind;
+    readonly surface: ThreadSurface;
+  }): boolean =>
+    isThreadOpen({
+      state: threadOpenState,
+      commentId,
+      kind,
+      surface,
+      isRailOpen: isOpen,
     });
-  const toggleFeedbackInlineThread = (commentId: string) =>
-    setFeedbackInlineThreads((current) => {
-      const next = new Set(current);
-      if (next.has(commentId)) next.delete(commentId);
-      else next.add(commentId);
-      return next;
-    });
+  const toggleCommentThread = ({
+    commentId,
+    kind,
+    surface,
+  }: {
+    readonly commentId: string;
+    readonly kind: ThreadKind;
+    readonly surface: ThreadSurface;
+  }) =>
+    setThreadOpenState((current) =>
+      toggleThreadOpen({
+        state: current,
+        commentId,
+        kind,
+        surface,
+        isRailOpen: isOpen,
+      }),
+    );
   const toggleResolvedComment = (commentId: string) => {
     if (!resolvedCommentIds.has(commentId)) {
       cancelRequestsForComment(commentId);
@@ -3098,11 +3128,16 @@ const ReviewKernel = () => {
       ) {
         setAssociatedTarget(null);
       }
-      setExpandedSentThreads((current) => {
-        const next = new Set(current);
-        next.delete(commentId);
-        return next;
-      });
+      setThreadOpenState((current) =>
+        setThreadOpen({
+          state: current,
+          commentId,
+          kind: "sent",
+          surface: "rail",
+          isRailOpen: isOpen,
+          open: false,
+        }),
+      );
     }
     setResolvedCommentIds((current) => {
       const next = new Set(current);
@@ -3126,7 +3161,16 @@ const ReviewKernel = () => {
     if (comment === undefined) return;
     setSelectedCommentId(commentId);
     setAssociatedTarget(comment.target);
-    setExpandedSentThreads((current) => new Set(current).add(commentId));
+    setThreadOpenState((current) =>
+      setThreadOpen({
+        state: current,
+        commentId,
+        kind: "sent",
+        surface: "rail",
+        isRailOpen: isOpen,
+        open: true,
+      }),
+    );
     setTab("comments");
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -3574,9 +3618,19 @@ const ReviewKernel = () => {
                               selected={selectedCommentId === comment.id}
                               identity={identity}
                               thread={thread}
-                              expanded={expandedSentThreads.has(comment.id)}
+                              expanded={threadIsOpen({
+                                commentId: comment.id,
+                                kind: "sent",
+                                surface: "rail",
+                              })}
                               resolved={false}
-                              onToggle={() => toggleSentThread(comment.id)}
+                              onToggle={() =>
+                                toggleCommentThread({
+                                  commentId: comment.id,
+                                  kind: "sent",
+                                  surface: "rail",
+                                })
+                              }
                               onResolve={() =>
                                 toggleResolvedComment(comment.id)
                               }
@@ -3617,9 +3671,19 @@ const ReviewKernel = () => {
                             selected={selectedCommentId === comment.id}
                             identity={identity}
                             thread={thread}
-                            expanded={expandedSentThreads.has(comment.id)}
+                            expanded={threadIsOpen({
+                              commentId: comment.id,
+                              kind: "sent",
+                              surface: "rail",
+                            })}
                             resolved
-                            onToggle={() => toggleSentThread(comment.id)}
+                            onToggle={() =>
+                              toggleCommentThread({
+                                commentId: comment.id,
+                                kind: "sent",
+                                surface: "rail",
+                              })
+                            }
                             onResolve={() => toggleResolvedComment(comment.id)}
                             onJump={() => jumpTo(comment)}
                             onAssociate={setAssociatedTarget}
@@ -3827,23 +3891,20 @@ const ReviewKernel = () => {
               targetAddress(associatedTarget) === targetAddress(comment.target)
             }
             collapsed={
-              isOpen
-                ? !feedbackInlineThreads.has(comment.id)
-                : collapsed.has(comment.id)
+              !threadIsOpen({
+                commentId: comment.id,
+                kind: "draft",
+                surface: "inline",
+              })
             }
             expanded={expandedBodies.has(comment.id)}
-            onCollapse={() => {
-              if (isOpen) {
-                toggleFeedbackInlineThread(comment.id);
-                return;
-              }
-              setCollapsed((current) => {
-                const next = new Set(current);
-                if (next.has(comment.id)) next.delete(comment.id);
-                else next.add(comment.id);
-                return next;
-              });
-            }}
+            onCollapse={() =>
+              toggleCommentThread({
+                commentId: comment.id,
+                kind: "draft",
+                surface: "inline",
+              })
+            }
             onExpandBody={() =>
               setExpandedBodies((current) => new Set(current).add(comment.id))
             }
@@ -3879,19 +3940,19 @@ const ReviewKernel = () => {
             selected={selectedCommentId === comment.id}
             identity={identity}
             thread={thread}
-            expanded={
-              isOpen
-                ? feedbackInlineThreads.has(comment.id)
-                : expandedSentThreads.has(comment.id)
-            }
+            expanded={threadIsOpen({
+              commentId: comment.id,
+              kind: "sent",
+              surface: "inline",
+            })}
             resolved={resolvedCommentIds.has(comment.id)}
-            onToggle={() => {
-              if (isOpen) {
-                toggleFeedbackInlineThread(comment.id);
-                return;
-              }
-              toggleSentThread(comment.id);
-            }}
+            onToggle={() =>
+              toggleCommentThread({
+                commentId: comment.id,
+                kind: "sent",
+                surface: "inline",
+              })
+            }
             onResolve={() => toggleResolvedComment(comment.id)}
             onJump={() => jumpTo(comment)}
             onAssociate={setAssociatedTarget}
