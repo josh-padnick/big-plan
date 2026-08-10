@@ -74,14 +74,14 @@ const CopyBlock = ({
   );
 };
 
-const activityTone = (tone: CurrentAgentActivity["tone"]): string =>
-  tone === "working"
-    ? "border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-c)]"
-    : tone === "warning"
+const activityTone = (activity: CurrentAgentActivity): string =>
+  activity.state === "offline" ||
+  activity.state === "disconnected" ||
+  activity.state === "errored"
+    ? "border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]"
+    : activity.state === "stalled"
       ? "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
-      : tone === "danger"
-        ? "border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]"
-        : "border-edge bg-surface text-muted";
+      : "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]";
 
 const CurrentActivityCard = ({
   activity,
@@ -96,7 +96,7 @@ const CurrentActivityCard = ({
     activity.state === "working" ? activity.latestStep : activity.supporting;
   return (
     <article
-      className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${activityTone(activity.tone)}`}
+      className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${activityTone(activity)}`}
       data-review-current-activity={activity.state}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -263,7 +263,7 @@ const ConnectionLog = ({
               <h3 className="mt-0 mb-1.5 text-2xs font-bold uppercase tracking-caps text-muted">
                 {date}
               </h3>
-              <ol className="m-0 grid list-none gap-0 p-0">
+              <ol className="m-0 grid list-none gap-1 p-0">
                 {rows.map((event) => {
                   const index = ordered.indexOf(event);
                   const next = ordered[index + 1];
@@ -286,7 +286,7 @@ const ConnectionLog = ({
                   return (
                     <li
                       key={event.eventId ?? event.at}
-                      className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-1 py-1"
+                      className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-0.5 py-2 first:pt-1 last:pb-0"
                       data-review-connection-event={
                         event.connected ? "connected" : "disconnected"
                       }
@@ -356,7 +356,7 @@ export const AgentConnectionPanel = ({
   <div className="min-w-0">
     <section>
       <p className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-muted">
-        Current activity
+        Current status
       </p>
       <CurrentActivityCard
         activity={activity}

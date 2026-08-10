@@ -210,11 +210,13 @@ export const RequestStatusStrip = ({
   status,
   activity,
   surface,
+  commentCount = 1,
   onShowAgent,
 }: {
   readonly status: AgentStatus;
   readonly activity: ReadonlyArray<MessageActivity>;
   readonly surface: MessageSurface;
+  readonly commentCount?: number;
   readonly onShowAgent: () => void;
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -252,7 +254,11 @@ export const RequestStatusStrip = ({
     >
       <div className="flex items-center gap-1.5 [&>svg]:size-[0.85rem] [&>svg]:shrink-0">
         {isWorking ? <Spinner /> : icon}
-        <strong className="min-w-0 flex-1 font-bold">{status.headline}</strong>
+        <strong className="min-w-0 flex-1 font-bold">
+          {isWorking && commentCount > 1
+            ? `Agent is working on ${commentCount} comments`
+            : status.headline}
+        </strong>
       </div>
       {status.detail === "" ? null : (
         <p className="m-0 text-ink [overflow-wrap:anywhere]">{status.detail}</p>
@@ -267,7 +273,9 @@ export const RequestStatusStrip = ({
         </button>
       ) : null}
       {isWorking && surface === "thread" ? (
-        <p className="mt-0.5 mb-0 text-muted">Updating 1 comment</p>
+        <p className="mt-0.5 mb-0 text-muted">
+          Updating {commentCount} comment{commentCount === 1 ? "" : "s"}
+        </p>
       ) : null}
       {isWorking ? (
         <p

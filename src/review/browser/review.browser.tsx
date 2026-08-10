@@ -1408,7 +1408,7 @@ const CommentCardHeader = ({
   >
     <button
       type="button"
-      className={`${targetClassName} min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 text-left leading-normal focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${onHeaderClick === undefined ? "hover:underline" : ""} ${surface === "thread" ? "pl-0.5 text-2xs font-medium text-subtle" : "text-xs font-semibold text-muted"}`}
+      className={`${targetClassName} min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 pl-0.5 text-left leading-normal focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${onHeaderClick === undefined ? "hover:underline" : ""} ${surface === "thread" ? "text-2xs font-medium text-subtle" : "text-xs font-semibold text-muted"}`}
       onClick={(event) => {
         event.stopPropagation();
         (onHeaderClick ?? onJump)();
@@ -1434,6 +1434,7 @@ const ContextualCommentSummary = ({
   className = "",
   status,
   statusIcon,
+  statusSpinner = false,
   statusTone = "secondary",
   statusClassName = "",
   body,
@@ -1447,6 +1448,7 @@ const ContextualCommentSummary = ({
   readonly className?: string;
   readonly status: string;
   readonly statusIcon?: LucideIcon;
+  readonly statusSpinner?: boolean;
   readonly statusTone?: "annotation" | "secondary";
   readonly statusClassName?: string;
   readonly body: string;
@@ -1473,7 +1475,18 @@ const ContextualCommentSummary = ({
     data-review-sent-thread={threadGroup}
     data-review-comment-id={commentId}
   >
-    {statusIcon === undefined ? (
+    {statusSpinner ? (
+      <span
+        className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--callout-note-bg)] px-1.5 py-0.5 text-2xs font-semibold text-[var(--callout-note-c)] ${statusClassName}`}
+        aria-label={status}
+      >
+        <span
+          className="inline-block size-2.5 animate-spin rounded-full border-[1.5px] border-current border-r-transparent motion-reduce:animate-none"
+          aria-hidden="true"
+        />
+        {status}
+      </span>
+    ) : statusIcon === undefined ? (
       <Badge
         size="compact"
         shape="badge"
@@ -1947,7 +1960,7 @@ const SentThread = ({
     latestExchange === undefined || latestExchange.outcome !== undefined
       ? undefined
       : statusForRequest(latestExchange.request, "thread");
-  const cardClass = `mt-2 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
+  const cardClass = `mt-2 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
   const associate = () => onAssociate(comment.target);
   const railFreshness = threadTime(
     latestExchange?.response?.createdAt ??
@@ -2012,7 +2025,12 @@ const SentThread = ({
     if (surface === "thread") {
       return (
         <ContextualCommentSummary
-          status={latestStatus?.headline ?? outcomeLabel}
+          status={
+            group === "working"
+              ? "Working"
+              : (latestStatus?.headline ?? outcomeLabel)
+          }
+          statusSpinner={group === "working"}
           statusIcon={
             latestStatus?.stage === "blocked" ? TRIANGLE_ALERT_ICON : undefined
           }
@@ -2230,11 +2248,17 @@ const SentThread = ({
                     ) : null}
                   </MessageTurn>
                   {requestOutcome === undefined || response === undefined ? (
-                    sharedConnectionState ? null : (
+                    sharedConnectionState ||
+                    (surface === "rail" && group === "working") ? null : (
                       <RequestStatusStrip
                         status={requestStatus}
                         activity={activityForRequest(request)}
                         surface="thread"
+                        commentCount={
+                          request.kind === "feedback"
+                            ? Math.max(1, request.commentIds.length)
+                            : 1
+                        }
                         onShowAgent={onShowAgent}
                       />
                     )
@@ -3579,6 +3603,17 @@ const ReviewKernel = () => {
                   ).map(({ key, label, glyph }) => {
                     const comments = sentByGroup.get(key) ?? [];
                     if (comments.length === 0) return null;
+                    const sharedWorkingRequest =
+                      key === "working"
+                        ? comments
+                            .flatMap((comment) => {
+                              const request = threadRequests(comment, agent).at(
+                                -1,
+                              );
+                              return request === undefined ? [] : [request];
+                            })
+                            .at(0)
+                        : undefined;
                     return (
                       <section
                         key={key}
@@ -3603,6 +3638,25 @@ const ReviewKernel = () => {
                             {comments.length}
                           </Badge>
                         </h3>
+                        {sharedWorkingRequest === undefined ? null : (
+                          <RequestStatusStrip
+                            status={statusForRequest(
+                              sharedWorkingRequest,
+                              "thread",
+                            )}
+                            activity={activityForRequest(sharedWorkingRequest)}
+                            surface="thread"
+                            commentCount={
+                              sharedWorkingRequest.kind === "feedback"
+                                ? Math.max(
+                                    1,
+                                    sharedWorkingRequest.commentIds.length,
+                                  )
+                                : 1
+                            }
+                            onShowAgent={showAgentSetup}
+                          />
+                        )}
                         {comments.map((comment) => (
                           <SentThread
                             key={comment.id}

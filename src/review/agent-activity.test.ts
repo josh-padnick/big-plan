@@ -16,7 +16,7 @@ const request = (
 });
 
 describe("current agent activity", () => {
-  it("should report an honest idle state", () => {
+  it("should prioritize disconnected status even without queued work", () => {
     expect(
       deriveCurrentAgentActivity({
         requests: [],
@@ -28,9 +28,28 @@ describe("current agent activity", () => {
         heartbeatAt: 0,
       }),
     ).toMatchObject({
+      state: "disconnected",
+      headline: "The agent is disconnected",
+      supporting:
+        "Reconnect the coding agent to continue. All comments are safe.",
+    });
+  });
+
+  it("should report an idle connected agent as healthy", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [],
+        responseRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: true,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW,
+      }),
+    ).toMatchObject({
       state: "idle",
-      headline: "No agent work in progress",
-      supporting: "Connect an agent to respond to feedback.",
+      headline: "Agent connected",
+      supporting: "The agent is connected and waiting for feedback.",
     });
   });
 
@@ -52,6 +71,17 @@ describe("current agent activity", () => {
       supporting:
         "Reconnect the coding agent to continue. All comments are safe.",
     });
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [request()],
+        responseRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: false,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: 0,
+      }),
+    ).not.toHaveProperty("requestId");
   });
 
   it.each([

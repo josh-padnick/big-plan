@@ -54,12 +54,12 @@ export type CurrentAgentActivity =
       readonly headline: "The agent reported a problem";
       readonly supporting: string;
     } & ActivityRequestFacts)
-  | ({
+  | {
       readonly state: "disconnected";
       readonly tone: "danger";
       readonly headline: "The agent is disconnected";
       readonly supporting: "Reconnect the coding agent to continue. All comments are safe.";
-    } & ActivityRequestFacts)
+    }
   | {
       readonly state: "offline";
       readonly tone: "danger";
@@ -69,8 +69,8 @@ export type CurrentAgentActivity =
   | {
       readonly state: "idle";
       readonly tone: "neutral";
-      readonly headline: "No agent work in progress";
-      readonly supporting: string;
+      readonly headline: "Agent connected";
+      readonly supporting: "The agent is connected and waiting for feedback.";
     };
 
 const requestHeadline = (request: AgentActivityRequest): string =>
@@ -128,6 +128,16 @@ export const deriveCurrentAgentActivity = ({
     };
   }
 
+  if (!agentConnected) {
+    return {
+      state: "disconnected",
+      tone: "danger",
+      headline: "The agent is disconnected",
+      supporting:
+        "Reconnect the coding agent to continue. All comments are safe.",
+    };
+  }
+
   const request = requests.find(
     (candidate) => !responseRequestIds.has(candidate.requestId),
   );
@@ -135,10 +145,8 @@ export const deriveCurrentAgentActivity = ({
     return {
       state: "idle",
       tone: "neutral",
-      headline: "No agent work in progress",
-      supporting: agentConnected
-        ? "The agent is connected and waiting for feedback."
-        : "Connect an agent to respond to feedback.",
+      headline: "Agent connected",
+      supporting: "The agent is connected and waiting for feedback.",
     };
   }
 
@@ -158,17 +166,6 @@ export const deriveCurrentAgentActivity = ({
       supporting:
         failed.step +
         (failed.detail === undefined ? "" : ` - ${failed.detail}`),
-    };
-  }
-
-  if (!agentConnected) {
-    return {
-      ...facts,
-      state: "disconnected",
-      tone: "danger",
-      headline: "The agent is disconnected",
-      supporting:
-        "Reconnect the coding agent to continue. All comments are safe.",
     };
   }
 
