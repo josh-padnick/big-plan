@@ -522,6 +522,72 @@ test("should remember the submit-right-away choice across new composers", async 
   ).toHaveAttribute("aria-checked", "true");
 });
 
+test("should replace an empty composer and protect a non-empty draft", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const slides = page.locator("[data-slide]");
+  const first = slides.nth(0);
+  const second = slides.nth(1);
+  await first.getByRole("button", { name: "Comment on slide" }).click();
+  await second.getByRole("button", { name: "Comment on slide" }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(first).not.toHaveAttribute("data-review-slide-selected", "");
+  await expect(second).toHaveAttribute("data-review-slide-selected", "");
+
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  const input = composer.getByLabel("Add a comment");
+  await input.fill("Keep this draft while I inspect another slide.");
+  await first.getByRole("button", { name: "Comment on slide" }).click();
+  const warning = page.getByRole("alertdialog", {
+    name: "Finish your draft comment?",
+  });
+  await expect(warning).toContainText(
+    "You have a draft comment that will be lost if you start a new one.",
+  );
+  await warning.getByRole("button", { name: "Return to draft" }).click();
+  await expect(input).toHaveValue(
+    "Keep this draft while I inspect another slide.",
+  );
+  await expect(input).toBeFocused();
+  await expect(second).toHaveAttribute("data-review-slide-selected", "");
+
+  await first.getByRole("button", { name: "Comment on slide" }).click();
+  await warning.getByRole("button", { name: "Discard" }).click();
+  await expect(input).toHaveValue("");
+  await expect(input).toBeFocused();
+  await expect(first).toHaveAttribute("data-review-slide-selected", "");
+  await expect(second).not.toHaveAttribute("data-review-slide-selected", "");
+});
+
+test("should give sub-slide comment controls one more gutter step", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+
+  const slide = page.locator('[data-collapsible="slide"]').first();
+  const subSlide = page.locator('[data-collapsible="subslide"]').first();
+  const gutter = async (card: typeof slide) => {
+    const cardBox = await card.boundingBox();
+    const buttonBox = await card
+      .getByRole("button", { name: "Comment on slide" })
+      .boundingBox();
+    if (cardBox === null || buttonBox === null) {
+      throw new Error("Expected slide card and comment control bounds");
+    }
+    return Math.round(cardBox.x - (buttonBox.x + buttonBox.width));
+  };
+
+  expect((await gutter(subSlide)) - (await gutter(slide))).toBe(4);
+});
+
 test("should minimize an expanded long comment from the feedback toolbar", async ({
   page,
   deckViewerUrl,

@@ -1247,20 +1247,23 @@ const useThreadHosts = (
 
 const CommentComposer = ({
   compose,
+  body,
   inline,
   submitRightAway,
   onCancel,
+  onBodyChange,
   onSave,
   onSubmitRightAwayChange,
 }: {
   readonly compose: ComposeState;
+  readonly body: string;
   readonly inline: boolean;
   readonly submitRightAway: boolean;
   readonly onCancel: () => void;
+  readonly onBodyChange: (body: string) => void;
   readonly onSave: (body: string, submitRightAway: boolean) => void;
   readonly onSubmitRightAwayChange: (submitRightAway: boolean) => void;
 }) => {
-  const [body, setBody] = useState("");
   const [floatingPosition, setFloatingPosition] = useState<FloatingPosition>({
     top: compose.top,
     left: compose.left,
@@ -1345,7 +1348,7 @@ const CommentComposer = ({
         value={body}
         maxLength={BODY_LIMIT}
         placeholder="What should the agent change here?"
-        onChange={(event) => setBody(event.target.value)}
+        onChange={(event) => onBodyChange(event.target.value)}
         onKeyDown={handleKeyDown}
       />
       <p className="review-compose-hint mt-1 mb-0 text-2xs text-subtle">
@@ -2491,6 +2494,10 @@ const ReviewKernel = () => {
     ReadonlySet<string>
   >(new Set());
   const [compose, setCompose] = useState<ComposeState | null>(null);
+  const [composeBody, setComposeBody] = useState("");
+  const [pendingCompose, setPendingCompose] = useState<ComposeState | null>(
+    null,
+  );
   const [selectionControl, setSelectionControl] =
     useState<SelectionControlState | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -2910,7 +2917,6 @@ const ReviewKernel = () => {
   }, [identity]);
 
   useEffect(() => {
-    if (compose !== null) return;
     let frame = 0;
     const update = () => {
       cancelAnimationFrame(frame);
@@ -2928,34 +2934,40 @@ const ReviewKernel = () => {
       window.removeEventListener("scroll", clear);
       window.removeEventListener("resize", clear);
     };
-  }, [compose]);
+  }, []);
 
   const beginTarget = useCallback(
     (target: CommentTarget, rect: Pick<DOMRect, "top">) => {
-      setCompose(
-        (current) =>
-          current ??
-          (() => {
-            const targetRect = targetElement(target)?.getBoundingClientRect();
-            const composerWidth = 17 * 16;
-            const edge = 24;
-            const overlap = 12;
-            const viewportWidth = document.documentElement.clientWidth;
-            return {
-              target,
-              top: Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
-              left: Math.max(
-                edge,
-                Math.min(
-                  (targetRect?.right ?? viewportWidth) - overlap,
-                  viewportWidth - composerWidth - edge,
-                ),
-              ),
-            };
-          })(),
-      );
+      if (
+        compose !== null &&
+        targetAddress(compose.target) === targetAddress(target)
+      ) {
+        return;
+      }
+      const targetRect = targetElement(target)?.getBoundingClientRect();
+      const composerWidth = 17 * 16;
+      const edge = 24;
+      const overlap = 12;
+      const viewportWidth = document.documentElement.clientWidth;
+      const next = {
+        target,
+        top: Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
+        left: Math.max(
+          edge,
+          Math.min(
+            (targetRect?.right ?? viewportWidth) - overlap,
+            viewportWidth - composerWidth - edge,
+          ),
+        ),
+      };
+      if (compose === null || composeBody.trim() === "") {
+        setComposeBody("");
+        setCompose(next);
+        return;
+      }
+      setPendingCompose(next);
     },
-    [],
+    [compose, composeBody],
   );
 
   const sendComments = async (comments: ReadonlyArray<ReviewComment>) => {
@@ -3002,6 +3014,7 @@ const ReviewKernel = () => {
     };
     setDrafts((current) => [...current, comment]);
     setCompose(null);
+    setComposeBody("");
     setTab("comments");
     setStatus("Comment staged locally.");
     if (submitRightAway) void sendComments([comment]);
@@ -3321,7 +3334,6 @@ const ReviewKernel = () => {
             className="group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] p-0 text-subtle hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:bg-surface aria-pressed:text-ink [&>svg]:size-3.5"
             aria-label={label}
             aria-pressed={pressed}
-            disabled={compose !== null && !pressed}
             onClick={() =>
               beginTarget(target, container.getBoundingClientRect())
             }
@@ -3350,9 +3362,6 @@ const ReviewKernel = () => {
                 compose?.target.type === "block" &&
                 targetElement(compose.target) === block
               }
-              disabled={
-                compose !== null && targetElement(compose.target) !== block
-              }
               onClick={() =>
                 beginTarget(
                   targetForBlock(block),
@@ -3377,9 +3386,6 @@ const ReviewKernel = () => {
                 compose?.target.type === "block" &&
                 targetElement(compose.target) === block
               }
-              disabled={
-                compose !== null && targetElement(compose.target) !== block
-              }
               data-tooltip={`Comment on ${block.dataset.blockLabel ?? "component"}`}
               data-tooltip-delay="1s"
               onClick={() =>
@@ -3397,7 +3403,6 @@ const ReviewKernel = () => {
               size="sm"
               className="review-block-button"
               aria-label={`Comment on ${block.dataset.blockLabel ?? "this component"}`}
-              disabled={compose !== null}
               data-review-block-button=""
               onClick={() =>
                 beginTarget(
@@ -3413,7 +3418,7 @@ const ReviewKernel = () => {
           block.dataset.blockId,
         ),
       )}
-      {selectionControl === null || compose !== null ? null : (
+      {selectionControl === null ? null : (
         <button
           type="button"
           className="fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-edge bg-paper px-2 py-1 text-xs text-muted shadow-raised hover:border-accent hover:bg-surface hover:text-ink focus-visible:border-accent focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
@@ -4053,8 +4058,13 @@ const ReviewKernel = () => {
           }
           compose={compose}
           inline={false}
+          body={composeBody}
           submitRightAway={submitRightAway}
-          onCancel={() => setCompose(null)}
+          onCancel={() => {
+            setCompose(null);
+            setComposeBody("");
+          }}
+          onBodyChange={setComposeBody}
           onSave={saveComment}
           onSubmitRightAwayChange={setSubmitRightAway}
         />
@@ -4068,14 +4078,42 @@ const ReviewKernel = () => {
             }
             compose={compose}
             inline
+            body={composeBody}
             submitRightAway={submitRightAway}
-            onCancel={() => setCompose(null)}
+            onCancel={() => {
+              setCompose(null);
+              setComposeBody("");
+            }}
+            onBodyChange={setComposeBody}
             onSave={saveComment}
             onSubmitRightAwayChange={setSubmitRightAway}
           />,
           inlineComposeHost,
         )
       )}
+      <AlertDialog
+        open={pendingCompose !== null}
+        title="Finish your draft comment?"
+        description="You have a draft comment that will be lost if you start a new one."
+        cancelLabel="Return to draft"
+        actionLabel="Discard"
+        onCancel={() => {
+          setPendingCompose(null);
+          requestAnimationFrame(() =>
+            document
+              .querySelector<HTMLTextAreaElement>(
+                'textarea[aria-label="Add a comment"]',
+              )
+              ?.focus(),
+          );
+        }}
+        onAction={() => {
+          if (pendingCompose === null) return;
+          setCompose(pendingCompose);
+          setComposeBody("");
+          setPendingCompose(null);
+        }}
+      />
       <AlertDialog
         open={pendingDelete !== null}
         title={

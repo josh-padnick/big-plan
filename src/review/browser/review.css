@@ -129,6 +129,18 @@ here; all values use the document theme's closed token vocabulary.
     transform: translateY(-50%);
   }
 
+  /* Sub-slide chrome is denser than slide chrome, so give its secondary
+     comment action one extra closed spacing step before the disclosure pair. */
+  @media (width >= 40rem) {
+    .plan-subslide-frame > [data-collapse-header] > [data-review-slide-host] {
+      right: calc(
+        100% + var(--deck-pad-x, 0rem) + var(--deck-toggle-size) +
+          var(--deck-toggle-gap) + var(--deck-toggle-gap) +
+          var(--deck-toggle-gap)
+      );
+    }
+  }
+
   [data-review-compose-inline],
   [data-review-thread-for]:not([data-review-thread-side]) {
     display: flow-root;
