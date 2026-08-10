@@ -468,6 +468,68 @@ describe("review runtime feedback", () => {
       ]),
     });
   });
+
+  it("should delete one queued comment without discarding its batch peers", async () => {
+    const comments = [
+      {
+        id: "a1a1a1a1",
+        body: "Delete this queued comment.",
+        target: { type: "document" },
+      },
+      {
+        id: "b2b2b2b2",
+        body: "Keep this queued comment.",
+        target: { type: "document" },
+      },
+    ];
+    expect(
+      (
+        await call({
+          path: "/api/feedback",
+          method: "POST",
+          body: { comments },
+        })
+      ).status,
+    ).toBe(200);
+
+    expect(
+      (
+        await call({
+          path: "/api/comments-delete",
+          method: "POST",
+          body: { commentId: comments[0]?.id },
+        })
+      ).status,
+    ).toBe(200);
+
+    const snapshot: unknown = await (
+      await call({ path: "/api/drafts" })
+    ).json();
+    expect(snapshot).toMatchObject({
+      sent: expect.arrayContaining([
+        expect.objectContaining({ id: "b2b2b2b2" }),
+      ]),
+    });
+    expect(snapshot).not.toMatchObject({
+      sent: expect.arrayContaining([
+        expect.objectContaining({ id: "a1a1a1a1" }),
+      ]),
+    });
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const batch = exchange.requests.find(
+      (request) =>
+        request.kind === "feedback" &&
+        request.comments.some((comment) => comment.id === "b2b2b2b2"),
+    );
+    expect(batch).toMatchObject({
+      kind: "feedback",
+      comments: [{ id: "b2b2b2b2" }],
+    });
+  });
 });
 
 describe("review runtime shutdown", () => {

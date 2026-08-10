@@ -61,6 +61,7 @@ const TABLE_PRECISION_KINDS = new Set([
 
 type PendingDelete =
   | { readonly kind: "comment"; readonly comment: ReviewComment }
+  | { readonly kind: "queued"; readonly comment: ReviewComment }
   | { readonly kind: "all"; readonly count: number };
 
 type RuntimeIdentity = {
@@ -291,7 +292,7 @@ const ThreadIconButton = ({
   );
 };
 
-/** Keeps a viewport-anchored composer clear of contextual comment cards. */
+/** Finds the initial viewport slot for a document-anchored composer. */
 const floatingComposerPosition = ({
   preferred,
   width,
@@ -1273,36 +1274,29 @@ const CommentComposer = ({
   useEffect(() => inputRef.current?.focus(), []);
   useEffect(() => {
     if (inline) return;
-    let frame = 0;
-    const update = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const rect = composerRef.current?.getBoundingClientRect();
-        if (rect === undefined) return;
-        const obstacles = Array.from(
-          document.querySelectorAll<HTMLElement>("[data-review-thread-side]"),
-          (node) => node.getBoundingClientRect(),
-        ).filter((obstacle) => obstacle.width > 0 && obstacle.height > 0);
-        const next = floatingComposerPosition({
-          preferred: { top: compose.top, left: compose.left },
-          width: rect.width,
-          height: rect.height,
-          obstacles,
-        });
-        setFloatingPosition((current) =>
-          current.top === next.top && current.left === next.left
-            ? current
-            : next,
-        );
+    const frame = requestAnimationFrame(() => {
+      const rect = composerRef.current?.getBoundingClientRect();
+      if (rect === undefined) return;
+      const obstacles = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-review-thread-side]"),
+        (node) => node.getBoundingClientRect(),
+      ).filter((obstacle) => obstacle.width > 0 && obstacle.height > 0);
+      const next = floatingComposerPosition({
+        preferred: {
+          top: compose.top - window.scrollY,
+          left: compose.left - window.scrollX,
+        },
+        width: rect.width,
+        height: rect.height,
+        obstacles,
       });
-    };
-    update();
-    window.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update, { passive: true });
+      setFloatingPosition({
+        top: next.top + window.scrollY,
+        left: next.left + window.scrollX,
+      });
+    });
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
     };
   }, [compose.left, compose.top, inline]);
   const save = () => body.trim() !== "" && onSave(body.trim(), submitRightAway);
@@ -1329,7 +1323,7 @@ const CommentComposer = ({
       className={
         inline
           ? `review-comment-composer-inline relative z-auto mb-6 w-full max-w-lg border border-edge bg-paper! p-3 text-ink shadow-floating ${compose.target.type === "block" && compose.target.kind === "slide" ? "-mt-4" : "mt-2"}`
-          : "review-comment-composer-floating fixed z-30 w-[min(17rem,calc(100vw-2rem))] border border-edge bg-paper! p-3 text-ink shadow-floating"
+          : "review-comment-composer-floating absolute z-30 w-[min(17rem,calc(100vw-2rem))] border border-edge bg-paper! p-3 text-ink shadow-floating"
       }
       style={style}
       role="dialog"
@@ -1907,6 +1901,7 @@ const SentThread = ({
   onReplySent,
   onShowAgent,
   onCancelRequest,
+  onDeleteQueued,
   statusForRequest,
   activityForRequest,
 }: {
@@ -1926,6 +1921,7 @@ const SentThread = ({
   readonly onReplySent: (message: string) => void;
   readonly onShowAgent: () => void;
   readonly onCancelRequest: (requestId: string) => void;
+  readonly onDeleteQueued: () => void;
   readonly statusForRequest: (
     request: AgentRequest,
     surface: MessageSurface,
@@ -1976,6 +1972,10 @@ const SentThread = ({
     latestExchange !== undefined &&
     latestExchange.response === undefined &&
     latestExchange.request.canceledAt === undefined;
+  const canDeleteQueued =
+    group === "queued" &&
+    latestPending &&
+    exchanges.every((exchange) => exchange.response === undefined);
   const cardClass = `mt-2 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
   const associate = () => onAssociate(comment.target);
   const railFreshness = threadTime(
@@ -2073,6 +2073,14 @@ const SentThread = ({
           }}
           onAssociate={(active) => onAssociate(active ? comment.target : null)}
         >
+          {canDeleteQueued ? (
+            <ThreadIconButton
+              label="Delete queued comment"
+              icon={TRASH_2_ICON}
+              onClick={onDeleteQueued}
+              tone="danger"
+            />
+          ) : null}
           {!latestPending ? (
             <ThreadIconButton
               label={resolved ? "Unresolve comment" : "Resolve comment"}
@@ -2122,6 +2130,14 @@ const SentThread = ({
             icon={MAXIMIZE_2_ICON}
             onClick={onToggle}
           />
+          {canDeleteQueued ? (
+            <ThreadIconButton
+              label="Delete queued comment"
+              icon={TRASH_2_ICON}
+              onClick={onDeleteQueued}
+              tone="danger"
+            />
+          ) : null}
           {latestChanged === undefined ? null : (
             <ThreadIconButton
               label="Revert agent changes"
@@ -2217,6 +2233,14 @@ const SentThread = ({
           icon={MINIMIZE_2_ICON}
           onClick={onToggle}
         />
+        {canDeleteQueued ? (
+          <ThreadIconButton
+            label="Delete queued comment"
+            icon={TRASH_2_ICON}
+            onClick={onDeleteQueued}
+            tone="danger"
+          />
+        ) : null}
         {latestChanged === undefined ? null : (
           <ThreadIconButton
             label="Revert agent changes"
@@ -2951,12 +2975,14 @@ const ReviewKernel = () => {
       const viewportWidth = document.documentElement.clientWidth;
       const next = {
         target,
-        top: Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
+        top:
+          window.scrollY +
+          Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
         left: Math.max(
-          edge,
+          edge + window.scrollX,
           Math.min(
-            (targetRect?.right ?? viewportWidth) - overlap,
-            viewportWidth - composerWidth - edge,
+            (targetRect?.right ?? viewportWidth) + window.scrollX - overlap,
+            window.scrollX + viewportWidth - composerWidth - edge,
           ),
         ),
       };
@@ -3029,6 +3055,38 @@ const ReviewKernel = () => {
     setDrafts([]);
     setPendingDelete(null);
     setStatus("All staged comments deleted.");
+  };
+  const deleteQueuedComment = async (commentId: string) => {
+    if (identity === null) return;
+    try {
+      await serializeRuntimeWrite(() =>
+        requestJson({
+          path: "/api/comments-delete",
+          identity,
+          method: "POST",
+          body: { commentId },
+        }),
+      );
+      const [snapshotValue, agentValue] = await Promise.all([
+        requestJson({ path: "/api/drafts", identity }),
+        requestJson({ path: "/api/agent", identity }),
+      ]);
+      const snapshot = parseSnapshot(snapshotValue);
+      setSent(snapshot.sent);
+      setResolvedCommentIds(new Set(snapshot.resolvedCommentIds));
+      setAgent(parseAgentSnapshot(agentValue));
+      setExpandedSentThreads((current) => {
+        const next = new Set(current);
+        next.delete(commentId);
+        return next;
+      });
+      if (selectedCommentId === commentId) setSelectedCommentId(null);
+      setPendingDelete(null);
+      setStatus("Queued comment deleted.");
+    } catch (error) {
+      setPendingDelete(null);
+      setStatus(errorMessage(error));
+    }
   };
   const jumpTo = (comment: ReviewComment) => {
     setAssociatedTarget(comment.target);
@@ -3760,6 +3818,9 @@ const ReviewKernel = () => {
                             onCancelRequest={(requestId) =>
                               void cancelRequest(requestId)
                             }
+                            onDeleteQueued={() =>
+                              setPendingDelete({ kind: "queued", comment })
+                            }
                             statusForRequest={statusForRequest}
                             activityForRequest={activityForRequest}
                           />
@@ -3800,6 +3861,9 @@ const ReviewKernel = () => {
                           onShowAgent={showAgentSetup}
                           onCancelRequest={(requestId) =>
                             void cancelRequest(requestId)
+                          }
+                          onDeleteQueued={() =>
+                            setPendingDelete({ kind: "queued", comment })
                           }
                           statusForRequest={statusForRequest}
                           activityForRequest={activityForRequest}
@@ -4042,6 +4106,7 @@ const ReviewKernel = () => {
             onReplySent={setStatus}
             onShowAgent={showAgentSetup}
             onCancelRequest={(requestId) => void cancelRequest(requestId)}
+            onDeleteQueued={() => setPendingDelete({ kind: "queued", comment })}
             statusForRequest={statusForRequest}
             activityForRequest={activityForRequest}
           />,
@@ -4119,12 +4184,16 @@ const ReviewKernel = () => {
         title={
           pendingDelete?.kind === "all"
             ? "Delete all comments?"
-            : "Delete comment?"
+            : pendingDelete?.kind === "queued"
+              ? "Delete queued comment?"
+              : "Delete comment?"
         }
         description={
           pendingDelete?.kind === "all"
             ? `This permanently removes all ${pendingDelete.count} staged ${pendingDelete.count === 1 ? "comment" : "comments"}. This action cannot be undone.`
-            : "This permanently removes your staged comment. This action cannot be undone."
+            : pendingDelete?.kind === "queued"
+              ? "This removes the comment before the agent picks it up. This action cannot be undone."
+              : "This permanently removes your staged comment. This action cannot be undone."
         }
         actionLabel={pendingDelete?.kind === "all" ? "Delete all" : "Delete"}
         onCancel={() => setPendingDelete(null)}
@@ -4133,6 +4202,8 @@ const ReviewKernel = () => {
             deleteDraft(pendingDelete.comment.id);
           } else if (pendingDelete?.kind === "all") {
             deleteAllDrafts();
+          } else if (pendingDelete?.kind === "queued") {
+            void deleteQueuedComment(pendingDelete.comment.id);
           }
         }}
       />

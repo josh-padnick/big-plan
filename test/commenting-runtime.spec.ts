@@ -28,6 +28,7 @@ test("should restore and submit staged comments through the local review runtime
 
   await stageComment(page, "Clarify the failure boundary.");
   await stageComment(page, "Name the operator recovery path.");
+  await stageComment(page, "Remove this queued comment before pickup.");
 
   const rail = page.getByRole("complementary", { name: "Feedback" });
   const kernel = page.locator("#big-plan-review-root");
@@ -35,6 +36,7 @@ test("should restore and submit staged comments through the local review runtime
   await page.getByRole("button", { name: /Feedback/ }).click();
   await expect(rail).toContainText("Clarify the failure boundary.");
   await expect(rail).toContainText("Name the operator recovery path.");
+  await expect(rail).toContainText("Remove this queued comment before pickup.");
   await expect(rail).toContainText("1 · Details");
   await expect(rail).toContainText("Comment staged locally.");
 
@@ -42,6 +44,7 @@ test("should restore and submit staged comments through the local review runtime
   await page.getByRole("button", { name: /Feedback/ }).click();
   await expect(rail).toContainText("Clarify the failure boundary.");
   await expect(rail).toContainText("Name the operator recovery path.");
+  await expect(rail).toContainText("Remove this queued comment before pickup.");
 
   const responsePromise = page.waitForResponse(
     (response) =>
@@ -71,10 +74,27 @@ test("should restore and submit staged comments through the local review runtime
     "Clarify the failure boundary.",
   );
 
-  await expect(rail).toContainText("2 comments submitted.");
+  await expect(rail).toContainText("3 comments submitted.");
   await expect(
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
+  const queuedForDeletion = rail
+    .locator("[data-review-sent-thread='queued']")
+    .filter({ hasText: "Remove this queued comment before pickup." });
+  await queuedForDeletion
+    .getByRole("button", { name: "Delete queued comment" })
+    .click();
+  const deleteDialog = page.getByRole("alertdialog", {
+    name: "Delete queued comment?",
+  });
+  await expect(deleteDialog).toContainText(
+    "This removes the comment before the agent picks it up.",
+  );
+  await deleteDialog.getByRole("button", { name: "Delete" }).click();
+  await expect(rail).not.toContainText(
+    "Remove this queued comment before pickup.",
+  );
+  await expect(rail).toContainText("Queued comment deleted.");
   await page.getByRole("button", { name: /Feedback/ }).click();
   const blockedSummary = page.locator(
     ".review-contextual-summary[data-review-sent-thread='queued']",

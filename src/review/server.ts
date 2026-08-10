@@ -46,6 +46,7 @@ import {
   feedbackAgentRequest,
   messageAgentRequest,
   readAgentExchange,
+  removeCommentFromQueuedFeedbackRequest,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import {
@@ -109,6 +110,7 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "GET", path: "/api/drafts" },
   { method: "PUT", path: "/api/drafts" },
   { method: "POST", path: "/api/feedback" },
+  { method: "POST", path: "/api/comments-delete" },
   { method: "GET", path: "/api/agent" },
   { method: "POST", path: "/api/agent-requests" },
   { method: "POST", path: "/api/agent-cancel" },
@@ -446,6 +448,106 @@ export const startReviewRuntime = async ({
           agentRequest,
         },
       });
+      return;
+    }
+    if (route.path === "/api/comments-delete") {
+      const body = await readBody(request);
+      const payload =
+        typeof body === "object" && body !== null
+          ? (body as Readonly<Record<string, unknown>>)
+          : {};
+      const commentId = payload.commentId;
+      if (typeof commentId !== "string") {
+        refuse({ response, status: 400, reason: "A comment id is required" });
+        return;
+      }
+      const sent = await readComments({ path: store.sentPath, validate });
+      if (!sent.some((comment) => comment.id === commentId)) {
+        refuse({ response, status: 404, reason: "No such sent comment" });
+        return;
+      }
+      const exchange = await readAgentExchange({ store, sessionId, planId });
+      const answeredRequestIds = new Set(
+        exchange.responses.flatMap((candidate) =>
+          candidate.kind !== "chat" &&
+          candidate.outcomes.some((outcome) => outcome.commentId === commentId)
+            ? [candidate.requestId]
+            : [],
+        ),
+      );
+      if (answeredRequestIds.size > 0) {
+        refuse({
+          response,
+          status: 409,
+          reason: "Only a comment still waiting in the queue can be deleted",
+        });
+        return;
+      }
+      const pendingRequests = exchange.requests.filter(
+        (candidate) =>
+          candidate.canceledAt === undefined &&
+          !exchange.responses.some(
+            (response) => response.requestId === candidate.requestId,
+          ) &&
+          ((candidate.kind === "feedback" &&
+            candidate.comments.some((comment) => comment.id === commentId)) ||
+            (candidate.kind === "reply" && candidate.commentId === commentId)),
+      );
+      if (pendingRequests.length === 0) {
+        refuse({
+          response,
+          status: 409,
+          reason: "Only a comment still waiting in the queue can be deleted",
+        });
+        return;
+      }
+      if (
+        pendingRequests.some((candidate) => candidate.claimedAt !== undefined)
+      ) {
+        refuse({
+          response,
+          status: 409,
+          reason: "The agent has already picked up this comment",
+        });
+        return;
+      }
+      const now = new Date().toISOString();
+      for (const pending of pendingRequests) {
+        if (pending.kind === "feedback") {
+          await removeCommentFromQueuedFeedbackRequest({
+            store,
+            request: pending,
+            commentId,
+            now,
+          });
+        } else {
+          await cancelAgentRequest({ store, request: pending, now });
+        }
+      }
+      await writeComments({
+        path: store.sentPath,
+        comments: sent.filter((comment) => comment.id !== commentId),
+      });
+      const resolvedCommentIds = await readResolvedCommentIds({
+        store,
+        validate: validateResolvedCommentIds,
+      });
+      await writeResolvedCommentIds({
+        store,
+        ids: resolvedCommentIds.filter((id) => id !== commentId),
+      });
+      progressSeq += 1;
+      await appendProgress({
+        store,
+        event: {
+          sessionId,
+          atMs: Date.now(),
+          seq: progressSeq,
+          step: "Queued comment deleted",
+          state: "done",
+        },
+      });
+      sendJson({ response, status: 200, value: { commentId } });
       return;
     }
     if (route.path === "/api/agent") {

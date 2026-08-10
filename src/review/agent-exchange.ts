@@ -447,6 +447,50 @@ export const cancelAgentRequest = async ({
   return canceled;
 };
 
+/** Removes one unclaimed comment without disturbing the rest of its batch. */
+export const removeCommentFromQueuedFeedbackRequest = async ({
+  store,
+  request,
+  commentId,
+  now,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentFeedbackRequest;
+  readonly commentId: string;
+  readonly now: string;
+}): Promise<AgentFeedbackRequest> => {
+  if (request.claimedAt !== undefined) {
+    throw new AgentExchangeRejected(
+      "The agent has already picked up this feedback request",
+    );
+  }
+  if (request.canceledAt !== undefined) return request;
+  const comments = request.comments.filter(
+    (comment) => comment.id !== commentId,
+  );
+  if (comments.length === request.comments.length) {
+    throw new AgentExchangeRejected(
+      "The queued feedback request does not contain this comment",
+    );
+  }
+  const updated = validateAgentRequest(
+    comments.length === 0
+      ? { ...request, canceledAt: now }
+      : { ...request, comments },
+  );
+  if (updated.kind !== "feedback") {
+    throw new AgentExchangeRejected(
+      "Removing a queued comment changed the request kind",
+    );
+  }
+  await writeAgentRequestValue({
+    store,
+    requestId: request.requestId,
+    value: updated,
+  });
+  return updated;
+};
+
 /** The immutable revision an agent actually saw when it claimed the work. */
 export const requestBaselineRevision = (request: AgentRequest): string =>
   request.claimedFromRevision ?? request.sourceRevision;

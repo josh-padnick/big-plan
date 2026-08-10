@@ -55,6 +55,22 @@ const fail = (message: string): never => {
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** Describes pickup with useful context instead of repeating a count. */
+const pickupProgress = (
+  request: AgentRequest,
+): { readonly step: string; readonly detail?: string } => {
+  if (request.kind === "chat") return { step: "Reviewing plan question" };
+  if (request.kind === "reply") return { step: "Reviewing thread reply" };
+  if (request.comments.length !== 1) {
+    return { step: `Reviewing ${request.comments.length} comments` };
+  }
+  const comment = request.comments[0];
+  if (comment === undefined || comment.target.type === "document") {
+    return { step: "Reviewing feedback", detail: "Whole plan" };
+  }
+  return { step: "Reviewing feedback", detail: comment.target.label };
+};
+
 type SessionDescriptor = {
   readonly sessionId: string;
   readonly planId: string;
@@ -246,7 +262,7 @@ For each returned work item:
 1. Read the current plan source and the request plus its conversation history.
 2. As you work, narrate for the reviewer: run \`node ${shellQuote(binPath)} agent note ${shellQuote(
     session.planPath,
-  )} "<one short line>"\` when you start each meaningful step - reading the request, deciding an outcome, editing the plan, validating. One line per step, present tense, no repeats.
+  )} "<one short line>"\` when you start each meaningful step - reading the request, deciding an outcome, editing the plan, validating. If one step runs longer than a minute, add another note only when you can name concrete new progress. One line per update, present tense, no repeats.
 3. For every anchored comment, choose exactly one outcome:
    - changed: revise the plan source, explain the revision, and list every changed render block id in changeTargets, in presentation order.
    - question: do not guess; ask the precise question the reviewer must answer.
@@ -351,22 +367,8 @@ const nextWork = async ({
       seq:
         progress.reduce((highest, event) => Math.max(highest, event.seq), 0) +
         1,
-      step:
-        request.kind === "chat"
-          ? "Picked up: plan question"
-          : request.kind === "reply"
-            ? "Picked up: thread reply"
-            : `Picked up: ${request.comments.length} comment${
-                request.comments.length === 1 ? "" : "s"
-              }`,
+      ...pickupProgress(request),
       state: "live",
-      ...(request.kind === "feedback"
-        ? {
-            detail: `${request.comments.length} comment${
-              request.comments.length === 1 ? "" : "s"
-            }`,
-          }
-        : {}),
     },
   });
   const responseFile = agentResponseDraftPath({

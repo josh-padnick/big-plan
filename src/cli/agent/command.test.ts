@@ -135,9 +135,10 @@ describe("agent command", () => {
     ).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          step: "Picked up: 1 comment",
+          step: "Reviewing feedback",
           state: "live",
-          detail: "1 comment",
+          detail:
+            "A durable retry pipeline takes over failed payment captures.",
         }),
       ]),
     );
