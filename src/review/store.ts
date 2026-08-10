@@ -27,6 +27,10 @@ import {
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
+import {
+  isProgressStepCode,
+  type ProgressStepCode,
+} from "./shared/progress-code.js";
 
 const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
@@ -44,6 +48,7 @@ export type ProgressEvent = {
   readonly requestId?: string;
   readonly atMs?: number;
   readonly seq: number;
+  readonly stepCode: ProgressStepCode;
   readonly step: string;
   readonly state: string;
   readonly detail?: string;
@@ -625,7 +630,11 @@ const asProgressEvent = ({
   if (typeof event.seq !== "number" || !Number.isInteger(event.seq)) {
     return undefined;
   }
-  if (typeof event.step !== "string" || typeof event.state !== "string") {
+  if (
+    !isProgressStepCode(event.stepCode) ||
+    typeof event.step !== "string" ||
+    typeof event.state !== "string"
+  ) {
     return undefined;
   }
   if (!PROGRESS_STATES.has(event.state)) {
@@ -641,6 +650,7 @@ const asProgressEvent = ({
       ? { atMs: event.atMs }
       : {}),
     seq: event.seq,
+    stepCode: event.stepCode,
     step: event.step.slice(0, PROGRESS_TEXT_LIMIT),
     state: event.state,
     ...(typeof event.detail === "string"

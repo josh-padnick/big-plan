@@ -2,6 +2,8 @@
 // It derives presentation facts from runtime input. It stores no state and
 // does not depend on the browser or Node.
 
+import type { ProgressStepCode } from "./progress-code.js";
+
 export const AGENT_STALL_MS = 90_000;
 
 export type AgentActivityRequest = {
@@ -16,6 +18,7 @@ export type AgentActivityRequest = {
 export type AgentActivityProgress = {
   readonly requestId?: string;
   readonly atMs?: number;
+  readonly stepCode: ProgressStepCode;
   readonly step: string;
   readonly state: string;
   readonly detail?: string;
@@ -113,7 +116,8 @@ const meaningfulWork = (
 ): boolean =>
   event.requestId === requestId &&
   (event.state === "live" || event.state === "waiting") &&
-  !/^(reply sent to agent|plan question sent to agent)$/i.test(event.step);
+  event.stepCode !== "reply-sent" &&
+  event.stepCode !== "chat-sent";
 
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This updates by itself once the agent resumes.";

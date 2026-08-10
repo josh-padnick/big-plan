@@ -450,6 +450,7 @@ export const startReviewRuntime = async ({
         event: {
           sessionId,
           atMs: Date.now(),
+          stepCode: "feedback-received",
           step: "Feedback package received",
           state: "done",
           detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
@@ -563,6 +564,7 @@ export const startReviewRuntime = async ({
         event: {
           sessionId,
           atMs: Date.now(),
+          stepCode: "queued-comment-deleted",
           step: "Queued comment deleted",
           state: "done",
         },
@@ -655,6 +657,7 @@ export const startReviewRuntime = async ({
         event: {
           sessionId,
           atMs: Date.now(),
+          stepCode: agentRequest.kind === "reply" ? "reply-sent" : "chat-sent",
           step:
             agentRequest.kind === "reply"
               ? "Reply sent to agent"
@@ -715,6 +718,7 @@ export const startReviewRuntime = async ({
           sessionId,
           requestId: canceled.requestId,
           atMs: Date.now(),
+          stepCode: "request-canceled",
           step: "Request canceled by reviewer",
           state: "done",
         },

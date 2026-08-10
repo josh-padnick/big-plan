@@ -270,6 +270,7 @@ const nextWork = async ({
       sessionId: session.sessionId,
       requestId: request.requestId,
       atMs: Date.now(),
+      stepCode: "request-picked-up",
       ...pickupProgress(request),
       state: "live",
     },
@@ -410,6 +411,7 @@ const respond = async ({
       sessionId: session.sessionId,
       requestId: request.requestId,
       atMs: Date.now(),
+      stepCode: "response-ready",
       step: "Agent response ready",
       state: "done",
       detail:
@@ -475,6 +477,7 @@ const note = async ({
       sessionId: session.sessionId,
       requestId: request.requestId,
       atMs: Date.now(),
+      stepCode: "agent-note",
       step: message,
       state: "live",
     },

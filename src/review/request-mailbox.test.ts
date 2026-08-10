@@ -208,6 +208,7 @@ describe("request mailbox", () => {
             sessionId,
             requestId: packageId,
             atMs: 10_000 + index,
+            stepCode: "agent-note",
             step: `Step ${index + 1}`,
             state: "live",
           },

@@ -5,6 +5,7 @@
 import { deriveAgentStatus, type AgentStatus } from "./agent-status.js";
 import { requestIsCanceled, type CancelableRequest } from "./cancel-pending.js";
 import type { ReviewComment } from "./comment.js";
+import type { ProgressStepCode } from "./progress-code.js";
 
 export type ThreadRequest = CancelableRequest & {
   readonly sourceRevision: string;
@@ -38,6 +39,7 @@ export type ThreadProgress = {
   readonly requestId?: string;
   readonly atMs?: number;
   readonly seq: number;
+  readonly stepCode: ProgressStepCode;
   readonly step: string;
   readonly state: "waiting" | "live" | "done" | "failed";
   readonly detail?: string;

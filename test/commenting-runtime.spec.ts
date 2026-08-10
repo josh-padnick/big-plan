@@ -286,6 +286,7 @@ test("should restore and submit staged comments through the local review runtime
       sessionId: session.sessionId,
       requestId: request.requestId,
       atMs: Date.now(),
+      stepCode: "agent-note",
       step: "Reviewing the shared feedback batch",
       state: "live",
     },

@@ -41,6 +41,10 @@ import {
 } from "../shared/cancel-pending.js";
 import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
+  isProgressStepCode,
+  type ProgressStepCode,
+} from "../shared/progress-code.js";
+import {
   projectCommentThreads,
   projectRequestActivity,
   projectRequestStatus,
@@ -145,6 +149,7 @@ type ProgressEvent = {
   readonly requestId?: string;
   readonly atMs?: number;
   readonly seq: number;
+  readonly stepCode: ProgressStepCode;
   readonly step: string;
   readonly state: "waiting" | "live" | "done" | "failed";
   readonly detail?: string;
@@ -639,6 +644,7 @@ const parseProgress = (value: unknown): ReadonlyArray<ProgressEvent> => {
     if (
       !isRecord(event) ||
       typeof event.seq !== "number" ||
+      !isProgressStepCode(event.stepCode) ||
       typeof event.step !== "string" ||
       (event.state !== "waiting" &&
         event.state !== "live" &&
@@ -650,6 +656,7 @@ const parseProgress = (value: unknown): ReadonlyArray<ProgressEvent> => {
     return [
       {
         seq: event.seq,
+        stepCode: event.stepCode,
         step: event.step,
         state: event.state,
         ...(typeof event.requestId === "string"

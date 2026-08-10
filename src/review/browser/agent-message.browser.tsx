@@ -12,12 +12,14 @@ import {
 } from "../shared/message-markdown.js";
 import { messageTimeLabel } from "../shared/time-label.js";
 import type { AgentStatus } from "../shared/agent-status.js";
+import type { ProgressStepCode } from "../shared/progress-code.js";
 import { Icon } from "./icon.browser.js";
 
 export type MessageSurface = "thread" | "chat";
 
 export type MessageActivity = {
   readonly seq: number;
+  readonly stepCode: ProgressStepCode;
   readonly step: string;
   readonly state: "waiting" | "live" | "done" | "failed";
   readonly detail?: string;
@@ -229,10 +231,9 @@ export const RequestStatusStrip = ({
     .filter(
       (event) =>
         (event.state === "live" || event.state === "waiting") &&
-        !/^(reply sent to agent|plan question sent to agent)$/iu.test(
-          event.step,
-        ) &&
-        !/feedback package received/iu.test(event.step),
+        event.stepCode !== "reply-sent" &&
+        event.stepCode !== "chat-sent" &&
+        event.stepCode !== "feedback-received",
     )
     .filter(
       (event, index, events) =>
