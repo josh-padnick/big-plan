@@ -62,6 +62,7 @@ import {
   readProgress,
   readResolvedCommentIds,
   readRevisionSnapshot,
+  readSessionDescriptor,
   reviewStoreFor,
   writeActiveDraft,
   writeComments,
@@ -77,6 +78,16 @@ import { diffRevisions } from "./revision-diff.js";
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const HEARTBEAT_INTERVAL_MS = 750;
+
+/** Reads only the ownership field needed to fence superseded runtimes. */
+const descriptorSessionId = (value: unknown): string | undefined =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  "sessionId" in value &&
+  typeof value.sessionId === "string"
+    ? value.sessionId
+    : undefined;
 
 /** Quotes one trusted local path as one POSIX-shell argument. */
 const shellArgument = (value: string): string =>
@@ -886,7 +897,14 @@ export const startReviewRuntime = async ({
   const queueHeartbeat = (running: boolean): Promise<void> => {
     heartbeatWrite = heartbeatWrite
       .catch(() => undefined)
-      .then(() => writeSessionHeartbeat({ store, sessionId, running }));
+      .then(async () => {
+        const currentSessionId = await readSessionDescriptor({
+          store,
+          validate: descriptorSessionId,
+        });
+        if (currentSessionId !== sessionId) return;
+        await writeSessionHeartbeat({ store, sessionId, running });
+      });
     return heartbeatWrite;
   };
   await queueHeartbeat(true);

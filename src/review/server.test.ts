@@ -6,7 +6,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deriveSourceRevision,
   nextPendingAgentRequest,
@@ -14,7 +14,7 @@ import {
 } from "./agent-exchange.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { writeRevisionSnapshot } from "./store.js";
+import { sessionHeartbeatIsFresh, writeRevisionSnapshot } from "./store.js";
 
 const PLAN = `# Review runtime plan
 
@@ -533,6 +533,29 @@ describe("review runtime feedback", () => {
 });
 
 describe("review runtime shutdown", () => {
+  it("should keep a replacement runtime authoritative for the same plan", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-restart-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    vi.useFakeTimers();
+    const first = await startReviewRuntime({ planPath });
+    await vi.advanceTimersByTimeAsync(450);
+    const replacement = await startReviewRuntime({ planPath });
+    try {
+      await vi.advanceTimersByTimeAsync(400);
+      expect(
+        await sessionHeartbeatIsFresh({
+          store: replacement.store,
+          sessionId: replacement.sessionId,
+        }),
+      ).toBe(true);
+    } finally {
+      await Promise.all([first.close(), replacement.close()]);
+      vi.useRealTimers();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should stop listening when the reviewer closes it", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-server-close-"));
     const planPath = join(directory, "plan.mdx");
