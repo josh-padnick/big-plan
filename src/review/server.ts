@@ -48,12 +48,12 @@ import {
   writeAgentRequest,
 } from "./agent-exchange.js";
 import {
+  appendProgressEvent,
   cancelAgentRequest,
+  recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
 } from "./request-mailbox.js";
 import {
-  appendAgentConnectionEvent,
-  appendProgress,
   deriveReviewPlanId,
   prepareStore,
   randomId,
@@ -264,8 +264,6 @@ export const startReviewRuntime = async ({
   // re-anchor; it simply refuses to forget what it once addressed.
   const blocks = new Map<string, BlockMapEntry>();
   let blockMapMarkdown: string | undefined;
-  let progressSeq = 0;
-  let lastConnectionState: boolean | undefined;
 
   const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateComments({ value, blocks, now: new Date().toISOString() });
@@ -469,15 +467,13 @@ export const startReviewRuntime = async ({
       });
       await writeComments({ path: store.draftsPath, comments: [] });
       await writeActiveDraft({ path: store.activeDraftPath, value: "" });
-      progressSeq += 1;
       // The one event the runtime can honestly author: it has the package.
       // Everything after this belongs to the agent that reads the channel.
-      await appendProgress({
+      await appendProgressEvent({
         store,
         event: {
           sessionId,
           atMs: Date.now(),
-          seq: progressSeq,
           step: "Feedback package received",
           state: "done",
           detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
@@ -586,13 +582,11 @@ export const startReviewRuntime = async ({
         store,
         ids: resolvedCommentIds.filter((id) => id !== commentId),
       });
-      progressSeq += 1;
-      await appendProgress({
+      await appendProgressEvent({
         store,
         event: {
           sessionId,
           atMs: Date.now(),
-          seq: progressSeq,
           step: "Queued comment deleted",
           state: "done",
         },
@@ -604,22 +598,6 @@ export const startReviewRuntime = async ({
       const exchange = await readAgentExchange({ store, sessionId, planId });
       const latestResponse = exchange.responses.at(-1);
       const presence = await readAgentPresence({ store, sessionId });
-      if (presence.connected !== lastConnectionState) {
-        const reason =
-          lastConnectionState === true && !presence.connected
-            ? "Heartbeat timed out"
-            : undefined;
-        lastConnectionState = presence.connected;
-        await appendAgentConnectionEvent({
-          store,
-          event: {
-            sessionId,
-            connected: presence.connected,
-            at: new Date().toISOString(),
-            ...(reason === undefined ? {} : { reason }),
-          },
-        });
-      }
       const connectionLog = await readAgentConnectionEvents({
         store,
         sessionId,
@@ -696,13 +674,11 @@ export const startReviewRuntime = async ({
         }
       }
       await writeAgentRequest({ store, request: agentRequest });
-      progressSeq += 1;
-      await appendProgress({
+      await appendProgressEvent({
         store,
         event: {
           sessionId,
           atMs: Date.now(),
-          seq: progressSeq,
           step:
             agentRequest.kind === "reply"
               ? "Reply sent to agent"
@@ -757,14 +733,12 @@ export const startReviewRuntime = async ({
         requestId: agentRequest.requestId,
         now: new Date().toISOString(),
       });
-      progressSeq += 1;
-      await appendProgress({
+      await appendProgressEvent({
         store,
         event: {
           sessionId,
           requestId: canceled.requestId,
           atMs: Date.now(),
-          seq: progressSeq,
           step: "Request canceled by reviewer",
           state: "done",
         },
@@ -817,10 +791,6 @@ export const startReviewRuntime = async ({
     }
     if (route.path === "/api/progress") {
       const events = await readProgress({ store, sessionId });
-      progressSeq = Math.max(
-        progressSeq,
-        events.reduce((highest, event) => Math.max(highest, event.seq), 0),
-      );
       sendJson({ response, status: 200, value: { events } });
       return;
     }
@@ -989,6 +959,36 @@ export const startReviewRuntime = async ({
   }, HEARTBEAT_INTERVAL_MS);
   heartbeatTimer.unref();
 
+  let connectionWrite = Promise.resolve();
+  let connectionFailureReported = false;
+  const queueConnectionCheck = (): Promise<void> => {
+    connectionWrite = connectionWrite
+      .catch(() => undefined)
+      .then(async () => {
+        const presence = await readAgentPresence({ store, sessionId });
+        await recordAgentConnectionState({
+          store,
+          sessionId,
+          connected: presence.connected,
+          at: new Date().toISOString(),
+          disconnectReason: "Heartbeat timed out",
+        });
+      })
+      .catch((error: unknown) => {
+        if (connectionFailureReported) return;
+        connectionFailureReported = true;
+        process.stderr.write(
+          `Agent connection check failed for session ${sessionId} (${resolvedPlanPath}): ${String(error)}\n`,
+        );
+      });
+    return connectionWrite;
+  };
+  await queueConnectionCheck();
+  const connectionTimer = setInterval(() => {
+    void queueConnectionCheck();
+  }, HEARTBEAT_INTERVAL_MS);
+  connectionTimer.unref();
+
   return {
     url,
     port,
@@ -998,7 +998,9 @@ export const startReviewRuntime = async ({
     store,
     close: async () => {
       clearInterval(heartbeatTimer);
+      clearInterval(connectionTimer);
       await queueHeartbeat(false).catch(() => undefined);
+      await connectionWrite.catch(() => undefined);
       await new Promise<void>((settle) => {
         server.close(() => settle());
       });

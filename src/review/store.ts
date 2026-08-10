@@ -709,18 +709,8 @@ export const readProgress = async ({
   return history.events.slice(-PROGRESS_EVENT_LIMIT);
 };
 
-/** Allocates the next sequence independently of the relayed display window. */
-export const readNextProgressSequence = async ({
-  store,
-  sessionId,
-}: {
-  readonly store: ReviewStore;
-  readonly sessionId: string;
-}): Promise<number> =>
-  (await readProgressHistory({ store, sessionId })).highestSequence + 1;
-
-/** Appends one runtime-authored event to the agent's status channel. */
-export const appendProgress = async ({
+/** Appends one checked event for the mailbox mutation owner. */
+export const appendProgressValue = async ({
   store,
   event,
 }: {

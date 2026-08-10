@@ -1,19 +1,27 @@
 // Owns changes to stored agent requests. Each change locks one request,
 // reads its current value, validates it, and writes one complete replacement.
 
-import { mkdir, rmdir } from "node:fs/promises";
+import { mkdir, readFile, rmdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   AgentExchangeRejected,
   validateAgentRequest,
 } from "./agent-exchange.js";
 import type { AgentFeedbackRequest, AgentRequest } from "./agent-exchange.js";
-import { readAgentRequestValue, writeAgentRequestValue } from "./store.js";
-import type { ReviewStore } from "./store.js";
+import {
+  appendAgentConnectionEvent,
+  appendProgressValue,
+  readAgentConnectionEvents,
+  readAgentRequestValue,
+  readProgress,
+  writeAgentRequestValue,
+} from "./store.js";
+import type { ProgressEvent, ReviewStore } from "./store.js";
 
 const LOCK_ATTEMPTS = 200;
 const LOCK_WAIT_MS = 10;
 const REQUEST_ID = /^[a-f0-9]{16}$/;
+const LOCK_OWNER_FILE = "owner.json";
 
 const wait = async (): Promise<void> => {
   await new Promise<void>((resolve) => {
@@ -27,7 +35,98 @@ const hasCode = (
 ): error is Error & { readonly code: string } =>
   error instanceof Error && "code" in error && error.code === code;
 
-/** Runs one request change while other processes wait for the same request. */
+const processIsRunning = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: unknown) {
+    return !hasCode(error, "ESRCH");
+  }
+};
+
+/** Removes a lock only when its recorded process no longer exists. */
+const clearAbandonedLock = async (lockPath: string): Promise<void> => {
+  const ownerPath = join(lockPath, LOCK_OWNER_FILE);
+  let value: unknown;
+  try {
+    value = JSON.parse(await readFile(ownerPath, "utf8"));
+  } catch {
+    return;
+  }
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("pid" in value) ||
+    typeof value.pid !== "number" ||
+    !Number.isInteger(value.pid) ||
+    processIsRunning(value.pid)
+  ) {
+    return;
+  }
+  try {
+    // Only one waiter can remove the owner file. Other waiters leave any new
+    // non-empty lock alone.
+    await unlink(ownerPath);
+    await rmdir(lockPath);
+  } catch (error: unknown) {
+    if (!hasCode(error, "ENOENT")) throw error;
+  }
+};
+
+/** Creates one cross-process lock and records the process that owns it. */
+const acquireMailboxLock = async (lockPath: string): Promise<boolean> => {
+  try {
+    await mkdir(lockPath, { mode: 0o700 });
+  } catch (error: unknown) {
+    if (!hasCode(error, "EEXIST")) throw error;
+    await clearAbandonedLock(lockPath);
+    return false;
+  }
+  try {
+    await writeFile(
+      join(lockPath, LOCK_OWNER_FILE),
+      `${JSON.stringify({ pid: process.pid })}\n`,
+      { flag: "wx", mode: 0o600 },
+    );
+    return true;
+  } catch (error: unknown) {
+    await rmdir(lockPath).catch(() => undefined);
+    throw error;
+  }
+};
+
+/** Releases the exact lock owned by this process. */
+const releaseMailboxLock = async (lockPath: string): Promise<void> => {
+  await unlink(join(lockPath, LOCK_OWNER_FILE));
+  await rmdir(lockPath);
+};
+
+/** Runs one mailbox change while other processes wait for the same resource. */
+const withMailboxLock = async <TResult>({
+  lockPath,
+  change,
+}: {
+  readonly lockPath: string;
+  readonly change: () => Promise<TResult>;
+}): Promise<TResult> => {
+  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
+    if (!(await acquireMailboxLock(lockPath))) {
+      await wait();
+      continue;
+    }
+    try {
+      return await change();
+    } finally {
+      await releaseMailboxLock(lockPath);
+    }
+  }
+  throw new AgentExchangeRejected(
+    "Another process is changing this request. Try again.",
+  );
+};
+
+/** Runs one request change while the request file is locked. */
 const withRequestLock = async <TResult>({
   store,
   requestId,
@@ -42,26 +141,10 @@ const withRequestLock = async <TResult>({
       "A request id must be 16 hexadecimal characters",
     );
   }
-  const lockPath = join(store.agentRequestDirectory, `.${requestId}.lock`);
-  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
-    try {
-      await mkdir(lockPath, { mode: 0o700 });
-    } catch (error: unknown) {
-      if (!hasCode(error, "EEXIST")) {
-        throw error;
-      }
-      await wait();
-      continue;
-    }
-    try {
-      return await change();
-    } finally {
-      await rmdir(lockPath);
-    }
-  }
-  throw new AgentExchangeRejected(
-    "Another process is changing this request. Try again.",
-  );
+  return withMailboxLock({
+    lockPath: join(store.agentRequestDirectory, `.${requestId}.lock`),
+    change,
+  });
 };
 
 /** Reads and validates one request while its mailbox lock is held. */
@@ -183,3 +266,78 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
       return updated;
     },
   });
+
+export type ProgressEventDraft = Omit<ProgressEvent, "seq">;
+
+/** Allocates and appends one progress event while its sequence is locked. */
+export const appendProgressEvent = async ({
+  store,
+  event,
+}: {
+  readonly store: ReviewStore;
+  readonly event: ProgressEventDraft;
+}): Promise<ProgressEvent> => {
+  if (!REQUEST_ID.test(event.sessionId)) {
+    throw new AgentExchangeRejected(
+      "A session id must be 16 hexadecimal characters",
+    );
+  }
+  return withMailboxLock({
+    lockPath: join(store.reviewDirectory, `.${event.sessionId}.progress.lock`),
+    change: async () => {
+      const events = await readProgress({ store, sessionId: event.sessionId });
+      const seq =
+        events.reduce((highest, entry) => Math.max(highest, entry.seq), 0) + 1;
+      const checked = { ...event, seq };
+      await appendProgressValue({ store, event: checked });
+      return checked;
+    },
+  });
+};
+
+/** Appends a connection edge once, even when several checks see it. */
+export const recordAgentConnectionState = async ({
+  store,
+  sessionId,
+  connected,
+  at,
+  disconnectReason,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly connected: boolean;
+  readonly at: string;
+  readonly disconnectReason: string;
+}): Promise<boolean> => {
+  if (!REQUEST_ID.test(sessionId)) {
+    throw new AgentExchangeRejected(
+      "A session id must be 16 hexadecimal characters",
+    );
+  }
+  return withMailboxLock({
+    lockPath: join(
+      store.agentConnectionDirectory,
+      `.${sessionId}.connection.lock`,
+    ),
+    change: async () => {
+      const events = await readAgentConnectionEvents({
+        store,
+        sessionId,
+      });
+      const previous = events.at(-1)?.connected;
+      if (previous === connected) return false;
+      await appendAgentConnectionEvent({
+        store,
+        event: {
+          sessionId,
+          connected,
+          at,
+          ...(previous === true && !connected
+            ? { reason: disconnectReason }
+            : {}),
+        },
+      });
+      return true;
+    },
+  });
+};

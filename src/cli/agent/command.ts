@@ -18,18 +18,19 @@ import {
   validateAgentResponseDraft,
   writeAgentResponse,
 } from "../../review/agent-exchange.js";
-import { claimAgentRequest } from "../../review/request-mailbox.js";
+import {
+  appendProgressEvent,
+  claimAgentRequest,
+} from "../../review/request-mailbox.js";
 import type {
   AgentExchangeSnapshot,
   AgentRequest,
 } from "../../review/agent-exchange.js";
 import {
   agentResponseDraftPath,
-  appendProgress,
   deriveReviewPlanId,
   prepareStore,
   readAgentPresence,
-  readNextProgressSequence,
   readSessionDescriptor,
   readRevisionSnapshot,
   reviewStoreFor,
@@ -352,17 +353,12 @@ const nextWork = async ({
     state: "working",
     requestId: request.requestId,
   });
-  const nextProgressSequence = await readNextProgressSequence({
-    store: session.store,
-    sessionId: session.sessionId,
-  });
-  await appendProgress({
+  await appendProgressEvent({
     store: session.store,
     event: {
       sessionId: session.sessionId,
       requestId: request.requestId,
       atMs: Date.now(),
-      seq: nextProgressSequence,
       ...pickupProgress(request),
       state: "live",
     },
@@ -483,17 +479,12 @@ const respond = async ({
     now: new Date().toISOString(),
   });
   await writeAgentResponse({ store: session.store, response });
-  const nextProgressSequence = await readNextProgressSequence({
-    store: session.store,
-    sessionId: session.sessionId,
-  });
-  await appendProgress({
+  await appendProgressEvent({
     store: session.store,
     event: {
       sessionId: session.sessionId,
       requestId: request.requestId,
       atMs: Date.now(),
-      seq: nextProgressSequence,
       step: "Agent response ready",
       state: "done",
       detail:
@@ -552,17 +543,12 @@ const note = async ({
   if (message === "" || message.length > 160) {
     return fail("Progress must be between 1 and 160 characters");
   }
-  const nextProgressSequence = await readNextProgressSequence({
-    store: session.store,
-    sessionId: session.sessionId,
-  });
-  await appendProgress({
+  await appendProgressEvent({
     store: session.store,
     event: {
       sessionId: session.sessionId,
       requestId: request.requestId,
       atMs: Date.now(),
-      seq: nextProgressSequence,
       step: message,
       state: "live",
     },

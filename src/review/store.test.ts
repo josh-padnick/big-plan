@@ -12,13 +12,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   appendAgentConnectionEvent,
-  appendProgress,
+  appendProgressValue,
   deriveReviewPlanId,
   prepareStore,
   readActiveDraft,
   readAgentConnectionEvents,
   readAgentPresence,
-  readNextProgressSequence,
   readProgress,
   readResolvedCommentIds,
   readRevisionSnapshot,
@@ -410,7 +409,7 @@ describe("review store progress relay", () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
-    await appendProgress({
+    await appendProgressValue({
       store,
       event: {
         sessionId: "s1",
@@ -419,7 +418,7 @@ describe("review store progress relay", () => {
         state: "done",
       },
     });
-    await appendProgress({
+    await appendProgressValue({
       store,
       event: {
         sessionId: "s1",
@@ -435,7 +434,7 @@ describe("review store progress relay", () => {
     ).toEqual(["Feedback package received", "Agent started"]);
   });
 
-  it("should relay the latest 200 events and allocate after the full history", async () => {
+  it("should relay the latest 200 events", async () => {
     const store = await storeWithProgress(
       Array.from({ length: 205 }, (_, index) =>
         line({
@@ -450,8 +449,5 @@ describe("review store progress relay", () => {
     expect(events).toHaveLength(200);
     expect(events[0]?.seq).toBe(6);
     expect(events.at(-1)?.seq).toBe(205);
-    await expect(
-      readNextProgressSequence({ store, sessionId: "s1" }),
-    ).resolves.toBe(206);
   });
 });

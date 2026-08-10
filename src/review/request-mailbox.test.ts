@@ -1,9 +1,11 @@
 // Proves that separate browser and agent processes can change one stored
 // request without replacing each other's fields.
 
+import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./comment.js";
 import {
@@ -14,16 +16,39 @@ import {
 } from "./agent-exchange.js";
 import { buildFeedbackPackage } from "./feedback-package.js";
 import {
-  cancelAgentRequest,
+  appendProgressEvent,
   claimAgentRequest,
+  recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
 } from "./request-mailbox.js";
-import { prepareStore, reviewStoreFor } from "./store.js";
+import {
+  prepareStore,
+  readAgentConnectionEvents,
+  readProgress,
+  reviewStoreFor,
+} from "./store.js";
 
 const sessionId = "1111111111111111";
 const planId = "2222222222222222";
 const packageId = "3333333333333333";
 const revision = deriveSourceRevision("# Plan\n");
+const execFileAsync = promisify(execFile);
+const mailboxModule = new URL("./request-mailbox.ts", import.meta.url).href;
+const storeModule = new URL("./store.ts", import.meta.url).href;
+
+const WORKER_SCRIPT = `
+const { reviewStoreFor } = await import(process.env.BP_STORE_MODULE);
+const { claimAgentRequest, cancelAgentRequest } = await import(process.env.BP_MAILBOX_MODULE);
+const store = reviewStoreFor({ planPath: process.env.BP_PLAN_PATH, planId: process.env.BP_PLAN_ID });
+const delay = Number(process.env.BP_START_AT) - Date.now();
+if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+const common = { store, requestId: process.env.BP_REQUEST_ID, now: process.env.BP_NOW };
+if (process.env.BP_OPERATION === "claim") {
+  await claimAgentRequest({ ...common, sourceRevision: "aaaaaaaaaaaaaaaa" });
+} else {
+  await cancelAgentRequest(common);
+}
+`;
 
 const reviewComment = ({
   id,
@@ -51,33 +76,65 @@ const requestWith = (comments: ReadonlyArray<ReviewComment>) =>
     sourceRevision: revision,
   });
 
-const preparedStore = async () => {
+const preparedReview = async () => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-mailbox-"));
   const planPath = join(directory, "plan.mdx");
   await writeFile(planPath, "# Plan\n");
   const store = reviewStoreFor({ planPath, planId });
   await prepareStore(store);
-  return store;
+  return { planPath, store };
+};
+
+const runRequestWorker = async ({
+  operation,
+  planPath,
+  requestId,
+  startAt,
+  now,
+}: {
+  readonly operation: "claim" | "cancel";
+  readonly planPath: string;
+  readonly requestId: string;
+  readonly startAt: number;
+  readonly now: string;
+}): Promise<void> => {
+  await execFileAsync("bun", ["-e", WORKER_SCRIPT], {
+    env: {
+      ...process.env,
+      BP_STORE_MODULE: storeModule,
+      BP_MAILBOX_MODULE: mailboxModule,
+      BP_OPERATION: operation,
+      BP_PLAN_PATH: planPath,
+      BP_PLAN_ID: planId,
+      BP_REQUEST_ID: requestId,
+      BP_START_AT: String(startAt),
+      BP_NOW: now,
+    },
+  });
 };
 
 describe("request mailbox", () => {
-  it("should preserve claim and cancel fields when processes race", async () => {
-    const store = await preparedStore();
+  it("should preserve claim and cancel fields when two processes race", async () => {
+    const { planPath, store } = await preparedReview();
     const request = requestWith([
       reviewComment({ id: "4444444444444444", body: "Revise this." }),
     ]);
     await writeAgentRequest({ store, request });
 
+    const startAt = Date.now() + 400;
     await Promise.all([
-      claimAgentRequest({
-        store,
+      runRequestWorker({
+        operation: "claim",
+        planPath,
         requestId: request.requestId,
-        sourceRevision: "aaaaaaaaaaaaaaaa",
+        startAt,
         now: "2026-08-10T12:00:01.000Z",
       }),
-      cancelAgentRequest({
-        store,
+      runRequestWorker({
+        operation: "cancel",
+        planPath,
         requestId: request.requestId,
+        startAt,
         now: "2026-08-10T12:00:02.000Z",
       }),
     ]);
@@ -96,7 +153,7 @@ describe("request mailbox", () => {
   });
 
   it("should keep a valid request when removal races with pickup", async () => {
-    const store = await preparedStore();
+    const { store } = await preparedReview();
     const removedId = "4444444444444444";
     const keptId = "5555555555555555";
     const request = requestWith([
@@ -139,5 +196,58 @@ describe("request mailbox", () => {
         message: "The agent has already picked up this feedback request",
       });
     }
+  });
+
+  it("should allocate unique progress sequences when writers overlap", async () => {
+    const { store } = await preparedReview();
+    await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        appendProgressEvent({
+          store,
+          event: {
+            sessionId,
+            requestId: packageId,
+            atMs: 10_000 + index,
+            step: `Step ${index + 1}`,
+            state: "live",
+          },
+        }),
+      ),
+    );
+
+    const events = await readProgress({ store, sessionId });
+    expect(events.map((event) => event.seq)).toEqual(
+      Array.from({ length: 20 }, (_, index) => index + 1),
+    );
+  });
+
+  it("should append one connection event for each real state edge", async () => {
+    const { store } = await preparedReview();
+    const state = (connected: boolean, at: string) =>
+      recordAgentConnectionState({
+        store,
+        sessionId,
+        connected,
+        at,
+        disconnectReason: "Heartbeat timed out",
+      });
+
+    await Promise.all([
+      state(false, "2026-08-10T12:00:00.000Z"),
+      state(false, "2026-08-10T12:00:00.000Z"),
+    ]);
+    await Promise.all([
+      state(true, "2026-08-10T12:00:01.000Z"),
+      state(true, "2026-08-10T12:00:01.000Z"),
+    ]);
+    await state(false, "2026-08-10T12:00:02.000Z");
+
+    await expect(
+      readAgentConnectionEvents({ store, sessionId }),
+    ).resolves.toMatchObject([
+      { connected: false },
+      { connected: true },
+      { connected: false, reason: "Heartbeat timed out" },
+    ]);
   });
 });
