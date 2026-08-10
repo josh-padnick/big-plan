@@ -15,6 +15,7 @@ test("should reveal line numbers only while maximized and keep them highlighted"
   const numberRail = frame.locator(".code-snippet-line-number").first();
   const trigger = frame.locator("[data-figure-maximize]");
 
+  // Wait for the ordinary inset layout to settle before checking its hidden rail.
   await expect
     .poll(() =>
       frame.evaluate(

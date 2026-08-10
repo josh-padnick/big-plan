@@ -512,22 +512,16 @@ export const startReviewRuntime = async ({
       const hasCanceledRequest = commentRequests.some(
         (candidate) => candidate.canceledAt !== undefined,
       );
-      if (answeredRequestIds.size > 0 && !hasCanceledRequest) {
-        refuse({
-          response,
-          status: 409,
-          reason:
-            "Only a queued or canceled comment can be deleted from the review",
-        });
-        return;
-      }
       const pendingRequests = commentRequests.filter(
         (candidate) =>
           !exchange.responses.some(
             (response) => response.requestId === candidate.requestId,
           ),
       );
-      if (pendingRequests.length === 0) {
+      if (
+        (answeredRequestIds.size > 0 && !hasCanceledRequest) ||
+        pendingRequests.length === 0
+      ) {
         refuse({
           response,
           status: 409,
