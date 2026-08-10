@@ -16,7 +16,7 @@ import {
   validateAgentResponseDraft,
   writeAgentResponse,
 } from "./agent-exchange.js";
-import type { AgentExchangeSnapshot, AgentRequest } from "./agent-exchange.js";
+import type { AgentRequest } from "./agent-exchange.js";
 import { appendProgressEvent, claimAgentRequest } from "./request-mailbox.js";
 import {
   agentResponseDraftPath,
@@ -39,6 +39,7 @@ import {
   agentNextCommand,
   quoteShellArgument,
 } from "./shared/agent-command.js";
+import { projectConversationHistory } from "./shared/thread-projection.js";
 
 export type AgentWorkLoopAction =
   | {
@@ -109,97 +110,6 @@ const wait = (milliseconds: number): Promise<void> =>
   new Promise((settle) => {
     setTimeout(settle, milliseconds);
   });
-
-const responseHistory = ({
-  request,
-  snapshot,
-}: {
-  readonly request: AgentRequest;
-  readonly snapshot: AgentExchangeSnapshot;
-}): ReadonlyArray<Readonly<Record<string, unknown>>> => {
-  if (request.kind === "feedback") {
-    return [];
-  }
-  const history: Array<Readonly<Record<string, unknown>>> = [];
-  for (const candidate of snapshot.requests) {
-    if (candidate.createdAt >= request.createdAt) {
-      continue;
-    }
-    const response = snapshot.responses.find(
-      (entry) => entry.requestId === candidate.requestId,
-    );
-    if (
-      request.kind === "chat" &&
-      candidate.kind === "chat" &&
-      response?.kind === "chat"
-    ) {
-      history.push(
-        {
-          role: "reviewer",
-          body: candidate.body,
-          createdAt: candidate.createdAt,
-        },
-        {
-          role: "agent",
-          body: response.message,
-          createdAt: response.createdAt,
-        },
-      );
-    }
-    if (
-      request.kind === "reply" &&
-      candidate.kind === "reply" &&
-      candidate.commentId === request.commentId &&
-      response?.kind === "reply"
-    ) {
-      const outcome = response.outcomes.find(
-        (entry) => entry.commentId === request.commentId,
-      );
-      history.push({
-        role: "reviewer",
-        body: candidate.body,
-        createdAt: candidate.createdAt,
-      });
-      if (outcome !== undefined) {
-        history.push({
-          role: "agent",
-          body: outcome.message,
-          state: outcome.state,
-          createdAt: response.createdAt,
-        });
-      }
-    }
-    if (
-      request.kind === "reply" &&
-      candidate.kind === "feedback" &&
-      response?.kind === "feedback"
-    ) {
-      const original = candidate.comments.find(
-        (entry) => entry.id === request.commentId,
-      );
-      const outcome = response.outcomes.find(
-        (entry) => entry.commentId === request.commentId,
-      );
-      if (original !== undefined && outcome !== undefined) {
-        history.push(
-          {
-            role: "reviewer",
-            body: original.body,
-            target: original.target,
-            createdAt: original.createdAt,
-          },
-          {
-            role: "agent",
-            body: outcome.message,
-            state: outcome.state,
-            createdAt: response.createdAt,
-          },
-        );
-      }
-    }
-  }
-  return history;
-};
 
 const readPlanSession = async (planArgument: string) => {
   const planPath = resolve(planArgument);
@@ -373,7 +283,11 @@ const nextWork = async ({
     pending: true,
     plan: session.planPath,
     work: request,
-    history: responseHistory({ request, snapshot }),
+    history: projectConversationHistory({
+      request,
+      requests: snapshot.requests,
+      responses: snapshot.responses,
+    }),
     response_template: responseTemplateFor(request),
     response_file: responseFile,
     respond_command: `node ${quoteShellArgument(binPath)} agent respond ${quoteShellArgument(

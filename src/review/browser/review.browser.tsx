@@ -41,6 +41,15 @@ import {
 } from "../shared/cancel-pending.js";
 import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
+  projectCommentThreads,
+  projectRequestActivity,
+  projectRequestStatus,
+  requestCommentIds,
+  type CommentThreadProjection,
+  type ThreadGroup,
+  type ThreadRuntime,
+} from "../shared/thread-projection.js";
+import {
   AgentConnectionPanel,
   AgentHealthAlert,
   type BrowserConnectionEvent,
@@ -2012,55 +2021,13 @@ const StagedCard = ({
   );
 };
 
-type ThreadGroup = "needs-input" | "ready" | "working" | "queued";
-
-const threadRequests = (
-  comment: ReviewComment,
-  agent: AgentSnapshot,
-): ReadonlyArray<AgentRequest> =>
-  agent.requests.filter(
-    (request) =>
-      (request.kind === "feedback" &&
-        request.commentIds.includes(comment.id)) ||
-      (request.kind === "reply" && request.commentId === comment.id),
-  );
-
-const threadGroupFor = ({
-  comment,
-  agent,
-  statusForRequest,
-}: {
-  readonly comment: ReviewComment;
-  readonly agent: AgentSnapshot;
-  readonly statusForRequest: (
-    request: AgentRequest,
-    surface: MessageSurface,
-  ) => AgentStatus;
-}): ThreadGroup => {
-  const request = threadRequests(comment, agent).at(-1);
-  if (request === undefined) return "queued";
-  const response = agent.responses.find(
-    (candidate) => candidate.requestId === request.requestId,
-  );
-  const outcome = response?.outcomes.find(
-    (candidate) => candidate.commentId === comment.id,
-  );
-  if (outcome?.state === "question") return "needs-input";
-  if (outcome !== undefined) return "ready";
-  const status = statusForRequest(request, "thread");
-  return status.stage === "working" || status.stage === "stalled"
-    ? "working"
-    : "queued";
-};
-
 const SentThread = ({
   comment,
   surface,
   associated,
   selected,
   identity,
-  agent,
-  group,
+  thread,
   expanded,
   resolved,
   onToggle,
@@ -2071,17 +2038,13 @@ const SentThread = ({
   onShowAgent,
   onCancelRequest,
   onDeleteQueued,
-  statusForRequest,
-  activityForRequest,
-  cancelPendingRequestIds,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
   readonly associated: boolean;
   readonly selected: boolean;
   readonly identity: RuntimeIdentity | null;
-  readonly agent: AgentSnapshot;
-  readonly group: ThreadGroup;
+  readonly thread: CommentThreadProjection<AgentRequest, AgentResponse>;
   readonly expanded: boolean;
   readonly resolved: boolean;
   readonly onToggle: () => void;
@@ -2092,44 +2055,23 @@ const SentThread = ({
   readonly onShowAgent: () => void;
   readonly onCancelRequest: (requestId: string) => void;
   readonly onDeleteQueued: () => void;
-  readonly statusForRequest: (
-    request: AgentRequest,
-    surface: MessageSurface,
-  ) => AgentStatus;
-  readonly activityForRequest: (
-    request: AgentRequest,
-  ) => ReadonlyArray<MessageActivity>;
-  readonly cancelPendingRequestIds: ReadonlySet<string>;
 }) => {
   const [locations, setLocations] =
     useState<ReadonlyArray<DiffLocation> | null>(null);
   const [diffError, setDiffError] = useState("");
   const [reply, setReply] = useState("");
   const [isReplying, setIsReplying] = useState(false);
-  const requests = threadRequests(comment, agent);
-  const exchanges = requests.map((request) => {
-    const response = agent.responses.find(
-      (candidate) => candidate.requestId === request.requestId,
-    );
-    return {
-      request,
-      response,
-      outcome: response?.outcomes.find(
-        (candidate) => candidate.commentId === comment.id,
-      ),
-    };
-  });
-  const latestExchange = exchanges.at(-1);
-  const latestCanceled =
-    latestExchange !== undefined &&
-    requestIsCanceled({
-      request: latestExchange.request,
-      pendingRequestIds: cancelPendingRequestIds,
-    });
+  const {
+    exchanges,
+    latestExchange,
+    latestChanged,
+    latestStatus,
+    latestPending,
+    latestCanceled,
+    canDeleteQueued,
+    group,
+  } = thread;
   const outcome = latestExchange?.outcome;
-  const latestChanged = [...exchanges]
-    .reverse()
-    .find((exchange) => exchange.outcome?.state === "changed");
   const targetPresent = targetElement(comment.target) !== null;
   const outcomeLabel = latestCanceled
     ? "Canceled"
@@ -2140,18 +2082,6 @@ const SentThread = ({
         : outcome?.state === "outside"
           ? "Outside this plan"
           : "Waiting for agent";
-  const latestStatus =
-    latestExchange === undefined || latestExchange.outcome !== undefined
-      ? undefined
-      : statusForRequest(latestExchange.request, "thread");
-  const latestPending =
-    latestExchange !== undefined &&
-    latestExchange.response === undefined &&
-    !latestCanceled;
-  const canDeleteQueued =
-    group === "queued" &&
-    latestPending &&
-    exchanges.every((exchange) => exchange.response === undefined);
   const cardClass = `mt-2 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
   const associate = () => onAssociate(comment.target);
   const railFreshness = threadTime(
@@ -2185,7 +2115,7 @@ const SentThread = ({
       return;
     try {
       const value = await requestJson({
-        path: `/api/revision-diff?from=${encodeURIComponent(latestChanged.request.claimedFromRevision ?? latestChanged.request.sourceRevision)}&to=${encodeURIComponent(latestChanged.response.sourceRevision)}`,
+        path: `/api/revision-diff?from=${encodeURIComponent(latestChanged.baselineRevision)}&to=${encodeURIComponent(latestChanged.response.sourceRevision)}`,
         identity,
       });
       setLocations(parseDiffLocations(value));
@@ -2457,85 +2387,93 @@ const SentThread = ({
               delivery="Saved"
             />
           ) : (
-            exchanges.map(({ request, response, outcome: requestOutcome }) => {
-              const requestStatus = statusForRequest(request, "thread");
-              const sharedConnectionState =
-                surface === "rail" &&
-                (requestStatus.stage === "blocked" ||
-                  requestStatus.stage === "offline");
-              return (
-                <div key={request.requestId}>
-                  <MessageTurn
-                    role="user"
-                    surface="thread"
-                    body={
-                      request.kind === "feedback"
-                        ? comment.body
-                        : (request.body ?? "")
-                    }
-                    createdAt={request.createdAt}
-                    delivery={
-                      response !== undefined || request.claimedAt !== undefined
-                        ? "Sent"
-                        : "Queued"
-                    }
-                  >
-                    {request.kind === "feedback" &&
-                    comment.target.type === "selection" &&
-                    response !== undefined &&
-                    response.sourceRevision !== request.sourceRevision ? (
-                      <blockquote className="mt-2 mb-0 border-l-2 border-[var(--annotation-c)] pl-2 text-xs text-muted">
-                        You commented on: “{comment.target.quote}” — this text
-                        was revised
-                      </blockquote>
-                    ) : null}
-                  </MessageTurn>
-                  {requestOutcome === undefined || response === undefined ? (
-                    sharedConnectionState ? (
-                      <button
-                        type="button"
-                        className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-2xs text-muted underline underline-offset-[0.16em] hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-                        onClick={() => onCancelRequest(request.requestId)}
-                      >
-                        Cancel request
-                      </button>
-                    ) : (
-                      <RequestStatusStrip
-                        status={requestStatus}
-                        activity={activityForRequest(request)}
-                        surface="thread"
-                        commentCount={
-                          request.kind === "feedback"
-                            ? Math.max(1, request.commentIds.length)
-                            : 1
-                        }
-                        onShowAgent={onShowAgent}
-                        onCancelRequest={() =>
-                          onCancelRequest(request.requestId)
-                        }
-                      />
-                    )
-                  ) : (
+            exchanges.map(
+              ({
+                request,
+                response,
+                outcome: requestOutcome,
+                status: requestStatus,
+                activity,
+              }) => {
+                const sharedConnectionState =
+                  surface === "rail" &&
+                  (requestStatus.stage === "blocked" ||
+                    requestStatus.stage === "offline");
+                return (
+                  <div key={request.requestId}>
                     <MessageTurn
-                      role="agent"
+                      role="user"
                       surface="thread"
-                      body={requestOutcome.message}
-                      createdAt={response.createdAt}
+                      body={
+                        request.kind === "feedback"
+                          ? comment.body
+                          : (request.body ?? "")
+                      }
+                      createdAt={request.createdAt}
+                      delivery={
+                        response !== undefined ||
+                        request.claimedAt !== undefined
+                          ? "Sent"
+                          : "Queued"
+                      }
                     >
-                      {requestOutcome.state === "changed" &&
-                      response.requestId ===
-                        latestChanged?.response?.requestId ? (
-                        <AgentChangeDigest
-                          changes={locations}
-                          isLoading={false}
-                          onLoad={() => void loadDiff()}
-                        />
+                      {request.kind === "feedback" &&
+                      comment.target.type === "selection" &&
+                      response !== undefined &&
+                      response.sourceRevision !== request.sourceRevision ? (
+                        <blockquote className="mt-2 mb-0 border-l-2 border-[var(--annotation-c)] pl-2 text-xs text-muted">
+                          You commented on: “{comment.target.quote}” — this text
+                          was revised
+                        </blockquote>
                       ) : null}
                     </MessageTurn>
-                  )}
-                </div>
-              );
-            })
+                    {requestOutcome === undefined || response === undefined ? (
+                      sharedConnectionState ? (
+                        <button
+                          type="button"
+                          className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-2xs text-muted underline underline-offset-[0.16em] hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                          onClick={() => onCancelRequest(request.requestId)}
+                        >
+                          Cancel request
+                        </button>
+                      ) : (
+                        <RequestStatusStrip
+                          status={requestStatus}
+                          activity={activity}
+                          surface="thread"
+                          commentCount={
+                            request.kind === "feedback"
+                              ? Math.max(1, requestCommentIds(request).length)
+                              : 1
+                          }
+                          onShowAgent={onShowAgent}
+                          onCancelRequest={() =>
+                            onCancelRequest(request.requestId)
+                          }
+                        />
+                      )
+                    ) : (
+                      <MessageTurn
+                        role="agent"
+                        surface="thread"
+                        body={requestOutcome.message}
+                        createdAt={response.createdAt}
+                      >
+                        {requestOutcome.state === "changed" &&
+                        response.requestId ===
+                          latestChanged?.response?.requestId ? (
+                          <AgentChangeDigest
+                            changes={locations}
+                            isLoading={false}
+                            onLoad={() => void loadDiff()}
+                          />
+                        ) : null}
+                      </MessageTurn>
+                    )}
+                  </div>
+                );
+              },
+            )
           )}
         </div>
         {diffError === "" ? null : (
@@ -3367,22 +3305,26 @@ const ReviewKernel = () => {
     }
   };
 
+  const threadRuntime: ThreadRuntime =
+    identity === null ? "static" : pollFailures >= 2 ? "offline" : "online";
+  const threadProjections = projectCommentThreads({
+    comments: sent,
+    requests: agent.requests,
+    responses: agent.responses,
+    progressEvents: progress,
+    presence: agent.presence,
+    runtime: threadRuntime,
+    nowMs: statusNowMs,
+    cancelPendingRequestIds,
+  });
   const cancelRequestsForComment = (commentId: string) => {
-    const answered = new Set(
-      agent.responses.map((response) => response.requestId),
-    );
-    const pending = agent.requests.filter(
-      (request) =>
-        !requestIsCanceled({
-          request,
-          pendingRequestIds: cancelPendingRequestIds,
-        }) &&
-        !answered.has(request.requestId) &&
-        ((request.kind === "feedback" &&
-          request.commentIds.includes(commentId)) ||
-          (request.kind === "reply" && request.commentId === commentId)),
-    );
-    for (const request of pending) void cancelRequest(request.requestId);
+    const thread = threadProjections.get(commentId);
+    if (thread === undefined) return;
+    for (const exchange of thread.exchanges) {
+      if (exchange.response === undefined && !exchange.canceled) {
+        void cancelRequest(exchange.request.requestId);
+      }
+    }
   };
 
   const latestRequest = agent.requests.at(-1);
@@ -3407,8 +3349,7 @@ const ReviewKernel = () => {
       : 0,
   );
   const agentStatus: AgentStatus = deriveAgentStatus({
-    runtime:
-      identity === null ? "static" : pollFailures >= 2 ? "offline" : "online",
+    runtime: threadRuntime,
     request:
       latestRequest === undefined
         ? "none"
@@ -3429,57 +3370,23 @@ const ReviewKernel = () => {
   const activityForRequest = (
     request: AgentRequest,
   ): ReadonlyArray<MessageActivity> =>
-    progress.filter((event) => event.requestId === request.requestId);
+    projectRequestActivity({ request, progressEvents: progress });
   const statusForRequest = (
     request: AgentRequest,
     surface: MessageSurface,
-  ): AgentStatus => {
-    if (
-      requestIsCanceled({
-        request,
-        pendingRequestIds: cancelPendingRequestIds,
-      })
-    ) {
-      return {
-        stage: "answered",
-        label: "Canceled",
-        headline: "Request canceled",
-        detail: "",
-        tone: "neutral",
-      };
-    }
-    const requestActivity = activityForRequest(request);
-    const response = agent.responses.find(
-      (candidate) => candidate.requestId === request.requestId,
-    );
-    const failed = [...requestActivity]
-      .reverse()
-      .find((event) => event.state === "failed");
-    const lastSignalAtMs = Math.max(
-      0,
-      ...requestActivity.map((event) => event.atMs ?? 0),
-      request.claimedAt === undefined ? 0 : Date.parse(request.claimedAt),
-      agent.presence.requestId === request.requestId
-        ? (agent.presence.updatedAtMs ?? 0)
-        : 0,
-    );
-    return deriveAgentStatus({
-      runtime:
-        identity === null ? "static" : pollFailures >= 2 ? "offline" : "online",
-      request: response === undefined ? "pending" : "answered",
-      agentConnected: agent.presence.connected,
-      pickedUp: request.claimedAt !== undefined || requestActivity.length > 0,
-      sessionBusy:
-        agent.presence.state === "working" &&
-        agent.presence.requestId !== request.requestId,
+  ): AgentStatus =>
+    projectRequestStatus({
+      request,
+      response: agent.responses.find(
+        (candidate) => candidate.requestId === request.requestId,
+      ),
+      progressEvents: progress,
+      presence: agent.presence,
+      runtime: threadRuntime,
       surface,
-      ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
-      ...(failed === undefined
-        ? {}
-        : { failure: failed.detail ?? failed.step }),
       nowMs: statusNowMs,
+      cancelPendingRequestIds,
     });
-  };
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
     responseRequestIds: new Set([
@@ -3509,8 +3416,7 @@ const ReviewKernel = () => {
     (["needs-input", "ready", "working", "queued"] as const).map((group) => [
       group,
       unresolvedSent.filter(
-        (comment) =>
-          threadGroupFor({ comment, agent, statusForRequest }) === group,
+        (comment) => threadProjections.get(comment.id)?.group === group,
       ),
     ]),
   );
@@ -3574,11 +3480,7 @@ const ReviewKernel = () => {
       (candidate) => candidate.requestId === requestId,
     );
     const commentId =
-      request?.kind === "feedback"
-        ? request.commentIds[0]
-        : request?.kind === "reply"
-          ? request.commentId
-          : undefined;
+      request === undefined ? undefined : requestCommentIds(request)[0];
     if (commentId === undefined) return;
     const comment = sent.find((candidate) => candidate.id === commentId);
     if (comment === undefined) return;
@@ -3942,11 +3844,7 @@ const ReviewKernel = () => {
                   <div className="mt-4 flex justify-end">
                     {unresolvedSent.some(
                       (comment) =>
-                        threadGroupFor({
-                          comment,
-                          agent,
-                          statusForRequest,
-                        }) === "ready",
+                        threadProjections.get(comment.id)?.group === "ready",
                     ) ? (
                       <button
                         type="button"
@@ -3958,11 +3856,8 @@ const ReviewKernel = () => {
                               ...unresolvedSent
                                 .filter(
                                   (comment) =>
-                                    threadGroupFor({
-                                      comment,
-                                      agent,
-                                      statusForRequest,
-                                    }) === "ready",
+                                    threadProjections.get(comment.id)?.group ===
+                                    "ready",
                                 )
                                 .map((comment) => comment.id),
                             ]),
@@ -4023,7 +3918,53 @@ const ReviewKernel = () => {
                             {comments.length}
                           </Badge>
                         </h3>
-                        {comments.map((comment) => (
+                        {comments.map((comment) => {
+                          const thread = threadProjections.get(comment.id);
+                          if (thread === undefined) return null;
+                          return (
+                            <SentThread
+                              key={comment.id}
+                              comment={comment}
+                              surface="rail"
+                              associated={
+                                associatedTarget !== null &&
+                                targetAddress(associatedTarget) ===
+                                  targetAddress(comment.target)
+                              }
+                              selected={selectedCommentId === comment.id}
+                              identity={identity}
+                              thread={thread}
+                              expanded={expandedSentThreads.has(comment.id)}
+                              resolved={false}
+                              onToggle={() => toggleSentThread(comment.id)}
+                              onResolve={() =>
+                                toggleResolvedComment(comment.id)
+                              }
+                              onJump={() => jumpTo(comment)}
+                              onAssociate={setAssociatedTarget}
+                              onReplySent={setStatus}
+                              onShowAgent={showAgentSetup}
+                              onCancelRequest={(requestId) =>
+                                void cancelRequest(requestId)
+                              }
+                              onDeleteQueued={() =>
+                                setPendingDelete({ kind: "queued", comment })
+                              }
+                            />
+                          );
+                        })}
+                      </section>
+                    );
+                  })}
+                  {resolvedSent.length === 0 ? null : (
+                    <details className="mt-4 border-t border-edge pt-4">
+                      <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                        Resolved ({resolvedSent.length})
+                      </summary>
+                      {resolvedSent.map((comment) => {
+                        const thread = threadProjections.get(comment.id);
+                        if (thread === undefined) return null;
+                        return (
                           <SentThread
                             key={comment.id}
                             comment={comment}
@@ -4035,10 +3976,9 @@ const ReviewKernel = () => {
                             }
                             selected={selectedCommentId === comment.id}
                             identity={identity}
-                            agent={agent}
-                            group={key}
+                            thread={thread}
                             expanded={expandedSentThreads.has(comment.id)}
-                            resolved={false}
+                            resolved
                             onToggle={() => toggleSentThread(comment.id)}
                             onResolve={() => toggleResolvedComment(comment.id)}
                             onJump={() => jumpTo(comment)}
@@ -4051,56 +3991,9 @@ const ReviewKernel = () => {
                             onDeleteQueued={() =>
                               setPendingDelete({ kind: "queued", comment })
                             }
-                            statusForRequest={statusForRequest}
-                            activityForRequest={activityForRequest}
-                            cancelPendingRequestIds={cancelPendingRequestIds}
                           />
-                        ))}
-                      </section>
-                    );
-                  })}
-                  {resolvedSent.length === 0 ? null : (
-                    <details className="mt-4 border-t border-edge pt-4">
-                      <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-                        Resolved ({resolvedSent.length})
-                      </summary>
-                      {resolvedSent.map((comment) => (
-                        <SentThread
-                          key={comment.id}
-                          comment={comment}
-                          surface="rail"
-                          associated={
-                            associatedTarget !== null &&
-                            targetAddress(associatedTarget) ===
-                              targetAddress(comment.target)
-                          }
-                          selected={selectedCommentId === comment.id}
-                          identity={identity}
-                          agent={agent}
-                          group={threadGroupFor({
-                            comment,
-                            agent,
-                            statusForRequest,
-                          })}
-                          expanded={expandedSentThreads.has(comment.id)}
-                          resolved
-                          onToggle={() => toggleSentThread(comment.id)}
-                          onResolve={() => toggleResolvedComment(comment.id)}
-                          onJump={() => jumpTo(comment)}
-                          onAssociate={setAssociatedTarget}
-                          onReplySent={setStatus}
-                          onShowAgent={showAgentSetup}
-                          onCancelRequest={(requestId) =>
-                            void cancelRequest(requestId)
-                          }
-                          onDeleteQueued={() =>
-                            setPendingDelete({ kind: "queued", comment })
-                          }
-                          statusForRequest={statusForRequest}
-                          activityForRequest={activityForRequest}
-                          cancelPendingRequestIds={cancelPendingRequestIds}
-                        />
-                      ))}
+                        );
+                      })}
                     </details>
                   )}
                 </div>
@@ -4333,7 +4226,8 @@ const ReviewKernel = () => {
       })}
       {sent.map((comment) => {
         const host = threadHosts.get(comment.id);
-        if (host === undefined) return null;
+        const thread = threadProjections.get(comment.id);
+        if (host === undefined || thread === undefined) return null;
         return createPortal(
           <SentThread
             comment={comment}
@@ -4344,8 +4238,7 @@ const ReviewKernel = () => {
             }
             selected={selectedCommentId === comment.id}
             identity={identity}
-            agent={agent}
-            group={threadGroupFor({ comment, agent, statusForRequest })}
+            thread={thread}
             expanded={
               isOpen
                 ? feedbackInlineThreads.has(comment.id)
@@ -4366,9 +4259,6 @@ const ReviewKernel = () => {
             onShowAgent={showAgentSetup}
             onCancelRequest={(requestId) => void cancelRequest(requestId)}
             onDeleteQueued={() => setPendingDelete({ kind: "queued", comment })}
-            statusForRequest={statusForRequest}
-            activityForRequest={activityForRequest}
-            cancelPendingRequestIds={cancelPendingRequestIds}
           />,
           host,
           `sent-${comment.id}`,
