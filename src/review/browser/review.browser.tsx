@@ -2689,6 +2689,9 @@ const ReviewKernel = () => {
   const [expandedSentThreads, setExpandedSentThreads] = useState<
     ReadonlySet<string>
   >(new Set());
+  const [feedbackInlineThreads, setFeedbackInlineThreads] = useState<
+    ReadonlySet<string>
+  >(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
   );
@@ -2752,6 +2755,10 @@ const ReviewKernel = () => {
   useEffect(() => {
     rootElement.toggleAttribute("data-review-kernel-open", isOpen);
     return () => rootElement.removeAttribute("data-review-kernel-open");
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) setFeedbackInlineThreads(new Set());
   }, [isOpen]);
 
   useEffect(() => {
@@ -3445,6 +3452,13 @@ const ReviewKernel = () => {
     initialSourceRevision !== agent.sourceRevision;
   const toggleSentThread = (commentId: string) =>
     setExpandedSentThreads((current) => {
+      const next = new Set(current);
+      if (next.has(commentId)) next.delete(commentId);
+      else next.add(commentId);
+      return next;
+    });
+  const toggleFeedbackInlineThread = (commentId: string) =>
+    setFeedbackInlineThreads((current) => {
       const next = new Set(current);
       if (next.has(commentId)) next.delete(commentId);
       else next.add(commentId);
@@ -4186,16 +4200,15 @@ const ReviewKernel = () => {
               associatedTarget !== null &&
               targetAddress(associatedTarget) === targetAddress(comment.target)
             }
-            collapsed={isOpen || collapsed.has(comment.id)}
+            collapsed={
+              isOpen
+                ? !feedbackInlineThreads.has(comment.id)
+                : collapsed.has(comment.id)
+            }
             expanded={expandedBodies.has(comment.id)}
             onCollapse={() => {
               if (isOpen) {
-                setIsOpen(false);
-                setCollapsed((current) => {
-                  const next = new Set(current);
-                  next.delete(comment.id);
-                  return next;
-                });
+                toggleFeedbackInlineThread(comment.id);
                 return;
               }
               setCollapsed((current) => {
@@ -4240,14 +4253,15 @@ const ReviewKernel = () => {
             identity={identity}
             agent={agent}
             group={threadGroupFor({ comment, agent, statusForRequest })}
-            expanded={!isOpen && expandedSentThreads.has(comment.id)}
+            expanded={
+              isOpen
+                ? feedbackInlineThreads.has(comment.id)
+                : expandedSentThreads.has(comment.id)
+            }
             resolved={resolvedCommentIds.has(comment.id)}
             onToggle={() => {
               if (isOpen) {
-                setIsOpen(false);
-                setExpandedSentThreads((current) =>
-                  new Set(current).add(comment.id),
-                );
+                toggleFeedbackInlineThread(comment.id);
                 return;
               }
               toggleSentThread(comment.id);

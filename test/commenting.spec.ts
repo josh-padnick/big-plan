@@ -260,6 +260,15 @@ test("should stage and restore a slide comment through the legacy chrome", async
   );
   await expect(openRailIndicator).toBeVisible();
   await expect(openRailIndicator).toContainText("STAGED");
+  await openRailIndicator
+    .getByRole("button", { name: /Expand comment:/ })
+    .click();
+  await expect(rail).toBeVisible();
+  await expect(
+    page.locator(
+      "[data-review-thread-side] .review-staged-card[data-review-surface='thread']",
+    ),
+  ).toBeVisible();
 
   await rail.getByRole("button", { name: "Close feedback" }).click();
   const threadHost = page.locator("[data-review-thread-side]");

@@ -363,6 +363,18 @@ test("should restore and submit staged comments through the local review runtime
     .getByRole("button", { name: "Minimize thread" })
     .click();
   await page.getByRole("button", { name: /Feedback/ }).click();
+  await firstWorkingThread
+    .getByRole("button", {
+      name: "Expand comment: Clarify the failure boundary.",
+    })
+    .click();
+  await expect(rail).toBeVisible();
+  await expect(firstWorkingThread).toContainText(
+    "Reviewing the shared feedback batch",
+  );
+  await firstWorkingThread
+    .getByRole("button", { name: "Minimize thread" })
+    .click();
 
   const beforeSource = await readFile(session.plan, "utf8");
   const afterSource = beforeSource
