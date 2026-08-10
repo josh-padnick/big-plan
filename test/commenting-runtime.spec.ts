@@ -11,6 +11,7 @@ import {
   writeAgentResponse,
 } from "../src/review/agent-exchange.js";
 import { diffRevisions } from "../src/review/revision-diff.js";
+import { startReviewRuntime } from "../src/review/server.js";
 import {
   appendProgress,
   reviewStoreFor,
@@ -567,4 +568,47 @@ test("should restore and submit staged comments through the local review runtime
   await replyButton.click();
   await continuedThread.getByRole("button", { name: "Cancel request" }).click();
   await expect(continuedThread).toContainText("Request canceled");
+});
+
+test("should mark a superseded review as read-only and link to its replacement", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const session = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("plan" in session) ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The review runtime did not identify its plan");
+  }
+  const replacement = await startReviewRuntime({ planPath: session.plan });
+  try {
+    const readOnly = page.getByRole("button", {
+      name: /Using read-only session/,
+    });
+    await expect(readOnly).toBeVisible();
+    await readOnly.click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(rail).toContainText("This review was replaced");
+    await expect(
+      rail.getByRole("link", { name: "Open latest review" }),
+    ).toHaveAttribute("href", replacement.url);
+  } finally {
+    await replacement.close();
+  }
 });

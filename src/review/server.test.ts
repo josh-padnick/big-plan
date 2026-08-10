@@ -539,6 +539,16 @@ describe("review runtime shutdown", () => {
     await writeFile(planPath, PLAN);
     vi.useFakeTimers();
     const first = await startReviewRuntime({ planPath });
+    const firstDescriptor: unknown = JSON.parse(
+      await readFile(first.store.sessionPath, "utf8"),
+    );
+    const firstToken =
+      typeof firstDescriptor === "object" &&
+      firstDescriptor !== null &&
+      "token" in firstDescriptor &&
+      typeof firstDescriptor.token === "string"
+        ? firstDescriptor.token
+        : "";
     await vi.advanceTimersByTimeAsync(450);
     const replacement = await startReviewRuntime({ planPath });
     try {
@@ -549,6 +559,22 @@ describe("review runtime shutdown", () => {
           sessionId: replacement.sessionId,
         }),
       ).toBe(true);
+      const oldSessionResponse = await fetch(`${first.url}api/session`, {
+        headers: { "x-big-plan-review-token": firstToken },
+      });
+      await expect(oldSessionResponse.json()).resolves.toMatchObject({
+        authoritative: false,
+        latestReviewUrl: replacement.url,
+      });
+      const oldWriteResponse = await fetch(`${first.url}api/drafts`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          "x-big-plan-review-token": firstToken,
+        },
+        body: JSON.stringify({ drafts: [] }),
+      });
+      expect(oldWriteResponse.status).toBe(409);
     } finally {
       await Promise.all([first.close(), replacement.close()]);
       vi.useRealTimers();

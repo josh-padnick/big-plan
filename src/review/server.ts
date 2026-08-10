@@ -79,15 +79,25 @@ const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const HEARTBEAT_INTERVAL_MS = 750;
 
-/** Reads only the ownership field needed to fence superseded runtimes. */
-const descriptorSessionId = (value: unknown): string | undefined =>
-  typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value) &&
-  "sessionId" in value &&
-  typeof value.sessionId === "string"
-    ? value.sessionId
-    : undefined;
+type SessionReference = {
+  readonly sessionId?: string;
+  readonly url?: string;
+};
+
+/** Reads only the fields needed to fence and redirect superseded runtimes. */
+const sessionReference = (value: unknown): SessionReference => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {};
+  }
+  return {
+    ...("sessionId" in value && typeof value.sessionId === "string"
+      ? { sessionId: value.sessionId }
+      : {}),
+    ...("url" in value && typeof value.url === "string"
+      ? { url: value.url }
+      : {}),
+  };
+};
 
 /** Quotes one trusted local path as one POSIX-shell argument. */
 const shellArgument = (value: string): string =>
@@ -338,10 +348,23 @@ export const startReviewRuntime = async ({
     readonly query: URLSearchParams;
   }): Promise<void> => {
     if (route.path === "/api/session") {
+      const currentSession = await readSessionDescriptor({
+        store,
+        validate: sessionReference,
+      });
+      const authoritative = currentSession.sessionId === sessionId;
       sendJson({
         response,
         status: 200,
-        value: { sessionId, planId, plan: resolvedPlanPath },
+        value: {
+          sessionId,
+          planId,
+          plan: resolvedPlanPath,
+          authoritative,
+          ...(authoritative || currentSession.url === undefined
+            ? {}
+            : { latestReviewUrl: currentSession.url }),
+        },
       });
       return;
     }
@@ -852,6 +875,22 @@ export const startReviewRuntime = async ({
         return;
       }
 
+      if (matched.method !== "GET") {
+        const currentSession = await readSessionDescriptor({
+          store,
+          validate: sessionReference,
+        });
+        if (currentSession.sessionId !== sessionId) {
+          refuse({
+            response,
+            status: 409,
+            reason:
+              "This review was replaced by a newer session and is now read-only",
+          });
+          return;
+        }
+      }
+
       await handleApi({
         route: matched,
         request,
@@ -900,9 +939,9 @@ export const startReviewRuntime = async ({
       .then(async () => {
         const currentSessionId = await readSessionDescriptor({
           store,
-          validate: descriptorSessionId,
+          validate: sessionReference,
         });
-        if (currentSessionId !== sessionId) return;
+        if (currentSessionId.sessionId !== sessionId) return;
         await writeSessionHeartbeat({ store, sessionId, running });
       });
     return heartbeatWrite;

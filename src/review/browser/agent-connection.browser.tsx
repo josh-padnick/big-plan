@@ -39,20 +39,63 @@ const useSecondClock = (): number => {
 
 export const AgentHealthAlert = ({
   label,
+  tone,
   onOpen,
 }: {
   readonly label: string;
+  readonly tone: "warning" | "danger";
   readonly onOpen: () => void;
 }) => (
   <button
     type="button"
-    className="inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 border-0 bg-transparent px-1 py-1 text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-4"
+    className={`inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 border-0 bg-transparent px-1 py-1 text-xs font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-4 ${tone === "warning" ? "text-warning" : "text-danger"}`}
     aria-label={`${label} — open agent connection status`}
     onClick={onOpen}
   >
     <Icon icon={TRIANGLE_ALERT_ICON} />
     {label}
   </button>
+);
+
+const ReadOnlySessionCard = ({
+  replacementUrl,
+}: {
+  readonly replacementUrl: string | null;
+}) => (
+  <article
+    className="grid min-w-0 gap-2 rounded-lg border border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] p-3 text-xs leading-[1.45] text-[var(--callout-warning-c)]"
+    data-review-current-activity="read-only"
+  >
+    <div className="flex min-w-0 items-center gap-2">
+      <span
+        className="size-2 shrink-0 rounded-full border-2 border-current opacity-70"
+        aria-hidden="true"
+      />
+      <strong className="min-w-0 flex-1 text-sm text-ink">
+        This review was replaced
+      </strong>
+      <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
+        Read only
+      </span>
+    </div>
+    <p className="m-0 text-ink [overflow-wrap:anywhere]">
+      A newer review session is active for this plan. This tab remains safe to
+      read, but it can no longer make changes.
+    </p>
+    <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-2 text-2xs">
+      <span className="text-muted">
+        Your comments remain in the latest review.
+      </span>
+      {replacementUrl === null ? null : (
+        <a
+          className="ml-auto shrink-0 font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          href={replacementUrl}
+        >
+          Open latest review →
+        </a>
+      )}
+    </div>
+  </article>
 );
 
 const CopyBlock = ({
@@ -356,6 +399,8 @@ export const AgentConnectionPanel = ({
   connectionLog,
   recoveryPrompt,
   agentCommand,
+  isReadOnly,
+  replacementUrl,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
@@ -364,6 +409,8 @@ export const AgentConnectionPanel = ({
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   readonly recoveryPrompt: string;
   readonly agentCommand: string;
+  readonly isReadOnly: boolean;
+  readonly replacementUrl: string | null;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
   const currentNowMs = useSecondClock();
@@ -373,13 +420,17 @@ export const AgentConnectionPanel = ({
         <p className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-muted">
           Current status
         </p>
-        <CurrentActivityCard
-          activity={activity}
-          nowMs={currentNowMs}
-          onViewRequest={onViewRequest}
-        />
+        {isReadOnly ? (
+          <ReadOnlySessionCard replacementUrl={replacementUrl} />
+        ) : (
+          <CurrentActivityCard
+            activity={activity}
+            nowMs={currentNowMs}
+            onViewRequest={onViewRequest}
+          />
+        )}
       </section>
-      {connected ? null : (
+      {isReadOnly || connected ? null : (
         <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
@@ -407,12 +458,14 @@ export const AgentConnectionPanel = ({
           </div>
         </details>
       )}
-      <ConnectionLog
-        connected={connected}
-        heartbeatAt={heartbeatAt}
-        events={connectionLog}
-        nowMs={currentNowMs}
-      />
+      {isReadOnly ? null : (
+        <ConnectionLog
+          connected={connected}
+          heartbeatAt={heartbeatAt}
+          events={connectionLog}
+          nowMs={currentNowMs}
+        />
+      )}
     </div>
   );
 };

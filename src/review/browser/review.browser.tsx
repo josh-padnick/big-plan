@@ -147,6 +147,8 @@ type DiffLocation = {
 
 type RuntimeSession = {
   readonly plan: string;
+  readonly authoritative: boolean;
+  readonly latestReviewUrl?: string;
 };
 
 type ComposeState = {
@@ -400,6 +402,29 @@ const isComment = (value: unknown): value is ReviewComment => {
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const parseRuntimeSession = ({
+  value,
+  sessionId,
+}: {
+  readonly value: unknown;
+  readonly sessionId: string;
+}): RuntimeSession | null => {
+  if (
+    !isRecord(value) ||
+    value.sessionId !== sessionId ||
+    typeof value.plan !== "string"
+  ) {
+    return null;
+  }
+  return {
+    plan: value.plan,
+    authoritative: value.authoritative !== false,
+    ...(typeof value.latestReviewUrl === "string"
+      ? { latestReviewUrl: value.latestReviewUrl }
+      : {}),
+  };
+};
 
 const parseSnapshot = (value: unknown): ReviewSnapshot => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -2982,22 +3007,14 @@ const ReviewKernel = () => {
         return;
       }
       try {
-        const session = await requestJson({ path: "/api/session", identity });
-        if (
-          typeof session !== "object" ||
-          session === null ||
-          !("sessionId" in session) ||
-          session.sessionId !== identity.sessionId
-        ) {
+        const session = parseRuntimeSession({
+          value: await requestJson({ path: "/api/session", identity }),
+          sessionId: identity.sessionId,
+        });
+        if (session === null) {
           throw new Error("This page is not connected to its review runtime.");
         }
-        if (
-          isRecord(session) &&
-          "plan" in session &&
-          typeof session.plan === "string"
-        ) {
-          setRuntimeSession({ plan: session.plan });
-        }
+        setRuntimeSession(session);
         const snapshot = parseSnapshot(
           await requestJson({ path: "/api/drafts", identity }),
         );
@@ -3055,11 +3072,22 @@ const ReviewKernel = () => {
       if (pending) return;
       pending = true;
       try {
-        const [agentValue, progressValue] = await Promise.all([
+        const [sessionValue, agentValue, progressValue] = await Promise.all([
+          requestJson({ path: "/api/session", identity }),
           requestJson({ path: "/api/agent", identity }),
           requestJson({ path: "/api/progress", identity }),
         ]);
         if (current) {
+          const session = parseRuntimeSession({
+            value: sessionValue,
+            sessionId: identity.sessionId,
+          });
+          if (session === null) {
+            throw new Error(
+              "This page is not connected to its review runtime.",
+            );
+          }
+          setRuntimeSession(session);
           setAgent(parseAgentSnapshot(agentValue));
           setProgress(parseProgress(progressValue));
           setPollFailures(0);
@@ -3104,6 +3132,11 @@ const ReviewKernel = () => {
 
   const beginTarget = useCallback(
     (target: CommentTarget, rect: Pick<DOMRect, "top">) => {
+      if (runtimeSession?.authoritative === false) {
+        setIsOpen(true);
+        setTab("agent");
+        return;
+      }
       if (
         compose !== null &&
         targetAddress(compose.target) === targetAddress(target)
@@ -3135,7 +3168,7 @@ const ReviewKernel = () => {
       }
       setPendingCompose(next);
     },
-    [compose, composeBody],
+    [compose, composeBody, runtimeSession?.authoritative],
   );
 
   const sendComments = async (comments: ReadonlyArray<ReviewComment>) => {
@@ -3435,17 +3468,19 @@ const ReviewKernel = () => {
     resolvedCommentIds.has(comment.id),
   );
   const agentHealthLabel =
-    identity === null
-      ? null
-      : pollFailures >= 2
-        ? "Review server offline"
-        : !agent.presence.connected
-          ? "Agent connection lost"
-          : agentStatus.stage === "stalled"
-            ? "Agent not responding"
-            : agentStatus.stage === "failed"
-              ? "Agent error"
-              : null;
+    runtimeSession?.authoritative === false
+      ? "Using read-only session"
+      : identity === null
+        ? null
+        : pollFailures >= 2
+          ? "Review server offline"
+          : !agent.presence.connected
+            ? "Agent connection lost"
+            : agentStatus.stage === "stalled"
+              ? "Agent not responding"
+              : agentStatus.stage === "failed"
+                ? "Agent error"
+                : null;
   const newerRevisionAvailable =
     initialSourceRevision !== "" &&
     agent.sourceRevision !== "" &&
@@ -3672,6 +3707,11 @@ const ReviewKernel = () => {
               ) : (
                 <AgentHealthAlert
                   label={agentHealthLabel}
+                  tone={
+                    runtimeSession?.authoritative === false
+                      ? "warning"
+                      : "danger"
+                  }
                   onOpen={() => {
                     setIsOpen(true);
                     setTab("agent");
@@ -4149,6 +4189,12 @@ const ReviewKernel = () => {
                   agent.agentCommand ||
                   `node bin/big-plan.mjs agent '${agent.plan || runtimeSession?.plan || "<plan.mdx>"}'`
                 }
+                replacementUrl={
+                  runtimeSession?.authoritative === false
+                    ? (runtimeSession.latestReviewUrl ?? null)
+                    : null
+                }
+                isReadOnly={runtimeSession?.authoritative === false}
                 onViewRequest={viewAgentRequest}
               />
             </div>
@@ -4158,7 +4204,11 @@ const ReviewKernel = () => {
               <Button
                 className="w-full px-3! py-2! text-xs"
                 size="sm"
-                disabled={drafts.length === 0 || isSending}
+                disabled={
+                  drafts.length === 0 ||
+                  isSending ||
+                  runtimeSession?.authoritative === false
+                }
                 onClick={() => void sendComments(drafts)}
               >
                 {isSending ? "Sending…" : "Send all comments to agent"}
