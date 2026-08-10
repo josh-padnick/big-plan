@@ -22,7 +22,6 @@ import { PENCIL_ICON } from "../../icons/lucide/pencil.js";
 import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
-import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
@@ -73,19 +72,19 @@ import {
   type ProgressEvent,
   type RuntimeSession,
 } from "../shared/review-wire.js";
-import {
-  AgentConnectionPanel,
-  AgentHealthAlert,
-} from "./agent-connection.browser.js";
+import { AgentHealthAlert } from "./agent-connection.browser.js";
+import { AgentSurface } from "./agent-surface.browser.js";
+import { ChatSurface } from "./chat-surface.browser.js";
+import { CommentsSurface } from "./comments-surface.browser.js";
 import {
   AgentChangeDigest,
-  AgentStatePill,
   MessageTurn,
   RequestStatusStrip,
   type MessageActivity,
   type MessageSurface,
 } from "./agent-message.browser.js";
 import { Icon } from "./icon.browser.js";
+import { InlineComments } from "./inline-comments.browser.js";
 import { AlertDialog, Badge, Button, Card, Textarea } from "./ui.browser.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
@@ -3454,336 +3453,125 @@ export const ReviewController = () => {
             </Card>
           ) : null}
           {tab === "comments" ? (
-            <div
-              id="review-panel-comments"
-              className="review-feedback-panel min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3"
-              role="tabpanel"
-              aria-labelledby="review-tab-comments"
-            >
-              {drafts.length === 0 ? (
-                <div className="border-b border-edge pb-4 text-sm text-muted [&_p]:m-0 [&_p+p]:mt-2">
-                  {sent.length > 0 ? (
-                    <p>
-                      {sent.length} comment{sent.length === 1 ? "" : "s"} sent
-                      to the agent
-                    </p>
-                  ) : null}
-                  <p>
-                    {identity === null
-                      ? "Reading offline: drafts stay in this browser until you start the local review runtime."
-                      : "Select text to comment, or use a slide selector to select it all."}
-                  </p>
-                </div>
-              ) : (
-                <section>
-                  <div className="mb-2 flex items-center gap-2">
-                    <p className="m-0 text-xs font-bold uppercase tracking-caps text-subtle">
-                      Staged
-                    </p>
-                    <Badge tone="secondary" size="compact" className="ml-auto">
-                      {drafts.length}
-                    </Badge>
-                  </div>
-                  <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
-                    {drafts.map((comment) => (
-                      <li key={comment.id}>
-                        <StagedCard
-                          comment={comment}
-                          surface="rail"
-                          associated={
-                            associatedTarget !== null &&
-                            targetAddress(associatedTarget) ===
-                              targetAddress(comment.target)
-                          }
-                          collapsed={false}
-                          expanded={expandedBodies.has(comment.id)}
-                          onExpandBody={() =>
-                            setExpandedBodies((current) =>
-                              new Set(current).add(comment.id),
-                            )
-                          }
-                          onMinimizeBody={() =>
-                            setExpandedBodies((current) => {
-                              const next = new Set(current);
-                              next.delete(comment.id);
-                              return next;
-                            })
-                          }
-                          onUpdate={(body) => updateDraft(comment.id, body)}
-                          onDelete={() =>
-                            setPendingDelete({ kind: "comment", comment })
-                          }
-                          onJump={() => jumpTo(comment)}
-                          onSubmit={() => void sendComments([comment])}
-                          onAssociate={setAssociatedTarget}
-                        />
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-              )}
-              {sent.length > 0 ? (
-                <div>
-                  <div className="mt-4 flex justify-end">
-                    {unresolvedSent.some(
-                      (comment) =>
-                        threadProjections.get(comment.id)?.group === "ready",
-                    ) ? (
-                      <button
-                        type="button"
-                        className="cursor-pointer border-0 bg-transparent p-0 text-xs text-muted hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                        onClick={() =>
-                          setResolvedCommentIds(
-                            new Set([
-                              ...resolvedCommentIds,
-                              ...unresolvedSent
-                                .filter(
-                                  (comment) =>
-                                    threadProjections.get(comment.id)?.group ===
-                                    "ready",
-                                )
-                                .map((comment) => comment.id),
-                            ]),
-                          )
-                        }
-                      >
-                        Resolve all
-                      </button>
-                    ) : null}
-                  </div>
-                  {(
-                    [
-                      {
-                        key: "needs-input",
-                        label: "Respond",
-                        glyph: TRIANGLE_ALERT_ICON,
-                      },
-                      {
-                        key: "ready",
-                        label: "Ready for review",
-                        glyph: CHECK_ICON,
-                      },
-                      {
-                        key: "working",
-                        label: "Now working",
-                        glyph: null,
-                      },
-                      {
-                        key: "queued",
-                        label: "Queued",
-                        glyph: HOURGLASS_ICON,
-                      },
-                    ] as const
-                  ).map(({ key, label, glyph }) => {
-                    const comments = sentByGroup.get(key) ?? [];
-                    if (comments.length === 0) return null;
-                    return (
-                      <section
-                        key={key}
-                        className={`mt-4 border-t border-edge pt-4 ${key === "working" ? "text-[var(--callout-note-c)]" : key === "needs-input" ? "text-[var(--callout-warning-c)]" : key === "ready" ? "text-accent" : "text-muted"}`}
-                        data-review-thread-group={key}
-                      >
-                        <h3 className="m-0 mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-caps">
-                          {key === "working" ? (
-                            <span
-                              className="inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
-                              aria-hidden="true"
-                            />
-                          ) : glyph === null ? null : (
-                            <Icon icon={glyph} />
-                          )}
-                          {label}
-                          <Badge
-                            tone="secondary"
-                            size="compact"
-                            className="ml-auto"
-                          >
-                            {comments.length}
-                          </Badge>
-                        </h3>
-                        {comments.map((comment) => {
-                          const thread = threadProjections.get(comment.id);
-                          if (thread === undefined) return null;
-                          return (
-                            <SentThread
-                              key={comment.id}
-                              comment={comment}
-                              surface="rail"
-                              associated={
-                                associatedTarget !== null &&
-                                targetAddress(associatedTarget) ===
-                                  targetAddress(comment.target)
-                              }
-                              selected={selectedCommentId === comment.id}
-                              identity={identity}
-                              thread={thread}
-                              expanded={threadIsOpen({
-                                commentId: comment.id,
-                                kind: "sent",
-                                surface: "rail",
-                              })}
-                              resolved={false}
-                              onToggle={() =>
-                                toggleCommentThread({
-                                  commentId: comment.id,
-                                  kind: "sent",
-                                  surface: "rail",
-                                })
-                              }
-                              onResolve={() =>
-                                toggleResolvedComment(comment.id)
-                              }
-                              onJump={() => jumpTo(comment)}
-                              onAssociate={setAssociatedTarget}
-                              onReplySent={setStatus}
-                              onShowAgent={showAgentSetup}
-                              onCancelRequest={(requestId) =>
-                                void cancelRequest(requestId)
-                              }
-                              onDeleteQueued={() =>
-                                setPendingDelete({ kind: "queued", comment })
-                              }
-                            />
-                          );
-                        })}
-                      </section>
-                    );
-                  })}
-                  {resolvedSent.length === 0 ? null : (
-                    <details className="mt-4 border-t border-edge pt-4">
-                      <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-                        Resolved ({resolvedSent.length})
-                      </summary>
-                      {resolvedSent.map((comment) => {
-                        const thread = threadProjections.get(comment.id);
-                        if (thread === undefined) return null;
-                        return (
-                          <SentThread
-                            key={comment.id}
-                            comment={comment}
-                            surface="rail"
-                            associated={
-                              associatedTarget !== null &&
-                              targetAddress(associatedTarget) ===
-                                targetAddress(comment.target)
-                            }
-                            selected={selectedCommentId === comment.id}
-                            identity={identity}
-                            thread={thread}
-                            expanded={threadIsOpen({
-                              commentId: comment.id,
-                              kind: "sent",
-                              surface: "rail",
-                            })}
-                            resolved
-                            onToggle={() =>
-                              toggleCommentThread({
-                                commentId: comment.id,
-                                kind: "sent",
-                                surface: "rail",
-                              })
-                            }
-                            onResolve={() => toggleResolvedComment(comment.id)}
-                            onJump={() => jumpTo(comment)}
-                            onAssociate={setAssociatedTarget}
-                            onReplySent={setStatus}
-                            onShowAgent={showAgentSetup}
-                            onCancelRequest={(requestId) =>
-                              void cancelRequest(requestId)
-                            }
-                            onDeleteQueued={() =>
-                              setPendingDelete({ kind: "queued", comment })
-                            }
-                          />
-                        );
-                      })}
-                    </details>
-                  )}
-                </div>
-              ) : null}
-              {drafts.length > 0 ? (
-                <div className="mt-3 flex justify-end">
-                  <Button
-                    variant="outline"
-                    size="compact"
-                    className="border-danger text-danger hover:border-danger hover:text-danger"
-                    onClick={() =>
-                      setPendingDelete({ kind: "all", count: drafts.length })
+            <CommentsSurface
+              model={{
+                drafts,
+                sentCount: sent.length,
+                hasRuntime: identity !== null,
+                groups: sentByGroup,
+                resolved: resolvedSent,
+                canResolveAll: unresolvedSent.some(
+                  (comment) =>
+                    threadProjections.get(comment.id)?.group === "ready",
+                ),
+                renderDraft: (comment) => (
+                  <StagedCard
+                    key={comment.id}
+                    comment={comment}
+                    surface="rail"
+                    associated={
+                      associatedTarget !== null &&
+                      targetAddress(associatedTarget) ===
+                        targetAddress(comment.target)
                     }
-                  >
-                    <Icon icon={TRASH_2_ICON} />
-                    Delete all comments
-                  </Button>
-                </div>
-              ) : null}
-            </div>
+                    collapsed={false}
+                    expanded={expandedBodies.has(comment.id)}
+                    onExpandBody={() =>
+                      setExpandedBodies((current) =>
+                        new Set(current).add(comment.id),
+                      )
+                    }
+                    onMinimizeBody={() =>
+                      setExpandedBodies((current) => {
+                        const next = new Set(current);
+                        next.delete(comment.id);
+                        return next;
+                      })
+                    }
+                    onUpdate={(body) => updateDraft(comment.id, body)}
+                    onDelete={() =>
+                      setPendingDelete({ kind: "comment", comment })
+                    }
+                    onJump={() => jumpTo(comment)}
+                    onSubmit={() => void sendComments([comment])}
+                    onAssociate={setAssociatedTarget}
+                  />
+                ),
+                renderSent: (comment, resolved) => {
+                  const thread = threadProjections.get(comment.id);
+                  if (thread === undefined) return null;
+                  return (
+                    <SentThread
+                      key={comment.id}
+                      comment={comment}
+                      surface="rail"
+                      associated={
+                        associatedTarget !== null &&
+                        targetAddress(associatedTarget) ===
+                          targetAddress(comment.target)
+                      }
+                      selected={selectedCommentId === comment.id}
+                      identity={identity}
+                      thread={thread}
+                      expanded={threadIsOpen({
+                        commentId: comment.id,
+                        kind: "sent",
+                        surface: "rail",
+                      })}
+                      resolved={resolved}
+                      onToggle={() =>
+                        toggleCommentThread({
+                          commentId: comment.id,
+                          kind: "sent",
+                          surface: "rail",
+                        })
+                      }
+                      onResolve={() => toggleResolvedComment(comment.id)}
+                      onJump={() => jumpTo(comment)}
+                      onAssociate={setAssociatedTarget}
+                      onReplySent={setStatus}
+                      onShowAgent={showAgentSetup}
+                      onCancelRequest={(requestId) =>
+                        void cancelRequest(requestId)
+                      }
+                      onDeleteQueued={() =>
+                        setPendingDelete({ kind: "queued", comment })
+                      }
+                    />
+                  );
+                },
+                onResolveAll: () =>
+                  setResolvedCommentIds(
+                    new Set([
+                      ...resolvedCommentIds,
+                      ...unresolvedSent
+                        .filter(
+                          (comment) =>
+                            threadProjections.get(comment.id)?.group ===
+                            "ready",
+                        )
+                        .map((comment) => comment.id),
+                    ]),
+                  ),
+                onDeleteAll: () =>
+                  setPendingDelete({ kind: "all", count: drafts.length }),
+              }}
+            />
           ) : null}
           {tab === "chat" ? (
-            <div
-              id="review-panel-chat"
-              className="review-feedback-panel min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 grid content-start gap-3"
-              role="tabpanel"
-              aria-labelledby="review-tab-chat"
-            >
-              {identity === null ? (
-                <Card className="border border-edge bg-surface p-3 shadow-none">
-                  <p className="m-0 text-sm font-semibold text-ink">
-                    Plan-wide chat needs the local runtime
-                  </p>
-                  <p className="mt-1 mb-0 text-xs text-muted">
-                    Open this file with `big-plan review &lt;plan.mdx&gt;`.
-                    Browser drafts remain safe here.
-                  </p>
-                </Card>
-              ) : (
-                <>
-                  <div className="-m-3 mb-0 border-b border-edge bg-well p-3">
-                    <div className="flex items-center gap-2">
-                      <label
-                        className="text-sm font-bold uppercase tracking-caps text-muted"
-                        htmlFor="review-agent-chat"
-                      >
-                        Plan-wide chat
-                      </label>
-                      <AgentStatePill status={agentStatus} />
-                    </div>
-                    <Textarea
-                      id="review-agent-chat"
-                      className="mt-2 min-h-20! bg-input!"
-                      value={chatBody}
-                      maxLength={BODY_LIMIT}
-                      placeholder="Ask about the plan as a whole…"
-                      onChange={(event) => setChatBody(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (
-                          (event.metaKey || event.ctrlKey) &&
-                          event.key === "Enter"
-                        ) {
-                          event.preventDefault();
-                          void sendChat();
-                        }
-                      }}
-                    />
-                    <div className="mt-2 flex items-center gap-3">
-                      <DelayedTooltip label={`Send · ${MODIFIER_SHORTCUT}`}>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={chatBody.trim() === "" || isSendingChat}
-                          onClick={() => void sendChat()}
-                        >
-                          {isSendingChat ? "Sending…" : "Send"}
-                        </Button>
-                      </DelayedTooltip>
-                    </div>
-                  </div>
-                  {chatRequests.length === 0 ? (
-                    <p className="m-0 text-xs text-subtle">
-                      No plan-wide questions yet.
-                    </p>
-                  ) : (
-                    <ol className="m-0 grid list-none gap-3 p-0">
-                      {chatRequests.map((request) => {
+            <ChatSurface
+              model={{
+                hasRuntime: identity !== null,
+                status: agentStatus,
+                body: chatBody,
+                bodyLimit: BODY_LIMIT,
+                shortcutLabel: MODIFIER_SHORTCUT,
+                isSending: isSendingChat,
+                hasExchanges: chatRequests.length > 0,
+                exchanges:
+                  identity === null
+                    ? null
+                    : chatRequests.map((request) => {
                         const response = agent.responses.find(
                           (candidate) =>
                             candidate.requestId === request.requestId &&
@@ -3804,39 +3592,26 @@ export const ReviewController = () => {
                             }
                           />
                         );
-                      })}
-                    </ol>
-                  )}
-                </>
-              )}
-            </div>
+                      }),
+                onBodyChange: setChatBody,
+                onSend: () => void sendChat(),
+              }}
+            />
           ) : null}
           {tab === "agent" && identity !== null ? (
-            <div
-              id="review-panel-agent"
-              className="review-feedback-panel min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 grid content-start gap-3"
-              role="tabpanel"
-              aria-labelledby="review-tab-agent"
-            >
-              <AgentConnectionPanel
-                activity={currentAgentActivity}
-                connected={agent.presence.connected}
-                heartbeatAt={agent.presence.updatedAtMs ?? 0}
-                connectionLog={agent.connectionLog}
-                recoveryPrompt={agent.recoveryPrompt}
-                agentCommand={
-                  agent.agentCommand ||
-                  `node bin/big-plan.mjs agent '${agent.plan || runtimeSession?.plan || "<plan.mdx>"}'`
-                }
-                replacementUrl={
-                  runtimeSession?.authoritative === false
-                    ? (runtimeSession.latestReviewUrl ?? null)
-                    : null
-                }
-                isReadOnly={runtimeSession?.authoritative === false}
-                onViewRequest={viewAgentRequest}
-              />
-            </div>
+            <AgentSurface
+              model={{
+                activity: currentAgentActivity,
+                connected: agent.presence.connected,
+                heartbeatAt: agent.presence.updatedAtMs ?? 0,
+                connectionLog: agent.connectionLog,
+                recoveryPrompt: agent.recoveryPrompt,
+                agentCommand: agent.agentCommand,
+                plan: agent.plan,
+                runtimeSession,
+                onViewRequest: viewAgentRequest,
+              }}
+            />
           ) : null}
           {tab === "comments" ? (
             <div className="review-feedback-status flex flex-none flex-col items-stretch gap-2 border-t border-edge bg-paper p-3 text-xs text-subtle">
@@ -3878,92 +3653,94 @@ export const ReviewController = () => {
           ) : null}
         </aside>
       ) : null}
-      {drafts.map((comment) => {
-        const host = threadHosts.get(comment.id);
-        if (host === undefined) return null;
-        return createPortal(
-          <StagedCard
-            comment={comment}
-            surface="thread"
-            associated={
-              associatedTarget !== null &&
-              targetAddress(associatedTarget) === targetAddress(comment.target)
-            }
-            collapsed={
-              !threadIsOpen({
-                commentId: comment.id,
-                kind: "draft",
-                surface: "inline",
-              })
-            }
-            expanded={expandedBodies.has(comment.id)}
-            onCollapse={() =>
-              toggleCommentThread({
-                commentId: comment.id,
-                kind: "draft",
-                surface: "inline",
-              })
-            }
-            onExpandBody={() =>
-              setExpandedBodies((current) => new Set(current).add(comment.id))
-            }
-            onMinimizeBody={() =>
-              setExpandedBodies((current) => {
-                const next = new Set(current);
-                next.delete(comment.id);
-                return next;
-              })
-            }
-            onUpdate={(body) => updateDraft(comment.id, body)}
-            onDelete={() => setPendingDelete({ kind: "comment", comment })}
-            onJump={() => jumpTo(comment)}
-            onSubmit={() => void sendComments([comment])}
-            onAssociate={setAssociatedTarget}
-          />,
-          host,
-          comment.id,
-        );
-      })}
-      {sent.map((comment) => {
-        const host = threadHosts.get(comment.id);
-        const thread = threadProjections.get(comment.id);
-        if (host === undefined || thread === undefined) return null;
-        return createPortal(
-          <SentThread
-            comment={comment}
-            surface="thread"
-            associated={
-              associatedTarget !== null &&
-              targetAddress(associatedTarget) === targetAddress(comment.target)
-            }
-            selected={selectedCommentId === comment.id}
-            identity={identity}
-            thread={thread}
-            expanded={threadIsOpen({
-              commentId: comment.id,
-              kind: "sent",
-              surface: "inline",
-            })}
-            resolved={resolvedCommentIds.has(comment.id)}
-            onToggle={() =>
-              toggleCommentThread({
-                commentId: comment.id,
-                kind: "sent",
-                surface: "inline",
-              })
-            }
-            onResolve={() => toggleResolvedComment(comment.id)}
-            onJump={() => jumpTo(comment)}
-            onAssociate={setAssociatedTarget}
-            onReplySent={setStatus}
-            onShowAgent={showAgentSetup}
-            onCancelRequest={(requestId) => void cancelRequest(requestId)}
-            onDeleteQueued={() => setPendingDelete({ kind: "queued", comment })}
-          />,
-          host,
-          `sent-${comment.id}`,
-        );
-      })}
+      <InlineComments
+        model={{
+          drafts,
+          sent,
+          hostFor: (commentId) => threadHosts.get(commentId),
+          renderDraft: (comment) => (
+            <StagedCard
+              comment={comment}
+              surface="thread"
+              associated={
+                associatedTarget !== null &&
+                targetAddress(associatedTarget) ===
+                  targetAddress(comment.target)
+              }
+              collapsed={
+                !threadIsOpen({
+                  commentId: comment.id,
+                  kind: "draft",
+                  surface: "inline",
+                })
+              }
+              expanded={expandedBodies.has(comment.id)}
+              onCollapse={() =>
+                toggleCommentThread({
+                  commentId: comment.id,
+                  kind: "draft",
+                  surface: "inline",
+                })
+              }
+              onExpandBody={() =>
+                setExpandedBodies((current) => new Set(current).add(comment.id))
+              }
+              onMinimizeBody={() =>
+                setExpandedBodies((current) => {
+                  const next = new Set(current);
+                  next.delete(comment.id);
+                  return next;
+                })
+              }
+              onUpdate={(body) => updateDraft(comment.id, body)}
+              onDelete={() => setPendingDelete({ kind: "comment", comment })}
+              onJump={() => jumpTo(comment)}
+              onSubmit={() => void sendComments([comment])}
+              onAssociate={setAssociatedTarget}
+            />
+          ),
+          renderSent: (comment) => {
+            const thread = threadProjections.get(comment.id);
+            if (thread === undefined) return null;
+            return (
+              <SentThread
+                comment={comment}
+                surface="thread"
+                associated={
+                  associatedTarget !== null &&
+                  targetAddress(associatedTarget) ===
+                    targetAddress(comment.target)
+                }
+                selected={selectedCommentId === comment.id}
+                identity={identity}
+                thread={thread}
+                expanded={threadIsOpen({
+                  commentId: comment.id,
+                  kind: "sent",
+                  surface: "inline",
+                })}
+                resolved={resolvedCommentIds.has(comment.id)}
+                onToggle={() =>
+                  toggleCommentThread({
+                    commentId: comment.id,
+                    kind: "sent",
+                    surface: "inline",
+                  })
+                }
+                onResolve={() => toggleResolvedComment(comment.id)}
+                onJump={() => jumpTo(comment)}
+                onAssociate={setAssociatedTarget}
+                onReplySent={setStatus}
+                onShowAgent={showAgentSetup}
+                onCancelRequest={(requestId) => void cancelRequest(requestId)}
+                onDeleteQueued={() =>
+                  setPendingDelete({ kind: "queued", comment })
+                }
+              />
+            );
+          },
+        }}
+      />
       {compose === null ? null : inlineComposeHost === null ? (
         <CommentComposer
           key={
