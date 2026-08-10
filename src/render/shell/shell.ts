@@ -233,10 +233,10 @@ ${renderPreferenceOption({ mode: "system", title: "System", description: "Match 
 </section>
 </div>`;
 
-// The right side of the branding bar is one action group shared by Comment
-// and Settings, keeping both controls reachable without a menu layer.
+// The right side of the branding bar keeps status, Feedback, and Settings as
+// separate peer actions with one closed spacing-scale step between them.
 const renderHeaderActions = (): string =>
-  `<div class="ml-auto flex items-center gap-1 wide:gap-0.5">
+  `<div class="ml-auto flex items-center gap-3">
 ${renderCommentDraftControl()}
 ${renderPreferencesControl()}
 </div>`;

@@ -153,8 +153,7 @@ here; all values use the document theme's closed token vocabulary.
   }
 
   [data-review-feedback-host] {
-    display: inline-flex;
-    align-items: center;
+    display: contents;
   }
 
   /* Connection events are one timeline, so the island supplies markers while

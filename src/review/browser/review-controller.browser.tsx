@@ -1277,6 +1277,7 @@ const ContextualCommentSummary = ({
   className = "",
   status,
   statusIcon,
+  statusIconLabel,
   statusSpinner = false,
   statusTone = "secondary",
   statusClassName = "",
@@ -1291,6 +1292,7 @@ const ContextualCommentSummary = ({
   readonly className?: string;
   readonly status: string;
   readonly statusIcon?: LucideIcon;
+  readonly statusIconLabel?: string;
   readonly statusSpinner?: boolean;
   readonly statusTone?: "annotation" | "secondary";
   readonly statusClassName?: string;
@@ -1321,6 +1323,15 @@ const ContextualCommentSummary = ({
     data-review-sent-thread={threadGroup}
     data-review-comment-id={commentId}
   >
+    {statusIcon === undefined ? null : (
+      <span
+        role="img"
+        aria-label={statusIconLabel ?? status}
+        className="inline-flex size-5 shrink-0 items-center justify-center text-[var(--callout-warning-c)] [&>svg]:size-3.5"
+      >
+        <Icon icon={statusIcon} />
+      </span>
+    )}
     {statusSpinner ? (
       <span
         className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--callout-note-bg)] px-1.5 py-0.5 text-2xs font-semibold text-[var(--callout-note-c)] ${statusClassName}`}
@@ -1332,7 +1343,7 @@ const ContextualCommentSummary = ({
         />
         {status}
       </span>
-    ) : statusIcon === undefined ? (
+    ) : (
       <Badge
         size="compact"
         shape="badge"
@@ -1341,14 +1352,6 @@ const ContextualCommentSummary = ({
       >
         {status.toUpperCase()}
       </Badge>
-    ) : (
-      <span
-        role="img"
-        aria-label={status}
-        className="inline-flex size-5 shrink-0 items-center justify-center text-[var(--callout-warning-c)] [&>svg]:size-3.5"
-      >
-        <Icon icon={statusIcon} />
-      </span>
     )}
     <button
       type="button"
@@ -1745,15 +1748,6 @@ const SentThread = ({
   } = thread;
   const outcome = latestExchange?.outcome;
   const targetPresent = targetElement(comment.target) !== null;
-  const outcomeLabel = latestCanceled
-    ? "Canceled"
-    : outcome?.state === "changed"
-      ? "Changed"
-      : outcome?.state === "question"
-        ? "Respond"
-        : outcome?.state === "outside"
-          ? "Outside this plan"
-          : "Waiting for agent";
   const cardClass = `mt-2 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
   const associate = () => onAssociate(comment.target);
   const railFreshness = threadTime(
@@ -1826,14 +1820,26 @@ const SentThread = ({
       return (
         <ContextualCommentSummary
           status={
-            group === "working"
-              ? "Working"
-              : (latestStatus?.headline ?? outcomeLabel)
+            resolved
+              ? "Resolved"
+              : group === "working"
+                ? "Working"
+                : group === "ready"
+                  ? "Ready for review"
+                  : group === "needs-input"
+                    ? "Respond"
+                    : latestCanceled
+                      ? "Canceled"
+                      : "Queued"
           }
           statusSpinner={group === "working"}
           statusIcon={
-            latestStatus?.stage === "blocked" ? TRIANGLE_ALERT_ICON : undefined
+            latestStatus?.stage === "blocked" ||
+            latestStatus?.stage === "offline"
+              ? TRIANGLE_ALERT_ICON
+              : undefined
           }
+          statusIconLabel={latestStatus?.headline}
           statusClassName={
             latestCanceled
               ? ""
@@ -3331,7 +3337,7 @@ export const ReviewController = () => {
       {selectionControl === null ? null : (
         <button
           type="button"
-          className="fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-edge bg-paper px-2 py-1 text-xs text-muted shadow-raised hover:border-accent hover:bg-surface hover:text-ink focus-visible:border-accent focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5"
+          className="fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-edge-strong bg-surface px-2 py-1 text-xs text-ink shadow-raised hover:border-accent hover:bg-accent-soft hover:text-accent hover:shadow-lifted focus-visible:border-accent focus-visible:bg-accent-soft focus-visible:text-accent focus-visible:shadow-lifted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed [&_svg]:size-3.5"
           style={{
             top: `${selectionControl.top}px`,
             left: `${selectionControl.left}px`,
@@ -3350,7 +3356,7 @@ export const ReviewController = () => {
       {feedbackHost === null
         ? null
         : createPortal(
-            <span className="inline-flex items-center gap-1 wide:gap-0.5">
+            <>
               {agentHealthLabel === null ? (
                 identity !== null && agent.presence.connected ? (
                   <DelayedTooltip label="Agent session active">
@@ -3405,7 +3411,7 @@ export const ReviewController = () => {
                   </Badge>
                 ) : null}
               </button>
-            </span>,
+            </>,
             feedbackHost,
           )}
       {isOpen ? (

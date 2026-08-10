@@ -4,7 +4,7 @@
 
 import { expect, test } from "./fixtures";
 
-test("should keep the desktop toolbar actions compact and grouped", async ({
+test("should keep the desktop toolbar actions compact and distinct", async ({
   page,
   deckViewerUrl,
 }) => {
@@ -38,7 +38,7 @@ test("should keep the desktop toolbar actions compact and grouped", async ({
   await expect(settings).toBeVisible();
   expect(geometry.settingsHeight).toBe(geometry.feedbackHeight);
   expect(geometry.settingsWidth).toBe(geometry.settingsHeight);
-  expect(geometry.gap).toBe(2);
+  expect(geometry.gap).toBe(12);
 });
 
 test("should place a comment action between copy and maximize for plain code", async ({
@@ -759,6 +759,44 @@ test("should preserve a text selection while its compact composer is open", asyn
 
   const chip = page.getByRole("button", { name: "Comment on selected text" });
   await expect(chip).toHaveText(/Comment/);
+  const visualState = async () =>
+    chip.evaluate((button) => {
+      const resolveRole = (property: string, role: string): string => {
+        const probe = document.createElement("span");
+        probe.style.setProperty(property, `var(${role})`);
+        document.body.append(probe);
+        const value = getComputedStyle(probe).getPropertyValue(property);
+        probe.remove();
+        return value;
+      };
+      const style = getComputedStyle(button);
+      return {
+        background: style.backgroundColor,
+        border: style.borderTopColor,
+        color: style.color,
+        shadow: style.boxShadow,
+        roles: {
+          accent: resolveRole("color", "--accent-c"),
+          accentSoft: resolveRole("color", "--accent-soft-c"),
+          edgeStrong: resolveRole("color", "--edge-strong-c"),
+          ink: resolveRole("color", "--ink-c"),
+          lifted: resolveRole("box-shadow", "--elevation-lifted"),
+          raised: resolveRole("box-shadow", "--elevation-raised"),
+          surface: resolveRole("color", "--surface-c"),
+        },
+      };
+    });
+  const resting = await visualState();
+  expect(resting.background).toBe(resting.roles.surface);
+  expect(resting.border).toBe(resting.roles.edgeStrong);
+  expect(resting.color).toBe(resting.roles.ink);
+  expect(resting.shadow).toContain(resting.roles.raised);
+  await chip.hover();
+  const hovered = await visualState();
+  expect(hovered.background).toBe(hovered.roles.accentSoft);
+  expect(hovered.border).toBe(hovered.roles.accent);
+  expect(hovered.color).toBe(hovered.roles.accent);
+  expect(hovered.shadow).toContain(hovered.roles.lifted);
   await expect
     .poll(() =>
       chip.evaluate((button) => {

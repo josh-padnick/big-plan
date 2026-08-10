@@ -27,6 +27,31 @@ test("should restore and submit staged comments through the local review runtime
 }) => {
   await page.goto(reviewRuntimeUrl);
 
+  const agentStatus = page.getByRole("button", {
+    name: /open agent connection status/u,
+  });
+  const feedbackAction = page.getByRole("button", {
+    name: "Feedback",
+    exact: true,
+  });
+  const settingsAction = page.getByRole("button", { name: "Open settings" });
+  await expect(agentStatus).toBeVisible();
+  await expect(feedbackAction).toBeVisible();
+  await expect(settingsAction).toBeVisible();
+  const toolbarGaps = await Promise.all([
+    agentStatus.boundingBox(),
+    feedbackAction.boundingBox(),
+    settingsAction.boundingBox(),
+  ]).then(([status, feedback, settings]) => {
+    if (status === null || feedback === null || settings === null)
+      throw new Error("The review toolbar actions were not rendered");
+    return [
+      feedback.x - status.x - status.width,
+      settings.x - feedback.x - feedback.width,
+    ];
+  });
+  expect(toolbarGaps).toEqual([12, 12]);
+
   await stageComment(page, "Clarify the failure boundary.");
   await stageComment(page, "Name the operator recovery path.");
   await stageComment(page, "Remove this queued comment before pickup.");
@@ -106,6 +131,7 @@ test("should restore and submit staged comments through the local review runtime
       })
       .first(),
   ).toBeVisible();
+  await expect(blockedSummary.first()).toContainText("QUEUED");
   await expect(blockedSummary.first()).not.toContainText(
     "BLOCKED - NO AGENT CONNECTED",
   );
@@ -137,8 +163,12 @@ test("should restore and submit staged comments through the local review runtime
     .locator("xpath=ancestor::summary");
   await expect(connectionLog.locator("svg")).toHaveCount(1);
   await connectionLog.click();
-  const currentDuration = rail.locator(
-    "[data-review-connection-current] [data-review-connection-duration]",
+  const currentConnectionEvent = rail.locator(
+    "[data-review-connection-current]",
+  );
+  await expect(currentConnectionEvent).toHaveCSS("line-height", "12px");
+  const currentDuration = currentConnectionEvent.locator(
+    "[data-review-connection-duration]",
   );
   await expect(currentDuration).toBeVisible();
   await currentDuration.evaluate((node) => {
@@ -516,7 +546,7 @@ test("should restore and submit staged comments through the local review runtime
   const contextualThread = page
     .locator("[data-review-thread-side] [data-review-sent-thread]")
     .filter({ hasText: "Clarify the failure boundary." });
-  await expect(contextualThread).toContainText("CHANGED");
+  await expect(contextualThread).toContainText("READY FOR REVIEW");
   await expect(contextualThread).toContainText("Clarify the failure boundary.");
   await expect(contextualThread.locator(".review-sent-target")).toHaveCount(0);
   const contextualActions = contextualThread.locator(":scope > div");
