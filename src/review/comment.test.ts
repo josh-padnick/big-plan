@@ -17,6 +17,15 @@ const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
       section: "Status quo",
     },
   ],
+  [
+    "section/status-quo/paragraph-2",
+    {
+      id: "section/status-quo/paragraph-2",
+      kind: "paragraph",
+      label: "What changes next",
+      section: "Status quo",
+    },
+  ],
 ]);
 
 const NOW = "2026-07-31T00:00:00.000Z";
@@ -62,6 +71,30 @@ describe("validateComments acceptance", () => {
     });
   });
 
+  it("should accept selected text spanning two renderer-owned blocks", () => {
+    const [comment] = validate(
+      commentOn({
+        type: "selection",
+        blockId: "section/status-quo/paragraph-1",
+        endBlockId: "section/status-quo/paragraph-2",
+        start: 12,
+        end: 4,
+        quote: "reality\nWhat",
+      }),
+    );
+    expect(comment?.target).toEqual({
+      type: "selection",
+      blockId: "section/status-quo/paragraph-1",
+      endBlockId: "section/status-quo/paragraph-2",
+      kind: "paragraph",
+      label: "Today's reality",
+      section: "Status quo",
+      start: 12,
+      end: 4,
+      quote: "reality\nWhat",
+    });
+  });
+
   it("should accept an empty batch when nothing is pending", () => {
     expect(validate([])).toEqual([]);
   });
@@ -71,6 +104,21 @@ describe("validateComments target resolution", () => {
   it("should refuse a target naming a block this document does not contain", () => {
     expect(() =>
       validate(commentOn({ type: "block", blockId: "section/made-up/p-1" })),
+    ).toThrow(CommentRejected);
+  });
+
+  it("should refuse a cross-block selection with an unknown end block", () => {
+    expect(() =>
+      validate(
+        commentOn({
+          type: "selection",
+          blockId: "section/status-quo/paragraph-1",
+          endBlockId: "section/status-quo/made-up",
+          start: 0,
+          end: 4,
+          quote: "Some text",
+        }),
+      ),
     ).toThrow(CommentRejected);
   });
 

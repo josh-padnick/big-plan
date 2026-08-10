@@ -811,6 +811,64 @@ const targetLabel = (
 const parentElementFor = (node: Node): Element | null =>
   node instanceof Element ? node : node.parentElement;
 
+const SELECTION_BLOCK_SELECTOR =
+  '[data-block-id]:not([data-block-kind="part"])';
+
+const selectionBoundaryBlock = ({
+  container,
+  offset,
+  edge,
+}: {
+  readonly container: Node;
+  readonly offset: number;
+  readonly edge: "start" | "end";
+}): HTMLElement | null => {
+  const direct = parentElementFor(container)?.closest<HTMLElement>(
+    SELECTION_BLOCK_SELECTOR,
+  );
+  if (direct !== null && direct !== undefined) return direct;
+  if (!(container instanceof Element) || container.childNodes.length === 0) {
+    return null;
+  }
+  const childIndex =
+    edge === "start"
+      ? Math.min(offset, container.childNodes.length - 1)
+      : Math.max(0, Math.min(offset - 1, container.childNodes.length - 1));
+  const child = container.childNodes[childIndex];
+  if (child === undefined) return null;
+  const childElement = parentElementFor(child);
+  if (childElement?.matches(SELECTION_BLOCK_SELECTOR) === true) {
+    return childElement as HTMLElement;
+  }
+  const descendants = Array.from(
+    childElement?.querySelectorAll<HTMLElement>(SELECTION_BLOCK_SELECTOR) ?? [],
+  );
+  return edge === "start"
+    ? (descendants[0] ?? null)
+    : (descendants.at(-1) ?? null);
+};
+
+const selectionOffsetWithin = ({
+  block,
+  container,
+  offset,
+  edge,
+}: {
+  readonly block: HTMLElement;
+  readonly container: Node;
+  readonly offset: number;
+  readonly edge: "start" | "end";
+}): number => {
+  if (block !== container && !block.contains(container)) {
+    return edge === "start" ? 0 : (block.textContent?.length ?? 0);
+  }
+  const before = document.createRange();
+  before.selectNodeContents(block);
+  if (edge === "start") before.setEnd(container, offset);
+  else before.setEnd(container, offset);
+  return before.toString().length;
+};
+
 const selectionControlState = (): SelectionControlState | null => {
   const selection = window.getSelection();
   if (
@@ -821,33 +879,57 @@ const selectionControlState = (): SelectionControlState | null => {
     return null;
   }
   const range = selection.getRangeAt(0);
-  const selector = '[data-block-id]:not([data-block-kind="part"])';
-  const startBlock = parentElementFor(
-    range.startContainer,
-  )?.closest<HTMLElement>(selector);
-  const endBlock = parentElementFor(range.endContainer)?.closest<HTMLElement>(
-    selector,
+  const startBlock = selectionBoundaryBlock({
+    container: range.startContainer,
+    offset: range.startOffset,
+    edge: "start",
+  });
+  const endBlock = selectionBoundaryBlock({
+    container: range.endContainer,
+    offset: range.endOffset,
+    edge: "end",
+  });
+  const startReviewContainer = startBlock?.closest<HTMLElement>(
+    "[data-slide], [data-quick-summary]",
+  );
+  const endReviewContainer = endBlock?.closest<HTMLElement>(
+    "[data-slide], [data-quick-summary]",
   );
   if (
     startBlock == null ||
-    startBlock !== endBlock ||
+    endBlock == null ||
+    (startBlock !== endBlock &&
+      (startReviewContainer == null ||
+        startReviewContainer !== endReviewContainer)) ||
     startBlock.closest("#big-plan-review-root") !== null
   ) {
     return null;
   }
   const quote = selection.toString();
   if (quote.trim() === "" || quote.length > 400) return null;
-  const before = document.createRange();
-  before.selectNodeContents(startBlock);
-  before.setEnd(range.startContainer, range.startOffset);
+  const start = selectionOffsetWithin({
+    block: startBlock,
+    container: range.startContainer,
+    offset: range.startOffset,
+    edge: "start",
+  });
+  const end = selectionOffsetWithin({
+    block: endBlock,
+    container: range.endContainer,
+    offset: range.endOffset,
+    edge: "end",
+  });
   const rect = range.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return null;
   return {
     target: {
       type: "selection",
       ...blockIdentity(startBlock),
-      start: before.toString().length,
-      end: before.toString().length + quote.length,
+      ...(startBlock === endBlock
+        ? {}
+        : { endBlockId: endBlock.dataset.blockId ?? "" }),
+      start,
+      end,
       quote,
     },
     top: Math.max(8, rect.top - 44),
@@ -865,10 +947,29 @@ const targetElement = (target: CommentTarget): HTMLElement | null => {
     : block;
 };
 
+const targetAssociationElements = (
+  target: CommentTarget,
+): ReadonlySet<HTMLElement> => {
+  const element = targetElement(target);
+  if (element === null) return new Set();
+  const owningContainer = element.closest<HTMLElement>(
+    "[data-slide], [data-quick-summary]",
+  );
+  const elements = new Set<HTMLElement>();
+  if (
+    target.type !== "selection" &&
+    !(element.matches("[data-authored-prose]") && owningContainer !== null)
+  ) {
+    elements.add(element);
+  }
+  if (owningContainer !== null) elements.add(owningContainer);
+  return elements;
+};
+
 const targetAddress = (target: CommentTarget): string => {
   if (target.type === "document") return "document";
   if (target.type === "selection") {
-    return `selection:${target.blockId}:${target.start}:${target.end}`;
+    return `selection:${target.blockId}:${target.start}:${target.endBlockId ?? target.blockId}:${target.end}`;
   }
   return `block:${target.blockId}`;
 };
@@ -881,27 +982,48 @@ type HighlightRegistry = {
 const selectionRange = (
   target: Extract<CommentTarget, { readonly type: "selection" }>,
 ): Range | null => {
-  const block = targetElement(target);
-  if (block === null) return null;
-  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  const startBlock = targetElement(target);
+  const endBlock =
+    target.endBlockId === undefined
+      ? startBlock
+      : document.querySelector<HTMLElement>(
+          `[data-block-id="${CSS.escape(target.endBlockId)}"]`,
+        );
+  if (startBlock === null || endBlock === null) return null;
+  const textPoint = (
+    block: HTMLElement,
+    targetOffset: number,
+  ): { readonly node: Text; readonly offset: number } | null => {
+    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    let consumed = 0;
+    let last: Text | null = null;
+    let node = walker.nextNode();
+    while (node !== null) {
+      if (!(node instanceof Text)) {
+        node = walker.nextNode();
+        continue;
+      }
+      last = node;
+      const length = node.data.length;
+      if (targetOffset <= consumed + length) {
+        return { node, offset: Math.max(0, targetOffset - consumed) };
+      }
+      consumed += length;
+      node = walker.nextNode();
+    }
+    return last === null ? null : { node: last, offset: last.data.length };
+  };
+  const start = textPoint(startBlock, target.start);
+  const end = textPoint(endBlock, target.end);
+  if (start === null || end === null) return null;
   const range = document.createRange();
-  let offset = 0;
-  let startSet = false;
-  let node = walker.nextNode();
-  while (node !== null) {
-    const length = node.textContent?.length ?? 0;
-    if (!startSet && target.start <= offset + length) {
-      range.setStart(node, Math.max(0, target.start - offset));
-      startSet = true;
-    }
-    if (startSet && target.end <= offset + length) {
-      range.setEnd(node, Math.max(0, target.end - offset));
-      return range;
-    }
-    offset += length;
-    node = walker.nextNode();
+  try {
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    return range;
+  } catch {
+    return null;
   }
-  return null;
 };
 
 const setSelectionHighlights = (
@@ -1466,7 +1588,10 @@ const ContextualCommentSummary = ({
     density="dense"
     elevation="floating"
     onPointerEnter={() => onAssociate(true)}
-    onPointerLeave={() => onAssociate(false)}
+    onPointerLeave={(event) => {
+      if (!event.currentTarget.contains(document.activeElement))
+        onAssociate(false);
+    }}
     onFocus={() => onAssociate(true)}
     onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget))
@@ -1597,7 +1722,10 @@ const StagedCard = ({
         density="dense"
         elevation="none"
         onPointerEnter={() => setAssociated(true)}
-        onPointerLeave={() => setAssociated(false)}
+        onPointerLeave={(event) => {
+          if (!event.currentTarget.contains(document.activeElement))
+            setAssociated(false);
+        }}
         onFocus={() => setAssociated(true)}
         onBlur={(event) => {
           if (
@@ -1717,7 +1845,10 @@ const StagedCard = ({
       density="compact"
       elevation="floating"
       onPointerEnter={() => setAssociated(true)}
-      onPointerLeave={() => setAssociated(false)}
+      onPointerLeave={(event) => {
+        if (!event.currentTarget.contains(document.activeElement))
+          setAssociated(false);
+      }}
       onFocus={() => setAssociated(true)}
       onBlur={(event) => {
         if (
@@ -2104,7 +2235,10 @@ const SentThread = ({
         density="dense"
         elevation="none"
         onPointerEnter={associate}
-        onPointerLeave={() => onAssociate(null)}
+        onPointerLeave={(event) => {
+          if (!event.currentTarget.contains(document.activeElement))
+            onAssociate(null);
+        }}
         onFocus={associate}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget))
@@ -2112,6 +2246,7 @@ const SentThread = ({
         }}
         data-review-sent-thread={group}
         data-review-comment-id={comment.id}
+        data-review-comment-ui=""
         data-review-associated={associated ? "true" : undefined}
         data-review-selected={selected ? "true" : undefined}
       >
@@ -2207,7 +2342,10 @@ const SentThread = ({
       density={surface === "rail" ? "dense" : "compact"}
       elevation={surface === "rail" ? "none" : "floating"}
       onPointerEnter={associate}
-      onPointerLeave={() => onAssociate(null)}
+      onPointerLeave={(event) => {
+        if (!event.currentTarget.contains(document.activeElement))
+          onAssociate(null);
+      }}
       onFocus={() => onAssociate(comment.target)}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget))
@@ -2215,6 +2353,7 @@ const SentThread = ({
       }}
       data-review-sent-thread={group}
       data-review-comment-id={comment.id}
+      data-review-comment-ui=""
       data-review-associated={associated ? "true" : undefined}
       data-review-selected={selected ? "true" : undefined}
     >
@@ -2646,18 +2785,8 @@ const ReviewKernel = () => {
   }, [associatedTarget, associationActive, compose, reviewComments]);
 
   useEffect(() => {
-    if (associatedTarget === null || associatedTarget.type === "selection") {
-      return undefined;
-    }
-    const target = targetElement(associatedTarget);
-    if (target === null) {
-      return undefined;
-    }
-    const associatedElements = new Set<HTMLElement>([target]);
-    const owningSlide = target.closest<HTMLElement>(
-      "[data-slide], [data-quick-summary]",
-    );
-    if (owningSlide !== null) associatedElements.add(owningSlide);
+    if (associatedTarget === null) return undefined;
+    const associatedElements = targetAssociationElements(associatedTarget);
     for (const element of associatedElements) {
       element.dataset.reviewCommentAssociated = "";
     }
@@ -2673,16 +2802,8 @@ const ReviewKernel = () => {
     const comment = reviewComments.find(
       (candidate) => candidate.id === selectedCommentId,
     );
-    if (comment === undefined || comment.target.type === "selection") {
-      return undefined;
-    }
-    const target = targetElement(comment.target);
-    if (target === null) return undefined;
-    const selectedElements = new Set<HTMLElement>([target]);
-    const owningSlide = target.closest<HTMLElement>(
-      "[data-slide], [data-quick-summary]",
-    );
-    if (owningSlide !== null) selectedElements.add(owningSlide);
+    if (comment === undefined) return undefined;
+    const selectedElements = targetAssociationElements(comment.target);
     for (const element of selectedElements) {
       element.dataset.reviewCommentSelected = "";
     }
@@ -2698,9 +2819,11 @@ const ReviewKernel = () => {
     const entries = reviewComments.flatMap((comment) => {
       const element = targetElement(comment.target);
       if (element === null) return [];
-      if (comment.target.type !== "selection") {
-        element.dataset.reviewHasComment = "";
-        marked.add(element);
+      for (const associatedElement of targetAssociationElements(
+        comment.target,
+      )) {
+        associatedElement.dataset.reviewHasComment = "";
+        marked.add(associatedElement);
       }
       return [
         {
@@ -2744,7 +2867,14 @@ const ReviewKernel = () => {
           : eventTarget instanceof Node
             ? eventTarget.parentElement
             : null;
+      const focusedComment =
+        document.activeElement instanceof Element
+          ? document.activeElement.closest(
+              "[data-review-comment-ui], [data-review-comment-id]",
+            )
+          : null;
       if (
+        focusedComment !== null ||
         (eventTarget instanceof Node &&
           document
             .querySelector("#big-plan-review-root")

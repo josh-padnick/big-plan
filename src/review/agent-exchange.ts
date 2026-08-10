@@ -193,13 +193,18 @@ const target = (value: unknown): CommentTarget => {
   if (value.type === "block") {
     return { type: "block", ...identity };
   }
+  const endBlockId =
+    value.type === "selection" && typeof value.endBlockId === "string"
+      ? value.endBlockId
+      : undefined;
   if (
     typeof value.start !== "number" ||
     !Number.isInteger(value.start) ||
     value.start < 0 ||
     typeof value.end !== "number" ||
     !Number.isInteger(value.end) ||
-    value.end < value.start ||
+    (endBlockId === undefined && value.end < value.start) ||
+    (endBlockId !== undefined && !BLOCK_ID.test(endBlockId)) ||
     typeof value.quote !== "string" ||
     value.quote.length > 400
   ) {
@@ -208,6 +213,9 @@ const target = (value: unknown): CommentTarget => {
   return {
     type: value.type,
     ...identity,
+    ...(endBlockId === undefined || endBlockId === value.blockId
+      ? {}
+      : { endBlockId }),
     start: value.start,
     end: value.end,
     quote: value.quote,

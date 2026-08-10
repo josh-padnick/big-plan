@@ -647,7 +647,10 @@ test("should preserve a text selection while its compact composer is open", asyn
   await page.evaluate(() => localStorage.clear());
   await page.reload();
 
-  const block = page.locator("[data-block-kind='paragraph']").first();
+  const block = page
+    .locator("[data-slide] [data-block-kind='paragraph']")
+    .first();
+  await block.scrollIntoViewIfNeeded();
   const selected = await block.evaluate((element) => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     const text = walker.nextNode();
@@ -703,6 +706,31 @@ test("should preserve a text selection while its compact composer is open", asyn
   const rail = page.getByRole("complementary", { name: "Feedback" });
   await expect(rail.locator("code")).toHaveText("leaseOwner");
   const railCard = rail.locator(".review-staged-card").first();
+  const owningSlide = block.locator("xpath=ancestor::*[@data-slide][1]");
+  await expect(owningSlide).toHaveAttribute("data-review-has-comment", "");
+  await expect(block).not.toHaveAttribute("data-review-has-comment", "");
+  await railCard.getByRole("button", { name: "Edit staged comment" }).click();
+  const editComment = railCard.getByRole("textbox", {
+    name: "Edit comment",
+  });
+  await expect(editComment).toBeFocused();
+  await page.mouse.move(20, 200);
+  await expect(owningSlide).toHaveAttribute(
+    "data-review-comment-associated",
+    "",
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          CSS as unknown as {
+            highlights?: { has(name: string): boolean };
+          }
+        ).highlights?.has("big-plan-review-selection-active"),
+      ),
+    )
+    .toBe(true);
+  await page.keyboard.press("Escape");
   const railCardTop = await railCard.evaluate(
     (node) => node.getBoundingClientRect().top,
   );
@@ -797,6 +825,135 @@ test("should preserve a text selection while its compact composer is open", asyn
   await page.keyboard.press("Enter");
   await expect(deleteDialog).not.toBeVisible();
   await expect(rail.locator(".review-staged-card")).toHaveCount(0);
+});
+
+test("should offer comments for whole-line and same-slide multi-block selections", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const slideId = await page.evaluate(() => {
+    const slide = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-slide]"),
+    ).find((candidate) => {
+      const heading = candidate.querySelector<HTMLElement>(
+        "[data-collapse-header] h2, [data-collapse-header] h3",
+      );
+      const bodyBlock = candidate.querySelector<HTMLElement>(
+        "[data-block-kind='paragraph'], [data-block-kind='list-item']",
+      );
+      return (
+        heading?.closest("[data-slide]") === candidate &&
+        bodyBlock?.closest("[data-slide]") === candidate
+      );
+    });
+    return slide?.dataset.collapseId ?? null;
+  });
+  expect(slideId).not.toBeNull();
+  const slide = page.locator(
+    `[data-slide][data-collapse-id="${slideId ?? "missing"}"]`,
+  );
+  await slide.scrollIntoViewIfNeeded();
+  const wholeHeading = await slide.evaluate((element) => {
+    const heading = element.querySelector<HTMLElement>(
+      "[data-collapse-header] h2, [data-collapse-header] h3",
+    );
+    const text =
+      heading === null
+        ? null
+        : document.createTreeWalker(heading, NodeFilter.SHOW_TEXT).nextNode();
+    if (!(text instanceof Text) || heading?.parentNode === null) return "";
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEndAfter(heading);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return selection?.toString() ?? "";
+  });
+  expect(wholeHeading.trim()).not.toBe("");
+  const chip = page.getByRole("button", { name: "Comment on selected text" });
+  await expect(chip).toBeVisible();
+
+  await page.evaluate(() => {
+    window.getSelection()?.removeAllRanges();
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  await expect(chip).toHaveCount(0);
+
+  const crossBlock = await slide.evaluate((element) => {
+    const heading = element.querySelector<HTMLElement>(
+      "[data-collapse-header] h2, [data-collapse-header] h3",
+    );
+    const endBlock = element.querySelector<HTMLElement>(
+      "[data-block-kind='paragraph'], [data-block-kind='list-item']",
+    );
+    const headingText =
+      heading === null
+        ? null
+        : document.createTreeWalker(heading, NodeFilter.SHOW_TEXT).nextNode();
+    const endText =
+      endBlock === null
+        ? null
+        : document.createTreeWalker(endBlock, NodeFilter.SHOW_TEXT).nextNode();
+    if (!(headingText instanceof Text) || !(endText instanceof Text)) {
+      return null;
+    }
+    const range = document.createRange();
+    range.setStart(headingText, 0);
+    range.setEnd(endText, Math.min(24, endText.length));
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return {
+      quote: selection?.toString() ?? "",
+      startBlockId: heading?.dataset.blockId ?? "",
+      endBlockId: endBlock?.dataset.blockId ?? "",
+      startSlide:
+        heading?.closest<HTMLElement>("[data-slide]")?.dataset.collapseId,
+      endSlide:
+        endBlock?.closest<HTMLElement>("[data-slide]")?.dataset.collapseId,
+      rect: {
+        width: range.getBoundingClientRect().width,
+        height: range.getBoundingClientRect().height,
+      },
+    };
+  });
+  expect(crossBlock).not.toBeNull();
+  expect(crossBlock?.quote.trim()).not.toBe("");
+  await expect(chip).toBeVisible();
+  await chip.click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer
+    .getByLabel("Add a comment")
+    .fill("Keep this heading and context together.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((candidate) =>
+      candidate.startsWith("big-plan:review:drafts:"),
+    );
+    return key === undefined ? null : localStorage.getItem(key);
+  });
+  expect(stored).not.toBeNull();
+  expect(JSON.parse(stored ?? "[]")[0]?.target).toMatchObject({
+    type: "selection",
+    blockId: crossBlock?.startBlockId,
+    endBlockId: crossBlock?.endBlockId,
+    quote: crossBlock?.quote,
+  });
+  await expect(slide).toHaveAttribute("data-review-has-comment", "");
+  await expect(
+    slide
+      .locator("[data-collapse-header] h2, [data-collapse-header] h3")
+      .first(),
+  ).not.toHaveAttribute("data-review-has-comment", "");
 });
 
 test("should confirm deleting every staged comment from Comments", async ({
