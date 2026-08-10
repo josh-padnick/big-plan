@@ -11,6 +11,7 @@ import type { ReviewStore } from "./store.js";
 
 const HEARTBEAT_READ_ATTEMPTS = 5;
 const HEARTBEAT_READ_RETRY_MS = 25;
+export const REVIEW_HEARTBEAT_INTERVAL_MS = 750;
 const SESSION_MAXIMUM_AGE_MS = 3_000;
 const SESSION_ID = /^[a-f0-9]{16}$/;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
@@ -35,7 +36,8 @@ export type ReviewSessionView = {
   readonly latestReviewUrl?: string;
 };
 
-export type SessionAuthorityErrorCode = "missing" | "wrong-plan" | "stopped";
+export type SessionAuthorityErrorCode =
+  "invalid" | "missing" | "wrong-plan" | "stopped";
 
 export class SessionAuthorityRejected extends Error {
   readonly code: SessionAuthorityErrorCode;
@@ -49,6 +51,15 @@ export class SessionAuthorityRejected extends Error {
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isHttpUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
 
 /** Checks one session descriptor read from the owner-only review store. */
 export const validateReviewSessionDescriptor = (
@@ -64,7 +75,7 @@ export const validateReviewSessionDescriptor = (
     typeof value.plan !== "string" ||
     value.plan === "" ||
     typeof value.url !== "string" ||
-    value.url === "" ||
+    !isHttpUrl(value.url) ||
     typeof value.port !== "number" ||
     !Number.isInteger(value.port) ||
     typeof value.pid !== "number" ||
@@ -107,7 +118,7 @@ export const activateReviewSession = async ({
 }): Promise<void> => {
   const checked = validateReviewSessionDescriptor(descriptor);
   if (checked === undefined) {
-    throw new SessionAuthorityRejected("missing");
+    throw new SessionAuthorityRejected("invalid");
   }
   await writeSessionDescriptorValue({ store, value: checked });
 };
@@ -147,9 +158,9 @@ export const reviewSessionOwnsMailbox = async ({
 }): Promise<boolean> =>
   (await readCurrentReviewSession({ store }))?.sessionId === sessionId;
 
-const waitForHeartbeatRead = async (): Promise<void> => {
+const wait = async (milliseconds: number): Promise<void> => {
   await new Promise<void>((resolve) => {
-    setTimeout(resolve, HEARTBEAT_READ_RETRY_MS);
+    setTimeout(resolve, milliseconds);
   });
 };
 
@@ -169,7 +180,7 @@ export const reviewSessionIsRunning = async ({
   for (let attempt = 0; attempt < HEARTBEAT_READ_ATTEMPTS; attempt += 1) {
     value = await readSessionHeartbeatValue(store);
     if (value !== undefined || attempt === HEARTBEAT_READ_ATTEMPTS - 1) break;
-    await waitForHeartbeatRead();
+    await wait(HEARTBEAT_READ_RETRY_MS);
   }
   if (!isRecord(value)) return false;
   const observedAtMs = now ?? Date.now();
@@ -214,15 +225,18 @@ export const liveReviewSessionForPlan = async ({
   readonly planId: string;
   readonly plan: string;
 }): Promise<ReviewSessionDescriptor> => {
-  const current = await readCurrentReviewSession({ store });
-  if (current === undefined) throw new SessionAuthorityRejected("missing");
-  if (current.planId !== planId || current.plan !== plan) {
-    throw new SessionAuthorityRejected("wrong-plan");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const value = await readSessionDescriptorValue(store);
+    if (value === undefined) throw new SessionAuthorityRejected("missing");
+    const current = validateReviewSessionDescriptor(value);
+    if (current === undefined) throw new SessionAuthorityRejected("invalid");
+    if (current.planId !== planId || current.plan !== plan) {
+      throw new SessionAuthorityRejected("wrong-plan");
+    }
+    if (await reviewSessionIsRunning({ store, sessionId: current.sessionId })) {
+      return current;
+    }
+    if (attempt === 0) await wait(REVIEW_HEARTBEAT_INTERVAL_MS);
   }
-  if (
-    !(await reviewSessionIsRunning({ store, sessionId: current.sessionId }))
-  ) {
-    throw new SessionAuthorityRejected("stopped");
-  }
-  return current;
+  throw new SessionAuthorityRejected("stopped");
 };

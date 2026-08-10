@@ -41,6 +41,7 @@ export const CommentsSurface = ({
     className="review-feedback-panel min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3"
     role="tabpanel"
     aria-labelledby="review-tab-comments"
+    tabIndex={0}
   >
     {model.drafts.length === 0 ? (
       <div className="border-b border-edge pb-4 text-sm text-muted [&_p]:m-0 [&_p+p]:mt-2">

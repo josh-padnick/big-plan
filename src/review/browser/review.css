@@ -132,9 +132,14 @@ here; all values use the document theme's closed token vocabulary.
      comment action one extra closed spacing step before the disclosure pair. */
   @media (width >= 40rem) {
     .plan-subslide-frame > [data-collapse-header] > [data-review-slide-host] {
+      --review-subslide-gutter-base: calc(
+        var(--deck-toggle-size) + var(--deck-toggle-gap)
+      );
+      --review-subslide-gutter-extra: calc(
+        var(--deck-toggle-gap) + var(--deck-toggle-gap)
+      );
       --review-slide-host-gutter: calc(
-        var(--deck-toggle-size) + var(--deck-toggle-gap) +
-          var(--deck-toggle-gap) + var(--deck-toggle-gap)
+        var(--review-subslide-gutter-base) + var(--review-subslide-gutter-extra)
       );
     }
   }

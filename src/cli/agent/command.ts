@@ -24,9 +24,11 @@ const invalidArguments = (): never => {
 const executablePath = (): string =>
   resolve(process.argv[1] ?? "bin/big-plan.mjs");
 
+const RESERVED_ACTIONS = new Set(["next", "note", "respond"]);
+
 /** Parses one public command into the review-owned work-loop action. */
 const parseAction = (args: ReadonlyArray<string>): AgentWorkLoopAction => {
-  if (args.length === 1) {
+  if (args.length === 1 && !RESERVED_ACTIONS.has(args[0] ?? "")) {
     return {
       kind: "prompt",
       planPath: args[0] ?? "",

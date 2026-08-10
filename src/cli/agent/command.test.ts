@@ -11,4 +11,14 @@ describe("agent command adapter", () => {
       message: expect.stringContaining("big-plan agent"),
     });
   });
+
+  it.each(["next", "note", "respond"])(
+    "should reject the bare reserved %s action",
+    async (action) => {
+      await expect(agentCommand([action])).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+        message: expect.stringContaining("big-plan agent"),
+      });
+    },
+  );
 });

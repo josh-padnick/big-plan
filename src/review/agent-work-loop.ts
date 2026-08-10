@@ -135,6 +135,11 @@ const readPlanSession = async (planArgument: string) => {
         "The recorded review session is not running. Start `big-plan review` for this plan first.",
       );
     }
+    if (error.code === "invalid") {
+      return fail(
+        "The recorded review session is invalid. Restart `big-plan review` for this plan.",
+      );
+    }
     return fail(
       "No live review session describes this plan. Start `big-plan review` first.",
     );
@@ -445,6 +450,10 @@ const note = async ({
   readonly planPath: string;
   readonly detail: string;
 }): Promise<Record<string, unknown>> => {
+  const message = detail.trim();
+  if (message === "" || message.length > 160) {
+    return fail("Progress must be between 1 and 160 characters");
+  }
   const session = await readPlanSession(planPath);
   const snapshot = await readAgentExchange({
     store: session.store,
@@ -467,10 +476,6 @@ const note = async ({
   const request = active ?? nextPendingAgentRequest(snapshot);
   if (request === undefined)
     return fail("There is no pending request to update");
-  const message = detail.trim();
-  if (message === "" || message.length > 160) {
-    return fail("Progress must be between 1 and 160 characters");
-  }
   await appendProgressEvent({
     store: session.store,
     event: {

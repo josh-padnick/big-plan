@@ -142,6 +142,29 @@ describe("thread projection", () => {
       }).stage,
     ).toBe("working");
   });
+
+  it("should ignore an invalid claimed timestamp when valid activity exists", () => {
+    expect(
+      projectRequestStatus({
+        request: request({ claimedAt: "not-a-timestamp" }),
+        response: undefined,
+        progressEvents: [
+          {
+            requestId: "aaaaaaaaaaaaaaaa",
+            seq: 1,
+            step: "Checking the retry state",
+            state: "live",
+            atMs: NOW,
+          },
+        ],
+        presence: { ...presence, state: "working", updatedAtMs: undefined },
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }).stage,
+    ).toBe("working");
+  });
 });
 
 describe("conversation history", () => {

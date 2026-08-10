@@ -143,10 +143,12 @@ export const projectRequestStatus = ({
   const failed = [...activity]
     .reverse()
     .find((event) => event.state === "failed");
+  const claimedAtMs =
+    request.claimedAt === undefined ? 0 : Date.parse(request.claimedAt);
   const lastSignalAtMs = Math.max(
     0,
     ...activity.map((event) => event.atMs ?? 0),
-    request.claimedAt === undefined ? 0 : Date.parse(request.claimedAt),
+    Number.isNaN(claimedAtMs) ? 0 : claimedAtMs,
     presence.requestId === request.requestId ? (presence.updatedAtMs ?? 0) : 0,
   );
   return deriveAgentStatus({

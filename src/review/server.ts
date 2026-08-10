@@ -86,6 +86,7 @@ import {
 } from "./shared/review-wire.js";
 import {
   activateReviewSession,
+  REVIEW_HEARTBEAT_INTERVAL_MS,
   refreshReviewSessionHeartbeat,
   reviewSessionOwnsMailbox,
   reviewSessionView,
@@ -93,7 +94,6 @@ import {
 
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
-const HEARTBEAT_INTERVAL_MS = 750;
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
@@ -947,7 +947,7 @@ export const startReviewRuntime = async ({
   await queueHeartbeat(true);
   const heartbeatTimer = setInterval(() => {
     void queueHeartbeat(true);
-  }, HEARTBEAT_INTERVAL_MS);
+  }, REVIEW_HEARTBEAT_INTERVAL_MS);
   heartbeatTimer.unref();
 
   let connectionWrite = Promise.resolve();
@@ -977,7 +977,7 @@ export const startReviewRuntime = async ({
   await queueConnectionCheck();
   const connectionTimer = setInterval(() => {
     void queueConnectionCheck();
-  }, HEARTBEAT_INTERVAL_MS);
+  }, REVIEW_HEARTBEAT_INTERVAL_MS);
   connectionTimer.unref();
 
   return {

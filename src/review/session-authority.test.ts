@@ -13,12 +13,17 @@ import {
   reviewSessionIsRunning,
   reviewSessionOwnsMailbox,
   reviewSessionView,
+  validateReviewSessionDescriptor,
 } from "./session-authority.js";
 import type {
   ReviewSessionDescriptor,
   SessionAuthorityRejected,
 } from "./session-authority.js";
-import { prepareStore, reviewStoreFor } from "./store.js";
+import {
+  prepareStore,
+  reviewStoreFor,
+  writeSessionDescriptorValue,
+} from "./store.js";
 
 const planId = "1111111111111111";
 
@@ -50,6 +55,52 @@ const preparedStore = async () => {
 };
 
 describe("session authority", () => {
+  it("should accept only HTTP(S) review URLs", () => {
+    const current = descriptor({
+      sessionId: "2222222222222222",
+      url: "https://example.test/review",
+    });
+    expect(validateReviewSessionDescriptor(current)).toEqual(current);
+    for (const url of [
+      "javascript:alert(1)",
+      "data:text/html,hello",
+      "file:///tmp/review.html",
+      "//example.test/review",
+    ]) {
+      expect(validateReviewSessionDescriptor({ ...current, url })).toBe(
+        undefined,
+      );
+    }
+  });
+
+  it("should distinguish an invalid descriptor from a missing one", async () => {
+    const store = await preparedStore();
+    await expect(
+      activateReviewSession({
+        store,
+        descriptor: {
+          ...descriptor({
+            sessionId: "2222222222222222",
+            url: "http://127.0.0.1:61000/",
+          }),
+          url: "file:///tmp/review.html",
+        },
+      }),
+    ).rejects.toMatchObject<Partial<SessionAuthorityRejected>>({
+      code: "invalid",
+    });
+
+    await writeSessionDescriptorValue({
+      store,
+      value: { sessionId: "not-a-session" },
+    });
+    await expect(
+      liveReviewSessionForPlan({ store, planId, plan: "/tmp/plan.mdx" }),
+    ).rejects.toMatchObject<Partial<SessionAuthorityRejected>>({
+      code: "invalid",
+    });
+  });
+
   it("should expose the current session as authoritative", async () => {
     const store = await preparedStore();
     const current = descriptor({

@@ -25,8 +25,9 @@ export const ChatSurface = ({
 }: {
   readonly model: ChatSurfaceModel;
 }) => {
+  const canSend = model.body.trim() !== "" && !model.isSending;
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    if (canSend && (event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
       model.onSend();
     }
@@ -74,7 +75,7 @@ export const ChatSurface = ({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={model.body.trim() === "" || model.isSending}
+                disabled={!canSend}
                 data-tooltip={`Send · ${model.shortcutLabel}`}
                 data-tooltip-delay="1s"
                 onClick={model.onSend}

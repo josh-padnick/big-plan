@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildFeedbackPackage } from "./feedback-package.js";
 import {
   deriveSourceRevision,
@@ -15,8 +15,8 @@ import {
 import { runAgentWorkLoopAction } from "./agent-work-loop.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { refreshReviewSessionHeartbeat } from "./session-authority.js";
 import { readProgress } from "./store.js";
+import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
 
 let runtime: ReviewRuntime;
@@ -80,16 +80,9 @@ afterAll(async () => {
 
 describe("agent work loop", () => {
   it("should tolerate a heartbeat file being replaced while the review server is live", async () => {
-    await writeFile(runtime.store.heartbeatPath, "");
-    const restored = new Promise<void>((settle, fail) => {
-      setTimeout(() => {
-        void refreshReviewSessionHeartbeat({
-          store: runtime.store,
-          sessionId: runtime.sessionId,
-          running: true,
-        }).then(settle, fail);
-      }, 25);
-    });
+    const readHeartbeat = vi
+      .spyOn(reviewStore, "readSessionHeartbeatValue")
+      .mockResolvedValueOnce(undefined);
     try {
       await expect(
         runAgentWorkLoopAction({
@@ -99,7 +92,7 @@ describe("agent work loop", () => {
         }),
       ).resolves.toMatchObject({ review: runtime.url });
     } finally {
-      await restored;
+      readHeartbeat.mockRestore();
     }
   });
 
@@ -213,6 +206,16 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should validate a progress note before reading session state", async () => {
+    await expect(
+      runAgentWorkLoopAction({
+        kind: "note",
+        planPath: "/tmp/no-review-session.mdx",
+        detail: "   ",
+      }),
+    ).rejects.toThrow(/Progress must be between 1 and 160 characters/);
+  });
+
   it("should refuse a descriptor whose review server has stopped", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-stopped-"));
     const planPath = join(directory, "plan.mdx");
