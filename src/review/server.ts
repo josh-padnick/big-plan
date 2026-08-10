@@ -41,14 +41,16 @@ import {
 } from "./comment.js";
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 import {
-  cancelAgentRequest,
   deriveSourceRevision,
   feedbackAgentRequest,
   messageAgentRequest,
   readAgentExchange,
-  removeCommentFromQueuedFeedbackRequest,
   writeAgentRequest,
 } from "./agent-exchange.js";
+import {
+  cancelAgentRequest,
+  removeCommentFromQueuedFeedbackRequest,
+} from "./request-mailbox.js";
 import {
   appendAgentConnectionEvent,
   appendProgress,
@@ -560,12 +562,16 @@ export const startReviewRuntime = async ({
         if (pending.kind === "feedback") {
           await removeCommentFromQueuedFeedbackRequest({
             store,
-            request: pending,
+            requestId: pending.requestId,
             commentId,
             now,
           });
         } else {
-          await cancelAgentRequest({ store, request: pending, now });
+          await cancelAgentRequest({
+            store,
+            requestId: pending.requestId,
+            now,
+          });
         }
       }
       await writeComments({
@@ -748,7 +754,7 @@ export const startReviewRuntime = async ({
       }
       const canceled = await cancelAgentRequest({
         store,
-        request: agentRequest,
+        requestId: agentRequest.requestId,
         now: new Date().toISOString(),
       });
       progressSeq += 1;

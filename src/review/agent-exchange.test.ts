@@ -9,8 +9,6 @@ import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./comment.js";
 import {
   AgentExchangeRejected,
-  cancelAgentRequest,
-  claimAgentRequest,
   commentsFromExchange,
   deriveSourceRevision,
   feedbackAgentRequest,
@@ -24,6 +22,7 @@ import {
 } from "./agent-exchange.js";
 import type { AgentExchangeSnapshot } from "./agent-exchange.js";
 import { buildFeedbackPackage } from "./feedback-package.js";
+import { cancelAgentRequest, claimAgentRequest } from "./request-mailbox.js";
 import { prepareStore, reviewStoreFor } from "./store.js";
 
 const sessionId = "1111111111111111";
@@ -236,13 +235,13 @@ describe("agent exchange filesystem", () => {
     await writeAgentRequest({ store, request });
     const firstClaim = await claimAgentRequest({
       store,
-      request,
+      requestId: request.requestId,
       sourceRevision: "aaaaaaaaaaaaaaaa",
       now: "2026-08-02T12:00:30.000Z",
     });
     const repeatedClaim = await claimAgentRequest({
       store,
-      request: firstClaim,
+      requestId: firstClaim.requestId,
       sourceRevision: "bbbbbbbbbbbbbbbb",
       now: "2026-08-02T12:01:00.000Z",
     });
@@ -306,7 +305,7 @@ describe("agent exchange filesystem", () => {
     await writeAgentRequest({ store, request });
     const canceled = await cancelAgentRequest({
       store,
-      request,
+      requestId: request.requestId,
       now: "2026-08-02T12:00:45.000Z",
     });
     const canceledSnapshot = await readAgentExchange({

@@ -9,7 +9,6 @@ import { AxiError } from "axi-sdk-js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { quoteShellArgument } from "../_shared/shell-argument.js";
 import {
-  claimAgentRequest,
   commentsFromExchange,
   deriveSourceRevision,
   nextPendingAgentRequest,
@@ -19,6 +18,7 @@ import {
   validateAgentResponseDraft,
   writeAgentResponse,
 } from "../../review/agent-exchange.js";
+import { claimAgentRequest } from "../../review/request-mailbox.js";
 import type {
   AgentExchangeSnapshot,
   AgentRequest,
@@ -342,7 +342,7 @@ const nextWork = async ({
   });
   request = await claimAgentRequest({
     store: session.store,
-    request,
+    requestId: request.requestId,
     sourceRevision: claimedRevision,
     now: new Date().toISOString(),
   });

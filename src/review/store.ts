@@ -526,6 +526,16 @@ export const readAgentRequestValues = async (
 ): Promise<ReadonlyArray<unknown>> =>
   readJsonDirectory(store.agentRequestDirectory);
 
+/** Reads one untrusted request value for a locked mailbox change. */
+export const readAgentRequestValue = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<unknown> =>
+  readJson(exchangePath({ directory: store.agentRequestDirectory, requestId }));
+
 /** Reads every untrusted response value for validation by the exchange module. */
 export const readAgentResponseValues = async (
   store: ReviewStore,
