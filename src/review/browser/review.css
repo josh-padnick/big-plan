@@ -98,10 +98,6 @@ here; all values use the document theme's closed token vocabulary.
     right: 0.75rem;
   }
 
-  .figure-control-bar:has([data-review-toolbar-host]) {
-    flex-direction: row;
-  }
-
   :is([data-slide], [data-quick-summary]) > [data-review-slide-host] {
     position: absolute;
     z-index: 3;

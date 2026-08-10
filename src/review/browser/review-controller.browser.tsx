@@ -493,6 +493,15 @@ const targetLabel = (
     )
     ?.textContent?.trim();
   if (slideTitle === undefined || slideTitle === "") return label;
+  const combinedSubSlideTitle =
+    slideReference === undefined
+      ? undefined
+      : slideTitle.match(/^(\d+(?:\.\d+)*)\s*\/\s*(.+)$/u);
+  const combinedReference = combinedSubSlideTitle?.[1];
+  const combinedTitle = combinedSubSlideTitle?.[2];
+  if (combinedReference === slideReference && combinedTitle !== undefined) {
+    return `${slideReference} · ${combinedTitle}`;
+  }
   return slideReference === undefined
     ? slideTitle
     : `${slideReference} · ${slideTitle}`;
@@ -818,6 +827,14 @@ const useBlockHosts = () => {
           ).append(host);
         } else {
           host.dataset.reviewAnchorHost = "";
+          const plainCodeFigure = block.parentElement?.matches(".code-figure")
+            ? block.parentElement
+            : null;
+          const plainCodeActions = plainCodeFigure?.querySelector<HTMLElement>(
+            ".figure-control-bar",
+          );
+          const plainCodeCopy =
+            plainCodeActions?.querySelector<HTMLElement>("[data-copy-code]");
           const copyControl = ownedDescendant(
             block,
             "[data-copy-source], [data-copy-code]",
@@ -834,7 +851,14 @@ const useBlockHosts = () => {
             block,
             ".decision-zone-question",
           );
-          if (copyControl !== null) {
+          if (plainCodeActions !== undefined && plainCodeActions !== null) {
+            host.dataset.reviewToolbarHost = "";
+            if (plainCodeCopy === undefined || plainCodeCopy === null) {
+              plainCodeActions.prepend(host);
+            } else {
+              plainCodeCopy.after(host);
+            }
+          } else if (copyControl !== null) {
             host.dataset.reviewToolbarHost = "";
             copyControl.before(host);
           } else if (actionGroup !== null) {
@@ -3326,13 +3350,13 @@ export const ReviewController = () => {
       {feedbackHost === null
         ? null
         : createPortal(
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 wide:gap-0.5">
               {agentHealthLabel === null ? (
                 identity !== null && agent.presence.connected ? (
                   <DelayedTooltip label="Agent session active">
                     <button
                       type="button"
-                      className="inline-flex size-[1.85rem] cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-surface focus-visible:bg-surface focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                      className="inline-flex size-11 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-surface focus-visible:bg-surface focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent wide:size-8"
                       aria-label="Agent session active"
                       onClick={() => {
                         setIsOpen(true);
@@ -3364,7 +3388,7 @@ export const ReviewController = () => {
               )}
               <button
                 type="button"
-                className="inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:bg-surface hover:text-ink hover:shadow-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-accent aria-expanded:bg-accent-wash aria-expanded:text-accent aria-expanded:shadow-raised [&>svg]:size-4"
+                className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 py-1 text-xs text-muted shadow-none hover:bg-surface hover:text-ink hover:shadow-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed aria-expanded:border-accent aria-expanded:bg-accent-wash aria-expanded:text-accent aria-expanded:shadow-raised wide:min-h-8 [&>svg]:size-4"
                 aria-expanded={isOpen}
                 aria-controls="big-plan-feedback-rail"
                 onClick={() => setIsOpen((current) => !current)}

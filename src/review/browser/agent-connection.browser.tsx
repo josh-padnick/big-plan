@@ -45,7 +45,7 @@ export const AgentHealthAlert = ({
 }) => (
   <button
     type="button"
-    className={`inline-flex min-h-[1.875rem] cursor-pointer items-center gap-1.5 border-0 bg-transparent px-1 py-1 text-xs font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-4 ${tone === "warning" ? "text-warning" : "text-danger"}`}
+    className={`inline-flex min-h-11 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-1 py-1 text-xs font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-8 [&>svg]:size-4 ${tone === "warning" ? "text-warning" : "text-danger"}`}
     aria-label={`${label} — open agent connection status`}
     onClick={onOpen}
   >

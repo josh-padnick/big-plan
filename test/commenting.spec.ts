@@ -4,6 +4,61 @@
 
 import { expect, test } from "./fixtures";
 
+test("should keep the desktop toolbar actions compact and grouped", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+
+  const feedback = page.getByRole("button", { name: "Feedback", exact: true });
+  const settings = page.getByRole("button", { name: "Open settings" });
+  const geometry = await page.evaluate(() => {
+    const feedbackButton = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Feedback",
+    );
+    const settingsButton = document.querySelector("[data-preferences-open]");
+    if (
+      !(feedbackButton instanceof HTMLButtonElement) ||
+      !(settingsButton instanceof HTMLButtonElement)
+    ) {
+      throw new Error("The toolbar actions were not rendered");
+    }
+    const feedbackRect = feedbackButton.getBoundingClientRect();
+    const settingsRect = settingsButton.getBoundingClientRect();
+    return {
+      feedbackHeight: feedbackRect.height,
+      settingsHeight: settingsRect.height,
+      settingsWidth: settingsRect.width,
+      gap: settingsRect.left - feedbackRect.right,
+    };
+  });
+
+  await expect(feedback).toBeVisible();
+  await expect(settings).toBeVisible();
+  expect(geometry.settingsHeight).toBe(geometry.feedbackHeight);
+  expect(geometry.settingsWidth).toBe(geometry.settingsHeight);
+  expect(geometry.gap).toBe(2);
+});
+
+test("should place a comment action between copy and maximize for plain code", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+
+  const figure = page.locator(".code-figure").last();
+  const toolbar = figure.locator(".figure-control-bar");
+  await figure.scrollIntoViewIfNeeded();
+  await figure.hover();
+
+  const actions = toolbar.getByRole("button");
+  await expect(actions).toHaveCount(3);
+  await expect(actions.nth(0)).toHaveAccessibleName("Copy code");
+  await expect(actions.nth(1)).toHaveAccessibleName(/Comment on/u);
+  await expect(actions.nth(2)).toHaveAccessibleName("Maximize code");
+});
+
 test("should stage and restore a slide comment through the legacy chrome", async ({
   page,
   deckViewerUrl,
@@ -599,6 +654,28 @@ test("should give sub-slide comment controls one more gutter step", async ({
   };
 
   expect((await gutter(subSlide)) - (await gutter(slide))).toBe(4);
+});
+
+test("should show a sub-slide ordinal once in its comment toolbar", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const subSlide = page.locator('[data-collapsible="subslide"]').first();
+  await subSlide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer.getByLabel("Add a comment").fill("Keep this step explicit.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  const target = page.locator(
+    "[data-review-thread-side] .review-staged-target",
+  );
+  await expect(target).toHaveText("2.1.1 · The worker");
 });
 
 test("should minimize an expanded long comment from the feedback toolbar", async ({
