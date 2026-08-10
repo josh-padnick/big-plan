@@ -39,7 +39,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(rail).toContainText("Name the operator recovery path.");
   await expect(rail).toContainText("Remove this queued comment before pickup.");
   await expect(rail).toContainText("1 · Details");
-  await expect(rail).toContainText("Comment staged locally.");
+  await expect(rail).toContainText("The agent is disconnected");
 
   await page.reload();
   await page.getByRole("button", { name: /Feedback/ }).click();
@@ -75,7 +75,7 @@ test("should restore and submit staged comments through the local review runtime
     "Clarify the failure boundary.",
   );
 
-  await expect(rail).toContainText("3 comments submitted.");
+  await expect(rail).toContainText("3 comments sent to the agent");
   await expect(
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
@@ -95,7 +95,6 @@ test("should restore and submit staged comments through the local review runtime
   await expect(rail).not.toContainText(
     "Remove this queued comment before pickup.",
   );
-  await expect(rail).toContainText("Queued comment deleted.");
   await page.getByRole("button", { name: /Feedback/ }).click();
   const blockedSummary = page.locator(
     ".review-contextual-summary[data-review-sent-thread='queued']",
@@ -220,7 +219,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(selectedTitle).toHaveCSS("text-decoration-line", "none");
   await rail
     .getByRole("button", {
-      name: "Blocked - no agent connected — view Agent tab",
+      name: "The agent is disconnected — view Agent tab",
     })
     .click();
   await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
@@ -483,6 +482,16 @@ test("should restore and submit staged comments through the local review runtime
     "Removed the ambiguous promise and tightened delivery.",
   );
   await expect(kernel).toContainText("A revised plan is ready.");
+  const changedNextStepLabels = await sentThread
+    .locator("[data-review-thread-next-steps] button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label")),
+    );
+  expect(changedNextStepLabels).toEqual([
+    "Minimize thread",
+    "Revert agent changes",
+    "Resolve comment",
+  ]);
   await kernel.getByRole("button", { name: "See changes" }).click();
   await expect(kernel).toContainText("atomically");
   const resolve = sentThread
@@ -582,6 +591,58 @@ test("should restore and submit staged comments through the local review runtime
   await replyButton.click();
   await continuedThread.getByRole("button", { name: "Cancel request" }).click();
   await expect(continuedThread).toContainText("Request canceled");
+  await rail.getByRole("button", { name: "Close feedback" }).click();
+  const canceledInline = page
+    .locator("[data-review-thread-side] [data-review-sent-thread]")
+    .filter({ hasText: "Name the operator recovery path." });
+  await canceledInline
+    .getByRole("button", { name: "1 · Details", exact: true })
+    .click();
+  await expect(
+    canceledInline.getByRole("button", {
+      name: "Expand comment: Name the operator recovery path.",
+    }),
+  ).toBeVisible();
+  await canceledInline
+    .getByRole("button", {
+      name: "Expand comment: Name the operator recovery path.",
+    })
+    .click();
+  await expect(
+    canceledInline.getByRole("button", { name: "Delete canceled comment" }),
+  ).toBeVisible();
+  await canceledInline
+    .getByRole("button", { name: "Delete canceled comment" })
+    .first()
+    .click();
+  const deleteCanceled = page.getByRole("alertdialog", {
+    name: "Delete canceled comment?",
+  });
+  await expect(deleteCanceled).toBeVisible();
+  await deleteCanceled.getByRole("button", { name: "Delete" }).click();
+  await expect(canceledInline).toHaveCount(0);
+  await stageComment(page, "Keep this draft while the runtime is offline.");
+  await page.route("**/api/agent", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "not-json",
+    }),
+  );
+  await page.getByRole("button", { name: /Feedback/ }).click();
+  await expect(
+    rail.getByText("The review server is unreachable", { exact: true }),
+  ).toBeVisible({ timeout: 6_000 });
+  await expect(
+    rail.getByRole("button", { name: "Send all comments to agent" }),
+  ).toBeDisabled();
+  await expect(
+    rail.getByRole("img", { name: "The review server is unreachable" }),
+  ).toBeVisible();
+  await expect(rail).not.toContainText(
+    "Connected to the local review runtime.",
+  );
+  await page.unroute("**/api/agent");
   await writeFile(session.plan, beforeSource, "utf8");
 });
 

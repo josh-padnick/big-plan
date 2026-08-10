@@ -1005,7 +1005,24 @@ test("should confirm deleting every staged comment from Comments", async ({
   });
   await expect(deleteAll.locator("..")).toHaveCSS("margin-top", "12px");
   await expect(deleteAll.locator("svg")).toHaveCount(1);
+  await slides
+    .first()
+    .locator("p")
+    .first()
+    .evaluate((paragraph) => {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(paragraph);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    });
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+    .not.toBe("");
   await deleteAll.click();
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+    .toBe("");
   const deleteDialog = page.getByRole("alertdialog", {
     name: "Delete all comments?",
   });

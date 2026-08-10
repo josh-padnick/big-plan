@@ -101,6 +101,7 @@ const TABLE_PRECISION_KINDS = new Set([
 type PendingDelete =
   | { readonly kind: "comment"; readonly comment: ReviewComment }
   | { readonly kind: "queued"; readonly comment: ReviewComment }
+  | { readonly kind: "canceled"; readonly comment: ReviewComment }
   | { readonly kind: "all"; readonly count: number };
 
 type RuntimeIdentity = {
@@ -1752,6 +1753,10 @@ const SentThread = ({
             ? "Working"
             : "Queued";
   const railMetadata = `${railState} ${railFreshness === "Just now" ? "just now" : railFreshness}`;
+  const canDeleteComment = canDeleteQueued || latestCanceled;
+  const deleteCommentLabel = latestCanceled
+    ? "Delete canceled comment"
+    : "Delete queued comment";
 
   const loadDiff = async () => {
     if (
@@ -1826,9 +1831,9 @@ const SentThread = ({
           }}
           onAssociate={(active) => onAssociate(active ? comment.target : null)}
         >
-          {canDeleteQueued ? (
+          {canDeleteComment ? (
             <ThreadIconButton
-              label="Delete queued comment"
+              label={deleteCommentLabel}
               icon={TRASH_2_ICON}
               onClick={onDeleteQueued}
               tone="danger"
@@ -1887,9 +1892,9 @@ const SentThread = ({
             icon={MAXIMIZE_2_ICON}
             onClick={onToggle}
           />
-          {canDeleteQueued ? (
+          {canDeleteComment ? (
             <ThreadIconButton
-              label="Delete queued comment"
+              label={deleteCommentLabel}
               icon={TRASH_2_ICON}
               onClick={onDeleteQueued}
               tone="danger"
@@ -1987,16 +1992,16 @@ const SentThread = ({
         actionsClassName="review-thread-actions"
         onJump={onJump}
         onHeaderClick={onToggle}
-        onTargetClick={onJump}
+        onTargetClick={surface === "rail" ? onJump : undefined}
       >
         <ThreadIconButton
           label="Minimize thread"
           icon={MINIMIZE_2_ICON}
           onClick={onToggle}
         />
-        {canDeleteQueued ? (
+        {canDeleteComment ? (
           <ThreadIconButton
-            label="Delete queued comment"
+            label={deleteCommentLabel}
             icon={TRASH_2_ICON}
             onClick={onDeleteQueued}
             tone="danger"
@@ -2142,18 +2147,28 @@ const SentThread = ({
                     icon={MINIMIZE_2_ICON}
                     onClick={onToggle}
                   />
-                  <ThreadIconButton
-                    label={resolved ? "Unresolve comment" : "Resolve comment"}
-                    icon={CHECK_ICON}
-                    onClick={onResolve}
-                  />
+                  {canDeleteComment ? (
+                    <ThreadIconButton
+                      label={deleteCommentLabel}
+                      icon={TRASH_2_ICON}
+                      onClick={onDeleteQueued}
+                      tone="danger"
+                    />
+                  ) : null}
                   {latestChanged === undefined ? null : (
                     <ThreadIconButton
                       label="Revert agent changes"
                       icon={ROTATE_CCW_ICON}
                       disabled
+                      tone="danger"
                     />
                   )}
+                  <ThreadIconButton
+                    label={resolved ? "Unresolve comment" : "Resolve comment"}
+                    icon={CHECK_ICON}
+                    onClick={onResolve}
+                    tone="positive"
+                  />
                 </div>
               </section>
             )}
@@ -2870,7 +2885,11 @@ export const ReviewController = () => {
       );
       if (selectedCommentId === commentId) setSelectedCommentId(null);
       setPendingDelete(null);
-      setStatus("Queued comment deleted.");
+      setStatus(
+        pendingDelete?.kind === "canceled"
+          ? "Canceled comment deleted."
+          : "Queued comment deleted.",
+      );
     } catch (error) {
       setPendingDelete(null);
       setStatus(errorMessage(error));
@@ -3535,7 +3554,10 @@ export const ReviewController = () => {
                         void cancelRequest(requestId)
                       }
                       onDeleteQueued={() =>
-                        setPendingDelete({ kind: "queued", comment })
+                        setPendingDelete({
+                          kind: thread.latestCanceled ? "canceled" : "queued",
+                          comment,
+                        })
                       }
                     />
                   );
@@ -3621,6 +3643,7 @@ export const ReviewController = () => {
                 disabled={
                   drafts.length === 0 ||
                   isSending ||
+                  currentAgentActivity.state === "offline" ||
                   runtimeSession?.authoritative === false
                 }
                 onClick={() => void sendComments(drafts)}
@@ -3636,17 +3659,34 @@ export const ReviewController = () => {
                   <div className="flex items-center justify-between gap-3">
                     <button
                       type="button"
-                      className="m-0 min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left text-xs font-semibold text-ink hover:underline hover:underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      aria-label={`${agentStatus.headline} — view Agent tab`}
+                      className="m-0 inline-flex min-w-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-left text-xs font-semibold text-ink hover:underline hover:underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      aria-label={`${currentAgentActivity.headline} — view Agent tab`}
                       onClick={() => setTab("agent")}
                     >
-                      {agentStatus.headline}
+                      {currentAgentActivity.tone === "danger" ? (
+                        <span
+                          className="inline-flex shrink-0 text-danger [&>svg]:size-3.5"
+                          role="img"
+                          aria-label={currentAgentActivity.headline}
+                        >
+                          <Icon icon={TRIANGLE_ALERT_ICON} />
+                        </span>
+                      ) : null}
+                      {currentAgentActivity.headline}
                     </button>
                     <Badge tone="secondary" size="compact">
-                      {agentStatus.label}
+                      {currentAgentActivity.state === "disconnected"
+                        ? "Offline"
+                        : currentAgentActivity.state === "stalled"
+                          ? "Warning"
+                          : currentAgentActivity.state}
                     </Badge>
                   </div>
-                  <p className="mt-1 mb-0 text-xs text-support">{status}</p>
+                  <p className="mt-1 mb-0 text-xs text-support">
+                    {currentAgentActivity.state === "working"
+                      ? currentAgentActivity.latestStep
+                      : currentAgentActivity.supporting}
+                  </p>
                 </div>
               )}
             </div>
@@ -3734,7 +3774,10 @@ export const ReviewController = () => {
                 onShowAgent={showAgentSetup}
                 onCancelRequest={(requestId) => void cancelRequest(requestId)}
                 onDeleteQueued={() =>
-                  setPendingDelete({ kind: "queued", comment })
+                  setPendingDelete({
+                    kind: thread.latestCanceled ? "canceled" : "queued",
+                    comment,
+                  })
                 }
               />
             );
@@ -3811,16 +3854,20 @@ export const ReviewController = () => {
         title={
           pendingDelete?.kind === "all"
             ? "Delete all comments?"
-            : pendingDelete?.kind === "queued"
-              ? "Delete queued comment?"
-              : "Delete comment?"
+            : pendingDelete?.kind === "canceled"
+              ? "Delete canceled comment?"
+              : pendingDelete?.kind === "queued"
+                ? "Delete queued comment?"
+                : "Delete comment?"
         }
         description={
           pendingDelete?.kind === "all"
             ? `This permanently removes all ${pendingDelete.count} staged ${pendingDelete.count === 1 ? "comment" : "comments"}. This action cannot be undone.`
-            : pendingDelete?.kind === "queued"
-              ? "This removes the comment before the agent picks it up. This action cannot be undone."
-              : "This permanently removes your staged comment. This action cannot be undone."
+            : pendingDelete?.kind === "canceled"
+              ? "This permanently removes the canceled comment and its thread. This action cannot be undone."
+              : pendingDelete?.kind === "queued"
+                ? "This removes the comment before the agent picks it up. This action cannot be undone."
+                : "This permanently removes your staged comment. This action cannot be undone."
         }
         actionLabel={pendingDelete?.kind === "all" ? "Delete all" : "Delete"}
         onCancel={() => setPendingDelete(null)}
@@ -3829,7 +3876,10 @@ export const ReviewController = () => {
             deleteDraft(pendingDelete.comment.id);
           } else if (pendingDelete?.kind === "all") {
             deleteAllDrafts();
-          } else if (pendingDelete?.kind === "queued") {
+          } else if (
+            pendingDelete?.kind === "queued" ||
+            pendingDelete?.kind === "canceled"
+          ) {
             void deleteQueuedComment(pendingDelete.comment.id);
           }
         }}

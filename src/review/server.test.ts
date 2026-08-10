@@ -583,6 +583,61 @@ describe("review runtime feedback", () => {
       comments: [{ id: "b2b2b2b2" }],
     });
   });
+
+  it("should delete a comment after its request is canceled", async () => {
+    const comment = {
+      id: "c3c3c3c3",
+      body: "Delete this canceled comment.",
+      target: { type: "document" },
+    };
+    expect(
+      (
+        await call({
+          path: "/api/feedback",
+          method: "POST",
+          body: { comments: [comment] },
+        })
+      ).status,
+    ).toBe(200);
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const request = exchange.requests.find(
+      (candidate) =>
+        candidate.kind === "feedback" &&
+        candidate.comments.some((item) => item.id === comment.id),
+    );
+    if (request === undefined) throw new Error("The request was not stored");
+    expect(
+      (
+        await call({
+          path: "/api/agent-cancel",
+          method: "POST",
+          body: { requestId: request.requestId },
+        })
+      ).status,
+    ).toBe(200);
+
+    expect(
+      (
+        await call({
+          path: "/api/comments-delete",
+          method: "POST",
+          body: { commentId: comment.id },
+        })
+      ).status,
+    ).toBe(200);
+    const snapshot: unknown = await (
+      await call({ path: "/api/drafts" })
+    ).json();
+    expect(snapshot).not.toMatchObject({
+      sent: expect.arrayContaining([
+        expect.objectContaining({ id: comment.id }),
+      ]),
+    });
+  });
 });
 
 describe("review runtime shutdown", () => {

@@ -207,6 +207,7 @@ export const AlertDialog = ({
   useLayoutEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
+    window.getSelection()?.removeAllRanges();
     dialogRef.current?.focus();
     return () => {
       previousFocus?.focus();

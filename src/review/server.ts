@@ -503,34 +503,45 @@ export const startReviewRuntime = async ({
             : [],
         ),
       );
-      if (answeredRequestIds.size > 0) {
+      const commentRequests = exchange.requests.filter(
+        (candidate) =>
+          (candidate.kind === "feedback" &&
+            candidate.comments.some((comment) => comment.id === commentId)) ||
+          (candidate.kind === "reply" && candidate.commentId === commentId),
+      );
+      const hasCanceledRequest = commentRequests.some(
+        (candidate) => candidate.canceledAt !== undefined,
+      );
+      if (answeredRequestIds.size > 0 && !hasCanceledRequest) {
         refuse({
           response,
           status: 409,
-          reason: "Only a comment still waiting in the queue can be deleted",
+          reason:
+            "Only a queued or canceled comment can be deleted from the review",
         });
         return;
       }
-      const pendingRequests = exchange.requests.filter(
+      const pendingRequests = commentRequests.filter(
         (candidate) =>
-          candidate.canceledAt === undefined &&
           !exchange.responses.some(
             (response) => response.requestId === candidate.requestId,
-          ) &&
-          ((candidate.kind === "feedback" &&
-            candidate.comments.some((comment) => comment.id === commentId)) ||
-            (candidate.kind === "reply" && candidate.commentId === commentId)),
+          ),
       );
       if (pendingRequests.length === 0) {
         refuse({
           response,
           status: 409,
-          reason: "Only a comment still waiting in the queue can be deleted",
+          reason:
+            "Only a queued or canceled comment can be deleted from the review",
         });
         return;
       }
       if (
-        pendingRequests.some((candidate) => candidate.claimedAt !== undefined)
+        pendingRequests.some(
+          (candidate) =>
+            candidate.canceledAt === undefined &&
+            candidate.claimedAt !== undefined,
+        )
       ) {
         refuse({
           response,
@@ -541,6 +552,7 @@ export const startReviewRuntime = async ({
       }
       const now = new Date().toISOString();
       for (const pending of pendingRequests) {
+        if (pending.canceledAt !== undefined) continue;
         if (pending.kind === "feedback") {
           await removeCommentFromQueuedFeedbackRequest({
             store,
