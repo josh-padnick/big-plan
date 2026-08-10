@@ -94,6 +94,7 @@ import {
 
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
+const SHUTDOWN_GRACE_MS = 100;
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
@@ -340,14 +341,14 @@ export const startReviewRuntime = async ({
 
   const handleApi = async ({
     route,
-    request,
     response,
     query,
+    body,
   }: {
     readonly route: Route;
-    readonly request: IncomingMessage;
     readonly response: ServerResponse;
     readonly query: URLSearchParams;
+    readonly body?: unknown;
   }): Promise<void> => {
     if (route.path === "/api/session") {
       const sessionView = await reviewSessionView({
@@ -386,7 +387,6 @@ export const startReviewRuntime = async ({
       return;
     }
     if (route.path === "/api/drafts") {
-      const body = await readBody(request);
       const payload =
         typeof body === "object" && body !== null
           ? (body as Readonly<Record<string, unknown>>)
@@ -406,7 +406,6 @@ export const startReviewRuntime = async ({
       return;
     }
     if (route.path === "/api/feedback") {
-      const body = await readBody(request);
       const payload =
         typeof body === "object" && body !== null
           ? (body as Readonly<Record<string, unknown>>)
@@ -479,7 +478,6 @@ export const startReviewRuntime = async ({
       return;
     }
     if (route.path === "/api/comments-delete") {
-      const body = await readBody(request);
       const payload =
         typeof body === "object" && body !== null
           ? (body as Readonly<Record<string, unknown>>)
@@ -617,7 +615,6 @@ export const startReviewRuntime = async ({
       return;
     }
     if (route.path === "/api/agent-requests") {
-      const body = await readBody(request);
       const payload =
         typeof body === "object" && body !== null
           ? (body as Readonly<Record<string, unknown>>)
@@ -693,7 +690,6 @@ export const startReviewRuntime = async ({
       return;
     }
     if (route.path === "/api/agent-cancel") {
-      const body = await readBody(request);
       const payload =
         typeof body === "object" && body !== null
           ? (body as Readonly<Record<string, unknown>>)
@@ -875,12 +871,16 @@ export const startReviewRuntime = async ({
         }
       }
 
+      // A slow client may occupy its own request, but it must not hold the
+      // filesystem mutation gate while it is still streaming input.
+      const body =
+        matched.method === "GET" ? undefined : await readBody(request);
       const dispatch = () =>
         handleApi({
           route: matched,
-          request,
           response,
           query: target.searchParams,
+          body,
         });
       if (matched.method === "GET") await dispatch();
       else await exclusively(dispatch);
@@ -992,9 +992,19 @@ export const startReviewRuntime = async ({
       clearInterval(connectionTimer);
       await queueHeartbeat(false).catch(() => undefined);
       await connectionWrite.catch(() => undefined);
-      await new Promise<void>((settle) => {
+      const closed = new Promise<void>((settle) => {
         server.close(() => settle());
       });
+      server.closeIdleConnections();
+      const forceClose = setTimeout(() => {
+        server.closeAllConnections();
+      }, SHUTDOWN_GRACE_MS);
+      forceClose.unref();
+      try {
+        await closed;
+      } finally {
+        clearTimeout(forceClose);
+      }
     },
   };
 };

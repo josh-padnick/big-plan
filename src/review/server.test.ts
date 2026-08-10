@@ -105,6 +105,30 @@ const rawStatus = ({
     request.end();
   });
 
+const openStalledMutation = ({
+  target,
+  sessionToken,
+}: {
+  readonly target: ReviewRuntime;
+  readonly sessionToken: string;
+}) => {
+  const request = httpRequest({
+    host: "127.0.0.1",
+    port: target.port,
+    path: "/api/drafts",
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      "x-big-plan-review-token": sessionToken,
+      "sec-fetch-site": "same-origin",
+      origin: target.url.replace(/\/$/, ""),
+    },
+  });
+  request.on("error", () => undefined);
+  request.write("{");
+  return request;
+};
+
 describe("review runtime transport", () => {
   it("should bind loopback on an ephemeral port when it starts", () => {
     expect(runtime.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
@@ -434,6 +458,31 @@ describe("review runtime feedback", () => {
     );
   });
 
+  it("should not let a streaming body hold the mutation gate", async () => {
+    const stalled = openStalledMutation({
+      target: runtime,
+      sessionToken: token,
+    });
+    try {
+      await new Promise((settle) => setTimeout(settle, 20));
+      const result = await Promise.race([
+        call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: { drafts: [], activeDraft: "", resolvedCommentIds: [] },
+        }),
+        new Promise<"timeout">((settle) =>
+          setTimeout(() => settle("timeout"), 500),
+        ),
+      ]);
+      expect(result).not.toBe("timeout");
+      if (result === "timeout") return;
+      expect(result.status).toBe(200);
+    } finally {
+      stalled.destroy();
+    }
+  });
+
   it("should refuse empty chat and reply requests", async () => {
     for (const body of [undefined, "", "   "]) {
       const response = await call({
@@ -699,6 +748,34 @@ describe("review runtime shutdown", () => {
       await closing.close();
       await expect(fetch(closing.url)).rejects.toThrow();
     } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should force-close a stalled active request after a short grace period", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-stall-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const closing = await startReviewRuntime({ planPath });
+    const descriptor: unknown = JSON.parse(
+      await readFile(closing.store.sessionPath, "utf8"),
+    );
+    const closingToken =
+      typeof descriptor === "object" &&
+      descriptor !== null &&
+      "token" in descriptor &&
+      typeof descriptor.token === "string"
+        ? descriptor.token
+        : "";
+    const stalled = openStalledMutation({
+      target: closing,
+      sessionToken: closingToken,
+    });
+    try {
+      await new Promise((settle) => setTimeout(settle, 20));
+      await expect(closing.close()).resolves.toBeUndefined();
+    } finally {
+      stalled.destroy();
       await rm(directory, { recursive: true, force: true });
     }
   });
