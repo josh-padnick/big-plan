@@ -31,6 +31,7 @@ type AgentRequestBase = {
   readonly createdAt: string;
   readonly claimedFromRevision?: string;
   readonly claimedAt?: string;
+  readonly canceledAt?: string;
 };
 
 export type AgentFeedbackRequest = AgentRequestBase & {
@@ -237,6 +238,8 @@ const requestBase = (
       : sourceRevision(value.claimedFromRevision);
   const claimedAt =
     value.claimedAt === undefined ? undefined : timestamp(value.claimedAt);
+  const canceledAt =
+    value.canceledAt === undefined ? undefined : timestamp(value.canceledAt);
   if ((claimedFromRevision === undefined) !== (claimedAt === undefined)) {
     throw new AgentExchangeRejected(
       '"claimedFromRevision" and "claimedAt" must appear together',
@@ -252,6 +255,7 @@ const requestBase = (
     ...(claimedFromRevision === undefined
       ? {}
       : { claimedFromRevision, claimedAt }),
+    ...(canceledAt === undefined ? {} : { canceledAt }),
   };
 };
 
@@ -423,6 +427,26 @@ export const claimAgentRequest = async ({
   return claimed;
 };
 
+/** Marks one request terminal so neither pickup nor response can revive it. */
+export const cancelAgentRequest = async ({
+  store,
+  request,
+  now,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+  readonly now: string;
+}): Promise<AgentRequest> => {
+  if (request.canceledAt !== undefined) return request;
+  const canceled = validateAgentRequest({ ...request, canceledAt: now });
+  await writeAgentRequestValue({
+    store,
+    requestId: request.requestId,
+    value: canceled,
+  });
+  return canceled;
+};
+
 /** The immutable revision an agent actually saw when it claimed the work. */
 export const requestBaselineRevision = (request: AgentRequest): string =>
   request.claimedFromRevision ?? request.sourceRevision;
@@ -443,6 +467,9 @@ export const validateAgentResponseDraft = ({
   readonly currentRevision: string;
   readonly now: string;
 }): AgentResponse => {
+  if (request.canceledAt !== undefined) {
+    throw new AgentExchangeRejected("The request was canceled by the reviewer");
+  }
   if (!isRecord(value)) {
     throw new AgentExchangeRejected("An agent response must be an object");
   }
@@ -750,7 +777,10 @@ export const nextPendingAgentRequest = (
   const answered = new Set(
     snapshot.responses.map((response) => response.requestId),
   );
-  return snapshot.requests.find((request) => !answered.has(request.requestId));
+  return snapshot.requests.find(
+    (request) =>
+      request.canceledAt === undefined && !answered.has(request.requestId),
+  );
 };
 
 /** Collects the original comments needed to validate a reply response. */

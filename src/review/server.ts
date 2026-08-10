@@ -41,6 +41,7 @@ import {
 } from "./comment.js";
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 import {
+  cancelAgentRequest,
   deriveSourceRevision,
   feedbackAgentRequest,
   messageAgentRequest,
@@ -110,6 +111,7 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "POST", path: "/api/feedback" },
   { method: "GET", path: "/api/agent" },
   { method: "POST", path: "/api/agent-requests" },
+  { method: "POST", path: "/api/agent-cancel" },
   { method: "GET", path: "/api/progress" },
   { method: "GET", path: "/api/revision-diff" },
 ];
@@ -555,6 +557,57 @@ export const startReviewRuntime = async ({
           request: agentRequest,
         },
       });
+      return;
+    }
+    if (route.path === "/api/agent-cancel") {
+      const body = await readBody(request);
+      const payload =
+        typeof body === "object" && body !== null
+          ? (body as Readonly<Record<string, unknown>>)
+          : {};
+      const requestId = payload.requestId;
+      if (typeof requestId !== "string") {
+        refuse({ response, status: 400, reason: "A request id is required" });
+        return;
+      }
+      const exchange = await readAgentExchange({ store, sessionId, planId });
+      const agentRequest = exchange.requests.find(
+        (candidate) => candidate.requestId === requestId,
+      );
+      if (agentRequest === undefined) {
+        refuse({ response, status: 404, reason: "No such agent request" });
+        return;
+      }
+      if (
+        exchange.responses.some(
+          (candidate) => candidate.requestId === agentRequest.requestId,
+        )
+      ) {
+        refuse({
+          response,
+          status: 409,
+          reason: "The agent has already answered this request",
+        });
+        return;
+      }
+      const canceled = await cancelAgentRequest({
+        store,
+        request: agentRequest,
+        now: new Date().toISOString(),
+      });
+      progressSeq += 1;
+      await appendProgress({
+        store,
+        event: {
+          sessionId,
+          requestId: canceled.requestId,
+          atMs: Date.now(),
+          seq: progressSeq,
+          step: "Request canceled by reviewer",
+          state: "done",
+        },
+      });
+      sendJson({ response, status: 200, value: { request: canceled } });
       return;
     }
     if (route.path === "/api/revision-diff") {

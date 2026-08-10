@@ -154,6 +154,8 @@ test("should restore and submit staged comments through the local review runtime
   await rail.getByRole("tab", { name: "Comments" }).click();
   await expect(reply).toBeVisible();
   await selectedTitle.click();
+  await expect(reply).toBeVisible();
+  await selectedThread.getByRole("button", { name: "Minimize thread" }).click();
   await expect(
     selectedThread.getByRole("button", {
       name: "Expand thread: Clarify the failure boundary.",
@@ -215,27 +217,38 @@ test("should restore and submit staged comments through the local review runtime
 
   const workingGroup = rail.locator("[data-review-thread-group='working']");
   await expect(workingGroup).toBeVisible();
-  const sharedActivity = workingGroup.locator(
-    "[data-review-thread-status='working']",
-  );
-  await expect(sharedActivity).toHaveCount(1);
-  await expect(sharedActivity).toContainText("Agent is working on 2 comments");
-  await expect(sharedActivity).toContainText(
-    "Reviewing the shared feedback batch",
-  );
   const workingCards = workingGroup.locator(
     "[data-review-sent-thread='working']",
   );
   await expect(workingCards).toHaveCount(2);
+  await expect(
+    workingGroup.locator("[data-review-thread-status='working']"),
+  ).toHaveCount(0);
+  await workingCards
+    .first()
+    .getByRole("button", { name: "Expand thread", exact: true })
+    .click();
+  const threadActivity = workingCards
+    .first()
+    .locator("[data-review-thread-status='working']");
+  await expect(threadActivity).toHaveCount(1);
+  await expect(threadActivity).toContainText("Agent is working on 2 comments");
+  await expect(threadActivity).toContainText(
+    "Reviewing the shared feedback batch",
+  );
   expect(
     await workingCards
       .first()
       .evaluate((node) => getComputedStyle(node).borderTopColor),
   ).toBe(
-    await sharedActivity.evaluate(
+    await threadActivity.evaluate(
       (node) => getComputedStyle(node).borderTopColor,
     ),
   );
+  await workingCards
+    .first()
+    .getByRole("button", { name: "Minimize thread" })
+    .click();
   await rail.getByRole("tab", { name: "Agent" }).click();
   await writeAgentHeartbeat({
     store,
@@ -356,7 +369,18 @@ test("should restore and submit staged comments through the local review runtime
     "font-size",
     "14px",
   );
-  await sentThread.getByRole("button", { name: /^Expand thread:/u }).click();
+  await expect(
+    sentThread.getByRole("button", { name: "Expand thread", exact: true }),
+  ).toBeVisible();
+  await expect(
+    sentThread.getByRole("button", { name: "Revert agent changes" }),
+  ).toBeVisible();
+  await expect(
+    sentThread.getByRole("button", { name: "Resolve comment" }),
+  ).toBeVisible();
+  await sentThread
+    .getByRole("button", { name: "Expand thread", exact: true })
+    .click();
   await expect(kernel).toContainText(
     "Removed the ambiguous promise and tightened delivery.",
   );
@@ -441,4 +465,23 @@ test("should restore and submit staged comments through the local review runtime
   await expect(rail).not.toContainText(
     "Original target unavailable in this revision.",
   );
+
+  const continuedThread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: "Name the operator recovery path." });
+  await continuedThread
+    .getByRole("button", { name: "Expand thread", exact: true })
+    .click();
+  const continuedReply = continuedThread.getByPlaceholder(
+    "Reply to the agent…",
+  );
+  await continuedReply.fill("Keep the recovery steps concise.");
+  const replyButton = continuedThread.getByRole("button", { name: "Reply" });
+  await replyButton.hover();
+  await expect(
+    page.getByRole("tooltip").filter({ hasText: /Reply ·/u }),
+  ).toBeVisible();
+  await replyButton.click();
+  await continuedThread.getByRole("button", { name: "Cancel request" }).click();
+  await expect(continuedThread).toContainText("Request canceled");
 });

@@ -364,25 +364,15 @@ export const AgentConnectionPanel = ({
         onViewRequest={onViewRequest}
       />
     </section>
-    <section className="mt-3 grid gap-2 rounded-md border border-edge px-3 py-2 text-xs text-muted">
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          className={`inline-flex size-2.5 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,currentColor_34%,transparent)] ${connected ? "text-[var(--diff-add-c)]" : "text-muted"}`}
-          aria-hidden="true"
-        >
-          <span className="size-1.5 rounded-full bg-current" />
-        </span>
-        <strong className="text-ink">
-          {connected ? "Agent session connected" : "Agent session disconnected"}
-        </strong>
-        {heartbeatAt > 0 ? (
-          <span className="ml-auto">
-            Last signal {relativeSignalLabel({ now: nowMs, at: heartbeatAt })}
+    {connected ? null : (
+      <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+          <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
+            <Icon icon={CHEVRON_RIGHT_ICON} />
           </span>
-        ) : null}
-      </div>
-      {connected ? null : (
-        <>
+          Re-connect your session
+        </summary>
+        <div className="grid gap-2 border-t border-edge px-3 py-3">
           <p className="m-0">
             To reconnect this running review, paste this exact prompt into your
             coding agent:
@@ -399,9 +389,9 @@ export const AgentConnectionPanel = ({
             repository:
           </p>
           <CopyBlock value={agentCommand} label="connector command" />
-        </>
-      )}
-    </section>
+        </div>
+      </details>
+    )}
     <ConnectionLog
       connected={connected}
       heartbeatAt={heartbeatAt}

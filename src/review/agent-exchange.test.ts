@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./comment.js";
 import {
   AgentExchangeRejected,
+  cancelAgentRequest,
   claimAgentRequest,
   commentsFromExchange,
   deriveSourceRevision,
@@ -294,5 +295,45 @@ describe("agent exchange filesystem", () => {
       requests: [request],
       responses: [response],
     });
+  });
+
+  it("makes canceled work terminal for pickup and response", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-cancel-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, before);
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    await writeAgentRequest({ store, request });
+    const canceled = await cancelAgentRequest({
+      store,
+      request,
+      now: "2026-08-02T12:00:45.000Z",
+    });
+    const canceledSnapshot = await readAgentExchange({
+      store,
+      sessionId,
+      planId,
+    });
+    expect(canceled.canceledAt).toBe("2026-08-02T12:00:45.000Z");
+    expect(nextPendingAgentRequest(canceledSnapshot)).toBeUndefined();
+    expect(() =>
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "outside",
+              message: "This should never publish.",
+            },
+          ],
+        },
+        request: canceled,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set(),
+        currentRevision: deriveSourceRevision(before),
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toThrow(/canceled by the reviewer/);
   });
 });

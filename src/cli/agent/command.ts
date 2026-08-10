@@ -27,6 +27,7 @@ import {
   appendProgress,
   deriveReviewPlanId,
   prepareStore,
+  readAgentPresence,
   readProgress,
   readSessionDescriptor,
   readRevisionSnapshot,
@@ -405,10 +406,6 @@ const respond = async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const request = nextPendingAgentRequest(snapshot);
-  if (request === undefined) {
-    return fail("There is no pending agent request to answer");
-  }
   let responseDraft: unknown;
   try {
     responseDraft = JSON.parse(
@@ -416,6 +413,21 @@ const respond = async ({
     );
   } catch (error: unknown) {
     return fail(`Cannot read the response JSON: ${String(error)}`);
+  }
+  if (!isRecord(responseDraft) || typeof responseDraft.requestId !== "string") {
+    return fail("The response JSON must name its agent request");
+  }
+  const request = snapshot.requests.find(
+    (candidate) => candidate.requestId === responseDraft.requestId,
+  );
+  if (request?.canceledAt !== undefined) {
+    return fail("The reviewer canceled this agent request");
+  }
+  if (
+    request === undefined ||
+    nextPendingAgentRequest(snapshot)?.requestId !== request.requestId
+  ) {
+    return fail("The response does not answer the current pending request");
   }
   let markdown: string;
   try {
@@ -516,7 +528,20 @@ const note = async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const request = nextPendingAgentRequest(snapshot);
+  const presence = await readAgentPresence({
+    store: session.store,
+    sessionId: session.sessionId,
+  });
+  const active =
+    presence.requestId === undefined
+      ? undefined
+      : snapshot.requests.find(
+          (candidate) => candidate.requestId === presence.requestId,
+        );
+  if (active?.canceledAt !== undefined) {
+    return fail("The reviewer canceled this agent request");
+  }
+  const request = active ?? nextPendingAgentRequest(snapshot);
   if (request === undefined)
     return fail("There is no pending request to update");
   const message = detail.trim();

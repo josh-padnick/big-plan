@@ -296,6 +296,39 @@ describe("review runtime feedback", () => {
     });
   });
 
+  it("should cancel a pending request through the authenticated runtime", async () => {
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const reply = exchange.requests.find((request) => request.kind === "reply");
+    if (reply === undefined)
+      throw new Error("The reply request was not stored");
+    const response = await call({
+      path: "/api/agent-cancel",
+      method: "POST",
+      body: { requestId: reply.requestId },
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      request: {
+        requestId: reply.requestId,
+        canceledAt: expect.stringMatching(/^2026-/),
+      },
+    });
+    const canceled = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    expect(
+      canceled.requests.find(
+        (request) => request.requestId === reply.requestId,
+      ),
+    ).toMatchObject({ canceledAt: expect.any(String) });
+  });
+
   it("should expose only validated live agent exchange state", async () => {
     const answer: unknown = await (await call({ path: "/api/agent" })).json();
     expect(answer).toMatchObject({

@@ -212,12 +212,14 @@ export const RequestStatusStrip = ({
   surface,
   commentCount = 1,
   onShowAgent,
+  onCancelRequest,
 }: {
   readonly status: AgentStatus;
   readonly activity: ReadonlyArray<MessageActivity>;
   readonly surface: MessageSurface;
   readonly commentCount?: number;
   readonly onShowAgent: () => void;
+  readonly onCancelRequest?: () => void;
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const meaningful = activity
@@ -328,14 +330,15 @@ export const RequestStatusStrip = ({
           ))}
         </ol>
       ) : null}
-      <button
-        type="button"
-        className="-mx-1 justify-self-end rounded-sm px-1 text-2xs underline underline-offset-[0.16em] disabled:cursor-not-allowed disabled:opacity-50"
-        disabled
-        title="Request cancellation is not available in this review yet"
-      >
-        Cancel request
-      </button>
+      {onCancelRequest === undefined || status.stage === "answered" ? null : (
+        <button
+          type="button"
+          className="-mx-1 cursor-pointer justify-self-end rounded-sm px-1 text-2xs underline underline-offset-[0.16em] hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          onClick={onCancelRequest}
+        >
+          Cancel request
+        </button>
+      )}
     </div>
   );
 };
