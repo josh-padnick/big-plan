@@ -37,8 +37,6 @@ const PROGRESS_STATES = new Set(["waiting", "live", "done", "failed"]);
 const PROGRESS_TEXT_LIMIT = 160;
 const PROGRESS_EVENT_LIMIT = 200;
 const REVIEW_PLAN_ID_LENGTH = 16;
-const HEARTBEAT_READ_RETRY_MS = 25;
-const HEARTBEAT_READ_ATTEMPTS = 3;
 
 /** One relayed agent progress event, after checking. */
 export type ProgressEvent = {
@@ -601,14 +599,10 @@ export const writeAgentPrompt = async ({
   await chmod(store.agentPromptPath, FILE_MODE);
 };
 
-/** Reads the owner-only descriptor through the caller's validator. */
-export const readSessionDescriptor = async <Descriptor>({
-  store,
-  validate,
-}: {
-  readonly store: ReviewStore;
-  readonly validate: (value: unknown) => Descriptor;
-}): Promise<Descriptor> => validate(await readJson(store.sessionPath));
+/** Reads the untrusted current session value for the authority module. */
+export const readSessionDescriptorValue = async (
+  store: ReviewStore,
+): Promise<unknown> => readJson(store.sessionPath);
 
 /** A random identifier for one package or session. */
 export const randomId = (bytes = 8): string =>
@@ -723,75 +717,31 @@ export const appendProgressValue = async ({
   await chmod(store.progressPath, FILE_MODE);
 };
 
-/** Records the running session so a reviewer (and only they) can find it. */
-export const writeSessionDescriptor = async ({
+/** Writes one checked session value for the authority module. */
+export const writeSessionDescriptorValue = async ({
   store,
-  descriptor,
+  value,
 }: {
   readonly store: ReviewStore;
-  readonly descriptor: Readonly<Record<string, unknown>>;
+  readonly value: unknown;
 }): Promise<void> => {
-  await writeJson({ path: store.sessionPath, value: descriptor });
+  await writeJson({ path: store.sessionPath, value });
 };
 
-/** Updates the filesystem-only liveness signal coding-agent sandboxes read. */
-export const writeSessionHeartbeat = async ({
-  store,
-  sessionId,
-  running,
-  now = Date.now(),
-}: {
-  readonly store: ReviewStore;
-  readonly sessionId: string;
-  readonly running: boolean;
-  readonly now?: number;
-}): Promise<void> => {
-  await writeJson({
-    path: store.heartbeatPath,
-    value: { sessionId, running, updatedAtMs: now },
-  });
-};
+/** Reads the untrusted session heartbeat for the authority module. */
+export const readSessionHeartbeatValue = async (
+  store: ReviewStore,
+): Promise<unknown> => readJson(store.heartbeatPath);
 
-/** Checks whether the matching review runtime has refreshed its heartbeat. */
-export const sessionHeartbeatIsFresh = async ({
+/** Writes one checked session heartbeat for the authority module. */
+export const writeSessionHeartbeatValue = async ({
   store,
-  sessionId,
-  now,
-  maximumAgeMs = 3_000,
+  value,
 }: {
   readonly store: ReviewStore;
-  readonly sessionId: string;
-  readonly now?: number;
-  readonly maximumAgeMs?: number;
-}): Promise<boolean> => {
-  let value: unknown;
-  for (let attempt = 0; attempt < HEARTBEAT_READ_ATTEMPTS; attempt += 1) {
-    value = await readJson(store.heartbeatPath);
-    if (value !== undefined || attempt === HEARTBEAT_READ_ATTEMPTS - 1) {
-      break;
-    }
-    // A heartbeat rewrite briefly truncates the file before replacing its
-    // contents. Retry that unreadable instant instead of declaring a healthy
-    // loopback server dead.
-    await new Promise<void>((settle) => {
-      setTimeout(settle, HEARTBEAT_READ_RETRY_MS);
-    });
-  }
-  const observedAtMs = now ?? Date.now();
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    "sessionId" in value &&
-    value.sessionId === sessionId &&
-    "running" in value &&
-    value.running === true &&
-    "updatedAtMs" in value &&
-    typeof value.updatedAtMs === "number" &&
-    Number.isFinite(value.updatedAtMs) &&
-    observedAtMs - value.updatedAtMs >= 0 &&
-    observedAtMs - value.updatedAtMs <= maximumAgeMs
-  );
+  readonly value: unknown;
+}): Promise<void> => {
+  await writeJson({ path: store.heartbeatPath, value });
 };
 
 export type AgentPresence = {

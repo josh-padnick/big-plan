@@ -14,7 +14,8 @@ import {
 } from "./agent-exchange.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { sessionHeartbeatIsFresh, writeRevisionSnapshot } from "./store.js";
+import { reviewSessionIsRunning } from "./session-authority.js";
+import { writeRevisionSnapshot } from "./store.js";
 
 const PLAN = `# Review runtime plan
 
@@ -606,7 +607,7 @@ describe("review runtime shutdown", () => {
     try {
       await vi.advanceTimersByTimeAsync(400);
       expect(
-        await sessionHeartbeatIsFresh({
+        await reviewSessionIsRunning({
           store: replacement.store,
           sessionId: replacement.sessionId,
         }),

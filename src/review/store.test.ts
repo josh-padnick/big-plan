@@ -22,12 +22,11 @@ import {
   readResolvedCommentIds,
   readRevisionSnapshot,
   reviewStoreFor,
-  sessionHeartbeatIsFresh,
   writeActiveDraft,
   writeAgentHeartbeat,
   writeResolvedCommentIds,
   writeRevisionSnapshot,
-  writeSessionHeartbeat,
+  writeSessionHeartbeatValue,
 } from "./store.js";
 
 const created: Array<string> = [];
@@ -219,24 +218,28 @@ describe("review store creation", () => {
   });
 });
 
-describe("review store session heartbeat", () => {
+describe("review store session files", () => {
   it("should replace heartbeat snapshots without mutating an open reader", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
-    await writeSessionHeartbeat({
+    await writeSessionHeartbeatValue({
       store,
-      sessionId: "aaaaaaaaaaaaaaaa",
-      running: true,
-      now: 10_000,
+      value: {
+        sessionId: "aaaaaaaaaaaaaaaa",
+        running: true,
+        updatedAtMs: 10_000,
+      },
     });
     const previousSnapshot = await open(store.heartbeatPath, "r");
     try {
-      await writeSessionHeartbeat({
+      await writeSessionHeartbeatValue({
         store,
-        sessionId: "aaaaaaaaaaaaaaaa",
-        running: true,
-        now: 11_000,
+        value: {
+          sessionId: "aaaaaaaaaaaaaaaa",
+          running: true,
+          updatedAtMs: 11_000,
+        },
       });
       expect(JSON.parse(await previousSnapshot.readFile("utf8"))).toMatchObject(
         {
@@ -246,52 +249,6 @@ describe("review store session heartbeat", () => {
     } finally {
       await previousSnapshot.close();
     }
-  });
-
-  it("should accept only a fresh running heartbeat from the matching session", async () => {
-    const { planPath } = await temporaryPlan();
-    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
-    await prepareStore(store);
-    await writeSessionHeartbeat({
-      store,
-      sessionId: "aaaaaaaaaaaaaaaa",
-      running: true,
-      now: 10_000,
-    });
-    await expect(
-      sessionHeartbeatIsFresh({
-        store,
-        sessionId: "aaaaaaaaaaaaaaaa",
-        now: 12_000,
-      }),
-    ).resolves.toBe(true);
-    await expect(
-      sessionHeartbeatIsFresh({
-        store,
-        sessionId: "bbbbbbbbbbbbbbbb",
-        now: 12_000,
-      }),
-    ).resolves.toBe(false);
-    await expect(
-      sessionHeartbeatIsFresh({
-        store,
-        sessionId: "aaaaaaaaaaaaaaaa",
-        now: 14_000,
-      }),
-    ).resolves.toBe(false);
-    await writeSessionHeartbeat({
-      store,
-      sessionId: "aaaaaaaaaaaaaaaa",
-      running: false,
-      now: 14_000,
-    });
-    await expect(
-      sessionHeartbeatIsFresh({
-        store,
-        sessionId: "aaaaaaaaaaaaaaaa",
-        now: 14_000,
-      }),
-    ).resolves.toBe(false);
   });
 });
 

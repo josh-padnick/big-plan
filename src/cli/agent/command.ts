@@ -31,16 +31,19 @@ import {
   deriveReviewPlanId,
   prepareStore,
   readAgentPresence,
-  readSessionDescriptor,
   readRevisionSnapshot,
   reviewStoreFor,
-  sessionHeartbeatIsFresh,
   writeAgentPrompt,
   writeAgentHeartbeat,
   writeRevisionSnapshot,
 } from "../../review/store.js";
 import { renderDocument } from "../../render/render-document.js";
 import { diffRevisions } from "../../review/revision-diff.js";
+import {
+  liveReviewSessionForPlan,
+  reviewSessionIsRunning,
+  SessionAuthorityRejected,
+} from "../../review/session-authority.js";
 
 const USAGE = [
   "Usage:",
@@ -71,41 +74,6 @@ const pickupProgress = (
     return { step: "Reviewing feedback", detail: "Whole plan" };
   }
   return { step: "Reviewing feedback", detail: comment.target.label };
-};
-
-type SessionDescriptor = {
-  readonly sessionId: string;
-  readonly planId: string;
-  readonly plan: string;
-  readonly url: string;
-  readonly pid: number;
-  readonly token: string;
-};
-
-const sessionDescriptor = (value: unknown): SessionDescriptor => {
-  if (
-    !isRecord(value) ||
-    typeof value.sessionId !== "string" ||
-    typeof value.planId !== "string" ||
-    typeof value.plan !== "string" ||
-    typeof value.url !== "string" ||
-    typeof value.pid !== "number" ||
-    !Number.isInteger(value.pid) ||
-    typeof value.token !== "string" ||
-    !/^[A-Za-z0-9_-]{43}$/.test(value.token)
-  ) {
-    return fail(
-      "No live review session describes this plan. Start `big-plan review` first.",
-    );
-  }
-  return {
-    sessionId: value.sessionId,
-    planId: value.planId,
-    plan: value.plan,
-    url: value.url,
-    pid: value.pid,
-    token: value.token,
-  };
 };
 
 const wait = (milliseconds: number): Promise<void> =>
@@ -209,27 +177,27 @@ const readPlanSession = async (planArgument: string) => {
   const planId = deriveReviewPlanId({ planPath });
   const store = reviewStoreFor({ planPath, planId });
   await prepareStore(store);
-  const descriptor = await readSessionDescriptor({
-    store,
-    validate: sessionDescriptor,
-  });
-  if (
-    descriptor.plan !== planPath ||
-    descriptor.planId !== planId ||
-    typeof descriptor.sessionId !== "string"
-  ) {
-    return fail(
-      "The live review session belongs to a different plan. Restart `big-plan review` for this source.",
-    );
-  }
-  if (
-    !(await sessionHeartbeatIsFresh({
+  let descriptor;
+  try {
+    descriptor = await liveReviewSessionForPlan({
       store,
-      sessionId: descriptor.sessionId,
-    }))
-  ) {
+      planId,
+      plan: planPath,
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof SessionAuthorityRejected)) throw error;
+    if (error.code === "wrong-plan") {
+      return fail(
+        "The live review session belongs to a different plan. Restart `big-plan review` for this source.",
+      );
+    }
+    if (error.code === "stopped") {
+      return fail(
+        "The recorded review session is not running. Start `big-plan review` for this plan first.",
+      );
+    }
     return fail(
-      "The recorded review session is not running. Start `big-plan review` for this plan first.",
+      "No live review session describes this plan. Start `big-plan review` first.",
     );
   }
   return {
@@ -310,7 +278,7 @@ const nextWork = async ({
       state: "waiting",
     });
     if (
-      !(await sessionHeartbeatIsFresh({
+      !(await reviewSessionIsRunning({
         store: session.store,
         sessionId: session.sessionId,
       }))

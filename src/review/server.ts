@@ -64,42 +64,25 @@ import {
   readProgress,
   readResolvedCommentIds,
   readRevisionSnapshot,
-  readSessionDescriptor,
   reviewStoreFor,
   writeActiveDraft,
   writeComments,
   writeFeedbackPackage,
   writeResolvedCommentIds,
   writeRevisionSnapshot,
-  writeSessionDescriptor,
-  writeSessionHeartbeat,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import { diffRevisions } from "./revision-diff.js";
+import {
+  activateReviewSession,
+  refreshReviewSessionHeartbeat,
+  reviewSessionOwnsMailbox,
+  reviewSessionView,
+} from "./session-authority.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const HEARTBEAT_INTERVAL_MS = 750;
-
-type SessionReference = {
-  readonly sessionId?: string;
-  readonly url?: string;
-};
-
-/** Reads only the fields needed to fence and redirect superseded runtimes. */
-const sessionReference = (value: unknown): SessionReference => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return {};
-  }
-  return {
-    ...("sessionId" in value && typeof value.sessionId === "string"
-      ? { sessionId: value.sessionId }
-      : {}),
-    ...("url" in value && typeof value.url === "string"
-      ? { url: value.url }
-      : {}),
-  };
-};
 
 /** Quotes one trusted local path as one POSIX-shell argument. */
 const shellArgument = (value: string): string =>
@@ -358,23 +341,16 @@ export const startReviewRuntime = async ({
     readonly query: URLSearchParams;
   }): Promise<void> => {
     if (route.path === "/api/session") {
-      const currentSession = await readSessionDescriptor({
+      const sessionView = await reviewSessionView({
         store,
-        validate: sessionReference,
+        sessionId,
+        planId,
+        plan: resolvedPlanPath,
       });
-      const authoritative = currentSession.sessionId === sessionId;
       sendJson({
         response,
         status: 200,
-        value: {
-          sessionId,
-          planId,
-          plan: resolvedPlanPath,
-          authoritative,
-          ...(authoritative || currentSession.url === undefined
-            ? {}
-            : { latestReviewUrl: currentSession.url }),
-        },
+        value: sessionView,
       });
       return;
     }
@@ -868,11 +844,7 @@ export const startReviewRuntime = async ({
       }
 
       if (matched.method !== "GET") {
-        const currentSession = await readSessionDescriptor({
-          store,
-          validate: sessionReference,
-        });
-        if (currentSession.sessionId !== sessionId) {
+        if (!(await reviewSessionOwnsMailbox({ store, sessionId }))) {
           refuse({
             response,
             status: 409,
@@ -915,7 +887,7 @@ export const startReviewRuntime = async ({
     typeof address === "object" && address !== null ? address.port : 0;
   const url = `http://127.0.0.1:${port}/`;
 
-  await writeSessionDescriptor({
+  await activateReviewSession({
     store,
     descriptor: {
       version: 1,
@@ -937,12 +909,11 @@ export const startReviewRuntime = async ({
     heartbeatWrite = heartbeatWrite
       .catch(() => undefined)
       .then(async () => {
-        const currentSessionId = await readSessionDescriptor({
+        await refreshReviewSessionHeartbeat({
           store,
-          validate: sessionReference,
+          sessionId,
+          running,
         });
-        if (currentSessionId.sessionId !== sessionId) return;
-        await writeSessionHeartbeat({ store, sessionId, running });
       })
       .catch((error: unknown) => {
         if (heartbeatFailureReported) return;

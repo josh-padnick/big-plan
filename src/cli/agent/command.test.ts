@@ -15,7 +15,8 @@ import {
 } from "../../review/agent-exchange.js";
 import { startReviewRuntime } from "../../review/server.js";
 import type { ReviewRuntime } from "../../review/server.js";
-import { readProgress, writeSessionHeartbeat } from "../../review/store.js";
+import { refreshReviewSessionHeartbeat } from "../../review/session-authority.js";
+import { readProgress } from "../../review/store.js";
 import { renderDocument } from "../../render/render-document.js";
 import { agentCommand } from "./command.js";
 
@@ -80,7 +81,7 @@ describe("agent command", () => {
     await writeFile(runtime.store.heartbeatPath, "");
     const restored = new Promise<void>((settle, fail) => {
       setTimeout(() => {
-        void writeSessionHeartbeat({
+        void refreshReviewSessionHeartbeat({
           store: runtime.store,
           sessionId: runtime.sessionId,
           running: true,
