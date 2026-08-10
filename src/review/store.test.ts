@@ -306,24 +306,54 @@ describe("review store progress relay", () => {
 
   it("should relay an event that belongs to the running session", async () => {
     const store = await storeWithProgress(
-      line({ sessionId: "s1", seq: 1, step: "Revising", state: "live" }),
+      line({
+        sessionId: "s1",
+        seq: 1,
+        stepCode: "agent-note",
+        step: "Revising",
+        state: "live",
+      }),
     );
     expect(await readProgress({ store, sessionId: "s1" })).toEqual([
-      { sessionId: "s1", seq: 1, step: "Revising", state: "live" },
+      {
+        sessionId: "s1",
+        seq: 1,
+        stepCode: "agent-note",
+        step: "Revising",
+        state: "live",
+      },
     ]);
   });
 
   it("should drop an event written for another session", async () => {
     const store = await storeWithProgress(
-      line({ sessionId: "other", seq: 1, step: "Ready", state: "done" }),
+      line({
+        sessionId: "other",
+        seq: 1,
+        stepCode: "agent-note",
+        step: "Ready",
+        state: "done",
+      }),
     );
     expect(await readProgress({ store, sessionId: "s1" })).toEqual([]);
   });
 
   it("should drop an event that does not advance the sequence", async () => {
     const store = await storeWithProgress(
-      line({ sessionId: "s1", seq: 2, step: "Revising", state: "live" }) +
-        line({ sessionId: "s1", seq: 1, step: "Replayed", state: "done" }),
+      line({
+        sessionId: "s1",
+        seq: 2,
+        stepCode: "agent-note",
+        step: "Revising",
+        state: "live",
+      }) +
+        line({
+          sessionId: "s1",
+          seq: 1,
+          stepCode: "agent-note",
+          step: "Replayed",
+          state: "done",
+        }),
     );
     const events = await readProgress({ store, sessionId: "s1" });
     expect(events.map((event) => event.step)).toEqual(["Revising"]);
@@ -334,6 +364,7 @@ describe("review store progress relay", () => {
       line({
         sessionId: "s1",
         seq: 1,
+        stepCode: "agent-note",
         step: "Redirect",
         state: "navigate:https://evil.example.com",
       }),
@@ -344,7 +375,13 @@ describe("review store progress relay", () => {
   it("should survive a hand-edited status file rather than failing the session", async () => {
     const store = await storeWithProgress(
       "not json at all\n" +
-        line({ sessionId: "s1", seq: 1, step: "Revising", state: "live" }),
+        line({
+          sessionId: "s1",
+          seq: 1,
+          stepCode: "agent-note",
+          step: "Revising",
+          state: "live",
+        }),
     );
     expect(await readProgress({ store, sessionId: "s1" })).toHaveLength(1);
   });
@@ -354,6 +391,7 @@ describe("review store progress relay", () => {
       line({
         sessionId: "s1",
         seq: 1,
+        stepCode: "agent-note",
         step: "x".repeat(500),
         state: "live",
       }),
@@ -371,6 +409,7 @@ describe("review store progress relay", () => {
       event: {
         sessionId: "s1",
         seq: 1,
+        stepCode: "agent-note",
         step: "Feedback package received",
         state: "done",
       },
@@ -380,6 +419,7 @@ describe("review store progress relay", () => {
       event: {
         sessionId: "s1",
         seq: 2,
+        stepCode: "agent-note",
         step: "Agent started",
         state: "live",
       },
@@ -397,6 +437,7 @@ describe("review store progress relay", () => {
         line({
           sessionId: "s1",
           seq: index + 1,
+          stepCode: "agent-note",
           step: `Step ${index + 1}`,
           state: "live",
         }),
