@@ -18,11 +18,13 @@ import {
   appendFile,
   chmod,
   mkdir,
+  rename,
   readdir,
   readFile,
+  unlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import type { ReviewComment } from "./comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 
@@ -222,10 +224,24 @@ const writeJson = async ({
   readonly path: string;
   readonly value: unknown;
 }): Promise<void> => {
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, {
-    mode: FILE_MODE,
-  });
-  await chmod(path, FILE_MODE);
+  const temporaryPath = join(
+    dirname(path),
+    `.${basename(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`,
+  );
+  try {
+    // Readers either retain the previous complete snapshot or open the next
+    // complete snapshot; they never observe writeFile's truncate-and-rewrite
+    // window and mistake a live review or agent for a disconnected one.
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
+      flag: "wx",
+      mode: FILE_MODE,
+    });
+    await chmod(temporaryPath, FILE_MODE);
+    await rename(temporaryPath, path);
+  } catch (error: unknown) {
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
 };
 
 /** Reads a stored comment list back through the caller's own validator. */

@@ -1,6 +1,7 @@
 import {
   chmod,
   mkdtemp,
+  open,
   readFile,
   rm,
   stat,
@@ -219,6 +220,34 @@ describe("review store creation", () => {
 });
 
 describe("review store session heartbeat", () => {
+  it("should replace heartbeat snapshots without mutating an open reader", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeSessionHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      running: true,
+      now: 10_000,
+    });
+    const previousSnapshot = await open(store.heartbeatPath, "r");
+    try {
+      await writeSessionHeartbeat({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        running: true,
+        now: 11_000,
+      });
+      expect(JSON.parse(await previousSnapshot.readFile("utf8"))).toMatchObject(
+        {
+          updatedAtMs: 10_000,
+        },
+      );
+    } finally {
+      await previousSnapshot.close();
+    }
+  });
+
   it("should accept only a fresh running heartbeat from the matching session", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
