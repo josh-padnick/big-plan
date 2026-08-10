@@ -25,7 +25,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import type { ReviewComment } from "./comment.js";
+import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 
 const DIRECTORY_MODE = 0o700;

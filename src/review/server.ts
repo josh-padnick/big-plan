@@ -32,13 +32,13 @@ import {
   renderDocument,
   MarkdownDiagnosticsError,
 } from "../render/render-document.js";
-import type { BlockMapEntry, ReviewComment } from "./comment.js";
+import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
 import {
   CommentRejected,
   validateActiveDraft,
   validateComments,
   validateResolvedCommentIds,
-} from "./comment.js";
+} from "./shared/comment.js";
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 import {
   deriveSourceRevision,

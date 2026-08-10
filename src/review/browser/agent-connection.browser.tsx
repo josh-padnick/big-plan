@@ -7,8 +7,11 @@ import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
-import type { CurrentAgentActivity } from "../agent-activity.js";
-import { compactDurationLabel, relativeSignalLabel } from "../time-label.js";
+import type { CurrentAgentActivity } from "../shared/agent-status.js";
+import {
+  compactDurationLabel,
+  relativeSignalLabel,
+} from "../shared/time-label.js";
 import { Icon } from "./icon.browser.js";
 
 export type BrowserConnectionEvent = {

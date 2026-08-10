@@ -4,7 +4,7 @@
 // filenames, replay rules, response completeness, or source-revision checks.
 
 import { createHash } from "node:crypto";
-import type { CommentTarget, ReviewComment } from "./comment.js";
+import type { CommentTarget, ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
   readAgentRequestValues,

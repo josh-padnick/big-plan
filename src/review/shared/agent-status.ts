@@ -1,8 +1,8 @@
-// Owns the one replace-in-place projection of the serialized coding-agent
-// queue. It derives presentation facts from exchange, progress, and presence;
-// it persists nothing and knows nothing about the browser.
+// Owns the status vocabulary for review-wide agent activity and one request.
+// It derives presentation facts from runtime input. It stores no state and
+// does not depend on the browser or Node.
 
-export const AGENT_ACTIVITY_STALL_MS = 90_000;
+export const AGENT_STALL_MS = 90_000;
 
 export type AgentActivityRequest = {
   readonly requestId: string;
@@ -220,7 +220,7 @@ export const deriveCurrentAgentActivity = ({
     heartbeatAt,
     Date.parse(request.claimedAt ?? request.createdAt) || 0,
   );
-  if (now - observedAt > AGENT_ACTIVITY_STALL_MS) {
+  if (now - observedAt > AGENT_STALL_MS) {
     return {
       ...facts,
       state: "stalled",
@@ -238,5 +238,138 @@ export const deriveCurrentAgentActivity = ({
     headline: requestHeadline(request),
     latestStep: latest?.step ?? "Picked up by the agent",
     updatedAtMs: observedAt,
+  };
+};
+
+export type AgentStatusStage =
+  | "idle"
+  | "waiting"
+  | "blocked"
+  | "working"
+  | "stalled"
+  | "failed"
+  | "offline"
+  | "answered";
+
+export type AgentStatus = {
+  readonly stage: AgentStatusStage;
+  readonly label: string;
+  readonly headline: string;
+  readonly detail: string;
+  readonly tone: "neutral" | "positive" | "warning" | "danger";
+};
+
+export type AgentStatusInput = {
+  readonly runtime: "static" | "online" | "offline";
+  readonly request: "none" | "pending" | "answered";
+  readonly agentConnected: boolean;
+  readonly pickedUp: boolean;
+  readonly sessionBusy?: boolean;
+  readonly surface?: "thread" | "chat";
+  readonly lastAgentSignalAtMs?: number;
+  readonly failure?: string;
+  readonly nowMs: number;
+};
+
+/** Derives status from observable runtime, request, and agent-channel facts. */
+export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
+  if (input.runtime === "static") {
+    return {
+      stage: "idle",
+      label: "Offline file",
+      headline: "Open the local review runtime to contact the agent",
+      detail: "Your browser drafts remain safe on this device.",
+      tone: "neutral",
+    };
+  }
+  if (input.runtime === "offline") {
+    return {
+      stage: "offline",
+      label: "Runtime offline",
+      headline: "The review server is unreachable",
+      detail:
+        "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
+      tone: "danger",
+    };
+  }
+  if (input.failure !== undefined) {
+    return {
+      stage: "failed",
+      label: "Needs attention",
+      headline: "The agent reported a problem",
+      detail: input.failure,
+      tone: "danger",
+    };
+  }
+  if (input.request === "answered") {
+    return {
+      stage: "answered",
+      label: "Response ready",
+      headline: "The agent has answered",
+      detail: "Review the response and continue the thread if needed.",
+      tone: "positive",
+    };
+  }
+  if (input.request === "none") {
+    return {
+      stage: "idle",
+      label: input.agentConnected ? "Agent connected" : "No agent connected",
+      headline: input.agentConnected
+        ? "Ready for feedback"
+        : "Connect a coding agent when you are ready to send",
+      detail: input.agentConnected
+        ? "The agent is waiting for a review request."
+        : "Draft comments remain local until you send them.",
+      tone: input.agentConnected ? "positive" : "neutral",
+    };
+  }
+  if (!input.pickedUp) {
+    return input.agentConnected
+      ? {
+          stage: "waiting",
+          label: "Waiting",
+          headline:
+            input.sessionBusy === true
+              ? "Waiting - the agent is working on another request"
+              : "Waiting for an agent",
+          detail: "",
+          tone: "neutral",
+        }
+      : {
+          stage: "blocked",
+          label: "Blocked",
+          headline: "Blocked - no agent connected",
+          detail:
+            "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.",
+          tone: "warning",
+        };
+  }
+  const quietFor =
+    input.lastAgentSignalAtMs === undefined
+      ? null
+      : Math.max(0, input.nowMs - input.lastAgentSignalAtMs);
+  if (quietFor === null || quietFor > AGENT_STALL_MS) {
+    return {
+      stage: "stalled",
+      label: "Working",
+      headline:
+        quietFor === null
+          ? "No progress reported yet"
+          : `No progress for ${Math.max(1, Math.round(quietFor / 60_000))}m`,
+      detail:
+        (input.agentConnected ? "The agent session is still connected. " : "") +
+        stalledHint,
+      tone: "warning",
+    };
+  }
+  return {
+    stage: "working",
+    label: "Agent working",
+    headline:
+      input.surface === "chat"
+        ? "Agent is working on your feedback"
+        : "Agent is working on this",
+    detail: "",
+    tone: "positive",
   };
 };

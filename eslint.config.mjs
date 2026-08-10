@@ -199,13 +199,37 @@ export default tseslint.config(
         ],
         mayImport: ["markdown", "shell", "page"],
       },
+      // Browser-safe review models. These modules must stay usable by both the
+      // browser island and the local review runtime.
+      reviewShared: {
+        files: ["src/review/shared/**/*.ts", "src/review/shared/**/*.tsx"],
+        imports: ["**/review/shared/**"],
+        mayImport: [],
+        blockedImports: ["node:*"],
+        blockedImportRegex: ["^\\.\\./"],
+      },
+      // The browser island may use only browser-owned presentation code,
+      // browser-safe review models, and framework-neutral icons.
+      reviewBrowser: {
+        files: ["src/review/browser/**/*.ts", "src/review/browser/**/*.tsx"],
+        imports: ["**/review/browser/**"],
+        mayImport: ["icons", "reviewShared"],
+        blockedImports: ["node:*"],
+        blockedImportRegex: ["^\\.\\./(?!\\.|shared/)"],
+      },
       // The local review runtime: loopback transport, session identity, the
       // reviewer's on-disk state, and the feedback package. It renders through
       // the composer's public entry points and owns no command I/O.
       review: {
         files: ["src/review/**/*.ts", "src/review/**/*.tsx"],
+        ignores: [
+          "src/review/browser/**/*.ts",
+          "src/review/browser/**/*.tsx",
+          "src/review/shared/**/*.ts",
+          "src/review/shared/**/*.tsx",
+        ],
         imports: ["**/review/**"],
-        mayImport: ["composer", "icons", "planLint"],
+        mayImport: ["composer", "icons", "planLint", "reviewShared"],
       },
       cli: {
         files: ["src/cli/**/*.ts"],
@@ -223,8 +247,8 @@ export default tseslint.config(
       ["page", "ui"],
       ["components"],
       ["markdown", "shell"],
-      ["composer"],
-      ["review"],
+      ["composer", "reviewShared"],
+      ["review", "reviewBrowser"],
       ["cli"],
     ];
 
@@ -310,7 +334,13 @@ export default tseslint.config(
 
     return names
       .map((name) => {
-        const { files, ignores, mayImport } = LAYERS[name];
+        const {
+          files,
+          ignores,
+          mayImport,
+          blockedImports = [],
+          blockedImportRegex = [],
+        } = LAYERS[name];
         const banned = names.filter(
           (other) => other !== name && !mayImport.includes(other),
         );
@@ -329,6 +359,18 @@ export default tseslint.config(
                     group: banned.flatMap((other) => LAYERS[other].imports),
                     message: `Layering: ${name} may import only [${mayImport.join(", ") || "nothing project-local"}]. Information flows one way; grant access via mayImport in eslint.config.mjs only if the flow stays downward.`,
                   },
+                  ...(blockedImports.length === 0
+                    ? []
+                    : [
+                        {
+                          group: blockedImports,
+                          message: `Layering: ${name} must remain browser-safe and may not import Node built-ins.`,
+                        },
+                      ]),
+                  ...blockedImportRegex.map((regex) => ({
+                    regex,
+                    message: `Layering: ${name} may not import server-owned review modules.`,
+                  })),
                 ],
               },
             ],

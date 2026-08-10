@@ -8,7 +8,7 @@
 // comment bodies inside a blockquote, quoted plan text inside a fence - so no
 // note can forge a heading and read as though the runtime wrote it.
 
-import type { ReviewComment } from "./comment.js";
+import type { ReviewComment } from "./shared/comment.js";
 
 export type FeedbackPackage = {
   readonly version: 1;

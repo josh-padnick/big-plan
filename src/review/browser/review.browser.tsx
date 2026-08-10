@@ -29,12 +29,13 @@ import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import {
   deriveAgentHealthLabel,
+  deriveAgentStatus,
   deriveCurrentAgentActivity,
-} from "../agent-activity.js";
-import type { CommentTarget, ReviewComment } from "../comment.js";
-import { parseCommentMarkdownLine } from "../comment-markdown.js";
-import { deriveAgentStatus, type AgentStatus } from "../thread-status.js";
-import { stackThreadPositions } from "../thread-layout.js";
+  type AgentStatus,
+} from "../shared/agent-status.js";
+import type { CommentTarget, ReviewComment } from "../shared/comment.js";
+import { parseCommentMarkdownLine } from "../shared/comment-markdown.js";
+import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
   AgentConnectionPanel,
   AgentHealthAlert,

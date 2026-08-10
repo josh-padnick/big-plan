@@ -6,9 +6,12 @@ import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
-import { parseMessageMarkdown, type MessageNode } from "../message-markdown.js";
-import { messageTimeLabel } from "../time-label.js";
-import type { AgentStatus } from "../thread-status.js";
+import {
+  parseMessageMarkdown,
+  type MessageNode,
+} from "../shared/message-markdown.js";
+import { messageTimeLabel } from "../shared/time-label.js";
+import type { AgentStatus } from "../shared/agent-status.js";
 import { Icon } from "./icon.browser.js";
 
 export type MessageSurface = "thread" | "chat";
