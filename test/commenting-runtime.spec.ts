@@ -136,6 +136,57 @@ test("should restore and submit staged comments through the local review runtime
     .getByText("Connection log", { exact: true })
     .locator("xpath=ancestor::summary");
   await expect(connectionLog.locator("svg")).toHaveCount(1);
+  await connectionLog.click();
+  const currentDuration = rail.locator(
+    "[data-review-connection-current] [data-review-connection-duration]",
+  );
+  await expect(currentDuration).toBeVisible();
+  await currentDuration.evaluate((node) => {
+    const values = [node.textContent ?? ""];
+    const observer = new MutationObserver(() => {
+      const value = node.textContent ?? "";
+      if (values.at(-1) !== value) values.push(value);
+    });
+    observer.observe(node, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    Object.assign(window, {
+      __bigPlanConnectionDurations: values,
+      __bigPlanConnectionDurationObserver: observer,
+    });
+  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as {
+                __bigPlanConnectionDurations: ReadonlyArray<string>;
+              }
+            ).__bigPlanConnectionDurations.length,
+        ),
+      { timeout: 3_500 },
+    )
+    .toBeGreaterThanOrEqual(3);
+  const durationValues = await page.evaluate(() => {
+    const runtime = window as unknown as {
+      __bigPlanConnectionDurations: ReadonlyArray<string>;
+      __bigPlanConnectionDurationObserver: MutationObserver;
+    };
+    runtime.__bigPlanConnectionDurationObserver.disconnect();
+    return runtime.__bigPlanConnectionDurations.slice(-3);
+  });
+  const durationSeconds = durationValues.map((value) => {
+    const hours = Number(/(\d+)h/u.exec(value)?.[1] ?? 0);
+    const minutes = Number(/(\d+)m/u.exec(value)?.[1] ?? 0);
+    const seconds = Number(/(\d+)s/u.exec(value)?.[1] ?? 0);
+    return hours * 3_600 + minutes * 60 + seconds;
+  });
+  expect(durationSeconds[1] - durationSeconds[0]).toBe(1);
+  expect(durationSeconds[2] - durationSeconds[1]).toBe(1);
   await rail.getByRole("tab", { name: "Comments" }).click();
   const selectedThread = rail
     .locator("[data-review-comment-id]")

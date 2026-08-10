@@ -2,7 +2,7 @@
 // review kernel owns polling and navigation; this module owns only the visual
 // projection and local disclosure/copy interactions.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
@@ -24,6 +24,18 @@ const Spinner = () => (
     aria-hidden="true"
   />
 );
+
+// Keep human-readable elapsed time independent from the slower network poll.
+// This component exists only while the Agent tab is mounted, so the local
+// tick cannot make the rest of the review workspace rerender every second.
+const useSecondClock = (): number => {
+  const [nowMs, setNowMs] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return nowMs;
+};
 
 export const AgentHealthAlert = ({
   label,
@@ -312,7 +324,10 @@ const ConnectionLog = ({
                           Current
                         </span>
                       ) : null}
-                      <span className="col-start-3 col-end-5 text-2xs text-muted">
+                      <span
+                        className="col-start-3 col-end-5 text-2xs text-muted"
+                        data-review-connection-duration=""
+                      >
                         {prefix}
                         {duration ?? "duration unavailable"}
                         {suffix}
@@ -341,7 +356,6 @@ export const AgentConnectionPanel = ({
   connectionLog,
   recoveryPrompt,
   agentCommand,
-  nowMs,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
@@ -350,53 +364,55 @@ export const AgentConnectionPanel = ({
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   readonly recoveryPrompt: string;
   readonly agentCommand: string;
-  readonly nowMs: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
-}) => (
-  <div className="min-w-0">
-    <section>
-      <p className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-muted">
-        Current status
-      </p>
-      <CurrentActivityCard
-        activity={activity}
-        nowMs={nowMs}
-        onViewRequest={onViewRequest}
+}) => {
+  const currentNowMs = useSecondClock();
+  return (
+    <div className="min-w-0">
+      <section>
+        <p className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-muted">
+          Current status
+        </p>
+        <CurrentActivityCard
+          activity={activity}
+          nowMs={currentNowMs}
+          onViewRequest={onViewRequest}
+        />
+      </section>
+      {connected ? null : (
+        <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+            <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
+              <Icon icon={CHEVRON_RIGHT_ICON} />
+            </span>
+            Re-connect your session
+          </summary>
+          <div className="grid gap-2 border-t border-edge px-3 py-3">
+            <p className="m-0">
+              To reconnect this running review, paste this exact prompt into
+              your coding agent:
+            </p>
+            <CopyBlock
+              value={
+                recoveryPrompt ||
+                "Ask your coding agent to reconnect to this Big Plan review and keep its feedback loop running."
+              }
+              label="recovery prompt"
+            />
+            <p className="m-0">
+              Or run this exact connector command yourself from the Big Plan
+              repository:
+            </p>
+            <CopyBlock value={agentCommand} label="connector command" />
+          </div>
+        </details>
+      )}
+      <ConnectionLog
+        connected={connected}
+        heartbeatAt={heartbeatAt}
+        events={connectionLog}
+        nowMs={currentNowMs}
       />
-    </section>
-    {connected ? null : (
-      <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-          <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
-            <Icon icon={CHEVRON_RIGHT_ICON} />
-          </span>
-          Re-connect your session
-        </summary>
-        <div className="grid gap-2 border-t border-edge px-3 py-3">
-          <p className="m-0">
-            To reconnect this running review, paste this exact prompt into your
-            coding agent:
-          </p>
-          <CopyBlock
-            value={
-              recoveryPrompt ||
-              "Ask your coding agent to reconnect to this Big Plan review and keep its feedback loop running."
-            }
-            label="recovery prompt"
-          />
-          <p className="m-0">
-            Or run this exact connector command yourself from the Big Plan
-            repository:
-          </p>
-          <CopyBlock value={agentCommand} label="connector command" />
-        </div>
-      </details>
-    )}
-    <ConnectionLog
-      connected={connected}
-      heartbeatAt={heartbeatAt}
-      events={connectionLog}
-      nowMs={nowMs}
-    />
-  </div>
-);
+    </div>
+  );
+};

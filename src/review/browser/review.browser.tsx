@@ -1285,7 +1285,7 @@ const useThreadHosts = (
   const isWide = useWide();
 
   useEffect(() => {
-    if (isOpen || !isWide) {
+    if (!isWide) {
       setHosts(new Map());
       return;
     }
@@ -1302,6 +1302,7 @@ const useThreadHosts = (
     const position = () => {
       const viewportWidth = document.documentElement.clientWidth;
       const edge = 24;
+      const feedbackRailWidth = isOpen ? Math.min(22 * 16, viewportWidth) : 0;
       const threadTopInset = 12;
       const threadWidth = 17 * 16;
       const positionItems: Array<{
@@ -1347,7 +1348,11 @@ const useThreadHosts = (
           edge + window.scrollX,
           Math.min(
             anchorRect.right + window.scrollX - 12,
-            window.scrollX + viewportWidth - threadWidth - edge,
+            window.scrollX +
+              viewportWidth -
+              feedbackRailWidth -
+              threadWidth -
+              edge,
           ),
         )}px`;
       }
@@ -4130,7 +4135,6 @@ const ReviewKernel = () => {
                   agent.agentCommand ||
                   `node bin/big-plan.mjs agent '${agent.plan || runtimeSession?.plan || "<plan.mdx>"}'`
                 }
-                nowMs={statusNowMs}
                 onViewRequest={viewAgentRequest}
               />
             </div>
@@ -4182,16 +4186,25 @@ const ReviewKernel = () => {
               associatedTarget !== null &&
               targetAddress(associatedTarget) === targetAddress(comment.target)
             }
-            collapsed={collapsed.has(comment.id)}
+            collapsed={isOpen || collapsed.has(comment.id)}
             expanded={expandedBodies.has(comment.id)}
-            onCollapse={() =>
+            onCollapse={() => {
+              if (isOpen) {
+                setIsOpen(false);
+                setCollapsed((current) => {
+                  const next = new Set(current);
+                  next.delete(comment.id);
+                  return next;
+                });
+                return;
+              }
               setCollapsed((current) => {
                 const next = new Set(current);
                 if (next.has(comment.id)) next.delete(comment.id);
                 else next.add(comment.id);
                 return next;
-              })
-            }
+              });
+            }}
             onExpandBody={() =>
               setExpandedBodies((current) => new Set(current).add(comment.id))
             }
@@ -4227,9 +4240,18 @@ const ReviewKernel = () => {
             identity={identity}
             agent={agent}
             group={threadGroupFor({ comment, agent, statusForRequest })}
-            expanded={expandedSentThreads.has(comment.id)}
+            expanded={!isOpen && expandedSentThreads.has(comment.id)}
             resolved={resolvedCommentIds.has(comment.id)}
-            onToggle={() => toggleSentThread(comment.id)}
+            onToggle={() => {
+              if (isOpen) {
+                setIsOpen(false);
+                setExpandedSentThreads((current) =>
+                  new Set(current).add(comment.id),
+                );
+                return;
+              }
+              toggleSentThread(comment.id);
+            }}
             onResolve={() => toggleResolvedComment(comment.id)}
             onJump={() => jumpTo(comment)}
             onAssociate={setAssociatedTarget}
