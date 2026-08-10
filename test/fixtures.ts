@@ -69,6 +69,8 @@ type WorkerFixtures = {
   readonly wireframeFormFactorsViewerUrl: string;
   readonly wireframeQualityViewerUrl: string;
   readonly wireframeShortContentViewerUrl: string;
+  readonly wireframeMultiDesktopViewerUrl: string;
+  readonly wireframeSingleDesktopViewerUrl: string;
   readonly wireframeViewerUrl: string;
 };
 
@@ -263,6 +265,92 @@ const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
     <Panel title="Ready">
       <Text text="The short state is complete." />
     </Panel>
+  </Screen>
+</Wireframe>
+`;
+
+const WIREFRAME_SINGLE_DESKTOP_MDX = `# Single desktop workspace
+
+<Wireframe id="single-desktop" title="Historical change inside the thread card">
+  <Screen
+    id="historical"
+    name="Historical change"
+    device="desktop"
+    url="review.example.test/thread/4821"
+  >
+    <TopBar title="Review thread">
+      <Button label="Resolve" emphasis="tertiary" />
+    </TopBar>
+    <Row gap="none">
+      <Panel title="Thread">
+        <Message
+          author="Alex"
+          time="Now"
+          kind="agent"
+          text="The historical change remains visible in context."
+        />
+        <Message
+          author="Maya"
+          time="1m"
+          kind="customer"
+          text="Keep the earlier answer reviewable."
+        />
+      </Panel>
+      <Rail>
+        <Panel title="Feedback">
+          <Text text="Historical change" role="section" />
+          <Text text="Superseded changes remain reviewable." role="body" />
+        </Panel>
+      </Rail>
+    </Row>
+  </Screen>
+</Wireframe>
+`;
+
+const WIREFRAME_MULTI_DESKTOP_MDX = `# Multi-screen desktop workspace
+
+<Wireframe id="multi-desktop" title="Two threads, one block, two truthful diffs">
+  <Screen
+    id="first-thread"
+    name="First thread"
+    device="desktop"
+    url="review.example.test/thread/4821"
+  >
+    <TopBar title="Review thread">
+      <Button label="Resolve" emphasis="tertiary" />
+    </TopBar>
+    <Row gap="none">
+      <Panel title="Thread one">
+        <Message author="Alex" time="Now" kind="agent" text="The first answer changed this block." />
+      </Panel>
+      <Rail>
+        <Panel title="Feedback">
+          <Text text="First historical change" role="section" />
+          <Text text="The earlier answer remains reviewable." role="body" />
+        </Panel>
+      </Rail>
+    </Row>
+  </Screen>
+  <Screen
+    id="second-thread"
+    name="Second thread"
+    device="desktop"
+    url="review.example.test/thread/4822"
+  >
+    <TopBar title="Review thread">
+      <Button label="Resolve" emphasis="tertiary" />
+    </TopBar>
+    <Row gap="none">
+      <Panel title="Thread two">
+        <Message author="Maya" time="Now" kind="customer" text="The second answer touched the same block." />
+      </Panel>
+      <Rail>
+        <Panel title="Feedback">
+          <Text text="Second historical change" role="section" />
+          <Text text="The two changes stay separately reviewable." role="body" />
+        </Panel>
+      </Rail>
+    </Row>
   </Screen>
 </Wireframe>
 `;
@@ -738,6 +826,34 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const inputPath = join(outputDir, "wireframe-short-content.mdx");
       const outputPath = join(outputDir, "wireframe-short-content.html");
       await writeFile(inputPath, WIREFRAME_SHORT_CONTENT_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeSingleDesktopViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-single-desktop-"),
+      );
+      const inputPath = join(outputDir, "wireframe-single-desktop.mdx");
+      const outputPath = join(outputDir, "wireframe-single-desktop.html");
+      await writeFile(inputPath, WIREFRAME_SINGLE_DESKTOP_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeMultiDesktopViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-multi-desktop-"),
+      );
+      const inputPath = join(outputDir, "wireframe-multi-desktop.mdx");
+      const outputPath = join(outputDir, "wireframe-multi-desktop.html");
+      await writeFile(inputPath, WIREFRAME_MULTI_DESKTOP_MDX, "utf8");
       await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });

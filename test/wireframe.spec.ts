@@ -147,6 +147,107 @@ test("should maximize into a left screen rail, sequence it with arrow keys, and 
   });
 });
 
+test("should fill a maximized single-screen desktop workspace", async ({
+  page,
+  wireframeSingleDesktopViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(wireframeSingleDesktopViewerUrl);
+
+  const frame = page.locator('[data-wireframe="single-desktop"]');
+  await frame.locator("[data-figure-maximize]").click();
+  await expect(frame).toHaveAttribute("data-figure-maximized", "");
+  await expect(frame.getByRole("heading", { name: "Feedback" })).toBeVisible();
+
+  const geometry = await frame.evaluate((node) => {
+    const artboard = node.querySelector<HTMLElement>(".wireframe-artboard");
+    const workspace = node.querySelector<HTMLElement>(
+      ".wireframe-row[data-wireframe-workspace]",
+    );
+    const primary = workspace?.querySelector<HTMLElement>(".wireframe-panel");
+    const rail = workspace?.querySelector<HTMLElement>(".wireframe-rail");
+    if (
+      artboard === null ||
+      workspace === null ||
+      primary === null ||
+      rail === null
+    ) {
+      throw new Error("single-screen desktop workspace is incomplete");
+    }
+    const artboardBox = artboard.getBoundingClientRect();
+    const workspaceBox = workspace.getBoundingClientRect();
+    return {
+      artboardBottom: artboardBox.bottom,
+      workspaceBottom: workspaceBox.bottom,
+      workspaceHeight: workspaceBox.height,
+      primaryHeight: primary.getBoundingClientRect().height,
+      railHeight: rail.getBoundingClientRect().height,
+    };
+  });
+
+  expect(geometry.artboardBottom - geometry.workspaceBottom).toBeLessThan(32);
+  expect(geometry.workspaceHeight).toBeGreaterThan(700);
+  expect(geometry.primaryHeight).toBeCloseTo(geometry.workspaceHeight, 0);
+  expect(geometry.railHeight).toBeCloseTo(geometry.workspaceHeight, 0);
+});
+
+test("should fill a multi-screen desktop workspace at rest and when maximized", async ({
+  page,
+  wireframeMultiDesktopViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(wireframeMultiDesktopViewerUrl);
+
+  const frame = page.locator('[data-wireframe="multi-desktop"]');
+  const screen = frame.locator('[data-wireframe-screen="first-thread"]');
+  const workspace = screen.locator(".wireframe-row[data-wireframe-workspace]");
+
+  const assertWorkspaceFillsArtboard = async (): Promise<void> => {
+    const geometry = await screen.evaluate((node) => {
+      const artboard = node.querySelector<HTMLElement>(".wireframe-artboard");
+      const workspace = node.querySelector<HTMLElement>(
+        ".wireframe-row[data-wireframe-workspace]",
+      );
+      const primary = workspace?.querySelector<HTMLElement>(".wireframe-panel");
+      const rail = workspace?.querySelector<HTMLElement>(".wireframe-rail");
+      if (
+        artboard === null ||
+        workspace === null ||
+        primary === null ||
+        rail === null
+      ) {
+        throw new Error("multi-screen desktop workspace is incomplete");
+      }
+      const artboardBox = artboard.getBoundingClientRect();
+      const workspaceBox = workspace.getBoundingClientRect();
+      return {
+        artboardHeight: artboardBox.height,
+        deadBand: artboardBox.bottom - workspaceBox.bottom,
+        workspaceHeight: workspaceBox.height,
+        primaryHeight: primary.getBoundingClientRect().height,
+        railHeight: rail.getBoundingClientRect().height,
+      };
+    });
+
+    expect(geometry.deadBand).toBeLessThan(geometry.artboardHeight * 0.05);
+    expect(geometry.workspaceHeight).toBeGreaterThan(
+      geometry.artboardHeight * 0.85,
+    );
+    expect(geometry.primaryHeight).toBeCloseTo(geometry.workspaceHeight, 0);
+    expect(geometry.railHeight).toBeCloseTo(geometry.workspaceHeight, 0);
+  };
+
+  await expect(
+    frame.getByRole("navigation", { name: "Prototype screens" }),
+  ).toBeVisible();
+  await expect(workspace).toBeVisible();
+  await assertWorkspaceFillsArtboard();
+
+  await frame.locator("[data-figure-maximize]").click();
+  await expect(frame).toHaveAttribute("data-figure-maximized", "");
+  await assertWorkspaceFillsArtboard();
+});
+
 test("should keep the wireframe maximize control dormant and the storyboard readable without JavaScript", async ({
   browser,
   wireframeViewerUrl,
