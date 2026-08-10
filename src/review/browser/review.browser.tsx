@@ -35,6 +35,10 @@ import {
 } from "../shared/agent-status.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { parseCommentMarkdownLine } from "../shared/comment-markdown.js";
+import {
+  reconcilePendingCancellations,
+  requestIsCanceled,
+} from "../shared/cancel-pending.js";
 import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
   AgentConnectionPanel,
@@ -2069,6 +2073,7 @@ const SentThread = ({
   onDeleteQueued,
   statusForRequest,
   activityForRequest,
+  cancelPendingRequestIds,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -2094,6 +2099,7 @@ const SentThread = ({
   readonly activityForRequest: (
     request: AgentRequest,
   ) => ReadonlyArray<MessageActivity>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
 }) => {
   const [locations, setLocations] =
     useState<ReadonlyArray<DiffLocation> | null>(null);
@@ -2114,21 +2120,26 @@ const SentThread = ({
     };
   });
   const latestExchange = exchanges.at(-1);
+  const latestCanceled =
+    latestExchange !== undefined &&
+    requestIsCanceled({
+      request: latestExchange.request,
+      pendingRequestIds: cancelPendingRequestIds,
+    });
   const outcome = latestExchange?.outcome;
   const latestChanged = [...exchanges]
     .reverse()
     .find((exchange) => exchange.outcome?.state === "changed");
   const targetPresent = targetElement(comment.target) !== null;
-  const outcomeLabel =
-    latestExchange?.request.canceledAt !== undefined
-      ? "Canceled"
-      : outcome?.state === "changed"
-        ? "Changed"
-        : outcome?.state === "question"
-          ? "Respond"
-          : outcome?.state === "outside"
-            ? "Outside this plan"
-            : "Waiting for agent";
+  const outcomeLabel = latestCanceled
+    ? "Canceled"
+    : outcome?.state === "changed"
+      ? "Changed"
+      : outcome?.state === "question"
+        ? "Respond"
+        : outcome?.state === "outside"
+          ? "Outside this plan"
+          : "Waiting for agent";
   const latestStatus =
     latestExchange === undefined || latestExchange.outcome !== undefined
       ? undefined
@@ -2136,7 +2147,7 @@ const SentThread = ({
   const latestPending =
     latestExchange !== undefined &&
     latestExchange.response === undefined &&
-    latestExchange.request.canceledAt === undefined;
+    !latestCanceled;
   const canDeleteQueued =
     group === "queued" &&
     latestPending &&
@@ -2152,7 +2163,7 @@ const SentThread = ({
     ? "Resolved"
     : group === "needs-input"
       ? "Respond"
-      : latestExchange?.request.canceledAt !== undefined
+      : latestCanceled
         ? "Canceled"
         : group === "ready"
           ? outcome?.state === "changed"
@@ -2218,7 +2229,7 @@ const SentThread = ({
             latestStatus?.stage === "blocked" ? TRIANGLE_ALERT_ICON : undefined
           }
           statusClassName={
-            latestExchange?.request.canceledAt !== undefined
+            latestCanceled
               ? ""
               : group === "ready"
                 ? "bg-accent-soft text-accent"
@@ -2704,6 +2715,9 @@ const ReviewKernel = () => {
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatBody, setChatBody] = useState("");
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
+  const [cancelPendingRequestIds, setCancelPendingRequestIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
   const [progress, setProgress] = useState<ReadonlyArray<ProgressEvent>>([]);
   const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(
     null,
@@ -2743,6 +2757,15 @@ const ReviewKernel = () => {
     [drafts, resolvedCommentIds, sent],
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
+  const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
+    setAgent(snapshot);
+    setCancelPendingRequestIds((current) =>
+      reconcilePendingCancellations({
+        pendingRequestIds: current,
+        requests: snapshot.requests,
+      }),
+    );
+  }, []);
   const serializeRuntimeWrite = useCallback(
     <Value,>(write: () => Promise<Value>): Promise<Value> => {
       const result = persistenceQueue.current.then(write, write);
@@ -3092,7 +3115,7 @@ const ReviewKernel = () => {
             );
           }
           setRuntimeSession(session);
-          setAgent(parseAgentSnapshot(agentValue));
+          acceptAgentSnapshot(parseAgentSnapshot(agentValue));
           setProgress(parseProgress(progressValue));
           setPollFailures(0);
           setStatusNowMs(Date.now());
@@ -3112,7 +3135,7 @@ const ReviewKernel = () => {
       current = false;
       window.clearInterval(timer);
     };
-  }, [identity]);
+  }, [acceptAgentSnapshot, identity]);
 
   useEffect(() => {
     let frame = 0;
@@ -3253,7 +3276,7 @@ const ReviewKernel = () => {
       const snapshot = parseSnapshot(snapshotValue);
       setSent(snapshot.sent);
       setResolvedCommentIds(new Set(snapshot.resolvedCommentIds));
-      setAgent(parseAgentSnapshot(agentValue));
+      acceptAgentSnapshot(parseAgentSnapshot(agentValue));
       setExpandedSentThreads((current) => {
         const next = new Set(current);
         next.delete(commentId);
@@ -3299,7 +3322,7 @@ const ReviewKernel = () => {
         body: { kind: "chat", body },
       });
       setChatBody("");
-      setAgent(
+      acceptAgentSnapshot(
         parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
       );
       setStatus("Plan question sent to the coding agent.");
@@ -3312,13 +3335,7 @@ const ReviewKernel = () => {
 
   const cancelRequest = async (requestId: string) => {
     if (identity === null) return;
-    const canceledAt = new Date().toISOString();
-    setAgent((current) => ({
-      ...current,
-      requests: current.requests.map((request) =>
-        request.requestId === requestId ? { ...request, canceledAt } : request,
-      ),
-    }));
+    setCancelPendingRequestIds((current) => new Set([...current, requestId]));
     try {
       await requestJson({
         path: "/api/agent-cancel",
@@ -3326,14 +3343,26 @@ const ReviewKernel = () => {
         method: "POST",
         body: { requestId },
       });
-      setAgent(
+      acceptAgentSnapshot(
         parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
       );
       setStatus("Agent request canceled.");
     } catch (error) {
-      setAgent(
-        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
-      );
+      setCancelPendingRequestIds((current) => {
+        const next = new Set(current);
+        next.delete(requestId);
+        return next;
+      });
+      try {
+        acceptAgentSnapshot(
+          parseAgentSnapshot(
+            await requestJson({ path: "/api/agent", identity }),
+          ),
+        );
+      } catch {
+        // Preserve the original cancel failure. The poll loop will recover the
+        // snapshot when the runtime becomes reachable again.
+      }
       setStatus(errorMessage(error));
     }
   };
@@ -3344,7 +3373,10 @@ const ReviewKernel = () => {
     );
     const pending = agent.requests.filter(
       (request) =>
-        request.canceledAt === undefined &&
+        !requestIsCanceled({
+          request,
+          pendingRequestIds: cancelPendingRequestIds,
+        }) &&
         !answered.has(request.requestId) &&
         ((request.kind === "feedback" &&
           request.commentIds.includes(commentId)) ||
@@ -3380,7 +3412,11 @@ const ReviewKernel = () => {
     request:
       latestRequest === undefined
         ? "none"
-        : latestResponse === undefined && latestRequest.canceledAt === undefined
+        : latestResponse === undefined &&
+            !requestIsCanceled({
+              request: latestRequest,
+              pendingRequestIds: cancelPendingRequestIds,
+            })
           ? "pending"
           : "answered",
     agentConnected: agent.presence.connected,
@@ -3398,7 +3434,12 @@ const ReviewKernel = () => {
     request: AgentRequest,
     surface: MessageSurface,
   ): AgentStatus => {
-    if (request.canceledAt !== undefined) {
+    if (
+      requestIsCanceled({
+        request,
+        pendingRequestIds: cancelPendingRequestIds,
+      })
+    ) {
       return {
         stage: "answered",
         label: "Canceled",
@@ -3444,7 +3485,12 @@ const ReviewKernel = () => {
     responseRequestIds: new Set([
       ...agent.responses.map((response) => response.requestId),
       ...agent.requests.flatMap((request) =>
-        request.canceledAt === undefined ? [] : [request.requestId],
+        requestIsCanceled({
+          request,
+          pendingRequestIds: cancelPendingRequestIds,
+        })
+          ? [request.requestId]
+          : [],
       ),
     ]),
     progressEvents: progress,
@@ -4007,6 +4053,7 @@ const ReviewKernel = () => {
                             }
                             statusForRequest={statusForRequest}
                             activityForRequest={activityForRequest}
+                            cancelPendingRequestIds={cancelPendingRequestIds}
                           />
                         ))}
                       </section>
@@ -4051,6 +4098,7 @@ const ReviewKernel = () => {
                           }
                           statusForRequest={statusForRequest}
                           activityForRequest={activityForRequest}
+                          cancelPendingRequestIds={cancelPendingRequestIds}
                         />
                       ))}
                     </details>
@@ -4320,6 +4368,7 @@ const ReviewKernel = () => {
             onDeleteQueued={() => setPendingDelete({ kind: "queued", comment })}
             statusForRequest={statusForRequest}
             activityForRequest={activityForRequest}
+            cancelPendingRequestIds={cancelPendingRequestIds}
           />,
           host,
           `sent-${comment.id}`,
