@@ -5,6 +5,7 @@ description: True-size product screens with honest device proportions, safe cont
 
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
 Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1200 px logical layout within a shared 768 px painted cap.
+While maximized, the same uniform zoom is constrained by both available width and height so the complete device frame and its caption remain visible.
 Desktop pages and phone screens use realistic minimum silhouettes and grow with content.
 Desktop workspaces instead fill the 1200 × 820 silhouette, whether they use an `AppShell` or place a workspace `Row` directly after a `TopBar`: persistent panes own their overflow while the app itself never scrolls sideways.
 Tablet holds a real iPad aspect ratio; content lays out to fit that fixed frame instead of stretching its bezel or scrolling inside it.
@@ -100,7 +101,7 @@ All screen copy lives in attributes; loose prose inside `Wireframe`, `Screen`, o
 `Wireframe` requires a non-empty `id` and at least one direct `Screen` child.
 Its optional `title` labels the figure, and `initialScreen` names which child opens first; without it, the first authored screen opens first.
 
-Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`:
+Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`.
 Its caption keeps that screen name on the left and its device and viewport description on the right, aligned to the frame at rest and while maximized, even when the wireframe contains only one screen.
 
 | `device`          | Logical size                      | Frame                 |

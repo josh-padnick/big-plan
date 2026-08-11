@@ -251,7 +251,7 @@ marks and a plan diff never jitters.
      background). It wraps outside the hand-drawn device bezel `.wireframe-frame`
      already draws for desktop/tablet/phone, so nothing doubles up inside it.
      The viewer script reads this padding and border back out of computed
-     style to keep the frame's fit-to-width math correct, so the two stay in
+     style to keep the frame's uniform fit math correct, so the two stay in
      sync without a duplicated constant. */
   .wireframe-frame-card {
     display: inline-block;
