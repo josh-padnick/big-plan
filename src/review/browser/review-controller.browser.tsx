@@ -2023,16 +2023,16 @@ const SentThread = ({
               ? CHECK_ICON
               : latestStatus?.stage === "blocked" ||
                   latestStatus?.stage === "offline"
-              ? TRIANGLE_ALERT_ICON
-              : latestCanceled
-                ? CIRCLE_X_ICON
-                : group === "ready"
-                  ? CHECK_ICON
-                  : group === "needs-input"
-                    ? MESSAGE_SQUARE_ICON
-                    : group === "working"
-                      ? undefined
-                      : HOURGLASS_ICON
+                ? TRIANGLE_ALERT_ICON
+                : latestCanceled
+                  ? CIRCLE_X_ICON
+                  : group === "ready"
+                    ? CHECK_ICON
+                    : group === "needs-input"
+                      ? MESSAGE_SQUARE_ICON
+                      : group === "working"
+                        ? undefined
+                        : HOURGLASS_ICON
           }
           statusIconLabel={latestStatus?.headline}
           statusClassName={

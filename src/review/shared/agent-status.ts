@@ -154,7 +154,8 @@ export const deriveCurrentAgentActivity = ({
       state: "disconnected",
       tone: "danger",
       headline: "The agent is disconnected",
-      supporting: "Reconnect the coding agent to continue. All comments are safe.",
+      supporting:
+        "Reconnect the coding agent to continue. All comments are safe.",
     };
   }
 

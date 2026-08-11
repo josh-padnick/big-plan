@@ -427,9 +427,7 @@ export const AgentChangeDigest = ({
     );
   }
   if (available.length === 0) return null;
-  const isActive = available.some(
-    (place) => place.placeId === activePlaceId,
-  );
+  const isActive = available.some((place) => place.placeId === activePlaceId);
   const historicalPlace = activePlaceIsHistorical
     ? available.find((place) => place.placeId === activePlaceId)
     : undefined;
@@ -516,10 +514,10 @@ export const AgentChangeDigest = ({
           ? available.length === 1
             ? "Hide the change"
             : "Hide changes"
-          : actionLabel ??
+          : (actionLabel ??
             (available.length === 1
               ? "See the change"
-              : `See changes (${available.length})`)}
+              : `See changes (${available.length})`))}
       </button>
       {historicalPlace === undefined ? null : (
         <div data-review-historical-diff="">

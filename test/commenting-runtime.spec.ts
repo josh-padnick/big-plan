@@ -769,9 +769,11 @@ test("should preview stale, historical, and multi-place causal diffs through the
         controlRows: new Set(controlRects.map((rect) => Math.round(rect.top)))
           .size,
         labels: controls.map((control) => control.getAttribute("aria-label")),
-        gaps: controlRects.slice(1).map((rect, index) =>
-          Math.round(rect.left - (controlRects[index]?.right ?? rect.left)),
-        ),
+        gaps: controlRects
+          .slice(1)
+          .map((rect, index) =>
+            Math.round(rect.left - (controlRects[index]?.right ?? rect.left)),
+          ),
       };
     });
     expect
@@ -836,9 +838,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
       (await planWideDigest.textContent()) ?? "0",
       10,
     );
-    await rail
-      .getByRole("button", { name: /See changes \(\d+\)/u })
-      .click();
+    await rail.getByRole("button", { name: /See changes \(\d+\)/u }).click();
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       `Change 1 of ${planWideChangeCount}`,
     );
