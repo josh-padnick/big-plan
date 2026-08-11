@@ -3,9 +3,9 @@ title: Linting rules
 description: Every authoring lint rule Big Plan enforces, with the exact boundaries that keep each one conservative.
 ---
 
-Lint is an additional, deliberately stricter layer that `validate` and `render` both apply once structural compilation succeeds.
+Lint is an additional, deliberately stricter layer that `validate`, `render`, and `review` apply once structural compilation succeeds.
 It can check any statically analyzable aspect of an authored plan.
-`render` enforces the same rules before writing, so a plan that fails lint never reaches a reviewer; only `compile` stays permissive for Markdown the parser treats as prose.
+`render` enforces the same rules before writing, and `review` before opening a port, so a plan that fails lint never reaches a reviewer; only `compile` stays permissive for Markdown the parser treats as prose.
 
 This page is the exhaustive reference for what each rule matches and, just as importantly, what it deliberately leaves alone.
 It does not explain why the rules exist or how to write a plan well.

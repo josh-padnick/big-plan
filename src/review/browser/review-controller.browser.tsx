@@ -1744,6 +1744,7 @@ const SentThread = ({
     latestPending,
     latestCanceled,
     canDeleteQueued,
+    canDeleteCanceled,
     group,
   } = thread;
   const outcome = latestExchange?.outcome;
@@ -1771,7 +1772,7 @@ const SentThread = ({
             ? "Working"
             : "Queued";
   const railMetadata = `${railState} ${railFreshness === "Just now" ? "just now" : railFreshness}`;
-  const canDeleteComment = canDeleteQueued || latestCanceled;
+  const canDeleteComment = canDeleteQueued || canDeleteCanceled;
   const deleteCommentLabel = latestCanceled
     ? "Delete canceled comment"
     : "Delete queued comment";

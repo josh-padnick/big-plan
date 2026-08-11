@@ -120,6 +120,44 @@ describe("thread projection", () => {
     });
   });
 
+  it("should only offer canceled-comment deletion before any agent answer or pickup", () => {
+    const base = {
+      comment,
+      progressEvents: [],
+      presence,
+      runtime: "online" as const,
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set<string>(),
+    };
+    const canceled = request({ canceledAt: "2026-08-10T19:02:00Z" });
+    expect(
+      projectCommentThread({
+        ...base,
+        requests: [canceled],
+        responses: [],
+      }).canDeleteCanceled,
+    ).toBe(true);
+
+    const canceledReply = request({
+      requestId: "cccccccccccccccc",
+      kind: "reply",
+      commentId: comment.id,
+      commentIds: undefined,
+      createdAt: "2026-08-10T19:03:00Z",
+      canceledAt: "2026-08-10T19:04:00Z",
+    });
+    expect(
+      projectCommentThread({
+        ...base,
+        requests: [request(), canceledReply],
+        responses: [response("changed")],
+      }),
+    ).toMatchObject({
+      latestCanceled: true,
+      canDeleteCanceled: false,
+    });
+  });
+
   it("should derive one request status from progress and presence", () => {
     expect(
       projectRequestStatus({

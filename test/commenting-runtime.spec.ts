@@ -649,17 +649,10 @@ test("should restore and submit staged comments through the local review runtime
     .click();
   await expect(
     canceledInline.getByRole("button", { name: "Delete canceled comment" }),
-  ).toBeVisible();
-  await canceledInline
-    .getByRole("button", { name: "Delete canceled comment" })
-    .first()
-    .click();
-  const deleteCanceled = page.getByRole("alertdialog", {
-    name: "Delete canceled comment?",
-  });
-  await expect(deleteCanceled).toBeVisible();
-  await deleteCanceled.getByRole("button", { name: "Delete" }).click();
-  await expect(canceledInline).toHaveCount(0);
+  ).toHaveCount(0);
+  await expect(canceledInline).toContainText(
+    "Removed the ambiguous promise and tightened delivery.",
+  );
   await stageComment(page, "Keep this draft while the runtime is offline.");
   await page.route("**/api/agent", (route) =>
     route.fulfill({

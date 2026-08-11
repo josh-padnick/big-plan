@@ -31,14 +31,14 @@ npx big-plan review <file.mdx>
 npx big-plan agent <file.mdx>
 ```
 
-`guidance` prints the principles for writing a plan a human loves to review; reading it recently is required before `validate` and `render` will run.
+`guidance` prints the principles for writing a plan a human loves to review; the [CLI reference](docs/src/content/docs/reference/cli.md#guidance-and-the-acknowledgment-gate) owns which commands require a current acknowledgment.
 `skill` prints the thin agent skill shell shipped with the package; `skill write <path>` installs that shell only when you ask (no silent overwrites).
 Validation checks that the plan can be compiled and rendered, then applies linting rules to the authored plan without writing an output file.
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
 `review` serves the rendered plan locally so a reviewer can leave comments.
 `agent` runs the coding-agent side of that live review exchange.
-Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
+Rendered and compiled output sit next to the input by default, while the MDX file remains the canonical source and JSON is always derived output.
 See the [two-artifact delivery contract](adr/0001-two-artifact-plan-delivery.md).
 MermaidDiagram rendering additionally uses the pinned headless Chromium renderer at compile time; on a clean install, provision it once with `bunx playwright@1.61.1 install chromium`.
 A responsive table of contents links to the document's level-two headings and highlights the section being read, and a `Settings` dialog lets a reviewer pick a `Light`, `Dark`, or `System` appearance that is saved for every review document in that browser.
@@ -97,7 +97,7 @@ bun run build           # regenerate embedded modules, then compile TypeScript t
 bun run test            # Vitest and Node unit tests, including the stylesheet-contract and design-system script tests (regenerates embedded modules first)
 bun run lint            # ESLint, stylesheet-contract, design-system, and Prettier checks
 bun run format          # format authored files with Prettier
-bun run gen             # regenerate CSS, font, branding-asset, guidance, and skill modules
+bun run gen             # regenerate review-script, CSS, font, branding-asset, guidance, and skill modules
 bun run test:e2e        # browser tests of the rendered viewer (build first)
 node bin/big-plan.mjs render examples/sample.mdx
 ```

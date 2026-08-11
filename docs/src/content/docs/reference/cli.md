@@ -57,15 +57,15 @@ With a component name, `big-plan guidance <Component>` prints that component's j
 `big-plan guidance Slide` returns every registered slide type and its matching, authoring, component-pairing, and cardinality guidance in one call for the whole plan.
 The component form records no acknowledgment, and an unknown name fails with the list of components that have guidance.
 
-`validate` and `render` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
+`validate`, `render`, and `review` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
 An acknowledgment is current when it was recorded for the same working directory within the last 24 hours against the guidance content the installed CLI ships.
-Updating Big Plan to a release with changed guidance therefore re-locks both commands until `guidance` is read again.
-`compile` and `skill` are not gated, so machine tooling and skill install can run without the authoring workflow.
+Updating Big Plan to a release with changed guidance therefore re-locks all three commands until `guidance` is read again.
+`compile`, `skill`, and `agent` are not gated, so machine tooling, skill install, and an already-live agent loop can run without the authoring workflow.
 
 Acknowledgment state lives outside the project: in `.big-plan/` under the user's home directory, falling back to a `big-plan/` directory under the system temporary directory when the home directory rejects writes, as workspace-scoped sandboxes commonly do.
 Setting the `BIG_PLAN_STATE_DIR` environment variable pins state to exactly one directory, which test suites and sandboxed environments use to keep state isolated.
 
-When no state location accepts writes at all, the gate degrades instead of blocking: `guidance` still prints the full guidance and notes that the acknowledgment could not be saved, and `validate` and `render` proceed while their results carry a warning that the acknowledgment could not be verified.
+When no state location accepts writes at all, the gate degrades instead of blocking: `guidance` still prints the full guidance and notes that the acknowledgment could not be saved, and `validate`, `render`, and `review` proceed while their results carry a warning that the acknowledgment could not be verified.
 Filesystem restrictions therefore never lock an agent out of the plan workflow.
 
 ## Skill shell
@@ -104,7 +104,7 @@ Neither derived-output command permits the output to resolve to the input file, 
 
 ## Document metadata
 
-All three commands choose the document title from the MDX content.
+`validate`, `render`, and `compile` choose the document title from the MDX content.
 The input filename without its extension is the fallback title.
 The reported section count comes from the document's level-two sections.
 
@@ -168,19 +168,18 @@ session token, heartbeat, durable review state, and revision snapshots.
 prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
 a model provider itself. The launched coding-agent session uses:
 
-- `agent next <input.mdx> --wait` to receive the oldest pending feedback or
-  reply, its prior conversation, a validated response template, and the exact
-  publish command;
+- `agent next <input.mdx> --wait` to receive the oldest pending feedback,
+  thread reply, or plan-wide chat question, its prior conversation, a validated
+  response template, and the exact publish command;
 - `agent note <input.mdx> "<progress>"` to keep the reviewer informed as each
   meaningful work step begins; and
 - `agent respond <input.mdx> <response.json>` to publish one complete answer
   after the current MDX has rendered and passed lint.
 
 A `changed` outcome is accepted only when the source revision changed and
-every named target belongs to the computed revision diff. The review document
-therefore distinguishes **With agent**, **Changed**, **Needs your answer**, and
-**Outside this plan** without inventing progress. Its basic **What changed**
-view comes from stored source revisions, not DOM mutation.
+every named target belongs to the computed revision diff. See [Reviewing a
+plan](/reference/reviewing/) for the reviewer-facing status, revision, and
+anchor contracts.
 
 `guidance` returns the guidance Markdown itself rather than a structured result.
 `skill` with no arguments returns the skill Markdown the same way.
@@ -191,34 +190,36 @@ view comes from stored source revisions, not DOM mutation.
 
 ## Errors
 
-If the input argument is missing, any plan-file command raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and its command-specific usage line.
+If the input argument is missing, `validate`, `render`, `compile`, or `review` raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and its command-specific usage line.
 
 ```text
 Usage: big-plan validate <input.mdx>
 Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
 Usage: big-plan review <input.mdx>
-Usage: big-plan agent <input.mdx>
 ```
 
-The three plan-file commands and `skill` reject any dash-prefixed command argument as an unknown option.
-`validate` rejects a second positional argument; `render` and `compile` reject a third.
+`validate`, `render`, `compile`, `review`, and `skill` reject any dash-prefixed command argument as an unknown option.
+`validate` and `review` reject a second positional argument; `render` and `compile` reject a third.
 Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 
-If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
+`agent` rejects an unknown action or invalid action arguments with
+`INVALID_INPUT` and its complete multi-line usage text.
+
+If the input for `validate`, `render`, `compile`, or `review` cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.
 
 If the output would overwrite the input file, the command raises a structured `VALIDATION_ERROR` with the message `Output path would overwrite the input MDX file` and the command-specific usage line.
 The input file is left unchanged.
 
-If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with `Cannot validate document with invalid MDX`, `Cannot render document with invalid MDX`, or `Cannot compile document with invalid MDX`, according to the command.
+If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with `Cannot validate document with invalid MDX`, `Cannot render document with invalid MDX`, `Cannot compile document with invalid MDX`, or `Cannot review a document with invalid MDX`, according to the command.
 Its help entries contain every collected authoring diagnostic as `line:column message`, and no output file is written.
 
-If authoring lint fails, `validate` and `render` raise `VALIDATION_ERROR` with `Plan failed authoring lint`.
+If authoring lint fails, `validate`, `render`, and `review` raise `VALIDATION_ERROR` with `Plan failed authoring lint`.
 Each help entry is `line:column [rule-id] message`.
-`render` runs lint before writing, so a lint failure leaves no output file.
+`render` runs lint before writing, and `review` runs it before opening a port.
 
-If guidance has not been acknowledged for the working directory, `validate` and `render` raise a structured `GUIDANCE_REQUIRED` error whose help entries name the `big-plan guidance` command and the acknowledgment window.
+If guidance has not been acknowledged for the working directory, `validate`, `render`, and `review` raise a structured `GUIDANCE_REQUIRED` error whose help entries name the `big-plan guidance` command and the acknowledgment window.
 
 `axi-sdk-js` maps `VALIDATION_ERROR` to exit status `2`.
 Successful validation exits `0`; operational or internal failures use `1`.

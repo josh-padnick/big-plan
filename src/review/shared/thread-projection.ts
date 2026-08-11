@@ -81,6 +81,7 @@ export type CommentThreadProjection<
   readonly latestPending: boolean;
   readonly latestCanceled: boolean;
   readonly canDeleteQueued: boolean;
+  readonly canDeleteCanceled: boolean;
   readonly group: ThreadGroup;
 };
 
@@ -250,6 +251,13 @@ export const projectCommentThread = <
       group === "queued" &&
       latestPending &&
       exchanges.every((exchange) => exchange.response === undefined),
+    canDeleteCanceled:
+      (latestExchange?.canceled ?? false) &&
+      exchanges.every(
+        (exchange) =>
+          exchange.response === undefined &&
+          exchange.request.claimedAt === undefined,
+      ),
     group,
   };
 };
