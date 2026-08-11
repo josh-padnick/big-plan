@@ -171,6 +171,9 @@ test("should fill a maximized single-screen desktop workspace", async ({
   await page.goto(wireframeSingleDesktopViewerUrl);
 
   const frame = page.locator('[data-wireframe="single-desktop"]');
+  await expect(frame.locator(".wireframe-screen-viewport")).toHaveText(
+    "Desktop · 1200 × 820px workspace viewport",
+  );
   await frame.locator("[data-figure-maximize]").click();
   await expect(frame).toHaveAttribute("data-figure-maximized", "");
   await expect(frame.getByRole("heading", { name: "Feedback" })).toBeVisible();

@@ -677,7 +677,12 @@ const Screen = ({
   const desktop = screen.device === "desktop";
   const phone = screen.device === "phone";
   const workspaceViewport =
-    desktop && screen.children.some((child) => child.element === "AppShell");
+    desktop &&
+    screen.children.some(
+      (child) =>
+        child.element === "AppShell" ||
+        (child.element === "Row" && isWorkspaceRow(child.children)),
+    );
   return (
     <section
       className="wireframe-screen mx-auto w-full overflow-x-auto [container-type:inline-size]"
