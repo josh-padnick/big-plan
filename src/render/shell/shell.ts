@@ -224,6 +224,12 @@ const PALETTE_OPTIONS = PALETTES.map((palette) => ({
   title: PALETTE_TITLES[palette],
 }));
 
+// approved-metric: the palette swatch column. Four colour columns read as one
+// chip beside the option's own control: 22px stands level with that control,
+// and an 11px column is the widest that still reads as one sample rather than
+// four blocks. A shell-owned chip size, not a step of the spacing scale.
+const PALETTE_SWATCH_CLASSES = "block h-[1.375rem] w-[0.6875rem]";
+
 // A row rather than a card: five themes read faster stacked than wrapped, and
 // the strip does the describing so the name never has to. The swatch carries
 // its own theme, so each strip shows that theme's shades whatever the document
@@ -237,7 +243,7 @@ const renderPaletteOption = ({
 }): string =>
   `<label class="group relative flex min-h-11 min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-edge bg-paper px-3 py-2 text-ink transition-colors hover:bg-surface has-[:checked]:border-accent has-[:checked]:bg-surface has-[:checked]:text-accent has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-accent">
 <input class="order-last size-4 shrink-0 accent-accent" id="big-plan-palette-${palette}" type="radio" name="big-plan-palette" value="${palette}" data-preference-palette="${palette}" aria-label="${escapeHtml(title)}">
-<span class="flex shrink-0 overflow-hidden rounded-sm border border-edge" data-palette-swatch data-palette="${palette}" aria-hidden="true"><span class="palette-swatch-paper block h-swatch w-swatch-column" data-swatch="paper"></span><span class="palette-swatch-edge block h-swatch w-swatch-column" data-swatch="edge"></span><span class="palette-swatch-accent block h-swatch w-swatch-column" data-swatch="accent"></span><span class="palette-swatch-ink block h-swatch w-swatch-column" data-swatch="ink"></span></span>
+<span class="flex shrink-0 overflow-hidden rounded-sm border border-edge" data-palette-swatch data-palette="${palette}" aria-hidden="true"><span class="palette-swatch-paper ${PALETTE_SWATCH_CLASSES}" data-swatch="paper"></span><span class="palette-swatch-edge ${PALETTE_SWATCH_CLASSES}" data-swatch="edge"></span><span class="palette-swatch-accent ${PALETTE_SWATCH_CLASSES}" data-swatch="accent"></span><span class="palette-swatch-ink ${PALETTE_SWATCH_CLASSES}" data-swatch="ink"></span></span>
 <span class="min-w-0 grow truncate text-sm font-semibold leading-tight">${escapeHtml(title)}</span>
 </label>`;
 

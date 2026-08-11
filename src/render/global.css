@@ -744,15 +744,6 @@ are declared, so a role or a scale step is the only thing a utility can name.
   /* The layout switches from stacked to sidebar-plus-column at this width. */
   --breakpoint-wide: 56rem;
 
-  /* The palette swatch: four colour columns read as one chip. The chip stands
-     level with the option's own radio control, and the column is half its
-     height, which is the widest a column can be while four of them still read
-     as one sample rather than four blocks. These are fixed chrome dimensions
-     rather than space between things, so they are declared here instead of
-     borrowing a spacing step or being written inline at the call site. */
-  --spacing-swatch: 1.375rem;
-  --spacing-swatch-column: 0.6875rem;
-
   /*
     THE TYPE SCALE
 

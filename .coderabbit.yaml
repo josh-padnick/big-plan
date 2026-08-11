@@ -22,6 +22,12 @@ reviews:
         src/review/browser.
         Flag hex colours, raw shadows, and off-scale sizes; use the theme role
         tokens and the closed scales instead.
+        The spacing, radius, and elevation scales are closed on purpose, so do
+        not ask for a new global token to name a one-off size; that widens the
+        scale for every call site. A fixed chrome dimension that is genuinely
+        not a step stays at its call site behind an `approved-metric:` comment
+        saying what it is and why, which is the exception
+        scripts/design-system/check.mjs already recognizes.
     - path: "src/review/**/*.tsx"
       instructions: |
         This is a browser interaction island. Markup it renders must be styled
@@ -39,3 +45,6 @@ reviews:
         Flag any semantic class name introduced here, and flag chrome that
         styles another slice's markup; that presentation belongs in the slice
         that renders it.
+        A repeated arbitrary size belongs in one named constant carrying an
+        `approved-metric:` comment, not inline at each call site and not as a
+        new global theme token.
