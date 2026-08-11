@@ -72,12 +72,112 @@ test("should expire a held connected snapshot when the reviewer returns", async 
   await page.clock.setSystemTime(now + 6 * 60 * 60_000);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   const connectionLost = page.getByRole("button", {
-    name: /Agent connection lost/u,
+    name: /Agent disconnected/u,
   });
   await expect(connectionLost).toBeVisible();
   await connectionLost.click();
   const rail = page.getByRole("complementary", { name: "Feedback" });
   await expect(rail).toContainText("No agent signal for 6h 00m");
+});
+
+test("should pause a nonstandard request behind an explicit warning", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await stageComment(
+    page,
+    "Add slides that depart from the standard template.",
+  );
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submitted).ok()).toBe(true);
+
+  const session: unknown = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The warning journey requires a live review session");
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = nextPendingAgentRequest(exchange);
+  if (request === undefined || request.kind !== "feedback") {
+    throw new Error("The warning journey did not create feedback work");
+  }
+  const source = await readFile(session.plan, "utf8");
+  const claimed = await claimAgentRequest({
+    store,
+    requestId: request.requestId,
+    baselineSnapshot: deriveSnapshotDigest(source),
+    now: new Date().toISOString(),
+  });
+  const response = validateAgentResponseDraft({
+    value: {
+      requestId: request.requestId,
+      outcomes: request.comments.map((comment) => ({
+        commentId: comment.id,
+        state: "warning",
+        message:
+          "Fulfilling this request would deviate from the standard template.",
+      })),
+    },
+    request: claimed,
+    commentsById: commentsFromExchange({
+      requests: [claimed],
+      responses: [],
+    }),
+    changedBlocks: new Set(),
+    currentSnapshot: deriveSnapshotDigest(source),
+    now: new Date().toISOString(),
+  });
+  await publishAgentResponse({ store, response });
+
+  await rail
+    .getByRole("button", { name: "Expand thread", exact: true })
+    .click();
+  await expect(rail).toContainText(
+    "Fulfilling this request would deviate from the standard template.",
+  );
+  const doItAnyway = rail.getByRole("button", { name: "Do it anyway" });
+  await expect(doItAnyway).toBeVisible();
+  const override = page.waitForResponse(
+    (candidate) =>
+      candidate.url().endsWith("/api/agent-requests") &&
+      candidate.request().method() === "POST",
+  );
+  await doItAnyway.click();
+  expect((await override).ok()).toBe(true);
 });
 
 test("should restore and submit staged comments through the local review runtime", async ({
@@ -109,7 +209,7 @@ test("should restore and submit staged comments through the local review runtime
       settings.x - feedback.x - feedback.width,
     ];
   });
-  expect(toolbarGaps).toEqual([12, 12]);
+  expect(toolbarGaps).toEqual([4, 4]);
 
   await stageComment(page, "Clarify the failure boundary.");
   await stageComment(page, "Name the operator recovery path.");
@@ -385,7 +485,7 @@ test("should restore and submit staged comments through the local review runtime
   });
 
   await expect(
-    page.getByRole("button", { name: /Agent connection lost/u }),
+    page.getByRole("button", { name: /Agent disconnected/u }),
   ).toHaveCount(0);
   await rail.getByRole("tab", { name: "Agent" }).click();
   const activeWork = rail.locator("[data-review-current-activity='working']");
@@ -837,14 +937,34 @@ test("should restore and submit staged comments through the local review runtime
   );
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(
-    rail.getByText("The review server is unreachable", { exact: true }),
+    rail.getByText("Agent is unreachable", { exact: true }),
   ).toBeVisible({ timeout: 6_000 });
   await expect(
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
   await expect(
-    rail.getByRole("img", { name: "The review server is unreachable" }),
+    rail.getByRole("img", { name: "Agent is unreachable" }),
   ).toBeVisible();
+  await rail.getByRole("button", { name: "Delete staged comment" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Delete comment?" })
+    .getByRole("button", { name: "Delete" })
+    .click();
+  await page.getByRole("button", { name: "Comment on slide" }).first().click();
+  const offlineComposer = page.getByRole("dialog", { name: /Comment on/u });
+  await offlineComposer
+    .getByLabel("Add a comment")
+    .fill("Keep this staged until the agent reconnects.");
+  await offlineComposer
+    .getByRole("switch", { name: "Submit right away" })
+    .click();
+  await expect(
+    offlineComposer.getByRole("button", { name: "Submit Now" }),
+  ).toBeDisabled();
+  await expect(
+    offlineComposer.getByRole("button", { name: "Agent disconnected" }),
+  ).toBeVisible();
+  await offlineComposer.getByRole("button", { name: "Cancel" }).click();
   await expect(rail).not.toContainText(
     "Connected to the local review runtime.",
   );
@@ -917,10 +1037,43 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(
       codeFigure.getByRole("button", { name: /Comment on/u }),
     ).toBeVisible();
+    await expect(
+      codeFigure.getByRole("button", {
+        name: "Comment on this code snippet",
+      }),
+    ).toHaveAttribute("data-tooltip", "Comment on this code snippet");
     await expect(codeFigure.locator("[data-review-toolbar-host]")).toHaveCSS(
       "opacity",
       "1",
     );
+    const markdownTable = page.locator("[data-block-kind='table']").first();
+    const markdownTableComment = markdownTable.locator(".review-table-comment");
+    await markdownTable.locator("th, td").first().hover();
+    await expect(markdownTableComment).toBeVisible();
+    const tableCommentGeometry = await markdownTable.evaluate((table) => {
+      const button = table.querySelector<HTMLElement>(".review-table-comment");
+      if (button === null)
+        throw new Error("The table comment control is missing");
+      const tableRect = table.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
+      return {
+        bottom: Math.round(buttonRect.bottom),
+        right: Math.round(buttonRect.right),
+        tableRight: Math.round(tableRect.right),
+        tableTop: Math.round(tableRect.top),
+      };
+    });
+    expect(tableCommentGeometry.bottom).toBeLessThanOrEqual(
+      tableCommentGeometry.tableTop,
+    );
+    expect(tableCommentGeometry.right).toBe(tableCommentGeometry.tableRight);
+    await expect
+      .poll(() =>
+        markdownTable.evaluate(
+          (element) => element.scrollWidth - element.clientWidth,
+        ),
+      )
+      .toBeLessThanOrEqual(1);
     const codeChrome = await codeFigure.evaluate((figure) => {
       const body = figure.querySelector(":scope > pre");
       const controls = Array.from(
@@ -1228,6 +1381,52 @@ test("should keep component replacements inside their slide and preserve Callout
     await page.screenshot({
       path: testInfo.outputPath("callout-diff-in-slide.png"),
     });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should highlight only changed words inside a revised list", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-list-diff-"));
+  const planPath = join(directory, "list.mdx");
+  const before = `# List diff
+
+## Promise
+
+- Thread answers carry only the changes caused by that feedback.
+- Chat answers carry a grouped, plan-wide change digest.
+- Historical answers preserve their claim-time baseline and result snapshots.
+- A guided tour moves through every changed place without losing context.
+`;
+  const after = before.replace(
+    "Thread answers carry only the changes caused by that feedback.",
+    "Thread answers carry only the changes caused by their own feedback.",
+  );
+  await writeFile(planPath, after);
+  const runtime = await startReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await page
+      .getByRole("button", { name: "Review premise → current" })
+      .click();
+    const list = page
+      .locator("[data-review-diff-lens] [data-review-diff-content]")
+      .filter({ has: page.locator("li") });
+    await expect(list.locator("li")).toHaveCount(4);
+    await expect(list.locator("li").first().locator("del")).toBeVisible();
+    await expect(
+      list.locator("li").first().locator("ins").first(),
+    ).toBeVisible();
+    await expect(list.locator("li").nth(1).locator("del, ins")).toHaveCount(0);
+    await expect(list.locator("li").nth(2).locator("del, ins")).toHaveCount(0);
+    await expect(list.locator("li").nth(3).locator("del, ins")).toHaveCount(0);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

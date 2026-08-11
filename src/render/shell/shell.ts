@@ -236,7 +236,7 @@ ${renderPreferenceOption({ mode: "system", title: "System", description: "Match 
 // The right side of the branding bar keeps status, Feedback, and Settings as
 // separate peer actions with one closed spacing-scale step between them.
 const renderHeaderActions = (): string =>
-  `<div class="ml-auto flex items-center gap-3">
+  `<div class="ml-auto flex items-center gap-1">
 ${renderCommentDraftControl()}
 ${renderPreferencesControl()}
 </div>`;

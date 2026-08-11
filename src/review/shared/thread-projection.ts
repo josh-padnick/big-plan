@@ -21,7 +21,8 @@ export type ThreadRequest = CancelableRequest & {
 
 export type ThreadOutcome = {
   readonly commentId: string;
-  readonly state: "answered" | "changed" | "needs-input" | "declined";
+  readonly state:
+    "answered" | "changed" | "warning" | "needs-input" | "declined";
   readonly message: string;
   readonly changeTargets?: ReadonlyArray<string>;
 };
@@ -232,7 +233,8 @@ export const projectCommentThread = <
     latestExchange.response === undefined &&
     !latestExchange.canceled;
   const group: ThreadGroup =
-    latestExchange?.outcome?.state === "needs-input"
+    latestExchange?.outcome?.state === "needs-input" ||
+    latestExchange?.outcome?.state === "warning"
       ? "needs-input"
       : latestExchange?.outcome !== undefined
         ? "ready"

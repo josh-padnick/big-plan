@@ -31,7 +31,7 @@ const request = (overrides: Partial<ThreadRequest> = {}): ThreadRequest => ({
   ...overrides,
 });
 const response = (
-  state: "answered" | "changed" | "needs-input" | "declined",
+  state: "answered" | "changed" | "warning" | "needs-input" | "declined",
 ): ThreadResponse => ({
   requestId: "aaaaaaaaaaaaaaaa",
   resultSnapshot: "2222222222222222",
@@ -89,6 +89,13 @@ describe("thread projection", () => {
         ...base,
         requests: [request()],
         responses: [response("needs-input")],
+      }).group,
+    ).toBe("needs-input");
+    expect(
+      projectCommentThread({
+        ...base,
+        requests: [request()],
+        responses: [response("warning")],
       }).group,
     ).toBe("needs-input");
     expect(

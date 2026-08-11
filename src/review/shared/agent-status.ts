@@ -67,7 +67,7 @@ export type CurrentAgentActivity =
   | {
       readonly state: "offline";
       readonly tone: "danger";
-      readonly headline: "The review server is unreachable";
+      readonly headline: "Agent is unreachable";
       readonly supporting: string;
     }
   | {
@@ -89,8 +89,9 @@ export const deriveAgentHealthLabel = ({
 }): string | null => {
   if (isReadOnly) return "Using read-only session";
   if (!hasAgentRuntime) return null;
-  if (activity.state === "offline") return "Review server offline";
-  if (activity.state === "disconnected") return "Agent connection lost";
+  if (activity.state === "offline" || activity.state === "disconnected") {
+    return "Agent disconnected";
+  }
   if (activity.state === "stalled") return "Agent not responding";
   if (activity.state === "errored") return "Agent error";
   return null;
@@ -175,7 +176,7 @@ export const deriveCurrentAgentActivity = ({
     return {
       state: "offline",
       tone: "danger",
-      headline: "The review server is unreachable",
+      headline: "Agent is unreachable",
       supporting:
         "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
     };
@@ -310,7 +311,7 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     return {
       stage: "offline",
       label: "Runtime offline",
-      headline: "The review server is unreachable",
+      headline: "Agent is unreachable",
       detail:
         "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
       tone: "danger",

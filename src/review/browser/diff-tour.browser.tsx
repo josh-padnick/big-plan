@@ -194,6 +194,45 @@ const WordRunContent = ({
   }
 };
 
+/** Preserves list-item boundaries while reusing the centralized word diff. */
+const runsByLine = (
+  runs: ReadonlyArray<DiffRun>,
+): ReadonlyArray<ReadonlyArray<DiffRun>> => {
+  const lines: Array<Array<DiffRun>> = [[]];
+  for (const run of runs) {
+    const parts = run.text.split("\n");
+    parts.forEach((part, index) => {
+      if (part !== "") lines.at(-1)?.push({ ...run, text: part });
+      if (index < parts.length - 1) lines.push([]);
+    });
+  }
+  return lines.filter((line) => line.some((run) => run.text.trim() !== ""));
+};
+
+const ListRunContent = ({
+  runs,
+  location,
+}: {
+  readonly runs: ReadonlyArray<DiffRun>;
+  readonly location: DiffLocation;
+}) => {
+  const current =
+    currentBlockFor(location, "new") ?? currentBlockFor(location, "old");
+  const List = current?.tagName === "OL" ? "ol" : "ul";
+  return (
+    <List data-authored-prose="" data-review-diff-content="">
+      {runsByLine(runs).map((line, index) => (
+        <li
+          key={`${index}-${line.map((run) => run.text).join("")}`}
+          data-authored-prose=""
+        >
+          {runsWithChanges(line)}
+        </li>
+      ))}
+    </List>
+  );
+};
+
 const SnapshotTable = ({
   rows,
   side,
@@ -404,7 +443,8 @@ export const DiffLensContent = ({
     place.note === "reworded" &&
     (only.kind === "paragraph" ||
       only.kind === "heading" ||
-      only.kind === "quote");
+      only.kind === "quote" ||
+      only.kind === "list");
   const hasOldText = locations.some(
     (location) => location.oldText.trim() !== "",
   );
@@ -430,7 +470,11 @@ export const DiffLensContent = ({
         <em className="text-2xs text-muted">{place.note}</em>
       </div>
       {canUseWordRuns && only !== undefined ? (
-        <WordRunContent runs={only.runs} presentation={presentation} />
+        only.kind === "list" ? (
+          <ListRunContent runs={only.runs} location={only} />
+        ) : (
+          <WordRunContent runs={only.runs} presentation={presentation} />
+        )
       ) : (
         <div className="grid min-w-0 gap-2">
           {!hasOldText ? null : (

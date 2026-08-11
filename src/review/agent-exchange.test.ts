@@ -306,6 +306,42 @@ describe("agent exchange filesystem", () => {
     });
   });
 
+  it("should accept a warning without inventing a changed snapshot", () => {
+    const claimed = {
+      ...request,
+      claimedAt: "2026-08-02T12:00:30.000Z",
+      baselineSnapshot: request.premiseSnapshot,
+    };
+    expect(
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "warning",
+              message:
+                "Fulfilling this request would deviate from the standard template.",
+            },
+          ],
+        },
+        request: claimed,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set(),
+        currentSnapshot: request.premiseSnapshot,
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toMatchObject({
+      outcomes: [
+        {
+          state: "warning",
+          message:
+            "Fulfilling this request would deviate from the standard template.",
+        },
+      ],
+    });
+  });
+
   it("makes canceled work terminal for pickup and response", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-cancel-"));
     const planPath = join(directory, "plan.mdx");

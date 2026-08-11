@@ -120,7 +120,7 @@ describe("current agent activity", () => {
         hasAgentRuntime: true,
         isReadOnly: false,
       }),
-    ).toBe("Agent connection lost");
+    ).toBe("Agent disconnected");
   });
 
   it.each([

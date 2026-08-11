@@ -411,7 +411,7 @@ export const AgentStatePill = ({
         : status.stage === "failed"
           ? ({ tone: "failed", label: "Agent needs attention" } as const)
           : status.stage === "offline"
-            ? ({ tone: "failed", label: "Review server offline" } as const)
+            ? ({ tone: "failed", label: "Agent disconnected" } as const)
             : status.stage === "blocked"
               ? ({ tone: "failed", label: "No agent connected" } as const)
               : status.stage === "stalled"

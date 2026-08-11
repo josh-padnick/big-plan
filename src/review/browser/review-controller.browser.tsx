@@ -172,6 +172,13 @@ const WIDE_QUERY = "(min-width: 80rem)";
 const MODIFIER_SHORTCUT = /Mac|iPhone|iPad/u.test(navigator.platform)
   ? "⌘+Enter"
   : "Ctrl+Enter";
+const APPLE_PLATFORM = /Mac|iPhone|iPad/u.test(navigator.platform);
+const NEW_COMMENT_SHORTCUT = APPLE_PLATFORM ? "⌃+⌘+C" : "Ctrl+Alt+C";
+const isNewCommentShortcut = (event: globalThis.KeyboardEvent): boolean =>
+  event.key.toLocaleLowerCase() === "c" &&
+  (APPLE_PLATFORM
+    ? event.ctrlKey && event.metaKey && !event.altKey
+    : event.ctrlKey && event.altKey && !event.metaKey);
 type StagedCardSurface = "rail" | "thread";
 type SelectionTarget = Extract<CommentTarget, { readonly type: "selection" }>;
 
@@ -698,6 +705,12 @@ const selectionControlState = (): SelectionControlState | null => {
     left: Math.max(8, Math.min(window.innerWidth - 132, rect.left)),
   };
 };
+
+const blockCommentLabel = (block: HTMLElement): string =>
+  block.dataset.blockKind === "code" ||
+  block.dataset.blockKind?.startsWith("code-") === true
+    ? "Comment on this code snippet"
+    : `Comment on ${block.dataset.blockLabel ?? "this component"}`;
 
 const targetElement = (target: CommentTarget): HTMLElement | null => {
   if (target.type === "document") return document.querySelector("main");
@@ -1250,19 +1263,23 @@ const CommentComposer = ({
   body,
   inline,
   submitRightAway,
+  canSubmitRightAway,
   onCancel,
   onBodyChange,
   onSave,
   onSubmitRightAwayChange,
+  onShowAgent,
 }: {
   readonly compose: ComposeState;
   readonly body: string;
   readonly inline: boolean;
   readonly submitRightAway: boolean;
+  readonly canSubmitRightAway: boolean;
   readonly onCancel: () => void;
   readonly onBodyChange: (body: string) => void;
   readonly onSave: (body: string, submitRightAway: boolean) => void;
   readonly onSubmitRightAwayChange: (submitRightAway: boolean) => void;
+  readonly onShowAgent: () => void;
 }) => {
   const [floatingPosition, setFloatingPosition] = useState<FloatingPosition>({
     top: compose.top,
@@ -1298,7 +1315,10 @@ const CommentComposer = ({
       cancelAnimationFrame(frame);
     };
   }, [compose.left, compose.top, inline]);
-  const save = () => body.trim() !== "" && onSave(body.trim(), submitRightAway);
+  const save = () =>
+    body.trim() !== "" &&
+    (!submitRightAway || canSubmitRightAway) &&
+    onSave(body.trim(), submitRightAway);
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -1366,7 +1386,13 @@ const CommentComposer = ({
             Cancel
           </Button>
           <span className="group relative inline-flex">
-            <Button size="micro" disabled={body.trim() === ""} onClick={save}>
+            <Button
+              size="micro"
+              disabled={
+                body.trim() === "" || (submitRightAway && !canSubmitRightAway)
+              }
+              onClick={save}
+            >
               {submitRightAway ? "Submit Now" : "Add Comment"}
             </Button>
             <span
@@ -1377,6 +1403,15 @@ const CommentComposer = ({
             </span>
           </span>
         </div>
+        {submitRightAway && !canSubmitRightAway ? (
+          <button
+            type="button"
+            className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+            onClick={onShowAgent}
+          >
+            Agent disconnected
+          </button>
+        ) : null}
       </div>
     </Card>
   );
@@ -1532,6 +1567,8 @@ const StagedCard = ({
   onDelete,
   onJump,
   onSubmit,
+  canSubmit,
+  onShowAgent,
   onAssociate,
   identity,
   currentSnapshot,
@@ -1551,6 +1588,8 @@ const StagedCard = ({
   readonly onDelete: () => void;
   readonly onJump: () => void;
   readonly onSubmit: () => void;
+  readonly canSubmit: boolean;
+  readonly onShowAgent: () => void;
   readonly onAssociate: (target: CommentTarget | null) => void;
   readonly identity: RuntimeIdentity | null;
   readonly currentSnapshot: string;
@@ -1737,11 +1776,25 @@ const StagedCard = ({
                   Unresolve
                 </Button>
               ) : (
-                <Button variant="accentOutline" size="micro" onClick={onSubmit}>
+                <Button
+                  variant="accentOutline"
+                  size="micro"
+                  disabled={!canSubmit}
+                  onClick={onSubmit}
+                >
                   Send this
                 </Button>
               )}
             </div>
+            {!resolved && !canSubmit ? (
+              <button
+                type="button"
+                className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                onClick={onShowAgent}
+              >
+                Agent disconnected
+              </button>
+            ) : null}
           </div>
         )}
       </Card>
@@ -1880,11 +1933,25 @@ const StagedCard = ({
       ) : null}
       {isEditing ? null : (
         <div className="mt-2 flex items-center justify-end">
-          <Button variant="accentOutline" size="micro" onClick={onSubmit}>
+          <Button
+            variant="accentOutline"
+            size="micro"
+            disabled={!canSubmit}
+            onClick={onSubmit}
+          >
             Submit Now
           </Button>
         </div>
       )}
+      {!isEditing && !canSubmit ? (
+        <button
+          type="button"
+          className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          onClick={onShowAgent}
+        >
+          Agent disconnected
+        </button>
+      ) : null}
     </Card>
   );
 };
@@ -2127,7 +2194,9 @@ const SentThread = ({
   const railState = resolved
     ? "Resolved"
     : group === "needs-input"
-      ? "Respond"
+      ? outcome?.state === "warning"
+        ? "Warning"
+        : "Respond"
       : latestCanceled
         ? "Canceled"
         : group === "ready"
@@ -2153,8 +2222,8 @@ const SentThread = ({
       ? "Delete canceled comment"
       : "Delete queued comment";
 
-  const sendReply = async () => {
-    const body = reply.trim();
+  const sendReply = async (bodyOverride?: string) => {
+    const body = (bodyOverride ?? reply).trim();
     if (identity === null || body === "") return;
     setIsReplying(true);
     try {
@@ -2545,7 +2614,8 @@ const SentThread = ({
                               : "secondary"
                           }
                           className={
-                            requestOutcome.state === "needs-input"
+                            requestOutcome.state === "needs-input" ||
+                            requestOutcome.state === "warning"
                               ? "mt-2 bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
                               : "mt-2"
                           }
@@ -2554,10 +2624,30 @@ const SentThread = ({
                             ? "Answered"
                             : requestOutcome.state === "changed"
                               ? "Changed"
-                              : requestOutcome.state === "needs-input"
-                                ? "Needs your answer"
-                                : "Declined"}
+                              : requestOutcome.state === "warning"
+                                ? "Warning"
+                                : requestOutcome.state === "needs-input"
+                                  ? "Needs your answer"
+                                  : "Declined"}
                         </Badge>
+                        {requestOutcome.state === "warning" ? (
+                          <div className="mt-2 flex items-center gap-2 border-t border-[color-mix(in_srgb,var(--callout-warning-c)_24%,transparent)] pt-2">
+                            <span
+                              className="inline-flex text-[var(--callout-warning-c)] [&>svg]:size-4"
+                              aria-hidden="true"
+                            >
+                              <Icon icon={TRIANGLE_ALERT_ICON} />
+                            </span>
+                            <Button
+                              variant="accentOutline"
+                              size="micro"
+                              disabled={isReplying || latestPending}
+                              onClick={() => void sendReply("Do it anyway.")}
+                            >
+                              {isReplying ? "Sending…" : "Do it anyway"}
+                            </Button>
+                          </div>
+                        ) : null}
                         {requestOutcome.state === "changed" &&
                         identity !== null ? (
                           <ChangeAttachment
@@ -2809,6 +2899,17 @@ export const ReviewController = () => {
       : "Loading review…",
   );
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
+  const threadRuntime: ThreadRuntime =
+    identity === null ? "static" : pollFailures >= 2 ? "offline" : "online";
+  const agentConnected = agentPresenceIsFresh({
+    connected: agent.presence.connected,
+    heartbeatAt: agent.presence.updatedAtMs ?? 0,
+    now: statusNowMs,
+  });
+  const canSendToAgent =
+    identity !== null &&
+    threadRuntime === "online" &&
+    runtimeSession?.authoritative !== false;
   const unresolvedDrafts = useMemo(
     () => drafts.filter((comment) => !resolvedCommentIds.has(comment.id)),
     [drafts, resolvedCommentIds],
@@ -3348,11 +3449,28 @@ export const ReviewController = () => {
     [compose, composeBody, runtimeSession?.authoritative],
   );
 
+  useEffect(() => {
+    const beginSelectedComment = (event: globalThis.KeyboardEvent) => {
+      if (
+        selectionControl === null ||
+        event.defaultPrevented ||
+        !isNewCommentShortcut(event)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      beginTarget(selectionControl.target, { top: selectionControl.top });
+      setSelectionControl(null);
+    };
+    document.addEventListener("keydown", beginSelectedComment);
+    return () => document.removeEventListener("keydown", beginSelectedComment);
+  }, [beginTarget, selectionControl]);
+
   const sendComments = useCallback(
     async (comments: ReadonlyArray<ReviewComment>) => {
-      if (identity === null) {
+      if (!canSendToAgent || identity === null) {
         setStatus(
-          "Start `big-plan review` to submit comments. Your drafts are saved.",
+          "Agent disconnected. Your comment is saved and can be sent after reconnecting.",
         );
         return;
       }
@@ -3384,7 +3502,7 @@ export const ReviewController = () => {
         setIsSending(false);
       }
     },
-    [identity, serializeRuntimeWrite],
+    [canSendToAgent, identity, serializeRuntimeWrite],
   );
 
   useEffect(() => {
@@ -3611,13 +3729,6 @@ export const ReviewController = () => {
     }
   };
 
-  const threadRuntime: ThreadRuntime =
-    identity === null ? "static" : pollFailures >= 2 ? "offline" : "online";
-  const agentConnected = agentPresenceIsFresh({
-    connected: agent.presence.connected,
-    heartbeatAt: agent.presence.updatedAtMs ?? 0,
-    now: statusNowMs,
-  });
   const effectivePresence = { ...agent.presence, connected: agentConnected };
   const threadProjections = projectCommentThreads({
     comments: sent,
@@ -3904,8 +4015,8 @@ export const ReviewController = () => {
             block.dataset.blockKind === "table" ? (
             <button
               type="button"
-              className="review-table-comment review-block-button group relative inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-muted hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
-              aria-label={`Comment on ${block.dataset.blockLabel ?? "this table"}`}
+              className="review-table-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-muted hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
+              aria-label="Comment on this table"
               aria-pressed={
                 compose?.target.type === "block" &&
                 targetElement(compose.target) === block
@@ -3929,12 +4040,12 @@ export const ReviewController = () => {
             <button
               type="button"
               className="review-toolbar-comment inline-flex size-6 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
-              aria-label={`Comment on ${block.dataset.blockLabel ?? "this component"}`}
+              aria-label={blockCommentLabel(block)}
               aria-pressed={
                 compose?.target.type === "block" &&
                 targetElement(compose.target) === block
               }
-              data-tooltip={`Comment on ${block.dataset.blockLabel ?? "component"}`}
+              data-tooltip={blockCommentLabel(block)}
               data-tooltip-delay="1s"
               onClick={() =>
                 beginTarget(
@@ -3969,7 +4080,7 @@ export const ReviewController = () => {
       {selectionControl === null ? null : (
         <button
           type="button"
-          className="fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-accent bg-accent-soft px-2 py-1 text-xs text-accent shadow-raised hover:shadow-lifted focus-visible:shadow-lifted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed [&_svg]:size-3.5"
+          className="group fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-accent bg-accent-soft px-2 py-1 text-xs text-accent shadow-raised hover:shadow-lifted focus-visible:shadow-lifted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed [&_svg]:size-3.5"
           style={{
             top: `${selectionControl.top}px`,
             left: `${selectionControl.left}px`,
@@ -3983,6 +4094,13 @@ export const ReviewController = () => {
         >
           <Icon icon={MESSAGE_SQUARE_ICON} />
           Comment
+          <span
+            role="tooltip"
+            data-selection-comment-tooltip=""
+            className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] left-1/2 z-50 w-max -translate-x-1/2 rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-visible:visible group-focus-visible:opacity-100 group-focus-visible:delay-1000"
+          >
+            New comment · {NEW_COMMENT_SHORTCUT}
+          </span>
         </button>
       )}
       {feedbackHost === null
@@ -4157,6 +4275,8 @@ export const ReviewController = () => {
                     }
                     onJump={() => jumpTo(comment)}
                     onSubmit={() => void sendComments([comment])}
+                    canSubmit={identity === null || canSendToAgent}
+                    onShowAgent={showAgentSetup}
                     onAssociate={setAssociatedTarget}
                     identity={identity}
                     currentSnapshot={currentSnapshot}
@@ -4190,6 +4310,8 @@ export const ReviewController = () => {
                     }
                     onJump={() => jumpTo(comment)}
                     onSubmit={() => void sendComments([comment])}
+                    canSubmit={identity === null || canSendToAgent}
+                    onShowAgent={showAgentSetup}
                     onAssociate={setAssociatedTarget}
                     identity={identity}
                     currentSnapshot={currentSnapshot}
@@ -4435,6 +4557,8 @@ export const ReviewController = () => {
               onDelete={() => setPendingDelete({ kind: "comment", comment })}
               onJump={() => jumpTo(comment)}
               onSubmit={() => void sendComments([comment])}
+              canSubmit={identity === null || canSendToAgent}
+              onShowAgent={showAgentSetup}
               onAssociate={setAssociatedTarget}
               identity={identity}
               currentSnapshot={currentSnapshot}
@@ -4508,6 +4632,7 @@ export const ReviewController = () => {
           inline={false}
           body={composeBody}
           submitRightAway={submitRightAway}
+          canSubmitRightAway={identity === null || canSendToAgent}
           onCancel={() => {
             setCompose(null);
             setComposeBody("");
@@ -4515,6 +4640,7 @@ export const ReviewController = () => {
           onBodyChange={setComposeBody}
           onSave={saveComment}
           onSubmitRightAwayChange={setSubmitRightAway}
+          onShowAgent={showAgentSetup}
         />
       ) : (
         createPortal(
@@ -4528,6 +4654,7 @@ export const ReviewController = () => {
             inline
             body={composeBody}
             submitRightAway={submitRightAway}
+            canSubmitRightAway={identity === null || canSendToAgent}
             onCancel={() => {
               setCompose(null);
               setComposeBody("");
@@ -4535,6 +4662,7 @@ export const ReviewController = () => {
             onBodyChange={setComposeBody}
             onSave={saveComment}
             onSubmitRightAwayChange={setSubmitRightAway}
+            onShowAgent={showAgentSetup}
           />,
           inlineComposeHost,
         )

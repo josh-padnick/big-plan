@@ -12,7 +12,8 @@ export type ReviewSnapshot = {
 
 export type AgentOutcome = {
   readonly commentId: string;
-  readonly state: "answered" | "changed" | "needs-input" | "declined";
+  readonly state:
+    "answered" | "changed" | "warning" | "needs-input" | "declined";
   readonly message: string;
   readonly changeTargets: ReadonlyArray<string>;
 };
@@ -281,6 +282,7 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
                   typeof outcome.message !== "string" ||
                   (outcome.state !== "answered" &&
                     outcome.state !== "changed" &&
+                    outcome.state !== "warning" &&
                     outcome.state !== "needs-input" &&
                     outcome.state !== "declined")
                 ) {

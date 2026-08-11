@@ -800,6 +800,9 @@ test("should preserve a text selection while its compact composer is open", asyn
   expect(resting.color).toBe(resting.roles.accent);
   expect(resting.shadow).toContain(resting.roles.raised);
   await chip.hover();
+  const selectionTooltip = page.locator("[data-selection-comment-tooltip]");
+  await expect(selectionTooltip).toBeVisible();
+  await expect(selectionTooltip).toContainText(/⌃\+⌘\+C|Ctrl\+Alt\+C/u);
   const hovered = await visualState();
   expect(hovered.background).toBe(hovered.roles.accentSoft);
   expect(hovered.border).toBe(hovered.roles.accent);
@@ -817,7 +820,10 @@ test("should preserve a text selection while its compact composer is open", asyn
       }),
     )
     .toBe(true);
-  await chip.click();
+  const platform = await page.evaluate(() => navigator.platform);
+  await page.keyboard.press(
+    /Mac|iPhone|iPad/u.test(platform) ? "Control+Meta+c" : "Control+Alt+c",
+  );
 
   const dialog = page.getByRole("dialog", {
     name: /Comment on Selected text in/,

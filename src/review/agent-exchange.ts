@@ -21,7 +21,7 @@ const ID = /^[a-f0-9]{16}$/;
 const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
 
 export type AgentOutcomeState =
-  "answered" | "changed" | "needs-input" | "declined";
+  "answered" | "changed" | "warning" | "needs-input" | "declined";
 
 type AgentRequestBase = {
   readonly version: 1;
@@ -365,11 +365,12 @@ const outcome = ({
   if (
     state !== "answered" &&
     state !== "changed" &&
+    state !== "warning" &&
     state !== "needs-input" &&
     state !== "declined"
   ) {
     throw new AgentExchangeRejected(
-      'An outcome state must be "answered", "changed", "needs-input", or "declined"',
+      'An outcome state must be "answered", "changed", "warning", "needs-input", or "declined"',
     );
   }
   const result: AgentOutcome = {
@@ -538,6 +539,7 @@ const validateStoredResponse = ({
     if (
       entry.state !== "answered" &&
       entry.state !== "changed" &&
+      entry.state !== "warning" &&
       entry.state !== "needs-input" &&
       entry.state !== "declined"
     ) {

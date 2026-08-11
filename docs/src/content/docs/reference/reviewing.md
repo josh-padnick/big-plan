@@ -55,8 +55,10 @@ edits only the authoritative MDX when appropriate, validates the new render,
 and publishes one outcome for every comment.
 
 Until a response exists, a sent thread says **With agent**. A real response
-records an `answered`, `changed`, `needs-input`, or `declined` outcome and shows
-the agent's message. An accepted result updates the plan in place without
+records an `answered`, `changed`, `warning`, `needs-input`, or `declined`
+outcome and shows the agent's message. A warning leaves the plan unchanged,
+explains the standard or template the request would cross, and lets the
+reviewer explicitly choose **Do it anyway**. An accepted result updates the plan in place without
 discarding drafts, open threads, or scroll position.
 
 ## Diff and anchor truth

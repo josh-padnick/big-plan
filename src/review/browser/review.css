@@ -41,12 +41,17 @@ here; all values use the document theme's closed token vocabulary.
     pointer-events: auto;
   }
 
-  [data-block-id]:hover:has([data-block-id]:hover) > [data-review-anchor-host] {
+  [data-block-id]:not([data-block-kind="table"]):not(
+      [data-block-kind="data-table"]
+    ):hover:has([data-block-id]:hover)
+    > [data-review-anchor-host] {
     opacity: 0;
     pointer-events: none;
   }
 
-  [data-block-id]:hover:has([data-block-id]:hover)
+  [data-block-id]:not([data-block-kind="table"]):not(
+      [data-block-kind="data-table"]
+    ):hover:has([data-block-id]:hover)
     > [data-review-anchor-host]
     .review-block-button {
     pointer-events: none;
