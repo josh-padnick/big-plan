@@ -443,6 +443,8 @@ export const AgentChangeDigest = ({
   onLoad,
   actionLabel,
   onResolve,
+  onRevert,
+  canRevert,
   resolved = false,
 }: {
   readonly diff: SnapshotDiff | null;
@@ -453,10 +455,18 @@ export const AgentChangeDigest = ({
   readonly onLoad: () => void;
   readonly actionLabel?: string;
   readonly onResolve?: () => void;
+  readonly onRevert?: () => void;
+  readonly canRevert?: boolean;
   readonly resolved?: boolean;
 }) => {
-  const { activeDiff, activePlaceId, isPlaceReviewed, closeTour, openTour } =
-    useDiffTour();
+  const {
+    activeDiff,
+    activePlaceId,
+    isPlaceAccepted,
+    setPlacesAccepted,
+    closeTour,
+    openTour,
+  } = useDiffTour();
   const available =
     diff === null
       ? []
@@ -478,10 +488,10 @@ export const AgentChangeDigest = ({
     );
   }
   if (available.length === 0) return null;
-  const reviewedCount = available.filter((place) =>
-    isPlaceReviewed(diff, place.placeId),
+  const acceptedCount = available.filter((place) =>
+    isPlaceAccepted(diff, place.placeId),
   ).length;
-  const allReviewed = reviewedCount === available.length;
+  const allAccepted = acceptedCount === available.length;
   const ownsActiveTour = activeDiff === diff;
   const isActive =
     ownsActiveTour &&
@@ -521,9 +531,9 @@ export const AgentChangeDigest = ({
         <Icon icon={CHEVRON_RIGHT_ICON} />
         {available.length} change{available.length === 1 ? "" : "s"} across{" "}
         {sections.size} slide{sections.size === 1 ? "" : "s"}
-        {reviewedCount === 0 ? null : (
+        {acceptedCount === 0 ? null : (
           <span className="ml-auto font-medium text-accent">
-            {reviewedCount} of {available.length} reviewed
+            {acceptedCount} of {available.length} accepted
           </span>
         )}
       </button>
@@ -556,16 +566,19 @@ export const AgentChangeDigest = ({
                       placeIds: available.map((place) => place.placeId),
                       startPlaceId: entry.placeId,
                       isSuperseded,
+                      onResolve,
+                      onRevert,
+                      canRevert,
                     })
                   }
                 >
                   <span className="min-w-0 [overflow-wrap:anywhere]">
                     {entry.label}
                   </span>
-                  {isPlaceReviewed(diff, entry.placeId) ? (
+                  {isPlaceAccepted(diff, entry.placeId) ? (
                     <span
                       className="row-span-2 inline-flex shrink-0 items-center self-center text-accent [&>svg]:size-3.5"
-                      aria-label="Reviewed"
+                      aria-label="Accepted"
                     >
                       <Icon icon={CHECK_ICON} />
                     </span>
@@ -585,40 +598,60 @@ export const AgentChangeDigest = ({
           elsewhere in this snapshot
         </p>
       )}
-      <button
-        type="button"
-        className="w-fit rounded-md border border-edge bg-paper px-2 py-1 text-2xs font-semibold text-accent hover:border-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent"
-        onClick={() => {
-          if (isActive) {
-            closeTour();
-            return;
-          }
-          openTour({
-            diff,
-            placeIds: available.map((place) => place.placeId),
-            isSuperseded,
-          });
-        }}
-      >
-        {isActive
-          ? available.length === 1
-            ? "Close review"
-            : "Close review"
-          : (actionLabel ??
-            (reviewedCount > 0 && !allReviewed
-              ? "Continue review"
-              : available.length === 1
-                ? "Review change"
-                : `Review changes (${available.length})`))}
-      </button>
-      {!allReviewed || onResolve === undefined ? null : (
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="w-fit rounded-md border border-edge bg-paper px-2 py-1 text-2xs font-semibold text-accent hover:border-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent"
+          onClick={() => {
+            if (isActive) {
+              closeTour();
+              return;
+            }
+            openTour({
+              diff,
+              placeIds: available.map((place) => place.placeId),
+              isSuperseded,
+              onResolve,
+              onRevert,
+              canRevert,
+            });
+          }}
+        >
+          {isActive
+            ? "Exit review"
+            : (actionLabel ??
+              (acceptedCount > 0 && !allAccepted
+                ? "Continue review"
+                : available.length === 1
+                  ? "Review change"
+                  : `Review changes (${available.length})`))}
+        </button>
+        {available.length <= 1 || allAccepted ? null : (
+          <Button
+            variant="accentOutline"
+            size="micro"
+            onClick={() =>
+              setPlacesAccepted(
+                diff,
+                available.map((place) => place.placeId),
+                true,
+              )
+            }
+          >
+            Accept all
+          </Button>
+        )}
+      </div>
+      {!allAccepted || onResolve === undefined ? null : (
         <div
           className="flex min-w-0 items-center gap-2 border-t border-edge pt-2 text-2xs text-accent"
-          data-review-changes-reviewed=""
+          data-review-changes-accepted=""
         >
-          <span className="min-w-0 flex-1 font-semibold">Review complete</span>
-          <Button variant="accentOutline" size="micro" onClick={onResolve}>
-            {resolved ? "Unresolve" : "Resolve"}
+          <span className="min-w-0 flex-1 font-semibold">
+            All changes accepted
+          </span>
+          <Button variant="default" size="micro" onClick={onResolve}>
+            {resolved ? "Unresolve thread" : "Resolve thread"}
           </Button>
         </div>
       )}

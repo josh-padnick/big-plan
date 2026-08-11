@@ -2001,6 +2001,8 @@ const ChangeAttachment = ({
   currentSnapshot,
   onStatus,
   onResolve,
+  onRevert,
+  canRevert,
   resolved,
 }: {
   readonly identity: RuntimeIdentity;
@@ -2010,6 +2012,8 @@ const ChangeAttachment = ({
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
   readonly onResolve?: () => void;
+  readonly onRevert?: () => void;
+  readonly canRevert?: boolean;
   readonly resolved?: boolean;
 }) => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
@@ -2049,6 +2053,8 @@ const ChangeAttachment = ({
       isLoading={isLoading}
       onLoad={() => void load()}
       onResolve={onResolve}
+      onRevert={onRevert}
+      canRevert={canRevert}
       resolved={resolved}
     />
   );
@@ -2702,6 +2708,16 @@ const SentThread = ({
                               request.requestId
                                 ? onResolve
                                 : undefined
+                            }
+                            onRevert={
+                              latestChanged?.request.requestId ===
+                              request.requestId
+                                ? () => onRevert(request.requestId, comment.id)
+                                : undefined
+                            }
+                            canRevert={
+                              latestChanged?.request.requestId ===
+                                request.requestId && canRevertLatestChange
                             }
                             resolved={resolved}
                           />

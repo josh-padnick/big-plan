@@ -813,20 +813,20 @@ test("should restore and submit staged comments through the local review runtime
     "What changed",
   );
   await expect(page.locator("[data-review-diff-stepper]")).toContainText(
-    "Change 1 of",
+    "1 of",
   );
   await expect(kernel).toContainText("atomically");
   const closeReview = sentThread.getByRole("button", {
-    name: "Close review",
+    name: "Exit review",
   });
   await expect(closeReview).toBeVisible();
   await closeReview.click();
   await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
   await sentThread.getByRole("button", { name: "Review change" }).click();
   await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
-  await page.getByRole("button", { name: "Show current text" }).click();
+  await page.getByRole("button", { name: "Current plan" }).click();
   await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
-  await page.getByRole("button", { name: "Show changes" }).click();
+  await page.getByRole("button", { name: "This change", exact: true }).click();
   await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
@@ -1191,20 +1191,38 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(page.locator("[data-review-diff-lens]")).toContainText(
       "What changed",
     );
-    await page
-      .getByRole("button", { name: "Mark this change reviewed" })
-      .click();
-    const reviewedChange = rail.locator("[data-review-changes-reviewed]");
-    await expect(reviewedChange).toContainText("Review complete");
+    const singletonStepper = page.locator("[data-review-diff-stepper]");
+    await expect(singletonStepper).toContainText("Reviewing changes");
+    await expect(singletonStepper).toContainText("1 of 1");
     await expect(
-      reviewedChange.getByRole("button", { name: "Resolve" }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Mark this change unreviewed" })
+      singletonStepper.getByRole("button", { name: "Previous change" }),
+    ).toHaveCount(0);
+    await expect(
+      singletonStepper.getByRole("button", { name: "Next change" }),
+    ).toHaveCount(0);
+    const displayMode = singletonStepper.getByRole("group", {
+      name: "Change display",
+    });
+    await expect(
+      displayMode.getByRole("button", { name: "This change" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await displayMode.getByRole("button", { name: "Current plan" }).click();
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+    await displayMode.getByRole("button", { name: "This change" }).click();
+    await singletonStepper
+      .getByRole("button", { name: "Accept this change" })
       .click();
-    await expect(reviewedChange).toHaveCount(0);
-    await page
-      .getByRole("button", { name: "Mark this change reviewed" })
+    const acceptedChange = rail.locator("[data-review-changes-accepted]");
+    await expect(acceptedChange).toContainText("All changes accepted");
+    await expect(
+      acceptedChange.getByRole("button", { name: "Resolve thread" }),
+    ).toBeVisible();
+    await singletonStepper
+      .getByRole("button", { name: "Undo acceptance for this change" })
+      .click();
+    await expect(acceptedChange).toHaveCount(0);
+    await singletonStepper
+      .getByRole("button", { name: "Accept this change" })
       .click();
     const diffLens = page.locator("[data-review-diff-lens]");
     await expect(diffLens.locator("ins")).toHaveCSS(
@@ -1278,7 +1296,9 @@ test("should preview stale, historical, and multi-place causal diffs through the
         }),
       )
       .toBe(true);
-    await reviewedChange.getByRole("button", { name: "Resolve" }).click();
+    await acceptedChange
+      .getByRole("button", { name: "Resolve thread" })
+      .click();
     await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
     await rail.getByText("Resolved (1)").click();
@@ -1316,12 +1336,25 @@ test("should preview stale, historical, and multi-place causal diffs through the
       .getByRole("button", { name: /Review changes \(\d+\)|Continue review/u })
       .click();
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
-      `Change 1 of ${planWideChangeCount}`,
+      `1 of ${planWideChangeCount}`,
     );
+    await expect(
+      page.getByRole("button", {
+        name: "Undo acceptance for this change",
+      }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Next change" }).click();
+    await page.getByRole("button", { name: "Accept this change" }).click();
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
-      `Change 2 of ${planWideChangeCount}`,
+      `3 of ${planWideChangeCount}`,
     );
+    await page.getByRole("button", { name: "Previous change" }).click();
+    await expect(
+      page.getByRole("button", {
+        name: "Undo acceptance for this change",
+      }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Next change" }).click();
     const diffStepper = page.locator("[data-review-diff-stepper]");
     for (let index = 2; index < planWideChangeCount; index += 1) {
       if ((await diffStepper.textContent())?.includes("Delivery contract"))
