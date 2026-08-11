@@ -222,4 +222,101 @@ describe("snapshot block alignment", () => {
     });
     expect(second.places[0]?.placeId).toBe(first.places[0]?.placeId);
   });
+
+  it("should keep one table revision together as one review place", () => {
+    const before = [
+      block({
+        id: "section/approach/table-1",
+        kind: "table",
+        text: "Name\nValue\nAlpha\nOne",
+      }),
+      block({
+        id: "section/approach/table-row-1",
+        kind: "table-row",
+        text: "Name\nValue",
+      }),
+      block({
+        id: "section/approach/table-cell-1-1",
+        kind: "table-cell",
+        text: "Name",
+      }),
+      block({
+        id: "section/approach/table-cell-1-2",
+        kind: "table-cell",
+        text: "Value",
+      }),
+      block({
+        id: "section/approach/table-row-2",
+        kind: "table-row",
+        text: "Alpha\nOne",
+      }),
+      block({
+        id: "section/approach/table-cell-2-1",
+        kind: "table-cell",
+        text: "Alpha",
+      }),
+      block({
+        id: "section/approach/table-cell-2-2",
+        kind: "table-cell",
+        text: "One",
+      }),
+    ];
+    const after = [
+      block({
+        id: "section/approach/table-1",
+        kind: "table",
+        text: "Name\nValue\nEvidence\nAlpha\nOne\nBaseline",
+      }),
+      block({
+        id: "section/approach/table-row-1",
+        kind: "table-row",
+        text: "Name\nValue\nEvidence",
+      }),
+      block({
+        id: "section/approach/table-cell-1-1",
+        kind: "table-cell",
+        text: "Name",
+      }),
+      block({
+        id: "section/approach/table-cell-1-2",
+        kind: "table-cell",
+        text: "Value",
+      }),
+      block({
+        id: "section/approach/table-column-3",
+        kind: "table-column",
+        text: "Evidence",
+      }),
+      block({
+        id: "section/approach/table-row-2",
+        kind: "table-row",
+        text: "Alpha\nOne\nBaseline",
+      }),
+      block({
+        id: "section/approach/table-cell-2-1",
+        kind: "table-cell",
+        text: "Alpha",
+      }),
+      block({
+        id: "section/approach/table-cell-2-2",
+        kind: "table-cell",
+        text: "One",
+      }),
+      block({
+        id: "section/approach/table-cell-2-3",
+        kind: "table-cell",
+        text: "Baseline",
+      }),
+    ];
+
+    const diff = buildSnapshotDiff({
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      before,
+      after,
+    });
+
+    expect(diff.places).toHaveLength(1);
+    expect(diff.places[0]?.locationIndexes).toHaveLength(5);
+  });
 });

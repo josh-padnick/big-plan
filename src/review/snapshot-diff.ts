@@ -419,6 +419,32 @@ const placeId = ({
     .digest("hex")
     .slice(0, 16);
 
+const tableOwnerFor = ({
+  location,
+  before,
+  after,
+}: {
+  readonly location: SnapshotDiffLocation;
+  readonly before: ReadonlyArray<SnapshotBlock>;
+  readonly after: ReadonlyArray<SnapshotBlock>;
+}): string | undefined => {
+  if (location.kind !== "table" && !location.kind.startsWith("table-")) {
+    return undefined;
+  }
+  const blocks = location.newBlockId === undefined ? before : after;
+  const blockId = location.newBlockId ?? location.oldBlockId;
+  const position = blocks.findIndex((block) => block.id === blockId);
+  if (position < 0) return undefined;
+  for (let index = position; index >= 0; index -= 1) {
+    const candidate = blocks.at(index);
+    if (candidate === undefined || candidate.section !== location.section) {
+      continue;
+    }
+    if (candidate.kind === "table") return candidate.id;
+  }
+  return undefined;
+};
+
 /** Groups adjacent changed blocks within a section into calm review stops. */
 export const buildSnapshotDiff = ({
   from,
@@ -445,11 +471,18 @@ export const buildSnapshotDiff = ({
       previous === undefined
         ? -2
         : after.findIndex((block) => block.id === locationAnchor(previous));
+    const currentTableOwner = tableOwnerFor({ location, before, after });
+    const previousTableOwner =
+      previous === undefined
+        ? undefined
+        : tableOwnerFor({ location: previous, before, after });
     if (
       group !== undefined &&
       previous !== undefined &&
       previous.section === location.section &&
-      currentPosition - previousPosition <= 1
+      ((currentTableOwner !== undefined &&
+        currentTableOwner === previousTableOwner) ||
+        currentPosition - previousPosition <= 1)
     ) {
       group.push(index);
     } else {

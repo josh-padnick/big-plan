@@ -4,6 +4,7 @@
 
 import type { ElementContent } from "hast";
 import { MESSAGE_SQUARE_ICON } from "../../../icons/lucide/message-square.js";
+import type { LucideIcon } from "../../../icons/lucide-icon.js";
 import { hastContentToReact } from "../hast-content/hast-content.js";
 import { lucideIconToReact } from "../lucide-icon/lucide-icon.js";
 
@@ -14,11 +15,13 @@ export const AnnotationCard = ({
   children,
   className = [],
   dataProperties = {},
+  icon = MESSAGE_SQUARE_ICON,
 }: {
   readonly label: string;
   readonly children: ReadonlyArray<ElementContent>;
   readonly className?: ReadonlyArray<string>;
   readonly dataProperties?: Readonly<Record<string, string | number>>;
+  readonly icon?: LucideIcon;
 }) => (
   <aside
     className={[
@@ -29,7 +32,7 @@ export const AnnotationCard = ({
     aria-label={label}
     {...dataProperties}
   >
-    {lucideIconToReact({ icon: MESSAGE_SQUARE_ICON, hidden: false })}
+    {lucideIconToReact({ icon, hidden: false })}
     <div className="annotation-card-content min-w-0">
       <span className="annotation-card-badge mb-1 inline-flex rounded-sm bg-[color-mix(in_srgb,var(--annotation-c)_14%,transparent)] px-1.5 py-0.5 text-xs font-semibold text-[var(--annotation-c)]">
         {label}

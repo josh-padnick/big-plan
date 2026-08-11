@@ -1281,27 +1281,34 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
   await summaryComposer.getByRole("button", { name: "Cancel" }).click();
   await feedback.click();
 
-  const scrollContainer = page
-    .locator("[data-block-kind='data-table']")
-    .first()
-    .locator("[data-table-scroll-container]");
+  for (const componentName of ["FileTree", "FileTreeDiff"] as const) {
+    const component = page
+      .locator(`[data-component='${componentName}']`)
+      .first();
+    await expect(
+      component.getByRole("button", { name: /Comment on/u }),
+    ).toBeVisible();
+    await expect(component.locator("[data-review-toolbar-host]")).toHaveCSS(
+      "opacity",
+      "1",
+    );
+  }
+
+  const dataTable = page.locator("[data-block-kind='data-table']").first();
+  const scrollContainer = dataTable.locator("[data-table-scroll-container]");
   const before = await scrollContainer.evaluate(
     (element) => element.scrollWidth,
   );
   await expect(
     scrollContainer.locator("button[data-review-block-button]"),
   ).toHaveCount(0);
-  const tableComment = scrollContainer.locator(".review-table-comment");
+  const tableComment = dataTable.locator(".review-table-comment");
   await expect(tableComment).toHaveCount(1);
   await expect(tableComment).toBeVisible();
-  await expect(
-    scrollContainer.locator(
-      "[data-review-table-host][data-review-anchor-host]",
-    ),
-  ).toHaveCount(0);
-  await expect(scrollContainer.locator("[data-review-table-host]")).toHaveCSS(
-    "background-color",
-    "rgba(0, 0, 0, 0)",
+  await expect(scrollContainer.locator(".review-table-comment")).toHaveCount(0);
+  await expect(dataTable.locator("[data-review-toolbar-host]")).toHaveCSS(
+    "opacity",
+    "1",
   );
   await page.locator("[data-block-kind='table-cell']").first().hover();
   await expect(tableComment).toBeVisible();
@@ -1368,7 +1375,7 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
-  const phoneButton = scrollContainer.locator(".review-table-comment");
+  const phoneButton = dataTable.locator(".review-table-comment");
   await expect
     .poll(() =>
       phoneButton.evaluate((node) => {

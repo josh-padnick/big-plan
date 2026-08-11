@@ -88,6 +88,7 @@ import {
 } from "./agent-message.browser.js";
 import { Icon } from "./icon.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
+import { useDiffTour } from "./diff-tour.browser.js";
 import { AlertDialog, Badge, Button, Card, Textarea } from "./ui.browser.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
@@ -117,6 +118,30 @@ type RuntimeIdentity = {
   readonly planId: string;
   readonly sessionId: string;
   readonly token: string;
+};
+
+type ExternalFeedbackItem = {
+  readonly kind?: string;
+  readonly anchor?: string;
+  readonly field?: string;
+  readonly before?: string;
+  readonly after?: string;
+  readonly body?: string;
+  readonly reason?: string;
+  readonly consequence?: string;
+};
+
+type ExternalFeedbackPayload = {
+  readonly source: "flow-diagram" | "decision";
+  readonly anchor?: string | null;
+  readonly items: ReadonlyArray<ExternalFeedbackItem>;
+  readonly submit?: "batch" | "now";
+};
+
+type BigPlanFeedbackWindow = Window & {
+  bigPlan?: {
+    feedback?: { readonly add: (payload: ExternalFeedbackPayload) => void };
+  };
 };
 
 type ComposeState = {
@@ -845,12 +870,15 @@ const useBlockHosts = () => {
           block.dataset.blockKind === "data-table" ||
           block.dataset.blockKind === "table"
         ) {
-          host.dataset.reviewTableHost = "";
-          (
-            ownedDescendant(block, "[data-table-scroll-container]") ?? block
-          ).append(host);
+          const tableActions = ownedDescendant(block, ".figure-action-group");
+          if (tableActions === null) {
+            host.dataset.reviewAnchorHost = "";
+            block.append(host);
+          } else {
+            host.dataset.reviewToolbarHost = "";
+            tableActions.prepend(host);
+          }
         } else {
-          host.dataset.reviewAnchorHost = "";
           const plainCodeFigure = block.parentElement?.matches(".code-figure")
             ? block.parentElement
             : null;
@@ -897,6 +925,7 @@ const useBlockHosts = () => {
             host.dataset.reviewToolbarOverlay = "";
             overlayHeader.append(host);
           } else {
+            host.dataset.reviewAnchorHost = "";
             block.append(host);
           }
         }
@@ -2199,7 +2228,11 @@ const SentThread = ({
           ) : null}
           {latestChanged === undefined ? null : (
             <ThreadIconButton
-              label="Revert agent changes"
+              label={
+                canRevertLatestChange
+                  ? "Revert response"
+                  : "Revert unavailable — the plan changed again"
+              }
               icon={ROTATE_CCW_ICON}
               disabled={!canRevertLatestChange}
               onClick={() =>
@@ -2258,7 +2291,11 @@ const SentThread = ({
           ) : null}
           {latestChanged === undefined ? null : (
             <ThreadIconButton
-              label="Revert agent changes"
+              label={
+                canRevertLatestChange
+                  ? "Revert response"
+                  : "Revert unavailable — the plan changed again"
+              }
               icon={ROTATE_CCW_ICON}
               disabled={!canRevertLatestChange}
               onClick={() =>
@@ -2370,7 +2407,11 @@ const SentThread = ({
         ) : null}
         {latestChanged === undefined ? null : (
           <ThreadIconButton
-            label="Revert agent changes"
+            label={
+              canRevertLatestChange
+                ? "Revert response"
+                : "Revert unavailable — the plan changed again"
+            }
             icon={ROTATE_CCW_ICON}
             disabled={!canRevertLatestChange}
             onClick={() =>
@@ -2549,7 +2590,11 @@ const SentThread = ({
                   ) : null}
                   {latestChanged === undefined ? null : (
                     <ThreadIconButton
-                      label="Revert agent changes"
+                      label={
+                        canRevertLatestChange
+                          ? "Revert response"
+                          : "Revert unavailable — the plan changed again"
+                      }
                       icon={ROTATE_CCW_ICON}
                       disabled={!canRevertLatestChange}
                       onClick={() =>
@@ -2681,6 +2726,7 @@ const ChatExchange = ({
 };
 
 export const ReviewController = () => {
+  const { closeTour } = useDiffTour();
   const identity = useMemo(runtimeIdentity, []);
   const initialSnapshot = useMemo(bootstrapSnapshot, []);
   const planId =
@@ -3242,39 +3288,104 @@ export const ReviewController = () => {
     [compose, composeBody, runtimeSession?.authoritative],
   );
 
-  const sendComments = async (comments: ReadonlyArray<ReviewComment>) => {
-    if (identity === null) {
-      setStatus(
-        "Start `big-plan review` to submit comments. Your drafts are saved.",
-      );
-      return;
-    }
-    setIsSending(true);
-    try {
-      const result = parseSnapshot(
-        await serializeRuntimeWrite(() =>
-          requestJson({
-            path: "/api/feedback",
-            identity,
-            method: "POST",
-            body: { comments },
-          }),
-        ),
-      );
-      const ids = new Set(comments.map((comment) => comment.id));
-      setDrafts((current) => current.filter((comment) => !ids.has(comment.id)));
-      setSent((current) =>
-        result.sent.length > 0 ? result.sent : [...current, ...comments],
-      );
-      setStatus(
-        `${comments.length} comment${comments.length === 1 ? "" : "s"} submitted.`,
-      );
-    } catch (error) {
-      setStatus(errorMessage(error));
-    } finally {
-      setIsSending(false);
-    }
-  };
+  const sendComments = useCallback(
+    async (comments: ReadonlyArray<ReviewComment>) => {
+      if (identity === null) {
+        setStatus(
+          "Start `big-plan review` to submit comments. Your drafts are saved.",
+        );
+        return;
+      }
+      setIsSending(true);
+      try {
+        const result = parseSnapshot(
+          await serializeRuntimeWrite(() =>
+            requestJson({
+              path: "/api/feedback",
+              identity,
+              method: "POST",
+              body: { comments },
+            }),
+          ),
+        );
+        const ids = new Set(comments.map((comment) => comment.id));
+        setDrafts((current) =>
+          current.filter((comment) => !ids.has(comment.id)),
+        );
+        setSent((current) =>
+          result.sent.length > 0 ? result.sent : [...current, ...comments],
+        );
+        setStatus(
+          `${comments.length} comment${comments.length === 1 ? "" : "s"} submitted.`,
+        );
+      } catch (error) {
+        setStatus(errorMessage(error));
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [identity, serializeRuntimeWrite],
+  );
+
+  useEffect(() => {
+    if (!isHydrated) return undefined;
+    const feedbackWindow = window as BigPlanFeedbackWindow;
+    const previous = feedbackWindow.bigPlan?.feedback;
+    const api = {
+      add: (payload: ExternalFeedbackPayload): void => {
+        const source =
+          payload.source === "flow-diagram" && payload.anchor !== undefined
+            ? document.querySelector<HTMLElement>(
+                `[data-flow-anchor="${CSS.escape(payload.anchor ?? "")}"]`,
+              )
+            : payload.anchor === undefined || payload.anchor === null
+              ? null
+              : document.getElementById(payload.anchor);
+        const block = source?.closest<HTMLElement>("[data-block-id]") ?? null;
+        const subject =
+          payload.source === "flow-diagram"
+            ? "Diagram feedback"
+            : "Suggested decision option";
+        const lines = payload.items.map((item) => {
+          if (item.kind === "edit-text") {
+            return `- Change ${item.field ?? "text"}: “${item.before ?? ""}” → “${item.after ?? ""}”`;
+          }
+          if (item.kind === "remove-element") {
+            return `- Remove ${item.anchor ?? "the selected element"}${item.reason === undefined ? "" : `: ${item.reason}`}`;
+          }
+          return `- ${item.body ?? item.after ?? "Review this item."}`;
+        });
+        const comment: ReviewComment = {
+          id: randomId(),
+          body: `${subject}:\n\n${lines.join("\n")}`,
+          createdAt: new Date().toISOString(),
+          premiseSnapshot: currentSnapshot,
+          target: block === null ? { type: "document" } : targetForBlock(block),
+        };
+        setDrafts((current) => [...current, comment]);
+        setIsOpen(true);
+        setTab("comments");
+        setStatus(
+          payload.submit === "now"
+            ? "Submitting component feedback."
+            : "Component feedback added to the review batch.",
+        );
+        if (payload.submit === "now") void sendComments([comment]);
+      },
+    };
+    feedbackWindow.bigPlan = {
+      ...(feedbackWindow.bigPlan ?? {}),
+      feedback: api,
+    };
+    return () => {
+      if (feedbackWindow.bigPlan?.feedback !== api) return;
+      feedbackWindow.bigPlan = {
+        ...feedbackWindow.bigPlan,
+        ...(previous === undefined ? {} : { feedback: previous }),
+      };
+      if (previous === undefined) delete feedbackWindow.bigPlan.feedback;
+    };
+  }, [currentSnapshot, isHydrated, sendComments]);
 
   const saveComment = (body: string, submitRightAway: boolean) => {
     if (compose === null) return;
@@ -3599,6 +3710,7 @@ export const ReviewController = () => {
     );
   const toggleResolvedComment = (commentId: string) => {
     if (!resolvedCommentIds.has(commentId)) {
+      closeTour();
       cancelRequestsForComment(commentId);
       if (selectedCommentId === commentId) setSelectedCommentId(null);
       const comment = [...drafts, ...sent].find(
@@ -3724,7 +3836,7 @@ export const ReviewController = () => {
             block.dataset.blockKind === "table" ? (
             <button
               type="button"
-              className="review-table-comment group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent p-0 text-muted hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
+              className="review-table-comment review-block-button group relative inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-muted hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
               aria-label={`Comment on ${block.dataset.blockLabel ?? "this table"}`}
               aria-pressed={
                 compose?.target.type === "block" &&
@@ -4384,9 +4496,9 @@ export const ReviewController = () => {
       />
       <AlertDialog
         open={pendingRevert !== null}
-        title="Revert agent changes?"
+        title="Revert response?"
         description="This restores the plan to its state before this agent response. The comment and thread will remain until you delete them."
-        actionLabel="Revert changes"
+        actionLabel="Revert response"
         onCancel={() => setPendingRevert(null)}
         onAction={() => void revertAgentChanges()}
       />

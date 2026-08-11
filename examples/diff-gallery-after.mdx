@@ -21,12 +21,12 @@ Verify the causal boundary, the in-place lens, and the historical state.
 
 *Each answer includes the evidence that led to its declared outcome.*
 
-| Where reviewers see it | Evidence shown |
-| ---------------------- | -------------- |
-| Feedback thread | Was/Now diff attributed to that feedback |
-| Plan-wide chat | Grouped change digest and guided tour |
-| Current plan | Current source plus historical diffs |
-| Feedback on an older plan version | Stale badge and premise-to-current diff |
+| Where reviewers see it | Evidence shown | Snapshot that anchors it |
+| ---------------------- | -------------- | ------------------------ |
+| Feedback thread | Was/Now diff attributed to that feedback | Baseline to result |
+| Plan-wide chat | Grouped change digest and guided tour | Latest result |
+| Current plan | Current source plus historical diffs | Result to current |
+| Feedback on an older plan version | Stale badge and premise-to-current diff | Premise to current |
 
 ```ts
 type Outcome = "answered" | "changed" | "needs-input" | "declined";

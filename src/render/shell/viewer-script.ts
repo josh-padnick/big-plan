@@ -2291,6 +2291,20 @@ const installColumnPointerReorder = ({
       choice.hasAttribute("data-decision-proposal-choice");
     const proposalValue = () =>
       proposalText === null ? "" : proposalText.value.trim();
+    const proposalBatch = document.createElement("button");
+    proposalBatch.type = "button";
+    proposalBatch.className = "decision-proposal-action";
+    proposalBatch.textContent = "Add to feedback";
+    proposalBatch.hidden = true;
+    const proposalNow = document.createElement("button");
+    proposalNow.type = "button";
+    proposalNow.className = "decision-proposal-action decision-proposal-now";
+    proposalNow.textContent = "Send now";
+    proposalNow.hidden = true;
+    if (footer !== null && confirm !== null) {
+      footer.insertBefore(proposalBatch, confirm);
+      footer.insertBefore(proposalNow, confirm);
+    }
     let previousOptionChoice =
       choices.find((choice) => choice.checked && !proposes(choice)) || null;
 
@@ -2531,9 +2545,15 @@ const installColumnPointerReorder = ({
       const index = choice === null ? null : choice.getAttribute("data-option-index");
       showPanel(index === null ? defaultIndex : index);
       paintColumn(index, false);
-      confirm.textContent = proposing ? "Submit proposal" : "Confirm choice";
+      confirm.textContent = proposing
+        ? "Include with acceptance"
+        : "Confirm choice";
       confirm.disabled =
         choice === null || (proposing && proposalValue() === "");
+      proposalBatch.hidden = !proposing;
+      proposalNow.hidden = !proposing;
+      proposalBatch.disabled = proposalValue() === "";
+      proposalNow.disabled = proposalValue() === "";
       if (summary !== null) {
         summary.textContent =
           choice === null
@@ -2552,6 +2572,34 @@ const installColumnPointerReorder = ({
       if (proposes(event.target) && proposalText !== null) proposalText.focus();
     });
     if (proposalText !== null) proposalText.addEventListener("input", sync);
+    const handOffProposal = (submit) => {
+      const target = window.bigPlan?.feedback;
+      if (typeof target?.add !== "function") {
+        if (summary !== null) {
+          summary.textContent =
+            "Open this document in a live review to submit feedback.";
+        }
+        return;
+      }
+      target.add({
+        source: "decision",
+        anchor: decision.id,
+        submit,
+        items: [
+          {
+            kind: "comment",
+            body: "Suggest another option: " + proposalValue(),
+          },
+        ],
+      });
+      const proposalChoice = choices.find(proposes) || null;
+      if (proposalChoice !== null) proposalChoice.checked = false;
+      if (previousOptionChoice !== null) previousOptionChoice.checked = true;
+      if (proposalText !== null) proposalText.value = "";
+      sync();
+    };
+    proposalBatch.addEventListener("click", () => handOffProposal("batch"));
+    proposalNow.addEventListener("click", () => handOffProposal("now"));
     decision.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || event.bigPlanEscapeHandled === true) return;
       const choice = picked();

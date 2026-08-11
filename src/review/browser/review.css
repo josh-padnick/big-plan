@@ -56,25 +56,6 @@ here; all values use the document theme's closed token vocabulary.
     display: none;
   }
 
-  [data-table-scroll-container]:has([data-review-table-host]) {
-    position: relative;
-  }
-
-  [data-review-table-host] {
-    position: absolute;
-    z-index: 5;
-    top: 0;
-    right: 0;
-    display: flex;
-    width: 2.25rem;
-    height: 100%;
-    max-height: 2.25rem;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    pointer-events: auto;
-  }
-
   [data-review-toolbar-host] {
     position: static;
     display: inline-flex;

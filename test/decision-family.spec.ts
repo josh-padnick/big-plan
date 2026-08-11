@@ -161,6 +161,13 @@ test("should compare, answer, and revise a Decision", async ({
     .locator("[data-decision-proposal-text]")
     .fill("Publish a signed standalone archive.");
   await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
+  await expect(
+    card.getByRole("button", { name: "Add to feedback" }),
+  ).toBeVisible();
+  await expect(card.getByRole("button", { name: "Send now" })).toBeVisible();
+  await expect(
+    card.getByRole("button", { name: "Include with acceptance" }),
+  ).toBeVisible();
   await card.locator("[data-decision-proposal-cancel]").click();
   await expect(card.locator("[data-decision-proposal]")).toBeHidden();
 
@@ -174,6 +181,15 @@ test("should compare, answer, and revise a Decision", async ({
   await expect(card.locator(".decision-propose-link")).toHaveCSS(
     "box-shadow",
     "none",
+  );
+
+  await card.locator(".decision-propose-link").click();
+  await card
+    .locator("[data-decision-proposal-text]")
+    .fill("Publish through the repository release.");
+  await card.getByRole("button", { name: "Include with acceptance" }).click();
+  await expect(card.locator("[data-decision-answer]")).toContainText(
+    "Publish through the repository release.",
   );
 });
 
