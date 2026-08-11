@@ -222,6 +222,7 @@ test("should fill a maximized single-screen desktop workspace", async ({
     const artboardBox = artboard.getBoundingClientRect();
     const workspaceBox = workspace.getBoundingClientRect();
     return {
+      artboardHeight: artboardBox.height,
       artboardBottom: artboardBox.bottom,
       workspaceBottom: workspaceBox.bottom,
       workspaceHeight: workspaceBox.height,
@@ -231,9 +232,16 @@ test("should fill a maximized single-screen desktop workspace", async ({
   });
 
   expect(geometry.artboardBottom - geometry.workspaceBottom).toBeLessThan(32);
-  expect(geometry.workspaceHeight).toBeGreaterThan(700);
+  expect(geometry.workspaceHeight).toBeGreaterThan(
+    geometry.artboardHeight * 0.85,
+  );
   expect(geometry.primaryHeight).toBeCloseTo(geometry.workspaceHeight, 0);
   expect(geometry.railHeight).toBeCloseTo(geometry.workspaceHeight, 0);
+
+  const screenOverflow = await frame
+    .locator(".wireframe-screen")
+    .evaluate((node) => node.scrollHeight - node.clientHeight);
+  expect(screenOverflow).toBeLessThanOrEqual(2);
 
   const rail = frame.locator(".wireframe-rail");
   const scrollRange = await rail.evaluate(

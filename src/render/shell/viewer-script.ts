@@ -1087,14 +1087,24 @@ const installColumnPointerReorder = ({
     // from computed style rather than a duplicated constant, so the two
     // never drift out of sync.
     const cardStyle = getComputedStyle(card);
-    const inset =
+    const horizontalInset =
       parseFloat(cardStyle.paddingLeft) +
       parseFloat(cardStyle.paddingRight) +
       parseFloat(cardStyle.borderLeftWidth) +
       parseFloat(cardStyle.borderRightWidth);
-    frame.style.zoom = String(
-      Math.min(1, (screen.clientWidth - inset) / frame.offsetWidth),
-    );
+    const verticalInset =
+      parseFloat(cardStyle.paddingTop) +
+      parseFloat(cardStyle.paddingBottom) +
+      parseFloat(cardStyle.borderTopWidth) +
+      parseFloat(cardStyle.borderBottomWidth);
+    const caption = card.previousElementSibling;
+    const captionHeight =
+      caption instanceof HTMLElement ? caption.getBoundingClientRect().height : 0;
+    const widthScale =
+      (screen.clientWidth - horizontalInset) / frame.offsetWidth;
+    const heightScale =
+      (screen.clientHeight - captionHeight - verticalInset) / frame.offsetHeight;
+    frame.style.zoom = String(Math.min(1, widthScale, heightScale));
   };
   for (const root of roots) {
     const screens = Array.from(
