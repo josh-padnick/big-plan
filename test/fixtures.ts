@@ -69,6 +69,7 @@ type WorkerFixtures = {
   readonly wireframeFormFactorsViewerUrl: string;
   readonly wireframeQualityViewerUrl: string;
   readonly wireframeShortContentViewerUrl: string;
+  readonly wireframeDirectPanelViewerUrl: string;
   readonly wireframeMultiDesktopViewerUrl: string;
   readonly wireframeSingleDesktopViewerUrl: string;
   readonly wireframeViewerUrl: string;
@@ -264,6 +265,18 @@ const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
   <Screen id="ready" name="Ready" device="phone">
     <Panel title="Ready">
       <Text text="The short state is complete." />
+    </Panel>
+  </Screen>
+</Wireframe>
+`;
+
+const WIREFRAME_DIRECT_PANEL_MDX = `# Direct desktop panel
+
+<Wireframe id="direct-panel" title="Standalone desktop content">
+  <Screen id="standalone" name="Standalone" device="desktop">
+    <Panel title="Standalone panel">
+      <Text text="First line." />
+      <Text text="Second line." />
     </Panel>
   </Screen>
 </Wireframe>
@@ -846,6 +859,20 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const inputPath = join(outputDir, "wireframe-short-content.mdx");
       const outputPath = join(outputDir, "wireframe-short-content.html");
       await writeFile(inputPath, WIREFRAME_SHORT_CONTENT_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeDirectPanelViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-direct-panel-"),
+      );
+      const inputPath = join(outputDir, "wireframe-direct-panel.mdx");
+      const outputPath = join(outputDir, "wireframe-direct-panel.html");
+      await writeFile(inputPath, WIREFRAME_DIRECT_PANEL_MDX, "utf8");
       await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });

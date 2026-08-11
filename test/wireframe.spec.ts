@@ -70,6 +70,22 @@ test("should reach every prototype action from the keyboard", async ({
   await expect(lesson).toBeVisible();
 });
 
+test("should preserve panel spacing outside a direct desktop workspace", async ({
+  page,
+  wireframeDirectPanelViewerUrl,
+}) => {
+  await page.goto(wireframeDirectPanelViewerUrl);
+
+  const screen = page.locator('[data-wireframe-screen="standalone"]');
+  await expect(
+    screen.locator(".wireframe-row[data-wireframe-workspace]"),
+  ).toHaveCount(0);
+  await expect(screen.locator(".wireframe-panel-body")).toHaveCSS(
+    "gap",
+    "12px",
+  );
+});
+
 test("should maximize into a left screen rail, sequence it with arrow keys, and restore cleanly", async ({
   page,
   wireframeViewerUrl,

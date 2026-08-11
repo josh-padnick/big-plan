@@ -706,8 +706,13 @@ marks and a plan diff never jitters.
   }
   /* Queue column: force two-line rows and clip long subjects. */
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row
+    > [data-wireframe-master]
+    .wireframe-list-item,
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    > .wireframe-canvas
+    > .wireframe-row[data-wireframe-workspace]
     > [data-wireframe-master]
     .wireframe-list-item {
     display: flex;
@@ -728,7 +733,11 @@ marks and a plan diff never jitters.
     border-left: 1px solid var(--wf-stroke-soft);
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
+    .wireframe-panel-body,
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    > .wireframe-canvas
+    > .wireframe-row[data-wireframe-workspace]
     .wireframe-panel-body {
     gap: 0.45rem;
     min-height: 0;
@@ -736,26 +745,42 @@ marks and a plan diff never jitters.
   /* Conversation column: the thread scrolls independently while mode and
      composer remain anchored at the foot of the dominant primary pane. */
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
+    .wireframe-panel-body[data-wireframe-conversation],
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    > .wireframe-canvas
+    > .wireframe-row[data-wireframe-workspace]
     .wireframe-panel-body[data-wireframe-conversation] {
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
+    .wireframe-panel:has(> .wireframe-panel-body[data-wireframe-conversation]),
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    > .wireframe-canvas
+    > .wireframe-row[data-wireframe-workspace]
     .wireframe-panel:has(> .wireframe-panel-body[data-wireframe-conversation]) {
     overflow: hidden;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
+    .wireframe-thread,
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    > .wireframe-canvas
+    > .wireframe-row[data-wireframe-workspace]
     .wireframe-thread {
     flex: 1 1 0;
     min-height: 0;
     overflow-y: auto;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
+    .wireframe-composer,
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    > .wireframe-canvas
+    > .wireframe-row[data-wireframe-workspace]
     .wireframe-composer {
     flex: none;
     padding-top: 0.5rem;
