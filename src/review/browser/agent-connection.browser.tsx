@@ -174,6 +174,12 @@ const CurrentActivityCard = ({
   }, [attentionKey]);
   const body =
     activity.state === "working" ? activity.latestStep : activity.supporting;
+  const footerLabel =
+    "updatedAtMs" in activity
+      ? `Updated ${relativeSignalLabel({ now: nowMs, at: activity.updatedAtMs })}`
+      : activity.state === "idle"
+        ? "No unanswered requests"
+        : null;
   return (
     <article
       ref={cardRef}
@@ -210,26 +216,24 @@ const CurrentActivityCard = ({
         </strong>
       ) : null}
       <p className="m-0 text-ink [overflow-wrap:anywhere]">{body}</p>
-      <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-2 text-2xs">
-        <span className="text-muted">
-          {"updatedAtMs" in activity
-            ? `Updated ${relativeSignalLabel({ now: nowMs, at: activity.updatedAtMs })}`
-            : activity.state === "idle"
-              ? "No unanswered requests"
-              : "Current queue state"}
-        </span>
-        {"requestId" in activity ? (
-          <button
-            type="button"
-            className="ml-auto cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={() =>
-              onViewRequest(activity.requestId, activity.requestKind)
-            }
-          >
-            View thread →
-          </button>
-        ) : null}
-      </div>
+      {footerLabel !== null || "requestId" in activity ? (
+        <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-2 text-2xs">
+          {footerLabel === null ? null : (
+            <span className="text-muted">{footerLabel}</span>
+          )}
+          {"requestId" in activity ? (
+            <button
+              type="button"
+              className="ml-auto cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onClick={() =>
+                onViewRequest(activity.requestId, activity.requestKind)
+              }
+            >
+              View thread →
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 };
@@ -444,6 +448,10 @@ export const AgentConnectionPanel = ({
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
   const currentNowMs = useSecondClock();
+  const isConnected =
+    connected &&
+    activity.state !== "offline" &&
+    activity.state !== "disconnected";
   return (
     <div className="min-w-0">
       <section>
@@ -461,7 +469,7 @@ export const AgentConnectionPanel = ({
           />
         )}
       </section>
-      {isReadOnly || connected ? null : (
+      {isReadOnly || isConnected ? null : (
         <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
@@ -491,7 +499,7 @@ export const AgentConnectionPanel = ({
       )}
       {isReadOnly ? null : (
         <ConnectionLog
-          connected={connected}
+          connected={isConnected}
           heartbeatAt={heartbeatAt}
           events={connectionLog}
           nowMs={currentNowMs}

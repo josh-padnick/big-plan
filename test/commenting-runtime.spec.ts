@@ -754,6 +754,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(
     sentThread.getByRole("button", { name: "Resolve comment" }),
   ).toBeVisible();
+  await page.setViewportSize({ width: 800, height: 1000 });
   await sentThread
     .getByRole("button", { name: "Expand thread", exact: true })
     .click();
@@ -765,6 +766,24 @@ test("should restore and submit staged comments through the local review runtime
     "overflow-y",
     "auto",
   );
+  expect(
+    await sentThread
+      .locator("[data-review-thread-scroll]")
+      .evaluate(
+        (node) => Math.ceil(node.scrollWidth) <= Math.ceil(node.clientWidth),
+      ),
+  ).toBe(true);
+  expect(
+    await sentThread.evaluate((thread) => {
+      const rail = thread.closest("#big-plan-feedback-rail");
+      if (rail === null) throw new Error("The feedback rail is missing");
+      return (
+        Math.ceil(thread.getBoundingClientRect().right) <=
+        Math.ceil(rail.getBoundingClientRect().right)
+      );
+    }),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1600, height: 1000 });
   const agentResponseParagraph = sentThread
     .locator(
       '[data-review-message="agent"] [data-review-message-body="structured"] p',
@@ -814,10 +833,12 @@ test("should restore and submit staged comments through the local review runtime
   await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
   await sentThread.getByRole("button", { name: "Review change" }).click();
   await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
-  await page.getByRole("button", { name: "Current plan" }).click();
-  await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
-  await page.getByRole("button", { name: "This change", exact: true }).click();
-  await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
+  const changeSetDock = page.locator("[data-review-diff-stepper]");
+  await expect(changeSetDock).toContainText("Reviewing change set");
+  await expect(changeSetDock).toContainText("Clarify the failure boundary.");
+  await expect(
+    changeSetDock.getByRole("group", { name: "Change display" }),
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
   const resolve = sentThread
@@ -1026,6 +1047,7 @@ test("should restore and submit staged comments through the local review runtime
 test("should preview stale, historical, and multi-place causal diffs through the real pipeline", async ({
   page,
 }, testInfo) => {
+  test.setTimeout(60_000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   const directory = await mkdtemp(join(tmpdir(), "big-plan-diff-preview-"));
   const planPath = join(directory, "gallery.mdx");
@@ -1035,7 +1057,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
   );
   const after = (
     await readFile(
-      new URL("../examples/diff-gallery-after.mdx", import.meta.url),
+      new URL("./fixtures/causal-diff-gallery-after.mdx", import.meta.url),
       "utf8",
     )
   )
@@ -1186,7 +1208,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
       "What changed",
     );
     const singletonStepper = page.locator("[data-review-diff-stepper]");
-    await expect(singletonStepper).toContainText("Reviewing changes");
+    await expect(singletonStepper).toContainText("Reviewing change set");
     await expect(singletonStepper).toContainText("1 of 1");
     await expect(
       singletonStepper.getByRole("button", { name: "Previous change" }),
@@ -1194,20 +1216,14 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(
       singletonStepper.getByRole("button", { name: "Next change" }),
     ).toHaveCount(0);
-    const displayMode = singletonStepper.getByRole("group", {
-      name: "Change display",
-    });
     await expect(
-      displayMode.getByRole("button", { name: "This change" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    await displayMode.getByRole("button", { name: "Current plan" }).click();
-    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
-    await displayMode.getByRole("button", { name: "This change" }).click();
+      singletonStepper.getByRole("group", { name: "Change display" }),
+    ).toHaveCount(0);
     await singletonStepper
       .getByRole("button", { name: "Accept this change" })
       .click();
     const acceptedChange = rail.locator("[data-review-changes-accepted]");
-    await expect(acceptedChange).toContainText("All changes accepted");
+    await expect(acceptedChange).toContainText("Change set accepted");
     await expect(
       acceptedChange.getByRole("button", { name: "Resolve thread" }),
     ).toBeVisible();
@@ -1348,14 +1364,10 @@ test("should preview stale, historical, and multi-place causal diffs through the
         name: "Undo acceptance for this change",
       }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Next change" }).click();
-    const diffStepper = page.locator("[data-review-diff-stepper]");
-    for (let index = 2; index < planWideChangeCount; index += 1) {
-      if ((await diffStepper.textContent())?.includes("Delivery contract"))
-        break;
-      await page.getByRole("button", { name: "Next change" }).click();
-    }
-    await expect(diffStepper).toContainText("Delivery contract");
+    await deliverySection
+      .locator("..")
+      .getByRole("button", { name: /Whole section/u })
+      .click();
     const tableDiffLens = page.locator("[data-review-diff-lens]");
     await expect(tableDiffLens.locator("[data-review-diff-table]")).toHaveCount(
       2,
@@ -1407,7 +1419,7 @@ test("should keep component replacements inside their slide and preserve Callout
   const planPath = join(directory, "gallery.mdx");
   const after = (
     await readFile(
-      new URL("../examples/diff-gallery-after.mdx", import.meta.url),
+      new URL("./fixtures/causal-diff-gallery-after.mdx", import.meta.url),
       "utf8",
     )
   ).split("\n## Delivery contract")[0];

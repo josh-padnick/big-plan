@@ -1,0 +1,73 @@
+# Causal Diff Gallery
+
+Make every meaningful agent change reviewable at its original place and long after later edits.
+
+## What this experience does
+
+This is a causal diff review experience: it shows reviewers the exact Was and Now content beside each place an agent changed, and ties each change back to the feedback that caused it.
+
+- Thread answers carry only the changes caused by that feedback.
+- Chat answers carry a grouped, plan-wide change digest.
+- Historical answers preserve their claim-time baseline and result snapshots.
+- A guided tour moves through every changed place without losing context.
+
+<Callout type="note" title="Review note">
+
+Verify the causal boundary, the in-place lens, and the historical state.
+
+</Callout>
+
+## Delivery contract
+
+*Each answer includes the evidence that led to its declared outcome.*
+
+| Where reviewers see it | Evidence shown | Snapshot that anchors it |
+| ---------------------- | -------------- | ------------------------ |
+| Feedback thread | Was/Now diff attributed to that feedback | Baseline to result |
+| Plan-wide chat | Grouped change digest and guided tour | Latest result |
+| Current plan | Current source plus historical diffs | Result to current |
+| Feedback on an older plan version | Stale badge and premise-to-current diff | Premise to current |
+
+```ts
+type Outcome = "answered" | "changed" | "needs-input" | "declined";
+
+type SnapshotExchange = {
+  premiseSnapshot: string;
+  baselineSnapshot?: string;
+  resultSnapshot: string;
+};
+```
+
+## Rollout
+
+The first release enables the full experience for every local reviewer.
+
+1. Capture the premise when feedback is authored.
+2. Freeze the baseline when the agent claims the request.
+3. Attach the result snapshot to the answer.
+4. Tour grouped changed places in the live document.
+
+<QuickSummary>
+
+<Why>
+
+- Review comments and decisions must survive browser reloads without moving
+  plan authority away from the source file.
+
+</Why>
+
+<What>
+
+- Add a local review service, a durable event table, and one operator-facing
+  review queue.
+
+</What>
+
+<How>
+
+- Land persistence first, expose narrow service contracts, then enable the
+  review workspace behind a rollout flag.
+
+</How>
+
+</QuickSummary>

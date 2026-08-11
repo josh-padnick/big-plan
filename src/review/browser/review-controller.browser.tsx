@@ -2113,6 +2113,7 @@ const ChangeAttachment = ({
   onResolve,
   onRevert,
   canRevert,
+  threadLabel,
   resolved,
 }: {
   readonly identity: RuntimeIdentity;
@@ -2124,6 +2125,7 @@ const ChangeAttachment = ({
   readonly onResolve?: () => void;
   readonly onRevert?: () => void;
   readonly canRevert?: boolean;
+  readonly threadLabel?: string;
   readonly resolved?: boolean;
 }) => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
@@ -2165,6 +2167,7 @@ const ChangeAttachment = ({
       onResolve={onResolve}
       onRevert={onRevert}
       canRevert={canRevert}
+      threadLabel={threadLabel}
       resolved={resolved}
     />
   );
@@ -2261,6 +2264,7 @@ const StalePremiseNotice = ({
           isLoading={false}
           onLoad={() => undefined}
           actionLabel="Review premise → current"
+          threadLabel={comment.body}
           onResolve={onResolve}
         />
       ) : null}
@@ -2343,7 +2347,7 @@ const SentThread = ({
   } = thread;
   const outcome = latestExchange?.outcome;
   const targetPresent = targetElement(comment.target) !== null;
-  const cardClass = `mt-2 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
+  const cardClass = `mt-2 min-w-0 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
   const associate = () => onAssociate(comment.target);
   const railFreshness = threadTime(
     latestExchange?.response?.createdAt ??
@@ -2422,15 +2426,15 @@ const SentThread = ({
           statusIcon={
             resolved
               ? CHECK_ICON
-              : latestStatus?.stage === "blocked" ||
-                  latestStatus?.stage === "offline"
-                ? TRIANGLE_ALERT_ICON
-                : latestCanceled
-                  ? CIRCLE_X_ICON
-                  : group === "ready"
-                    ? CHECK_ICON
-                    : group === "needs-input"
-                      ? MESSAGE_SQUARE_ICON
+              : group === "needs-input"
+                ? MESSAGE_SQUARE_ICON
+                : latestStatus?.stage === "blocked" ||
+                    latestStatus?.stage === "offline"
+                  ? TRIANGLE_ALERT_ICON
+                  : latestCanceled
+                    ? CIRCLE_X_ICON
+                    : group === "ready"
+                      ? CHECK_ICON
                       : group === "working"
                         ? undefined
                         : HOURGLASS_ICON
@@ -2701,15 +2705,16 @@ const SentThread = ({
           tone="positive"
         />
       </CommentCardHeader>
-      <div className={surface === "rail" ? "p-3" : ""}>
+      <div className={surface === "rail" ? "min-w-0 p-3" : ""}>
         {!targetPresent ? (
-          <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]">
-            Original target unavailable in this revision. This thread keeps its
-            recorded address; Big Plan did not guess a replacement.
+          <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)] [overflow-wrap:anywhere]">
+            The part of the plan you commented on has since been replaced or
+            removed. You can still review this thread and its saved change set
+            here.
           </p>
         ) : null}
         <div
-          className="mt-2 max-h-[30rem] min-w-0 overflow-y-auto pr-1"
+          className="mt-2 max-h-[30rem] w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto pr-1"
           data-review-thread-scroll=""
         >
           {exchanges.length === 0 ? (
@@ -2859,6 +2864,7 @@ const SentThread = ({
                               latestChanged?.request.requestId ===
                                 request.requestId && canRevertLatestChange
                             }
+                            threadLabel={comment.body}
                             resolved={resolved}
                           />
                         ) : null}
@@ -3023,6 +3029,7 @@ const ChatExchange = ({
               response={response}
               currentSnapshot={currentSnapshot}
               onStatus={onStatus}
+              threadLabel={request.body}
             />
           ) : null}
         </MessageTurn>
@@ -4440,7 +4447,7 @@ export const ReviewController = () => {
       {isOpen ? (
         <aside
           id="big-plan-feedback-rail"
-          className="fixed top-11 right-0 bottom-0 z-20 flex w-[min(22rem,100vw)] flex-col border-l border-edge bg-paper text-ink shadow-floating"
+          className="fixed top-11 right-0 bottom-0 z-20 flex w-[min(22rem,100vw)] min-w-0 max-w-full flex-col overflow-hidden border-l border-edge bg-paper text-ink shadow-floating"
           aria-label="Feedback"
         >
           <div className="flex flex-none items-stretch border-b border-edge bg-paper">

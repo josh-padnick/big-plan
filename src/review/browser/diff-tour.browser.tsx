@@ -17,6 +17,7 @@ import { INFO_ICON } from "../../icons/lucide/info.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
+import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { OCTAGON_ALERT_ICON } from "../../icons/lucide/octagon-alert.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
@@ -37,6 +38,7 @@ type OpenTour = {
   readonly onResolve?: () => void;
   readonly onRevert?: () => void;
   readonly canRevert?: boolean;
+  readonly threadLabel?: string;
 };
 
 type DiffTourValue = {
@@ -697,7 +699,6 @@ export const DiffTourProvider = ({
 }) => {
   const [tour, setTour] = useState<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
-  const [isVisible, setIsVisible] = useState(true);
   const [acceptedPlaces, setAcceptedPlaces] = useState(initialAcceptedPlaces);
   const places = useMemo(() => {
     if (tour === null) return [];
@@ -754,7 +755,6 @@ export const DiffTourProvider = ({
         : Math.max(0, next.placeIds.indexOf(next.startPlaceId));
     setTour(next);
     setIndex(startIndex);
-    setIsVisible(true);
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -806,7 +806,6 @@ export const DiffTourProvider = ({
     );
     if (nextIndex >= 0) {
       setIndex(nextIndex);
-      setIsVisible(true);
     }
   };
   return (
@@ -817,23 +816,30 @@ export const DiffTourProvider = ({
           <LensPortal
             diff={tour.diff}
             place={active}
-            isVisible={isVisible}
+            isVisible
             isSuperseded={tour.isSuperseded === true}
           />
           <div
             className="fixed right-4 bottom-4 left-4 z-40 mx-auto grid w-auto min-w-0 overflow-hidden rounded-xl border border-edge-strong bg-raised text-xs text-ink shadow-floating wide:w-fit wide:min-w-sm"
             data-review-diff-stepper=""
           >
-            <div className="flex min-w-0 items-center gap-2 border-b border-edge bg-header px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2 border-b border-accent bg-accent-soft px-3 py-2">
               <span className="inline-flex shrink-0 items-center gap-1 font-semibold text-ink [&>svg]:size-3.5">
                 <Icon icon={CHECK_ICON} />
-                Reviewing changes
+                Reviewing change set
               </span>
               <span className="shrink-0 rounded-full bg-surface px-1.5 py-0.5 text-2xs font-semibold text-muted">
                 {index + 1} of {places.length}
               </span>
-              <span className="min-w-0 flex-1 truncate text-muted">
-                {active.section}
+              <span
+                className="inline-flex min-w-0 flex-1 items-center gap-1 rounded-md bg-paper/70 px-2 py-1 text-muted [&>svg]:size-3.5"
+                aria-label={`Comment thread: ${tour.threadLabel ?? "Plan-wide chat"}`}
+                title={tour.threadLabel ?? "Plan-wide chat"}
+              >
+                <Icon icon={MESSAGE_SQUARE_ICON} />
+                <span className="truncate">
+                  {tour.threadLabel ?? "Plan-wide chat"}
+                </span>
               </span>
               {places.length <= 1 ? null : (
                 <div
@@ -848,7 +854,6 @@ export const DiffTourProvider = ({
                     aria-label="Previous change"
                     onClick={() => {
                       setIndex((current) => Math.max(0, current - 1));
-                      setIsVisible(true);
                     }}
                   >
                     <Icon icon={CHEVRON_RIGHT_ICON} />
@@ -862,7 +867,6 @@ export const DiffTourProvider = ({
                       setIndex((current) =>
                         Math.min(places.length - 1, current + 1),
                       );
-                      setIsVisible(true);
                     }}
                   >
                     <Icon icon={CHEVRON_RIGHT_ICON} />
@@ -879,30 +883,6 @@ export const DiffTourProvider = ({
               </button>
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-2 px-3 py-2">
-              <span className="text-2xs font-semibold text-muted">View</span>
-              <div
-                className="flex items-center rounded-md border border-edge bg-surface p-0.5"
-                role="group"
-                aria-label="Change display"
-              >
-                <button
-                  type="button"
-                  className="min-h-8 cursor-pointer rounded-sm px-2 font-semibold text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-pressed:bg-raised aria-pressed:text-ink aria-pressed:shadow-raised"
-                  aria-pressed={isVisible}
-                  onClick={() => setIsVisible(true)}
-                >
-                  This change
-                </button>
-                <button
-                  type="button"
-                  className="min-h-8 cursor-pointer rounded-sm px-2 font-semibold text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-pressed:bg-raised aria-pressed:text-ink aria-pressed:shadow-raised"
-                  aria-pressed={!isVisible}
-                  onClick={() => setIsVisible(false)}
-                >
-                  Current plan
-                </button>
-              </div>
-              <span className="min-w-0 flex-1" />
               {tour.onRevert === undefined ? null : (
                 <button
                   type="button"
@@ -916,9 +896,10 @@ export const DiffTourProvider = ({
                   onClick={tour.onRevert}
                 >
                   <Icon icon={ROTATE_CCW_ICON} />
-                  Revert response
+                  Revert
                 </button>
               )}
+              <span className="min-w-0 flex-1" />
               {places.length <= 1 || allAccepted ? null : (
                 <button
                   type="button"
@@ -934,32 +915,49 @@ export const DiffTourProvider = ({
                   Accept all
                 </button>
               )}
-              <button
-                type="button"
-                className={`inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md border border-accent px-3 font-semibold focus-visible:outline-2 focus-visible:outline-accent [&>svg]:size-3.5 ${isActiveAccepted ? "bg-accent-soft text-accent" : "bg-accent text-accent-ink shadow-raised hover:shadow-lifted"}`}
-                aria-pressed={isActiveAccepted}
-                aria-label={
-                  isActiveAccepted
-                    ? "Undo acceptance for this change"
-                    : "Accept this change"
-                }
-                onClick={acceptActivePlace}
-              >
-                <Icon icon={CHECK_ICON} />
-                {isActiveAccepted ? "Accepted" : "Accept change"}
-              </button>
-              {!allAccepted || tour.onResolve === undefined ? null : (
+              {isActiveAccepted ? (
+                <div className="inline-flex min-h-8 items-center gap-2">
+                  <span className="inline-flex items-center gap-1 font-semibold text-accent [&>svg]:size-3.5">
+                    <Icon icon={CHECK_ICON} />
+                    Accepted
+                  </span>
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-md px-2 py-1 text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+                    aria-label="Undo acceptance for this change"
+                    onClick={acceptActivePlace}
+                  >
+                    Undo
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md bg-accent px-3 font-semibold text-accent-ink shadow-raised hover:shadow-lifted focus-visible:outline-2 focus-visible:outline-accent [&>svg]:size-3.5"
-                  onClick={() => {
-                    tour.onResolve?.();
-                    closeTour();
-                  }}
+                  className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md border border-accent bg-accent px-3 font-semibold text-accent-ink shadow-raised hover:shadow-lifted focus-visible:outline-2 focus-visible:outline-accent [&>svg]:size-3.5"
+                  aria-label="Accept this change"
+                  onClick={acceptActivePlace}
                 >
                   <Icon icon={CHECK_ICON} />
-                  Resolve thread
+                  Accept change
                 </button>
+              )}
+              {!allAccepted || tour.onResolve === undefined ? null : (
+                <div className="inline-flex items-center gap-2 border-l border-edge pl-2">
+                  <span className="text-2xs font-semibold text-muted">
+                    Thread
+                  </span>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md bg-accent px-3 font-semibold text-accent-ink shadow-raised hover:shadow-lifted focus-visible:outline-2 focus-visible:outline-accent [&>svg]:size-3.5"
+                    onClick={() => {
+                      tour.onResolve?.();
+                      closeTour();
+                    }}
+                  >
+                    <Icon icon={CHECK_ICON} />
+                    Resolve thread
+                  </button>
+                </div>
               )}
             </div>
           </div>

@@ -30,7 +30,7 @@ const LifecycleSection = ({
   action,
 }: LifecycleSectionProps) => (
   <section
-    className={`${first ? "" : "border-t border-edge pt-4"} ${tone === "working" ? "text-[var(--callout-note-c)]" : tone === "ready" ? "text-accent" : "text-muted"}`}
+    className={`min-w-0 ${first ? "" : "border-t border-edge pt-4"} ${tone === "working" ? "text-[var(--callout-note-c)]" : tone === "ready" ? "text-accent" : "text-muted"}`}
     data-review-thread-group={tone}
   >
     <h3 className="m-0 mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-caps">
@@ -141,7 +141,7 @@ export const CommentsSurface = ({
       )}
 
       {sectionCount === 0 ? null : (
-        <div className="grid gap-4">
+        <div className="grid min-w-0 gap-4">
           {ready.length === 0 ? null : (
             <LifecycleSection
               label="Ready for review"

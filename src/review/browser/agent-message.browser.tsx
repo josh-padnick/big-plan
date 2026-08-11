@@ -31,9 +31,9 @@ export type MessageActivity = {
 };
 
 const THREAD_BASE =
-  "mt-2 min-w-0 max-w-full w-[calc(100%_-_1rem)] rounded-lg border border-edge px-2 py-2";
+  "mt-2 box-border w-auto min-w-0 max-w-full overflow-hidden rounded-lg border border-edge px-2 py-2";
 const CHAT_BASE =
-  "min-w-0 w-[calc(100%_-_1.5rem)] rounded-lg border border-edge px-2 py-2";
+  "box-border w-auto min-w-0 max-w-full overflow-hidden rounded-lg border border-edge px-2 py-2";
 const ROLE_CLASSES = {
   user: "ml-4 border-r-2 border-r-[var(--annotation-c)] bg-[color-mix(in_srgb,var(--annotation-bg)_30%,var(--bg))]",
   agent:
@@ -445,6 +445,7 @@ export const AgentChangeDigest = ({
   onResolve,
   onRevert,
   canRevert,
+  threadLabel,
   resolved = false,
 }: {
   readonly diff: SnapshotDiff | null;
@@ -457,6 +458,7 @@ export const AgentChangeDigest = ({
   readonly onResolve?: () => void;
   readonly onRevert?: () => void;
   readonly canRevert?: boolean;
+  readonly threadLabel?: string;
   readonly resolved?: boolean;
 }) => {
   const {
@@ -532,8 +534,11 @@ export const AgentChangeDigest = ({
         {available.length} change{available.length === 1 ? "" : "s"} across{" "}
         {sections.size} slide{sections.size === 1 ? "" : "s"}
         {acceptedCount === 0 ? null : (
-          <span className="ml-auto font-medium text-accent">
-            {acceptedCount} of {available.length} accepted
+          <span
+            className="ml-auto shrink-0 font-medium text-accent"
+            aria-label={`${acceptedCount} of ${available.length} changes accepted`}
+          >
+            {allAccepted ? "Accepted" : `${acceptedCount}/${available.length}`}
           </span>
         )}
       </button>
@@ -569,6 +574,7 @@ export const AgentChangeDigest = ({
                       onResolve,
                       onRevert,
                       canRevert,
+                      threadLabel,
                     })
                   }
                 >
@@ -614,6 +620,7 @@ export const AgentChangeDigest = ({
               onResolve,
               onRevert,
               canRevert,
+              threadLabel,
             });
           }}
         >
@@ -648,7 +655,7 @@ export const AgentChangeDigest = ({
           data-review-changes-accepted=""
         >
           <span className="min-w-0 flex-1 font-semibold">
-            All changes accepted
+            Change set accepted
           </span>
           <Button variant="default" size="micro" onClick={onResolve}>
             {resolved ? "Unresolve thread" : "Resolve thread"}

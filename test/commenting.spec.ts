@@ -1305,7 +1305,14 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
   await expect(
     quickSummary.locator("[data-block-kind='quick-summary-facet']"),
   ).toHaveCount(3);
-  for (const kind of ["callout", "decision-analysis", "file-tree"] as const) {
+  for (const kind of [
+    "callout",
+    "decision-analysis",
+    "file-tree",
+    "http-endpoint",
+    "graphql-operation",
+    "grpc-method",
+  ] as const) {
     const component = page.locator(`[data-block-kind='${kind}']`).first();
     await expect(component.locator(".review-toolbar-comment")).toBeVisible();
     await expect(
