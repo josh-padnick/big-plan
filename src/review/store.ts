@@ -398,6 +398,13 @@ const acquireStoreLock = async (
   }
 };
 
+/**
+ * Retires the generation this call published, and never fails. The change it
+ * guarded has already finished by the time this runs, so a generation that
+ * another process retired, an unreadable owner file, and a filesystem failure
+ * are all recovered here instead of surfacing as a caller-visible error over
+ * work that already succeeded.
+ */
 const releaseStoreLock = async ({
   lockPath,
   owner,
@@ -405,17 +412,30 @@ const releaseStoreLock = async ({
   readonly lockPath: string;
   readonly owner: StoreLockOwner;
 }): Promise<void> => {
-  const current = lockOwner(
-    JSON.parse(await readFile(join(lockPath, LOCK_OWNER_FILE), "utf8")),
-  );
+  let current: StoreLockOwner | undefined;
+  try {
+    current = lockOwner(
+      JSON.parse(await readFile(join(lockPath, LOCK_OWNER_FILE), "utf8")),
+    );
+  } catch {
+    // A retired or unreadable generation is no longer ours to retire.
+    return;
+  }
   if (
     current === undefined ||
     current.pid !== owner.pid ||
     current.token !== owner.token
   ) {
-    throw new Error("The review store lock changed owners before release");
+    // Some other generation holds this path now. Retiring it would take a
+    // live lock away from the process that published it.
+    return;
   }
-  await retireLockDirectory({ lockPath, label: "released" });
+  try {
+    await retireLockDirectory({ lockPath, label: "released" });
+  } catch {
+    // A generation this process cannot retire is cleared by the next
+    // acquire once this process is gone.
+  }
 };
 
 /** Runs one store change while other processes wait for the same resource. */
@@ -437,6 +457,8 @@ export const withReviewStoreLock = async <TResult>({
     try {
       return await change();
     } finally {
+      // Releasing never throws, so it can neither fail a completed change
+      // nor replace the error a failed change is already raising.
       await releaseStoreLock({ lockPath, owner });
     }
   }

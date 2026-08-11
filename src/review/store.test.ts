@@ -131,6 +131,67 @@ describe("review store locking", () => {
       code: "ENOENT",
     });
   });
+
+  it("should return a completed change after another process retired the lock", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+
+    await expect(
+      withReviewStoreLock({
+        lockPath: store.sessionLockPath,
+        change: async () => {
+          await rm(store.sessionLockPath, { recursive: true, force: true });
+          return "written";
+        },
+        timeoutError: () => new Error("lock timed out"),
+      }),
+    ).resolves.toBe("written");
+  });
+
+  it("should keep the change error when the lock changed owners", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+
+    await expect(
+      withReviewStoreLock({
+        lockPath: store.sessionLockPath,
+        change: async () => {
+          await writeFile(
+            join(store.sessionLockPath, "owner.json"),
+            `${JSON.stringify({ pid: process.pid, token: "0".repeat(32) })}\n`,
+          );
+          throw new Error("the change itself failed");
+        },
+        timeoutError: () => new Error("lock timed out"),
+      }),
+    ).rejects.toThrow("the change itself failed");
+  });
+
+  it("should leave a generation it no longer owns in place", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const successor = { pid: process.pid, token: "f".repeat(32) };
+
+    await withReviewStoreLock({
+      lockPath: store.sessionLockPath,
+      change: async () => {
+        await writeFile(
+          join(store.sessionLockPath, "owner.json"),
+          `${JSON.stringify(successor)}\n`,
+        );
+      },
+      timeoutError: () => new Error("lock timed out"),
+    });
+
+    expect(
+      JSON.parse(
+        await readFile(join(store.sessionLockPath, "owner.json"), "utf8"),
+      ),
+    ).toEqual(successor);
+  });
 });
 
 describe("agent connection history", () => {
