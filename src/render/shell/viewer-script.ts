@@ -50,6 +50,22 @@ const clearColumnDropIndicators = (drag) => {
   }
 };
 
+const moveColumnDragPreview = (drag, clientX, clientY) => {
+  if (drag.preview === null) return;
+  drag.preview.style.left = String(clientX) + "px";
+  drag.preview.style.top = String(clientY) + "px";
+};
+
+const showColumnDragPreview = (drag, event) => {
+  const preview = document.createElement("div");
+  preview.setAttribute("data-column-drag-preview", "");
+  preview.setAttribute("aria-hidden", "true");
+  preview.textContent = (drag.head.textContent || "Column").trim();
+  document.body?.appendChild(preview);
+  drag.preview = preview;
+  moveColumnDragPreview(drag, event.clientX, event.clientY);
+};
+
 const columnTargetAt = (drag, clientX, clientY) => {
   const element = document.elementFromPoint(clientX, clientY);
   const target = element?.closest("[data-column-reorderable]");
@@ -82,6 +98,7 @@ const finishColumnPointerReorder = (event, commit) => {
     }
   }
   clearColumnDropIndicators(drag);
+  drag.preview?.remove();
   activeColumnReorder = null;
   setColumnDragState({ pressed: false, dragging: false });
   if (drag.captureTarget.hasPointerCapture(drag.pointerId)) {
@@ -115,8 +132,10 @@ document.addEventListener("pointermove", (event) => {
     if (distance < 4) return;
     drag.dragging = true;
     setColumnDragState({ pressed: true, dragging: true });
+    showColumnDragPreview(drag, event);
   }
   event.preventDefault();
+  moveColumnDragPreview(drag, event.clientX, event.clientY);
   clearColumnDropIndicators(drag);
   const target = columnTargetAt(drag, event.clientX, event.clientY);
   if (target === null || target === drag.head) return;
@@ -190,6 +209,7 @@ const installColumnPointerReorder = ({
         startX: event.clientX,
         startY: event.clientY,
         dragging: false,
+        preview: null,
       };
       captureTarget.setPointerCapture(event.pointerId);
       setColumnDragState({ pressed: true, dragging: false });

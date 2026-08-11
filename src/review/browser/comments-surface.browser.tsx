@@ -16,7 +16,6 @@ const GROUPS = [
   { key: "needs-input", label: "Respond", glyph: TRIANGLE_ALERT_ICON },
   { key: "ready", label: "Ready for review", glyph: CHECK_ICON },
   { key: "working", label: "Now working", glyph: null },
-  { key: "queued", label: "Queued", glyph: HOURGLASS_ICON },
 ] as const;
 
 export type CommentsSurfaceModel = {
@@ -63,7 +62,7 @@ export const CommentsSurface = ({
         />
       </label>
     )}
-    {model.query !== "" ? null : model.drafts.length === 0 ? (
+    {model.query !== "" || model.drafts.length > 0 ? null : (
       <div className="border-b border-edge pb-4 text-sm text-muted [&_p]:m-0 [&_p+p]:mt-2">
         {model.sentCount > 0 ? (
           <p>
@@ -77,22 +76,6 @@ export const CommentsSurface = ({
             : "Reading offline: drafts stay in this browser until you start the local review runtime."}
         </p>
       </div>
-    ) : (
-      <section>
-        <div className="mb-2 flex items-center gap-2">
-          <p className="m-0 text-xs font-bold uppercase tracking-caps text-subtle">
-            Staged
-          </p>
-          <Badge tone="secondary" size="compact" className="ml-auto">
-            {model.drafts.length}
-          </Badge>
-        </div>
-        <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
-          {model.drafts.map((comment) => (
-            <li key={comment.id}>{model.renderDraft(comment)}</li>
-          ))}
-        </ol>
-      </section>
     )}
 
     {model.sentCount > 0 || model.resolvedDrafts.length > 0 ? (
@@ -135,6 +118,40 @@ export const CommentsSurface = ({
             </section>
           );
         })}
+        {model.query !== "" || model.drafts.length === 0 ? null : (
+          <section className="mt-4 border-t border-edge pt-4">
+            <div className="mb-2 flex items-center gap-2">
+              <p className="m-0 text-xs font-bold uppercase tracking-caps text-subtle">
+                Staged
+              </p>
+              <Badge tone="secondary" size="compact" className="ml-auto">
+                {model.drafts.length}
+              </Badge>
+            </div>
+            <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
+              {model.drafts.map((comment) => (
+                <li key={comment.id}>{model.renderDraft(comment)}</li>
+              ))}
+            </ol>
+          </section>
+        )}
+        {(model.groups.get("queued") ?? []).length === 0 ? null : (
+          <section
+            className="mt-4 border-t border-edge pt-4 text-muted"
+            data-review-thread-group="queued"
+          >
+            <h3 className="m-0 mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-caps">
+              <Icon icon={HOURGLASS_ICON} />
+              Queued
+              <Badge tone="secondary" size="compact" className="ml-auto">
+                {(model.groups.get("queued") ?? []).length}
+              </Badge>
+            </h3>
+            {(model.groups.get("queued") ?? []).map((comment) =>
+              model.renderSent(comment, false),
+            )}
+          </section>
+        )}
         {model.resolved.length === 0 &&
         model.resolvedDrafts.length === 0 ? null : (
           <details className="mt-4 border-t border-edge pt-4">
@@ -149,6 +166,27 @@ export const CommentsSurface = ({
         )}
       </div>
     ) : null}
+
+    {model.query !== "" ||
+    model.drafts.length === 0 ||
+    model.sentCount > 0 ||
+    model.resolvedDrafts.length > 0 ? null : (
+      <section>
+        <div className="mb-2 flex items-center gap-2">
+          <p className="m-0 text-xs font-bold uppercase tracking-caps text-subtle">
+            Staged
+          </p>
+          <Badge tone="secondary" size="compact" className="ml-auto">
+            {model.drafts.length}
+          </Badge>
+        </div>
+        <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
+          {model.drafts.map((comment) => (
+            <li key={comment.id}>{model.renderDraft(comment)}</li>
+          ))}
+        </ol>
+      </section>
+    )}
 
     {model.drafts.length > 0 ? (
       <div className="mt-3 flex justify-end">

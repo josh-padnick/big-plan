@@ -25,7 +25,7 @@
     border-bottom: 0;
   }
   article .data-table-grid tbody tr:hover td {
-    background: var(--surface-c);
+    background: color-mix(in srgb, var(--ink-c) 4%, var(--raised-c));
   }
   article .data-table-sort-glyph svg {
     width: 0.7rem;

@@ -142,6 +142,7 @@ test("should keep column drag cursors through pointer gestures in both themes", 
 }) => {
   await page.goto(allComponentsViewerUrl);
   const body = page.locator("body");
+  const dragPreview = page.locator("[data-column-drag-preview]");
   const pointerControl = page.locator("[data-preferences-open]");
   const plainTableHeader = page
     .locator(
@@ -219,12 +220,15 @@ test("should keep column drag cursors through pointer gestures in both themes", 
         ).toBe(true);
         await page.mouse.move(controlPoint.x, controlPoint.y, { steps: 10 });
         await expect(body).toHaveAttribute("data-column-dragging", "");
+        await expect(dragPreview).toBeVisible();
+        await expect(dragPreview).not.toHaveText("");
         expect(await cursorAt(controlPoint.x, controlPoint.y)).toBe("grabbing");
         await expect(plainTableHeader).toHaveCSS("cursor", "default");
         await expect(schemaRowHeader).toHaveCSS("cursor", "default");
         await page.mouse.up();
         await expect(body).not.toHaveAttribute("data-column-pressing");
         await expect(body).not.toHaveAttribute("data-column-dragging");
+        await expect(dragPreview).toHaveCount(0);
         expect(await cursorAt(controlPoint.x, controlPoint.y)).toBe("pointer");
         await expect(header).toHaveCSS("cursor", "grab");
         await expect(plainTableHeader).toHaveCSS("cursor", "auto");
