@@ -110,35 +110,43 @@ export const GraphqlOperation = ({
     data-graphql-kind={model.kind}
     {...(model.deprecated ? { "data-graphql-deprecated": "" } : {})}
   >
-    <header className="bg-header px-4 py-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <BadgePill
-          label={model.kind}
-          classNames={["graphql-operation-kind-pill", KIND_CLASSES[model.kind]]}
-        />
-        <span
-          className={[
-            "font-mono",
-            "text-sm",
-            "font-semibold",
-            ...(model.deprecated ? ["text-muted", "line-through"] : []),
-          ].join(" ")}
-        >
-          {model.name}
-        </span>
-        {model.deprecated ? (
-          <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
-        ) : null}
-        {model.deprecationReason === undefined ? null : (
-          <span className="text-sm text-muted">{model.deprecationReason}</span>
+    <header className="flex min-w-0 items-start justify-between gap-1 bg-header px-4 py-3">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-3">
+          <BadgePill
+            label={model.kind}
+            classNames={[
+              "graphql-operation-kind-pill",
+              KIND_CLASSES[model.kind],
+            ]}
+          />
+          <span
+            className={[
+              "font-mono",
+              "text-sm",
+              "font-semibold",
+              ...(model.deprecated ? ["text-muted", "line-through"] : []),
+            ].join(" ")}
+          >
+            {model.name}
+          </span>
+          {model.deprecated ? (
+            <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
+          ) : null}
+          {model.deprecationReason === undefined ? null : (
+            <span className="text-sm text-muted">
+              {model.deprecationReason}
+            </span>
+          )}
+        </div>
+        {model.access === undefined ? null : (
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-muted [&_svg]:size-3.5 [&_svg]:shrink-0">
+            {lucideIconToReact({ icon: LOCK_ICON, hidden: false })}
+            {model.access}
+          </div>
         )}
       </div>
-      {model.access === undefined ? null : (
-        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted [&_svg]:size-3.5 [&_svg]:shrink-0">
-          {lucideIconToReact({ icon: LOCK_ICON, hidden: false })}
-          {model.access}
-        </div>
-      )}
+      <span className="figure-action-group inline-flex shrink-0 items-center gap-1" />
     </header>
     {model.description.length === 0 ? null : (
       <div className="px-4 py-4 [&>:last-child]:mb-0">

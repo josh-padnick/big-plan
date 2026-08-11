@@ -80,15 +80,15 @@ const COMPONENT_INTERACTIONS = {
   },
   GraphqlOperation: {
     selector: "[data-graphql-operation]",
-    affordances: [],
+    affordances: ["comment"],
   },
   GrpcMethod: {
     selector: "[data-grpc-method]",
-    affordances: [],
+    affordances: ["comment"],
   },
   HttpEndpoint: {
     selector: "[data-http-endpoint]",
-    affordances: [],
+    affordances: ["comment"],
   },
   Part: {
     selector: "[data-part]",
@@ -133,6 +133,33 @@ test("should account for every registered component in the interaction gate", as
     await test.step(name, async () => {
       expect(await page.locator(contract.selector).count()).toBeGreaterThan(0);
     });
+  }
+});
+
+test("should expose endpoint comment controls and one shared selected-scope treatment", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+
+  for (const selector of [
+    "[data-http-endpoint]",
+    "[data-grpc-method]",
+    "[data-graphql-operation]",
+  ]) {
+    const component = page.locator(selector).first();
+    const comment = component.getByRole("button", { name: /Comment on/u });
+    await expect(comment).toBeVisible();
+    await comment.click();
+    await expect(component).toHaveAttribute("data-review-scope-selected", "");
+    await page
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByRole("button", { name: "Cancel" })
+      .click();
+    await expect(component).not.toHaveAttribute(
+      "data-review-scope-selected",
+      "",
+    );
   }
 });
 

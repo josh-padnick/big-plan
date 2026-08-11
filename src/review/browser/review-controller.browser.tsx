@@ -24,6 +24,7 @@ import { PENCIL_ICON } from "../../icons/lucide/pencil.js";
 import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
@@ -1591,6 +1592,76 @@ const ContextualCommentSummary = ({
   </Card>
 );
 
+const CompactRailComment = ({
+  target,
+  body,
+  associated,
+  status,
+  queuePosition,
+  onExpand,
+  onAssociate,
+  threadGroup,
+  commentId,
+  children,
+}: {
+  readonly target: CommentTarget;
+  readonly body: string;
+  readonly associated: boolean;
+  readonly status: "Queued" | "Staged" | "Working";
+  readonly queuePosition?: number;
+  readonly onExpand: () => void;
+  readonly onAssociate: (active: boolean) => void;
+  readonly threadGroup?: ThreadGroup;
+  readonly commentId?: string;
+  readonly children: ReactNode;
+}) => (
+  <Card
+    className="group/compact w-full max-w-none overflow-hidden border border-edge bg-comment-body! p-0! transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-raised"
+    density="dense"
+    elevation="none"
+    data-review-comment-ui=""
+    data-review-sent-thread={threadGroup}
+    data-review-comment-id={commentId}
+    data-review-associated={associated ? "true" : undefined}
+    onPointerEnter={() => onAssociate(true)}
+    onPointerLeave={(event) => {
+      if (!event.currentTarget.contains(document.activeElement))
+        onAssociate(false);
+    }}
+    onFocus={() => onAssociate(true)}
+    onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget))
+        onAssociate(false);
+    }}
+  >
+    <div className="flex min-w-0 items-center gap-2 px-2 py-1.5">
+      <button
+        type="button"
+        className="grid min-w-0 flex-1 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-center gap-x-1.5 border-0 bg-transparent p-0 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        aria-expanded="false"
+        aria-label={`Expand ${status.toLocaleLowerCase()} comment: ${body}`}
+        onClick={onExpand}
+      >
+        <Icon icon={CHEVRON_RIGHT_ICON} />
+        <span className="min-w-0">
+          <span className="flex min-w-0 items-baseline gap-1.5 text-2xs text-subtle">
+            {queuePosition === undefined ? null : (
+              <span className="shrink-0 font-semibold">#{queuePosition}</span>
+            )}
+            <span className="min-w-0 truncate font-medium text-muted">
+              {targetLabel(target, true)}
+            </span>
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-ink">{body}</span>
+        </span>
+      </button>
+      <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/compact:opacity-100 group-focus-within/compact:opacity-100">
+        {children}
+      </div>
+    </div>
+  </Card>
+);
+
 const StagedCard = ({
   comment,
   surface,
@@ -1612,6 +1683,7 @@ const StagedCard = ({
   onStatus,
   resolved = false,
   onResolve,
+  compact = false,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -1633,6 +1705,7 @@ const StagedCard = ({
   readonly onStatus: (message: string) => void;
   readonly resolved?: boolean;
   readonly onResolve?: () => void;
+  readonly compact?: boolean;
 }) => {
   const setAssociated = (active: boolean) => {
     onAssociate(active ? comment.target : null);
@@ -1668,6 +1741,34 @@ const StagedCard = ({
           tone="danger"
         />
       </ContextualCommentSummary>
+    );
+  }
+  if (surface === "rail" && compact && !expanded) {
+    return (
+      <CompactRailComment
+        target={comment.target}
+        body={comment.body}
+        associated={associated}
+        status="Staged"
+        onExpand={onExpandBody}
+        onAssociate={setAssociated}
+      >
+        <ThreadIconButton
+          label="Edit staged comment"
+          icon={PENCIL_ICON}
+          onClick={() => {
+            setEditBody(comment.body);
+            setIsEditing(true);
+            onExpandBody();
+          }}
+        />
+        <ThreadIconButton
+          label="Delete staged comment"
+          icon={TRASH_2_ICON}
+          onClick={onDelete}
+          tone="danger"
+        />
+      </CompactRailComment>
     );
   }
   const long = comment.body.length > LONG_COMMENT;
@@ -1713,7 +1814,7 @@ const StagedCard = ({
               onClick={onResolve}
             />
           ) : null}
-          {!resolved && long && expanded ? (
+          {!resolved && expanded && (long || compact) ? (
             <ThreadIconButton
               label="Minimize comment"
               icon={MINIMIZE_2_ICON}
@@ -2188,6 +2289,9 @@ const SentThread = ({
   onDelete,
   onRevert,
   currentSnapshot,
+  compact = false,
+  queuePosition,
+  suppressPendingStatus = false,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -2211,6 +2315,9 @@ const SentThread = ({
   readonly onDelete: () => void;
   readonly onRevert: (requestId: string, commentId: string) => void;
   readonly currentSnapshot: string;
+  readonly compact?: boolean;
+  readonly queuePosition?: number;
+  readonly suppressPendingStatus?: boolean;
 }) => {
   const [reply, setReply] = useState("");
   const [isReplying, setIsReplying] = useState(false);
@@ -2378,6 +2485,30 @@ const SentThread = ({
             />
           )}
         </ContextualCommentSummary>
+      );
+    }
+    if (compact) {
+      return (
+        <CompactRailComment
+          target={comment.target}
+          body={comment.body}
+          associated={associated}
+          status={group === "working" ? "Working" : "Queued"}
+          queuePosition={queuePosition}
+          threadGroup={group}
+          commentId={comment.id}
+          onExpand={onToggle}
+          onAssociate={(active) => onAssociate(active ? comment.target : null)}
+        >
+          {canDeleteComment ? (
+            <ThreadIconButton
+              label={deleteCommentLabel}
+              icon={TRASH_2_ICON}
+              onClick={onDelete}
+              tone="danger"
+            />
+          ) : null}
+        </CompactRailComment>
       );
     }
     return (
@@ -2621,7 +2752,7 @@ const SentThread = ({
                       ) : null}
                     </MessageTurn>
                     {requestOutcome === undefined || response === undefined ? (
-                      sharedConnectionState ? (
+                      suppressPendingStatus ? null : sharedConnectionState ? (
                         <button
                           type="button"
                           className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-2xs text-muted underline underline-offset-[0.16em] hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
@@ -3241,6 +3372,7 @@ export const ReviewController = () => {
         compose?.target.type === "block" &&
         targetElement(compose.target) === container;
       container.toggleAttribute("data-review-slide-selected", selected);
+      container.toggleAttribute("data-review-scope-selected", selected);
     }
   }, [compose, reviewContainerHosts]);
 
@@ -3250,6 +3382,7 @@ export const ReviewController = () => {
         compose?.target.type === "block" &&
         targetElement(compose.target) === block;
       block.toggleAttribute("data-review-block-selected", selected);
+      block.toggleAttribute("data-review-scope-selected", selected);
     }
   }, [blockHosts, compose]);
 
@@ -4085,6 +4218,24 @@ export const ReviewController = () => {
           onClick: () =>
             viewAgentRequest(activeRequest.requestId, activeRequest.kind),
         };
+  const activeBatchRequest = [...agent.requests].reverse().find(
+    (request) =>
+      request.kind === "feedback" &&
+      requestCommentIds(request).length > 1 &&
+      !requestIsCanceled({
+        request,
+        pendingRequestIds: cancelPendingRequestIds,
+      }) &&
+      !agent.responses.some(
+        (response) => response.requestId === request.requestId,
+      ),
+  );
+  const activeBatchCommentIds =
+    activeBatchRequest === undefined
+      ? []
+      : requestCommentIds(activeBatchRequest).filter((commentId) =>
+          visibleUnresolvedSent.some((comment) => comment.id === commentId),
+        );
 
   return (
     <>
@@ -4351,13 +4502,42 @@ export const ReviewController = () => {
                 sentCount: visibleUnresolvedSent.length + resolvedSent.length,
                 hasRuntime: identity !== null,
                 groups: sentByGroup,
+                workingBatch:
+                  activeBatchRequest === undefined ||
+                  activeBatchCommentIds.length === 0
+                    ? undefined
+                    : {
+                        count: activeBatchCommentIds.length,
+                        content: (
+                          <Card
+                            className="m-0 w-full max-w-none border border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-ink)] shadow-none"
+                            density="dense"
+                            elevation="none"
+                          >
+                            <RequestStatusStrip
+                              status={statusForRequest(
+                                activeBatchRequest,
+                                "thread",
+                              )}
+                              activity={activityForRequest(activeBatchRequest)}
+                              surface="thread"
+                              commentCount={activeBatchCommentIds.length}
+                              onShowAgent={showAgentSetup}
+                              activeRequestLink={activeRequestLink}
+                              onCancelRequest={() =>
+                                void cancelRequest(activeBatchRequest.requestId)
+                              }
+                            />
+                          </Card>
+                        ),
+                      },
                 resolved: resolvedSent,
                 resolvedDrafts: visibleResolvedDrafts,
                 canResolveAll: visibleUnresolvedSent.some(
                   (comment) =>
                     threadProjections.get(comment.id)?.group === "ready",
                 ),
-                renderDraft: (comment) => (
+                renderDraft: (comment, compact) => (
                   <StagedCard
                     key={comment.id}
                     comment={comment}
@@ -4394,6 +4574,7 @@ export const ReviewController = () => {
                     currentSnapshot={currentSnapshot}
                     onStatus={setStatus}
                     onResolve={() => toggleResolvedComment(comment.id)}
+                    compact={compact}
                   />
                 ),
                 renderResolvedDraft: (comment) => (
@@ -4432,7 +4613,7 @@ export const ReviewController = () => {
                     onResolve={() => toggleResolvedComment(comment.id)}
                   />
                 ),
-                renderSent: (comment, resolved) => {
+                renderSent: (comment, resolved, compact, queuePosition) => {
                   const thread = threadProjections.get(comment.id);
                   if (thread === undefined) return null;
                   return (
@@ -4486,6 +4667,11 @@ export const ReviewController = () => {
                         setPendingRevert({ requestId, commentId })
                       }
                       currentSnapshot={currentSnapshot}
+                      compact={compact}
+                      queuePosition={queuePosition}
+                      suppressPendingStatus={activeBatchCommentIds.includes(
+                        comment.id,
+                      )}
                     />
                   );
                 },

@@ -969,6 +969,79 @@ test("should preserve a text selection while its compact composer is open", asyn
   await expect(rail.locator(".review-staged-card")).toHaveCount(0);
 });
 
+test("should offer selection comments after double-clicking Markdown and component prose", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const cases = [
+    {
+      name: "Markdown paragraph",
+      target: page.locator("[data-block-kind='paragraph']").first(),
+    },
+    {
+      name: "Markdown list item",
+      target: page.locator("[data-block-id] li").first(),
+    },
+    {
+      name: "Markdown table cell",
+      target: page.locator("[data-block-kind='table-cell']").first(),
+    },
+    {
+      name: "Quick summary facet",
+      target: page.locator("[data-commentable-label='How'] dd").first(),
+    },
+    {
+      name: "Callout body",
+      target: page.locator("[data-block-kind='callout'] .callout-body").first(),
+    },
+  ];
+  const selectionComment = page.getByRole("button", {
+    name: "Comment on selected text",
+  });
+
+  for (const candidate of cases) {
+    await test.step(candidate.name, async () => {
+      await candidate.target.scrollIntoViewIfNeeded();
+      const point = await candidate.target.evaluate((element) => {
+        const walker = document.createTreeWalker(
+          element,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode: (node) =>
+              /[\p{L}\p{N}]/u.test(node.textContent ?? "")
+                ? NodeFilter.FILTER_ACCEPT
+                : NodeFilter.FILTER_SKIP,
+          },
+        );
+        const text = walker.nextNode();
+        if (!(text instanceof Text)) return null;
+        const match = /[\p{L}\p{N}]+/u.exec(text.data);
+        if (match === null) return null;
+        const range = document.createRange();
+        range.setStart(text, match.index);
+        range.setEnd(text, match.index + match[0].length);
+        const rect = range.getBoundingClientRect();
+        return {
+          x: rect.left + Math.min(4, rect.width / 2),
+          y: rect.top + rect.height / 2,
+        };
+      });
+      if (point === null) throw new Error(`${candidate.name} has no text`);
+      await page.mouse.dblclick(point.x, point.y, { delay: 40 });
+      await expect
+        .poll(() => page.evaluate(() => window.getSelection()?.toString()))
+        .not.toBe("");
+      await expect(selectionComment).toBeVisible();
+      await page.evaluate(() => window.getSelection()?.removeAllRanges());
+      await expect(selectionComment).toHaveCount(0);
+    });
+  }
+});
+
 test("should offer comments for whole-line and same-slide multi-block selections", async ({
   page,
   deckViewerUrl,

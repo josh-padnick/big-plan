@@ -265,6 +265,11 @@ test("should restore and submit staged comments through the local review runtime
     .locator("[data-review-sent-thread='queued']")
     .filter({ hasText: "Remove this queued comment before pickup." });
   await queuedForDeletion
+    .getByRole("button", {
+      name: "Expand queued comment: Remove this queued comment before pickup.",
+    })
+    .click();
+  await queuedForDeletion
     .getByRole("button", { name: "Delete queued comment" })
     .click();
   const deleteDialog = page.getByRole("alertdialog", {
@@ -412,7 +417,9 @@ test("should restore and submit staged comments through the local review runtime
     .locator("[data-review-comment-id]")
     .filter({ hasText: "Clarify the failure boundary." });
   await selectedThread
-    .getByRole("button", { name: /^Expand thread:/u })
+    .getByRole("button", {
+      name: /^(?:Expand thread:|Expand queued comment:)/u,
+    })
     .click();
   const reply = selectedThread.getByPlaceholder("Reply to the agent…");
   await expect(reply).toBeVisible();
@@ -453,7 +460,7 @@ test("should restore and submit staged comments through the local review runtime
   await selectedThread.getByRole("button", { name: "Minimize thread" }).click();
   await expect(
     selectedThread.getByRole("button", {
-      name: "Expand thread: Clarify the failure boundary.",
+      name: "Expand queued comment: Clarify the failure boundary.",
     }),
   ).toBeVisible();
 
@@ -526,33 +533,16 @@ test("should restore and submit staged comments through the local review runtime
   );
   await expect(workingCards).toHaveCount(2);
   await expect(
-    workingGroup.locator("[data-review-thread-status='working']"),
+    workingCards.locator("[data-review-thread-status='working']"),
   ).toHaveCount(0);
-  await workingCards
-    .first()
-    .getByRole("button", { name: "Expand thread", exact: true })
-    .click();
-  const threadActivity = workingCards
-    .first()
-    .locator("[data-review-thread-status='working']");
+  const threadActivity = workingGroup.locator(
+    "[data-review-thread-status='working']",
+  );
   await expect(threadActivity).toHaveCount(1);
   await expect(threadActivity).toContainText("Agent is working on 2 comments");
   await expect(threadActivity).toContainText(
     "Reviewing the shared feedback batch",
   );
-  expect(
-    await workingCards
-      .first()
-      .evaluate((node) => getComputedStyle(node).borderTopColor),
-  ).toBe(
-    await threadActivity.evaluate(
-      (node) => getComputedStyle(node).borderTopColor,
-    ),
-  );
-  await workingCards
-    .first()
-    .getByRole("button", { name: "Minimize thread" })
-    .click();
   await rail.getByRole("tab", { name: "Agent" }).click();
   await writeAgentHeartbeat({
     store,
@@ -1374,6 +1364,9 @@ test("should preview stale, historical, and multi-place causal diffs through the
         height: Math.round(lens.getBoundingClientRect().height),
         headerCount: (lens.textContent?.match(/Where reviewers see it/gu) ?? [])
           .length,
+        rowCounts: tables.map(
+          (table) => table.querySelectorAll("tbody > tr").length,
+        ),
         overflowingTables: tables.filter(
           (table) => table.scrollWidth > table.clientWidth,
         ).length,
@@ -1381,6 +1374,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
     });
     expect(tableDiffStructure.height).toBeLessThan(1_000);
     expect(tableDiffStructure.headerCount).toBe(1);
+    expect(tableDiffStructure.rowCounts).toEqual([4, 5]);
     expect(tableDiffStructure.overflowingTables).toBe(0);
     await expect(tableDiffLens).toContainText("Baseline to result");
     await expect(tableDiffLens).toContainText("Premise to current");

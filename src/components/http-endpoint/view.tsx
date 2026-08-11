@@ -238,39 +238,42 @@ export const HttpEndpoint = ({
     data-http-method={model.method}
     {...(model.deprecated ? { "data-http-deprecated": "" } : {})}
   >
-    <header className="bg-header px-4 py-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <BadgePill
-          label={model.method}
-          classNames={[
-            "http-endpoint-method-pill",
-            METHOD_CLASSES[model.method],
-          ]}
-        />
-        <span
-          className={[
-            "http-endpoint-path",
-            "font-mono",
-            "text-sm",
-            "font-semibold",
-            ...(model.deprecated ? ["text-muted", "line-through"] : []),
-          ].join(" ")}
-        >
-          {pathChildren(model.path)}
-        </span>
-        {model.summary === undefined ? null : (
-          <span className="text-sm text-muted">{model.summary}</span>
-        )}
-        {model.deprecated ? (
-          <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
-        ) : null}
-      </div>
-      {model.auth === undefined ? null : (
-        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted [&_svg]:size-3.5 [&_svg]:shrink-0">
-          {lucideIconToReact({ icon: LOCK_ICON, hidden: false })}
-          {model.auth}
+    <header className="flex min-w-0 items-start justify-between gap-1 bg-header px-4 py-3">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-3">
+          <BadgePill
+            label={model.method}
+            classNames={[
+              "http-endpoint-method-pill",
+              METHOD_CLASSES[model.method],
+            ]}
+          />
+          <span
+            className={[
+              "http-endpoint-path",
+              "font-mono",
+              "text-sm",
+              "font-semibold",
+              ...(model.deprecated ? ["text-muted", "line-through"] : []),
+            ].join(" ")}
+          >
+            {pathChildren(model.path)}
+          </span>
+          {model.summary === undefined ? null : (
+            <span className="text-sm text-muted">{model.summary}</span>
+          )}
+          {model.deprecated ? (
+            <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
+          ) : null}
         </div>
-      )}
+        {model.auth === undefined ? null : (
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-muted [&_svg]:size-3.5 [&_svg]:shrink-0">
+            {lucideIconToReact({ icon: LOCK_ICON, hidden: false })}
+            {model.auth}
+          </div>
+        )}
+      </div>
+      <span className="figure-action-group inline-flex shrink-0 items-center gap-1" />
     </header>
     {model.description.length === 0 ? null : (
       <div className="px-4 py-4 [&>:last-child]:mb-0">

@@ -165,18 +165,21 @@ export const GrpcMethod = ({
     data-grpc-kind={model.kind}
     {...(model.deprecated ? { "data-grpc-deprecated": "" } : {})}
   >
-    <header className="bg-header px-4 py-3">
-      <div className="font-mono text-xs text-muted">{model.service}</div>
-      <div className="mt-1 flex flex-wrap items-center gap-3">
-        <Signature model={model} />
-        <BadgePill
-          label={KIND_LABELS[model.kind]}
-          classNames={["grpc-method-kind-pill", KIND_CLASSES[model.kind]]}
-        />
-        {model.deprecated ? (
-          <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
-        ) : null}
+    <header className="flex min-w-0 items-start justify-between gap-1 bg-header px-4 py-3">
+      <div className="min-w-0">
+        <div className="font-mono text-xs text-muted">{model.service}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <Signature model={model} />
+          <BadgePill
+            label={KIND_LABELS[model.kind]}
+            classNames={["grpc-method-kind-pill", KIND_CLASSES[model.kind]]}
+          />
+          {model.deprecated ? (
+            <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
+          ) : null}
+        </div>
       </div>
+      <span className="figure-action-group inline-flex shrink-0 items-center gap-1" />
     </header>
     {model.description.length === 0 ? null : (
       <div className="px-4 py-4 [&>:last-child]:mb-0">

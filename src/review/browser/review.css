@@ -164,16 +164,7 @@ here; all values use the document theme's closed token vocabulary.
     content: "";
   }
 
-  :is(
-    [data-block-kind="data-table"],
-    [data-block-kind="table"]
-  )[data-review-block-selected] {
-    outline: 2px solid var(--annotation-c);
-    outline-offset: 0.25rem;
-    box-shadow: 0 0 0 0.25rem var(--annotation-bg);
-  }
-
-  :is([data-slide], [data-quick-summary])[data-review-slide-selected] {
+  [data-review-scope-selected] {
     outline: 3px solid color-mix(in srgb, var(--annotation-c) 45%, var(--bg));
     outline-offset: 0.25rem;
   }
