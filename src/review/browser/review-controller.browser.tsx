@@ -2673,16 +2673,29 @@ export const ReviewController = () => {
           await requestJson({ path: "/api/drafts", identity }),
         );
         if (current) {
-          setDrafts(snapshot.drafts);
+          setDrafts((existing) => {
+            const hydratedIds = new Set(
+              snapshot.drafts.map((draft) => draft.id),
+            );
+            return [
+              ...snapshot.drafts,
+              ...existing.filter((draft) => !hydratedIds.has(draft.id)),
+            ];
+          });
           setSent(snapshot.sent);
-          setResolvedCommentIds(new Set(snapshot.resolvedCommentIds));
+          setChatBody((existing) =>
+            existing === "" ? snapshot.activeDraft : existing,
+          );
+          setResolvedCommentIds(
+            (existing) =>
+              new Set([...snapshot.resolvedCommentIds, ...existing]),
+          );
           setStatus("Connected to the local review runtime.");
           setIsHydrated(true);
         }
       } catch (error) {
         if (current) {
           setStatus(errorMessage(error));
-          setIsHydrated(true);
         }
       }
     })();
@@ -2704,12 +2717,13 @@ export const ReviewController = () => {
         method: "PUT",
         body: {
           drafts,
-          activeDraft: "",
+          activeDraft: chatBody,
           resolvedCommentIds: Array.from(resolvedCommentIds),
         },
       }),
     ).catch((error: unknown) => setStatus(errorMessage(error)));
   }, [
+    chatBody,
     drafts,
     identity,
     isHydrated,

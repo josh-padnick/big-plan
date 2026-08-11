@@ -24,6 +24,198 @@ import {
 import { renderDocument } from "../src/render/render-document.js";
 import { expect, stageComment, test } from "./fixtures";
 
+test("should preserve durable review state when draft hydration fails", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(reviewRuntimeUrl);
+  await initialPersistence;
+  const durableState = {
+    drafts: [
+      {
+        id: "aabbccdd",
+        body: "Keep this durable draft.",
+        target: { type: "document" },
+      },
+    ],
+    activeDraft: "Keep this unfinished document note.",
+    resolvedCommentIds: ["1122aabb"],
+  };
+  await page.evaluate(async (state) => {
+    const root = document.documentElement;
+    const response = await fetch("/api/drafts", {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+      body: JSON.stringify(state),
+    });
+    if (!response.ok) throw new Error("Could not seed durable review state");
+  }, durableState);
+
+  await page.route("**/api/drafts", (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "not-json",
+      });
+    }
+    return route.continue();
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Feedback", exact: true }),
+  ).toBeVisible();
+  await page.evaluate(
+    () =>
+      new Promise<void>((settle) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => settle())),
+      ),
+  );
+  await page.unroute("**/api/drafts");
+
+  const persisted = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/drafts", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  expect(persisted).toMatchObject(durableState);
+});
+
+test("should merge a staged comment when hydration finishes late", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(reviewRuntimeUrl);
+  await initialPersistence;
+  await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/drafts", {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+      body: JSON.stringify({
+        drafts: [
+          {
+            id: "aabbccdd",
+            body: "Keep the durable server draft.",
+            target: { type: "document" },
+          },
+        ],
+        activeDraft: "",
+        resolvedCommentIds: [],
+      }),
+    });
+    if (!response.ok) throw new Error("Could not seed the server draft");
+  });
+
+  let releaseHydration = (): void => undefined;
+  const hydrationGate = new Promise<void>((settle) => {
+    releaseHydration = settle;
+  });
+  let markHydrationRequested = (): void => undefined;
+  const hydrationRequested = new Promise<void>((settle) => {
+    markHydrationRequested = settle;
+  });
+  await page.route("**/api/drafts", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    markHydrationRequested();
+    await hydrationGate;
+    await route.continue();
+  });
+  await page.reload();
+  await hydrationRequested;
+  await stageComment(page, "Keep the comment staged during hydration.");
+  const persisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  releaseHydration();
+  await persisted;
+
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).toContainText("Keep the durable server draft.");
+  await expect(rail).toContainText("Keep the comment staged during hydration.");
+});
+
+test("should round-trip the active plan-wide draft through hydration", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(reviewRuntimeUrl);
+  await initialPersistence;
+  const activeDraft = "Keep this unfinished plan-wide question.";
+  await page.evaluate(async (body) => {
+    const root = document.documentElement;
+    const response = await fetch("/api/drafts", {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+      body: JSON.stringify({
+        drafts: [],
+        activeDraft: body,
+        resolvedCommentIds: [],
+      }),
+    });
+    if (!response.ok) throw new Error("Could not seed the active draft");
+  }, activeDraft);
+
+  const persisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.reload();
+  await persisted;
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await expect(
+    rail.getByRole("textbox", { name: "Plan-wide chat" }),
+  ).toHaveValue(activeDraft);
+
+  const snapshot = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/drafts", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  expect(snapshot).toMatchObject({ activeDraft });
+});
+
 test("should restore and submit staged comments through the local review runtime", async ({
   page,
   reviewRuntimeUrl,
