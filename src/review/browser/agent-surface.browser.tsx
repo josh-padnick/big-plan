@@ -17,6 +17,7 @@ export type AgentSurfaceModel = {
   readonly agentCommand: string;
   readonly plan: string;
   readonly runtimeSession: RuntimeSession | null;
+  readonly attentionKey: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 };
 
@@ -47,6 +48,7 @@ export const AgentSurface = ({
           : null
       }
       isReadOnly={model.runtimeSession?.authoritative === false}
+      attentionKey={model.attentionKey}
       onViewRequest={model.onViewRequest}
     />
   </div>

@@ -115,7 +115,7 @@ const pickupProgress = (
   if (comment === undefined || comment.target.type === "document") {
     return { step: "Reviewing feedback", detail: "Whole plan" };
   }
-  return { step: "Reviewing feedback", detail: comment.target.label };
+  return { step: "Reviewing feedback", detail: comment.body };
 };
 
 const wait = (milliseconds: number): Promise<void> =>

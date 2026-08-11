@@ -261,6 +261,10 @@ test("should restore and submit staged comments through the local review runtime
     "aria-selected",
     "true",
   );
+  await expect(rail.locator("[data-review-current-activity]")).toHaveAttribute(
+    "data-review-attention",
+    "true",
+  );
   await rail.getByRole("tab", { name: "Comments" }).click();
   await expect(reply).toBeVisible();
   await selectedTitle.click();
@@ -801,10 +805,12 @@ test("should preview stale, historical, and multi-place causal diffs through the
       new URL("../examples/diff-gallery-after.mdx", import.meta.url),
       "utf8",
     )
-  ).replace(
-    '<Callout type="note" title="Review note">\n\nVerify the causal boundary, the in-place lens, and the historical state.\n\n</Callout>',
-    "> **Review note:** verify the causal boundary, the in-place lens, and the historical state.",
-  );
+  )
+    .replace(
+      '<Callout type="note" title="Review note">\n\nVerify the causal boundary, the in-place lens, and the historical state.\n\n</Callout>',
+      "> **Review note:** verify the causal boundary, the in-place lens, and the historical state.",
+    )
+    .split("\n<QuickSummary>")[0];
   await writeFile(planPath, after);
   const runtime = await startReviewRuntime({
     planPath,
@@ -1001,9 +1007,13 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(deliverySection).toBeVisible();
     await expect(deliverySection.locator("svg")).toHaveCount(0);
     await rail.getByRole("button", { name: "See the change" }).click();
+    const historicalChange = page
+      .locator("main")
+      .getByRole("region", { name: "Historical change" });
+    await expect(historicalChange).toContainText("Retired experiment");
     await expect(
       rail.getByRole("region", { name: "Historical change" }),
-    ).toContainText("Retired experiment");
+    ).toHaveCount(0);
     await page.screenshot({
       path: testInfo.outputPath("historical-change.png"),
     });
@@ -1032,13 +1042,22 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(tableDiffLens.locator("[data-review-diff-table]")).toHaveCount(
       2,
     );
-    const tableDiffStructure = await tableDiffLens.evaluate((lens) => ({
-      height: Math.round(lens.getBoundingClientRect().height),
-      headerCount: (lens.textContent?.match(/Where reviewers see it/gu) ?? [])
-        .length,
-    }));
+    const tableDiffStructure = await tableDiffLens.evaluate((lens) => {
+      const tables = Array.from(
+        lens.querySelectorAll<HTMLElement>("[data-review-diff-table]"),
+      );
+      return {
+        height: Math.round(lens.getBoundingClientRect().height),
+        headerCount: (lens.textContent?.match(/Where reviewers see it/gu) ?? [])
+          .length,
+        overflowingTables: tables.filter(
+          (table) => table.scrollWidth > table.clientWidth,
+        ).length,
+      };
+    });
     expect(tableDiffStructure.height).toBeLessThan(1_000);
     expect(tableDiffStructure.headerCount).toBe(1);
+    expect(tableDiffStructure.overflowingTables).toBe(0);
     await page.keyboard.press("Escape");
     await rail.getByRole("tab", { name: "Comments" }).click();
     await rail.getByRole("button", { name: "Mark addressed" }).click();

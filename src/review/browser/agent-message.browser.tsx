@@ -14,7 +14,7 @@ import { messageTimeLabel } from "../shared/time-label.js";
 import type { AgentStatus } from "../shared/agent-status.js";
 import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
-import { DiffLensContent, useDiffTour } from "./diff-tour.browser.js";
+import { useDiffTour } from "./diff-tour.browser.js";
 import { Icon } from "./icon.browser.js";
 
 export type MessageSurface = "thread" | "chat";
@@ -245,6 +245,12 @@ export const RequestStatusStrip = ({
     .slice(-8);
   const current = meaningful.at(-1);
   const earlier = meaningful.slice(0, -1).reverse();
+  const currentText =
+    current === undefined
+      ? "Starting work…"
+      : current.step +
+        (current.detail === undefined ? "" : ` — ${current.detail}`);
+  const hasCurrentTooltip = currentText.length > 96;
   const isWorking = status.stage === "working";
   const icon =
     status.stage === "waiting" ? (
@@ -295,16 +301,22 @@ export const RequestStatusStrip = ({
       ) : null}
       {isWorking ? (
         <p
-          className="mt-1.5 mb-0 min-w-0 text-xs text-ink [overflow-wrap:anywhere]"
+          className="group relative mt-1.5 mb-0 min-w-0 text-xs text-ink [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           data-review-status-current-activity=""
           aria-live="polite"
+          tabIndex={hasCurrentTooltip ? 0 : undefined}
         >
-          <span>
-            {current === undefined
-              ? "Starting work…"
-              : current.step +
-                (current.detail === undefined ? "" : ` — ${current.detail}`)}
+          <span className={hasCurrentTooltip ? "line-clamp-3" : undefined}>
+            {currentText}
           </span>
+          {hasCurrentTooltip ? (
+            <span
+              role="tooltip"
+              className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] left-0 z-50 w-64 max-w-[min(16rem,calc(100vw_-_2rem))] rounded-md bg-[var(--ink-c)] px-2 py-1.5 text-2xs leading-normal text-[var(--bg)] opacity-0 shadow-raised transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-visible:visible group-focus-visible:opacity-100 group-focus-visible:delay-1000"
+            >
+              {currentText}
+            </span>
+          ) : null}
         </p>
       ) : null}
       {isWorking && earlier.length > 0 ? (
@@ -418,13 +430,7 @@ export const AgentChangeDigest = ({
   readonly onLoad: () => void;
   readonly actionLabel?: string;
 }) => {
-  const {
-    activeDiff,
-    activePlaceId,
-    activePlaceIsHistorical,
-    closeTour,
-    openTour,
-  } = useDiffTour();
+  const { activeDiff, activePlaceId, closeTour, openTour } = useDiffTour();
   const available =
     diff === null
       ? []
@@ -450,10 +456,6 @@ export const AgentChangeDigest = ({
   const isActive =
     ownsActiveTour &&
     available.some((place) => place.placeId === activePlaceId);
-  const historicalPlace =
-    ownsActiveTour && activePlaceIsHistorical
-      ? available.find((place) => place.placeId === activePlaceId)
-      : undefined;
   const sections = new Map<string, Array<DiffPlace>>();
   for (const change of available) {
     const group = sections.get(change.section) ?? [];
@@ -564,16 +566,6 @@ export const AgentChangeDigest = ({
               ? "See the change"
               : `See changes (${available.length})`))}
       </button>
-      {historicalPlace === undefined ? null : (
-        <div data-review-historical-diff="">
-          <DiffLensContent
-            diff={diff}
-            place={historicalPlace}
-            isHistorical
-            isSuperseded={isSuperseded === true}
-          />
-        </div>
-      )}
     </div>
   );
 };

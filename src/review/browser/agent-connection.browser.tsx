@@ -2,7 +2,7 @@
 // review kernel owns polling and navigation; this module owns only the visual
 // projection and local disclosure/copy interactions.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
@@ -152,18 +152,35 @@ const activityTone = (activity: CurrentAgentActivity): string =>
 const CurrentActivityCard = ({
   activity,
   nowMs,
+  attentionKey,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
   readonly nowMs: number;
+  readonly attentionKey: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
+  const cardRef = useRef<HTMLElement>(null);
+  const [isAttentionActive, setIsAttentionActive] = useState(false);
+  useEffect(() => {
+    if (attentionKey === 0) return;
+    const card = cardRef.current;
+    if (card === null) return;
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    card.focus({ preventScroll: true });
+    setIsAttentionActive(true);
+    const timer = window.setTimeout(() => setIsAttentionActive(false), 1_200);
+    return () => window.clearTimeout(timer);
+  }, [attentionKey]);
   const body =
     activity.state === "working" ? activity.latestStep : activity.supporting;
   return (
     <article
-      className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${activityTone(activity)}`}
+      ref={cardRef}
+      className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] outline-offset-2 transition-[outline-color] focus-visible:outline-2 focus-visible:outline-accent motion-reduce:scroll-auto ${isAttentionActive ? "outline-2 outline-accent" : "outline-transparent"} ${activityTone(activity)}`}
       data-review-current-activity={activity.state}
+      data-review-attention={isAttentionActive ? "true" : undefined}
+      tabIndex={-1}
     >
       <div className="flex min-w-0 items-center gap-2">
         {activity.state === "working" ? (
@@ -412,6 +429,7 @@ export const AgentConnectionPanel = ({
   agentCommand,
   isReadOnly,
   replacementUrl,
+  attentionKey,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
@@ -422,6 +440,7 @@ export const AgentConnectionPanel = ({
   readonly agentCommand: string;
   readonly isReadOnly: boolean;
   readonly replacementUrl: string | null;
+  readonly attentionKey: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
   const currentNowMs = useSecondClock();
@@ -437,6 +456,7 @@ export const AgentConnectionPanel = ({
           <CurrentActivityCard
             activity={activity}
             nowMs={currentNowMs}
+            attentionKey={attentionKey}
             onViewRequest={onViewRequest}
           />
         )}

@@ -23,7 +23,7 @@ import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
 
 let runtime: ReviewRuntime;
-let targetLabel = "";
+const commentBody = "Which confidence level should this claim use?";
 const executablePath = fileURLToPath(
   new URL("../../bin/big-plan.mjs", import.meta.url),
 );
@@ -46,7 +46,6 @@ beforeAll(async () => {
   if (target === undefined) {
     throw new Error("The sample plan has no paragraph target");
   }
-  targetLabel = target.label;
   const feedback = buildFeedbackPackage({
     sessionId: runtime.sessionId,
     packageId: "aaaaaaaaaaaaaaaa",
@@ -56,7 +55,7 @@ beforeAll(async () => {
     comments: [
       {
         id: "bbbbbbbbbbbbbbbb",
-        body: "Which confidence level should this claim use?",
+        body: commentBody,
         createdAt: "2026-08-02T12:00:00.000Z",
         premiseSnapshot: deriveSnapshotDigest(source),
         target: {
@@ -150,7 +149,7 @@ describe("agent work loop", () => {
         expect.objectContaining({
           step: "Reviewing feedback",
           state: "live",
-          detail: targetLabel,
+          detail: commentBody,
         }),
       ]),
     );

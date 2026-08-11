@@ -2711,6 +2711,7 @@ export const ReviewController = () => {
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(
     null,
   );
+  const [agentAttentionKey, setAgentAttentionKey] = useState(0);
   const [associationActive, setAssociationActive] = useState(false);
   const [status, setStatus] = useState(
     identity === null
@@ -2767,6 +2768,7 @@ export const ReviewController = () => {
   const showAgentSetup = () => {
     setIsOpen(true);
     selectFeedbackTab("agent");
+    setAgentAttentionKey((current) => current + 1);
   };
   const handleFeedbackTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     let index = feedbackTabs.indexOf(tab);
@@ -4123,6 +4125,7 @@ export const ReviewController = () => {
                 agentCommand: agent.agentCommand,
                 plan: agent.plan,
                 runtimeSession,
+                attentionKey: agentAttentionKey,
                 onViewRequest: viewAgentRequest,
               }}
             />
@@ -4153,7 +4156,7 @@ export const ReviewController = () => {
                       type="button"
                       className="m-0 inline-flex min-w-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-left text-xs font-semibold text-ink hover:underline hover:underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                       aria-label={`${currentAgentActivity.headline} — view Agent tab`}
-                      onClick={() => setTab("agent")}
+                      onClick={showAgentSetup}
                     >
                       {currentAgentActivity.tone === "danger" ? (
                         <span

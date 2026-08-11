@@ -28,7 +28,6 @@ type OpenTour = {
 type DiffTourValue = {
   readonly activeDiff: SnapshotDiff | null;
   readonly activePlaceId: string | null;
-  readonly activePlaceIsHistorical: boolean;
   readonly openTour: (tour: OpenTour) => void;
   readonly closeTour: () => void;
 };
@@ -166,8 +165,12 @@ const SnapshotTable = ({
   readonly rows: ReadonlyArray<DiffLocation>;
   readonly side: "old" | "new";
 }) => (
-  <div className="max-w-full overflow-x-auto">
-    <table data-authored-prose="" data-review-diff-table="">
+  <div className="max-w-full min-w-0 overflow-hidden">
+    <table
+      className="w-full table-fixed"
+      data-authored-prose=""
+      data-review-diff-table=""
+    >
       <tbody data-authored-prose="">
         {rows.map((row, rowIndex) => {
           const cells = sideText(row, side).trim().split(/\n+/u);
@@ -176,7 +179,11 @@ const SnapshotTable = ({
               {cells.map((cell, cellIndex) => {
                 const Cell = rowIndex === 0 ? "th" : "td";
                 return (
-                  <Cell key={`${cellIndex}-${cell}`} data-authored-prose="">
+                  <Cell
+                    key={`${cellIndex}-${cell}`}
+                    className="min-w-0 [overflow-wrap:anywhere]"
+                    data-authored-prose=""
+                  >
                     {cell}
                   </Cell>
                 );
@@ -400,9 +407,25 @@ const LensPortal = ({
     const anchor = first === undefined ? null : anchorFor(first, isSuperseded);
     if (anchor === null) {
       setIsHistorical(true);
-      setHost(null);
       setPresentation(undefined);
-      return;
+      const main = document.querySelector<HTMLElement>("main");
+      if (main === null) {
+        setHost(null);
+        return;
+      }
+      const container = document.createElement("div");
+      container.dataset.reviewDiffLensHost = "";
+      container.dataset.reviewHistoricalDiff = "";
+      container.className =
+        "mx-auto my-4 min-w-0 w-full max-w-[var(--measure)] px-4";
+      const firstSlide = main.querySelector<HTMLElement>("[data-slide]");
+      if (firstSlide === null) main.prepend(container);
+      else firstSlide.before(container);
+      setHost(container);
+      requestAnimationFrame(() =>
+        container.scrollIntoView({ behavior: "smooth", block: "center" }),
+      );
+      return () => container.remove();
     }
     setIsHistorical(false);
     setPresentation(prosePresentationFor(anchor));
@@ -445,14 +468,13 @@ const LensPortal = ({
       removalNode.remove();
     };
   }, [isVisible, locations]);
-  if (isHistorical) return null;
   return host === null
     ? null
     : createPortal(
         <DiffLensContent
           diff={diff}
           place={place}
-          isHistorical={false}
+          isHistorical={isHistorical}
           isSuperseded={isSuperseded}
           presentation={presentation}
         />,
@@ -475,12 +497,6 @@ export const DiffTourProvider = ({
     return tour.diff.places.filter((place) => allowed.has(place.placeId));
   }, [tour]);
   const active = places.at(index);
-  const isHistorical =
-    tour !== null &&
-    active !== undefined &&
-    placeLocations({ diff: tour.diff, place: active }).every(
-      (location) => anchorFor(location, tour.isSuperseded === true) === null,
-    );
   const closeTour = () => setTour(null);
   const openTour = (next: OpenTour): void => {
     const startIndex =
@@ -504,11 +520,10 @@ export const DiffTourProvider = ({
     () => ({
       activeDiff: tour?.diff ?? null,
       activePlaceId: active?.placeId ?? null,
-      activePlaceIsHistorical: isHistorical,
       openTour,
       closeTour,
     }),
-    [active?.placeId, isHistorical, tour],
+    [active?.placeId, tour],
   );
   return (
     <DiffTourContext.Provider value={value}>
