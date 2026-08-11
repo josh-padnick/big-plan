@@ -165,6 +165,15 @@ test("should reject nonvisual support owners, nested layers, and root descendant
   assert.match(failures.join("\n"), /Override invariant:/);
 });
 
+test("should reject a stylesheet sitting directly under components", async () => {
+  const failures = await checkSource({
+    "components/styles.css": `${HEADER}
+@layer components { article .generated-child { color: red; } }
+`,
+  });
+  assert.match(failures.join("\n"), /outside a visual owner/);
+});
+
 test("should accept a palette-scoped token rule and reject a palette-scoped style rule", async () => {
   const accepted = await checkSource({
     "render/global.css": `${HEADER}
@@ -228,6 +237,31 @@ test("should accept a class-only rule whose utility form is written out, or a de
     { drawingSystems: new Set(["src/components/sketch/styles.css"]) },
   );
   assert.deepEqual(drawing, []);
+
+  const bothInventories = await checkSource(
+    {
+      "render/global.css": `${HEADER}
+@layer theme, base, components, utilities, bp-state;
+`,
+      "components/sketch/styles.css": `${HEADER}
+@layer components { .sketch-stroke { border-radius: 1rem; } }
+`,
+    },
+    {
+      drawingSystems: new Set(["src/components/sketch/styles.css"]),
+      budgets: {
+        "src/components/sketch/styles.css": {
+          declarations: 40,
+          classOnlyRules: 1,
+        },
+      },
+    },
+  );
+  assert.equal(bothInventories.length, 1);
+  assert.match(
+    bothInventories.join("\n"),
+    /recorded both as a drawing system and as class-only debt/,
+  );
 });
 
 test("should reject a bare Utility form marker with nothing written out", async () => {
@@ -338,6 +372,7 @@ test("should hold recorded class-only debt still and require it to shrink to zer
       "src/review/browser/review.css": { declarations: 40, classOnlyRules: 3 },
     },
   });
+  assert.equal(shrunk.length, 1);
   assert.match(shrunk.join("\n"), /this debt only shrinks, so record 2/);
 });
 

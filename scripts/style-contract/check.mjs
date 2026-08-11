@@ -88,6 +88,12 @@ const NO_VISUAL_OWNER =
 
 /** Reports whether a component or shared-primitive folder may own a stylesheet. */
 const componentOwns = (segments) => {
+  // A stylesheet needs an owning folder, not just a home under components: a
+  // bare `src/components/styles.css` has no component to belong to, and its
+  // file name would otherwise read as the owner.
+  if (segments.length < 4) {
+    return false;
+  }
   const owner = segments[2];
   if (owner === undefined || owner.startsWith("_")) {
     return owner === "_shared" && segments.length >= 5
@@ -439,7 +445,16 @@ export const checkStylesheetContract = async ({
       }
     });
 
-    if (!drawingSystems.has(relativePath)) {
+    if (drawingSystems.has(relativePath)) {
+      // A drawing system is exempt from the class-only rule, so recorded debt
+      // for one is never validated and never falls to zero. Say so rather than
+      // letting the two inventories disagree in silence.
+      if (budget?.classOnlyRules !== undefined) {
+        failures.push(
+          `${relativePath}:1: recorded both as a drawing system and as class-only debt; a drawing system is exempt from that rule, so drop classOnlyRules from its budget in scripts/style-contract/allowlist.mjs.`,
+        );
+      }
+    } else {
       const recorded = budget?.classOnlyRules ?? 0;
       if (recorded === 0) {
         for (const rule of classOnlyRules) {
