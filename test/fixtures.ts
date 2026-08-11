@@ -300,6 +300,26 @@ const WIREFRAME_SINGLE_DESKTOP_MDX = `# Single desktop workspace
         <Panel title="Feedback">
           <Text text="Historical change" role="section" />
           <Text text="Superseded changes remain reviewable." role="body" />
+          <List>
+            <ListItem label="Feedback detail 01" meta="Pending" />
+            <ListItem label="Feedback detail 02" meta="Pending" />
+            <ListItem label="Feedback detail 03" meta="Pending" />
+            <ListItem label="Feedback detail 04" meta="Pending" />
+            <ListItem label="Feedback detail 05" meta="Pending" />
+            <ListItem label="Feedback detail 06" meta="Pending" />
+            <ListItem label="Feedback detail 07" meta="Pending" />
+            <ListItem label="Feedback detail 08" meta="Pending" />
+            <ListItem label="Feedback detail 09" meta="Pending" />
+            <ListItem label="Feedback detail 10" meta="Pending" />
+            <ListItem label="Feedback detail 11" meta="Pending" />
+            <ListItem label="Feedback detail 12" meta="Pending" />
+            <ListItem label="Feedback detail 13" meta="Pending" />
+            <ListItem label="Feedback detail 14" meta="Pending" />
+            <ListItem label="Feedback detail 15" meta="Pending" />
+            <ListItem label="Feedback detail 16" meta="Pending" />
+            <ListItem label="Feedback detail 17" meta="Pending" />
+            <ListItem label="Feedback detail 18" meta="Pending" />
+          </List>
         </Panel>
       </Rail>
     </Row>

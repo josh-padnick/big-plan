@@ -2148,10 +2148,11 @@ marks and a plan diff never jitters.
     max-width: 20rem;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
-    .wireframe-app-content
+    :is(.wireframe-app-content, .wireframe-canvas)
     > .wireframe-row[data-wireframe-workspace]
     > .wireframe-rail {
     min-height: 0;
+    contain: size;
     overflow-y: auto;
   }
 

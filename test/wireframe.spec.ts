@@ -189,6 +189,17 @@ test("should fill a maximized single-screen desktop workspace", async ({
   expect(geometry.workspaceHeight).toBeGreaterThan(700);
   expect(geometry.primaryHeight).toBeCloseTo(geometry.workspaceHeight, 0);
   expect(geometry.railHeight).toBeCloseTo(geometry.workspaceHeight, 0);
+
+  const rail = frame.locator(".wireframe-rail");
+  const scrollRange = await rail.evaluate(
+    (node) => node.scrollHeight - node.clientHeight,
+  );
+  expect(scrollRange).toBeGreaterThan(0);
+  await rail.hover();
+  await page.mouse.wheel(0, scrollRange);
+  await expect
+    .poll(() => rail.evaluate((node) => node.scrollTop))
+    .toBeGreaterThan(0);
 });
 
 test("should fill a multi-screen desktop workspace at rest and when maximized", async ({
