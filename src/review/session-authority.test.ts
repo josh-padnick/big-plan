@@ -14,6 +14,7 @@ import {
   reviewSessionOwnsMailbox,
   reviewSessionView,
   validateReviewSessionDescriptor,
+  withReviewSessionAuthority,
 } from "./session-authority.js";
 import type {
   ReviewSessionDescriptor,
@@ -212,5 +213,50 @@ describe("session authority", () => {
     await expect(
       reviewSessionOwnsMailbox({ store, sessionId: current.sessionId }),
     ).resolves.toBe(true);
+  });
+
+  it("should serialize custody replacement after an authorized mutation", async () => {
+    const store = await preparedStore();
+    const replaced = descriptor({
+      sessionId: "2222222222222222",
+      url: "http://127.0.0.1:61000/",
+    });
+    const current = descriptor({
+      sessionId: "3333333333333333",
+      url: "http://127.0.0.1:62000/",
+    });
+    await activateReviewSession({ store, descriptor: replaced });
+    let releaseMutation = (): void => undefined;
+    const mutationReleased = new Promise<void>((settle) => {
+      releaseMutation = settle;
+    });
+    let mutationStarted = (): void => undefined;
+    const started = new Promise<void>((settle) => {
+      mutationStarted = settle;
+    });
+    const order: Array<string> = [];
+    const mutation = withReviewSessionAuthority({
+      store,
+      sessionId: replaced.sessionId,
+      change: async () => {
+        mutationStarted();
+        await mutationReleased;
+        order.push("mutation");
+      },
+    });
+    await started;
+    const replacement = activateReviewSession({
+      store,
+      descriptor: current,
+    }).then(() => {
+      order.push("replacement");
+    });
+    await Promise.resolve();
+    expect(order).toEqual([]);
+    releaseMutation();
+    await Promise.all([mutation, replacement]);
+
+    expect(order).toEqual(["mutation", "replacement"]);
+    await expect(readCurrentReviewSession({ store })).resolves.toEqual(current);
   });
 });

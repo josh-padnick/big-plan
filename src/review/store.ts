@@ -21,12 +21,14 @@ import {
   rename,
   readdir,
   readFile,
+  rmdir,
   unlink,
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
+import { AGENT_STALL_MS } from "./shared/agent-status.js";
 import {
   isProgressState,
   isProgressStepCode,
@@ -82,6 +84,7 @@ export type ReviewStore = {
   readonly resolvedPath: string;
   readonly sessionPath: string;
   readonly heartbeatPath: string;
+  readonly sessionLockPath: string;
   readonly agentHeartbeatPath: string;
 };
 
@@ -164,8 +167,15 @@ export const reviewStoreFor = ({
       leaf: "connections",
     }),
     resolvedPath: inside({ base: reviewDirectory, leaf: "resolved.json" }),
-    sessionPath: inside({ base: root, leaf: "session.json" }),
-    heartbeatPath: inside({ base: root, leaf: "session-heartbeat.json" }),
+    sessionPath: inside({ base: reviewDirectory, leaf: "session.json" }),
+    heartbeatPath: inside({
+      base: reviewDirectory,
+      leaf: "session-heartbeat.json",
+    }),
+    sessionLockPath: inside({
+      base: reviewDirectory,
+      leaf: ".session-authority.lock",
+    }),
     agentHeartbeatPath: inside({
       base: agentDirectory,
       leaf: "agent-heartbeat.json",
@@ -219,6 +229,106 @@ const readJson = async (path: string): Promise<unknown> => {
     // A missing, truncated, or hand-edited file means no state, never a crash.
     return undefined;
   }
+};
+
+const LOCK_ATTEMPTS = 200;
+const LOCK_WAIT_MS = 10;
+const LOCK_OWNER_FILE = "owner.json";
+
+const hasCode = (
+  error: unknown,
+  code: string,
+): error is Error & { readonly code: string } =>
+  error instanceof Error && "code" in error && error.code === code;
+
+const processIsRunning = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: unknown) {
+    return !hasCode(error, "ESRCH");
+  }
+};
+
+const waitForLock = async (): Promise<void> => {
+  await new Promise<void>((settle) => {
+    setTimeout(settle, LOCK_WAIT_MS);
+  });
+};
+
+/** Removes a lock only when its recorded process no longer exists. */
+const clearAbandonedLock = async (lockPath: string): Promise<void> => {
+  const ownerPath = join(lockPath, LOCK_OWNER_FILE);
+  let value: unknown;
+  try {
+    value = JSON.parse(await readFile(ownerPath, "utf8"));
+  } catch {
+    return;
+  }
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("pid" in value) ||
+    typeof value.pid !== "number" ||
+    !Number.isInteger(value.pid) ||
+    processIsRunning(value.pid)
+  ) {
+    return;
+  }
+  try {
+    await unlink(ownerPath);
+    await rmdir(lockPath);
+  } catch (error: unknown) {
+    if (!hasCode(error, "ENOENT")) throw error;
+  }
+};
+
+/** Creates one cross-process lock and records the process that owns it. */
+const acquireStoreLock = async (lockPath: string): Promise<boolean> => {
+  try {
+    await mkdir(lockPath, { mode: DIRECTORY_MODE });
+  } catch (error: unknown) {
+    if (!hasCode(error, "EEXIST")) throw error;
+    await clearAbandonedLock(lockPath);
+    return false;
+  }
+  try {
+    await writeFile(
+      join(lockPath, LOCK_OWNER_FILE),
+      `${JSON.stringify({ pid: process.pid })}\n`,
+      { flag: "wx", mode: FILE_MODE },
+    );
+    return true;
+  } catch (error: unknown) {
+    await rmdir(lockPath).catch(() => undefined);
+    throw error;
+  }
+};
+
+/** Runs one store change while other processes wait for the same resource. */
+export const withReviewStoreLock = async <TResult>({
+  lockPath,
+  change,
+  timeoutError,
+}: {
+  readonly lockPath: string;
+  readonly change: () => Promise<TResult>;
+  readonly timeoutError: () => Error;
+}): Promise<TResult> => {
+  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
+    if (!(await acquireStoreLock(lockPath))) {
+      await waitForLock();
+      continue;
+    }
+    try {
+      return await change();
+    } finally {
+      await unlink(join(lockPath, LOCK_OWNER_FILE));
+      await rmdir(lockPath);
+    }
+  }
+  throw timeoutError();
 };
 
 const writeJson = async ({
@@ -546,6 +656,18 @@ export const readAgentResponseValues = async (
 ): Promise<ReadonlyArray<unknown>> =>
   readJsonDirectory(store.agentResponseDirectory);
 
+/** Reads one untrusted response value for a locked mailbox change. */
+export const readAgentResponseValue = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<unknown> =>
+  readJson(
+    exchangePath({ directory: store.agentResponseDirectory, requestId }),
+  );
+
 /** Writes one runtime-authored request under its validated opaque id. */
 export const writeAgentRequestValue = async ({
   store,
@@ -789,7 +911,7 @@ export const readAgentPresence = async ({
   store,
   sessionId,
   now = Date.now(),
-  maximumAgeMs = 3_500,
+  maximumAgeMs = AGENT_STALL_MS,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;

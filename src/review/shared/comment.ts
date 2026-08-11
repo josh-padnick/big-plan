@@ -69,6 +69,7 @@ const BODY_LIMIT = 4000;
 export const QUOTE_LIMIT = 400;
 const ID_LIMIT = 64;
 const COMMENT_LIMIT = 200;
+const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
 
 const asRecord = ({
   value,
@@ -236,6 +237,131 @@ const validateTarget = ({
   throw new CommentRejected(`Unsupported comment target "${String(type)}"`);
 };
 
+const asTargetText = ({
+  value,
+  field,
+  limit,
+}: {
+  readonly value: unknown;
+  readonly field: string;
+  readonly limit: number;
+}): string => {
+  const result = asText({ value, field, limit });
+  if (result.trim() === "") {
+    throw new CommentRejected(`"${field}" cannot be empty`);
+  }
+  return result;
+};
+
+/** Validates the immutable target metadata recorded with a stored comment. */
+const validateStoredTarget = (value: unknown): CommentTarget => {
+  const target = asRecord({ value, field: "target" });
+  if (target.type === "document") return { type: "document" };
+  if (
+    (target.type !== "block" &&
+      target.type !== "selection" &&
+      target.type !== "lines") ||
+    typeof target.blockId !== "string" ||
+    !BLOCK_ID.test(target.blockId)
+  ) {
+    throw new CommentRejected("A stored comment target is invalid");
+  }
+  const identity = {
+    blockId: target.blockId,
+    kind: asTargetText({ value: target.kind, field: "kind", limit: 100 }),
+    label: asTargetText({ value: target.label, field: "label", limit: 300 }),
+    ...(target.section === undefined
+      ? {}
+      : {
+          section: asTargetText({
+            value: target.section,
+            field: "section",
+            limit: 300,
+          }),
+        }),
+  };
+  if (target.type === "block") return { type: "block", ...identity };
+  const start = asOffset({ value: target.start, field: "start" });
+  const end = asOffset({ value: target.end, field: "end" });
+  const endBlockId =
+    target.type === "selection" && target.endBlockId !== undefined
+      ? target.endBlockId
+      : undefined;
+  if (
+    ((endBlockId === undefined || endBlockId === target.blockId) &&
+      end < start) ||
+    (endBlockId !== undefined &&
+      (typeof endBlockId !== "string" || !BLOCK_ID.test(endBlockId)))
+  ) {
+    throw new CommentRejected("A stored comment range is invalid");
+  }
+  return {
+    type: target.type,
+    ...identity,
+    ...(endBlockId === undefined || endBlockId === target.blockId
+      ? {}
+      : { endBlockId }),
+    start,
+    end,
+    quote: asText({
+      value: target.quote ?? "",
+      field: "quote",
+      limit: QUOTE_LIMIT,
+    }),
+  };
+};
+
+/** Validates one bounded batch through selected target and timestamp policies. */
+const validateCommentList = ({
+  value,
+  now,
+  targetFor,
+  createdAtFor,
+}: {
+  readonly value: unknown;
+  readonly now: string;
+  readonly targetFor: (
+    comment: Readonly<Record<string, unknown>>,
+    id: string,
+  ) => CommentTarget;
+  readonly createdAtFor?: (
+    comment: Readonly<Record<string, unknown>>,
+    id: string,
+  ) => string;
+}): ReadonlyArray<ReviewComment> => {
+  if (!Array.isArray(value)) {
+    throw new CommentRejected("Comments must arrive as a list");
+  }
+  if (value.length > COMMENT_LIMIT) {
+    throw new CommentRejected(
+      `More than ${COMMENT_LIMIT} comments in one batch`,
+    );
+  }
+  const comments = value.map((entry) => {
+    const comment = asRecord({ value: entry, field: "comment" });
+    const id = asId(comment.id);
+    const body = asText({
+      value: comment.body,
+      field: "body",
+      limit: BODY_LIMIT,
+    }).trim();
+    if (body === "") {
+      throw new CommentRejected("A comment cannot be empty");
+    }
+    return {
+      id,
+      body,
+      createdAt:
+        createdAtFor?.(comment, id) ?? asTimestamp(comment.createdAt, now),
+      target: targetFor(comment, id),
+    };
+  });
+  if (new Set(comments.map((comment) => comment.id)).size !== comments.length) {
+    throw new CommentRejected("Comment ids must be unique");
+  }
+  return comments;
+};
+
 /**
  * Validates one batch of comments from the document into the shape the rest of
  * the runtime may hold. Rejects the whole batch on the first problem: a
@@ -249,34 +375,49 @@ export const validateComments = ({
   readonly value: unknown;
   readonly blocks: ReadonlyMap<string, BlockMapEntry>;
   readonly now: string;
-}): ReadonlyArray<ReviewComment> => {
-  if (!Array.isArray(value)) {
-    throw new CommentRejected("Comments must arrive as a list");
-  }
-  if (value.length > COMMENT_LIMIT) {
-    throw new CommentRejected(
-      `More than ${COMMENT_LIMIT} comments in one batch`,
-    );
-  }
-  const comments = value.map((entry) => {
-    const comment = asRecord({ value: entry, field: "comment" });
-    const body = asText({
-      value: comment.body,
-      field: "body",
-      limit: BODY_LIMIT,
-    }).trim();
-    if (body === "") {
-      throw new CommentRejected("A comment cannot be empty");
-    }
-    return {
-      id: asId(comment.id),
-      body,
-      createdAt: asTimestamp(comment.createdAt, now),
-      target: validateTarget({ value: comment.target, blocks }),
-    };
+}): ReadonlyArray<ReviewComment> =>
+  validateCommentList({
+    value,
+    now,
+    targetFor: (comment) => validateTarget({ value: comment.target, blocks }),
   });
-  if (new Set(comments.map((comment) => comment.id)).size !== comments.length) {
-    throw new CommentRejected("Comment ids must be unique");
-  }
-  return comments;
+
+/** Re-checks stored comments without requiring their targets to remain rendered. */
+export const validateStoredComments = ({
+  value,
+  now,
+}: {
+  readonly value: unknown;
+  readonly now: string;
+}): ReadonlyArray<ReviewComment> =>
+  validateCommentList({
+    value,
+    now,
+    targetFor: (comment) => validateStoredTarget(comment.target),
+  });
+
+/** Validates draft edits while preserving targets already accepted by the runtime. */
+export const validateCommentUpdates = ({
+  value,
+  blocks,
+  existing,
+  now,
+}: {
+  readonly value: unknown;
+  readonly blocks: ReadonlyMap<string, BlockMapEntry>;
+  readonly existing: ReadonlyArray<ReviewComment>;
+  readonly now: string;
+}): ReadonlyArray<ReviewComment> => {
+  const existingById = new Map(
+    existing.map((comment) => [comment.id, comment]),
+  );
+  return validateCommentList({
+    value,
+    now,
+    targetFor: (comment, id) =>
+      existingById.get(id)?.target ??
+      validateTarget({ value: comment.target, blocks }),
+    createdAtFor: (comment, id) =>
+      existingById.get(id)?.createdAt ?? asTimestamp(comment.createdAt, now),
+  });
 };

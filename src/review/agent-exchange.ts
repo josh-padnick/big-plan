@@ -10,7 +10,6 @@ import {
   readAgentRequestValues,
   readAgentResponseValues,
   writeAgentRequestValue,
-  writeAgentResponseValue,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 
@@ -635,21 +634,6 @@ export const writeAgentRequest = async ({
   });
 };
 
-/** Writes a response only after the exchange module has validated it. */
-export const writeAgentResponse = async ({
-  store,
-  response,
-}: {
-  readonly store: ReviewStore;
-  readonly response: AgentResponse;
-}): Promise<void> => {
-  await writeAgentResponseValue({
-    store,
-    requestId: response.requestId,
-    value: response,
-  });
-};
-
 /**
  * Reads the whole plan exchange through the contract. A review-server restart
  * creates a new transport session, but the plan identity continues to own its
@@ -665,31 +649,32 @@ export const readAgentExchange = async ({
   readonly sessionId: string;
   readonly planId: string;
 }): Promise<AgentExchangeSnapshot> => {
-  const requests: Array<AgentRequest> = [];
-  for (const value of (await readAgentRequestValues(store)).slice(
-    0,
-    EXCHANGE_LIMIT,
-  )) {
+  const acceptedRequests: Array<AgentRequest> = [];
+  const acceptedRequestIds = new Set<string>();
+  for (const value of await readAgentRequestValues(store)) {
     try {
       const request = validateAgentRequest(value);
       if (
         request.planId === planId &&
-        !requests.some((entry) => entry.requestId === request.requestId)
+        !acceptedRequestIds.has(request.requestId)
       ) {
-        requests.push(request);
+        acceptedRequests.push(request);
+        acceptedRequestIds.add(request.requestId);
       }
     } catch {
       // A hand-edited exchange file is ignored, never trusted or fatal.
     }
   }
-  requests.sort((left, right) => {
+  acceptedRequests.sort((left, right) => {
     const chronological = left.createdAt.localeCompare(right.createdAt);
     if (chronological !== 0) return chronological;
-    return (
-      Number(right.sessionId === sessionId) -
-      Number(left.sessionId === sessionId)
-    );
+    const currentSession =
+      Number(left.sessionId === sessionId) -
+      Number(right.sessionId === sessionId);
+    if (currentSession !== 0) return currentSession;
+    return left.requestId.localeCompare(right.requestId);
   });
+  const requests = acceptedRequests.slice(-EXCHANGE_LIMIT);
   const commentsById = new Map<string, ReviewComment>();
   for (const request of requests) {
     if (request.kind === "feedback") {
@@ -702,10 +687,8 @@ export const readAgentExchange = async ({
     requests.map((request) => [request.requestId, request]),
   );
   const responses: Array<AgentResponse> = [];
-  for (const value of (await readAgentResponseValues(store)).slice(
-    0,
-    EXCHANGE_LIMIT,
-  )) {
+  const responseRequestIds = new Set<string>();
+  for (const value of await readAgentResponseValues(store)) {
     try {
       if (!isRecord(value) || typeof value.requestId !== "string") {
         continue;
@@ -719,17 +702,20 @@ export const readAgentExchange = async ({
         request,
         commentsById,
       });
-      if (!responses.some((entry) => entry.requestId === response.requestId)) {
+      if (!responseRequestIds.has(response.requestId)) {
         responses.push(response);
+        responseRequestIds.add(response.requestId);
       }
     } catch {
       // The response command normally owns these files; disk remains untrusted.
     }
   }
-  responses.sort((left, right) =>
-    left.createdAt.localeCompare(right.createdAt),
-  );
-  return { requests, responses };
+  responses.sort((left, right) => {
+    const chronological = left.createdAt.localeCompare(right.createdAt);
+    if (chronological !== 0) return chronological;
+    return left.requestId.localeCompare(right.requestId);
+  });
+  return { requests, responses: responses.slice(-EXCHANGE_LIMIT) };
 };
 
 /** Returns the oldest request that does not yet have a validated response. */

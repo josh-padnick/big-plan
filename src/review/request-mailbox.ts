@@ -1,130 +1,30 @@
 // Owns changes to stored agent requests. Each change locks one request,
 // reads its current value, validates it, and writes one complete replacement.
 
-import { mkdir, readFile, rmdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   AgentExchangeRejected,
   validateAgentRequest,
 } from "./agent-exchange.js";
-import type { AgentFeedbackRequest, AgentRequest } from "./agent-exchange.js";
+import type {
+  AgentFeedbackRequest,
+  AgentRequest,
+  AgentResponse,
+} from "./agent-exchange.js";
 import {
   appendAgentConnectionEvent,
   appendProgressValue,
   readAgentConnectionEvents,
   readAgentRequestValue,
+  readAgentResponseValue,
   readProgress,
+  withReviewStoreLock,
   writeAgentRequestValue,
+  writeAgentResponseValue,
 } from "./store.js";
 import type { ProgressEvent, ReviewStore } from "./store.js";
 
-const LOCK_ATTEMPTS = 200;
-const LOCK_WAIT_MS = 10;
 const REQUEST_ID = /^[a-f0-9]{16}$/;
-const LOCK_OWNER_FILE = "owner.json";
-
-const wait = async (): Promise<void> => {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, LOCK_WAIT_MS);
-  });
-};
-
-const hasCode = (
-  error: unknown,
-  code: string,
-): error is Error & { readonly code: string } =>
-  error instanceof Error && "code" in error && error.code === code;
-
-const processIsRunning = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error: unknown) {
-    return !hasCode(error, "ESRCH");
-  }
-};
-
-/** Removes a lock only when its recorded process no longer exists. */
-const clearAbandonedLock = async (lockPath: string): Promise<void> => {
-  const ownerPath = join(lockPath, LOCK_OWNER_FILE);
-  let value: unknown;
-  try {
-    value = JSON.parse(await readFile(ownerPath, "utf8"));
-  } catch {
-    return;
-  }
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    !("pid" in value) ||
-    typeof value.pid !== "number" ||
-    !Number.isInteger(value.pid) ||
-    processIsRunning(value.pid)
-  ) {
-    return;
-  }
-  try {
-    // Only one waiter can remove the owner file. Other waiters leave any new
-    // non-empty lock alone.
-    await unlink(ownerPath);
-    await rmdir(lockPath);
-  } catch (error: unknown) {
-    if (!hasCode(error, "ENOENT")) throw error;
-  }
-};
-
-/** Creates one cross-process lock and records the process that owns it. */
-const acquireMailboxLock = async (lockPath: string): Promise<boolean> => {
-  try {
-    await mkdir(lockPath, { mode: 0o700 });
-  } catch (error: unknown) {
-    if (!hasCode(error, "EEXIST")) throw error;
-    await clearAbandonedLock(lockPath);
-    return false;
-  }
-  try {
-    await writeFile(
-      join(lockPath, LOCK_OWNER_FILE),
-      `${JSON.stringify({ pid: process.pid })}\n`,
-      { flag: "wx", mode: 0o600 },
-    );
-    return true;
-  } catch (error: unknown) {
-    await rmdir(lockPath).catch(() => undefined);
-    throw error;
-  }
-};
-
-/** Releases the exact lock owned by this process. */
-const releaseMailboxLock = async (lockPath: string): Promise<void> => {
-  await unlink(join(lockPath, LOCK_OWNER_FILE));
-  await rmdir(lockPath);
-};
-
-/** Runs one mailbox change while other processes wait for the same resource. */
-const withMailboxLock = async <TResult>({
-  lockPath,
-  change,
-}: {
-  readonly lockPath: string;
-  readonly change: () => Promise<TResult>;
-}): Promise<TResult> => {
-  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
-    if (!(await acquireMailboxLock(lockPath))) {
-      await wait();
-      continue;
-    }
-    try {
-      return await change();
-    } finally {
-      await releaseMailboxLock(lockPath);
-    }
-  }
-  throw new AgentExchangeRejected(
-    "Another process is changing this request. Try again.",
-  );
-};
 
 /** Runs one request change while the request file is locked. */
 const withRequestLock = async <TResult>({
@@ -141,11 +41,37 @@ const withRequestLock = async <TResult>({
       "A request id must be 16 hexadecimal characters",
     );
   }
-  return withMailboxLock({
+  return withReviewStoreLock({
     lockPath: join(store.agentRequestDirectory, `.${requestId}.lock`),
     change,
+    timeoutError: () =>
+      new AgentExchangeRejected(
+        "Another process is changing this request. Try again.",
+      ),
   });
 };
+
+/** Checks the identity fields shared by one request and response. */
+const responseMatchesRequest = ({
+  value,
+  request,
+}: {
+  readonly value: unknown;
+  readonly request: AgentRequest;
+}): boolean =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  "version" in value &&
+  value.version === 1 &&
+  "requestId" in value &&
+  value.requestId === request.requestId &&
+  "sessionId" in value &&
+  value.sessionId === request.sessionId &&
+  "planId" in value &&
+  value.planId === request.planId &&
+  "kind" in value &&
+  value.kind === request.kind;
 
 /** Reads and validates one request while its mailbox lock is held. */
 const readCurrentRequest = async ({
@@ -183,6 +109,11 @@ export const claimAgentRequest = async ({
     requestId,
     change: async () => {
       const request = await readCurrentRequest({ store, requestId });
+      if (request.canceledAt !== undefined) {
+        throw new AgentExchangeRejected(
+          "The request was canceled by the reviewer",
+        );
+      }
       if (request.claimedFromRevision !== undefined) return request;
       const claimed = validateAgentRequest({
         ...request,
@@ -210,9 +141,66 @@ export const cancelAgentRequest = async ({
     change: async () => {
       const request = await readCurrentRequest({ store, requestId });
       if (request.canceledAt !== undefined) return request;
+      if (
+        responseMatchesRequest({
+          value: await readAgentResponseValue({ store, requestId }),
+          request,
+        })
+      ) {
+        throw new AgentExchangeRejected(
+          "The agent has already answered this request",
+        );
+      }
       const canceled = validateAgentRequest({ ...request, canceledAt: now });
       await writeAgentRequestValue({ store, requestId, value: canceled });
       return canceled;
+    },
+  });
+
+/** Publishes one response only while its request remains answerable. */
+export const publishAgentResponse = async ({
+  store,
+  response,
+}: {
+  readonly store: ReviewStore;
+  readonly response: AgentResponse;
+}): Promise<void> =>
+  withRequestLock({
+    store,
+    requestId: response.requestId,
+    change: async () => {
+      const request = await readCurrentRequest({
+        store,
+        requestId: response.requestId,
+      });
+      if (request.canceledAt !== undefined) {
+        throw new AgentExchangeRejected(
+          "The request was canceled by the reviewer",
+        );
+      }
+      if (!responseMatchesRequest({ value: response, request })) {
+        throw new AgentExchangeRejected(
+          "The agent response does not match its request",
+        );
+      }
+      if (
+        responseMatchesRequest({
+          value: await readAgentResponseValue({
+            store,
+            requestId: response.requestId,
+          }),
+          request,
+        })
+      ) {
+        throw new AgentExchangeRejected(
+          "The agent has already answered this request",
+        );
+      }
+      await writeAgentResponseValue({
+        store,
+        requestId: response.requestId,
+        value: response,
+      });
     },
   });
 
@@ -282,7 +270,7 @@ export const appendProgressEvent = async ({
       "A session id must be 16 hexadecimal characters",
     );
   }
-  return withMailboxLock({
+  return withReviewStoreLock({
     lockPath: join(store.reviewDirectory, `.${event.sessionId}.progress.lock`),
     change: async () => {
       const events = await readProgress({ store, sessionId: event.sessionId });
@@ -292,6 +280,10 @@ export const appendProgressEvent = async ({
       await appendProgressValue({ store, event: checked });
       return checked;
     },
+    timeoutError: () =>
+      new AgentExchangeRejected(
+        "Another process is updating agent progress. Try again.",
+      ),
   });
 };
 
@@ -314,7 +306,7 @@ export const recordAgentConnectionState = async ({
       "A session id must be 16 hexadecimal characters",
     );
   }
-  return withMailboxLock({
+  return withReviewStoreLock({
     lockPath: join(
       store.agentConnectionDirectory,
       `.${sessionId}.connection.lock`,
@@ -339,5 +331,9 @@ export const recordAgentConnectionState = async ({
       });
       return true;
     },
+    timeoutError: () =>
+      new AgentExchangeRejected(
+        "Another process is updating agent presence. Try again.",
+      ),
   });
 };

@@ -36,11 +36,13 @@ import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
 import {
   CommentRejected,
   validateActiveDraft,
-  validateComments,
+  validateCommentUpdates,
   validateResolvedCommentIds,
+  validateStoredComments,
 } from "./shared/comment.js";
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 import {
+  AgentExchangeRejected,
   deriveSourceRevision,
   feedbackAgentRequest,
   messageAgentRequest,
@@ -88,8 +90,8 @@ import {
   activateReviewSession,
   REVIEW_HEARTBEAT_INTERVAL_MS,
   refreshReviewSessionHeartbeat,
-  reviewSessionOwnsMailbox,
   reviewSessionView,
+  withReviewSessionAuthority,
 } from "./session-authority.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
@@ -250,20 +252,37 @@ export const startReviewRuntime = async ({
     source: initialSource,
   });
 
-  // Every block this session has served, so a draft written against an earlier
-  // render still resolves after the agent revises the plan. Phase 1 does not
-  // re-anchor; it simply refuses to forget what it once addressed.
+  // The current render map authorizes newly created targets. Stored comments
+  // carry their already-validated target metadata across later revisions.
   const blocks = new Map<string, BlockMapEntry>();
   let blockMapMarkdown: string | undefined;
 
-  const validate = (value: unknown): ReadonlyArray<ReviewComment> =>
-    validateComments({ value, blocks, now: new Date().toISOString() });
+  const validateStored = (value: unknown): ReadonlyArray<ReviewComment> =>
+    validateStoredComments({ value, now: new Date().toISOString() });
+
+  const readStoredComments = (
+    path: string,
+  ): Promise<ReadonlyArray<ReviewComment>> =>
+    readComments({ path, validate: validateStored });
+
+  const validateUpdates = async (
+    value: unknown,
+  ): Promise<ReadonlyArray<ReviewComment>> =>
+    validateCommentUpdates({
+      value,
+      blocks,
+      existing: [
+        ...(await readStoredComments(store.draftsPath)),
+        ...(await readStoredComments(store.sentPath)),
+      ],
+      now: new Date().toISOString(),
+    });
 
   const readBootstrap = async (markdown: string): Promise<string> =>
     JSON.stringify({
       ...encodeReviewSnapshot({
-        drafts: await readComments({ path: store.draftsPath, validate }),
-        sent: await readComments({ path: store.sentPath, validate }),
+        drafts: await readStoredComments(store.draftsPath),
+        sent: await readStoredComments(store.sentPath),
         activeDraft: await readActiveDraft({
           path: store.activeDraftPath,
           validate: validateActiveDraft,
@@ -372,8 +391,8 @@ export const startReviewRuntime = async ({
         response,
         status: 200,
         value: encodeReviewSnapshot({
-          drafts: await readComments({ path: store.draftsPath, validate }),
-          sent: await readComments({ path: store.sentPath, validate }),
+          drafts: await readStoredComments(store.draftsPath),
+          sent: await readStoredComments(store.sentPath),
           activeDraft: await readActiveDraft({
             path: store.activeDraftPath,
             validate: validateActiveDraft,
@@ -391,7 +410,7 @@ export const startReviewRuntime = async ({
         typeof body === "object" && body !== null
           ? (body as Readonly<Record<string, unknown>>)
           : {};
-      const drafts = validate(payload.drafts);
+      const drafts = await validateUpdates(payload.drafts);
       const activeDraft = validateActiveDraft(payload.activeDraft);
       const resolvedCommentIds = validateResolvedCommentIds(
         payload.resolvedCommentIds,
@@ -410,7 +429,7 @@ export const startReviewRuntime = async ({
         typeof body === "object" && body !== null
           ? (body as Readonly<Record<string, unknown>>)
           : {};
-      const comments = validate(payload.comments);
+      const comments = await validateUpdates(payload.comments);
       if (comments.length === 0) {
         refuse({ response, status: 400, reason: "Nothing to send" });
         return;
@@ -439,10 +458,7 @@ export const startReviewRuntime = async ({
         store,
         request: agentRequest,
       });
-      const alreadySent = await readComments({
-        path: store.sentPath,
-        validate,
-      });
+      const alreadySent = await readStoredComments(store.sentPath);
       const sentIds = new Set(alreadySent.map((comment) => comment.id));
       const newlySent = comments.filter((comment) => !sentIds.has(comment.id));
       await writeComments({
@@ -487,7 +503,7 @@ export const startReviewRuntime = async ({
         refuse({ response, status: 400, reason: "A comment id is required" });
         return;
       }
-      const sent = await readComments({ path: store.sentPath, validate });
+      const sent = await readStoredComments(store.sentPath);
       if (!sent.some((comment) => comment.id === commentId)) {
         refuse({ response, status: 404, reason: "No such sent comment" });
         return;
@@ -507,19 +523,7 @@ export const startReviewRuntime = async ({
             candidate.comments.some((comment) => comment.id === commentId)) ||
           (candidate.kind === "reply" && candidate.commentId === commentId),
       );
-      const hasCanceledRequest = commentRequests.some(
-        (candidate) => candidate.canceledAt !== undefined,
-      );
-      const pendingRequests = commentRequests.filter(
-        (candidate) =>
-          !exchange.responses.some(
-            (response) => response.requestId === candidate.requestId,
-          ),
-      );
-      if (
-        (answeredRequestIds.size > 0 && !hasCanceledRequest) ||
-        pendingRequests.length === 0
-      ) {
+      if (answeredRequestIds.size > 0 || commentRequests.length === 0) {
         refuse({
           response,
           status: 409,
@@ -529,11 +533,7 @@ export const startReviewRuntime = async ({
         return;
       }
       if (
-        pendingRequests.some(
-          (candidate) =>
-            candidate.canceledAt === undefined &&
-            candidate.claimedAt !== undefined,
-        )
+        commentRequests.some((candidate) => candidate.claimedAt !== undefined)
       ) {
         refuse({
           response,
@@ -542,6 +542,9 @@ export const startReviewRuntime = async ({
         });
         return;
       }
+      const pendingRequests = commentRequests.filter(
+        (candidate) => candidate.canceledAt === undefined,
+      );
       const now = new Date().toISOString();
       for (const pending of pendingRequests) {
         if (pending.canceledAt !== undefined) continue;
@@ -654,7 +657,7 @@ export const startReviewRuntime = async ({
           : {}),
       });
       if (agentRequest.kind === "reply") {
-        const sent = await readComments({ path: store.sentPath, validate });
+        const sent = await readStoredComments(store.sentPath);
         if (!sent.some((comment) => comment.id === agentRequest.commentId)) {
           refuse({
             response,
@@ -719,11 +722,18 @@ export const startReviewRuntime = async ({
         });
         return;
       }
-      const canceled = await cancelAgentRequest({
-        store,
-        requestId: agentRequest.requestId,
-        now: new Date().toISOString(),
-      });
+      let canceled;
+      try {
+        canceled = await cancelAgentRequest({
+          store,
+          requestId: agentRequest.requestId,
+          now: new Date().toISOString(),
+        });
+      } catch (error: unknown) {
+        if (!(error instanceof AgentExchangeRejected)) throw error;
+        refuse({ response, status: 409, reason: error.message });
+        return;
+      }
       await appendProgressEvent({
         store,
         event: {
@@ -859,18 +869,6 @@ export const startReviewRuntime = async ({
         return;
       }
 
-      if (matched.method !== "GET") {
-        if (!(await reviewSessionOwnsMailbox({ store, sessionId }))) {
-          refuse({
-            response,
-            status: 409,
-            reason:
-              "This review was replaced by a newer session and is now read-only",
-          });
-          return;
-        }
-      }
-
       // A slow client may occupy its own request, but it must not hold the
       // filesystem mutation gate while it is still streaming input.
       const body =
@@ -882,8 +880,25 @@ export const startReviewRuntime = async ({
           query: target.searchParams,
           body,
         });
-      if (matched.method === "GET") await dispatch();
-      else await exclusively(dispatch);
+      if (matched.method === "GET") {
+        await dispatch();
+      } else {
+        await exclusively(async () => {
+          const authority = await withReviewSessionAuthority({
+            store,
+            sessionId,
+            change: dispatch,
+          });
+          if (!authority.authoritative) {
+            refuse({
+              response,
+              status: 409,
+              reason:
+                "This review was replaced by a newer session and is now read-only",
+            });
+          }
+        });
+      }
     } catch (error: unknown) {
       if (error instanceof CommentRejected) {
         refuse({ response, status: 400, reason: error.message });

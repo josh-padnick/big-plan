@@ -8,10 +8,12 @@ import {
   nextPendingAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
-  writeAgentResponse,
 } from "../src/review/agent-exchange.js";
 import { diffRevisions } from "../src/review/revision-diff.js";
-import { appendProgressEvent } from "../src/review/request-mailbox.js";
+import {
+  appendProgressEvent,
+  publishAgentResponse,
+} from "../src/review/request-mailbox.js";
 import { startReviewRuntime } from "../src/review/server.js";
 import {
   reviewStoreFor,
@@ -460,7 +462,7 @@ test("should restore and submit staged comments through the local review runtime
     revision,
     source: afterSource,
   });
-  await writeAgentResponse({
+  await publishAgentResponse({
     store,
     response: validateAgentResponseDraft({
       value: {

@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { AGENT_STALL_MS } from "./shared/agent-status.js";
 import {
   appendAgentConnectionEvent,
   appendProgressValue,
@@ -73,6 +74,7 @@ describe("review store placement", () => {
       store.resolvedPath,
       store.sessionPath,
       store.heartbeatPath,
+      store.sessionLockPath,
       store.agentHeartbeatPath,
     ]) {
       expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
@@ -84,6 +86,8 @@ describe("review store placement", () => {
     const one = reviewStoreFor({ planPath, planId: "aaaaaaaaaaaaaaaa" });
     const other = reviewStoreFor({ planPath, planId: "bbbbbbbbbbbbbbbb" });
     expect(one.draftsPath).not.toBe(other.draftsPath);
+    expect(one.sessionPath).not.toBe(other.sessionPath);
+    expect(one.heartbeatPath).not.toBe(other.heartbeatPath);
   });
 
   it("should refuse a plan id that would climb out of the review directory", async () => {
@@ -287,7 +291,19 @@ describe("review store agent presence", () => {
       readAgentPresence({
         store,
         sessionId: "aaaaaaaaaaaaaaaa",
-        now: 14_000,
+        now: 10_000 + AGENT_STALL_MS - 1,
+      }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "working",
+      requestId: "bbbbbbbbbbbbbbbb",
+      updatedAtMs: 10_000,
+    });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 10_000 + AGENT_STALL_MS + 1,
       }),
     ).resolves.toEqual({ connected: false, state: "waiting" });
   });

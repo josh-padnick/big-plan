@@ -18,11 +18,14 @@ import {
   requestBaselineRevision,
   validateAgentResponseDraft,
   writeAgentRequest,
-  writeAgentResponse,
 } from "./agent-exchange.js";
 import type { AgentExchangeSnapshot } from "./agent-exchange.js";
 import { buildFeedbackPackage } from "./feedback-package.js";
-import { cancelAgentRequest, claimAgentRequest } from "./request-mailbox.js";
+import {
+  cancelAgentRequest,
+  claimAgentRequest,
+  publishAgentResponse,
+} from "./request-mailbox.js";
 import { prepareStore, reviewStoreFor } from "./store.js";
 
 const sessionId = "1111111111111111";
@@ -283,7 +286,7 @@ describe("agent exchange filesystem", () => {
       currentRevision: deriveSourceRevision(after),
       now: "2026-08-02T12:01:00.000Z",
     });
-    await writeAgentResponse({ store, response });
+    await publishAgentResponse({ store, response });
     expect(
       await readAgentExchange({
         store,
@@ -315,6 +318,14 @@ describe("agent exchange filesystem", () => {
     });
     expect(canceled.canceledAt).toBe("2026-08-02T12:00:45.000Z");
     expect(nextPendingAgentRequest(canceledSnapshot)).toBeUndefined();
+    await expect(
+      claimAgentRequest({
+        store,
+        requestId: request.requestId,
+        sourceRevision: "aaaaaaaaaaaaaaaa",
+        now: "2026-08-02T12:00:50.000Z",
+      }),
+    ).rejects.toThrow(/canceled by the reviewer/);
     expect(() =>
       validateAgentResponseDraft({
         value: {
@@ -334,5 +345,33 @@ describe("agent exchange filesystem", () => {
         now: "2026-08-02T12:01:00.000Z",
       }),
     ).toThrow(/canceled by the reviewer/);
+  });
+
+  it("should retain the newest requests when exchange history is bounded", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-limit-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, before);
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    const startedAt = Date.parse("2026-08-02T12:00:00.000Z");
+    for (let index = 0; index <= 400; index += 1) {
+      await writeAgentRequest({
+        store,
+        request: messageAgentRequest({
+          kind: "chat",
+          requestId: index.toString(16).padStart(16, "0"),
+          sessionId,
+          planId,
+          sourceRevision: deriveSourceRevision(before),
+          createdAt: new Date(startedAt + index).toISOString(),
+          body: `Question ${index}`,
+        }),
+      });
+    }
+
+    const bounded = await readAgentExchange({ store, sessionId, planId });
+    expect(bounded.requests).toHaveLength(400);
+    expect(bounded.requests[0]?.requestId).toBe("0000000000000001");
+    expect(bounded.requests.at(-1)?.requestId).toBe("0000000000000190");
   });
 });

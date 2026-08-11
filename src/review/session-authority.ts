@@ -4,6 +4,7 @@
 import {
   readSessionDescriptorValue,
   readSessionHeartbeatValue,
+  withReviewStoreLock,
   writeSessionDescriptorValue,
   writeSessionHeartbeatValue,
 } from "./store.js";
@@ -120,7 +121,13 @@ export const activateReviewSession = async ({
   if (checked === undefined) {
     throw new SessionAuthorityRejected("invalid");
   }
-  await writeSessionDescriptorValue({ store, value: checked });
+  await withReviewStoreLock({
+    lockPath: store.sessionLockPath,
+    change: async () => {
+      await writeSessionDescriptorValue({ store, value: checked });
+    },
+    timeoutError: () => new Error("Another process is changing review custody"),
+  });
 };
 
 /** Builds the browser-safe authority facts for one open review page. */
@@ -157,6 +164,31 @@ export const reviewSessionOwnsMailbox = async ({
   readonly sessionId: string;
 }): Promise<boolean> =>
   (await readCurrentReviewSession({ store }))?.sessionId === sessionId;
+
+export type ReviewSessionAuthorityResult<TResult> =
+  | { readonly authoritative: false }
+  | { readonly authoritative: true; readonly value: TResult };
+
+/** Runs one mailbox mutation while the same session owns plan custody. */
+export const withReviewSessionAuthority = async <TResult>({
+  store,
+  sessionId,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly change: () => Promise<TResult>;
+}): Promise<ReviewSessionAuthorityResult<TResult>> =>
+  withReviewStoreLock({
+    lockPath: store.sessionLockPath,
+    change: async () => {
+      if (!(await reviewSessionOwnsMailbox({ store, sessionId }))) {
+        return { authoritative: false };
+      }
+      return { authoritative: true, value: await change() };
+    },
+    timeoutError: () => new Error("Another process is changing review custody"),
+  });
 
 const wait = async (milliseconds: number): Promise<void> => {
   await new Promise<void>((resolve) => {
@@ -207,12 +239,17 @@ export const refreshReviewSessionHeartbeat = async ({
   readonly running: boolean;
   readonly now?: number;
 }): Promise<boolean> => {
-  if (!(await reviewSessionOwnsMailbox({ store, sessionId }))) return false;
-  await writeSessionHeartbeatValue({
+  const result = await withReviewSessionAuthority({
     store,
-    value: { sessionId, running, updatedAtMs: now },
+    sessionId,
+    change: async () => {
+      await writeSessionHeartbeatValue({
+        store,
+        value: { sessionId, running, updatedAtMs: now },
+      });
+    },
   });
-  return true;
+  return result.authoritative;
 };
 
 /** Returns the current live session for one exact plan or a stable reason. */

@@ -12,12 +12,15 @@ import {
   deriveSourceRevision,
   feedbackAgentRequest,
   readAgentExchange,
+  validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import { buildFeedbackPackage } from "./feedback-package.js";
 import {
   appendProgressEvent,
+  cancelAgentRequest,
   claimAgentRequest,
+  publishAgentResponse,
   recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
 } from "./request-mailbox.js";
@@ -122,7 +125,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
 
     const startAt = Date.now() + 400;
-    await Promise.all([
+    const results = await Promise.allSettled([
       runRequestWorker({
         operation: "claim",
         planPath,
@@ -139,17 +142,70 @@ describe("request mailbox", () => {
       }),
     ]);
 
-    await expect(
-      readAgentExchange({ store, sessionId, planId }),
-    ).resolves.toMatchObject({
-      requests: [
-        {
-          claimedFromRevision: "aaaaaaaaaaaaaaaa",
-          claimedAt: "2026-08-10T12:00:01.000Z",
-          canceledAt: "2026-08-10T12:00:02.000Z",
-        },
-      ],
+    expect(results[1]?.status).toBe("fulfilled");
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests[0]).toMatchObject({
+      canceledAt: "2026-08-10T12:00:02.000Z",
     });
+    if (results[0]?.status === "fulfilled") {
+      expect(exchange.requests[0]).toMatchObject({
+        claimedFromRevision: "aaaaaaaaaaaaaaaa",
+        claimedAt: "2026-08-10T12:00:01.000Z",
+      });
+    } else {
+      expect(exchange.requests[0]).not.toHaveProperty("claimedAt");
+    }
+  });
+
+  it("should commit either cancellation or response when they race", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Resolve this race.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      sourceRevision: revision,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "outside",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentRevision: revision,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+
+    const results = await Promise.allSettled([
+      publishAgentResponse({ store, response }),
+      cancelAgentRequest({
+        store,
+        requestId: request.requestId,
+        now: "2026-08-10T12:00:03.000Z",
+      }),
+    ]);
+
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(
+      Number(exchange.requests[0]?.canceledAt !== undefined) +
+        Number(exchange.responses.length > 0),
+    ).toBe(1);
   });
 
   it("should keep a valid request when removal races with pickup", async () => {

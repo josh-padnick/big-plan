@@ -6,12 +6,15 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  commentsFromExchange,
   deriveSourceRevision,
   nextPendingAgentRequest,
   readAgentExchange,
+  validateAgentResponseDraft,
 } from "./agent-exchange.js";
+import { claimAgentRequest, publishAgentResponse } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
@@ -112,21 +115,31 @@ const openStalledMutation = ({
   readonly target: ReviewRuntime;
   readonly sessionToken: string;
 }) => {
-  const request = httpRequest({
-    host: "127.0.0.1",
-    port: target.port,
-    path: "/api/drafts",
-    method: "PUT",
-    headers: {
-      "content-type": "application/json",
-      "x-big-plan-review-token": sessionToken,
-      "sec-fetch-site": "same-origin",
-      origin: target.url.replace(/\/$/, ""),
-    },
+  let settleStatus = (_status: number): void => undefined;
+  const status = new Promise<number>((settle) => {
+    settleStatus = settle;
   });
+  const request = httpRequest(
+    {
+      host: "127.0.0.1",
+      port: target.port,
+      path: "/api/drafts",
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": sessionToken,
+        "sec-fetch-site": "same-origin",
+        origin: target.url.replace(/\/$/, ""),
+      },
+    },
+    (response) => {
+      response.resume();
+      settleStatus(response.statusCode ?? 0);
+    },
+  );
   request.on("error", () => undefined);
   request.write("{");
-  return request;
+  return { request, status };
 };
 
 describe("review runtime transport", () => {
@@ -248,6 +261,61 @@ describe("review runtime feedback", () => {
     expect(answer).toMatchObject({ drafts: [{ id: "aabbccdd" }] });
   });
 
+  it("should preserve exact orphaned feedback after the plan changes", async () => {
+    await fetch(runtime.url);
+    const draft = {
+      id: "abcd1234",
+      body: "Keep this history after the target disappears.",
+      target: { type: "block", blockId },
+    };
+    expect(
+      (
+        await call({
+          path: "/api/feedback",
+          method: "POST",
+          body: { comments: [draft] },
+        })
+      ).status,
+    ).toBe(200);
+    const before: unknown = await (await call({ path: "/api/drafts" })).json();
+    expect(before).toMatchObject({
+      sent: expect.arrayContaining([expect.objectContaining({ id: draft.id })]),
+    });
+    try {
+      await writeFile(
+        runtime.planPath,
+        "# A different plan\n\nNo prior block.\n",
+      );
+      const after: unknown = await (await call({ path: "/api/drafts" })).json();
+      expect(after).toEqual(before);
+    } finally {
+      await writeFile(runtime.planPath, PLAN);
+      await fetch(runtime.url);
+      const exchange = await readAgentExchange({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+      });
+      const request = exchange.requests.find(
+        (candidate) =>
+          candidate.kind === "feedback" &&
+          candidate.comments.some((comment) => comment.id === draft.id),
+      );
+      if (request !== undefined) {
+        await call({
+          path: "/api/agent-cancel",
+          method: "POST",
+          body: { requestId: request.requestId },
+        });
+        await call({
+          path: "/api/comments-delete",
+          method: "POST",
+          body: { commentId: draft.id },
+        });
+      }
+    }
+  });
+
   it("should refuse a comment pointing at a block this document does not contain", async () => {
     const response = await call({
       path: "/api/feedback",
@@ -360,10 +428,10 @@ describe("review runtime feedback", () => {
     const answer: unknown = await (await call({ path: "/api/agent" })).json();
     expect(answer).toMatchObject({
       sourceRevision: expect.stringMatching(/^[a-f0-9]{16}$/),
-      requests: [
-        { kind: "feedback" },
-        { kind: "reply", commentId: "55667788" },
-      ],
+      requests: expect.arrayContaining([
+        expect.objectContaining({ kind: "feedback" }),
+        expect.objectContaining({ kind: "reply", commentId: "55667788" }),
+      ]),
       responses: [],
       plan: runtime.planPath,
       agentCommand: expect.stringContaining(`agent '${runtime.planPath}'`),
@@ -479,7 +547,7 @@ describe("review runtime feedback", () => {
       if (result === "timeout") return;
       expect(result.status).toBe(200);
     } finally {
-      stalled.destroy();
+      stalled.request.destroy();
     }
   });
 
@@ -687,6 +755,108 @@ describe("review runtime feedback", () => {
       ]),
     });
   });
+
+  it("should keep answered history when a later follow-up is canceled", async () => {
+    const comment = {
+      id: "d4d4d4d4",
+      body: "Keep this answered thread.",
+      target: { type: "document" },
+    };
+    expect(
+      (
+        await call({
+          path: "/api/feedback",
+          method: "POST",
+          body: { comments: [comment] },
+        })
+      ).status,
+    ).toBe(200);
+    let exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const request = exchange.requests.find(
+      (candidate) =>
+        candidate.kind === "feedback" &&
+        candidate.comments.some((entry) => entry.id === comment.id),
+    );
+    if (request === undefined)
+      throw new Error("The feedback request was not stored");
+    const claimed = await claimAgentRequest({
+      store: runtime.store,
+      requestId: request.requestId,
+      sourceRevision: request.sourceRevision,
+      now: new Date().toISOString(),
+    });
+    await publishAgentResponse({
+      store: runtime.store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: claimed.requestId,
+          outcomes: [
+            {
+              commentId: comment.id,
+              state: "outside",
+              message: "The existing plan already covers this.",
+            },
+          ],
+        },
+        request: claimed,
+        commentsById: commentsFromExchange(exchange),
+        changedBlocks: new Set(),
+        currentRevision: request.sourceRevision,
+        now: new Date().toISOString(),
+      }),
+    });
+    const followUpResponse = await call({
+      path: "/api/agent-requests",
+      method: "POST",
+      body: {
+        kind: "reply",
+        commentId: comment.id,
+        body: "One canceled follow-up.",
+      },
+    });
+    const followUpBody: unknown = await followUpResponse.json();
+    if (
+      typeof followUpBody !== "object" ||
+      followUpBody === null ||
+      !("requestId" in followUpBody) ||
+      typeof followUpBody.requestId !== "string"
+    ) {
+      throw new Error("The follow-up request was not returned");
+    }
+    expect(
+      (
+        await call({
+          path: "/api/agent-cancel",
+          method: "POST",
+          body: { requestId: followUpBody.requestId },
+        })
+      ).status,
+    ).toBe(200);
+
+    expect(
+      (
+        await call({
+          path: "/api/comments-delete",
+          method: "POST",
+          body: { commentId: comment.id },
+        })
+      ).status,
+    ).toBe(409);
+    exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    expect(
+      exchange.responses.some(
+        (response) => response.requestId === request.requestId,
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("review runtime shutdown", () => {
@@ -694,7 +864,6 @@ describe("review runtime shutdown", () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-server-restart-"));
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
-    vi.useFakeTimers();
     const first = await startReviewRuntime({ planPath });
     const firstDescriptor: unknown = JSON.parse(
       await readFile(first.store.sessionPath, "utf8"),
@@ -706,10 +875,17 @@ describe("review runtime shutdown", () => {
       typeof firstDescriptor.token === "string"
         ? firstDescriptor.token
         : "";
-    await vi.advanceTimersByTimeAsync(450);
+    const stalled = openStalledMutation({
+      target: first,
+      sessionToken: firstToken,
+    });
+    await new Promise((settle) => setTimeout(settle, 20));
     const replacement = await startReviewRuntime({ planPath });
     try {
-      await vi.advanceTimersByTimeAsync(400);
+      stalled.request.end(
+        '"drafts":[],"activeDraft":"","resolvedCommentIds":[]}',
+      );
+      await expect(stalled.status).resolves.toBe(409);
       expect(
         await reviewSessionIsRunning({
           store: replacement.store,
@@ -733,8 +909,8 @@ describe("review runtime shutdown", () => {
       });
       expect(oldWriteResponse.status).toBe(409);
     } finally {
+      stalled.request.destroy();
       await Promise.all([first.close(), replacement.close()]);
-      vi.useRealTimers();
       await rm(directory, { recursive: true, force: true });
     }
   });
@@ -775,7 +951,7 @@ describe("review runtime shutdown", () => {
       await new Promise((settle) => setTimeout(settle, 20));
       await expect(closing.close()).resolves.toBeUndefined();
     } finally {
-      stalled.destroy();
+      stalled.request.destroy();
       await rm(directory, { recursive: true, force: true });
     }
   });

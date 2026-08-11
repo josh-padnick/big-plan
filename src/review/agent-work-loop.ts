@@ -7,6 +7,7 @@ import { basename, extname, resolve } from "node:path";
 import { lintPlan } from "../lint/lint-plan.js";
 import { renderDocument } from "../render/render-document.js";
 import {
+  AgentExchangeRejected,
   commentsFromExchange,
   deriveSourceRevision,
   nextPendingAgentRequest,
@@ -14,10 +15,13 @@ import {
   readAgentExchange,
   responseTemplateFor,
   validateAgentResponseDraft,
-  writeAgentResponse,
 } from "./agent-exchange.js";
 import type { AgentRequest } from "./agent-exchange.js";
-import { appendProgressEvent, claimAgentRequest } from "./request-mailbox.js";
+import {
+  appendProgressEvent,
+  claimAgentRequest,
+  publishAgentResponse,
+} from "./request-mailbox.js";
 import {
   agentResponseDraftPath,
   deriveReviewPlanId,
@@ -257,12 +261,17 @@ const nextWork = async ({
     revision: claimedRevision,
     source: claimedSource,
   });
-  request = await claimAgentRequest({
-    store: session.store,
-    requestId: request.requestId,
-    sourceRevision: claimedRevision,
-    now: new Date().toISOString(),
-  });
+  try {
+    request = await claimAgentRequest({
+      store: session.store,
+      requestId: request.requestId,
+      sourceRevision: claimedRevision,
+      now: new Date().toISOString(),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return fail(error.message);
+  }
   await writeAgentHeartbeat({
     store: session.store,
     sessionId: session.sessionId,
@@ -409,7 +418,12 @@ const respond = async ({
     currentRevision,
     now: new Date().toISOString(),
   });
-  await writeAgentResponse({ store: session.store, response });
+  try {
+    await publishAgentResponse({ store: session.store, response });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return fail(error.message);
+  }
   await appendProgressEvent({
     store: session.store,
     event: {
