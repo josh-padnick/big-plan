@@ -3,7 +3,7 @@ title: CLI reference
 description: Reference the complete Big Plan command surface, defaults, results, and errors.
 ---
 
-Big Plan exposes five product commands through the `big-plan` executable: `guidance` for the plan-writing principles, `skill` for the agent skill shell, `validate` for a no-write authoring check, `render` for the human-facing HTML document, and `compile` for the machine-facing plan model.
+Big Plan exposes six product commands through the `big-plan` executable: `guidance` for the plan-writing principles, `skill` for the agent skill shell, `validate` for a no-write authoring check, `render` for the human-facing HTML document, `compile` for the machine-facing plan model, and `review` for the interactive loopback review runtime.
 The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors, and result serialization.
 `axi-sdk-js` also reserves a built-in `update` command for optional package self-update of global installs.
 
@@ -15,14 +15,16 @@ big-plan skill [write <path>]
 big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
+big-plan review <input.mdx>
 big-plan update [--check]
 ```
 
 `guidance` optionally takes one component name.
 `skill` with no arguments prints the skill shell; `skill write <path>` writes it only when that action is explicit.
 For the plan-file commands `<input.mdx>` is required.
-`validate` accepts no output argument.
+`validate` and `review` accept no output argument.
 The output argument is optional for `render` and `compile`.
+See [Reviewing a plan](/reference/reviewing/) for what `review` serves.
 `update` is the optional `axi-sdk-js` built-in rather than a Big Plan product command.
 
 The equivalent package runner forms are:
@@ -34,6 +36,7 @@ npx big-plan skill write <path/to/SKILL.md>
 npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
+npx big-plan review <input.mdx>
 npx big-plan update --check
 ```
 
@@ -47,15 +50,15 @@ With a component name, `big-plan guidance <Component>` prints that component's j
 `big-plan guidance Slide` returns every registered slide type and its matching, authoring, component-pairing, and cardinality guidance in one call for the whole plan.
 The component form records no acknowledgment, and an unknown name fails with the list of components that have guidance.
 
-`validate` and `render` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
+`validate`, `render`, and `review` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
 An acknowledgment is current when it was recorded for the same working directory within the last 24 hours against the guidance content the installed CLI ships.
-Updating Big Plan to a release with changed guidance therefore re-locks both commands until `guidance` is read again.
+Updating Big Plan to a release with changed guidance therefore re-locks all three commands until `guidance` is read again.
 `compile` and `skill` are not gated, so machine tooling and skill install can run without the authoring workflow.
 
 Acknowledgment state lives outside the project: in `.big-plan/` under the user's home directory, falling back to a `big-plan/` directory under the system temporary directory when the home directory rejects writes, as workspace-scoped sandboxes commonly do.
 Setting the `BIG_PLAN_STATE_DIR` environment variable pins state to exactly one directory, which test suites and sandboxed environments use to keep state isolated.
 
-When no state location accepts writes at all, the gate degrades instead of blocking: `guidance` still prints the full guidance and notes that the acknowledgment could not be saved, and `validate` and `render` proceed while their results carry a warning that the acknowledgment could not be verified.
+When no state location accepts writes at all, the gate degrades instead of blocking: `guidance` still prints the full guidance and notes that the acknowledgment could not be saved, and `validate`, `render`, and `review` proceed while their results carry a warning that the acknowledgment could not be verified.
 Filesystem restrictions therefore never lock an agent out of the plan workflow.
 
 ## Skill shell
@@ -185,7 +188,7 @@ If authoring lint fails, `validate` and `render` raise `VALIDATION_ERROR` with `
 Each help entry is `line:column [rule-id] message`.
 `render` runs lint before writing, so a lint failure leaves no output file.
 
-If guidance has not been acknowledged for the working directory, `validate` and `render` raise a structured `GUIDANCE_REQUIRED` error whose help entries name the `big-plan guidance` command and the acknowledgment window.
+If guidance has not been acknowledged for the working directory, `validate`, `render`, and `review` raise a structured `GUIDANCE_REQUIRED` error whose help entries name the `big-plan guidance` command and the acknowledgment window.
 
 `axi-sdk-js` maps `VALIDATION_ERROR` to exit status `2`.
 Successful validation exits `0`; operational or internal failures use `1`.

@@ -19,9 +19,9 @@ const TOP_LEVEL_HELP = `big-plan - ${DESCRIPTION}
 
 Usage:
   big-plan guidance [component]               Read the plan-writing guidance
-                                             (required before validate and
-                                             render), or one component's
-                                             usage guidance
+                                             (required before validate,
+                                             render, and review), or one
+                                             component's usage guidance
   big-plan skill [write <path>]               Print the agent skill shell, or
                                              write it to an explicit path
   big-plan render <input.mdx> [output.html]   Render an MDX plan to a
