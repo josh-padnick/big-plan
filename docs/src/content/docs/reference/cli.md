@@ -174,7 +174,8 @@ Both cases raise a structured `VALIDATION_ERROR`, include the command's usage li
 If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.
 
-If the output would overwrite the input file, the command raises a structured `VALIDATION_ERROR` with the message `Output path would overwrite the input MDX file` and the command-specific usage line.
+If the output would overwrite the input file, `render` and `compile` raise a structured `VALIDATION_ERROR` with the message `Output path would overwrite the input MDX file` and the command-specific usage line.
+`validate` and `review` accept no output argument, so they cannot raise it.
 The input file is left unchanged.
 
 If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with `Cannot validate document with invalid MDX`, `Cannot render document with invalid MDX`, or `Cannot compile document with invalid MDX`, according to the command.
