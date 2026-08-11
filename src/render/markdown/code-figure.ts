@@ -7,17 +7,18 @@
 // those add the control themselves through the React edge. This transform
 // therefore only claims a pre that is still a bare child of the document.
 //
-// The attribute vocabulary is owned by components/_model/figure-controls.
+// The attribute vocabulary is owned by components/_model/figure-controls; the
+// shared visual primitive owns the fixed control presentation.
 
 import type { Element, Root, RootContent } from "hast";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
+import { FIGURE_CONTROL_BUTTON_CLASSES } from "../../components/_shared/figure-controls/control-button-classes.js";
 import {
   BODY_ATTRIBUTE,
   copyLabel,
-  FIGURE_CONTROL_BUTTON_CLASSES,
   MAXIMIZABLE_ATTRIBUTE,
   TRIGGER_ATTRIBUTE,
   maximizeLabel,

@@ -17,11 +17,13 @@
    utilities on the authored elements. */
 
 @layer components {
-  /* The copy button remains a transparent icon control, with a small tactile
-     press response that does not alter its resting toolbar geometry. */
-  article [data-copy-code]:active,
-  article [data-copy-source]:active {
-    transform: scale(0.85);
+  @media (prefers-reduced-motion: no-preference) {
+    /* The copy button remains a transparent icon control, with a small tactile
+       press response that does not alter its resting toolbar geometry. */
+    article [data-copy-code]:active,
+    article [data-copy-source]:active {
+      transform: scale(0.85);
+    }
   }
 }
 

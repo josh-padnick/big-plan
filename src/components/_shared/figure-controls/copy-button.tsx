@@ -4,11 +4,9 @@
 
 import { COPY_ICON } from "../../../icons/lucide/copy.js";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
-import {
-  copyLabel,
-  FIGURE_CONTROL_BUTTON_CLASSES,
-  type CopySubject,
-} from "../../_model/figure-controls/figure-controls.js";
+import type { CopySubject } from "../../_model/figure-controls/figure-controls.js";
+import { copyLabel } from "../../_model/figure-controls/figure-controls.js";
+import { FIGURE_CONTROL_BUTTON_CLASSES } from "./control-button-classes.js";
 import { lucideIconToReact } from "../lucide-icon/lucide-icon.js";
 
 export const CopyButton = ({ subject }: { readonly subject: CopySubject }) => {

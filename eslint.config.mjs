@@ -160,12 +160,10 @@ export default tseslint.config(
         // concern has its own dependency contract.
         imports: ["**/markdown/*.js"],
         // Deliberately not escapeHtml: markdown escapes through
-        // rehype-stringify, never by hand. Icons are granted because document
-        // transforms build chrome - the deck transform draws collapse
-        // controls, the code-figure transform draws the maximize control - and
-        // a glyph either drew itself would be locally defined icon data, which
-        // the icons layer exists to prevent.
-        mayImport: ["components", "icons", "model", "planVocabulary"],
+        // rehype-stringify, never by hand. Document transforms build chrome,
+        // so they consume the same shared controls and icon data as React
+        // views instead of defining parallel presentation contracts.
+        mayImport: ["components", "icons", "model", "planVocabulary", "ui"],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],
