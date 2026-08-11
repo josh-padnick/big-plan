@@ -796,6 +796,35 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(page.locator("[data-review-diff-lens]")).toContainText(
       "What changed",
     );
+    const diffLens = page.locator("[data-review-diff-lens]");
+    await expect(diffLens.locator("ins")).toHaveCSS(
+      "background-color",
+      "rgb(222, 234, 215)",
+    );
+    const readingWidths = await page.evaluate(() => {
+      const lens = document.querySelector<HTMLElement>(
+        "[data-review-diff-lens]",
+      );
+      const prose = Array.from(
+        document.querySelectorAll<HTMLElement>("p[data-authored-prose]"),
+      ).find((paragraph) => getComputedStyle(paragraph).display !== "none");
+      if (lens === null || prose === undefined) {
+        throw new Error("The diff lens and standard prose must both render");
+      }
+      return {
+        lensWidth: Math.round(lens.getBoundingClientRect().width),
+        lensMaxWidth: Math.round(
+          Number.parseFloat(getComputedStyle(lens).maxWidth),
+        ),
+        proseMaxWidth: Math.round(
+          Number.parseFloat(getComputedStyle(prose).maxWidth),
+        ),
+      };
+    });
+    expect(readingWidths.lensWidth).toBeLessThanOrEqual(
+      readingWidths.lensMaxWidth,
+    );
+    expect(readingWidths.lensMaxWidth).toBe(readingWidths.proseMaxWidth);
     await expect
       .poll(() =>
         page.evaluate(() => {

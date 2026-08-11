@@ -226,7 +226,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --callout-danger-bg: var(--danger-50);
   --callout-danger-ink: var(--danger-900);
   --diff-add-c: var(--success-700);
-  --diff-add-bg: var(--success-50);
+  --diff-add-bg: var(--success-100);
   --diff-remove-c: var(--danger-700);
   --diff-remove-bg: var(--danger-50);
   --decision-pro-c: var(--success-700);
@@ -319,7 +319,7 @@ same separation.
     --callout-danger-bg: var(--danger-900);
     --callout-danger-ink: var(--danger-100);
     --diff-add-c: var(--success-300);
-    --diff-add-bg: var(--success-900);
+    --diff-add-bg: var(--success-800);
     --diff-remove-c: var(--danger-300);
     --diff-remove-bg: var(--danger-900);
     --decision-pro-c: var(--success-300);
@@ -394,7 +394,7 @@ same separation.
   --callout-danger-bg: var(--danger-900);
   --callout-danger-ink: var(--danger-100);
   --diff-add-c: var(--success-300);
-  --diff-add-bg: var(--success-900);
+  --diff-add-bg: var(--success-800);
   --diff-remove-c: var(--danger-300);
   --diff-remove-bg: var(--danger-900);
   --decision-pro-c: var(--success-300);

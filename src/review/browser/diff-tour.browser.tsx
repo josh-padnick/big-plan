@@ -125,7 +125,7 @@ export const DiffLensContent = ({
   );
   return (
     <section
-      className="grid min-w-0 gap-3 rounded-lg border border-dashed border-accent bg-raised p-4 text-ink shadow-raised"
+      className="grid w-full min-w-0 max-w-[var(--measure)] gap-3 rounded-lg border border-dashed border-accent bg-raised p-4 text-ink shadow-raised"
       aria-label={title}
       data-review-diff-lens=""
       data-review-diff-note={place.note}
