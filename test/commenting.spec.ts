@@ -188,6 +188,10 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(feedbackCount).toHaveCSS("height", "20px");
   await expect(feedbackCount).toHaveCSS("padding-left", "4px");
   await expect(feedbackCount).toHaveCSS("background-color", "rgb(22, 101, 52)");
+  await rail
+    .getByRole("button", { name: /Expand staged comment:/u })
+    .first()
+    .click();
   const staged = rail.locator(".review-staged-card").first();
   await expect(staged).not.toContainText("STAGED");
   await expect(staged.locator("code")).toHaveText("leaseOwner");
@@ -536,6 +540,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   ).toBeVisible();
   const feedback = page.getByRole("button", { name: /Feedback/ });
   await feedback.click();
+  await rail.getByRole("button", { name: /Expand staged comment:/u }).click();
   await expect(rail.locator("code")).toHaveText("leaseOwner");
   await expect(rail.getByRole("tab", { name: "Comments" })).toBeVisible();
   await rail.getByRole("tab", { name: "Chat" }).click();
@@ -705,11 +710,21 @@ test("should minimize an expanded long comment from the feedback toolbar", async
   const inlineToolbarHeight = await page
     .locator("[data-review-thread-side] .review-staged-meta")
     .evaluate((node) => Math.round(node.getBoundingClientRect().height));
+  await page
+    .locator("[data-review-thread-side] .review-staged-card")
+    .getByRole("button", { name: "… more" })
+    .click();
   await page.getByRole("button", { name: /Feedback/ }).click();
-  const railCard = page
-    .getByRole("complementary", { name: "Feedback" })
-    .locator(".review-staged-card")
-    .first();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const compactRow = rail.getByRole("button", {
+    name: /Expand staged comment:/u,
+  });
+  await expect(compactRow).toBeVisible();
+  await rail
+    .getByRole("button", { name: /Expand staged comment:/u })
+    .first()
+    .click();
+  const railCard = rail.locator(".review-staged-card").first();
   expect(
     await railCard
       .locator(".review-staged-meta")
@@ -720,18 +735,11 @@ test("should minimize an expanded long comment from the feedback toolbar", async
   ).toHaveCount(0);
   await expect(
     railCard.getByRole("button", { name: "Minimize comment" }),
-  ).toHaveCount(0);
-  await expect(railCard).not.toContainText("final verification marker");
-  await railCard.getByRole("button", { name: "… more" }).click();
-  await expect(railCard).toContainText("final verification marker");
-  await expect(
-    railCard.getByRole("button", { name: "Minimize comment" }),
   ).toBeVisible();
-  await expect(railCard.getByRole("button", { name: "… more" })).toHaveCount(0);
-
+  await expect(railCard).toContainText("final verification marker");
   await railCard.getByRole("button", { name: "Minimize comment" }).click();
-  await expect(railCard).not.toContainText("final verification marker");
-  await expect(railCard.getByRole("button", { name: "… more" })).toBeVisible();
+  await expect(compactRow).toBeVisible();
+  await expect(rail.locator(".review-staged-card")).toHaveCount(0);
 });
 
 test("should preserve a text selection while its compact composer is open", async ({
@@ -846,6 +854,10 @@ test("should preserve a text selection while its compact composer is open", asyn
 
   await page.getByRole("button", { name: /Feedback/ }).click();
   const rail = page.getByRole("complementary", { name: "Feedback" });
+  await rail
+    .getByRole("button", { name: /Expand staged comment:/u })
+    .first()
+    .click();
   await expect(rail.locator("code")).toHaveText("leaseOwner");
   const railCard = rail.locator(".review-staged-card").first();
   const owningSlide = block.locator("xpath=ancestor::*[@data-slide][1]");
@@ -1201,7 +1213,9 @@ test("should confirm deleting every staged comment from Comments", async ({
 
   await page.getByRole("button", { name: /Feedback 2/u }).click();
   const rail = page.getByRole("complementary", { name: "Feedback" });
-  await expect(rail.locator(".review-staged-card")).toHaveCount(2);
+  await expect(
+    rail.getByRole("button", { name: /Expand staged comment:/u }),
+  ).toHaveCount(2);
   const deleteAll = rail.getByRole("button", {
     name: "Delete all comments",
   });
@@ -1233,13 +1247,17 @@ test("should confirm deleting every staged comment from Comments", async ({
   );
   await page.keyboard.press("Escape");
   await expect(deleteDialog).not.toBeVisible();
-  await expect(rail.locator(".review-staged-card")).toHaveCount(2);
+  await expect(
+    rail.getByRole("button", { name: /Expand staged comment:/u }),
+  ).toHaveCount(2);
 
   await deleteAll.click();
   await expect(deleteDialog).toBeFocused();
   await deleteDialog.dispatchEvent("keydown", { key: "Enter", repeat: true });
   await expect(deleteDialog).toBeVisible();
-  await expect(rail.locator(".review-staged-card")).toHaveCount(2);
+  await expect(
+    rail.getByRole("button", { name: /Expand staged comment:/u }),
+  ).toHaveCount(2);
   await page.keyboard.press("Enter");
   await expect(deleteDialog).not.toBeVisible();
   await expect(rail.locator(".review-staged-card")).toHaveCount(0);
@@ -1428,6 +1446,9 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
   await tableComposer.getByRole("button", { name: "Add Comment" }).click();
   await page.getByRole("button", { name: /Feedback/ }).click();
   const tableRail = page.getByRole("complementary", { name: "Feedback" });
+  await tableRail
+    .getByRole("button", { name: /Expand staged comment:/u })
+    .click();
   await expect(tableRail.locator(".review-staged-target")).toHaveText(
     /^3\.1 · (?!.*Table).+$/u,
   );

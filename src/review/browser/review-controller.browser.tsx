@@ -1668,7 +1668,10 @@ const StagedCard = ({
   associated,
   collapsed,
   expanded,
+  compactExpanded = false,
   onCollapse,
+  onExpandCompact,
+  onCollapseCompact,
   onExpandBody,
   onMinimizeBody,
   onUpdate,
@@ -1690,7 +1693,10 @@ const StagedCard = ({
   readonly associated: boolean;
   readonly collapsed: boolean;
   readonly expanded: boolean;
+  readonly compactExpanded?: boolean;
   readonly onCollapse?: () => void;
+  readonly onExpandCompact?: () => void;
+  readonly onCollapseCompact?: () => void;
   readonly onExpandBody: () => void;
   readonly onMinimizeBody: () => void;
   readonly onUpdate: (body: string) => void;
@@ -1743,14 +1749,14 @@ const StagedCard = ({
       </ContextualCommentSummary>
     );
   }
-  if (surface === "rail" && compact && !expanded) {
+  if (surface === "rail" && compact && !compactExpanded) {
     return (
       <CompactRailComment
         target={comment.target}
         body={comment.body}
         associated={associated}
         status="Staged"
-        onExpand={onExpandBody}
+        onExpand={() => onExpandCompact?.()}
         onAssociate={setAssociated}
       >
         <ThreadIconButton
@@ -1759,7 +1765,7 @@ const StagedCard = ({
           onClick={() => {
             setEditBody(comment.body);
             setIsEditing(true);
-            onExpandBody();
+            onExpandCompact?.();
           }}
         />
         <ThreadIconButton
@@ -1814,11 +1820,14 @@ const StagedCard = ({
               onClick={onResolve}
             />
           ) : null}
-          {!resolved && expanded && (long || compact) ? (
+          {!resolved && (compactExpanded || (expanded && long)) ? (
             <ThreadIconButton
               label="Minimize comment"
               icon={MINIMIZE_2_ICON}
-              onClick={onMinimizeBody}
+              onClick={() => {
+                if (compactExpanded) onCollapseCompact?.();
+                else onMinimizeBody();
+              }}
             />
           ) : null}
           {!resolved ? (
@@ -3067,6 +3076,9 @@ export const ReviewController = () => {
   const [expandedBodies, setExpandedBodies] = useState<ReadonlySet<string>>(
     new Set(),
   );
+  const [expandedRailDraftIds, setExpandedRailDraftIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
   const [submitRightAway, setSubmitRightAway] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
@@ -4549,6 +4561,19 @@ export const ReviewController = () => {
                     }
                     collapsed={false}
                     expanded={expandedBodies.has(comment.id)}
+                    compactExpanded={expandedRailDraftIds.has(comment.id)}
+                    onExpandCompact={() =>
+                      setExpandedRailDraftIds((current) =>
+                        new Set(current).add(comment.id),
+                      )
+                    }
+                    onCollapseCompact={() =>
+                      setExpandedRailDraftIds((current) => {
+                        const next = new Set(current);
+                        next.delete(comment.id);
+                        return next;
+                      })
+                    }
                     onExpandBody={() =>
                       setExpandedBodies((current) =>
                         new Set(current).add(comment.id),

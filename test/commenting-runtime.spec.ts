@@ -1148,6 +1148,10 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(page.locator("[data-review-diff-preview]")).toHaveCount(0);
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
     const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand staged comment:/u })
+      .first()
+      .click();
     await expect(rail).toContainText("Current diff available");
     await expect(rail).toContainText(
       "This compares the plan when you commented with the current plan.",
@@ -1425,8 +1429,10 @@ test("should keep component replacements inside their slide and preserve Callout
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
     const rail = page.getByRole("complementary", { name: "Feedback" });
     await rail
-      .getByRole("button", { name: "Review premise → current" })
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
       .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
     const lens = page.locator("[data-review-diff-lens]");
     const stepper = page.locator("[data-review-diff-stepper]");
     const total = Number.parseInt(
@@ -1485,8 +1491,11 @@ test("should highlight only changed words inside a revised list", async ({
     await page.goto(runtime.url);
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
     await page
-      .getByRole("button", { name: "Review premise → current" })
+      .getByRole("complementary", { name: "Feedback" })
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
       .click();
+    await page.getByRole("button", { name: "Review change" }).click();
     const list = page
       .locator("[data-review-diff-lens] [data-review-diff-content]")
       .filter({ has: page.locator("li") });
