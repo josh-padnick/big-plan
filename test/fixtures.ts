@@ -70,6 +70,7 @@ type WorkerFixtures = {
   readonly wireframeQualityViewerUrl: string;
   readonly wireframeShortContentViewerUrl: string;
   readonly wireframeDirectPanelViewerUrl: string;
+  readonly wireframeLongCaptionDesktopViewerUrl: string;
   readonly wireframeMultiDesktopViewerUrl: string;
   readonly wireframeSingleDesktopViewerUrl: string;
   readonly wireframeViewerUrl: string;
@@ -336,6 +337,21 @@ const WIREFRAME_SINGLE_DESKTOP_MDX = `# Single desktop workspace
         </Panel>
       </Rail>
     </Row>
+  </Screen>
+</Wireframe>
+`;
+
+const WIREFRAME_LONG_CAPTION_DESKTOP_MDX = `# Long-caption desktop workspace
+
+<Wireframe id="long-caption-desktop" title="Long caption alignment">
+  <Screen
+    id="historical"
+    name="Historical change across a deliberately long reviewer-visible desktop screen caption that must wrap without outgrowing its frame"
+    device="desktop"
+  >
+    <Panel title="Review thread">
+      <Text text="The complete caption remains aligned with this desktop frame." />
+    </Panel>
   </Screen>
 </Wireframe>
 `;
@@ -887,6 +903,20 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const inputPath = join(outputDir, "wireframe-single-desktop.mdx");
       const outputPath = join(outputDir, "wireframe-single-desktop.html");
       await writeFile(inputPath, WIREFRAME_SINGLE_DESKTOP_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeLongCaptionDesktopViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-long-caption-desktop-"),
+      );
+      const inputPath = join(outputDir, "wireframe-long-caption-desktop.mdx");
+      const outputPath = join(outputDir, "wireframe-long-caption-desktop.html");
+      await writeFile(inputPath, WIREFRAME_LONG_CAPTION_DESKTOP_MDX, "utf8");
       await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });

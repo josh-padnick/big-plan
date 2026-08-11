@@ -255,6 +255,39 @@ test("should fill a maximized single-screen desktop workspace", async ({
     .toBeGreaterThan(0);
 });
 
+test("should align a long caption with a height-fitted desktop frame", async ({
+  page,
+  wireframeLongCaptionDesktopViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await page.goto(wireframeLongCaptionDesktopViewerUrl);
+
+  const wireframe = page.locator('[data-wireframe="long-caption-desktop"]');
+  await wireframe.locator("[data-figure-maximize]").click();
+  await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
+
+  const geometry = await wireframe.evaluate((node) => {
+    const caption = node.querySelector<HTMLElement>(
+      ".wireframe-screen-caption",
+    );
+    const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
+    if (caption === null || card === null) {
+      throw new Error("long-caption desktop screen is incomplete");
+    }
+    const captionBox = caption.getBoundingClientRect();
+    const cardBox = card.getBoundingClientRect();
+    return {
+      captionHeight: captionBox.height,
+      leftDelta: Math.abs(captionBox.left - cardBox.left),
+      rightDelta: Math.abs(captionBox.right - cardBox.right),
+    };
+  });
+
+  expect(geometry.captionHeight).toBeGreaterThan(16);
+  expect(geometry.leftDelta).toBeLessThan(4);
+  expect(geometry.rightDelta).toBeLessThan(4);
+});
+
 test("should fill a multi-screen desktop workspace at rest and when maximized", async ({
   page,
   wireframeMultiDesktopViewerUrl,

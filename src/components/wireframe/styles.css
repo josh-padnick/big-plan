@@ -79,10 +79,11 @@ marks and a plan diff never jitters.
      title so the control still has a stable home; MaximizeButton itself
      ships hidden until the viewer script reveals it. */
   .wireframe-header {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
   }
   .wireframe[data-figure-maximized] > .wireframe-header {
     flex: none;
+    margin-bottom: 0;
   }
 
   /* The screens live beside the switcher rather than under it, so the same

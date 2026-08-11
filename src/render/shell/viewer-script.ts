@@ -1077,11 +1077,19 @@ const installColumnPointerReorder = ({
     const card = screen.querySelector(
       ":scope > .wireframe-device-block > .wireframe-frame-card",
     );
+    const deviceBlock = card?.parentElement;
     const frame = card === null ? null : card.querySelector(":scope > .wireframe-frame");
-    if (card === null || frame === null || screen.clientWidth === 0) return;
+    if (
+      card === null ||
+      !(deviceBlock instanceof HTMLElement) ||
+      frame === null ||
+      screen.clientWidth === 0
+    )
+      return;
     // offsetWidth stays in the frame's unscaled coordinate space. Writing a
     // numeric zoom avoids relying on unsupported length division in CSS.
     frame.style.zoom = "1";
+    const availableHeight = screen.clientHeight;
     // The card's padding and border sit outside the frame, so the space
     // available to the frame is the screen's width minus that inset - read
     // from computed style rather than a duplicated constant, so the two
@@ -1098,19 +1106,34 @@ const installColumnPointerReorder = ({
       parseFloat(cardStyle.borderTopWidth) +
       parseFloat(cardStyle.borderBottomWidth);
     const caption = card.previousElementSibling;
-    let captionHeight = 0;
-    if (caption instanceof HTMLElement) {
-      const captionStyle = getComputedStyle(caption);
-      captionHeight =
-        caption.getBoundingClientRect().height +
-        parseFloat(captionStyle.marginTop) +
-        parseFloat(captionStyle.marginBottom);
-    }
+    const frameWidth = frame.offsetWidth;
+    const frameHeight = frame.offsetHeight;
     const widthScale =
-      (screen.clientWidth - horizontalInset) / frame.offsetWidth;
-    const heightScale =
-      (screen.clientHeight - captionHeight - verticalInset) / frame.offsetHeight;
-    frame.style.zoom = String(Math.min(1, widthScale, heightScale));
+      (screen.clientWidth - horizontalInset) / frameWidth;
+    let scale = Math.min(1, widthScale);
+    for (let fitPass = 0; fitPass < 8; fitPass += 1) {
+      frame.style.zoom = String(scale);
+      deviceBlock.style.width =
+        String(frameWidth * scale + horizontalInset) + "px";
+      let captionHeight = 0;
+      if (caption instanceof HTMLElement) {
+        const captionStyle = getComputedStyle(caption);
+        captionHeight =
+          caption.getBoundingClientRect().height +
+          parseFloat(captionStyle.marginTop) +
+          parseFloat(captionStyle.marginBottom);
+      }
+      const heightScale =
+        (availableHeight - captionHeight - verticalInset) / frameHeight;
+      const nextScale = Math.min(1, widthScale, heightScale);
+      if (Math.abs(nextScale - scale) < 0.0001) {
+        scale = nextScale;
+        break;
+      }
+      scale = nextScale;
+    }
+    frame.style.zoom = String(scale);
+    deviceBlock.style.width = String(frameWidth * scale + horizontalInset) + "px";
   };
   for (const root of roots) {
     const screens = Array.from(
