@@ -5,8 +5,8 @@
 // annotation-to-code cross-highlighting, CodeDiff and FileTreeDiff view
 // selection, collapse toggles for deck parts, slides, and sub-slides,
 // table-schema column state and index jumps, a document comment draft,
-// DataTable sorting, filtering, text fit, column layout and grouping, and one
-// maximize behavior shared by every figure family, a decision matrix's column
+// DataTable sorting, filtering, text fit, column layout and grouping, shared
+// figure-copy feedback and maximize behavior, a decision matrix's column
 // highlight, rationale swap, and confirm step, wireframe screen navigation
 // driven entirely by renderer-emitted data attributes plus true-width scaling,
 // and the diagram leg in ./diagram-script.ts. Plan content never contributes
@@ -299,8 +299,11 @@ const installColumnPointerReorder = ({
     if (!copied) throw new Error("Unable to copy code");
   };
 
-  const wireCopy = ({ button, source, label }) => {
+  const wireCopy = ({ button, source }) => {
+    const label = button.getAttribute("aria-label");
+    if (label === null) return;
     let resetTimer;
+    let copyAttempt = 0;
     const setCopiedState = (copied) => {
       const copyIcon = button.querySelector('[data-lucide="copy"]');
       const checkIcon = button.querySelector('[data-lucide="check"]');
@@ -317,16 +320,22 @@ const installColumnPointerReorder = ({
     };
     button.hidden = false;
     button.addEventListener("click", async () => {
+      const attempt = ++copyAttempt;
       clearTimeout(resetTimer);
+      button.setAttribute("aria-label", label);
+      button.setAttribute("data-tooltip", label);
+      setCopiedState(false);
       try {
         await clipboardWrite(
           typeof source === "function" ? source() : source,
         );
+        if (attempt !== copyAttempt) return;
         const copiedLabel = "Copied " + label.slice("Copy ".length).toLowerCase();
         button.setAttribute("aria-label", copiedLabel);
         button.setAttribute("data-tooltip", copiedLabel);
         setCopiedState(true);
       } catch (_) {
+        if (attempt !== copyAttempt) return;
         button.setAttribute("aria-label", "Copy failed");
         button.setAttribute("data-tooltip", "Copy failed");
         setCopiedState(false);
@@ -392,7 +401,6 @@ const installColumnPointerReorder = ({
     wireCopy({
       button,
       source,
-      label: "Copy code",
     });
   }
 
@@ -409,12 +417,10 @@ const installColumnPointerReorder = ({
       !(button instanceof HTMLButtonElement)
     )
       continue;
-    const label = button.getAttribute("aria-label") || "Copy code";
     const tableSource = isTable ? () => tableToTsv(figure) : null;
     wireCopy({
       button,
       source: tableSource ?? source.value,
-      label,
     });
   }
 })();
