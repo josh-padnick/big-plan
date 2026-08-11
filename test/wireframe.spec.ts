@@ -241,7 +241,7 @@ test("should fill a maximized single-screen desktop workspace", async ({
   const screenOverflow = await frame
     .locator(".wireframe-screen")
     .evaluate((node) => node.scrollHeight - node.clientHeight);
-  expect(screenOverflow).toBeLessThanOrEqual(2);
+  expect(screenOverflow).toBe(0);
 
   const rail = frame.locator(".wireframe-rail");
   const scrollRange = await rail.evaluate(
@@ -286,6 +286,11 @@ test("should align a long caption with a height-fitted desktop frame", async ({
   expect(geometry.captionHeight).toBeGreaterThan(16);
   expect(geometry.leftDelta).toBeLessThan(4);
   expect(geometry.rightDelta).toBeLessThan(4);
+
+  const screenOverflow = await wireframe
+    .locator(".wireframe-screen")
+    .evaluate((node) => node.scrollHeight - node.clientHeight);
+  expect(screenOverflow).toBe(0);
 });
 
 test("should fill a multi-screen desktop workspace at rest and when maximized", async ({
