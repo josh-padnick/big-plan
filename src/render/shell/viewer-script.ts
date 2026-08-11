@@ -1098,8 +1098,14 @@ const installColumnPointerReorder = ({
       parseFloat(cardStyle.borderTopWidth) +
       parseFloat(cardStyle.borderBottomWidth);
     const caption = card.previousElementSibling;
-    const captionHeight =
-      caption instanceof HTMLElement ? caption.getBoundingClientRect().height : 0;
+    let captionHeight = 0;
+    if (caption instanceof HTMLElement) {
+      const captionStyle = getComputedStyle(caption);
+      captionHeight =
+        caption.getBoundingClientRect().height +
+        parseFloat(captionStyle.marginTop) +
+        parseFloat(captionStyle.marginBottom);
+    }
     const widthScale =
       (screen.clientWidth - horizontalInset) / frame.offsetWidth;
     const heightScale =

@@ -167,7 +167,7 @@ test("should fill a maximized single-screen desktop workspace", async ({
   page,
   wireframeSingleDesktopViewerUrl,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.setViewportSize({ width: 1440, height: 800 });
   await page.goto(wireframeSingleDesktopViewerUrl);
 
   const frame = page.locator('[data-wireframe="single-desktop"]');
