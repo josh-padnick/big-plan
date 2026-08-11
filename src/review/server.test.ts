@@ -955,6 +955,40 @@ describe("review runtime feedback", () => {
         expect.objectContaining({ id: comment.id }),
       ]),
     });
+
+    expect(
+      (
+        await call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: {
+            drafts: [comment],
+            activeDraft: "",
+            resolvedCommentIds: [],
+          },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await call({
+          path: "/api/feedback",
+          method: "POST",
+          body: { comments: [comment] },
+        })
+      ).status,
+    ).toBe(500);
+    const afterResubmission: unknown = await (
+      await call({ path: "/api/drafts" })
+    ).json();
+    expect(afterResubmission).toMatchObject({
+      drafts: [expect.objectContaining({ id: comment.id })],
+    });
+    expect(afterResubmission).not.toMatchObject({
+      sent: expect.arrayContaining([
+        expect.objectContaining({ id: comment.id }),
+      ]),
+    });
   });
 
   it("should keep answered history when a later follow-up is canceled", async () => {

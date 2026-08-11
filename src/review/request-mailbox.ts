@@ -133,6 +133,11 @@ export const ensureAgentRequest = async ({
           "The stored request conflicts with this feedback submission",
         );
       }
+      if (existing.canceledAt !== undefined) {
+        throw new AgentExchangeRejected(
+          "The feedback submission was canceled by the reviewer",
+        );
+      }
       return existing;
     },
   });
