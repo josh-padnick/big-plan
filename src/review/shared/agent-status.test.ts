@@ -55,6 +55,24 @@ describe("current agent activity", () => {
     });
   });
 
+  it("should expire a previously connected agent when its heartbeat is stale", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [],
+        responseRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: true,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW - AGENT_STALL_MS - 1,
+      }),
+    ).toMatchObject({
+      state: "disconnected",
+      headline: "The agent is disconnected",
+      supporting: expect.stringContaining("No agent signal for 1m 30s"),
+    });
+  });
+
   it("should distinguish a disconnected agent from an ordinary wait", () => {
     const activity = deriveCurrentAgentActivity({
       requests: [request()],
@@ -146,7 +164,7 @@ describe("current agent activity", () => {
         agentConnected: true,
         runtimeOffline: false,
         now: NOW,
-        heartbeatAt: NOW - AGENT_STALL_MS - 1,
+        heartbeatAt: NOW,
       }),
     ).toMatchObject({ state: "stalled", headline: "Agent may be stalled" });
   });

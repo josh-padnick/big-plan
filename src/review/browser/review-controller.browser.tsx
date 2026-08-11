@@ -29,6 +29,8 @@ import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
+  AGENT_STALL_MS,
+  agentPresenceIsFresh,
   deriveAgentHealthLabel,
   deriveAgentStatus,
   deriveCurrentAgentActivity,
@@ -82,6 +84,7 @@ import { CommentsSurface } from "./comments-surface.browser.js";
 import {
   AgentChangeDigest,
   MessageTurn,
+  ReviewerMessagePreview,
   RequestStatusStrip,
   type MessageActivity,
   type MessageSurface,
@@ -511,9 +514,23 @@ const targetLabel = (
   else label = target.label;
 
   if (!includeSlideReference || target.type === "document") return label;
-  const reviewContainer = targetElement(target)?.closest<HTMLElement>(
+  const directContainer = targetElement(target)?.closest<HTMLElement>(
     "[data-slide], [data-quick-summary]",
   );
+  const reviewContainer =
+    directContainer ??
+    (target.section === undefined
+      ? null
+      : (Array.from(
+          document.querySelectorAll<HTMLElement>("[data-slide]"),
+        ).find((slide) => {
+          const heading = slide
+            .querySelector<HTMLElement>(
+              ":scope > [data-collapse-header] h2, :scope > [data-collapse-header] h3",
+            )
+            ?.textContent?.trim();
+          return heading === target.section;
+        }) ?? null));
   if (reviewContainer?.matches("[data-quick-summary]") === true) {
     return "Quick summary";
   }
@@ -1448,7 +1465,7 @@ const ContextualCommentSummary = ({
   readonly children: ReactNode;
 }) => (
   <Card
-    className={`review-contextual-summary group/contextual mt-2 flex w-full max-w-[17rem] items-center gap-2 border border-edge bg-raised! transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted ${className}`}
+    className={`review-contextual-summary group/contextual mt-2 flex w-full max-w-[17rem] cursor-pointer items-center gap-2 border border-edge bg-raised! transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted ${className}`}
     density="dense"
     elevation="floating"
     onPointerEnter={() => onAssociate(true)}
@@ -1460,6 +1477,16 @@ const ContextualCommentSummary = ({
     onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget))
         onAssociate(false);
+    }}
+    onClick={(event) => {
+      const target =
+        event.target instanceof Element
+          ? event.target
+          : event.target instanceof Node
+            ? event.target.parentElement
+            : null;
+      if (target !== null && target.closest("button") !== null) return;
+      onExpand();
     }}
     data-review-comment-ui=""
     data-review-associated={associated ? "true" : undefined}
@@ -2116,7 +2143,7 @@ const SentThread = ({
           : group === "working"
             ? "Working"
             : "Queued";
-  const railMetadata = `${railState} ${railFreshness === "Just now" ? "just now" : railFreshness}`;
+  const railTime = railFreshness === "Just now" ? "just now" : railFreshness;
   const latestChangeWasReverted =
     latestChanged !== undefined &&
     latestChanged.baselineSnapshot === currentSnapshot;
@@ -2314,17 +2341,14 @@ const SentThread = ({
           />
         </CommentCardHeader>
         <div className="p-3">
-          <button
-            type="button"
-            className="review-sent-summary line-clamp-3 min-w-0 w-full cursor-pointer [overflow-wrap:anywhere] border-0 bg-transparent p-0 text-left text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            aria-label={`Expand thread: ${comment.body}`}
-            aria-expanded="false"
-            onClick={onToggle}
-          >
-            {comment.body}
-          </button>
-          <div className="mt-3 flex min-w-0 items-center justify-between gap-2 text-xs text-muted">
-            <span className="min-w-0 truncate font-medium">{railMetadata}</span>
+          <ReviewerMessagePreview body={comment.body} onExpand={onToggle} />
+          <div className="review-sent-metadata mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-edge pt-2 text-xs text-muted">
+            <span className="flex min-w-0 items-baseline gap-1.5 truncate">
+              <span className="font-medium">{railState}</span>
+              <time className="review-sent-time text-2xs font-normal text-subtle">
+                {railTime}
+              </time>
+            </span>
             {resolved ? (
               <button
                 type="button"
@@ -3186,6 +3210,27 @@ export const ReviewController = () => {
   }, [acceptAgentSnapshot, identity]);
 
   useEffect(() => {
+    if (identity === null) return;
+    const refreshLeaseClock = () => setStatusNowMs(Date.now());
+    const heartbeatAt = agent.presence.updatedAtMs ?? 0;
+    const remaining = Math.max(
+      0,
+      heartbeatAt + AGENT_STALL_MS - Date.now() + 1,
+    );
+    const timer = window.setTimeout(refreshLeaseClock, remaining);
+    const refreshVisibleLease = () => {
+      if (!document.hidden) refreshLeaseClock();
+    };
+    window.addEventListener("focus", refreshLeaseClock);
+    document.addEventListener("visibilitychange", refreshVisibleLease);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", refreshLeaseClock);
+      document.removeEventListener("visibilitychange", refreshVisibleLease);
+    };
+  }, [agent.presence.updatedAtMs, identity]);
+
+  useEffect(() => {
     if (
       identity === null ||
       agent.currentSnapshot === "" ||
@@ -3553,12 +3598,18 @@ export const ReviewController = () => {
 
   const threadRuntime: ThreadRuntime =
     identity === null ? "static" : pollFailures >= 2 ? "offline" : "online";
+  const agentConnected = agentPresenceIsFresh({
+    connected: agent.presence.connected,
+    heartbeatAt: agent.presence.updatedAtMs ?? 0,
+    now: statusNowMs,
+  });
+  const effectivePresence = { ...agent.presence, connected: agentConnected };
   const threadProjections = projectCommentThreads({
     comments: sent,
     requests: agent.requests,
     responses: agent.responses,
     progressEvents: progress,
-    presence: agent.presence,
+    presence: effectivePresence,
     runtime: threadRuntime,
     nowMs: statusNowMs,
     cancelPendingRequestIds,
@@ -3606,7 +3657,7 @@ export const ReviewController = () => {
             })
           ? "pending"
           : "answered",
-    agentConnected: agent.presence.connected,
+    agentConnected,
     pickedUp:
       latestRequest?.claimedAt !== undefined || requestProgress.length > 0,
     ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
@@ -3627,7 +3678,7 @@ export const ReviewController = () => {
         (candidate) => candidate.requestId === request.requestId,
       ),
       progressEvents: progress,
-      presence: agent.presence,
+      presence: effectivePresence,
       runtime: threadRuntime,
       surface,
       nowMs: statusNowMs,
@@ -3647,7 +3698,7 @@ export const ReviewController = () => {
       ),
     ]),
     progressEvents: progress,
-    agentConnected: agent.presence.connected,
+    agentConnected,
     runtimeOffline: pollFailures >= 2,
     now: statusNowMs,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
@@ -3782,9 +3833,11 @@ export const ReviewController = () => {
       });
     });
   };
-  const activeRequest = agent.requests.find(
-    (request) => request.requestId === agent.presence.requestId,
-  );
+  const activeRequest = agentConnected
+    ? agent.requests.find(
+        (request) => request.requestId === agent.presence.requestId,
+      )
+    : undefined;
   const activeRequestLink =
     activeRequest === undefined
       ? undefined
@@ -3901,7 +3954,7 @@ export const ReviewController = () => {
       {selectionControl === null ? null : (
         <button
           type="button"
-          className="fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-edge-strong bg-surface px-2 py-1 text-xs text-ink shadow-raised hover:border-accent hover:bg-accent-soft hover:text-accent hover:shadow-lifted focus-visible:border-accent focus-visible:bg-accent-soft focus-visible:text-accent focus-visible:shadow-lifted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed [&_svg]:size-3.5"
+          className="fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-accent bg-accent-soft px-2 py-1 text-xs text-accent shadow-raised hover:shadow-lifted focus-visible:shadow-lifted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed [&_svg]:size-3.5"
           style={{
             top: `${selectionControl.top}px`,
             left: `${selectionControl.left}px`,
@@ -3922,7 +3975,7 @@ export const ReviewController = () => {
         : createPortal(
             <>
               {agentHealthLabel === null ? (
-                identity !== null && agent.presence.connected ? (
+                identity !== null && agentConnected ? (
                   <DelayedTooltip label="Agent session active">
                     <button
                       type="button"
@@ -4254,7 +4307,7 @@ export const ReviewController = () => {
             <AgentSurface
               model={{
                 activity: currentAgentActivity,
-                connected: agent.presence.connected,
+                connected: agentConnected,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
                 connectionLog: agent.connectionLog,
                 recoveryPrompt: agent.recoveryPrompt,

@@ -490,6 +490,9 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "background-color",
     "rgba(0, 0, 0, 0)",
   );
+  await minimizedStatus.click();
+  await expect(thread).toBeVisible();
+  await thread.getByRole("button", { name: "Minimize staged comment" }).click();
   const minimizedDelete = minimizedThread.getByRole("button", {
     name: "Delete staged comment",
   });
@@ -788,10 +791,13 @@ test("should preserve a text selection while its compact composer is open", asyn
         },
       };
     });
+  await page.evaluate(() => {
+    document.documentElement.dataset["theme"] = "dark";
+  });
   const resting = await visualState();
-  expect(resting.background).toBe(resting.roles.surface);
-  expect(resting.border).toBe(resting.roles.edgeStrong);
-  expect(resting.color).toBe(resting.roles.ink);
+  expect(resting.background).toBe(resting.roles.accentSoft);
+  expect(resting.border).toBe(resting.roles.accent);
+  expect(resting.color).toBe(resting.roles.accent);
   expect(resting.shadow).toContain(resting.roles.raised);
   await chip.hover();
   const hovered = await visualState();

@@ -3,6 +3,7 @@
 // does not depend on the browser or Node.
 
 import type { ProgressStepCode } from "./progress-code.js";
+import { compactDurationLabel } from "./time-label.js";
 
 export const AGENT_STALL_MS = 90_000;
 
@@ -61,7 +62,7 @@ export type CurrentAgentActivity =
       readonly state: "disconnected";
       readonly tone: "danger";
       readonly headline: "The agent is disconnected";
-      readonly supporting: "Reconnect the coding agent to continue. All comments are safe.";
+      readonly supporting: string;
     }
   | {
       readonly state: "offline";
@@ -122,6 +123,36 @@ const meaningfulWork = (
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This updates by itself once the agent resumes.";
 
+/** Expires a browser-held presence snapshot at the same lease as the store. */
+export const agentPresenceIsFresh = ({
+  connected,
+  heartbeatAt,
+  now,
+}: {
+  readonly connected: boolean;
+  readonly heartbeatAt: number;
+  readonly now: number;
+}): boolean =>
+  connected &&
+  Number.isFinite(heartbeatAt) &&
+  heartbeatAt > 0 &&
+  now - heartbeatAt >= 0 &&
+  now - heartbeatAt <= AGENT_STALL_MS;
+
+/** Explains a lost lease without claiming why the external agent stopped. */
+const disconnectedSupporting = ({
+  heartbeatAt,
+  now,
+}: {
+  readonly heartbeatAt: number;
+  readonly now: number;
+}): string => {
+  const quietFor = compactDurationLabel({ start: heartbeatAt, end: now });
+  return quietFor === null
+    ? "Reconnect the coding agent to continue. All comments are safe."
+    : `No agent signal for ${quietFor}; the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
+};
+
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({
   requests,
@@ -149,13 +180,12 @@ export const deriveCurrentAgentActivity = ({
         "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
     };
   }
-  if (!agentConnected) {
+  if (!agentPresenceIsFresh({ connected: agentConnected, heartbeatAt, now })) {
     return {
       state: "disconnected",
       tone: "danger",
       headline: "The agent is disconnected",
-      supporting:
-        "Reconnect the coding agent to continue. All comments are safe.",
+      supporting: disconnectedSupporting({ heartbeatAt, now }),
     };
   }
 
@@ -212,7 +242,6 @@ export const deriveCurrentAgentActivity = ({
   const observedAt = Math.max(
     0,
     latest?.atMs ?? 0,
-    heartbeatAt,
     Date.parse(request.claimedAt ?? request.createdAt) || 0,
   );
   if (now - observedAt > AGENT_STALL_MS) {

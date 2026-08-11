@@ -26,6 +26,60 @@ import {
 import { renderDocument } from "../src/render/render-document.js";
 import { expect, stageComment, test } from "./fixtures";
 
+test("should expire a held connected snapshot when the reviewer returns", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const now = Date.now();
+  await page.clock.install({ time: now });
+  await page.goto(reviewRuntimeUrl);
+  const session: unknown = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The review runtime did not describe its live session");
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+    now,
+  });
+  await page.clock.runFor(1_600);
+  await expect(
+    page.getByRole("button", { name: "Agent session active" }),
+  ).toBeVisible();
+
+  await page.clock.setSystemTime(now + 6 * 60 * 60_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  const connectionLost = page.getByRole("button", {
+    name: /Agent connection lost/u,
+  });
+  await expect(connectionLost).toBeVisible();
+  await connectionLost.click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).toContainText("No agent signal for 6h 00m");
+});
+
 test("should restore and submit staged comments through the local review runtime", async ({
   page,
   reviewRuntimeUrl,
@@ -554,10 +608,30 @@ test("should restore and submit staged comments through the local review runtime
     "padding-left",
     "2px",
   );
+  await expect(sentThread.locator(".review-sent-target")).toHaveText(
+    "1 · Details",
+  );
   await expect(sentThread.locator(".review-sent-summary")).toHaveCSS(
     "font-size",
-    "14px",
+    "12px",
   );
+  await expect(sentThread.locator(".review-sent-metadata")).toHaveCSS(
+    "border-top-width",
+    "1px",
+  );
+  await expect(sentThread.locator(".review-sent-time")).toHaveCSS(
+    "font-size",
+    "11px",
+  );
+  const compactReviewerStyle = await sentThread
+    .locator(".review-sent-summary")
+    .evaluate((node) => {
+      const style = getComputedStyle(node);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderRightColor: style.borderRightColor,
+      };
+    });
   await expect(
     sentThread.getByRole("button", { name: "Expand thread", exact: true }),
   ).toBeVisible();
@@ -570,6 +644,19 @@ test("should restore and submit staged comments through the local review runtime
   await sentThread
     .getByRole("button", { name: "Expand thread", exact: true })
     .click();
+  const expandedReviewer = sentThread
+    .locator('[data-review-message="user"]')
+    .first();
+  await expect(expandedReviewer.locator("p")).toHaveCSS("font-size", "12px");
+  expect(
+    await expandedReviewer.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderRightColor: style.borderRightColor,
+      };
+    }),
+  ).toEqual(compactReviewerStyle);
   await expect(kernel).toContainText(
     "Removed the ambiguous promise and tightened delivery.",
   );

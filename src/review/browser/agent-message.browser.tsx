@@ -190,6 +190,25 @@ export const MessageTurn = ({
   );
 };
 
+/** Keeps a collapsed reviewer message visually continuous with its full turn. */
+export const ReviewerMessagePreview = ({
+  body,
+  onExpand,
+}: {
+  readonly body: string;
+  readonly onExpand: () => void;
+}) => (
+  <button
+    type="button"
+    className={`${THREAD_BASE} ${ROLE_CLASSES.user} review-sent-summary block cursor-pointer text-left text-xs text-ink [line-height:1.45] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+    aria-label={`Expand thread: ${body}`}
+    aria-expanded="false"
+    onClick={onExpand}
+  >
+    <span className="line-clamp-3 [overflow-wrap:anywhere]">{body}</span>
+  </button>
+);
+
 const Spinner = () => (
   <span
     className="inline-block size-[0.72rem] shrink-0 animate-spin rounded-full border-[1.5px] border-current border-r-transparent [animation-duration:700ms] motion-reduce:[animation-duration:1.8s]"
