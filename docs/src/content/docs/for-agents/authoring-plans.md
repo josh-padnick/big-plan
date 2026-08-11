@@ -14,7 +14,7 @@ Everything a plan author has to judge - the title, the structure, the deck shape
 
 Run `big-plan guidance` before writing a plan.
 It prints the principles for writing a plan a human loves to review, and it is the only place those principles live.
-Reading it recently is required: `validate` and `render` fail with `GUIDANCE_REQUIRED` until guidance has been run from the same working directory within 24 hours.
+Reading it recently is required: `validate`, `render`, and `review` fail with `GUIDANCE_REQUIRED` until guidance has been run from the same working directory within 24 hours.
 
 The acknowledgment is recorded per directory and expires after 24 hours, or immediately when the guidance content itself changes, so a stale reading never unlocks a changed contract.
 `compile` stays open, because it produces machine-readable output rather than a document a human will read.

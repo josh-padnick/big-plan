@@ -97,9 +97,9 @@ Neither derived-output command permits the output to resolve to the input file, 
 
 ## Document metadata
 
-All four plan-file commands choose the document title from the MDX content.
+`render`, `compile`, and `validate` choose and report the document title from the MDX content; `review` renders the plan with the same title.
 The input filename without its extension is the fallback title.
-The reported section count comes from the document's level-two sections.
+The section count reported by `render`, `compile`, and `validate` comes from the document's level-two sections.
 
 ## The compiled plan model
 
