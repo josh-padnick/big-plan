@@ -27,14 +27,18 @@ npx big-plan skill write <path/to/SKILL.md>
 npx big-plan validate <file.mdx>
 npx big-plan render <file.mdx> [output.html]
 npx big-plan compile <file.mdx> [output.json]
+npx big-plan review <file.mdx>
+npx big-plan agent <file.mdx>
 ```
 
-`guidance` prints the principles for writing a plan a human loves to review; reading it recently is required before `validate` and `render` will run.
+`guidance` prints the principles for writing a plan a human loves to review; the [CLI reference](docs/src/content/docs/reference/cli.md#guidance-and-the-acknowledgment-gate) owns which commands require a current acknowledgment.
 `skill` prints the thin agent skill shell shipped with the package; `skill write <path>` installs that shell only when you ask (no silent overwrites).
 Validation checks that the plan can be compiled and rendered, then applies linting rules to the authored plan without writing an output file.
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
 Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.model.json`.
-Both sit next to the input, while the MDX file remains the canonical source and JSON is always derived output.
+`review` serves the rendered plan locally so a reviewer can leave comments.
+`agent` runs the coding-agent side of that live review exchange.
+Rendered and compiled output sit next to the input by default, while the MDX file remains the canonical source and JSON is always derived output.
 See the [two-artifact delivery contract](adr/0001-two-artifact-plan-delivery.md).
 MermaidDiagram rendering additionally uses the pinned headless Chromium renderer at compile time; on a clean install, provision it once with `bunx playwright@1.61.1 install chromium`.
 A responsive table of contents links to the document's level-two headings and highlights the section being read, and a `Settings` dialog lets a reviewer pick a `Light`, `Dark`, or `System` appearance that is saved for every review document in that browser.
@@ -77,7 +81,8 @@ The full authoring contract lives in the documentation:
 - [Linting rules](docs/src/content/docs/reference/lint-rules.md) - every authoring rule and its conservative matching boundaries.
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
-- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `skill`, `validate`, `render`, and `compile` in detail.
+- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `skill`, `validate`, `render`, `compile`, `review`, and `agent` in detail.
+- [Reviewing a plan](docs/src/content/docs/reference/reviewing.md) - local comments, the coding-agent exchange, and revision truth.
 
 To preview components locally from a source checkout, run `bun run build` first. Then run `node bin/big-plan.mjs guidance` once and render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`. The local executable reads the compiled files in `dist/`.
 To inspect supported fences and both palettes, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.
@@ -89,10 +94,10 @@ Generated previews remain ignored by Git.
 ```sh
 bun install
 bun run build           # regenerate embedded modules, then compile TypeScript to dist/
-bun run test            # Vitest and Node unit tests (regenerates embedded modules first)
+bun run test            # Vitest and Node unit tests, including the stylesheet-contract and design-system script tests (regenerates embedded modules first)
 bun run lint            # ESLint, stylesheet-contract, design-system, and Prettier checks
 bun run format          # format authored files with Prettier
-bun run gen             # regenerate CSS, font, branding-asset, guidance, and skill modules
+bun run gen             # regenerate review-script, CSS, font, branding-asset, guidance, and skill modules
 bun run test:e2e        # browser tests of the rendered viewer (build first)
 node bin/big-plan.mjs render examples/sample.mdx
 ```
@@ -100,7 +105,7 @@ node bin/big-plan.mjs render examples/sample.mdx
 Formatting exclusions and their rationale are documented in [.prettierignore](.prettierignore).
 Use `bun run test`, not `bun test` - the latter invokes Bun's own test runner instead of the package script.
 
-See [AGENTS.md](AGENTS.md) for architecture, [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for engineering practices, and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow, including the style-history verifier's commit contract and evidence workflow.
+See [AGENTS.md](AGENTS.md) for architecture, [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for engineering practices, and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
 ## Documentation
 

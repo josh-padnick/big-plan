@@ -12,6 +12,7 @@ import {
   parseInputCommandArguments,
 } from "../_shared/input-command.js";
 import { startReviewRuntime } from "../../review/server.js";
+import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { renderDocument } from "../../render/render-document.js";
 
 const USAGE = "Usage: big-plan review <input.mdx>";
@@ -73,6 +74,7 @@ export const reviewCommand = async (
       ...warnings,
       `Open ${runtime.url} in your browser to review and comment`,
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
+      `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,
       "Press Ctrl+C to stop the review runtime",
     ],
   };

@@ -260,19 +260,13 @@ test("should isolate the document while settings is open and restore focus on cl
     const dialog = document.querySelector("[data-preferences-dialog]");
     const backdropStyle =
       backdrop instanceof HTMLElement ? getComputedStyle(backdrop) : null;
-    const backdropAlpha =
-      backdropStyle === null
-        ? null
-        : (/(?:\/|,)\s*([\d.]+)\s*\)?$/u.exec(
-            backdropStyle.backgroundColor,
-          )?.[1] ?? null);
     return {
       backdropInert: backdrop instanceof HTMLElement && backdrop.inert,
       dialogInert: dialog instanceof HTMLElement && dialog.inert,
       backdropIsDimmed:
         backdropStyle !== null &&
         backdropStyle.backgroundColor !== "rgba(0, 0, 0, 0)",
-      backdropOpacity: backdropAlpha === null ? null : Number(backdropAlpha),
+      backdropColor: backdropStyle?.backgroundColor ?? null,
       topLevelSiblingsInert:
         backdrop instanceof HTMLElement
           ? Array.from(document.body.children)
@@ -284,7 +278,12 @@ test("should isolate the document while settings is open and restore focus on cl
     };
   });
 
-  expect(isolation).toEqual({
+  const { backdropColor, ...isolationState } = isolation;
+  expect({
+    ...isolationState,
+    backdropOpacity:
+      backdropColor === null ? null : backdropOpacity(backdropColor),
+  }).toEqual({
     backdropInert: false,
     dialogInert: false,
     backdropIsDimmed: true,

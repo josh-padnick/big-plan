@@ -1,6 +1,6 @@
 <!--
 Owns Big Plan's two-artifact delivery contract and the boundary between its
-server-rendered content floor and future React interaction islands.
+server-rendered content floor and React interaction islands.
 -->
 
 # ADR 0001: Two-artifact plan delivery
@@ -28,10 +28,10 @@ A plan ships as exactly two review artifacts: the authoritative MDX source and
 one self-contained interactive HTML render. Big Plan does not ship a separate
 script-free HTML variant.
 
-The interaction tier will be built on React, using off-the-shelf shadcn/ui for
-new commenting surfaces and theming those surfaces through the design tokens.
-React owns interaction islands only. The server-rendered readable HTML content
-floor is an explicit inviolable line.
+The interaction tier uses React and off-the-shelf shadcn/ui for new commenting
+surfaces, themed through the design tokens. React owns interaction islands
+only. The server-rendered readable HTML content floor is an explicit
+inviolable line.
 
 ## Rationale
 

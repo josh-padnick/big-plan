@@ -867,7 +867,8 @@ test("should keep review chrome stable through zoom and maximize in both themes"
         followsReviewAction: add.previousElementSibling?.hasAttribute(
           "data-review-toolbar-host",
         ),
-        contained: addRect.left >= barRect.left,
+        contained:
+          addRect.left >= barRect.left && addRect.right <= barRect.right,
       };
     });
     expect(placement).not.toBeNull();

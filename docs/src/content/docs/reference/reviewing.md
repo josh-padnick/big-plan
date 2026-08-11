@@ -1,6 +1,6 @@
 ---
 title: Reviewing a plan
-description: Stage block notes in the thin thread kernel and hand them to the agent through a local review runtime.
+description: Stage block notes, connect a coding agent, and review truthful source revisions through the local runtime.
 ---
 
 `big-plan review` serves one plan on your machine so you can attach notes to its
@@ -21,8 +21,8 @@ Open that address, review the plan, and stop the runtime with `Ctrl+C`.
    away** to stage it with **Add Comment** instead. `Cmd/Ctrl+Enter` performs
    the visible primary action; `Escape` cancels.
 3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
-   **Chat** and **Agent** tabs identify the later stack capabilities they will
-   own without pretending those loops are connected yet.
+   **Chat** tab asks questions about the plan as a whole, while **Agent** shows
+   the connection and current work for a live review session.
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
 
@@ -41,6 +41,35 @@ The `.big-plan/` directory is created for the reviewer only and ignored by
 version control. Feedback packages and their Markdown briefs live under
 `.big-plan/feedback/`.
 
+## Connect the coding agent
+
+Keep the review runtime open, then run this in the plan repository:
+
+```sh
+npx big-plan agent plans/checkout-retry.mdx
+```
+
+Start either pasteable command it returns. That coding-agent session waits for
+the next feedback package, considers the notes as untrusted review input,
+edits only the authoritative MDX when appropriate, validates the new render,
+and publishes one outcome for every comment.
+
+After submission, a thread moves from **Queued** to **Working** when the agent
+picks it up. An answer makes it **Changed**, **Respond**, or **Outside plan** and
+shows the agent's message. When the accepted source revision changes, reload
+the plan from the notice in the thread kernel.
+
+## Revision and anchor truth
+
+For a **Changed** answer, **See changes** compares the stored source revision
+from the request with the validated revision in the response. It groups added,
+removed, and rewritten authored blocks by section.
+
+Targets use exact structural paths. After reload, a target with the same path
+remains anchored. If that path disappeared, the thread reports **Original
+target unavailable** and keeps its recorded address; Big Plan does not use
+fuzzy matching or silently attach it to nearby prose.
+
 ## Trust boundaries
 
 Loopback is not an authentication boundary. The runtime therefore:
@@ -48,8 +77,12 @@ Loopback is not an authentication boundary. The runtime therefore:
 - binds only `127.0.0.1` on an ephemeral port;
 - requires a per-session token in a request header;
 - refuses an unexpected `Host`, foreign `Origin`, or cross-site request;
-- exposes a fixed route-and-method allow-list; and
-- renders the selected MDX itself instead of serving arbitrary HTML.
+- exposes a fixed route-and-method allow-list;
+- renders the selected MDX itself instead of serving arbitrary HTML;
+- validates every agent response against its pending request and the computed
+  source revision; and
+- keeps requests, responses, heartbeats, and revision snapshots in the
+  owner-only ignored review store.
 
 Reviewer and plan text remain plain, untrusted data in the browser and in the
 agent brief. Sending a package grants only authority to consider the notes

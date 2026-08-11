@@ -1302,22 +1302,17 @@ const installColumnPointerReorder = ({
       event.stopPropagation();
       toggle();
     });
-    // The whole header (chevron + kicker + title) is the hit target. It holds
-    // chrome only, so this cannot capture body clicks or a nested region's
-    // click - see the invariants in deck-collapse.ts.
+    // The title text is the only extra pointer target. Empty header space and
+    // the kicker remain reading chrome; the chevron stays the explicit
+    // keyboard and assistive-technology control.
     header.addEventListener("click", (event) => {
       if (
         event.target.closest("a, button, input, textarea, select, summary, label")
       )
         return;
-      event.preventDefault();
-      // A slide title opens a collapsed slide but does not close an open one.
-      // Kicker-only levels keep the full header toggle behavior.
       const title = event.target.closest(".plan-slide-title");
-      if (title !== null) {
-        if (block.hasAttribute("data-collapsed")) setCollapsed(block, false);
-        return;
-      }
+      if (title === null || !header.contains(title)) return;
+      event.preventDefault();
       toggle();
     });
   }

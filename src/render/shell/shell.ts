@@ -183,7 +183,7 @@ const renderCommentDraftControl = (): string =>
 // readable without exposing a control that cannot open its dialog.
 const renderPreferencesControl = (): string =>
   `<span data-preferences-control hidden>
-<button class="inline-flex size-11 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-open aria-label="Open settings" aria-haspopup="dialog" aria-expanded="false">${lucideIconToHtml({ icon: SETTINGS_ICON, className: "size-4" })}</button>
+<button class="inline-flex size-11 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:size-8" type="button" data-preferences-open aria-label="Open settings" aria-haspopup="dialog" aria-expanded="false">${lucideIconToHtml({ icon: SETTINGS_ICON, className: "size-4" })}</button>
 </span>`;
 
 const renderPreferenceOption = ({
@@ -233,10 +233,10 @@ ${renderPreferenceOption({ mode: "system", title: "System", description: "Match 
 </section>
 </div>`;
 
-// The right side of the branding bar is one action group shared by Comment
-// and Settings, keeping both controls reachable without a menu layer.
+// The right side of the branding bar keeps status, Feedback, and Settings as
+// separate peer actions with one closed spacing-scale step between them.
 const renderHeaderActions = (): string =>
-  `<div class="ml-auto flex items-center gap-1">
+  `<div class="ml-auto flex items-center gap-3">
 ${renderCommentDraftControl()}
 ${renderPreferencesControl()}
 </div>`;

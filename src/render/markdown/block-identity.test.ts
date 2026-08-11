@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Root } from "hast";
 import { compileMarkdown } from "./compile-markdown.js";
-import { rehypeBlockIdentity } from "./block-identity.js";
+import { rehypeBlockIdentity, type BlockDescriptor } from "./block-identity.js";
 import { serializeHtml } from "../serialize-html.js";
 
 const compile = (markdown: string) => {
@@ -182,7 +182,7 @@ describe("block identity kinds and labels", () => {
         },
       ],
     };
-    const blocks: Array<{ readonly id: string }> = [];
+    const blocks: Array<BlockDescriptor> = [];
     rehypeBlockIdentity({ blocks })(tree);
     expect(blocks.map((block) => block.id)).toEqual([
       "document/custom-1",

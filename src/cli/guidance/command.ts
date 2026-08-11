@@ -1,6 +1,6 @@
 // Implements `big-plan guidance [component]`: prints the plan-writing
-// principles (recording the acknowledgment that unlocks validate and render
-// for the current directory), or one component's usage guidance on demand.
+// principles (recording the acknowledgment that unlocks validate, render, and
+// review for the current directory), or one component's guidance on demand.
 
 import { AxiError } from "axi-sdk-js";
 import { recordGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
