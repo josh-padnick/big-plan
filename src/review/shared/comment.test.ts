@@ -222,18 +222,18 @@ describe("validateActiveDraft", () => {
 describe("validateResolvedCommentIds", () => {
   it("should refuse duplicate ids", () => {
     expect(() => validateResolvedCommentIds(["aabbccdd", "aabbccdd"])).toThrow(
-      "Resolved comment ids must be unique and bounded",
+      "Resolved comment ids must be unique",
     );
   });
 
-  it("should refuse more than 200 ids", () => {
-    expect(() =>
+  it("should retain durable resolution history beyond one submission batch", () => {
+    expect(
       validateResolvedCommentIds(
         Array.from({ length: 201 }, (_, index) =>
           index.toString(16).padStart(4, "0"),
         ),
       ),
-    ).toThrow("Resolved comment ids must be unique and bounded");
+    ).toHaveLength(201);
   });
 });
 

@@ -122,10 +122,8 @@ export const validateResolvedCommentIds = (
     throw new CommentRejected("Resolved comment ids must arrive as a list");
   }
   const ids = value.map(asId);
-  if (ids.length > COMMENT_LIMIT || new Set(ids).size !== ids.length) {
-    throw new CommentRejected(
-      "Resolved comment ids must be unique and bounded",
-    );
+  if (new Set(ids).size !== ids.length) {
+    throw new CommentRejected("Resolved comment ids must be unique");
   }
   return ids;
 };

@@ -295,14 +295,23 @@ const nextWork = async ({
     requestId: request.requestId,
   });
   const binPath = resolve(executablePath);
+  const historySnapshot =
+    request.kind === "reply"
+      ? await readAgentCommentHistory({
+          store: session.store,
+          sessionId: session.sessionId,
+          planId: session.planId,
+          commentId: request.commentId,
+        })
+      : snapshot;
   return {
     pending: true,
     plan: session.planPath,
     work: request,
     history: projectConversationHistory({
       request,
-      requests: snapshot.requests,
-      responses: snapshot.responses,
+      requests: historySnapshot.requests,
+      responses: historySnapshot.responses,
     }),
     response_template: responseTemplateFor(request),
     response_file: responseFile,

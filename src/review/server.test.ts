@@ -264,6 +264,70 @@ describe("review runtime feedback", () => {
     expect(answer).toMatchObject({ drafts: [{ id: "aabbccdd" }] });
   });
 
+  it("should remove only submitted comments from persisted drafts", async () => {
+    const drafts = [
+      {
+        id: "aa11bb22",
+        body: "Send this staged comment.",
+        target: { type: "document" },
+      },
+      {
+        id: "cc33dd44",
+        body: "Keep this staged comment.",
+        target: { type: "document" },
+      },
+    ];
+    expect(
+      (
+        await call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: { drafts, activeDraft: "", resolvedCommentIds: [] },
+        })
+      ).status,
+    ).toBe(200);
+
+    expect(
+      (
+        await call({
+          path: "/api/feedback",
+          method: "POST",
+          body: { comments: [drafts[0]] },
+        })
+      ).status,
+    ).toBe(200);
+    await expect(
+      (await call({ path: "/api/drafts" })).json(),
+    ).resolves.toMatchObject({
+      drafts: [{ id: "cc33dd44" }],
+      sent: expect.arrayContaining([
+        expect.objectContaining({ id: "aa11bb22" }),
+      ]),
+    });
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const request = exchange.requests.find(
+      (candidate) =>
+        candidate.kind === "feedback" &&
+        candidate.comments.some((comment) => comment.id === "aa11bb22"),
+    );
+    if (request === undefined) {
+      throw new Error("The submitted draft did not create agent work");
+    }
+    expect(
+      (
+        await call({
+          path: "/api/agent-cancel",
+          method: "POST",
+          body: { requestId: request.requestId },
+        })
+      ).status,
+    ).toBe(200);
+  });
+
   it("should preserve exact orphaned feedback after the plan changes", async () => {
     await fetch(runtime.url);
     const draft = {
@@ -477,6 +541,14 @@ describe("review runtime feedback", () => {
     expect(
       (await call({ path: "/api/feedback", method: "POST", body })).status,
     ).toBe(200);
+    const artifactsAfterFirst = (
+      await readdir(runtime.store.feedbackDirectory)
+    ).sort();
+    const exchangeAfterFirst = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
     expect(
       (await call({ path: "/api/feedback", method: "POST", body })).status,
     ).toBe(200);
@@ -494,6 +566,22 @@ describe("review runtime feedback", () => {
           )
         : [],
     ).toHaveLength(1);
+    expect((await readdir(runtime.store.feedbackDirectory)).sort()).toEqual(
+      artifactsAfterFirst,
+    );
+    const exchangeAfterRetry = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const matchingRequests = (exchange: typeof exchangeAfterRetry) =>
+      exchange.requests.filter(
+        (request) =>
+          request.kind === "feedback" &&
+          request.comments.some((comment) => comment.id === "a1b2c3d4"),
+      );
+    expect(matchingRequests(exchangeAfterFirst)).toHaveLength(1);
+    expect(matchingRequests(exchangeAfterRetry)).toHaveLength(1);
   });
 
   it("should preserve feedback sent by overlapping requests", async () => {
@@ -879,6 +967,106 @@ describe("review runtime feedback", () => {
 });
 
 describe("review runtime shutdown", () => {
+  it("should restart from the rendered source before accepting new responses", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-server-revision-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const first = await startReviewRuntime({ planPath });
+    const oldRevision = deriveSourceRevision(PLAN);
+    const oldRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "1111111111111111",
+      sessionId: first.sessionId,
+      planId: first.planId,
+      sourceRevision: oldRevision,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      body: "What changed?",
+    });
+    await writeAgentRequest({ store: first.store, request: oldRequest });
+    const oldClaim = await claimAgentRequest({
+      store: first.store,
+      requestId: oldRequest.requestId,
+      sourceRevision: oldRevision,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    await publishAgentResponse({
+      store: first.store,
+      response: validateAgentResponseDraft({
+        value: { requestId: oldRequest.requestId, message: "The old answer." },
+        request: oldClaim,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentRevision: oldRevision,
+        now: "2026-08-10T12:00:02.000Z",
+      }),
+    });
+    await first.close();
+
+    const restartedSource = `${PLAN}\nThe source changed while review was stopped.\n`;
+    await writeFile(planPath, restartedSource);
+    const restarted = await startReviewRuntime({ planPath });
+    try {
+      const descriptor: unknown = JSON.parse(
+        await readFile(restarted.store.sessionPath, "utf8"),
+      );
+      const restartedToken =
+        typeof descriptor === "object" &&
+        descriptor !== null &&
+        "token" in descriptor &&
+        typeof descriptor.token === "string"
+          ? descriptor.token
+          : "";
+      const agentState = () =>
+        fetch(`${restarted.url}api/agent`, {
+          headers: { "x-big-plan-review-token": restartedToken },
+        }).then((response) => response.json());
+      await expect(agentState()).resolves.toMatchObject({
+        sourceRevision: deriveSourceRevision(restartedSource),
+      });
+
+      const newRequest = messageAgentRequest({
+        kind: "chat",
+        requestId: "2222222222222222",
+        sessionId: restarted.sessionId,
+        planId: restarted.planId,
+        sourceRevision: deriveSourceRevision(restartedSource),
+        createdAt: "2026-08-10T12:01:00.000Z",
+        body: "What changed now?",
+      });
+      await writeAgentRequest({ store: restarted.store, request: newRequest });
+      const newClaim = await claimAgentRequest({
+        store: restarted.store,
+        requestId: newRequest.requestId,
+        sourceRevision: newRequest.sourceRevision,
+        now: "2026-08-10T12:01:01.000Z",
+      });
+      const acceptedSource = `${restartedSource}\nThe agent accepted this revision.\n`;
+      await writeFile(planPath, acceptedSource);
+      await publishAgentResponse({
+        store: restarted.store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: newRequest.requestId,
+            message: "The current answer.",
+          },
+          request: newClaim,
+          commentsById: new Map(),
+          changedBlocks: new Set(),
+          currentRevision: deriveSourceRevision(acceptedSource),
+          now: "2026-08-10T12:01:02.000Z",
+        }),
+      });
+      await expect(agentState()).resolves.toMatchObject({
+        sourceRevision: deriveSourceRevision(acceptedSource),
+      });
+    } finally {
+      await restarted.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should keep a replacement runtime authoritative for the same plan", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-server-restart-"));
     const planPath = join(directory, "plan.mdx");

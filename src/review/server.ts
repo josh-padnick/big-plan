@@ -246,6 +246,11 @@ export const startReviewRuntime = async ({
   const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
   await prepareStore(store);
   const initialSource = await readFile(resolvedPlanPath, "utf8");
+  renderDocument({
+    markdown: initialSource,
+    fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+    identity: {},
+  });
   const initialSourceRevision = deriveSourceRevision(initialSource);
   await writeRevisionSnapshot({
     store,
@@ -257,6 +262,11 @@ export const startReviewRuntime = async ({
   // carry their already-validated target metadata across later revisions.
   const blocks = new Map<string, BlockMapEntry>();
   let blockMapMarkdown: string | undefined;
+  const initialExchange = await readAgentExchange({ store, sessionId, planId });
+  const observedResponseIds = new Set(
+    initialExchange.responses.map((response) => response.requestId),
+  );
+  let acceptedSourceRevision = initialSourceRevision;
 
   const validateStored = (value: unknown): ReadonlyArray<ReviewComment> =>
     validateStoredComments({ value, now: new Date().toISOString() });
@@ -435,13 +445,51 @@ export const startReviewRuntime = async ({
         refuse({ response, status: 400, reason: "Nothing to send" });
         return;
       }
+      const alreadySent = await readStoredComments(store.sentPath);
+      const sentById = new Map(
+        alreadySent.map((comment) => [comment.id, comment]),
+      );
+      if (
+        comments.some((comment) => {
+          const existing = sentById.get(comment.id);
+          return (
+            existing !== undefined &&
+            JSON.stringify(existing) !== JSON.stringify(comment)
+          );
+        })
+      ) {
+        refuse({
+          response,
+          status: 409,
+          reason: "A sent comment id cannot be reused for different feedback",
+        });
+        return;
+      }
+      const newlySent = comments.filter((comment) => !sentById.has(comment.id));
+      const submittedIds = new Set(comments.map((comment) => comment.id));
+      const remainingDrafts = (
+        await readStoredComments(store.draftsPath)
+      ).filter((comment) => !submittedIds.has(comment.id));
+      if (newlySent.length === 0) {
+        await writeComments({
+          path: store.draftsPath,
+          comments: remainingDrafts,
+        });
+        await writeActiveDraft({ path: store.activeDraftPath, value: "" });
+        sendJson({
+          response,
+          status: 200,
+          value: { comments: 0, retried: true },
+        });
+        return;
+      }
       const feedback = buildFeedbackPackage({
         sessionId,
         packageId: randomId(8),
         planId,
         planPath: resolvedPlanPath,
         createdAt: new Date().toISOString(),
-        comments,
+        comments: newlySent,
       });
       const written = await writeFeedbackPackage({
         store,
@@ -459,14 +507,14 @@ export const startReviewRuntime = async ({
         store,
         request: agentRequest,
       });
-      const alreadySent = await readStoredComments(store.sentPath);
-      const sentIds = new Set(alreadySent.map((comment) => comment.id));
-      const newlySent = comments.filter((comment) => !sentIds.has(comment.id));
       await writeComments({
         path: store.sentPath,
         comments: [...alreadySent, ...newlySent],
       });
-      await writeComments({ path: store.draftsPath, comments: [] });
+      await writeComments({
+        path: store.draftsPath,
+        comments: remainingDrafts,
+      });
       await writeActiveDraft({ path: store.activeDraftPath, value: "" });
       // The one event the runtime can honestly author: it has the package.
       // Everything after this belongs to the agent that reads the channel.
@@ -478,7 +526,7 @@ export const startReviewRuntime = async ({
           stepCode: "feedback-received",
           step: "Feedback package received",
           state: "done",
-          detail: `${comments.length} comment${comments.length === 1 ? "" : "s"}`,
+          detail: `${newlySent.length} comment${newlySent.length === 1 ? "" : "s"}`,
         },
       });
       sendJson({
@@ -486,7 +534,7 @@ export const startReviewRuntime = async ({
         status: 200,
         value: {
           packageId: feedback.packageId,
-          comments: comments.length,
+          comments: newlySent.length,
           package: written.jsonPath,
           brief: written.briefPath,
           agentRequest,
@@ -591,7 +639,12 @@ export const startReviewRuntime = async ({
     }
     if (route.path === "/api/agent") {
       const exchange = await readAgentExchange({ store, sessionId, planId });
-      const latestResponse = exchange.responses.at(-1);
+      for (const agentResponse of exchange.responses) {
+        if (!observedResponseIds.has(agentResponse.requestId)) {
+          acceptedSourceRevision = agentResponse.sourceRevision;
+        }
+        observedResponseIds.add(agentResponse.requestId);
+      }
       const presence = await readAgentPresence({ store, sessionId });
       const connectionLog = await readAgentConnectionEvents({
         store,
@@ -605,8 +658,7 @@ export const startReviewRuntime = async ({
           // rendered, linted, and accepted. Watching the raw file here would
           // navigate the reviewer onto a transient parse error while an agent
           // is midway through editing the authoritative MDX.
-          sourceRevision:
-            latestResponse?.sourceRevision ?? initialSourceRevision,
+          sourceRevision: acceptedSourceRevision,
           presence,
           connectionLog,
           plan: resolvedPlanPath,

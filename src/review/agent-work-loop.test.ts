@@ -1,6 +1,6 @@
 // Covers the review-owned coding-agent loop through its one action interface.
 
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,10 +9,13 @@ import { buildFeedbackPackage } from "./feedback-package.js";
 import {
   deriveSourceRevision,
   feedbackAgentRequest,
+  messageAgentRequest,
   readAgentExchange,
+  validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import { runAgentWorkLoopAction } from "./agent-work-loop.js";
+import { claimAgentRequest, publishAgentResponse } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { readProgress } from "./store.js";
@@ -206,6 +209,119 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should include complete original context when picking up an old reply", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-history-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\n## Scope\n\nKeep this focused.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      const revision = deriveSourceRevision(source);
+      const comment = {
+        id: "2222222222222222",
+        body: "Explain the original decision.",
+        createdAt: "2026-08-10T12:00:00.000Z",
+        target: { type: "document" as const },
+      };
+      const feedback = buildFeedbackPackage({
+        sessionId: review.sessionId,
+        packageId: "1111111111111111",
+        planId: review.planId,
+        planPath,
+        createdAt: comment.createdAt,
+        comments: [comment],
+      });
+      const originalRequest = feedbackAgentRequest({
+        feedback,
+        sourceRevision: revision,
+      });
+      await writeAgentRequest({
+        store: review.store,
+        request: originalRequest,
+      });
+      const originalClaim = await claimAgentRequest({
+        store: review.store,
+        requestId: originalRequest.requestId,
+        sourceRevision: revision,
+        now: "2026-08-10T12:00:00.500Z",
+      });
+      await publishAgentResponse({
+        store: review.store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: originalRequest.requestId,
+            outcomes: [
+              {
+                commentId: comment.id,
+                state: "outside",
+                message: "The original plan already explains it.",
+              },
+            ],
+          },
+          request: originalClaim,
+          commentsById: new Map([[comment.id, comment]]),
+          changedBlocks: new Set(),
+          currentRevision: revision,
+          now: "2026-08-10T12:00:01.000Z",
+        }),
+      });
+      for (let index = 1; index < 400; index += 1) {
+        const chat = messageAgentRequest({
+          kind: "chat",
+          requestId: `8${index.toString(16).padStart(15, "0")}`,
+          sessionId: review.sessionId,
+          planId: review.planId,
+          sourceRevision: revision,
+          createdAt: new Date(
+            Date.parse(comment.createdAt) + index + 1,
+          ).toISOString(),
+          body: `Historical question ${index}`,
+        });
+        await writeAgentRequest({
+          store: review.store,
+          request: {
+            ...chat,
+            canceledAt: new Date(
+              Date.parse(comment.createdAt) + index + 2,
+            ).toISOString(),
+          },
+        });
+      }
+      const reply = messageAgentRequest({
+        kind: "reply",
+        requestId: "ffffffffffffffff",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        sourceRevision: revision,
+        createdAt: "2026-08-10T12:00:01.000Z",
+        body: "Please clarify that answer.",
+        commentId: comment.id,
+      });
+      await writeAgentRequest({ store: review.store, request: reply });
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).resolves.toMatchObject({
+        work: { requestId: reply.requestId },
+        history: [
+          { role: "reviewer", body: comment.body },
+          {
+            role: "agent",
+            body: "The original plan already explains it.",
+          },
+        ],
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should validate a progress note before reading session state", async () => {
     await expect(
       runAgentWorkLoopAction({
