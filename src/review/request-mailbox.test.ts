@@ -29,6 +29,7 @@ import {
   readAgentConnectionEvents,
   readProgress,
   reviewStoreFor,
+  writeAgentResponseValue,
 } from "./store.js";
 
 const sessionId = "1111111111111111";
@@ -206,6 +207,116 @@ describe("request mailbox", () => {
       Number(exchange.requests[0]?.canceledAt !== undefined) +
         Number(exchange.responses.length > 0),
     ).toBe(1);
+  });
+
+  it("should reject a response until its request is claimed", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Claim this before answering.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "outside",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentRevision: revision,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+
+    await expect(publishAgentResponse({ store, response })).rejects.toThrow(
+      /must be claimed/,
+    );
+  });
+
+  it("should replace a malformed stored response after claim", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Answer despite the malformed file.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      sourceRevision: revision,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    await writeAgentResponseValue({
+      store,
+      requestId: request.requestId,
+      value: {
+        version: 1,
+        requestId: request.requestId,
+        sessionId,
+        planId,
+        kind: "feedback",
+      },
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "outside",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentRevision: revision,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+
+    await publishAgentResponse({ store, response });
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ responses: [response] });
+  });
+
+  it("should cancel despite a malformed stored response", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({
+        id: "4444444444444444",
+        body: "Cancel despite the malformed file.",
+      }),
+    ]);
+    await writeAgentRequest({ store, request });
+    await writeAgentResponseValue({
+      store,
+      requestId: request.requestId,
+      value: {
+        version: 1,
+        requestId: request.requestId,
+        sessionId,
+        planId,
+        kind: "feedback",
+      },
+    });
+
+    await expect(
+      cancelAgentRequest({
+        store,
+        requestId: request.requestId,
+        now: "2026-08-10T12:00:02.000Z",
+      }),
+    ).resolves.toMatchObject({ canceledAt: "2026-08-10T12:00:02.000Z" });
   });
 
   it("should keep a valid request when removal races with pickup", async () => {

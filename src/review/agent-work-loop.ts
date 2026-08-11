@@ -12,6 +12,7 @@ import {
   deriveSourceRevision,
   nextPendingAgentRequest,
   requestBaselineRevision,
+  readAgentCommentHistory,
   readAgentExchange,
   responseTemplateFor,
   validateAgentResponseDraft,
@@ -410,10 +411,19 @@ const respond = async ({
       ),
     );
   }
+  const validationSnapshot =
+    request.kind === "reply"
+      ? await readAgentCommentHistory({
+          store: session.store,
+          sessionId: session.sessionId,
+          planId: session.planId,
+          commentId: request.commentId,
+        })
+      : snapshot;
   const response = validateAgentResponseDraft({
     value: responseDraft,
     request,
-    commentsById: commentsFromExchange(snapshot),
+    commentsById: commentsFromExchange(validationSnapshot),
     changedBlocks,
     currentRevision,
     now: new Date().toISOString(),

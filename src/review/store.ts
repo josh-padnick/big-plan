@@ -21,7 +21,7 @@ import {
   rename,
   readdir,
   readFile,
-  rmdir,
+  rm,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -234,6 +234,12 @@ const readJson = async (path: string): Promise<unknown> => {
 const LOCK_ATTEMPTS = 200;
 const LOCK_WAIT_MS = 10;
 const LOCK_OWNER_FILE = "owner.json";
+const LOCK_CLEANUP_PREFIX = ".cleanup-";
+
+type StoreLockOwner = {
+  readonly pid: number;
+  readonly token: string;
+};
 
 const hasCode = (
   error: unknown,
@@ -256,15 +262,7 @@ const waitForLock = async (): Promise<void> => {
   });
 };
 
-/** Removes a lock only when its recorded process no longer exists. */
-const clearAbandonedLock = async (lockPath: string): Promise<void> => {
-  const ownerPath = join(lockPath, LOCK_OWNER_FILE);
-  let value: unknown;
-  try {
-    value = JSON.parse(await readFile(ownerPath, "utf8"));
-  } catch {
-    return;
-  }
+const lockOwner = (value: unknown): StoreLockOwner | undefined => {
   if (
     typeof value !== "object" ||
     value === null ||
@@ -272,38 +270,143 @@ const clearAbandonedLock = async (lockPath: string): Promise<void> => {
     !("pid" in value) ||
     typeof value.pid !== "number" ||
     !Number.isInteger(value.pid) ||
-    processIsRunning(value.pid)
+    !("token" in value) ||
+    typeof value.token !== "string"
   ) {
-    return;
+    return undefined;
   }
+  return { pid: value.pid, token: value.token };
+};
+
+const cleanupPid = (name: string): number | undefined => {
+  const match = /^\.cleanup-(\d+)-[a-f0-9]+\.json$/.exec(name);
+  if (match === null) return undefined;
+  const pid = Number(match[1]);
+  return Number.isInteger(pid) ? pid : undefined;
+};
+
+const retireLockDirectory = async ({
+  lockPath,
+  label,
+}: {
+  readonly lockPath: string;
+  readonly label: string;
+}): Promise<boolean> => {
+  const retiredPath = `${lockPath}.${label}.${process.pid}.${randomBytes(8).toString("hex")}`;
   try {
-    await unlink(ownerPath);
-    await rmdir(lockPath);
+    await rename(lockPath, retiredPath);
+  } catch (error: unknown) {
+    if (hasCode(error, "ENOENT")) return false;
+    throw error;
+  }
+  await rm(retiredPath, { recursive: true, force: true });
+  return true;
+};
+
+/** Removes an abandoned generation without touching its replacement. */
+const clearAbandonedLock = async (lockPath: string): Promise<void> => {
+  const ownerPath = join(lockPath, LOCK_OWNER_FILE);
+  let owner: StoreLockOwner | undefined;
+  let ownerExists = true;
+  try {
+    const serialized = await readFile(ownerPath, "utf8");
+    try {
+      owner = lockOwner(JSON.parse(serialized));
+    } catch {
+      owner = undefined;
+    }
   } catch (error: unknown) {
     if (!hasCode(error, "ENOENT")) throw error;
+    ownerExists = false;
+  }
+  if (!ownerExists) {
+    let entries: ReadonlyArray<string>;
+    try {
+      entries = await readdir(lockPath);
+    } catch (error: unknown) {
+      if (hasCode(error, "ENOENT")) return;
+      throw error;
+    }
+    if (
+      entries.some((entry) => {
+        const pid = cleanupPid(entry);
+        return pid !== undefined && processIsRunning(pid);
+      })
+    ) {
+      return;
+    }
+    owner = { pid: process.pid, token: randomBytes(16).toString("hex") };
+    try {
+      await writeFile(ownerPath, `${JSON.stringify(owner)}\n`, {
+        flag: "wx",
+        mode: FILE_MODE,
+      });
+    } catch (error: unknown) {
+      if (hasCode(error, "EEXIST") || hasCode(error, "ENOENT")) return;
+      throw error;
+    }
+    await retireLockDirectory({ lockPath, label: "abandoned" });
+    return;
+  }
+  if (owner !== undefined && processIsRunning(owner.pid)) {
+    return;
+  }
+  const claimPath = join(
+    lockPath,
+    `${LOCK_CLEANUP_PREFIX}${process.pid}-${randomBytes(8).toString("hex")}.json`,
+  );
+  try {
+    await rename(ownerPath, claimPath);
+  } catch (error: unknown) {
+    if (hasCode(error, "ENOENT")) return;
+    throw error;
+  }
+  await retireLockDirectory({ lockPath, label: "abandoned" });
+};
+
+/** Creates one fully initialized lock generation before publishing it. */
+const acquireStoreLock = async (
+  lockPath: string,
+): Promise<StoreLockOwner | undefined> => {
+  const owner = { pid: process.pid, token: randomBytes(16).toString("hex") };
+  const candidatePath = `${lockPath}.candidate.${process.pid}.${owner.token}`;
+  try {
+    await mkdir(candidatePath, { mode: DIRECTORY_MODE });
+    await writeFile(
+      join(candidatePath, LOCK_OWNER_FILE),
+      `${JSON.stringify(owner)}\n`,
+      { flag: "wx", mode: FILE_MODE },
+    );
+    await rename(candidatePath, lockPath);
+    return owner;
+  } catch (error: unknown) {
+    await rm(candidatePath, { recursive: true, force: true });
+    if (hasCode(error, "EEXIST") || hasCode(error, "ENOTEMPTY")) {
+      await clearAbandonedLock(lockPath);
+      return undefined;
+    }
+    throw error;
   }
 };
 
-/** Creates one cross-process lock and records the process that owns it. */
-const acquireStoreLock = async (lockPath: string): Promise<boolean> => {
-  try {
-    await mkdir(lockPath, { mode: DIRECTORY_MODE });
-  } catch (error: unknown) {
-    if (!hasCode(error, "EEXIST")) throw error;
-    await clearAbandonedLock(lockPath);
-    return false;
+const releaseStoreLock = async ({
+  lockPath,
+  owner,
+}: {
+  readonly lockPath: string;
+  readonly owner: StoreLockOwner;
+}): Promise<void> => {
+  const current = lockOwner(
+    JSON.parse(await readFile(join(lockPath, LOCK_OWNER_FILE), "utf8")),
+  );
+  if (
+    current === undefined ||
+    current.pid !== owner.pid ||
+    current.token !== owner.token
+  ) {
+    throw new Error("The review store lock changed owners before release");
   }
-  try {
-    await writeFile(
-      join(lockPath, LOCK_OWNER_FILE),
-      `${JSON.stringify({ pid: process.pid })}\n`,
-      { flag: "wx", mode: FILE_MODE },
-    );
-    return true;
-  } catch (error: unknown) {
-    await rmdir(lockPath).catch(() => undefined);
-    throw error;
-  }
+  await retireLockDirectory({ lockPath, label: "released" });
 };
 
 /** Runs one store change while other processes wait for the same resource. */
@@ -317,15 +420,15 @@ export const withReviewStoreLock = async <TResult>({
   readonly timeoutError: () => Error;
 }): Promise<TResult> => {
   for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
-    if (!(await acquireStoreLock(lockPath))) {
+    const owner = await acquireStoreLock(lockPath);
+    if (owner === undefined) {
       await waitForLock();
       continue;
     }
     try {
       return await change();
     } finally {
-      await unlink(join(lockPath, LOCK_OWNER_FILE));
-      await rmdir(lockPath);
+      await releaseStoreLock({ lockPath, owner });
     }
   }
   throw timeoutError();

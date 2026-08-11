@@ -4,6 +4,7 @@
 import { join } from "node:path";
 import {
   AgentExchangeRejected,
+  readValidatedAgentResponse,
   validateAgentRequest,
 } from "./agent-exchange.js";
 import type {
@@ -16,7 +17,6 @@ import {
   appendProgressValue,
   readAgentConnectionEvents,
   readAgentRequestValue,
-  readAgentResponseValue,
   readProgress,
   withReviewStoreLock,
   writeAgentRequestValue,
@@ -142,10 +142,7 @@ export const cancelAgentRequest = async ({
       const request = await readCurrentRequest({ store, requestId });
       if (request.canceledAt !== undefined) return request;
       if (
-        responseMatchesRequest({
-          value: await readAgentResponseValue({ store, requestId }),
-          request,
-        })
+        (await readValidatedAgentResponse({ store, request })) !== undefined
       ) {
         throw new AgentExchangeRejected(
           "The agent has already answered this request",
@@ -178,19 +175,21 @@ export const publishAgentResponse = async ({
           "The request was canceled by the reviewer",
         );
       }
+      if (
+        request.claimedAt === undefined ||
+        request.claimedFromRevision === undefined
+      ) {
+        throw new AgentExchangeRejected(
+          "The request must be claimed before it can be answered",
+        );
+      }
       if (!responseMatchesRequest({ value: response, request })) {
         throw new AgentExchangeRejected(
           "The agent response does not match its request",
         );
       }
       if (
-        responseMatchesRequest({
-          value: await readAgentResponseValue({
-            store,
-            requestId: response.requestId,
-          }),
-          request,
-        })
+        (await readValidatedAgentResponse({ store, request })) !== undefined
       ) {
         throw new AgentExchangeRejected(
           "The agent has already answered this request",

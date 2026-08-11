@@ -12,6 +12,7 @@ import {
 import { diffRevisions } from "../src/review/revision-diff.js";
 import {
   appendProgressEvent,
+  claimAgentRequest,
   publishAgentResponse,
 } from "../src/review/request-mailbox.js";
 import { startReviewRuntime } from "../src/review/server.js";
@@ -462,6 +463,12 @@ test("should restore and submit staged comments through the local review runtime
     revision,
     source: afterSource,
   });
+  const claimed = await claimAgentRequest({
+    store,
+    requestId: request.requestId,
+    sourceRevision: request.sourceRevision,
+    now: new Date().toISOString(),
+  });
   await publishAgentResponse({
     store,
     response: validateAgentResponseDraft({
@@ -474,7 +481,7 @@ test("should restore and submit staged comments through the local review runtime
           changeTargets: [changeTarget],
         })),
       },
-      request,
+      request: claimed,
       commentsById: commentsFromExchange(exchange),
       changedBlocks,
       currentRevision: revision,

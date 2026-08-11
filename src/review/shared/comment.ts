@@ -317,6 +317,7 @@ const validateCommentList = ({
   now,
   targetFor,
   createdAtFor,
+  limit,
 }: {
   readonly value: unknown;
   readonly now: string;
@@ -328,14 +329,13 @@ const validateCommentList = ({
     comment: Readonly<Record<string, unknown>>,
     id: string,
   ) => string;
+  readonly limit?: number;
 }): ReadonlyArray<ReviewComment> => {
   if (!Array.isArray(value)) {
     throw new CommentRejected("Comments must arrive as a list");
   }
-  if (value.length > COMMENT_LIMIT) {
-    throw new CommentRejected(
-      `More than ${COMMENT_LIMIT} comments in one batch`,
-    );
+  if (limit !== undefined && value.length > limit) {
+    throw new CommentRejected(`More than ${limit} comments in one batch`);
   }
   const comments = value.map((entry) => {
     const comment = asRecord({ value: entry, field: "comment" });
@@ -379,6 +379,7 @@ export const validateComments = ({
   validateCommentList({
     value,
     now,
+    limit: COMMENT_LIMIT,
     targetFor: (comment) => validateTarget({ value: comment.target, blocks }),
   });
 
@@ -414,6 +415,7 @@ export const validateCommentUpdates = ({
   return validateCommentList({
     value,
     now,
+    limit: COMMENT_LIMIT,
     targetFor: (comment, id) =>
       existingById.get(id)?.target ??
       validateTarget({ value: comment.target, blocks }),

@@ -6,6 +6,7 @@ import {
   validateActiveDraft,
   validateComments,
   validateResolvedCommentIds,
+  validateStoredComments,
 } from "./comment.js";
 
 const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
@@ -274,6 +275,19 @@ describe("validateComments shape and bounds", () => {
         })),
       ),
     ).toThrow("More than 200 comments in one batch");
+  });
+
+  it("should retain durable history beyond one submission batch", () => {
+    const history = Array.from({ length: 201 }, (_, index) => ({
+      id: index.toString(16).padStart(4, "0"),
+      body: `Comment ${index}`,
+      createdAt: NOW,
+      target: { type: "document" },
+    }));
+
+    expect(validateStoredComments({ value: history, now: NOW })).toHaveLength(
+      201,
+    );
   });
 
   it("should refuse a body beyond the length limit", () => {

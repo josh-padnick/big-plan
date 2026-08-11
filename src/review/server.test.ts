@@ -10,9 +10,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   commentsFromExchange,
   deriveSourceRevision,
+  messageAgentRequest,
   nextPendingAgentRequest,
+  readAgentCommentHistory,
   readAgentExchange,
   validateAgentResponseDraft,
+  writeAgentRequest,
 } from "./agent-exchange.js";
 import { claimAgentRequest, publishAgentResponse } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
@@ -809,6 +812,21 @@ describe("review runtime feedback", () => {
         now: new Date().toISOString(),
       }),
     });
+    const answeredAt = Date.parse(request.createdAt);
+    for (let index = 0; index < 400; index += 1) {
+      await writeAgentRequest({
+        store: runtime.store,
+        request: messageAgentRequest({
+          kind: "chat",
+          requestId: `f${index.toString(16).padStart(15, "0")}`,
+          sessionId: runtime.sessionId,
+          planId: runtime.planId,
+          sourceRevision: request.sourceRevision,
+          createdAt: new Date(answeredAt + index + 1).toISOString(),
+          body: `Later plan question ${index + 1}`,
+        }),
+      });
+    }
     const followUpResponse = await call({
       path: "/api/agent-requests",
       method: "POST",
@@ -846,10 +864,11 @@ describe("review runtime feedback", () => {
         })
       ).status,
     ).toBe(409);
-    exchange = await readAgentExchange({
+    exchange = await readAgentCommentHistory({
       store: runtime.store,
       sessionId: runtime.sessionId,
       planId: runtime.planId,
+      commentId: comment.id,
     });
     expect(
       exchange.responses.some(

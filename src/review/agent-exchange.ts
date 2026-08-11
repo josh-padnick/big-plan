@@ -8,6 +8,7 @@ import type { CommentTarget, ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
   readAgentRequestValues,
+  readAgentResponseValue,
   readAgentResponseValues,
   writeAgentRequestValue,
 } from "./store.js";
@@ -481,6 +482,14 @@ const validateStoredResponse = ({
   readonly request: AgentRequest;
   readonly commentsById: ReadonlyMap<string, ReviewComment>;
 }): AgentResponse => {
+  if (
+    request.claimedAt === undefined ||
+    request.claimedFromRevision === undefined
+  ) {
+    throw new AgentExchangeRejected(
+      "A stored agent response cannot answer an unclaimed request",
+    );
+  }
   if (!isRecord(value) || value.version !== 1) {
     throw new AgentExchangeRejected("A stored agent response is invalid");
   }
@@ -553,6 +562,99 @@ const validateStoredResponse = ({
     throw new AgentExchangeRejected("A stored outcome set is incomplete");
   }
   return { ...base, kind: request.kind, outcomes };
+};
+
+const commentsFromRequests = (
+  requests: ReadonlyArray<AgentRequest>,
+): ReadonlyMap<string, ReviewComment> => {
+  const comments = new Map<string, ReviewComment>();
+  for (const request of requests) {
+    if (request.kind === "feedback") {
+      for (const entry of request.comments) {
+        comments.set(entry.id, entry);
+      }
+    }
+  }
+  return comments;
+};
+
+const readAcceptedAgentRequests = async ({
+  store,
+  sessionId,
+  planId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+}): Promise<ReadonlyArray<AgentRequest>> => {
+  const acceptedRequests: Array<AgentRequest> = [];
+  const acceptedRequestIds = new Set<string>();
+  for (const value of await readAgentRequestValues(store)) {
+    try {
+      const request = validateAgentRequest(value);
+      if (
+        request.planId === planId &&
+        !acceptedRequestIds.has(request.requestId)
+      ) {
+        acceptedRequests.push(request);
+        acceptedRequestIds.add(request.requestId);
+      }
+    } catch {
+      // A hand-edited exchange file is ignored, never trusted or fatal.
+    }
+  }
+  acceptedRequests.sort((left, right) => {
+    const chronological = left.createdAt.localeCompare(right.createdAt);
+    if (chronological !== 0) return chronological;
+    const currentSession =
+      Number(left.sessionId === sessionId) -
+      Number(right.sessionId === sessionId);
+    if (currentSession !== 0) return currentSession;
+    return left.requestId.localeCompare(right.requestId);
+  });
+  return acceptedRequests;
+};
+
+const readCompleteAgentExchange = async ({
+  store,
+  sessionId,
+  planId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+}): Promise<AgentExchangeSnapshot> => {
+  const requests = await readAcceptedAgentRequests({
+    store,
+    sessionId,
+    planId,
+  });
+  const commentsById = commentsFromRequests(requests);
+  const requestById = new Map(
+    requests.map((request) => [request.requestId, request]),
+  );
+  const responses: Array<AgentResponse> = [];
+  const responseRequestIds = new Set<string>();
+  for (const value of await readAgentResponseValues(store)) {
+    try {
+      if (!isRecord(value) || typeof value.requestId !== "string") continue;
+      const request = requestById.get(value.requestId);
+      if (request === undefined) continue;
+      const response = validateStoredResponse({ value, request, commentsById });
+      if (!responseRequestIds.has(response.requestId)) {
+        responses.push(response);
+        responseRequestIds.add(response.requestId);
+      }
+    } catch {
+      // The response command normally owns these files; disk remains untrusted.
+    }
+  }
+  responses.sort((left, right) => {
+    const chronological = left.createdAt.localeCompare(right.createdAt);
+    if (chronological !== 0) return chronological;
+    return left.requestId.localeCompare(right.requestId);
+  });
+  return { requests, responses };
 };
 
 /** A source digest shared by request creation, response validation, and polling. */
@@ -649,73 +751,78 @@ export const readAgentExchange = async ({
   readonly sessionId: string;
   readonly planId: string;
 }): Promise<AgentExchangeSnapshot> => {
-  const acceptedRequests: Array<AgentRequest> = [];
-  const acceptedRequestIds = new Set<string>();
-  for (const value of await readAgentRequestValues(store)) {
-    try {
-      const request = validateAgentRequest(value);
-      if (
-        request.planId === planId &&
-        !acceptedRequestIds.has(request.requestId)
-      ) {
-        acceptedRequests.push(request);
-        acceptedRequestIds.add(request.requestId);
-      }
-    } catch {
-      // A hand-edited exchange file is ignored, never trusted or fatal.
-    }
-  }
-  acceptedRequests.sort((left, right) => {
-    const chronological = left.createdAt.localeCompare(right.createdAt);
-    if (chronological !== 0) return chronological;
-    const currentSession =
-      Number(left.sessionId === sessionId) -
-      Number(right.sessionId === sessionId);
-    if (currentSession !== 0) return currentSession;
-    return left.requestId.localeCompare(right.requestId);
+  const complete = await readCompleteAgentExchange({
+    store,
+    sessionId,
+    planId,
   });
-  const requests = acceptedRequests.slice(-EXCHANGE_LIMIT);
-  const commentsById = new Map<string, ReviewComment>();
-  for (const request of requests) {
-    if (request.kind === "feedback") {
-      for (const entry of request.comments) {
-        commentsById.set(entry.id, entry);
-      }
-    }
-  }
-  const requestById = new Map(
-    requests.map((request) => [request.requestId, request]),
+  const requests = complete.requests.slice(-EXCHANGE_LIMIT);
+  const retainedRequestIds = new Set(
+    requests.map((request) => request.requestId),
   );
-  const responses: Array<AgentResponse> = [];
-  const responseRequestIds = new Set<string>();
-  for (const value of await readAgentResponseValues(store)) {
-    try {
-      if (!isRecord(value) || typeof value.requestId !== "string") {
-        continue;
-      }
-      const request = requestById.get(value.requestId);
-      if (request === undefined) {
-        continue;
-      }
-      const response = validateStoredResponse({
-        value,
-        request,
-        commentsById,
-      });
-      if (!responseRequestIds.has(response.requestId)) {
-        responses.push(response);
-        responseRequestIds.add(response.requestId);
-      }
-    } catch {
-      // The response command normally owns these files; disk remains untrusted.
-    }
-  }
-  responses.sort((left, right) => {
-    const chronological = left.createdAt.localeCompare(right.createdAt);
-    if (chronological !== 0) return chronological;
-    return left.requestId.localeCompare(right.requestId);
-  });
+  const responses = complete.responses.filter((response) =>
+    retainedRequestIds.has(response.requestId),
+  );
   return { requests, responses: responses.slice(-EXCHANGE_LIMIT) };
+};
+
+/** Reads complete validated history for one comment's authorization decisions. */
+export const readAgentCommentHistory = async ({
+  store,
+  sessionId,
+  planId,
+  commentId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+  readonly commentId: string;
+}): Promise<AgentExchangeSnapshot> => {
+  const complete = await readCompleteAgentExchange({
+    store,
+    sessionId,
+    planId,
+  });
+  const requests = complete.requests.filter(
+    (request) =>
+      (request.kind === "feedback" &&
+        request.comments.some((comment) => comment.id === commentId)) ||
+      (request.kind === "reply" && request.commentId === commentId),
+  );
+  const requestIds = new Set(requests.map((request) => request.requestId));
+  return {
+    requests,
+    responses: complete.responses.filter((response) =>
+      requestIds.has(response.requestId),
+    ),
+  };
+};
+
+/** Reads one response only when its complete persisted shape is valid. */
+export const readValidatedAgentResponse = async ({
+  store,
+  request,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+}): Promise<AgentResponse | undefined> => {
+  const requests = await readAcceptedAgentRequests({
+    store,
+    sessionId: request.sessionId,
+    planId: request.planId,
+  });
+  try {
+    return validateStoredResponse({
+      value: await readAgentResponseValue({
+        store,
+        requestId: request.requestId,
+      }),
+      request,
+      commentsById: commentsFromRequests(requests),
+    });
+  } catch {
+    return undefined;
+  }
 };
 
 /** Returns the oldest request that does not yet have a validated response. */
@@ -734,17 +841,8 @@ export const nextPendingAgentRequest = (
 /** Collects the original comments needed to validate a reply response. */
 export const commentsFromExchange = (
   snapshot: AgentExchangeSnapshot,
-): ReadonlyMap<string, ReviewComment> => {
-  const comments = new Map<string, ReviewComment>();
-  for (const request of snapshot.requests) {
-    if (request.kind === "feedback") {
-      for (const entry of request.comments) {
-        comments.set(entry.id, entry);
-      }
-    }
-  }
-  return comments;
-};
+): ReadonlyMap<string, ReviewComment> =>
+  commentsFromRequests(snapshot.requests);
 
 /** Gives a coding agent the smallest valid draft shape for one work item. */
 export const responseTemplateFor = (

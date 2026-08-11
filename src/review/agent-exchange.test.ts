@@ -268,6 +268,12 @@ describe("agent exchange filesystem", () => {
     const store = reviewStoreFor({ planPath, planId });
     await prepareStore(store);
     await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      sourceRevision: request.sourceRevision,
+      now: "2026-08-02T12:00:30.000Z",
+    });
     const response = validateAgentResponseDraft({
       value: {
         requestId: packageId,
@@ -280,7 +286,7 @@ describe("agent exchange filesystem", () => {
           },
         ],
       },
-      request,
+      request: claimed,
       commentsById: new Map([[commentId, comment]]),
       changedBlocks: new Set([blockId]),
       currentRevision: deriveSourceRevision(after),
@@ -294,7 +300,7 @@ describe("agent exchange filesystem", () => {
         planId,
       }),
     ).toEqual({
-      requests: [request],
+      requests: [claimed],
       responses: [response],
     });
   });
@@ -347,14 +353,15 @@ describe("agent exchange filesystem", () => {
     ).toThrow(/canceled by the reviewer/);
   });
 
-  it("should retain the newest requests when exchange history is bounded", async () => {
+  it("should retain newest requests and their complete reply context", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-limit-"));
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, before);
     const store = reviewStoreFor({ planPath, planId });
     await prepareStore(store);
     const startedAt = Date.parse("2026-08-02T12:00:00.000Z");
-    for (let index = 0; index <= 400; index += 1) {
+    await writeAgentRequest({ store, request });
+    for (let index = 1; index < 400; index += 1) {
       await writeAgentRequest({
         store,
         request: messageAgentRequest({
@@ -368,10 +375,46 @@ describe("agent exchange filesystem", () => {
         }),
       });
     }
+    const reply = messageAgentRequest({
+      kind: "reply",
+      requestId: "ffffffffffffffff",
+      sessionId,
+      planId,
+      sourceRevision: deriveSourceRevision(before),
+      createdAt: new Date(startedAt + 400).toISOString(),
+      body: "Does the original feedback need a plan change?",
+      commentId,
+    });
+    await writeAgentRequest({ store, request: reply });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: reply.requestId,
+      sourceRevision: reply.sourceRevision,
+      now: new Date(startedAt + 401).toISOString(),
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: claimed.requestId,
+        outcomes: [
+          {
+            commentId,
+            state: "outside",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[commentId, comment]]),
+      changedBlocks: new Set(),
+      currentRevision: claimed.sourceRevision,
+      now: new Date(startedAt + 402).toISOString(),
+    });
+    await publishAgentResponse({ store, response });
 
     const bounded = await readAgentExchange({ store, sessionId, planId });
     expect(bounded.requests).toHaveLength(400);
     expect(bounded.requests[0]?.requestId).toBe("0000000000000001");
-    expect(bounded.requests.at(-1)?.requestId).toBe("0000000000000190");
+    expect(bounded.requests.at(-1)?.requestId).toBe(reply.requestId);
+    expect(bounded.responses).toEqual([response]);
   });
 });

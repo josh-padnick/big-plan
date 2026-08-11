@@ -46,6 +46,7 @@ import {
   deriveSourceRevision,
   feedbackAgentRequest,
   messageAgentRequest,
+  readAgentCommentHistory,
   readAgentExchange,
   writeAgentRequest,
 } from "./agent-exchange.js";
@@ -508,7 +509,12 @@ export const startReviewRuntime = async ({
         refuse({ response, status: 404, reason: "No such sent comment" });
         return;
       }
-      const exchange = await readAgentExchange({ store, sessionId, planId });
+      const exchange = await readAgentCommentHistory({
+        store,
+        sessionId,
+        planId,
+        commentId,
+      });
       const answeredRequestIds = new Set(
         exchange.responses.flatMap((candidate) =>
           candidate.kind !== "chat" &&
@@ -517,12 +523,7 @@ export const startReviewRuntime = async ({
             : [],
         ),
       );
-      const commentRequests = exchange.requests.filter(
-        (candidate) =>
-          (candidate.kind === "feedback" &&
-            candidate.comments.some((comment) => comment.id === commentId)) ||
-          (candidate.kind === "reply" && candidate.commentId === commentId),
-      );
+      const commentRequests = exchange.requests;
       if (answeredRequestIds.size > 0 || commentRequests.length === 0) {
         refuse({
           response,

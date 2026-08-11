@@ -1,5 +1,6 @@
 import {
   chmod,
+  mkdir,
   mkdtemp,
   open,
   readFile,
@@ -28,6 +29,7 @@ import {
   writeResolvedCommentIds,
   writeRevisionSnapshot,
   writeSessionHeartbeatValue,
+  withReviewStoreLock,
 } from "./store.js";
 
 const created: Array<string> = [];
@@ -95,6 +97,38 @@ describe("review store placement", () => {
     expect(() =>
       reviewStoreFor({ planPath, planId: "../../../../etc" }),
     ).toThrow(/outside/);
+  });
+});
+
+describe("review store locking", () => {
+  it("should recover an ownerless lock generation", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await mkdir(store.sessionLockPath);
+
+    let active = 0;
+    let mostActive = 0;
+    const change = (result: string) =>
+      withReviewStoreLock({
+        lockPath: store.sessionLockPath,
+        change: async () => {
+          active += 1;
+          mostActive = Math.max(mostActive, active);
+          await new Promise((settle) => setTimeout(settle, 5));
+          active -= 1;
+          return result;
+        },
+        timeoutError: () => new Error("lock timed out"),
+      });
+
+    await expect(
+      Promise.all([change("first"), change("second")]),
+    ).resolves.toEqual(["first", "second"]);
+    expect(mostActive).toBe(1);
+    await expect(stat(store.sessionLockPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });
 

@@ -18,6 +18,7 @@ big-plan compile <input.mdx> [output.json]
 big-plan review <input.mdx>
 big-plan agent <input.mdx>
 big-plan agent next <input.mdx> [--wait]
+big-plan agent note <input.mdx> "<progress>"
 big-plan agent respond <input.mdx> <response.json>
 big-plan update [--check]
 ```
@@ -40,6 +41,9 @@ npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
 npx big-plan review <input.mdx>
 npx big-plan agent <input.mdx>
+npx big-plan agent next <input.mdx> --wait
+npx big-plan agent note <input.mdx> "<progress>"
+npx big-plan agent respond <input.mdx> <response.json>
 npx big-plan update --check
 ```
 
@@ -166,7 +170,9 @@ a model provider itself. The launched coding-agent session uses:
 
 - `agent next <input.mdx> --wait` to receive the oldest pending feedback or
   reply, its prior conversation, a validated response template, and the exact
-  publish command; and
+  publish command;
+- `agent note <input.mdx> "<progress>"` to keep the reviewer informed as each
+  meaningful work step begins; and
 - `agent respond <input.mdx> <response.json>` to publish one complete answer
   after the current MDX has rendered and passed lint.
 
