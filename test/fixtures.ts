@@ -72,6 +72,10 @@ type WorkerFixtures = {
   readonly wireframeViewerUrl: string;
 };
 
+type TestFixtures = {
+  readonly reviewRuntimeUrl: string;
+};
+
 const ANNOTATION_CODE_MDX = `# Annotation code
 
 <CodeDiff file="src/retry.ts">
@@ -285,7 +289,7 @@ The table has adjacent targets that must remain distinguishable.
 Sending writes one real feedback package beside this plan.
 `;
 
-export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
+export const test = base.extend<TestFixtures, WorkerFixtures>({
   reviewRuntimeUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(
@@ -301,7 +305,7 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
         await rm(outputDir, { recursive: true, force: true });
       }
     },
-    { scope: "worker" },
+    { scope: "test" },
   ],
   annotationCodeViewerUrl: [
     async ({}, use) => {

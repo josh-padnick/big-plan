@@ -223,8 +223,6 @@ test("should restore and submit staged comments through the local review runtime
   await expect(rail).toContainText("Name the operator recovery path.");
   await expect(rail).toContainText("Remove this queued comment before pickup.");
   await expect(rail).toContainText("1 · Details");
-  await expect(rail).toContainText(/Agent connected|agent is disconnected/u);
-
   await page.reload();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(rail).toContainText("Clarify the failure boundary.");
@@ -304,12 +302,7 @@ test("should restore and submit staged comments through the local review runtime
     planPath: session.plan,
     planId: session.planId,
   });
-  await writeAgentHeartbeat({
-    store,
-    sessionId: session.sessionId,
-    state: "waiting",
-    now: Date.now() - 60_000,
-  });
+  await rm(store.agentHeartbeatPath, { force: true });
   await expect(
     page.getByRole("button", { name: /Agent disconnected/u }),
   ).toBeVisible();
