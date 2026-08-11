@@ -97,7 +97,7 @@ Neither derived-output command permits the output to resolve to the input file, 
 
 ## Document metadata
 
-All three commands choose the document title from the MDX content.
+All four plan-file commands choose the document title from the MDX content.
 The input filename without its extension is the fallback title.
 The reported section count comes from the document's level-two sections.
 
@@ -153,6 +153,16 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 
 It writes no output.
 
+`review` returns:
+
+- `review`: the loopback URL for the review runtime.
+- `plan`: the absolute input path.
+- `session`: the review session identifier.
+- `feedback`: the absolute directory where sent feedback packages are written.
+- `help`: instructions for opening the review runtime, locating local feedback, and stopping the process.
+
+The process keeps listening until it receives `SIGINT` or `SIGTERM`.
+
 `guidance` returns the guidance Markdown itself rather than a structured result.
 `skill` with no arguments returns the skill Markdown the same way.
 `skill write` returns:
@@ -168,10 +178,11 @@ If the input argument is missing, any plan-file command raises a structured `VAL
 Usage: big-plan validate <input.mdx>
 Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
+Usage: big-plan review <input.mdx>
 ```
 
-The three plan-file commands and `skill` reject any dash-prefixed command argument as an unknown option.
-`validate` rejects a second positional argument; `render` and `compile` reject a third.
+The four plan-file commands and `skill` reject any dash-prefixed command argument as an unknown option.
+`validate` and `review` reject a second positional argument; `render` and `compile` reject a third.
 Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 
 If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
@@ -181,12 +192,13 @@ If the output would overwrite the input file, `render` and `compile` raise a str
 `validate` and `review` accept no output argument, so they cannot raise it.
 The input file is left unchanged.
 
-If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with `Cannot validate document with invalid MDX`, `Cannot render document with invalid MDX`, or `Cannot compile document with invalid MDX`, according to the command.
-Its help entries contain every collected authoring diagnostic as `line:column message`, and no output file is written.
+If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with `Cannot validate document with invalid MDX`, `Cannot render document with invalid MDX`, `Cannot compile document with invalid MDX`, or `Cannot review a document with invalid MDX`, according to the command.
+Its help entries contain every collected authoring diagnostic as `line:column message`, no output file is written, and the review runtime does not start.
 
-If authoring lint fails, `validate` and `render` raise `VALIDATION_ERROR` with `Plan failed authoring lint`.
+If authoring lint fails, `validate`, `render`, and `review` raise `VALIDATION_ERROR` with `Plan failed authoring lint`.
 Each help entry is `line:column [rule-id] message`.
 `render` runs lint before writing, so a lint failure leaves no output file.
+`review` runs lint before opening a port, so a lint failure leaves no review runtime running.
 
 If guidance has not been acknowledged for the working directory, `validate`, `render`, and `review` raise a structured `GUIDANCE_REQUIRED` error whose help entries name the `big-plan guidance` command and the acknowledgment window.
 
