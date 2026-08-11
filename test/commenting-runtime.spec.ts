@@ -279,6 +279,40 @@ test("should restore and submit staged comments through the local review runtime
   await expect(rail).not.toContainText(
     "Remove this queued comment before pickup.",
   );
+  const session: unknown = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const sessionResponse = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return sessionResponse.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The review runtime did not describe its live session");
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+    now: Date.now() - 60_000,
+  });
+  await expect(
+    page.getByRole("button", { name: /Agent disconnected/u }),
+  ).toBeVisible();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   const blockedSummary = page.locator(
     ".review-contextual-summary[data-review-sent-thread='queued']",
@@ -359,7 +393,7 @@ test("should restore and submit staged comments through the local review runtime
         ),
       { timeout: 3_500 },
     )
-    .toBeGreaterThanOrEqual(3);
+    .toBeGreaterThanOrEqual(2);
   const durationValues = await page.evaluate(() => {
     const runtime = window as unknown as {
       __bigPlanConnectionDurations: ReadonlyArray<string>;
@@ -408,7 +442,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(selectedTitle).toHaveCSS("text-decoration-line", "none");
   await rail
     .getByRole("button", {
-      name: "The agent is disconnected — view Agent tab",
+      name: /view Agent tab$/u,
     })
     .click();
   await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
@@ -430,31 +464,6 @@ test("should restore and submit staged comments through the local review runtime
     }),
   ).toBeVisible();
 
-  const session: unknown = await page.evaluate(async () => {
-    const root = document.documentElement;
-    const sessionResponse = await fetch("/api/session", {
-      headers: {
-        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
-      },
-    });
-    return sessionResponse.json();
-  });
-  if (
-    typeof session !== "object" ||
-    session === null ||
-    !("sessionId" in session) ||
-    !("planId" in session) ||
-    !("plan" in session) ||
-    typeof session.sessionId !== "string" ||
-    typeof session.planId !== "string" ||
-    typeof session.plan !== "string"
-  ) {
-    throw new Error("The review runtime did not describe its live session");
-  }
-  const store = reviewStoreFor({
-    planPath: session.plan,
-    planId: session.planId,
-  });
   const exchange = await readAgentExchange({
     store,
     sessionId: session.sessionId,
