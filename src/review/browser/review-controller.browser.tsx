@@ -1119,7 +1119,6 @@ const useThreadHosts = (
         string,
         { readonly left: number; readonly right: number; readonly top: number }
       >();
-      const leftThreadGaps = new Map<string, number>();
       const rightThreadOffsets = new Map<string, number>();
       for (const comment of comments) {
         const host = mounted.get(comment.id);
@@ -1162,12 +1161,6 @@ const useThreadHosts = (
           height: cardHeight,
         });
         anchorRects.set(comment.id, anchorRect);
-        leftThreadGaps.set(
-          comment.id,
-          anchor.matches("[data-slide], [data-quick-summary]")
-            ? 64
-            : diffThreadGap,
-        );
         rightThreadOffsets.set(
           comment.id,
           anchor.matches("[data-slide], [data-quick-summary]")
@@ -1190,23 +1183,14 @@ const useThreadHosts = (
           feedbackRailWidth -
           threadWidth -
           edge;
-        const leftThreadGap = leftThreadGaps.get(id) ?? diffThreadGap;
         const right =
           anchorRect.right +
           window.scrollX +
           (rightThreadOffsets.get(id) ?? diffThreadGap);
-        const left =
-          anchorRect.left + window.scrollX - threadWidth - leftThreadGap;
-        host.style.left = `${
-          right <= maximumLeft
-            ? right
-            : left >= minimumLeft
-              ? left
-              : Math.max(
-                  minimumLeft,
-                  Math.min(anchorRect.right + window.scrollX - 12, maximumLeft),
-                )
-        }px`;
+        host.style.left = `${Math.max(
+          minimumLeft,
+          Math.min(right, maximumLeft),
+        )}px`;
       }
     };
     const frame = requestAnimationFrame(position);

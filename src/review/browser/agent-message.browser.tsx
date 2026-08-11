@@ -81,7 +81,7 @@ const renderMessageNode = (node: MessageNode, key: string): ReactNode => {
   );
   if (node.type === "paragraph") {
     return (
-      <p key={key} className="mt-1 mb-0">
+      <p key={key} className="mt-0 mb-2">
         {children}
       </p>
     );
@@ -135,7 +135,7 @@ const MessageBody = ({
 }) =>
   isStructured ? (
     <div
-      className="min-w-0 max-w-full text-xs text-ink [line-height:1.45] whitespace-pre-wrap [overflow-wrap:anywhere]"
+      className="min-w-0 max-w-full text-xs leading-4 text-ink whitespace-pre-wrap [overflow-wrap:anywhere]"
       data-review-message-body="structured"
     >
       {parseMessageMarkdown(body).map((node, index) =>

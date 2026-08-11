@@ -12,12 +12,18 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import type { LucideIcon } from "../../icons/lucide-icon.js";
+import { INFO_ICON } from "../../icons/lucide/info.js";
+import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
+import { OCTAGON_ALERT_ICON } from "../../icons/lucide/octagon-alert.js";
+import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type {
   DiffLocation,
   DiffPlace,
   DiffRun,
   SnapshotDiff,
 } from "../shared/review-wire.js";
+import { Icon } from "./icon.browser.js";
 
 type OpenTour = {
   readonly diff: SnapshotDiff;
@@ -230,6 +236,64 @@ const SnapshotTable = ({
   </div>
 );
 
+type SnapshotCalloutType = "note" | "tip" | "warning" | "danger";
+
+const SNAPSHOT_CALLOUT_ICONS = {
+  note: INFO_ICON,
+  tip: LIGHTBULB_ICON,
+  warning: TRIANGLE_ALERT_ICON,
+  danger: OCTAGON_ALERT_ICON,
+} satisfies Readonly<Record<SnapshotCalloutType, LucideIcon>>;
+
+const currentBlockFor = (
+  location: DiffLocation,
+  side: "old" | "new",
+): HTMLElement | null => {
+  const blockId = side === "old" ? location.oldBlockId : location.newBlockId;
+  return blockId === undefined
+    ? null
+    : document.querySelector<HTMLElement>(
+        `[data-block-id="${CSS.escape(blockId)}"]`,
+      );
+};
+
+const SnapshotCallout = ({
+  location,
+  side,
+}: {
+  readonly location: DiffLocation;
+  readonly side: "old" | "new";
+}) => {
+  const current = currentBlockFor(location, side);
+  const authoredType = current?.dataset.callout;
+  const type: SnapshotCalloutType =
+    authoredType === "tip" ||
+    authoredType === "warning" ||
+    authoredType === "danger"
+      ? authoredType
+      : "note";
+  const title = location.label.trim() || "Note";
+  const text = sideText(location, side).trim();
+  const body = text.startsWith(title) ? text.slice(title.length).trim() : text;
+  return (
+    <aside
+      className="callout mb-0 max-w-[var(--measure)] rounded-r-md border-l-4 px-4 py-3"
+      data-callout={type}
+      data-review-diff-callout=""
+    >
+      <header className="callout-header mb-2 flex items-center gap-2 font-semibold text-[var(--callout-accent)] [&_svg]:size-4 [&_svg]:shrink-0">
+        <Icon icon={SNAPSHOT_CALLOUT_ICONS[type]} />
+        <span className="callout-title text-sm leading-5">{title}</span>
+      </header>
+      <div className="callout-body text-[var(--callout-ink)]">
+        <p className="m-0" data-authored-prose="">
+          {body}
+        </p>
+      </div>
+    </aside>
+  );
+};
+
 const SnapshotBlock = ({
   location,
   side,
@@ -238,6 +302,9 @@ const SnapshotBlock = ({
   readonly side: "old" | "new";
 }) => {
   const text = sideText(location, side);
+  if (location.kind === "callout") {
+    return <SnapshotCallout location={location} side={side} />;
+  }
   if (location.kind === "heading") {
     return (
       <h3 data-authored-prose="" data-review-diff-content="">
@@ -260,13 +327,9 @@ const SnapshotBlock = ({
     );
   }
   if (location.kind === "list") {
-    const blockId = location.newBlockId ?? location.oldBlockId;
     const current =
-      blockId === undefined
-        ? null
-        : document.querySelector<HTMLElement>(
-            `[data-block-id="${CSS.escape(blockId)}"]`,
-          );
+      currentBlockFor(location, side) ??
+      currentBlockFor(location, side === "old" ? "new" : "old");
     const List = current?.tagName === "OL" ? "ol" : "ul";
     const items = text
       .split("\n")
@@ -437,8 +500,10 @@ const LensPortal = ({
       setPresentation(undefined);
       return;
     }
-    const first = locations[0];
-    const anchor = first === undefined ? null : anchorFor(first, isSuperseded);
+    const anchor =
+      locations
+        .map((location) => anchorFor(location, isSuperseded))
+        .find((candidate) => candidate !== null) ?? null;
     if (anchor === null) {
       setIsHistorical(true);
       setPresentation(undefined);
@@ -501,7 +566,7 @@ const LensPortal = ({
       });
       removalNode.remove();
     };
-  }, [isVisible, locations]);
+  }, [isSuperseded, isVisible, locations]);
   return host === null
     ? null
     : createPortal(

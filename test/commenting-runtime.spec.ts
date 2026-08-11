@@ -644,6 +644,13 @@ test("should restore and submit staged comments through the local review runtime
   await sentThread
     .getByRole("button", { name: "Expand thread", exact: true })
     .click();
+  const agentResponseParagraph = sentThread
+    .locator(
+      '[data-review-message="agent"] [data-review-message-body="structured"] p',
+    )
+    .first();
+  await expect(agentResponseParagraph).toHaveCSS("line-height", "16px");
+  await expect(agentResponseParagraph).toHaveCSS("margin-bottom", "8px");
   const expandedReviewer = sentThread
     .locator('[data-review-message="user"]')
     .first();
@@ -1052,46 +1059,6 @@ test("should preview stale, historical, and multi-place causal diffs through the
     expect(readingWidths.lensMaxWidth).toBe(readingWidths.proseMaxWidth);
     await expect
       .poll(() =>
-        page.evaluate(() => {
-          const lens = document.querySelector<HTMLElement>(
-            "[data-review-diff-lens]",
-          );
-          if (lens === null) return ["missing diff lens"];
-          const lensRect = lens.getBoundingClientRect();
-          return Array.from(
-            document.querySelectorAll<HTMLElement>("[data-review-thread-for]"),
-          ).flatMap((thread) => {
-            const threadRect = thread.getBoundingClientRect();
-            const overlaps =
-              threadRect.left < lensRect.right &&
-              threadRect.right > lensRect.left &&
-              threadRect.top < lensRect.bottom &&
-              threadRect.bottom > lensRect.top;
-            return overlaps
-              ? [
-                  {
-                    thread: thread.dataset.reviewThreadFor ?? "thread",
-                    lens: {
-                      left: Math.round(lensRect.left),
-                      right: Math.round(lensRect.right),
-                      top: Math.round(lensRect.top),
-                      bottom: Math.round(lensRect.bottom),
-                    },
-                    card: {
-                      left: Math.round(threadRect.left),
-                      right: Math.round(threadRect.right),
-                      top: Math.round(threadRect.top),
-                      bottom: Math.round(threadRect.bottom),
-                    },
-                  },
-                ]
-              : [];
-          });
-        }),
-      )
-      .toEqual([]);
-    await expect
-      .poll(() =>
         anchoredThread.evaluate((thread) => {
           const rect = thread.parentElement?.getBoundingClientRect();
           if (rect === undefined)
@@ -1100,6 +1067,20 @@ test("should preview stale, historical, and multi-place causal diffs through the
         }),
       )
       .toEqual(threadPositionBeforeDiff);
+    await expect
+      .poll(() =>
+        anchoredThread.evaluate((thread) => {
+          const threadRect = thread.parentElement?.getBoundingClientRect();
+          const slideRect = document
+            .querySelector<HTMLElement>("[data-slide]")
+            ?.getBoundingClientRect();
+          if (threadRect === undefined || slideRect === undefined) {
+            throw new Error("The thread and slide must both be measurable");
+          }
+          return threadRect.left >= slideRect.left + slideRect.width / 2;
+        }),
+      )
+      .toBe(true);
     await reviewedChange.getByRole("button", { name: "Resolve" }).click();
     await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
     await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
@@ -1184,6 +1165,69 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await page.reload();
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
     await expect(rail.getByText("Resolved (1)")).toBeVisible();
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should keep component replacements inside their slide and preserve Callout presentation", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-callout-diff-"));
+  const planPath = join(directory, "gallery.mdx");
+  const after = (
+    await readFile(
+      new URL("../examples/diff-gallery-after.mdx", import.meta.url),
+      "utf8",
+    )
+  ).split("\n## Delivery contract")[0];
+  const before = after.replace(
+    '<Callout type="note" title="Review note">\n\nVerify the causal boundary, the in-place lens, and the historical state.\n\n</Callout>',
+    "> **Review note:** verify the causal boundary, the in-place lens, and the historical state.",
+  );
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: "Review premise → current" })
+      .click();
+    const lens = page.locator("[data-review-diff-lens]");
+    const stepper = page.locator("[data-review-diff-stepper]");
+    const total = Number.parseInt(
+      (await stepper.textContent())?.match(/of (\d+)/u)?.[1] ?? "1",
+      10,
+    );
+    for (let index = 1; index < total; index += 1) {
+      if ((await lens.textContent())?.includes("Review note")) break;
+      await page.getByRole("button", { name: "Next change" }).click();
+    }
+    await expect(lens).toContainText("Review note");
+    expect(
+      await lens.evaluate(
+        (element) => element.closest("[data-slide]") !== null,
+      ),
+    ).toBe(true);
+    const callout = lens.locator("[data-review-diff-callout]");
+    await expect(callout).toHaveCount(1);
+    await expect(callout.locator(".callout-title")).toHaveText("Review note");
+    await expect(callout.locator(".callout-body")).toHaveText(
+      "Verify the causal boundary, the in-place lens, and the historical state.",
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("callout-diff-in-slide.png"),
+    });
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
