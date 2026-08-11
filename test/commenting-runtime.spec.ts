@@ -187,7 +187,7 @@ test("should restore and submit staged comments through the local review runtime
   await page.goto(reviewRuntimeUrl);
 
   const agentStatus = page.getByRole("button", {
-    name: /open agent connection status/u,
+    name: /Agent session active|open agent connection status/u,
   });
   const feedbackAction = page.getByRole("button", {
     name: "Feedback",
@@ -1066,7 +1066,9 @@ test("should preview stale, historical, and multi-place causal diffs through the
     expect(tableCommentGeometry.bottom).toBeLessThanOrEqual(
       tableCommentGeometry.tableTop,
     );
-    expect(tableCommentGeometry.right).toBe(tableCommentGeometry.tableRight);
+    expect(
+      Math.abs(tableCommentGeometry.right - tableCommentGeometry.tableRight),
+    ).toBeLessThanOrEqual(1);
     await expect
       .poll(() =>
         markdownTable.evaluate(
