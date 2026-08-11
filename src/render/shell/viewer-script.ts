@@ -5,8 +5,8 @@
 // annotation-to-code cross-highlighting, CodeDiff and FileTreeDiff view
 // selection, collapse toggles for deck parts, slides, and sub-slides,
 // table-schema column state and index jumps, a document comment draft,
-// DataTable sorting, filtering, text fit, column layout and grouping, and one
-// maximize behavior shared by every figure family, a decision matrix's column
+// DataTable sorting, filtering, text fit, column layout and grouping, shared
+// figure-copy feedback and maximize behavior, a decision matrix's column
 // highlight, rationale swap, and confirm step, wireframe screen navigation
 // driven entirely by renderer-emitted data attributes plus true-width scaling,
 // and the diagram leg in ./diagram-script.ts. Plan content never contributes

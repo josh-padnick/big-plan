@@ -1,15 +1,12 @@
-// Owns the framework-free figure-control contract shared by rendered figures:
-// the maximize and copy attribute vocabulary and labels.
+// Owns the framework-free figure-control vocabulary shared by rendered
+// figures: the maximize DOM attributes and the maximize and copy labels.
 //
 // WHY THIS MODULE EXISTS
-// Maximize and copy are drawn three different ways - React views for
-// components, a HAST transform for plain fenced code, and CSS for shared
-// state - and driven by a fourth, the viewer script. Places agreeing on
-// attribute spellings by copy-paste is how collapse first broke (see
-// markdown/deck-collapse.ts). The spellings live here so the React edge and
-// the HAST edge cannot drift; the viewer script and stylesheet cite this
-// module rather than importing it, because one is a string template and the
-// other is CSS.
+// React views draw component controls and a HAST transform draws the same
+// controls for plain fenced code. Their shared vocabulary lives here so those
+// rendering edges cannot drift. The viewer script and stylesheet consume the
+// maximize DOM attributes by name rather than importing them because one is a
+// string template and the other is CSS.
 //
 // MAXIMIZE DOM CONTRACT
 //  1. The maximizable element carries MAXIMIZABLE_ATTRIBUTE and is the frame

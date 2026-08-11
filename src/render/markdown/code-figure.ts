@@ -7,8 +7,9 @@
 // those add the control themselves through the React edge. This transform
 // therefore only claims a pre that is still a bare child of the document.
 //
-// The attribute vocabulary is owned by components/_model/figure-controls; the
-// shared visual primitive owns the fixed control presentation.
+// The maximize attributes and both control labels are owned by
+// components/_model/figure-controls; the shared visual primitive owns the
+// fixed control presentation.
 
 import type { Element, Root, RootContent } from "hast";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
