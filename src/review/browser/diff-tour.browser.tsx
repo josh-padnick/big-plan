@@ -29,23 +29,28 @@ type OpenTour = {
 type DiffTourValue = {
   readonly activeDiff: SnapshotDiff | null;
   readonly activePlaceId: string | null;
-  readonly isPlaceAccepted: (diff: SnapshotDiff, placeId: string) => boolean;
-  readonly acceptPlace: (diff: SnapshotDiff, placeId: string) => void;
+  readonly isPlaceReviewed: (diff: SnapshotDiff, placeId: string) => boolean;
+  readonly togglePlaceReviewed: (diff: SnapshotDiff, placeId: string) => void;
+  readonly setPlacesReviewed: (
+    diff: SnapshotDiff,
+    placeIds: ReadonlyArray<string>,
+    reviewed: boolean,
+  ) => void;
   readonly openTour: (tour: OpenTour) => void;
   readonly closeTour: () => void;
 };
 
 const DiffTourContext = createContext<DiffTourValue | null>(null);
-const ACCEPTED_PLACES_STORAGE_KEY = "big-plan.review.accepted-diff-places.v1";
+const REVIEWED_PLACES_STORAGE_KEY = "big-plan.review.reviewed-diff-places.v1";
 
-const acceptedPlaceKey = (diff: SnapshotDiff, placeId: string): string =>
+const reviewedPlaceKey = (diff: SnapshotDiff, placeId: string): string =>
   `${diff.from}:${diff.to}:${placeId}`;
 
 /** Restores only bounded diff identifiers from optional browser preference state. */
-const initialAcceptedPlaces = (): ReadonlySet<string> => {
+const initialReviewedPlaces = (): ReadonlySet<string> => {
   try {
     const parsed: unknown = JSON.parse(
-      window.localStorage.getItem(ACCEPTED_PLACES_STORAGE_KEY) ?? "[]",
+      window.localStorage.getItem(REVIEWED_PLACES_STORAGE_KEY) ?? "[]",
     );
     if (!Array.isArray(parsed)) return new Set();
     return new Set(
@@ -192,7 +197,11 @@ const SnapshotTable = ({
 }) => (
   <div className="max-w-full min-w-0 overflow-hidden">
     <table
-      className="w-full table-fixed"
+      className={`w-full table-fixed ${
+        side === "old"
+          ? "[&_th]:bg-[color-mix(in_srgb,var(--diff-remove-c)_18%,var(--diff-remove-bg))]"
+          : "[&_th]:bg-[color-mix(in_srgb,var(--diff-add-c)_18%,var(--diff-add-bg))]"
+      }`}
       data-authored-prose=""
       data-review-diff-table=""
     >
@@ -516,7 +525,7 @@ export const DiffTourProvider = ({
   const [tour, setTour] = useState<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
-  const [acceptedPlaces, setAcceptedPlaces] = useState(initialAcceptedPlaces);
+  const [reviewedPlaces, setReviewedPlaces] = useState(initialReviewedPlaces);
   const places = useMemo(() => {
     if (tour === null) return [];
     const allowed = new Set(tour.placeIds);
@@ -524,16 +533,36 @@ export const DiffTourProvider = ({
   }, [tour]);
   const active = places.at(index);
   const closeTour = () => setTour(null);
-  const isPlaceAccepted = useCallback(
+  const isPlaceReviewed = useCallback(
     (diff: SnapshotDiff, placeId: string): boolean =>
-      acceptedPlaces.has(acceptedPlaceKey(diff, placeId)),
-    [acceptedPlaces],
+      reviewedPlaces.has(reviewedPlaceKey(diff, placeId)),
+    [reviewedPlaces],
   );
-  const acceptPlace = useCallback(
+  const togglePlaceReviewed = useCallback(
     (diff: SnapshotDiff, placeId: string): void => {
-      setAcceptedPlaces((current) => {
+      setReviewedPlaces((current) => {
         const next = new Set(current);
-        next.add(acceptedPlaceKey(diff, placeId));
+        const key = reviewedPlaceKey(diff, placeId);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    },
+    [],
+  );
+  const setPlacesReviewed = useCallback(
+    (
+      diff: SnapshotDiff,
+      placeIds: ReadonlyArray<string>,
+      reviewed: boolean,
+    ): void => {
+      setReviewedPlaces((current) => {
+        const next = new Set(current);
+        for (const placeId of placeIds) {
+          const key = reviewedPlaceKey(diff, placeId);
+          if (reviewed) next.add(key);
+          else next.delete(key);
+        }
         return next;
       });
     },
@@ -541,10 +570,10 @@ export const DiffTourProvider = ({
   );
   useEffect(() => {
     window.localStorage.setItem(
-      ACCEPTED_PLACES_STORAGE_KEY,
-      JSON.stringify([...acceptedPlaces]),
+      REVIEWED_PLACES_STORAGE_KEY,
+      JSON.stringify([...reviewedPlaces]),
     );
-  }, [acceptedPlaces]);
+  }, [reviewedPlaces]);
   const openTour = (next: OpenTour): void => {
     const startIndex =
       next.startPlaceId === undefined
@@ -567,12 +596,19 @@ export const DiffTourProvider = ({
     () => ({
       activeDiff: tour?.diff ?? null,
       activePlaceId: active?.placeId ?? null,
-      isPlaceAccepted,
-      acceptPlace,
+      isPlaceReviewed,
+      togglePlaceReviewed,
+      setPlacesReviewed,
       openTour,
       closeTour,
     }),
-    [acceptPlace, active?.placeId, isPlaceAccepted, tour],
+    [
+      active?.placeId,
+      isPlaceReviewed,
+      setPlacesReviewed,
+      togglePlaceReviewed,
+      tour,
+    ],
   );
   return (
     <DiffTourContext.Provider value={value}>
@@ -586,60 +622,93 @@ export const DiffTourProvider = ({
             isSuperseded={tour.isSuperseded === true}
           />
           <div
-            className="fixed right-4 bottom-4 left-4 z-40 mx-auto flex w-fit max-w-[calc(100vw_-_2rem)] min-w-0 items-center gap-1 rounded-full border border-edge-strong bg-raised p-1.5 text-xs text-ink shadow-floating"
+            className="fixed right-4 bottom-4 left-4 z-40 mx-auto grid w-fit max-w-[calc(100vw_-_2rem)] min-w-0 gap-1 rounded-xl border border-edge-strong bg-raised p-1.5 text-xs text-ink shadow-floating wide:flex wide:items-center wide:rounded-full"
             data-review-diff-stepper=""
           >
-            <button
-              type="button"
-              className="min-h-11 cursor-pointer rounded-full border-0 bg-transparent px-3 text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:text-subtle wide:min-h-8"
-              disabled={index === 0}
-              aria-label="Previous change"
-              onClick={() => {
-                setIndex((current) => Math.max(0, current - 1));
-                setIsVisible(true);
-              }}
-            >
-              Previous
-            </button>
-            <span className="min-w-0 max-w-72 truncate px-2 text-center text-xs text-muted">
-              Change {index + 1} of {places.length} - {active.section}
-            </span>
-            <button
-              type="button"
-              className="min-h-11 cursor-pointer rounded-full border-0 bg-transparent px-3 text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:text-subtle wide:min-h-8"
-              disabled={index >= places.length - 1}
-              aria-label="Next change"
-              onClick={() => {
-                setIndex((current) => Math.min(places.length - 1, current + 1));
-                setIsVisible(true);
-              }}
-            >
-              Next
-            </button>
-            <button
-              type="button"
-              className="min-h-11 cursor-pointer rounded-full border border-edge bg-paper px-3 font-semibold text-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent wide:min-h-8"
-              onClick={() => setIsVisible((current) => !current)}
-            >
-              {isVisible ? "Show current text" : "Show changes"}
-            </button>
-            <button
-              type="button"
-              className="min-h-11 cursor-pointer rounded-full border border-accent bg-accent-soft px-3 font-semibold text-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:border-edge disabled:bg-surface disabled:text-muted wide:min-h-8"
-              disabled={isPlaceAccepted(tour.diff, active.placeId)}
-              onClick={() => acceptPlace(tour.diff, active.placeId)}
-            >
-              {isPlaceAccepted(tour.diff, active.placeId)
-                ? "Accepted"
-                : "Accept change"}
-            </button>
-            <button
-              type="button"
-              className="min-h-11 cursor-pointer rounded-full border-0 bg-transparent px-3 text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent wide:min-h-8"
-              onClick={closeTour}
-            >
-              Hide changes
-            </button>
+            <div className="flex min-w-0 items-center justify-between gap-1 wide:contents">
+              <button
+                type="button"
+                className="min-h-11 cursor-pointer rounded-full border-0 bg-transparent px-3 text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:text-subtle wide:min-h-8"
+                disabled={index === 0}
+                aria-label="Previous change"
+                onClick={() => {
+                  setIndex((current) => Math.max(0, current - 1));
+                  setIsVisible(true);
+                }}
+              >
+                Previous
+              </button>
+              <span className="min-w-0 max-w-72 truncate px-2 text-center text-xs text-muted">
+                Change {index + 1} of {places.length} · {active.section}
+              </span>
+              <button
+                type="button"
+                className="min-h-11 cursor-pointer rounded-full border-0 bg-transparent px-3 text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:text-subtle wide:min-h-8"
+                disabled={index >= places.length - 1}
+                aria-label="Next change"
+                onClick={() => {
+                  setIndex((current) =>
+                    Math.min(places.length - 1, current + 1),
+                  );
+                  setIsVisible(true);
+                }}
+              >
+                Next
+              </button>
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center justify-center gap-1 wide:contents">
+              <button
+                type="button"
+                className="min-h-11 cursor-pointer rounded-full border border-edge bg-paper px-3 font-semibold text-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent wide:min-h-8"
+                onClick={() => setIsVisible((current) => !current)}
+              >
+                {isVisible ? "Show current text" : "Show changes"}
+              </button>
+              <button
+                type="button"
+                className="min-h-11 cursor-pointer rounded-full border border-accent bg-accent-soft px-3 font-semibold text-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent wide:min-h-8"
+                aria-pressed={isPlaceReviewed(tour.diff, active.placeId)}
+                aria-label={
+                  isPlaceReviewed(tour.diff, active.placeId)
+                    ? "Mark this change unreviewed"
+                    : "Mark this change reviewed"
+                }
+                onClick={() => togglePlaceReviewed(tour.diff, active.placeId)}
+              >
+                {isPlaceReviewed(tour.diff, active.placeId)
+                  ? "✓ Reviewed"
+                  : "Mark reviewed"}
+              </button>
+              {places.length <= 1 ? null : (
+                <button
+                  type="button"
+                  className="min-h-11 cursor-pointer rounded-full border-0 bg-transparent px-3 text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent wide:min-h-8"
+                  onClick={() => {
+                    const allReviewed = places.every((place) =>
+                      isPlaceReviewed(tour.diff, place.placeId),
+                    );
+                    setPlacesReviewed(
+                      tour.diff,
+                      places.map((place) => place.placeId),
+                      !allReviewed,
+                    );
+                  }}
+                >
+                  {places.every((place) =>
+                    isPlaceReviewed(tour.diff, place.placeId),
+                  )
+                    ? "Clear review marks"
+                    : "Mark all reviewed"}
+                </button>
+              )}
+              <button
+                type="button"
+                className="min-h-11 cursor-pointer rounded-full border-0 bg-transparent px-3 text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent wide:min-h-8"
+                onClick={closeTour}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </>
       )}

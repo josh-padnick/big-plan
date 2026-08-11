@@ -436,7 +436,7 @@ export const AgentChangeDigest = ({
   readonly onResolve?: () => void;
   readonly resolved?: boolean;
 }) => {
-  const { activeDiff, activePlaceId, isPlaceAccepted, closeTour, openTour } =
+  const { activeDiff, activePlaceId, isPlaceReviewed, closeTour, openTour } =
     useDiffTour();
   const available =
     diff === null
@@ -459,10 +459,10 @@ export const AgentChangeDigest = ({
     );
   }
   if (available.length === 0) return null;
-  const acceptedCount = available.filter((place) =>
-    isPlaceAccepted(diff, place.placeId),
+  const reviewedCount = available.filter((place) =>
+    isPlaceReviewed(diff, place.placeId),
   ).length;
-  const allAccepted = acceptedCount === available.length;
+  const allReviewed = reviewedCount === available.length;
   const ownsActiveTour = activeDiff === diff;
   const isActive =
     ownsActiveTour &&
@@ -502,9 +502,9 @@ export const AgentChangeDigest = ({
         <Icon icon={CHEVRON_RIGHT_ICON} />
         {available.length} change{available.length === 1 ? "" : "s"} across{" "}
         {sections.size} slide{sections.size === 1 ? "" : "s"}
-        {acceptedCount === 0 ? null : (
+        {reviewedCount === 0 ? null : (
           <span className="ml-auto font-medium text-accent">
-            {acceptedCount}/{available.length} reviewed
+            {reviewedCount} of {available.length} reviewed
           </span>
         )}
       </button>
@@ -527,7 +527,7 @@ export const AgentChangeDigest = ({
                 <button
                   type="button"
                   key={entry.placeId}
-                  className="flex w-full cursor-pointer items-baseline gap-2 border-0 border-t border-edge bg-transparent px-6 py-1 text-left text-xs font-medium text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-accent aria-current:bg-accent-soft aria-current:text-accent"
+                  className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-0.5 border-0 border-t border-edge bg-transparent px-6 py-2 text-left text-xs font-medium text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-accent aria-current:bg-accent-soft aria-current:text-accent"
                   aria-current={
                     activePlaceId === entry.placeId ? "step" : undefined
                   }
@@ -540,19 +540,18 @@ export const AgentChangeDigest = ({
                     })
                   }
                 >
-                  <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
                     {entry.label}
                   </span>
-                  {isPlaceAccepted(diff, entry.placeId) ? (
+                  {isPlaceReviewed(diff, entry.placeId) ? (
                     <span
-                      className="inline-flex shrink-0 items-center gap-1 text-2xs font-semibold text-accent [&>svg]:size-3"
-                      aria-label="Accepted"
+                      className="row-span-2 inline-flex shrink-0 items-center self-center text-accent [&>svg]:size-3.5"
+                      aria-label="Reviewed"
                     >
                       <Icon icon={CHECK_ICON} />
-                      Accepted
                     </span>
                   ) : null}
-                  <em className="shrink-0 text-2xs font-normal text-muted">
+                  <em className="col-start-1 text-2xs font-normal text-muted capitalize">
                     {entry.note}
                   </em>
                 </button>
@@ -584,23 +583,23 @@ export const AgentChangeDigest = ({
       >
         {isActive
           ? available.length === 1
-            ? "Hide the change"
-            : "Hide changes"
+            ? "Close review"
+            : "Close review"
           : (actionLabel ??
-            (available.length === 1
-              ? "See the change"
-              : `See changes (${available.length})`))}
+            (reviewedCount > 0 && !allReviewed
+              ? "Continue review"
+              : available.length === 1
+                ? "Review change"
+                : `Review changes (${available.length})`))}
       </button>
-      {!allAccepted || onResolve === undefined ? null : (
+      {!allReviewed || onResolve === undefined ? null : (
         <div
-          className="flex min-w-0 items-center gap-2 rounded-md border border-accent bg-accent-soft p-2 text-2xs text-accent"
+          className="flex min-w-0 items-center gap-2 border-t border-edge pt-2 text-2xs text-accent"
           data-review-changes-reviewed=""
         >
-          <span className="min-w-0 flex-1 font-semibold">
-            All changes reviewed
-          </span>
+          <span className="min-w-0 flex-1 font-semibold">Review complete</span>
           <Button variant="accentOutline" size="micro" onClick={onResolve}>
-            {resolved ? "Unresolve comment" : "Resolve comment"}
+            {resolved ? "Unresolve" : "Resolve"}
           </Button>
         </div>
       )}
