@@ -1074,6 +1074,7 @@ const useThreadHosts = (
         { readonly left: number; readonly right: number; readonly top: number }
       >();
       const leftThreadGaps = new Map<string, number>();
+      const rightThreadOffsets = new Map<string, number>();
       for (const comment of comments) {
         const host = mounted.get(comment.id);
         const target = targetElement(comment.target);
@@ -1121,6 +1122,12 @@ const useThreadHosts = (
             ? 64
             : diffThreadGap,
         );
+        rightThreadOffsets.set(
+          comment.id,
+          anchor.matches("[data-slide], [data-quick-summary]")
+            ? -diffThreadGap
+            : diffThreadGap,
+        );
       }
       for (const { id, top } of stackThreadPositions({
         items: positionItems,
@@ -1138,7 +1145,10 @@ const useThreadHosts = (
           threadWidth -
           edge;
         const leftThreadGap = leftThreadGaps.get(id) ?? diffThreadGap;
-        const right = anchorRect.right + window.scrollX + diffThreadGap;
+        const right =
+          anchorRect.right +
+          window.scrollX +
+          (rightThreadOffsets.get(id) ?? diffThreadGap);
         const left =
           anchorRect.left + window.scrollX - threadWidth - leftThreadGap;
         host.style.left = `${
