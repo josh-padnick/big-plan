@@ -1,7 +1,7 @@
 // Owns the local coding-agent exchange contract. Reviewers and agents share
 // only validated request and response values in the plan's ignored
 // `.big-plan/` store; browser code and CLI commands never need to understand
-// filenames, replay rules, response completeness, or source-revision checks.
+// filenames, replay rules, response completeness, or source-snapshot checks.
 
 import { createHash } from "node:crypto";
 import type { CommentTarget, ReviewComment } from "./shared/comment.js";
@@ -20,16 +20,17 @@ const EXCHANGE_LIMIT = 400;
 const ID = /^[a-f0-9]{16}$/;
 const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
 
-export type AgentOutcomeState = "changed" | "question" | "outside";
+export type AgentOutcomeState =
+  "answered" | "changed" | "needs-input" | "declined";
 
 type AgentRequestBase = {
   readonly version: 1;
   readonly requestId: string;
   readonly sessionId: string;
   readonly planId: string;
-  readonly sourceRevision: string;
+  readonly premiseSnapshot: string;
   readonly createdAt: string;
-  readonly claimedFromRevision?: string;
+  readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly canceledAt?: string;
 };
@@ -66,7 +67,7 @@ type AgentResponseBase = {
   readonly requestId: string;
   readonly sessionId: string;
   readonly planId: string;
-  readonly sourceRevision: string;
+  readonly resultSnapshot: string;
   readonly createdAt: string;
 };
 
@@ -148,11 +149,11 @@ const timestamp = (value: unknown): string => {
   return new Date(value).toISOString();
 };
 
-const sourceRevision = (value: unknown): string => {
-  const candidate = text({ value, field: "sourceRevision", limit: 64 });
+const snapshotDigest = (value: unknown, field: string): string => {
+  const candidate = text({ value, field, limit: 64 });
   if (!/^[a-f0-9]{16,64}$/.test(candidate)) {
     throw new AgentExchangeRejected(
-      '"sourceRevision" must be a hexadecimal source digest',
+      `"${field}" must be a hexadecimal snapshot digest`,
     );
   }
   return candidate;
@@ -230,6 +231,10 @@ const comment = (value: unknown): ReviewComment => {
     id: exchangeCommentId(value.id, "comment.id"),
     body: text({ value: value.body, field: "comment.body" }),
     createdAt: timestamp(value.createdAt),
+    premiseSnapshot: snapshotDigest(
+      value.premiseSnapshot,
+      "comment.premiseSnapshot",
+    ),
     target: target(value.target),
   };
 };
@@ -240,17 +245,17 @@ const requestBase = (
   if (value.version !== 1) {
     throw new AgentExchangeRejected("Unsupported agent request version");
   }
-  const claimedFromRevision =
-    value.claimedFromRevision === undefined
+  const baselineSnapshot =
+    value.baselineSnapshot === undefined
       ? undefined
-      : sourceRevision(value.claimedFromRevision);
+      : snapshotDigest(value.baselineSnapshot, "baselineSnapshot");
   const claimedAt =
     value.claimedAt === undefined ? undefined : timestamp(value.claimedAt);
   const canceledAt =
     value.canceledAt === undefined ? undefined : timestamp(value.canceledAt);
-  if ((claimedFromRevision === undefined) !== (claimedAt === undefined)) {
+  if ((baselineSnapshot === undefined) !== (claimedAt === undefined)) {
     throw new AgentExchangeRejected(
-      '"claimedFromRevision" and "claimedAt" must appear together',
+      '"baselineSnapshot" and "claimedAt" must appear together',
     );
   }
   return {
@@ -258,11 +263,9 @@ const requestBase = (
     requestId: id(value.requestId, "requestId"),
     sessionId: id(value.sessionId, "sessionId"),
     planId: id(value.planId, "planId"),
-    sourceRevision: sourceRevision(value.sourceRevision),
+    premiseSnapshot: snapshotDigest(value.premiseSnapshot, "premiseSnapshot"),
     createdAt: timestamp(value.createdAt),
-    ...(claimedFromRevision === undefined
-      ? {}
-      : { claimedFromRevision, claimedAt }),
+    ...(baselineSnapshot === undefined ? {} : { baselineSnapshot, claimedAt }),
     ...(canceledAt === undefined ? {} : { canceledAt }),
   };
 };
@@ -310,18 +313,18 @@ export const validateAgentRequest = (value: unknown): AgentRequest => {
 
 const responseBase = ({
   request,
-  currentRevision,
+  currentSnapshot,
   now,
 }: {
   readonly request: AgentRequest;
-  readonly currentRevision: string;
+  readonly currentSnapshot: string;
   readonly now: string;
 }): AgentResponseBase => ({
   version: 1,
   requestId: request.requestId,
   sessionId: request.sessionId,
   planId: request.planId,
-  sourceRevision: currentRevision,
+  resultSnapshot: currentSnapshot,
   createdAt: now,
 });
 
@@ -347,21 +350,26 @@ const outcome = ({
   value,
   request,
   changedBlocks,
-  currentRevision,
+  currentSnapshot,
 }: {
   readonly value: unknown;
   readonly request: AgentFeedbackRequest | AgentReplyRequest;
   readonly changedBlocks: ReadonlySet<string>;
-  readonly currentRevision: string;
+  readonly currentSnapshot: string;
 }): AgentOutcome => {
   if (!isRecord(value)) {
     throw new AgentExchangeRejected("Each outcome must be an object");
   }
   const checkedCommentId = exchangeCommentId(value.commentId, "commentId");
   const state = value.state;
-  if (state !== "changed" && state !== "question" && state !== "outside") {
+  if (
+    state !== "answered" &&
+    state !== "changed" &&
+    state !== "needs-input" &&
+    state !== "declined"
+  ) {
     throw new AgentExchangeRejected(
-      'An outcome state must be "changed", "question", or "outside"',
+      'An outcome state must be "answered", "changed", "needs-input", or "declined"',
     );
   }
   const result: AgentOutcome = {
@@ -373,7 +381,7 @@ const outcome = ({
     return result;
   }
   if (
-    currentRevision === (request.claimedFromRevision ?? request.sourceRevision)
+    currentSnapshot === (request.baselineSnapshot ?? request.premiseSnapshot)
   ) {
     throw new AgentExchangeRejected(
       'A "changed" outcome requires a revision to the plan source',
@@ -410,8 +418,8 @@ const outcome = ({
 };
 
 /** The immutable revision an agent actually saw when it claimed the work. */
-export const requestBaselineRevision = (request: AgentRequest): string =>
-  request.claimedFromRevision ?? request.sourceRevision;
+export const requestBaselineSnapshot = (request: AgentRequest): string =>
+  request.baselineSnapshot ?? request.premiseSnapshot;
 
 /** Validates an agent-authored draft and fills trusted session metadata. */
 export const validateAgentResponseDraft = ({
@@ -419,14 +427,14 @@ export const validateAgentResponseDraft = ({
   request,
   commentsById,
   changedBlocks,
-  currentRevision,
+  currentSnapshot,
   now,
 }: {
   readonly value: unknown;
   readonly request: AgentRequest;
   readonly commentsById: ReadonlyMap<string, ReviewComment>;
   readonly changedBlocks: ReadonlySet<string>;
-  readonly currentRevision: string;
+  readonly currentSnapshot: string;
   readonly now: string;
 }): AgentResponse => {
   if (request.canceledAt !== undefined) {
@@ -440,7 +448,7 @@ export const validateAgentResponseDraft = ({
       "The response does not answer the pending request",
     );
   }
-  const base = responseBase({ request, currentRevision, now });
+  const base = responseBase({ request, currentSnapshot, now });
   if (request.kind === "chat") {
     return {
       ...base,
@@ -457,7 +465,7 @@ export const validateAgentResponseDraft = ({
       value: entry,
       request,
       changedBlocks,
-      currentRevision,
+      currentSnapshot,
     }),
   );
   const actual = outcomes.map((entry) => entry.commentId);
@@ -484,7 +492,7 @@ const validateStoredResponse = ({
 }): AgentResponse => {
   if (
     request.claimedAt === undefined ||
-    request.claimedFromRevision === undefined
+    request.baselineSnapshot === undefined
   ) {
     throw new AgentExchangeRejected(
       "A stored agent response cannot answer an unclaimed request",
@@ -508,7 +516,7 @@ const validateStoredResponse = ({
     requestId: request.requestId,
     sessionId: request.sessionId,
     planId: request.planId,
-    sourceRevision: sourceRevision(value.sourceRevision),
+    resultSnapshot: snapshotDigest(value.resultSnapshot, "resultSnapshot"),
     createdAt: timestamp(value.createdAt),
   };
   if (request.kind === "chat") {
@@ -528,9 +536,10 @@ const validateStoredResponse = ({
     }
     const checkedCommentId = exchangeCommentId(entry.commentId, "commentId");
     if (
+      entry.state !== "answered" &&
       entry.state !== "changed" &&
-      entry.state !== "question" &&
-      entry.state !== "outside"
+      entry.state !== "needs-input" &&
+      entry.state !== "declined"
     ) {
       throw new AgentExchangeRejected("A stored outcome state is invalid");
     }
@@ -658,22 +667,22 @@ const readCompleteAgentExchange = async ({
 };
 
 /** A source digest shared by request creation, response validation, and polling. */
-export const deriveSourceRevision = (source: string): string =>
+export const deriveSnapshotDigest = (source: string): string =>
   createHash("sha256").update(source).digest("hex").slice(0, 16);
 
 /** Turns one real feedback package into the first coding-agent request. */
 export const feedbackAgentRequest = ({
   feedback,
-  sourceRevision: revision,
+  premiseSnapshot,
 }: {
   readonly feedback: FeedbackPackage;
-  readonly sourceRevision: string;
+  readonly premiseSnapshot: string;
 }): AgentFeedbackRequest => ({
   version: 1,
   requestId: feedback.packageId,
   sessionId: feedback.sessionId,
   planId: feedback.planId,
-  sourceRevision: revision,
+  premiseSnapshot: snapshotDigest(premiseSnapshot, "premiseSnapshot"),
   createdAt: feedback.createdAt,
   kind: "feedback",
   packageId: feedback.packageId,
@@ -686,7 +695,7 @@ export const messageAgentRequest = ({
   requestId,
   sessionId,
   planId,
-  sourceRevision: revision,
+  premiseSnapshot,
   createdAt,
   body,
   commentId,
@@ -695,7 +704,7 @@ export const messageAgentRequest = ({
   readonly requestId: string;
   readonly sessionId: string;
   readonly planId: string;
-  readonly sourceRevision: string;
+  readonly premiseSnapshot: string;
   readonly createdAt: string;
   readonly body: string;
   readonly commentId?: string;
@@ -705,7 +714,7 @@ export const messageAgentRequest = ({
     requestId: id(requestId, "requestId"),
     sessionId: id(sessionId, "sessionId"),
     planId: id(planId, "planId"),
-    sourceRevision: sourceRevision(revision),
+    premiseSnapshot: snapshotDigest(premiseSnapshot, "premiseSnapshot"),
     createdAt: timestamp(createdAt),
   };
   const checkedBody = text({ value: body, field: "body" });

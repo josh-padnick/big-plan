@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   commentsFromExchange,
-  deriveSourceRevision,
+  deriveSnapshotDigest,
   messageAgentRequest,
   nextPendingAgentRequest,
   readAgentCommentHistory,
@@ -28,7 +28,14 @@ import { claimAgentRequest, publishAgentResponse } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
-import { writeRevisionSnapshot } from "./store.js";
+import type { ReviewComment } from "./shared/comment.js";
+import {
+  readComments,
+  readResolvedCommentIds,
+  writeComments,
+  writeResolvedCommentIds,
+  writeSnapshot,
+} from "./store.js";
 
 const PLAN = `# Review runtime plan
 
@@ -38,6 +45,7 @@ The runtime serves this document and nothing else.
 
 Today's reality is that feedback does not reach the agent.
 `;
+const PLAN_SNAPSHOT = deriveSnapshotDigest(PLAN);
 
 let runtime: ReviewRuntime;
 let token: string;
@@ -255,6 +263,7 @@ describe("review runtime feedback", () => {
       {
         id: "aabbccdd",
         body: "Say what breaks, not just what works.",
+        premiseSnapshot: PLAN_SNAPSHOT,
         target: { type: "block", blockId },
       },
     ];
@@ -276,11 +285,13 @@ describe("review runtime feedback", () => {
       {
         id: "aa11bb22",
         body: "Send this staged comment.",
+        premiseSnapshot: PLAN_SNAPSHOT,
         target: { type: "document" },
       },
       {
         id: "cc33dd44",
         body: "Keep this staged comment.",
+        premiseSnapshot: PLAN_SNAPSHOT,
         target: { type: "document" },
       },
     ];
@@ -357,6 +368,7 @@ describe("review runtime feedback", () => {
     const draft = {
       id: "abcd1234",
       body: "Keep this history after the target disappears.",
+      premiseSnapshot: PLAN_SNAPSHOT,
       target: { type: "block", blockId },
     };
     expect(
@@ -416,6 +428,7 @@ describe("review runtime feedback", () => {
           {
             id: "11223344",
             body: "Traversal attempt.",
+            premiseSnapshot: PLAN_SNAPSHOT,
             target: { type: "block", blockId: "../../../../etc/passwd" },
           },
         ],
@@ -434,6 +447,7 @@ describe("review runtime feedback", () => {
           {
             id: "55667788",
             body: "Open with a shorter lede.",
+            premiseSnapshot: PLAN_SNAPSHOT,
             target: { type: "document" },
           },
         ],
@@ -518,7 +532,7 @@ describe("review runtime feedback", () => {
   it("should expose only validated live agent exchange state", async () => {
     const answer: unknown = await (await call({ path: "/api/agent" })).json();
     expect(answer).toMatchObject({
-      sourceRevision: expect.stringMatching(/^[a-f0-9]{16}$/),
+      currentSnapshot: expect.stringMatching(/^[a-f0-9]{16}$/),
       requests: expect.arrayContaining([
         expect.objectContaining({ kind: "feedback" }),
         expect.objectContaining({ kind: "reply", commentId: "55667788" }),
@@ -534,18 +548,18 @@ describe("review runtime feedback", () => {
     if (
       typeof answer !== "object" ||
       answer === null ||
-      !("sourceRevision" in answer)
+      !("currentSnapshot" in answer)
     ) {
-      throw new Error("The agent snapshot did not expose a source revision");
+      throw new Error("The agent snapshot did not expose its current snapshot");
     }
-    const acceptedRevision = answer.sourceRevision;
+    const acceptedSnapshot = answer.currentSnapshot;
     try {
       await writeFile(runtime.planPath, `${PLAN}\n<unfinished`);
       const whileEditing: unknown = await (
         await call({ path: "/api/agent" })
       ).json();
       expect(whileEditing).toMatchObject({
-        sourceRevision: acceptedRevision,
+        currentSnapshot: acceptedSnapshot,
       });
     } finally {
       await writeFile(runtime.planPath, PLAN);
@@ -558,6 +572,7 @@ describe("review runtime feedback", () => {
         {
           id: "a1b2c3d4",
           body: "Retry this exact feedback package.",
+          premiseSnapshot: PLAN_SNAPSHOT,
           target: { type: "document" },
         },
       ],
@@ -638,6 +653,7 @@ describe("review runtime feedback", () => {
               {
                 id: "ee44ff55",
                 body: "Publish this feedback exactly once after recovery.",
+                premiseSnapshot: PLAN_SNAPSHOT,
                 target: { type: "document" },
               },
             ],
@@ -663,7 +679,7 @@ describe("review runtime feedback", () => {
       await claimAgentRequest({
         store: isolated.store,
         requestId: created.requestId,
-        sourceRevision: created.sourceRevision,
+        baselineSnapshot: created.premiseSnapshot,
         now: claimedAt,
       });
 
@@ -699,11 +715,13 @@ describe("review runtime feedback", () => {
       {
         id: "c1c1c1c1",
         body: "Keep the first concurrent comment.",
+        premiseSnapshot: PLAN_SNAPSHOT,
         target: { type: "document" },
       },
       {
         id: "d2d2d2d2",
         body: "Keep the second concurrent comment.",
+        premiseSnapshot: PLAN_SNAPSHOT,
         target: { type: "document" },
       },
     ];
@@ -766,26 +784,26 @@ describe("review runtime feedback", () => {
     }
   });
 
-  it("should serve a deterministic diff between retained revisions", async () => {
+  it("should serve a deterministic diff between retained snapshots", async () => {
     const revised = PLAN.replace(
       "feedback does not reach the agent",
       "feedback reaches the coding agent",
     );
-    const from = deriveSourceRevision(PLAN);
-    const to = deriveSourceRevision(revised);
-    await writeRevisionSnapshot({
+    const from = deriveSnapshotDigest(PLAN);
+    const to = deriveSnapshotDigest(revised);
+    await writeSnapshot({
       store: runtime.store,
-      revision: from,
+      snapshot: from,
       source: PLAN,
     });
-    await writeRevisionSnapshot({
+    await writeSnapshot({
       store: runtime.store,
-      revision: to,
+      snapshot: to,
       source: revised,
     });
 
     const response = await call({
-      path: `/api/revision-diff?from=${from}&to=${to}`,
+      path: `/api/snapshot-diff?from=${from}&to=${to}`,
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -801,11 +819,11 @@ describe("review runtime feedback", () => {
     });
   });
 
-  it("should reject malformed revision names at the diff boundary", async () => {
+  it("should reject malformed snapshot names at the diff boundary", async () => {
     expect(
       (
         await call({
-          path: "/api/revision-diff?from=../../etc/passwd&to=1111111111111111",
+          path: "/api/snapshot-diff?from=../../etc/passwd&to=1111111111111111",
         })
       ).status,
     ).toBe(400);
@@ -820,6 +838,7 @@ describe("review runtime feedback", () => {
           {
             id: "deadbeef",
             body: "Emit an independent progress event.",
+            premiseSnapshot: PLAN_SNAPSHOT,
             target: { type: "document" },
           },
         ],
@@ -845,11 +864,13 @@ describe("review runtime feedback", () => {
       {
         id: "a1a1a1a1",
         body: "Delete this queued comment.",
+        premiseSnapshot: PLAN_SNAPSHOT,
         target: { type: "document" },
       },
       {
         id: "b2b2b2b2",
         body: "Keep this queued comment.",
+        premiseSnapshot: PLAN_SNAPSHOT,
         target: { type: "document" },
       },
     ];
@@ -906,6 +927,7 @@ describe("review runtime feedback", () => {
     const comment = {
       id: "c3c3c3c3",
       body: "Delete this canceled comment.",
+      premiseSnapshot: PLAN_SNAPSHOT,
       target: { type: "document" },
     };
     expect(
@@ -995,6 +1017,7 @@ describe("review runtime feedback", () => {
     const comment = {
       id: "d4d4d4d4",
       body: "Keep this answered thread.",
+      premiseSnapshot: PLAN_SNAPSHOT,
       target: { type: "document" },
     };
     expect(
@@ -1021,7 +1044,7 @@ describe("review runtime feedback", () => {
     const claimed = await claimAgentRequest({
       store: runtime.store,
       requestId: request.requestId,
-      sourceRevision: request.sourceRevision,
+      baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
     await publishAgentResponse({
@@ -1032,7 +1055,7 @@ describe("review runtime feedback", () => {
           outcomes: [
             {
               commentId: comment.id,
-              state: "outside",
+              state: "declined",
               message: "The existing plan already covers this.",
             },
           ],
@@ -1040,7 +1063,7 @@ describe("review runtime feedback", () => {
         request: claimed,
         commentsById: commentsFromExchange(exchange),
         changedBlocks: new Set(),
-        currentRevision: request.sourceRevision,
+        currentSnapshot: request.premiseSnapshot,
         now: new Date().toISOString(),
       }),
     });
@@ -1053,7 +1076,7 @@ describe("review runtime feedback", () => {
           requestId: `f${index.toString(16).padStart(15, "0")}`,
           sessionId: runtime.sessionId,
           planId: runtime.planId,
-          sourceRevision: request.sourceRevision,
+          premiseSnapshot: request.premiseSnapshot,
           createdAt: new Date(answeredAt + index + 1).toISOString(),
           body: `Later plan question ${index + 1}`,
         }),
@@ -1111,6 +1134,67 @@ describe("review runtime feedback", () => {
 });
 
 describe("review runtime shutdown", () => {
+  it("should not replace durable review state when reopening a diff preview", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-preview-reopen-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const before = PLAN.replace(
+      "Today's reality is that feedback does not reach the agent.",
+      "Today's reality is that feedback is easy to lose.",
+    );
+    const first = await startReviewRuntime({
+      planPath,
+      diffPreviewSource: before,
+    });
+    const validateComments = (value: unknown): ReadonlyArray<ReviewComment> =>
+      Array.isArray(value) ? (value as ReadonlyArray<ReviewComment>) : [];
+    const existing = await readComments({
+      path: first.store.sentPath,
+      validate: validateComments,
+    });
+    const retained: ReviewComment = {
+      id: "cafefeed",
+      body: "Keep this reviewer comment across preview restarts.",
+      createdAt: "2026-08-10T12:00:00.000Z",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" },
+    };
+    await writeComments({
+      path: first.store.sentPath,
+      comments: [...existing, retained],
+    });
+    await writeResolvedCommentIds({
+      store: first.store,
+      ids: [retained.id],
+    });
+    await first.close();
+
+    const reopened = await startReviewRuntime({
+      planPath,
+      diffPreviewSource: before,
+    });
+    try {
+      await expect(
+        readComments({
+          path: reopened.store.sentPath,
+          validate: validateComments,
+        }),
+      ).resolves.toEqual(expect.arrayContaining([retained]));
+      await expect(
+        readResolvedCommentIds({
+          store: reopened.store,
+          validate: (value) =>
+            Array.isArray(value)
+              ? value.filter((item): item is string => typeof item === "string")
+              : [],
+        }),
+      ).resolves.toContain(retained.id);
+    } finally {
+      await reopened.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should restart from the rendered source before accepting new responses", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "big-plan-server-revision-"),
@@ -1118,13 +1202,13 @@ describe("review runtime shutdown", () => {
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
     const first = await startReviewRuntime({ planPath });
-    const oldRevision = deriveSourceRevision(PLAN);
+    const oldRevision = deriveSnapshotDigest(PLAN);
     const oldRequest = messageAgentRequest({
       kind: "chat",
       requestId: "1111111111111111",
       sessionId: first.sessionId,
       planId: first.planId,
-      sourceRevision: oldRevision,
+      premiseSnapshot: oldRevision,
       createdAt: "2026-08-10T12:00:00.000Z",
       body: "What changed?",
     });
@@ -1132,7 +1216,7 @@ describe("review runtime shutdown", () => {
     const oldClaim = await claimAgentRequest({
       store: first.store,
       requestId: oldRequest.requestId,
-      sourceRevision: oldRevision,
+      baselineSnapshot: oldRevision,
       now: "2026-08-10T12:00:01.000Z",
     });
     await publishAgentResponse({
@@ -1142,7 +1226,7 @@ describe("review runtime shutdown", () => {
         request: oldClaim,
         commentsById: new Map(),
         changedBlocks: new Set(),
-        currentRevision: oldRevision,
+        currentSnapshot: oldRevision,
         now: "2026-08-10T12:00:02.000Z",
       }),
     });
@@ -1167,7 +1251,7 @@ describe("review runtime shutdown", () => {
           headers: { "x-big-plan-review-token": restartedToken },
         }).then((response) => response.json());
       await expect(agentState()).resolves.toMatchObject({
-        sourceRevision: deriveSourceRevision(restartedSource),
+        currentSnapshot: deriveSnapshotDigest(restartedSource),
       });
 
       const newRequest = messageAgentRequest({
@@ -1175,7 +1259,7 @@ describe("review runtime shutdown", () => {
         requestId: "2222222222222222",
         sessionId: restarted.sessionId,
         planId: restarted.planId,
-        sourceRevision: deriveSourceRevision(restartedSource),
+        premiseSnapshot: deriveSnapshotDigest(restartedSource),
         createdAt: "2026-08-10T12:01:00.000Z",
         body: "What changed now?",
       });
@@ -1183,7 +1267,7 @@ describe("review runtime shutdown", () => {
       const newClaim = await claimAgentRequest({
         store: restarted.store,
         requestId: newRequest.requestId,
-        sourceRevision: newRequest.sourceRevision,
+        baselineSnapshot: newRequest.premiseSnapshot,
         now: "2026-08-10T12:01:01.000Z",
       });
       const acceptedSource = `${restartedSource}\nThe agent accepted this revision.\n`;
@@ -1198,12 +1282,12 @@ describe("review runtime shutdown", () => {
           request: newClaim,
           commentsById: new Map(),
           changedBlocks: new Set(),
-          currentRevision: deriveSourceRevision(acceptedSource),
+          currentSnapshot: deriveSnapshotDigest(acceptedSource),
           now: "2026-08-10T12:01:02.000Z",
         }),
       });
       await expect(agentState()).resolves.toMatchObject({
-        sourceRevision: deriveSourceRevision(acceptedSource),
+        currentSnapshot: deriveSnapshotDigest(acceptedSource),
       });
     } finally {
       await restarted.close();

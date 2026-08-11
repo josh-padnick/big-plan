@@ -1,6 +1,7 @@
 // Owns everything the review runtime keeps on disk, and owns it narrowly: one
 // `.big-plan/` directory beside the plan, created owner-only and ignored by
-// version control, holding drafts, sent packages, and the agent's progress
+// version control, holding drafts, sent packages, immutable source snapshots,
+// and the agent's progress
 // channel.
 //
 // Two properties are enforced here rather than assumed by callers:
@@ -76,7 +77,7 @@ export type ReviewStore = {
   readonly agentResponseDirectory: string;
   readonly agentDraftDirectory: string;
   readonly agentPromptPath: string;
-  readonly revisionDirectory: string;
+  readonly snapshotDirectory: string;
   readonly draftsPath: string;
   readonly activeDraftPath: string;
   readonly sentPath: string;
@@ -91,7 +92,7 @@ export type ReviewStore = {
 
 /**
  * Namespaces review custody by source location while remaining stable across
- * the source revisions produced during one review.
+ * the source snapshots produced during one review.
  */
 export const deriveReviewPlanId = ({
   planPath,
@@ -156,9 +157,9 @@ export const reviewStoreFor = ({
       base: agentDirectory,
       leaf: "agent-prompt.md",
     }),
-    revisionDirectory: inside({
+    snapshotDirectory: inside({
       base: reviewDirectory,
-      leaf: "revisions",
+      leaf: "snapshots",
     }),
     draftsPath: inside({ base: reviewDirectory, leaf: "drafts.json" }),
     activeDraftPath: inside({
@@ -214,7 +215,7 @@ export const prepareStore = async (store: ReviewStore): Promise<void> => {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
-  await mkdir(store.revisionDirectory, {
+  await mkdir(store.snapshotDirectory, {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
@@ -529,40 +530,40 @@ export const writeActiveDraft = async ({
   await writeJson({ path, value });
 };
 
-const revisionPath = ({
+const snapshotPath = ({
   store,
-  revision,
+  snapshot,
 }: {
   readonly store: ReviewStore;
-  readonly revision: string;
+  readonly snapshot: string;
 }): string => {
-  if (!/^[a-f0-9]{16,64}$/.test(revision)) {
-    throw new Error("A source revision must be a hexadecimal digest");
+  if (!/^[a-f0-9]{16,64}$/.test(snapshot)) {
+    throw new Error("A source snapshot must be a hexadecimal digest");
   }
   return inside({
-    base: store.revisionDirectory,
-    leaf: `${revision}.mdx`,
+    base: store.snapshotDirectory,
+    leaf: `${snapshot}.mdx`,
   });
 };
 
-/** Retains the authoritative source the first time a revision is observed. */
-export const writeRevisionSnapshot = async ({
+/** Retains authoritative source the first time its snapshot is observed. */
+export const writeSnapshot = async ({
   store,
-  revision,
+  snapshot,
   source,
 }: {
   readonly store: ReviewStore;
-  readonly revision: string;
+  readonly snapshot: string;
   readonly source: string;
 }): Promise<void> => {
-  const path = revisionPath({ store, revision });
+  const path = snapshotPath({ store, snapshot });
   try {
     await readFile(path, "utf8");
   } catch {
     await writeFile(path, source, { mode: FILE_MODE, flag: "wx" }).catch(
       async (error: unknown) => {
         // Two request paths may observe the same digest concurrently. A file
-        // that now exists is the same immutable revision, not a conflict.
+        // that now exists is the same immutable snapshot, not a conflict.
         try {
           await readFile(path, "utf8");
         } catch {
@@ -574,13 +575,13 @@ export const writeRevisionSnapshot = async ({
 };
 
 /** Reads one immutable source snapshot after validating its digest filename. */
-export const readRevisionSnapshot = async ({
+export const readSnapshot = async ({
   store,
-  revision,
+  snapshot,
 }: {
   readonly store: ReviewStore;
-  readonly revision: string;
-}): Promise<string> => readFile(revisionPath({ store, revision }), "utf8");
+  readonly snapshot: string;
+}): Promise<string> => readFile(snapshotPath({ store, snapshot }), "utf8");
 
 /** Reads the durable set of locally resolved thread ids. */
 export const readResolvedCommentIds = async ({

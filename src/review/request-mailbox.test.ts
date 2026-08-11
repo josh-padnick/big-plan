@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./shared/comment.js";
 import {
-  deriveSourceRevision,
+  deriveSnapshotDigest,
   feedbackAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
@@ -35,7 +35,7 @@ import {
 const sessionId = "1111111111111111";
 const planId = "2222222222222222";
 const packageId = "3333333333333333";
-const revision = deriveSourceRevision("# Plan\n");
+const snapshot = deriveSnapshotDigest("# Plan\n");
 const execFileAsync = promisify(execFile);
 const mailboxModule = new URL("./request-mailbox.ts", import.meta.url).href;
 const storeModule = new URL("./store.ts", import.meta.url).href;
@@ -48,7 +48,7 @@ const delay = Number(process.env.BP_START_AT) - Date.now();
 if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
 const common = { store, requestId: process.env.BP_REQUEST_ID, now: process.env.BP_NOW };
 if (process.env.BP_OPERATION === "claim") {
-  await claimAgentRequest({ ...common, sourceRevision: "aaaaaaaaaaaaaaaa" });
+  await claimAgentRequest({ ...common, baselineSnapshot: "aaaaaaaaaaaaaaaa" });
 } else {
   await cancelAgentRequest(common);
 }
@@ -64,6 +64,7 @@ const reviewComment = ({
   id,
   body,
   createdAt: "2026-08-10T12:00:00.000Z",
+  premiseSnapshot: snapshot,
   target: { type: "document" },
 });
 
@@ -77,7 +78,7 @@ const requestWith = (comments: ReadonlyArray<ReviewComment>) =>
       createdAt: "2026-08-10T12:00:00.000Z",
       comments,
     }),
-    sourceRevision: revision,
+    premiseSnapshot: snapshot,
   });
 
 const preparedReview = async () => {
@@ -150,7 +151,7 @@ describe("request mailbox", () => {
     });
     if (results[0]?.status === "fulfilled") {
       expect(exchange.requests[0]).toMatchObject({
-        claimedFromRevision: "aaaaaaaaaaaaaaaa",
+        baselineSnapshot: "aaaaaaaaaaaaaaaa",
         claimedAt: "2026-08-10T12:00:01.000Z",
       });
     } else {
@@ -169,7 +170,7 @@ describe("request mailbox", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
-      sourceRevision: revision,
+      baselineSnapshot: revision,
       now: "2026-08-10T12:00:01.000Z",
     });
     const response = validateAgentResponseDraft({
@@ -178,7 +179,7 @@ describe("request mailbox", () => {
         outcomes: [
           {
             commentId: comment.id,
-            state: "outside",
+            state: "declined",
             message: "No plan revision is needed.",
           },
         ],
@@ -186,7 +187,7 @@ describe("request mailbox", () => {
       request: claimed,
       commentsById: new Map([[comment.id, comment]]),
       changedBlocks: new Set(),
-      currentRevision: revision,
+      currentSnapshot: revision,
       now: "2026-08-10T12:00:02.000Z",
     });
 
@@ -223,7 +224,7 @@ describe("request mailbox", () => {
         outcomes: [
           {
             commentId: comment.id,
-            state: "outside",
+            state: "declined",
             message: "No plan revision is needed.",
           },
         ],
@@ -231,7 +232,7 @@ describe("request mailbox", () => {
       request,
       commentsById: new Map([[comment.id, comment]]),
       changedBlocks: new Set(),
-      currentRevision: revision,
+      currentSnapshot: revision,
       now: "2026-08-10T12:00:02.000Z",
     });
 
@@ -251,7 +252,7 @@ describe("request mailbox", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
-      sourceRevision: revision,
+      baselineSnapshot: revision,
       now: "2026-08-10T12:00:01.000Z",
     });
     await writeAgentResponseValue({
@@ -271,7 +272,7 @@ describe("request mailbox", () => {
         outcomes: [
           {
             commentId: comment.id,
-            state: "outside",
+            state: "declined",
             message: "No plan revision is needed.",
           },
         ],
@@ -279,7 +280,7 @@ describe("request mailbox", () => {
       request: claimed,
       commentsById: new Map([[comment.id, comment]]),
       changedBlocks: new Set(),
-      currentRevision: revision,
+      currentSnapshot: revision,
       now: "2026-08-10T12:00:02.000Z",
     });
 
@@ -333,7 +334,7 @@ describe("request mailbox", () => {
       claimAgentRequest({
         store,
         requestId: request.requestId,
-        sourceRevision: "aaaaaaaaaaaaaaaa",
+        baselineSnapshot: "aaaaaaaaaaaaaaaa",
         now: "2026-08-10T12:00:01.000Z",
       }),
       removeCommentFromQueuedFeedbackRequest({
@@ -348,7 +349,7 @@ describe("request mailbox", () => {
     const stored = exchange.requests[0];
     expect(stored).toMatchObject({
       kind: "feedback",
-      claimedFromRevision: "aaaaaaaaaaaaaaaa",
+      baselineSnapshot: "aaaaaaaaaaaaaaaa",
     });
     if (stored?.kind !== "feedback") {
       throw new Error("The stored request must remain feedback");

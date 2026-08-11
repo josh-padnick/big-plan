@@ -13,6 +13,8 @@ import {
 import { messageTimeLabel } from "../shared/time-label.js";
 import type { AgentStatus } from "../shared/agent-status.js";
 import type { ProgressStepCode } from "../shared/progress-code.js";
+import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
+import { DiffLensContent, useDiffTour } from "./diff-tour.browser.js";
 import { Icon } from "./icon.browser.js";
 
 export type MessageSurface = "thread" | "chat";
@@ -24,12 +26,6 @@ export type MessageActivity = {
   readonly state: "waiting" | "live" | "done" | "failed";
   readonly detail?: string;
   readonly atMs?: number;
-};
-
-export type MessageChange = {
-  readonly status: "changed" | "added" | "removed";
-  readonly label: string;
-  readonly section: string;
 };
 
 const THREAD_BASE =
@@ -392,16 +388,33 @@ export const AgentStatePill = ({
 
 /** Attaches a quiet grouped revision digest to the answer that caused it. */
 export const AgentChangeDigest = ({
-  changes,
+  diff,
+  placeIds,
+  spilloverCount,
+  isSuperseded,
   isLoading,
   onLoad,
+  actionLabel,
 }: {
-  readonly changes: ReadonlyArray<MessageChange> | null;
+  readonly diff: SnapshotDiff | null;
+  readonly placeIds?: ReadonlyArray<string>;
+  readonly spilloverCount?: number;
+  readonly isSuperseded?: boolean;
   readonly isLoading: boolean;
   readonly onLoad: () => void;
+  readonly actionLabel?: string;
 }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
-  if (changes === null) {
+  const { activePlaceId, activePlaceIsHistorical, closeTour, openTour } =
+    useDiffTour();
+  const available =
+    diff === null
+      ? []
+      : placeIds === undefined
+        ? diff.places
+        : diff.places.filter((place) => placeIds.includes(place.placeId));
+  const [expandedChoice, setExpandedChoice] = useState<boolean | null>(null);
+  const isExpanded = expandedChoice ?? available.length <= 3;
+  if (diff === null) {
     return (
       <button
         type="button"
@@ -413,8 +426,15 @@ export const AgentChangeDigest = ({
       </button>
     );
   }
-  const sections = new Map<string, Array<MessageChange>>();
-  for (const change of changes) {
+  if (available.length === 0) return null;
+  const isActive = available.some(
+    (place) => place.placeId === activePlaceId,
+  );
+  const historicalPlace = activePlaceIsHistorical
+    ? available.find((place) => place.placeId === activePlaceId)
+    : undefined;
+  const sections = new Map<string, Array<DiffPlace>>();
+  for (const change of available) {
     const group = sections.get(change.section) ?? [];
     group.push(change);
     sections.set(change.section, group);
@@ -425,11 +445,11 @@ export const AgentChangeDigest = ({
         type="button"
         className="flex w-full cursor-pointer items-center gap-1 rounded-sm bg-transparent px-1 py-0.5 text-left text-2xs font-bold text-muted hover:bg-surface hover:text-accent [&>svg]:size-3"
         aria-expanded={isExpanded}
-        onClick={() => setIsExpanded((value) => !value)}
+        onClick={() => setExpandedChoice(!isExpanded)}
       >
         <Icon icon={CHEVRON_RIGHT_ICON} />
-        {changes.length} change{changes.length === 1 ? "" : "s"} across{" "}
-        {sections.size} location{sections.size === 1 ? "" : "s"}
+        {available.length} change{available.length === 1 ? "" : "s"} across{" "}
+        {sections.size} slide{sections.size === 1 ? "" : "s"}
       </button>
       {isExpanded ? (
         <div className="min-w-0 overflow-hidden rounded-md border border-edge bg-paper">
@@ -442,25 +462,75 @@ export const AgentChangeDigest = ({
                   {entries.length}
                 </span>
               </div>
-              {entries.map((entry, index) => (
-                <div
-                  key={`${entry.status}-${entry.label}-${index}`}
-                  className="border-t border-edge/60 px-6 py-1 text-xs font-medium text-ink [overflow-wrap:anywhere]"
+              {entries.map((entry) => (
+                <button
+                  type="button"
+                  key={entry.placeId}
+                  className="flex w-full cursor-pointer items-baseline gap-2 border-0 border-t border-edge bg-transparent px-6 py-1 text-left text-xs font-medium text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-accent aria-current:bg-accent-soft aria-current:text-accent"
+                  aria-current={
+                    activePlaceId === entry.placeId ? "step" : undefined
+                  }
+                  onClick={() =>
+                    openTour({
+                      diff,
+                      placeIds: available.map((place) => place.placeId),
+                      startPlaceId: entry.placeId,
+                      isSuperseded,
+                    })
+                  }
                 >
-                  {entry.label}
-                </div>
+                  <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                    {entry.label}
+                  </span>
+                  <em className="shrink-0 text-2xs font-normal text-muted">
+                    {entry.note}
+                  </em>
+                </button>
               ))}
             </div>
           ))}
         </div>
       ) : null}
+      {spilloverCount === undefined || spilloverCount === 0 ? null : (
+        <p className="m-0 text-2xs text-muted">
+          {spilloverCount} other change{spilloverCount === 1 ? "" : "s"}{" "}
+          elsewhere in this snapshot
+        </p>
+      )}
       <button
         type="button"
-        className="w-fit rounded-md border border-edge bg-paper px-2 py-1 text-2xs font-semibold text-accent hover:border-accent hover:bg-surface"
-        onClick={() => setIsExpanded((value) => !value)}
+        className="w-fit rounded-md border border-edge bg-paper px-2 py-1 text-2xs font-semibold text-accent hover:border-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent"
+        onClick={() => {
+          if (isActive) {
+            closeTour();
+            return;
+          }
+          openTour({
+            diff,
+            placeIds: available.map((place) => place.placeId),
+            isSuperseded,
+          });
+        }}
       >
-        {isExpanded ? "Hide changes" : "See changes"}
+        {isActive
+          ? available.length === 1
+            ? "Hide the change"
+            : "Hide changes"
+          : actionLabel ??
+            (available.length === 1
+              ? "See the change"
+              : `See changes (${available.length})`)}
       </button>
+      {historicalPlace === undefined ? null : (
+        <div data-review-historical-diff="">
+          <DiffLensContent
+            diff={diff}
+            place={historicalPlace}
+            isHistorical
+            isSuperseded={isSuperseded === true}
+          />
+        </div>
+      )}
     </div>
   );
 };

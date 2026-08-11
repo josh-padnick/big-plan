@@ -12,7 +12,7 @@ import {
 describe("review wire contract", () => {
   it("should round-trip a server agent snapshot into the browser projection", () => {
     const encoded = encodeAgentSnapshot({
-      sourceRevision: "a".repeat(16),
+      currentSnapshot: "a".repeat(16),
       presence: {
         connected: true,
         state: "working",
@@ -22,7 +22,7 @@ describe("review wire contract", () => {
       requests: [
         {
           requestId: "1".repeat(16),
-          sourceRevision: "a".repeat(16),
+          premiseSnapshot: "a".repeat(16),
           createdAt: "2026-08-10T12:00:00.000Z",
           kind: "feedback",
           comments: [
@@ -30,6 +30,7 @@ describe("review wire contract", () => {
               id: "comment-1",
               body: "Clarify this section",
               createdAt: "2026-08-10T12:00:00.000Z",
+              premiseSnapshot: "a".repeat(16),
               target: {
                 type: "block",
                 blockId: "slide-2",
@@ -56,7 +57,7 @@ describe("review wire contract", () => {
     });
 
     expect(decodeAgentSnapshot(encoded)).toMatchObject({
-      sourceRevision: "a".repeat(16),
+      currentSnapshot: "a".repeat(16),
       presence: { connected: true, state: "working" },
       requests: [
         {

@@ -31,9 +31,20 @@ const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
 ]);
 
 const NOW = "2026-07-31T00:00:00.000Z";
+const PREMISE = "1111111111111111";
 
 const validate = (value: unknown) =>
-  validateComments({ value, blocks: BLOCKS, now: NOW });
+  validateComments({
+    value: Array.isArray(value)
+      ? value.map((entry) =>
+          typeof entry === "object" && entry !== null && !Array.isArray(entry)
+            ? { premiseSnapshot: PREMISE, ...entry }
+            : entry,
+        )
+      : value,
+    blocks: BLOCKS,
+    now: NOW,
+  });
 
 const commentOn = (target: unknown) => [
   { id: "aabbccdd", body: "A note.", createdAt: NOW, target },
@@ -46,6 +57,7 @@ describe("validateComments acceptance", () => {
         id: "aabbccdd",
         body: "A note.",
         createdAt: NOW,
+        premiseSnapshot: PREMISE,
         target: { type: "document" },
       },
     ]);

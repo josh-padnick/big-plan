@@ -8,8 +8,8 @@ import type { ReviewComment } from "./comment.js";
 import type { ProgressStepCode } from "./progress-code.js";
 
 export type ThreadRequest = CancelableRequest & {
-  readonly sourceRevision: string;
-  readonly claimedFromRevision?: string;
+  readonly premiseSnapshot: string;
+  readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly createdAt: string;
   readonly kind: "feedback" | "reply" | "chat";
@@ -21,14 +21,14 @@ export type ThreadRequest = CancelableRequest & {
 
 export type ThreadOutcome = {
   readonly commentId: string;
-  readonly state: "changed" | "question" | "outside";
+  readonly state: "answered" | "changed" | "needs-input" | "declined";
   readonly message: string;
   readonly changeTargets?: ReadonlyArray<string>;
 };
 
 export type ThreadResponse = {
   readonly requestId: string;
-  readonly sourceRevision: string;
+  readonly resultSnapshot: string;
   readonly createdAt: string;
   readonly kind: "feedback" | "reply" | "chat";
   readonly outcomes?: ReadonlyArray<ThreadOutcome>;
@@ -66,7 +66,7 @@ export type ProjectedThreadExchange<
   readonly activity: ReadonlyArray<ThreadProgress>;
   readonly status: AgentStatus;
   readonly canceled: boolean;
-  readonly baselineRevision: string;
+  readonly baselineSnapshot: string;
 };
 
 export type CommentThreadProjection<
@@ -216,7 +216,7 @@ export const projectCommentThread = <
           request,
           pendingRequestIds: cancelPendingRequestIds,
         }),
-        baselineRevision: request.claimedFromRevision ?? request.sourceRevision,
+        baselineSnapshot: request.baselineSnapshot ?? request.premiseSnapshot,
       };
     });
   const latestExchange = exchanges.at(-1);
@@ -232,7 +232,7 @@ export const projectCommentThread = <
     latestExchange.response === undefined &&
     !latestExchange.canceled;
   const group: ThreadGroup =
-    latestExchange?.outcome?.state === "question"
+    latestExchange?.outcome?.state === "needs-input"
       ? "needs-input"
       : latestExchange?.outcome !== undefined
         ? "ready"

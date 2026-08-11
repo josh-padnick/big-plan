@@ -22,12 +22,12 @@ import {
   readAgentPresence,
   readProgress,
   readResolvedCommentIds,
-  readRevisionSnapshot,
+  readSnapshot,
   reviewStoreFor,
   writeActiveDraft,
   writeAgentHeartbeat,
   writeResolvedCommentIds,
-  writeRevisionSnapshot,
+  writeSnapshot,
   writeSessionHeartbeatValue,
   withReviewStoreLock,
 } from "./store.js";
@@ -68,7 +68,7 @@ describe("review store placement", () => {
       store.agentResponseDirectory,
       store.agentDraftDirectory,
       store.agentPromptPath,
-      store.revisionDirectory,
+      store.snapshotDirectory,
       store.draftsPath,
       store.activeDraftPath,
       store.sentPath,
@@ -182,12 +182,10 @@ describe("review store revision history", () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
-    const revision = "1111111111111111";
-    await writeRevisionSnapshot({ store, revision, source: "# First\n" });
-    await writeRevisionSnapshot({ store, revision, source: "# Second\n" });
-    await expect(readRevisionSnapshot({ store, revision })).resolves.toBe(
-      "# First\n",
-    );
+    const snapshot = "1111111111111111";
+    await writeSnapshot({ store, snapshot, source: "# First\n" });
+    await writeSnapshot({ store, snapshot, source: "# Second\n" });
+    await expect(readSnapshot({ store, snapshot })).resolves.toBe("# First\n");
   });
 
   it("should persist resolved threads independently of browser storage", async () => {

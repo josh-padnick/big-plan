@@ -1,0 +1,44 @@
+# Causal Diff Gallery
+
+Make every meaningful agent change reviewable at its original place and long after later edits.
+
+## What this experience does
+
+This is a causal diff review experience: it shows reviewers the exact Was and Now content beside each place an agent changed, and ties each change back to the feedback that caused it.
+
+- Thread answers carry only the changes caused by that feedback.
+- Chat answers carry a grouped, plan-wide change digest.
+- Historical answers preserve their claim-time baseline and result snapshots.
+- A guided tour moves through every changed place without losing context.
+
+> **Review note:** verify the causal boundary, the in-place lens, and the historical state.
+
+## Contrato de entrega
+
+*Cada respuesta incluye la evidencia que dio lugar al resultado declarado.*
+
+| Dónde la ven los revisores | Evidencia mostrada |
+| -------------------------- | ------------------ |
+| Hilo de comentarios | Diferencia Antes/Ahora atribuida a esos comentarios |
+| Chat sobre todo el plan | Resumen agrupado de cambios y recorrido guiado |
+| Plan actual | Fuente actual y diferencias históricas |
+| Comentarios sobre una versión anterior del plan | Indicador de obsolescencia y diferencia entre la premisa y el estado actual |
+
+```ts
+type Outcome = "answered" | "changed" | "needs-input" | "declined";
+
+type SnapshotExchange = {
+  premiseSnapshot: string;
+  baselineSnapshot?: string;
+  resultSnapshot: string;
+};
+```
+
+## Rollout
+
+The first release enables the full experience for every local reviewer.
+
+1. Capture the premise when feedback is authored.
+2. Freeze the baseline when the agent claims the request.
+3. Attach the result snapshot to the answer.
+4. Tour grouped changed places in the live document.

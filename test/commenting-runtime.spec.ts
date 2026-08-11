@@ -1,25 +1,27 @@
 // Critical browser journey for the local review runtime behind the React
 // commenting chrome: server-backed restoration and one real feedback handoff.
 
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   commentsFromExchange,
-  deriveSourceRevision,
+  deriveSnapshotDigest,
   nextPendingAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
 } from "../src/review/agent-exchange.js";
-import { diffRevisions } from "../src/review/revision-diff.js";
 import {
   appendProgressEvent,
   claimAgentRequest,
   publishAgentResponse,
 } from "../src/review/request-mailbox.js";
+import { diffSnapshots } from "../src/review/snapshot-diff.js";
 import { startReviewRuntime } from "../src/review/server.js";
 import {
   reviewStoreFor,
   writeAgentHeartbeat,
-  writeRevisionSnapshot,
+  writeSnapshot,
 } from "../src/review/store.js";
 import { renderDocument } from "../src/render/render-document.js";
 import { expect, stageComment, test } from "./fixtures";
@@ -134,7 +136,7 @@ test("should restore and submit staged comments through the local review runtime
       })
       .first(),
   ).toBeVisible();
-  await expect(blockedSummary.first()).toContainText("QUEUED");
+  await expect(blockedSummary.first()).toContainText("Queued");
   await expect(blockedSummary.first()).not.toContainText(
     "BLOCKED - NO AGENT CONNECTED",
   );
@@ -406,6 +408,29 @@ test("should restore and submit staged comments through the local review runtime
   await expect(firstWorkingThread).toContainText(
     "Reviewing the shared feedback batch",
   );
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const cards = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            "[data-review-thread-side] > :first-child",
+          ),
+        ).filter((card) => card.getBoundingClientRect().height > 0);
+        return cards.flatMap((card, index) => {
+          const rect = card.getBoundingClientRect();
+          return cards.slice(index + 1).flatMap((other) => {
+            const otherRect = other.getBoundingClientRect();
+            const overlaps =
+              rect.left < otherRect.right &&
+              rect.right > otherRect.left &&
+              rect.top < otherRect.bottom &&
+              rect.bottom > otherRect.top;
+            return overlaps ? [`${index}`] : [];
+          });
+        });
+      }),
+    )
+    .toEqual([]);
   await firstWorkingThread
     .getByRole("button", { name: "Minimize thread" })
     .click();
@@ -444,7 +469,7 @@ test("should restore and submit staged comments through the local review runtime
     fallbackTitle: "Review persistence",
     identity: {},
   });
-  const locations = diffRevisions({
+  const locations = diffSnapshots({
     before: before.blocks,
     after: after.blocks,
   });
@@ -457,16 +482,16 @@ test("should restore and submit staged comments through the local review runtime
   if (changeTarget === undefined) {
     throw new Error("The simulated rewrite produced no changed target");
   }
-  const revision = deriveSourceRevision(afterSource);
-  await writeRevisionSnapshot({
+  const resultSnapshot = deriveSnapshotDigest(afterSource);
+  await writeSnapshot({
     store,
-    revision,
+    snapshot: resultSnapshot,
     source: afterSource,
   });
   const claimed = await claimAgentRequest({
     store,
     requestId: request.requestId,
-    sourceRevision: request.sourceRevision,
+    baselineSnapshot: request.premiseSnapshot,
     now: new Date().toISOString(),
   });
   await publishAgentResponse({
@@ -484,7 +509,7 @@ test("should restore and submit staged comments through the local review runtime
       request: claimed,
       commentsById: commentsFromExchange(exchange),
       changedBlocks,
-      currentRevision: revision,
+      currentSnapshot: resultSnapshot,
       now: new Date().toISOString(),
     }),
   });
@@ -520,7 +545,6 @@ test("should restore and submit staged comments through the local review runtime
   await expect(kernel).toContainText(
     "Removed the ambiguous promise and tightened delivery.",
   );
-  await expect(kernel).toContainText("A revised plan is ready.");
   const changedNextStepLabels = await sentThread
     .locator("[data-review-thread-next-steps] button")
     .evaluateAll((buttons) =>
@@ -531,8 +555,30 @@ test("should restore and submit staged comments through the local review runtime
     "Revert agent changes",
     "Resolve comment",
   ]);
-  await kernel.getByRole("button", { name: "See changes" }).click();
+  await kernel
+    .getByRole("button", { name: /See (?:the change|changes)/u })
+    .click();
+  await expect(page.locator("[data-review-diff-lens]")).toContainText(
+    "What changed",
+  );
+  await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+    "Change 1 of",
+  );
   await expect(kernel).toContainText("atomically");
+  const hideChange = sentThread.getByRole("button", {
+    name: "Hide the change",
+  });
+  await expect(hideChange).toBeVisible();
+  await hideChange.click();
+  await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+  await sentThread.getByRole("button", { name: "See the change" }).click();
+  await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
+  await page.getByRole("button", { name: "Show current text" }).click();
+  await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+  await page.getByRole("button", { name: "Show changes" }).click();
+  await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
   const resolve = sentThread
     .getByRole("button", { name: "Resolve comment" })
     .first();
@@ -555,7 +601,7 @@ test("should restore and submit staged comments through the local review runtime
   const contextualThread = page
     .locator("[data-review-thread-side] [data-review-sent-thread]")
     .filter({ hasText: "Clarify the failure boundary." });
-  await expect(contextualThread).toContainText("READY FOR REVIEW");
+  await expect(contextualThread).toContainText("Ready for review");
   await expect(contextualThread).toContainText("Clarify the failure boundary.");
   await expect(contextualThread.locator(".review-sent-target")).toHaveCount(0);
   const contextualActions = contextualThread.locator(":scope > div");
@@ -676,6 +722,134 @@ test("should restore and submit staged comments through the local review runtime
   );
   await page.unroute("**/api/agent");
   await writeFile(session.plan, beforeSource, "utf8");
+});
+
+test("should preview stale, historical, and multi-place causal diffs through the real pipeline", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-diff-preview-"));
+  const planPath = join(directory, "gallery.mdx");
+  const before = await readFile(
+    new URL("../examples/diff-gallery-before.mdx", import.meta.url),
+    "utf8",
+  );
+  const after = await readFile(
+    new URL("../examples/diff-gallery-after.mdx", import.meta.url),
+    "utf8",
+  );
+  await writeFile(planPath, after);
+  const runtime = await startReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    const codeFigure = page.locator(".code-figure").last();
+    await expect(
+      codeFigure.getByRole("button", { name: /Comment on/u }),
+    ).toBeVisible();
+    const codeChrome = await codeFigure.evaluate((figure) => {
+      const body = figure.querySelector(":scope > pre");
+      const controls = Array.from(
+        figure.querySelectorAll<HTMLElement>(
+          ".figure-control, .review-toolbar-comment",
+        ),
+      );
+      if (!(body instanceof HTMLElement) || controls.length !== 3) {
+        throw new Error("The causal preview code chrome was not rendered");
+      }
+      const bodyRect = body.getBoundingClientRect();
+      const controlRects = controls.map((control) =>
+        control.getBoundingClientRect(),
+      );
+      return {
+        bodyRight: bodyRect.right,
+        controlsRight: Math.max(...controlRects.map((rect) => rect.right)),
+        controlRows: new Set(controlRects.map((rect) => Math.round(rect.top)))
+          .size,
+        labels: controls.map((control) => control.getAttribute("aria-label")),
+        gaps: controlRects.slice(1).map((rect, index) =>
+          Math.round(rect.left - (controlRects[index]?.right ?? rect.left)),
+        ),
+      };
+    });
+    expect
+      .soft(codeChrome.controlsRight)
+      .toBeLessThanOrEqual(codeChrome.bodyRight);
+    expect.soft(codeChrome.controlRows).toBe(1);
+    expect(codeChrome.labels).toEqual([
+      "Copy code",
+      expect.stringMatching(/^Comment on /u),
+      "Maximize code",
+    ]);
+    expect(codeChrome.gaps).toEqual([4, 4]);
+    await expect(page.locator("[data-review-diff-preview]")).toContainText(
+      "Temporary diff preview",
+    );
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await expect(rail).toContainText("Text changed since you commented");
+    await rail.getByRole("button", { name: "See what changed" }).click();
+    await expect(page.locator("[data-review-diff-lens]")).toContainText(
+      "What changed",
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const lens = document.querySelector<HTMLElement>(
+            "[data-review-diff-lens]",
+          );
+          if (lens === null) return ["missing diff lens"];
+          const lensRect = lens.getBoundingClientRect();
+          return Array.from(
+            document.querySelectorAll<HTMLElement>("[data-review-thread-for]"),
+          ).flatMap((thread) => {
+            const threadRect = thread.getBoundingClientRect();
+            const overlaps =
+              threadRect.left < lensRect.right &&
+              threadRect.right > lensRect.left &&
+              threadRect.top < lensRect.bottom &&
+              threadRect.bottom > lensRect.top;
+            return overlaps ? [thread.dataset.reviewThreadFor ?? "thread"] : [];
+          });
+        }),
+      )
+      .toEqual([]);
+    await page.keyboard.press("Escape");
+
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    const planWideDigest = rail.getByRole("button", {
+      name: /\d+ changes across \d+ slides/u,
+    });
+    await expect(planWideDigest).toBeVisible();
+    await rail.getByRole("button", { name: "See the change" }).click();
+    await expect(
+      rail.getByRole("region", { name: "Historical change" }),
+    ).toContainText("Retired experiment");
+    await page.screenshot({
+      path: testInfo.outputPath("historical-change.png"),
+    });
+    await page.keyboard.press("Escape");
+
+    const planWideChangeCount = Number.parseInt(
+      (await planWideDigest.textContent()) ?? "0",
+      10,
+    );
+    await rail
+      .getByRole("button", { name: /See changes \(\d+\)/u })
+      .click();
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      `Change 1 of ${planWideChangeCount}`,
+    );
+    await page.getByRole("button", { name: "Next change" }).click();
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      `Change 2 of ${planWideChangeCount}`,
+    );
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("should mark a superseded review as read-only and link to its replacement", async ({

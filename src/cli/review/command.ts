@@ -4,6 +4,8 @@
 // and progress can work - so it returns the address and then stays listening
 // until the reviewer stops it.
 
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { AxiError } from "axi-sdk-js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
@@ -15,14 +17,18 @@ import { startReviewRuntime } from "../../review/server.js";
 import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { renderDocument } from "../../render/render-document.js";
 
-const USAGE = "Usage: big-plan review <input.mdx>";
+const USAGE = "Usage: big-plan review <input.mdx> [--diff-preview]";
 
 /** Serves one plan for interactive review on loopback. */
 export const reviewCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
+  // Temporary development chrome: keep the product contract independent of
+  // this gallery seed so the flag can disappear without a migration.
+  const diffPreview = args.includes("--diff-preview");
+  const positionalArgs = args.filter((arg) => arg !== "--diff-preview");
   const { inputPath } = parseInputCommandArguments({
-    args,
+    args: positionalArgs,
     usage: USAGE,
     maximumArguments: 1,
   });
@@ -39,7 +45,22 @@ export const reviewCommand = async (
 
   let runtime;
   try {
-    runtime = await startReviewRuntime({ planPath: inputPath });
+    runtime = await startReviewRuntime({
+      planPath: inputPath,
+      ...(diffPreview
+        ? {
+            diffPreviewSource: await readFile(
+              fileURLToPath(
+                new URL(
+                  "../../../examples/diff-gallery-before.mdx",
+                  import.meta.url,
+                ),
+              ),
+              "utf8",
+            ),
+          }
+        : {}),
+    });
   } catch (error: unknown) {
     throw new AxiError(
       `Cannot start the review runtime: ${String(error)}`,
@@ -72,6 +93,9 @@ export const reviewCommand = async (
     feedback: runtime.store.feedbackDirectory,
     help: [
       ...warnings,
+      ...(diffPreview
+        ? ["Temporary diff preview is active with a synthetic answered request"]
+        : []),
       `Open ${runtime.url} in your browser to review and comment`,
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
       `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,

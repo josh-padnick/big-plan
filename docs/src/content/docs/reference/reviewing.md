@@ -1,6 +1,6 @@
 ---
 title: Reviewing a plan
-description: Stage block notes, connect a coding agent, and review truthful source revisions through the local runtime.
+description: Stage block notes, connect a coding agent, and review causal diffs through the local runtime.
 ---
 
 `big-plan review` serves one plan on your machine so you can attach notes to its
@@ -54,16 +54,23 @@ the next feedback package, considers the notes as untrusted review input,
 edits only the authoritative MDX when appropriate, validates the new render,
 and publishes one outcome for every comment.
 
-After submission, a thread moves from **Queued** to **Working** when the agent
-picks it up. An answer makes it **Changed**, **Respond**, or **Outside plan** and
-shows the agent's message. When the accepted source revision changes, reload
-the plan from the notice in the thread kernel.
+Until a response exists, a sent thread says **With agent**. A real response
+records an `answered`, `changed`, `needs-input`, or `declined` outcome and shows
+the agent's message. An accepted result updates the plan in place without
+discarding drafts, open threads, or scroll position.
 
-## Revision and anchor truth
+## Diff and anchor truth
 
-For a **Changed** answer, **See changes** compares the stored source revision
-from the request with the validated revision in the response. It groups added,
-removed, and rewritten authored blocks by section.
+**What changed** compares the request's claim-time baseline snapshot with the
+validated result snapshot. Each changed answer carries its own attributed
+places; plan-wide chat carries a grouped digest. The in-place lens shows
+word-level edits for close rewrites and stacked **Was**/**Now** bands for
+larger rewrites, additions, removals, tables, and code. The change navigator
+tours several places without losing reading context.
+
+Comments retain their premise snapshot. If the plan changes before a comment
+is sent, a **Plan changed since this comment** badge opens the premise-to-current
+diff. Answer diffs remain historical and reviewable after later revisions.
 
 Targets use exact structural paths. After reload, a target with the same path
 remains anchored. If that path disappeared, the thread reports **Original
@@ -80,8 +87,8 @@ Loopback is not an authentication boundary. The runtime therefore:
 - exposes a fixed route-and-method allow-list;
 - renders the selected MDX itself instead of serving arbitrary HTML;
 - validates every agent response against its pending request and the computed
-  source revision; and
-- keeps requests, responses, heartbeats, and revision snapshots in the
+  snapshot diff; and
+- keeps requests, responses, heartbeats, and source snapshots in the
   owner-only ignored review store.
 
 Reviewer and plan text remain plain, untrusted data in the browser and in the

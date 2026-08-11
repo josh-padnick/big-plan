@@ -3,8 +3,13 @@
 
 import { createRoot } from "react-dom/client";
 import { ReviewController } from "./review-controller.browser.js";
+import { DiffTourProvider } from "./diff-tour.browser.js";
 
 const mount = document.createElement("div");
 mount.id = "big-plan-review-root";
 document.body.append(mount);
-createRoot(mount).render(<ReviewController />);
+createRoot(mount).render(
+  <DiffTourProvider>
+    <ReviewController />
+  </DiffTourProvider>,
+);

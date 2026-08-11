@@ -14,6 +14,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { ACTIVITY_ICON } from "../../icons/lucide/activity.js";
+import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
+import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { MESSAGES_SQUARE_ICON } from "../../icons/lucide/messages-square.js";
 import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
@@ -25,6 +27,7 @@ import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
+import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
   deriveAgentHealthLabel,
   deriveAgentStatus,
@@ -58,7 +61,7 @@ import {
 } from "../shared/thread-projection.js";
 import {
   decodeAgentSnapshot as parseAgentSnapshot,
-  decodeDiffLocations as parseDiffLocations,
+  decodeSnapshotDiff as parseSnapshotDiff,
   decodeProgress as parseProgress,
   decodeReviewSnapshot as parseSnapshot,
   decodeRuntimeSession as parseRuntimeSession,
@@ -68,7 +71,7 @@ import {
   type AgentRequest,
   type AgentResponse,
   type AgentSnapshot,
-  type DiffLocation,
+  type SnapshotDiff,
   type ProgressEvent,
   type RuntimeSession,
 } from "../shared/review-wire.js";
@@ -332,16 +335,27 @@ const runtimeIdentity = (): RuntimeIdentity | null => {
     : { planId, sessionId, token };
 };
 
-const bootstrapSourceRevision = (): string => {
+const bootstrapSnapshot = (): string => {
   try {
     const value: unknown = JSON.parse(
       rootElement.getAttribute("data-review-bootstrap") ?? "{}",
     );
-    return isRecord(value) && typeof value.sourceRevision === "string"
-      ? value.sourceRevision
+    return isRecord(value) && typeof value.currentSnapshot === "string"
+      ? value.currentSnapshot
       : "";
   } catch {
     return "";
+  }
+};
+
+const bootstrapDiffPreview = (): boolean => {
+  try {
+    const value: unknown = JSON.parse(
+      rootElement.getAttribute("data-review-bootstrap") ?? "{}",
+    );
+    return isRecord(value) && value.diffPreview === true;
+  } catch {
+    return false;
   }
 };
 
@@ -1019,17 +1033,27 @@ const useThreadHosts = (
       const feedbackRailWidth = isOpen ? Math.min(22 * 16, viewportWidth) : 0;
       const threadTopInset = 12;
       const threadWidth = 17 * 16;
+      const diffThreadGap = 12;
       const positionItems: Array<{
         readonly id: string;
         readonly desiredTop: number;
         readonly height: number;
       }> = [];
       const anchorRects = new Map<string, DOMRect>();
+      const threadHeights = new Map<string, number>();
+      const diffAnchors = new Set<string>();
       for (const comment of comments) {
         const host = mounted.get(comment.id);
         const target = targetElement(comment.target);
         if (host === undefined || target === null) continue;
+        const previous = target.previousElementSibling;
+        const diffAnchor =
+          previous instanceof HTMLElement &&
+          previous.dataset.reviewDiffLensHost !== undefined
+            ? previous
+            : null;
         const anchor =
+          diffAnchor ??
           target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
           target;
         const anchorRect = anchor.getBoundingClientRect();
@@ -1049,7 +1073,12 @@ const useThreadHosts = (
           height: cardHeight,
         });
         anchorRects.set(comment.id, anchorRect);
+        threadHeights.set(comment.id, cardHeight);
+        if (diffAnchor !== null) diffAnchors.add(comment.id);
       }
+      const activeLensRect = document
+        .querySelector<HTMLElement>("[data-review-diff-lens]")
+        ?.getBoundingClientRect();
       for (const { id, top } of stackThreadPositions({
         items: positionItems,
         gap: 8,
@@ -1058,27 +1087,69 @@ const useThreadHosts = (
         const anchorRect = anchorRects.get(id);
         if (host === undefined || anchorRect === undefined) continue;
         host.style.top = `${top}px`;
-        host.style.left = `${Math.max(
-          edge + window.scrollX,
-          Math.min(
-            anchorRect.right + window.scrollX - 12,
-            window.scrollX +
-              viewportWidth -
-              feedbackRailWidth -
-              threadWidth -
-              edge,
-          ),
-        )}px`;
+        const minimumLeft = edge + window.scrollX;
+        const maximumLeft =
+          window.scrollX +
+          viewportWidth -
+          feedbackRailWidth -
+          threadWidth -
+          edge;
+        const height = threadHeights.get(id) ?? 1;
+        const overlapsActiveLens =
+          activeLensRect !== undefined &&
+          top < activeLensRect.bottom + window.scrollY &&
+          top + height > activeLensRect.top + window.scrollY;
+        const obstacleRect = overlapsActiveLens
+          ? activeLensRect
+          : diffAnchors.has(id)
+            ? anchorRect
+            : null;
+        if (obstacleRect !== null) {
+          const right = obstacleRect.right + window.scrollX + diffThreadGap;
+          const left =
+            obstacleRect.left + window.scrollX - threadWidth - diffThreadGap;
+          host.style.left = `${
+            right <= maximumLeft
+              ? right
+              : left >= minimumLeft
+                ? left
+                : Math.max(
+                    minimumLeft,
+                    Math.min(
+                      anchorRect.right + window.scrollX - 12,
+                      maximumLeft,
+                    ),
+                  )
+          }px`;
+        } else {
+          host.style.left = `${Math.max(
+            minimumLeft,
+            Math.min(anchorRect.right + window.scrollX - 12, maximumLeft),
+          )}px`;
+        }
       }
     };
     const frame = requestAnimationFrame(position);
     const observer = new ResizeObserver(position);
     for (const host of mounted.values()) observer.observe(host);
+    for (const comment of comments) {
+      const target = targetElement(comment.target);
+      if (target !== null) observer.observe(target);
+    }
     window.addEventListener("resize", position, { passive: true });
+    const mutations = new MutationObserver(() => {
+      const lens = document.querySelector<HTMLElement>(
+        "[data-review-diff-lens]",
+      );
+      if (lens !== null) observer.observe(lens);
+      position();
+    });
+    mutations.observe(document.body, { childList: true, subtree: true });
     setHosts(mounted);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      mutations.disconnect();
       window.removeEventListener("resize", position);
       for (const host of mounted.values()) host.remove();
     };
@@ -1279,7 +1350,6 @@ const ContextualCommentSummary = ({
   statusIcon,
   statusIconLabel,
   statusSpinner = false,
-  statusTone = "secondary",
   statusClassName = "",
   body,
   associated,
@@ -1294,7 +1364,6 @@ const ContextualCommentSummary = ({
   readonly statusIcon?: LucideIcon;
   readonly statusIconLabel?: string;
   readonly statusSpinner?: boolean;
-  readonly statusTone?: "annotation" | "secondary";
   readonly statusClassName?: string;
   readonly body: string;
   readonly associated: boolean;
@@ -1323,36 +1392,21 @@ const ContextualCommentSummary = ({
     data-review-sent-thread={threadGroup}
     data-review-comment-id={commentId}
   >
-    {statusIcon === undefined ? null : (
-      <span
-        role="img"
-        aria-label={statusIconLabel ?? status}
-        className="inline-flex size-5 shrink-0 items-center justify-center text-[var(--callout-warning-c)] [&>svg]:size-3.5"
-      >
-        <Icon icon={statusIcon} />
-      </span>
-    )}
-    {statusSpinner ? (
-      <span
-        className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--callout-note-bg)] px-1.5 py-0.5 text-2xs font-semibold text-[var(--callout-note-c)] ${statusClassName}`}
-        aria-label={status}
-      >
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs font-semibold normal-case [&>svg]:size-3 ${statusClassName}`}
+      role={statusIcon === undefined && !statusSpinner ? undefined : "img"}
+      aria-label={statusIconLabel ?? status}
+    >
+      {statusSpinner ? (
         <span
           className="inline-block size-2.5 animate-spin rounded-full border-[1.5px] border-current border-r-transparent motion-reduce:animate-none"
           aria-hidden="true"
         />
-        {status}
-      </span>
-    ) : (
-      <Badge
-        size="compact"
-        shape="badge"
-        tone={statusTone}
-        className={`shrink-0 leading-normal tracking-caps ${statusClassName}`}
-      >
-        {status.toUpperCase()}
-      </Badge>
-    )}
+      ) : statusIcon === undefined ? null : (
+        <Icon icon={statusIcon} />
+      )}
+      {status}
+    </span>
     <button
       type="button"
       className="min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 text-left text-xs text-ink hover:underline hover:underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
@@ -1382,6 +1436,9 @@ const StagedCard = ({
   onJump,
   onSubmit,
   onAssociate,
+  identity,
+  currentSnapshot,
+  onStatus,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -1396,6 +1453,9 @@ const StagedCard = ({
   readonly onJump: () => void;
   readonly onSubmit: () => void;
   readonly onAssociate: (target: CommentTarget | null) => void;
+  readonly identity: RuntimeIdentity | null;
+  readonly currentSnapshot: string;
+  readonly onStatus: (message: string) => void;
 }) => {
   const setAssociated = (active: boolean) => {
     onAssociate(active ? comment.target : null);
@@ -1417,7 +1477,8 @@ const StagedCard = ({
       <ContextualCommentSummary
         className={`review-staged-collapsed-${surface}`}
         status="Staged"
-        statusTone="annotation"
+        statusIcon={PENCIL_ICON}
+        statusClassName="bg-[var(--annotation-bg)] text-[var(--annotation-c)]"
         body={comment.body}
         associated={associated}
         onExpand={() => onCollapse?.()}
@@ -1538,6 +1599,12 @@ const StagedCard = ({
             <MarkdownBody
               body={visibleBody}
               className={`review-staged-body [overflow-wrap:anywhere] text-sm text-ink [&_p]:m-0 [&_p+p]:mt-2 ${expanded ? "" : "line-clamp-3"}`}
+            />
+            <StalePremiseNotice
+              comment={comment}
+              identity={identity}
+              currentSnapshot={currentSnapshot}
+              onStatus={onStatus}
             />
             {long && !expanded ? (
               <button
@@ -1669,6 +1736,12 @@ const StagedCard = ({
             body={visibleBody}
             className="review-staged-body mt-2 [overflow-wrap:anywhere] text-xs text-ink [&_p]:m-0 [&_p+p]:mt-2"
           />
+          <StalePremiseNotice
+            comment={comment}
+            identity={identity}
+            currentSnapshot={currentSnapshot}
+            onStatus={onStatus}
+          />
           <p className="mt-2 mb-0 text-xs text-muted">
             <time dateTime={comment.createdAt}>
               {threadTime(comment.createdAt)}
@@ -1696,6 +1769,137 @@ const StagedCard = ({
   );
 };
 
+const ChangeAttachment = ({
+  identity,
+  request,
+  response,
+  changeTargets,
+  currentSnapshot,
+  onStatus,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly request: AgentRequest;
+  readonly response: AgentResponse;
+  readonly changeTargets?: ReadonlyArray<string>;
+  readonly currentSnapshot: string;
+  readonly onStatus: (message: string) => void;
+}) => {
+  const [diff, setDiff] = useState<SnapshotDiff | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const load = useCallback(async () => {
+    if (isLoading || diff !== null) return;
+    setIsLoading(true);
+    try {
+      const value = await requestJson({
+        path: `/api/snapshot-diff?from=${encodeURIComponent(request.baselineSnapshot ?? request.premiseSnapshot)}&to=${encodeURIComponent(response.resultSnapshot)}`,
+        identity,
+      });
+      const parsed = parseSnapshotDiff(value);
+      if (parsed === null) throw new Error("The snapshot diff is unavailable");
+      setDiff(parsed);
+    } catch (error) {
+      onStatus(errorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [diff, identity, isLoading, onStatus, request, response]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const attributed =
+    diff === null || changeTargets === undefined
+      ? undefined
+      : attributeDiffPlaces({ diff, changeTargets });
+  return (
+    <AgentChangeDigest
+      diff={diff}
+      placeIds={attributed?.placeIds}
+      spilloverCount={attributed?.spilloverCount}
+      isSuperseded={
+        currentSnapshot !== "" && currentSnapshot !== response.resultSnapshot
+      }
+      isLoading={isLoading}
+      onLoad={() => void load()}
+    />
+  );
+};
+
+const StalePremiseNotice = ({
+  comment,
+  identity,
+  currentSnapshot,
+  onStatus,
+}: {
+  readonly comment: ReviewComment;
+  readonly identity: RuntimeIdentity | null;
+  readonly currentSnapshot: string;
+  readonly onStatus: (message: string) => void;
+}) => {
+  const [diff, setDiff] = useState<SnapshotDiff | null>(null);
+  const blockIds = useMemo(
+    () =>
+      comment.target.type === "document"
+        ? []
+        : [
+            comment.target.blockId,
+            ...(comment.target.type === "selection" &&
+            comment.target.endBlockId !== undefined
+              ? [comment.target.endBlockId]
+              : []),
+          ],
+    [comment.target],
+  );
+  useEffect(() => {
+    if (
+      identity === null ||
+      blockIds.length === 0 ||
+      comment.premiseSnapshot === currentSnapshot
+    ) {
+      setDiff(null);
+      return;
+    }
+    let current = true;
+    void requestJson({
+      path: `/api/snapshot-diff?from=${encodeURIComponent(comment.premiseSnapshot)}&to=${encodeURIComponent(currentSnapshot)}`,
+      identity,
+    })
+      .then((value) => {
+        const parsed = parseSnapshotDiff(value);
+        if (current && parsed !== null) setDiff(parsed);
+      })
+      .catch((error: unknown) => {
+        if (current) onStatus(errorMessage(error));
+      });
+    return () => {
+      current = false;
+    };
+  }, [blockIds, comment.premiseSnapshot, currentSnapshot, identity, onStatus]);
+  if (diff === null) return null;
+  const attributed = attributeDiffPlaces({ diff, changeTargets: blockIds });
+  if (attributed.placeIds.length === 0) return null;
+  return (
+    <div className="mt-2 rounded-md bg-[var(--callout-warning-bg)] p-2 text-[var(--callout-warning-ink)]">
+      <Badge
+        tone="secondary"
+        className="bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
+      >
+        Text changed since you commented
+      </Badge>
+      <p className="mt-1 mb-0 text-2xs">
+        The quoted text no longer matches the plan; the change may already
+        address this comment.
+      </p>
+      <AgentChangeDigest
+        diff={diff}
+        placeIds={attributed.placeIds}
+        isLoading={false}
+        onLoad={() => undefined}
+        actionLabel="See what changed"
+      />
+    </div>
+  );
+};
+
 const SentThread = ({
   comment,
   surface,
@@ -1713,6 +1917,7 @@ const SentThread = ({
   onShowAgent,
   onCancelRequest,
   onDeleteQueued,
+  currentSnapshot,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -1730,10 +1935,8 @@ const SentThread = ({
   readonly onShowAgent: () => void;
   readonly onCancelRequest: (requestId: string) => void;
   readonly onDeleteQueued: () => void;
+  readonly currentSnapshot: string;
 }) => {
-  const [locations, setLocations] =
-    useState<ReadonlyArray<DiffLocation> | null>(null);
-  const [diffError, setDiffError] = useState("");
   const [reply, setReply] = useState("");
   const [isReplying, setIsReplying] = useState(false);
   const {
@@ -1765,8 +1968,8 @@ const SentThread = ({
         : group === "ready"
           ? outcome?.state === "changed"
             ? "Changed"
-            : outcome?.state === "outside"
-              ? "Outside plan"
+            : outcome?.state === "declined"
+              ? "Declined"
               : "Ready"
           : group === "working"
             ? "Working"
@@ -1776,25 +1979,6 @@ const SentThread = ({
   const deleteCommentLabel = latestCanceled
     ? "Delete canceled comment"
     : "Delete queued comment";
-
-  const loadDiff = async () => {
-    if (
-      identity === null ||
-      latestChanged?.request === undefined ||
-      latestChanged.response === undefined
-    )
-      return;
-    try {
-      const value = await requestJson({
-        path: `/api/revision-diff?from=${encodeURIComponent(latestChanged.baselineRevision)}&to=${encodeURIComponent(latestChanged.response.sourceRevision)}`,
-        identity,
-      });
-      setLocations(parseDiffLocations(value));
-      setDiffError("");
-    } catch (error) {
-      setDiffError(errorMessage(error));
-    }
-  };
 
   const sendReply = async () => {
     const body = reply.trim();
@@ -1835,22 +2019,37 @@ const SentThread = ({
           }
           statusSpinner={group === "working"}
           statusIcon={
-            latestStatus?.stage === "blocked" ||
-            latestStatus?.stage === "offline"
+            resolved
+              ? CHECK_ICON
+              : latestStatus?.stage === "blocked" ||
+                  latestStatus?.stage === "offline"
               ? TRIANGLE_ALERT_ICON
-              : undefined
+              : latestCanceled
+                ? CIRCLE_X_ICON
+                : group === "ready"
+                  ? CHECK_ICON
+                  : group === "needs-input"
+                    ? MESSAGE_SQUARE_ICON
+                    : group === "working"
+                      ? undefined
+                      : HOURGLASS_ICON
           }
           statusIconLabel={latestStatus?.headline}
           statusClassName={
-            latestCanceled
-              ? ""
-              : group === "ready"
-                ? "bg-accent-soft text-accent"
-                : group === "needs-input"
-                  ? "bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
-                  : group === "working"
-                    ? "bg-[var(--callout-note-bg)] text-[var(--callout-note-c)]"
-                    : ""
+            resolved
+              ? "bg-surface text-muted"
+              : latestStatus?.stage === "blocked" ||
+                  latestStatus?.stage === "offline"
+                ? "bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
+                : latestCanceled
+                  ? "bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]"
+                  : group === "ready"
+                    ? "bg-accent-soft text-accent"
+                    : group === "needs-input"
+                      ? "bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
+                      : group === "working"
+                        ? "bg-[var(--callout-note-bg)] text-[var(--callout-note-c)]"
+                        : "bg-surface text-muted"
           }
           body={comment.body}
           associated={associated}
@@ -2100,14 +2299,13 @@ const SentThread = ({
                           : "Queued"
                       }
                     >
-                      {request.kind === "feedback" &&
-                      comment.target.type === "selection" &&
-                      response !== undefined &&
-                      response.sourceRevision !== request.sourceRevision ? (
-                        <blockquote className="mt-2 mb-0 border-l-2 border-[var(--annotation-c)] pl-2 text-xs text-muted">
-                          You commented on: “{comment.target.quote}” — this text
-                          was revised
-                        </blockquote>
+                      {response === undefined ? (
+                        <StalePremiseNotice
+                          comment={comment}
+                          identity={identity}
+                          currentSnapshot={currentSnapshot}
+                          onStatus={onReplySent}
+                        />
                       ) : null}
                     </MessageTurn>
                     {requestOutcome === undefined || response === undefined ? (
@@ -2142,13 +2340,35 @@ const SentThread = ({
                         body={requestOutcome.message}
                         createdAt={response.createdAt}
                       >
+                        <Badge
+                          tone={
+                            requestOutcome.state === "changed"
+                              ? "accent"
+                              : "secondary"
+                          }
+                          className={
+                            requestOutcome.state === "needs-input"
+                              ? "mt-2 bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
+                              : "mt-2"
+                          }
+                        >
+                          {requestOutcome.state === "answered"
+                            ? "Answered"
+                            : requestOutcome.state === "changed"
+                              ? "Changed"
+                              : requestOutcome.state === "needs-input"
+                                ? "Needs your answer"
+                                : "Declined"}
+                        </Badge>
                         {requestOutcome.state === "changed" &&
-                        response.requestId ===
-                          latestChanged?.response?.requestId ? (
-                          <AgentChangeDigest
-                            changes={locations}
-                            isLoading={false}
-                            onLoad={() => void loadDiff()}
+                        identity !== null ? (
+                          <ChangeAttachment
+                            identity={identity}
+                            request={request}
+                            response={response}
+                            changeTargets={requestOutcome.changeTargets}
+                            currentSnapshot={currentSnapshot}
+                            onStatus={onReplySent}
                           />
                         ) : null}
                       </MessageTurn>
@@ -2159,9 +2379,6 @@ const SentThread = ({
             )
           )}
         </div>
-        {diffError === "" ? null : (
-          <p className="mt-2 mb-0 text-xs text-danger">{diffError}</p>
-        )}
         {identity === null ? null : (
           <div className="mt-3 border-t border-edge pt-3">
             {latestExchange?.response === undefined ? null : (
@@ -2244,6 +2461,7 @@ const ChatExchange = ({
   onStatus,
   onShowAgent,
   onCancelRequest,
+  currentSnapshot,
 }: {
   readonly request: AgentRequest;
   readonly response: AgentResponse | undefined;
@@ -2253,29 +2471,12 @@ const ChatExchange = ({
   readonly onStatus: (message: string) => void;
   readonly onShowAgent: () => void;
   readonly onCancelRequest: (requestId: string) => void;
+  readonly currentSnapshot: string;
 }) => {
-  const [locations, setLocations] =
-    useState<ReadonlyArray<DiffLocation> | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const hasChanges =
     response !== undefined &&
-    (request.claimedFromRevision ?? request.sourceRevision) !==
-      response.sourceRevision;
-  const loadDiff = async () => {
-    if (response === undefined) return;
-    setIsLoading(true);
-    try {
-      const value = await requestJson({
-        path: `/api/revision-diff?from=${encodeURIComponent(request.claimedFromRevision ?? request.sourceRevision)}&to=${encodeURIComponent(response.sourceRevision)}`,
-        identity,
-      });
-      setLocations(parseDiffLocations(value));
-    } catch (error) {
-      onStatus(errorMessage(error));
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    (request.baselineSnapshot ?? request.premiseSnapshot) !==
+      response.resultSnapshot;
   return (
     <li className="grid min-w-0 gap-2">
       <MessageTurn
@@ -2307,10 +2508,12 @@ const ChatExchange = ({
           createdAt={response.createdAt}
         >
           {hasChanges ? (
-            <AgentChangeDigest
-              changes={locations}
-              isLoading={isLoading}
-              onLoad={() => void loadDiff()}
+            <ChangeAttachment
+              identity={identity}
+              request={request}
+              response={response}
+              currentSnapshot={currentSnapshot}
+              onStatus={onStatus}
             />
           ) : null}
         </MessageTurn>
@@ -2321,7 +2524,8 @@ const ChatExchange = ({
 
 export const ReviewController = () => {
   const identity = useMemo(runtimeIdentity, []);
-  const initialSourceRevision = useMemo(bootstrapSourceRevision, []);
+  const initialSnapshot = useMemo(bootstrapSnapshot, []);
+  const isDiffPreview = useMemo(bootstrapDiffPreview, []);
   const planId =
     identity?.planId ?? rootElement.getAttribute("data-plan-id") ?? "";
   const blockHosts = useBlockHosts();
@@ -2346,6 +2550,7 @@ export const ReviewController = () => {
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatBody, setChatBody] = useState("");
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
+  const [displayedSnapshot, setDisplayedSnapshot] = useState(initialSnapshot);
   const [cancelPendingRequestIds, setCancelPendingRequestIds] = useState<
     ReadonlySet<string>
   >(new Set());
@@ -2376,6 +2581,7 @@ export const ReviewController = () => {
       ? "Reading offline: drafts stay in this browser."
       : "Loading review…",
   );
+  const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
   const reviewComments = useMemo(
     () => [
       ...drafts,
@@ -2765,6 +2971,48 @@ export const ReviewController = () => {
   }, [acceptAgentSnapshot, identity]);
 
   useEffect(() => {
+    if (
+      identity === null ||
+      agent.currentSnapshot === "" ||
+      agent.currentSnapshot === displayedSnapshot
+    ) {
+      return;
+    }
+    let current = true;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    void fetch(window.location.href, { credentials: "same-origin" })
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error("The revised plan could not be loaded");
+        return response.text();
+      })
+      .then((html) => {
+        if (!current) return;
+        const nextDocument = new DOMParser().parseFromString(html, "text/html");
+        const nextArticle = nextDocument.querySelector("article");
+        const currentArticle = document.querySelector("article");
+        if (nextArticle === null || currentArticle === null) {
+          throw new Error(
+            "The revised plan did not contain its reading surface",
+          );
+        }
+        currentArticle.replaceWith(document.importNode(nextArticle, true));
+        setDisplayedSnapshot(agent.currentSnapshot);
+        window.scrollTo({ left: scrollX, top: scrollY });
+        setStatus(
+          "Plan refreshed in place. Open threads and review state were preserved.",
+        );
+      })
+      .catch((error: unknown) => {
+        if (current) setStatus(errorMessage(error));
+      });
+    return () => {
+      current = false;
+    };
+  }, [agent.currentSnapshot, displayedSnapshot, identity]);
+
+  useEffect(() => {
     let frame = 0;
     const update = () => {
       cancelAnimationFrame(frame);
@@ -2865,6 +3113,7 @@ export const ReviewController = () => {
       id: randomId(),
       body,
       createdAt: new Date().toISOString(),
+      premiseSnapshot: currentSnapshot,
       target: compose.target,
     };
     setDrafts((current) => [...current, comment]);
@@ -3126,10 +3375,6 @@ export const ReviewController = () => {
     hasAgentRuntime: identity !== null,
     isReadOnly: runtimeSession?.authoritative === false,
   });
-  const newerRevisionAvailable =
-    initialSourceRevision !== "" &&
-    agent.sourceRevision !== "" &&
-    initialSourceRevision !== agent.sourceRevision;
   const threadIsOpen = ({
     commentId,
     kind,
@@ -3236,6 +3481,14 @@ export const ReviewController = () => {
 
   return (
     <>
+      {isDiffPreview ? (
+        <div
+          className="fixed top-2 left-1/2 z-50 -translate-x-1/2 rounded-full border border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] px-3 py-1 text-xs font-bold text-[var(--callout-warning-c)] shadow-raised"
+          data-review-diff-preview=""
+        >
+          Temporary diff preview
+        </div>
+      ) : null}
       {reviewContainerHosts.map(({ container, host }) => {
         const target = targetForReviewContainer(container);
         if (target === null) return null;
@@ -3483,25 +3736,6 @@ export const ReviewController = () => {
               <Icon icon={X_ICON} />
             </Button>
           </div>
-          {newerRevisionAvailable ? (
-            <Card className="m-3 mb-0 border border-accent bg-accent-wash p-3 shadow-raised">
-              <p className="m-0 text-sm font-semibold text-ink">
-                A revised plan is ready.
-              </p>
-              <p className="mt-1 mb-0 text-xs text-muted">
-                Reload to review the accepted revision. Threads keep their exact
-                recorded addresses.
-              </p>
-              <Button
-                variant="secondary"
-                size="compact"
-                className="mt-2"
-                onClick={() => window.location.reload()}
-              >
-                Reload plan
-              </Button>
-            </Card>
-          ) : null}
           {tab === "comments" ? (
             <CommentsSurface
               model={{
@@ -3545,6 +3779,9 @@ export const ReviewController = () => {
                     onJump={() => jumpTo(comment)}
                     onSubmit={() => void sendComments([comment])}
                     onAssociate={setAssociatedTarget}
+                    identity={identity}
+                    currentSnapshot={currentSnapshot}
+                    onStatus={setStatus}
                   />
                 ),
                 renderSent: (comment, resolved) => {
@@ -3590,6 +3827,7 @@ export const ReviewController = () => {
                           comment,
                         })
                       }
+                      currentSnapshot={currentSnapshot}
                     />
                   );
                 },
@@ -3643,6 +3881,7 @@ export const ReviewController = () => {
                             onCancelRequest={(requestId) =>
                               void cancelRequest(requestId)
                             }
+                            currentSnapshot={currentSnapshot}
                           />
                         );
                       }),
@@ -3768,6 +4007,9 @@ export const ReviewController = () => {
               onJump={() => jumpTo(comment)}
               onSubmit={() => void sendComments([comment])}
               onAssociate={setAssociatedTarget}
+              identity={identity}
+              currentSnapshot={currentSnapshot}
+              onStatus={setStatus}
             />
           ),
           renderSent: (comment) => {
@@ -3810,6 +4052,7 @@ export const ReviewController = () => {
                     comment,
                   })
                 }
+                currentSnapshot={currentSnapshot}
               />
             );
           },

@@ -162,7 +162,7 @@ It writes no output.
 
 `review` returns the loopback address, resolved plan path, session id, and
 feedback directory, then keeps running until `Ctrl+C`. It owns the local
-session token, heartbeat, durable review state, and revision snapshots.
+session token, heartbeat, durable review state, and source snapshots.
 
 `agent <input.mdx>` reads the matching live session and returns the owner-only
 prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
@@ -176,10 +176,13 @@ a model provider itself. The launched coding-agent session uses:
 - `agent respond <input.mdx> <response.json>` to publish one complete answer
   after the current MDX has rendered and passed lint.
 
-A `changed` outcome is accepted only when the source revision changed and
-every named target belongs to the computed revision diff. See [Reviewing a
-plan](/reference/reviewing/) for the reviewer-facing status, revision, and
-anchor contracts.
+A `changed` outcome is accepted only when the result snapshot differs and every
+named target belongs to the computed snapshot diff. Other outcomes are
+`answered`, `needs-input`, and `declined`. **What changed** uses retained
+premise, claim-time baseline, and result snapshots rather than DOM mutation.
+The temporary development-only `review --diff-preview` flag seeds a synthetic
+gallery answer through that same pipeline and marks the browser with a visible
+preview banner.
 
 `guidance` returns the guidance Markdown itself rather than a structured result.
 `skill` with no arguments returns the skill Markdown the same way.

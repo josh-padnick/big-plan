@@ -11,7 +11,7 @@ export type AgentActivityRequest = {
   readonly kind: "feedback" | "reply" | "chat";
   readonly createdAt: string;
   readonly claimedAt?: string;
-  readonly claimedFromRevision?: string;
+  readonly baselineSnapshot?: string;
   readonly targetLabel?: string;
 };
 
@@ -149,20 +149,19 @@ export const deriveCurrentAgentActivity = ({
         "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
     };
   }
+  if (!agentConnected) {
+    return {
+      state: "disconnected",
+      tone: "danger",
+      headline: "The agent is disconnected",
+      supporting: "Reconnect the coding agent to continue. All comments are safe.",
+    };
+  }
 
   const request = requests.find(
     (candidate) => !responseRequestIds.has(candidate.requestId),
   );
   if (request === undefined) {
-    if (!agentConnected) {
-      return {
-        state: "disconnected",
-        tone: "danger",
-        headline: "The agent is disconnected",
-        supporting:
-          "Reconnect the coding agent to continue. All comments are safe.",
-      };
-    }
     return {
       state: "idle",
       tone: "neutral",
@@ -196,18 +195,9 @@ export const deriveCurrentAgentActivity = ({
   const latest = meaningful.at(-1);
   if (
     request.claimedAt === undefined &&
-    request.claimedFromRevision === undefined &&
+    request.baselineSnapshot === undefined &&
     latest === undefined
   ) {
-    if (!agentConnected) {
-      return {
-        state: "disconnected",
-        tone: "danger",
-        headline: "The agent is disconnected",
-        supporting:
-          "Reconnect the coding agent to continue. All comments are safe.",
-      };
-    }
     return {
       ...facts,
       state: "waiting",
@@ -327,26 +317,27 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
       tone: input.agentConnected ? "positive" : "neutral",
     };
   }
+  if (!input.agentConnected) {
+    return {
+      stage: "blocked",
+      label: "Blocked",
+      headline: "Blocked - no agent connected",
+      detail:
+        "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.",
+      tone: "warning",
+    };
+  }
   if (!input.pickedUp) {
-    return input.agentConnected
-      ? {
-          stage: "waiting",
-          label: "Waiting",
-          headline:
-            input.sessionBusy === true
-              ? "Waiting - the agent is working on another request"
-              : "Waiting for an agent",
-          detail: "",
-          tone: "neutral",
-        }
-      : {
-          stage: "blocked",
-          label: "Blocked",
-          headline: "Blocked - no agent connected",
-          detail:
-            "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.",
-          tone: "warning",
-        };
+    return {
+      stage: "waiting",
+      label: "Waiting",
+      headline:
+        input.sessionBusy === true
+          ? "Waiting - the agent is working on another request"
+          : "Waiting for an agent",
+      detail: "",
+      tone: "neutral",
+    };
   }
   const quietFor =
     input.lastAgentSignalAtMs === undefined

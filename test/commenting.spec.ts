@@ -314,7 +314,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "[data-review-thread-side] .review-staged-collapsed-thread",
   );
   await expect(openRailIndicator).toBeVisible();
-  await expect(openRailIndicator).toContainText("STAGED");
+  await expect(openRailIndicator).toContainText("Staged");
   await openRailIndicator
     .getByRole("button", { name: /Expand comment:/ })
     .click();
@@ -481,10 +481,12 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "background-color",
     "rgb(254, 253, 251)",
   );
-  const minimizedStatus = minimizedThread.getByText("STAGED");
+  const minimizedStatus = minimizedThread.getByRole("img", {
+    name: "Staged",
+  });
   await expect(minimizedStatus).toHaveCSS("color", "rgb(78, 88, 145)");
-  await expect(minimizedStatus).toHaveCSS("border-color", "rgb(78, 88, 145)");
-  await expect(minimizedStatus).toHaveCSS(
+  await expect(minimizedStatus.locator("svg")).toHaveCount(1);
+  await expect(minimizedStatus).not.toHaveCSS(
     "background-color",
     "rgba(0, 0, 0, 0)",
   );

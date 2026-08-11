@@ -45,6 +45,7 @@ export type ReviewComment = {
   readonly id: string;
   readonly body: string;
   readonly createdAt: string;
+  readonly premiseSnapshot: string;
   readonly target: CommentTarget;
 };
 
@@ -146,6 +147,16 @@ const asTimestamp = (value: unknown, fallback: string): string => {
     return fallback;
   }
   return new Date(value).toISOString();
+};
+
+const asSnapshotDigest = (value: unknown): string => {
+  const digest = asText({ value, field: "premiseSnapshot", limit: 64 });
+  if (!/^[a-f0-9]{16,64}$/.test(digest)) {
+    throw new CommentRejected(
+      '"premiseSnapshot" must be a hexadecimal snapshot digest',
+    );
+  }
+  return digest;
 };
 
 const asOffset = ({
@@ -315,6 +326,7 @@ const validateCommentList = ({
   now,
   targetFor,
   createdAtFor,
+  premiseSnapshotFor,
   limit,
 }: {
   readonly value: unknown;
@@ -324,6 +336,10 @@ const validateCommentList = ({
     id: string,
   ) => CommentTarget;
   readonly createdAtFor?: (
+    comment: Readonly<Record<string, unknown>>,
+    id: string,
+  ) => string;
+  readonly premiseSnapshotFor?: (
     comment: Readonly<Record<string, unknown>>,
     id: string,
   ) => string;
@@ -351,6 +367,9 @@ const validateCommentList = ({
       body,
       createdAt:
         createdAtFor?.(comment, id) ?? asTimestamp(comment.createdAt, now),
+      premiseSnapshot:
+        premiseSnapshotFor?.(comment, id) ??
+        asSnapshotDigest(comment.premiseSnapshot),
       target: targetFor(comment, id),
     };
   });
@@ -419,5 +438,8 @@ export const validateCommentUpdates = ({
       validateTarget({ value: comment.target, blocks }),
     createdAtFor: (comment, id) =>
       existingById.get(id)?.createdAt ?? asTimestamp(comment.createdAt, now),
+    premiseSnapshotFor: (comment, id) =>
+      existingById.get(id)?.premiseSnapshot ??
+      asSnapshotDigest(comment.premiseSnapshot),
   });
 };
