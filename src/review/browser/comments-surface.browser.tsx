@@ -24,8 +24,10 @@ export type CommentsSurfaceModel = {
   readonly hasRuntime: boolean;
   readonly groups: ReadonlyMap<ThreadGroup, ReadonlyArray<ReviewComment>>;
   readonly resolved: ReadonlyArray<ReviewComment>;
+  readonly resolvedDrafts: ReadonlyArray<ReviewComment>;
   readonly canResolveAll: boolean;
   readonly renderDraft: (comment: ReviewComment) => ReactNode;
+  readonly renderResolvedDraft: (comment: ReviewComment) => ReactNode;
   readonly renderSent: (comment: ReviewComment, resolved: boolean) => ReactNode;
   readonly onResolveAll: () => void;
   readonly onDeleteAll: () => void;
@@ -75,7 +77,7 @@ export const CommentsSurface = ({
       </section>
     )}
 
-    {model.sentCount > 0 ? (
+    {model.sentCount > 0 || model.resolvedDrafts.length > 0 ? (
       <div>
         <div className="mt-4 flex justify-end">
           {model.canResolveAll ? (
@@ -115,11 +117,15 @@ export const CommentsSurface = ({
             </section>
           );
         })}
-        {model.resolved.length === 0 ? null : (
+        {model.resolved.length === 0 &&
+        model.resolvedDrafts.length === 0 ? null : (
           <details className="mt-4 border-t border-edge pt-4">
             <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-              Resolved ({model.resolved.length})
+              Resolved ({model.resolved.length + model.resolvedDrafts.length})
             </summary>
+            {model.resolvedDrafts.map((comment) =>
+              model.renderResolvedDraft(comment),
+            )}
             {model.resolved.map((comment) => model.renderSent(comment, true))}
           </details>
         )}

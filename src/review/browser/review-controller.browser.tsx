@@ -105,7 +105,13 @@ type PendingDelete =
   | { readonly kind: "comment"; readonly comment: ReviewComment }
   | { readonly kind: "queued"; readonly comment: ReviewComment }
   | { readonly kind: "canceled"; readonly comment: ReviewComment }
+  | { readonly kind: "reverted"; readonly comment: ReviewComment }
   | { readonly kind: "all"; readonly count: number };
+
+type PendingRevert = {
+  readonly requestId: string;
+  readonly commentId: string;
+};
 
 type RuntimeIdentity = {
   readonly planId: string;
@@ -345,17 +351,6 @@ const bootstrapSnapshot = (): string => {
       : "";
   } catch {
     return "";
-  }
-};
-
-const bootstrapDiffPreview = (): boolean => {
-  try {
-    const value: unknown = JSON.parse(
-      rootElement.getAttribute("data-review-bootstrap") ?? "{}",
-    );
-    return isRecord(value) && value.diffPreview === true;
-  } catch {
-    return false;
   }
 };
 
@@ -665,6 +660,9 @@ const targetAssociationElements = (
 ): ReadonlySet<HTMLElement> => {
   const element = targetElement(target);
   if (element === null) return new Set();
+  if (target.type === "block" && element.matches("[data-authored-prose]")) {
+    return new Set();
+  }
   const owningContainer = element.closest<HTMLElement>(
     "[data-slide], [data-quick-summary]",
   );
@@ -739,9 +737,21 @@ const selectionRange = (
   }
 };
 
+const targetHighlightRange = (target: CommentTarget): Range | null => {
+  if (target.type === "selection") return selectionRange(target);
+  if (target.type !== "block") return null;
+  const element = targetElement(target);
+  if (element === null || !element.matches("[data-authored-prose]")) {
+    return null;
+  }
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  return range;
+};
+
 const setSelectionHighlights = (
   targets: ReadonlyArray<SelectionTarget>,
-  activeTarget: SelectionTarget | null,
+  activeTarget: CommentTarget | null,
 ): void => {
   const registry = (CSS as unknown as { highlights?: HighlightRegistry })
     .highlights;
@@ -759,7 +769,7 @@ const setSelectionHighlights = (
   if (ranges.length > 0)
     registry.set("big-plan-review-selection", new HighlightClass(...ranges));
   const activeRange =
-    activeTarget === null ? null : selectionRange(activeTarget);
+    activeTarget === null ? null : targetHighlightRange(activeTarget);
   if (activeRange !== null)
     registry.set(
       "big-plan-review-selection-active",
@@ -1018,9 +1028,29 @@ const useThreadHosts = (
       return;
     }
     const mounted = new Map<string, HTMLDivElement>();
+    const targetOffsets = new Map<string, number>();
+    const anchorPositions = new Map<
+      string,
+      { readonly left: number; readonly right: number; readonly top: number }
+    >();
     for (const comment of comments) {
       const anchor = targetElement(comment.target);
       if (anchor === null) continue;
+      const container =
+        anchor.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
+        anchor.parentElement ??
+        anchor;
+      targetOffsets.set(
+        comment.id,
+        anchor.getBoundingClientRect().top -
+          container.getBoundingClientRect().top,
+      );
+      const containerRect = container.getBoundingClientRect();
+      anchorPositions.set(comment.id, {
+        left: containerRect.left + window.scrollX,
+        right: containerRect.right + window.scrollX,
+        top: containerRect.top + window.scrollY,
+      });
       const host = document.createElement("div");
       host.dataset.reviewThreadFor = comment.id;
       host.dataset.reviewThreadSide = "";
@@ -1039,46 +1069,59 @@ const useThreadHosts = (
         readonly desiredTop: number;
         readonly height: number;
       }> = [];
-      const anchorRects = new Map<string, DOMRect>();
-      const threadHeights = new Map<string, number>();
-      const diffAnchors = new Set<string>();
+      const anchorRects = new Map<
+        string,
+        { readonly left: number; readonly right: number; readonly top: number }
+      >();
+      const leftThreadGaps = new Map<string, number>();
       for (const comment of comments) {
         const host = mounted.get(comment.id);
         const target = targetElement(comment.target);
         if (host === undefined || target === null) continue;
-        const previous = target.previousElementSibling;
-        const diffAnchor =
-          previous instanceof HTMLElement &&
-          previous.dataset.reviewDiffLensHost !== undefined
-            ? previous
-            : null;
         const anchor =
-          diffAnchor ??
           target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
+          target.parentElement ??
           target;
-        const anchorRect = anchor.getBoundingClientRect();
-        const targetRect =
-          comment.target.type === "selection"
-            ? selectionRange(comment.target)?.getBoundingClientRect()
-            : null;
+        const liveAnchorRect = anchor.getBoundingClientRect();
+        const cachedAnchor = anchorPositions.get(comment.id);
+        const anchorIsHidden = anchor.getClientRects().length === 0;
+        const anchorRect =
+          anchorIsHidden && cachedAnchor !== undefined
+            ? {
+                left: cachedAnchor.left - window.scrollX,
+                right: cachedAnchor.right - window.scrollX,
+                top: cachedAnchor.top - window.scrollY,
+              }
+            : liveAnchorRect;
+        if (!anchorIsHidden) {
+          anchorPositions.set(comment.id, {
+            left: liveAnchorRect.left + window.scrollX,
+            right: liveAnchorRect.right + window.scrollX,
+            top: liveAnchorRect.top + window.scrollY,
+          });
+        }
         const cardHeight = Math.max(
           1,
           host.firstElementChild?.getBoundingClientRect().height ?? 1,
         );
         const desiredTop =
-          (targetRect?.top ?? anchorRect.top) + window.scrollY + threadTopInset;
+          anchorRect.top +
+          (targetOffsets.get(comment.id) ?? 0) +
+          window.scrollY +
+          threadTopInset;
         positionItems.push({
           id: comment.id,
           desiredTop,
           height: cardHeight,
         });
         anchorRects.set(comment.id, anchorRect);
-        threadHeights.set(comment.id, cardHeight);
-        if (diffAnchor !== null) diffAnchors.add(comment.id);
+        leftThreadGaps.set(
+          comment.id,
+          anchor.matches("[data-slide], [data-quick-summary]")
+            ? 64
+            : diffThreadGap,
+        );
       }
-      const activeLensRect = document
-        .querySelector<HTMLElement>("[data-review-diff-lens]")
-        ?.getBoundingClientRect();
       for (const { id, top } of stackThreadPositions({
         items: positionItems,
         gap: 8,
@@ -1094,39 +1137,20 @@ const useThreadHosts = (
           feedbackRailWidth -
           threadWidth -
           edge;
-        const height = threadHeights.get(id) ?? 1;
-        const overlapsActiveLens =
-          activeLensRect !== undefined &&
-          top < activeLensRect.bottom + window.scrollY &&
-          top + height > activeLensRect.top + window.scrollY;
-        const obstacleRect = overlapsActiveLens
-          ? activeLensRect
-          : diffAnchors.has(id)
-            ? anchorRect
-            : null;
-        if (obstacleRect !== null) {
-          const right = obstacleRect.right + window.scrollX + diffThreadGap;
-          const left =
-            obstacleRect.left + window.scrollX - threadWidth - diffThreadGap;
-          host.style.left = `${
-            right <= maximumLeft
-              ? right
-              : left >= minimumLeft
-                ? left
-                : Math.max(
-                    minimumLeft,
-                    Math.min(
-                      anchorRect.right + window.scrollX - 12,
-                      maximumLeft,
-                    ),
-                  )
-          }px`;
-        } else {
-          host.style.left = `${Math.max(
-            minimumLeft,
-            Math.min(anchorRect.right + window.scrollX - 12, maximumLeft),
-          )}px`;
-        }
+        const leftThreadGap = leftThreadGaps.get(id) ?? diffThreadGap;
+        const right = anchorRect.right + window.scrollX + diffThreadGap;
+        const left =
+          anchorRect.left + window.scrollX - threadWidth - leftThreadGap;
+        host.style.left = `${
+          right <= maximumLeft
+            ? right
+            : left >= minimumLeft
+              ? left
+              : Math.max(
+                  minimumLeft,
+                  Math.min(anchorRect.right + window.scrollX - 12, maximumLeft),
+                )
+        }px`;
       }
     };
     const frame = requestAnimationFrame(position);
@@ -1134,9 +1158,19 @@ const useThreadHosts = (
     for (const host of mounted.values()) observer.observe(host);
     for (const comment of comments) {
       const target = targetElement(comment.target);
-      if (target !== null) observer.observe(target);
+      if (target !== null) {
+        observer.observe(target);
+        const anchor =
+          target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
+          target.parentElement;
+        if (anchor !== null) observer.observe(anchor);
+      }
     }
     window.addEventListener("resize", position, { passive: true });
+    const readingLayout = document.querySelector<HTMLElement>(
+      "[data-reading-layout]",
+    );
+    readingLayout?.addEventListener("transitionend", position);
     const mutations = new MutationObserver(() => {
       const lens = document.querySelector<HTMLElement>(
         "[data-review-diff-lens]",
@@ -1151,6 +1185,7 @@ const useThreadHosts = (
       observer.disconnect();
       mutations.disconnect();
       window.removeEventListener("resize", position);
+      readingLayout?.removeEventListener("transitionend", position);
       for (const host of mounted.values()) host.remove();
     };
   }, [comments, isOpen, isWide]);
@@ -1439,6 +1474,8 @@ const StagedCard = ({
   identity,
   currentSnapshot,
   onStatus,
+  resolved = false,
+  onResolve,
 }: {
   readonly comment: ReviewComment;
   readonly surface: StagedCardSurface;
@@ -1456,6 +1493,8 @@ const StagedCard = ({
   readonly identity: RuntimeIdentity | null;
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
+  readonly resolved?: boolean;
+  readonly onResolve?: () => void;
 }) => {
   const setAssociated = (active: boolean) => {
     onAssociate(active ? comment.target : null);
@@ -1529,27 +1568,38 @@ const StagedCard = ({
           actionsClassName="review-staged-actions"
           onJump={onJump}
         >
-          {long && expanded ? (
+          {resolved && onResolve !== undefined ? (
+            <ThreadIconButton
+              label="Unresolve comment"
+              icon={CHECK_ICON}
+              onClick={onResolve}
+            />
+          ) : null}
+          {!resolved && long && expanded ? (
             <ThreadIconButton
               label="Minimize comment"
               icon={MINIMIZE_2_ICON}
               onClick={onMinimizeBody}
             />
           ) : null}
-          <ThreadIconButton
-            label="Edit staged comment"
-            icon={PENCIL_ICON}
-            onClick={() => {
-              setEditBody(comment.body);
-              setIsEditing(true);
-            }}
-          />
-          <ThreadIconButton
-            label="Delete staged comment"
-            icon={TRASH_2_ICON}
-            onClick={onDelete}
-            tone="danger"
-          />
+          {!resolved ? (
+            <>
+              <ThreadIconButton
+                label="Edit staged comment"
+                icon={PENCIL_ICON}
+                onClick={() => {
+                  setEditBody(comment.body);
+                  setIsEditing(true);
+                }}
+              />
+              <ThreadIconButton
+                label="Delete staged comment"
+                icon={TRASH_2_ICON}
+                onClick={onDelete}
+                tone="danger"
+              />
+            </>
+          ) : null}
         </CommentCardHeader>
         {isEditing ? (
           <div className="p-3">
@@ -1605,6 +1655,7 @@ const StagedCard = ({
               identity={identity}
               currentSnapshot={currentSnapshot}
               onStatus={onStatus}
+              onResolve={!resolved ? onResolve : undefined}
             />
             {long && !expanded ? (
               <button
@@ -1619,9 +1670,15 @@ const StagedCard = ({
               <time dateTime={comment.createdAt}>
                 {threadTime(comment.createdAt)}
               </time>
-              <Button variant="accentOutline" size="micro" onClick={onSubmit}>
-                Send this
-              </Button>
+              {resolved && onResolve !== undefined ? (
+                <Button variant="outline" size="micro" onClick={onResolve}>
+                  Unresolve
+                </Button>
+              ) : (
+                <Button variant="accentOutline" size="micro" onClick={onSubmit}>
+                  Send this
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -1741,6 +1798,7 @@ const StagedCard = ({
             identity={identity}
             currentSnapshot={currentSnapshot}
             onStatus={onStatus}
+            onResolve={onResolve}
           />
           <p className="mt-2 mb-0 text-xs text-muted">
             <time dateTime={comment.createdAt}>
@@ -1829,11 +1887,13 @@ const StalePremiseNotice = ({
   identity,
   currentSnapshot,
   onStatus,
+  onResolve,
 }: {
   readonly comment: ReviewComment;
   readonly identity: RuntimeIdentity | null;
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
+  readonly onResolve?: () => void;
 }) => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
   const blockIds = useMemo(
@@ -1877,25 +1937,54 @@ const StalePremiseNotice = ({
   if (diff === null) return null;
   const attributed = attributeDiffPlaces({ diff, changeTargets: blockIds });
   if (attributed.placeIds.length === 0) return null;
+  const attributedPlaces = diff.places.filter((place) =>
+    attributed.placeIds.includes(place.placeId),
+  );
+  const currentTargetExists = attributedPlaces.some((place) =>
+    place.locationIndexes.some((index) => {
+      const blockId = diff.locations.at(index)?.newBlockId;
+      return (
+        blockId !== undefined &&
+        document.querySelector(`[data-block-id="${CSS.escape(blockId)}"]`) !==
+          null
+      );
+    }),
+  );
   return (
     <div className="mt-2 rounded-md bg-[var(--callout-warning-bg)] p-2 text-[var(--callout-warning-ink)]">
       <Badge
         tone="secondary"
         className="bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
       >
-        Text changed since you commented
+        {currentTargetExists
+          ? "Current diff available"
+          : "No current diff available"}
       </Badge>
       <p className="mt-1 mb-0 text-2xs">
-        The quoted text no longer matches the plan; the change may already
-        address this comment.
+        {currentTargetExists
+          ? "This compares the plan when you commented with the current plan."
+          : "The commented target was removed or superseded, so Big Plan did not guess a replacement."}
       </p>
-      <AgentChangeDigest
-        diff={diff}
-        placeIds={attributed.placeIds}
-        isLoading={false}
-        onLoad={() => undefined}
-        actionLabel="See what changed"
-      />
+      {currentTargetExists ? (
+        <AgentChangeDigest
+          diff={diff}
+          placeIds={attributed.placeIds}
+          isSuperseded
+          isLoading={false}
+          onLoad={() => undefined}
+          actionLabel="Review premise → current"
+        />
+      ) : null}
+      {onResolve === undefined ? null : (
+        <Button
+          variant="outline"
+          size="micro"
+          className="mt-2"
+          onClick={onResolve}
+        >
+          Mark addressed
+        </Button>
+      )}
     </div>
   );
 };
@@ -1915,8 +2004,10 @@ const SentThread = ({
   onAssociate,
   onReplySent,
   onShowAgent,
+  activeRequestLink,
   onCancelRequest,
-  onDeleteQueued,
+  onDelete,
+  onRevert,
   currentSnapshot,
 }: {
   readonly comment: ReviewComment;
@@ -1933,8 +2024,13 @@ const SentThread = ({
   readonly onAssociate: (target: CommentTarget | null) => void;
   readonly onReplySent: (message: string) => void;
   readonly onShowAgent: () => void;
+  readonly activeRequestLink?: {
+    readonly label: string;
+    readonly onClick: () => void;
+  };
   readonly onCancelRequest: (requestId: string) => void;
-  readonly onDeleteQueued: () => void;
+  readonly onDelete: () => void;
+  readonly onRevert: (requestId: string, commentId: string) => void;
   readonly currentSnapshot: string;
 }) => {
   const [reply, setReply] = useState("");
@@ -1975,10 +2071,18 @@ const SentThread = ({
             ? "Working"
             : "Queued";
   const railMetadata = `${railState} ${railFreshness === "Just now" ? "just now" : railFreshness}`;
-  const canDeleteComment = canDeleteQueued || canDeleteCanceled;
-  const deleteCommentLabel = latestCanceled
-    ? "Delete canceled comment"
-    : "Delete queued comment";
+  const latestChangeWasReverted =
+    latestChanged !== undefined &&
+    latestChanged.baselineSnapshot === currentSnapshot;
+  const canRevertLatestChange =
+    latestChanged?.response?.resultSnapshot === currentSnapshot;
+  const canDeleteComment =
+    canDeleteQueued || canDeleteCanceled || latestChangeWasReverted;
+  const deleteCommentLabel = latestChangeWasReverted
+    ? "Delete comment"
+    : latestCanceled
+      ? "Delete canceled comment"
+      : "Delete queued comment";
 
   const sendReply = async () => {
     const body = reply.trim();
@@ -2065,7 +2169,7 @@ const SentThread = ({
             <ThreadIconButton
               label={deleteCommentLabel}
               icon={TRASH_2_ICON}
-              onClick={onDeleteQueued}
+              onClick={onDelete}
               tone="danger"
             />
           ) : null}
@@ -2080,7 +2184,12 @@ const SentThread = ({
             <ThreadIconButton
               label="Revert agent changes"
               icon={ROTATE_CCW_ICON}
-              disabled
+              disabled={!canRevertLatestChange}
+              onClick={() =>
+                latestChanged === undefined
+                  ? undefined
+                  : onRevert(latestChanged.request.requestId, comment.id)
+              }
             />
           )}
         </ContextualCommentSummary>
@@ -2126,7 +2235,7 @@ const SentThread = ({
             <ThreadIconButton
               label={deleteCommentLabel}
               icon={TRASH_2_ICON}
-              onClick={onDeleteQueued}
+              onClick={onDelete}
               tone="danger"
             />
           ) : null}
@@ -2134,7 +2243,12 @@ const SentThread = ({
             <ThreadIconButton
               label="Revert agent changes"
               icon={ROTATE_CCW_ICON}
-              disabled
+              disabled={!canRevertLatestChange}
+              onClick={() =>
+                latestChanged === undefined
+                  ? undefined
+                  : onRevert(latestChanged.request.requestId, comment.id)
+              }
               tone="danger"
             />
           )}
@@ -2233,7 +2347,7 @@ const SentThread = ({
           <ThreadIconButton
             label={deleteCommentLabel}
             icon={TRASH_2_ICON}
-            onClick={onDeleteQueued}
+            onClick={onDelete}
             tone="danger"
           />
         ) : null}
@@ -2241,7 +2355,12 @@ const SentThread = ({
           <ThreadIconButton
             label="Revert agent changes"
             icon={ROTATE_CCW_ICON}
-            disabled
+            disabled={!canRevertLatestChange}
+            onClick={() =>
+              latestChanged === undefined
+                ? undefined
+                : onRevert(latestChanged.request.requestId, comment.id)
+            }
             tone="danger"
           />
         )}
@@ -2328,6 +2447,7 @@ const SentThread = ({
                               : 1
                           }
                           onShowAgent={onShowAgent}
+                          activeRequestLink={activeRequestLink}
                           onCancelRequest={() =>
                             onCancelRequest(request.requestId)
                           }
@@ -2399,7 +2519,7 @@ const SentThread = ({
                     <ThreadIconButton
                       label={deleteCommentLabel}
                       icon={TRASH_2_ICON}
-                      onClick={onDeleteQueued}
+                      onClick={onDelete}
                       tone="danger"
                     />
                   ) : null}
@@ -2407,7 +2527,15 @@ const SentThread = ({
                     <ThreadIconButton
                       label="Revert agent changes"
                       icon={ROTATE_CCW_ICON}
-                      disabled
+                      disabled={!canRevertLatestChange}
+                      onClick={() =>
+                        latestChanged === undefined
+                          ? undefined
+                          : onRevert(
+                              latestChanged.request.requestId,
+                              comment.id,
+                            )
+                      }
                       tone="danger"
                     />
                   )}
@@ -2460,6 +2588,7 @@ const ChatExchange = ({
   activity,
   onStatus,
   onShowAgent,
+  activeRequestLink,
   onCancelRequest,
   currentSnapshot,
 }: {
@@ -2470,6 +2599,10 @@ const ChatExchange = ({
   readonly activity: ReadonlyArray<MessageActivity>;
   readonly onStatus: (message: string) => void;
   readonly onShowAgent: () => void;
+  readonly activeRequestLink?: {
+    readonly label: string;
+    readonly onClick: () => void;
+  };
   readonly onCancelRequest: (requestId: string) => void;
   readonly currentSnapshot: string;
 }) => {
@@ -2497,6 +2630,7 @@ const ChatExchange = ({
             activity={activity}
             surface="chat"
             onShowAgent={onShowAgent}
+            activeRequestLink={activeRequestLink}
             onCancelRequest={() => onCancelRequest(request.requestId)}
           />
         </div>
@@ -2525,7 +2659,6 @@ const ChatExchange = ({
 export const ReviewController = () => {
   const identity = useMemo(runtimeIdentity, []);
   const initialSnapshot = useMemo(bootstrapSnapshot, []);
-  const isDiffPreview = useMemo(bootstrapDiffPreview, []);
   const planId =
     identity?.planId ?? rootElement.getAttribute("data-plan-id") ?? "";
   const blockHosts = useBlockHosts();
@@ -2570,6 +2703,9 @@ export const ReviewController = () => {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
   );
+  const [pendingRevert, setPendingRevert] = useState<PendingRevert | null>(
+    null,
+  );
   const [associatedTarget, setAssociatedTarget] =
     useState<CommentTarget | null>(null);
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(
@@ -2582,12 +2718,20 @@ export const ReviewController = () => {
       : "Loading review…",
   );
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
+  const unresolvedDrafts = useMemo(
+    () => drafts.filter((comment) => !resolvedCommentIds.has(comment.id)),
+    [drafts, resolvedCommentIds],
+  );
+  const resolvedDrafts = useMemo(
+    () => drafts.filter((comment) => resolvedCommentIds.has(comment.id)),
+    [drafts, resolvedCommentIds],
+  );
   const reviewComments = useMemo(
     () => [
-      ...drafts,
+      ...unresolvedDrafts,
       ...sent.filter((comment) => !resolvedCommentIds.has(comment.id)),
     ],
-    [drafts, resolvedCommentIds, sent],
+    [resolvedCommentIds, sent, unresolvedDrafts],
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
@@ -2666,14 +2810,13 @@ export const ReviewController = () => {
         (target): target is SelectionTarget => target.type === "selection",
       );
     if (composeSelection !== null) persistentSelections.push(composeSelection);
-    const associatedSelection =
-      associatedTarget?.type === "selection" ? associatedTarget : null;
-    const activeSelection =
-      associatedSelection ?? (associationActive ? composeSelection : null);
-    setSelectionHighlights(persistentSelections, activeSelection);
+    const activeHighlight =
+      associatedTarget ?? (associationActive ? composeSelection : null);
+    setSelectionHighlights(persistentSelections, activeHighlight);
     rootElement.toggleAttribute(
       "data-review-selection-active",
-      activeSelection !== null,
+      activeHighlight !== null &&
+        targetHighlightRange(activeHighlight) !== null,
     );
     return () => {
       setSelectionHighlights([], null);
@@ -3134,7 +3277,7 @@ export const ReviewController = () => {
     setPendingDelete(null);
     setStatus("All staged comments deleted.");
   };
-  const deleteQueuedComment = async (commentId: string) => {
+  const deleteSentComment = async (commentId: string) => {
     if (identity === null) return;
     try {
       await serializeRuntimeWrite(() =>
@@ -3168,10 +3311,29 @@ export const ReviewController = () => {
       setStatus(
         pendingDelete?.kind === "canceled"
           ? "Canceled comment deleted."
-          : "Queued comment deleted.",
+          : pendingDelete?.kind === "reverted"
+            ? "Comment deleted."
+            : "Queued comment deleted.",
       );
     } catch (error) {
       setPendingDelete(null);
+      setStatus(errorMessage(error));
+    }
+  };
+  const revertAgentChanges = async () => {
+    if (identity === null || pendingRevert === null) return;
+    try {
+      await serializeRuntimeWrite(() =>
+        requestJson({
+          path: "/api/revert-agent-changes",
+          identity,
+          method: "POST",
+          body: pendingRevert,
+        }),
+      );
+      window.location.reload();
+    } catch (error) {
+      setPendingRevert(null);
       setStatus(errorMessage(error));
     }
   };
@@ -3413,7 +3575,9 @@ export const ReviewController = () => {
     if (!resolvedCommentIds.has(commentId)) {
       cancelRequestsForComment(commentId);
       if (selectedCommentId === commentId) setSelectedCommentId(null);
-      const comment = sent.find((candidate) => candidate.id === commentId);
+      const comment = [...drafts, ...sent].find(
+        (candidate) => candidate.id === commentId,
+      );
       if (
         comment !== undefined &&
         associatedTarget !== null &&
@@ -3421,16 +3585,18 @@ export const ReviewController = () => {
       ) {
         setAssociatedTarget(null);
       }
-      setThreadOpenState((current) =>
-        setThreadOpen({
-          state: current,
-          commentId,
-          kind: "sent",
-          surface: "rail",
-          isRailOpen: isOpen,
-          open: false,
-        }),
-      );
+      if (sent.some((candidate) => candidate.id === commentId)) {
+        setThreadOpenState((current) =>
+          setThreadOpen({
+            state: current,
+            commentId,
+            kind: "sent",
+            surface: "rail",
+            isRailOpen: isOpen,
+            open: false,
+          }),
+        );
+      }
     }
     setResolvedCommentIds((current) => {
       const next = new Set(current);
@@ -3478,17 +3644,23 @@ export const ReviewController = () => {
       });
     });
   };
+  const activeRequest = agent.requests.find(
+    (request) => request.requestId === agent.presence.requestId,
+  );
+  const activeRequestLink =
+    activeRequest === undefined
+      ? undefined
+      : {
+          label:
+            activeRequest.kind === "chat"
+              ? "View active chat"
+              : "View active comment",
+          onClick: () =>
+            viewAgentRequest(activeRequest.requestId, activeRequest.kind),
+        };
 
   return (
     <>
-      {isDiffPreview ? (
-        <div
-          className="fixed top-2 left-1/2 z-50 -translate-x-1/2 rounded-full border border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] px-3 py-1 text-xs font-bold text-[var(--callout-warning-c)] shadow-raised"
-          data-review-diff-preview=""
-        >
-          Temporary diff preview
-        </div>
-      ) : null}
       {reviewContainerHosts.map(({ container, host }) => {
         const target = targetForReviewContainer(container);
         if (target === null) return null;
@@ -3655,13 +3827,13 @@ export const ReviewController = () => {
               >
                 <Icon icon={MESSAGE_SQUARE_ICON} />
                 Feedback
-                {drafts.length > 0 ? (
+                {unresolvedDrafts.length > 0 ? (
                   <Badge
                     size="compact"
                     tone="accent"
                     className="h-5 min-w-5 justify-center px-1 py-0 leading-none"
                   >
-                    {drafts.length}
+                    {unresolvedDrafts.length}
                   </Badge>
                 ) : null}
               </button>
@@ -3693,8 +3865,8 @@ export const ReviewController = () => {
               >
                 <Icon icon={MESSAGE_SQUARE_ICON} />
                 Comments
-                {drafts.length > 0 ? (
-                  <Badge size="compact">{drafts.length}</Badge>
+                {unresolvedDrafts.length > 0 ? (
+                  <Badge size="compact">{unresolvedDrafts.length}</Badge>
                 ) : null}
               </button>
               <button
@@ -3739,11 +3911,12 @@ export const ReviewController = () => {
           {tab === "comments" ? (
             <CommentsSurface
               model={{
-                drafts,
+                drafts: unresolvedDrafts,
                 sentCount: sent.length,
                 hasRuntime: identity !== null,
                 groups: sentByGroup,
                 resolved: resolvedSent,
+                resolvedDrafts,
                 canResolveAll: unresolvedSent.some(
                   (comment) =>
                     threadProjections.get(comment.id)?.group === "ready",
@@ -3782,6 +3955,41 @@ export const ReviewController = () => {
                     identity={identity}
                     currentSnapshot={currentSnapshot}
                     onStatus={setStatus}
+                    onResolve={() => toggleResolvedComment(comment.id)}
+                  />
+                ),
+                renderResolvedDraft: (comment) => (
+                  <StagedCard
+                    key={comment.id}
+                    comment={comment}
+                    surface="rail"
+                    associated={false}
+                    collapsed={false}
+                    expanded={expandedBodies.has(comment.id)}
+                    onExpandBody={() =>
+                      setExpandedBodies((current) =>
+                        new Set(current).add(comment.id),
+                      )
+                    }
+                    onMinimizeBody={() =>
+                      setExpandedBodies((current) => {
+                        const next = new Set(current);
+                        next.delete(comment.id);
+                        return next;
+                      })
+                    }
+                    onUpdate={(body) => updateDraft(comment.id, body)}
+                    onDelete={() =>
+                      setPendingDelete({ kind: "comment", comment })
+                    }
+                    onJump={() => jumpTo(comment)}
+                    onSubmit={() => void sendComments([comment])}
+                    onAssociate={setAssociatedTarget}
+                    identity={identity}
+                    currentSnapshot={currentSnapshot}
+                    onStatus={setStatus}
+                    resolved
+                    onResolve={() => toggleResolvedComment(comment.id)}
                   />
                 ),
                 renderSent: (comment, resolved) => {
@@ -3818,14 +4026,24 @@ export const ReviewController = () => {
                       onAssociate={setAssociatedTarget}
                       onReplySent={setStatus}
                       onShowAgent={showAgentSetup}
+                      activeRequestLink={activeRequestLink}
                       onCancelRequest={(requestId) =>
                         void cancelRequest(requestId)
                       }
-                      onDeleteQueued={() =>
+                      onDelete={() =>
                         setPendingDelete({
-                          kind: thread.latestCanceled ? "canceled" : "queued",
+                          kind:
+                            thread.latestChanged?.baselineSnapshot ===
+                            currentSnapshot
+                              ? "reverted"
+                              : thread.latestCanceled
+                                ? "canceled"
+                                : "queued",
                           comment,
                         })
+                      }
+                      onRevert={(requestId, commentId) =>
+                        setPendingRevert({ requestId, commentId })
                       }
                       currentSnapshot={currentSnapshot}
                     />
@@ -3845,7 +4063,10 @@ export const ReviewController = () => {
                     ]),
                   ),
                 onDeleteAll: () =>
-                  setPendingDelete({ kind: "all", count: drafts.length }),
+                  setPendingDelete({
+                    kind: "all",
+                    count: unresolvedDrafts.length,
+                  }),
               }}
             />
           ) : null}
@@ -3878,6 +4099,7 @@ export const ReviewController = () => {
                             activity={activityForRequest(request)}
                             onStatus={setStatus}
                             onShowAgent={showAgentSetup}
+                            activeRequestLink={activeRequestLink}
                             onCancelRequest={(requestId) =>
                               void cancelRequest(requestId)
                             }
@@ -3911,12 +4133,12 @@ export const ReviewController = () => {
                 className="w-full px-3! py-2! text-xs"
                 size="sm"
                 disabled={
-                  drafts.length === 0 ||
+                  unresolvedDrafts.length === 0 ||
                   isSending ||
                   currentAgentActivity.state === "offline" ||
                   runtimeSession?.authoritative === false
                 }
-                onClick={() => void sendComments(drafts)}
+                onClick={() => void sendComments(unresolvedDrafts)}
               >
                 {isSending ? "Sending…" : "Send all comments to agent"}
               </Button>
@@ -3965,7 +4187,7 @@ export const ReviewController = () => {
       ) : null}
       <InlineComments
         model={{
-          drafts,
+          drafts: unresolvedDrafts,
           sent,
           hostFor: (commentId) => threadHosts.get(commentId),
           renderDraft: (comment) => (
@@ -4010,6 +4232,7 @@ export const ReviewController = () => {
               identity={identity}
               currentSnapshot={currentSnapshot}
               onStatus={setStatus}
+              onResolve={() => toggleResolvedComment(comment.id)}
             />
           ),
           renderSent: (comment) => {
@@ -4045,12 +4268,21 @@ export const ReviewController = () => {
                 onAssociate={setAssociatedTarget}
                 onReplySent={setStatus}
                 onShowAgent={showAgentSetup}
+                activeRequestLink={activeRequestLink}
                 onCancelRequest={(requestId) => void cancelRequest(requestId)}
-                onDeleteQueued={() =>
+                onDelete={() =>
                   setPendingDelete({
-                    kind: thread.latestCanceled ? "canceled" : "queued",
+                    kind:
+                      thread.latestChanged?.baselineSnapshot === currentSnapshot
+                        ? "reverted"
+                        : thread.latestCanceled
+                          ? "canceled"
+                          : "queued",
                     comment,
                   })
+                }
+                onRevert={(requestId, commentId) =>
+                  setPendingRevert({ requestId, commentId })
                 }
                 currentSnapshot={currentSnapshot}
               />
@@ -4124,6 +4356,14 @@ export const ReviewController = () => {
         }}
       />
       <AlertDialog
+        open={pendingRevert !== null}
+        title="Revert agent changes?"
+        description="This restores the plan to its state before this agent response. The comment and thread will remain until you delete them."
+        actionLabel="Revert changes"
+        onCancel={() => setPendingRevert(null)}
+        onAction={() => void revertAgentChanges()}
+      />
+      <AlertDialog
         open={pendingDelete !== null}
         title={
           pendingDelete?.kind === "all"
@@ -4132,7 +4372,9 @@ export const ReviewController = () => {
               ? "Delete canceled comment?"
               : pendingDelete?.kind === "queued"
                 ? "Delete queued comment?"
-                : "Delete comment?"
+                : pendingDelete?.kind === "reverted"
+                  ? "Delete comment?"
+                  : "Delete comment?"
         }
         description={
           pendingDelete?.kind === "all"
@@ -4141,7 +4383,9 @@ export const ReviewController = () => {
               ? "This permanently removes the canceled comment and its thread. This action cannot be undone."
               : pendingDelete?.kind === "queued"
                 ? "This removes the comment before the agent picks it up. This action cannot be undone."
-                : "This permanently removes your staged comment. This action cannot be undone."
+                : pendingDelete?.kind === "reverted"
+                  ? "This permanently removes the comment and its thread. The reverted plan changes stay reverted."
+                  : "This permanently removes your staged comment. This action cannot be undone."
         }
         actionLabel={pendingDelete?.kind === "all" ? "Delete all" : "Delete"}
         onCancel={() => setPendingDelete(null)}
@@ -4152,9 +4396,10 @@ export const ReviewController = () => {
             deleteAllDrafts();
           } else if (
             pendingDelete?.kind === "queued" ||
-            pendingDelete?.kind === "canceled"
+            pendingDelete?.kind === "canceled" ||
+            pendingDelete?.kind === "reverted"
           ) {
-            void deleteQueuedComment(pendingDelete.comment.id);
+            void deleteSentComment(pendingDelete.comment.id);
           }
         }}
       />

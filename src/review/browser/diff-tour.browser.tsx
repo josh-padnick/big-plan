@@ -26,6 +26,7 @@ type OpenTour = {
 };
 
 type DiffTourValue = {
+  readonly activeDiff: SnapshotDiff | null;
   readonly activePlaceId: string | null;
   readonly activePlaceIsHistorical: boolean;
   readonly openTour: (tour: OpenTour) => void;
@@ -78,17 +79,202 @@ const runsWithChanges = (runs: ReadonlyArray<DiffRun>): ReactNode =>
     );
   });
 
-const joinedText = ({
+const sideText = (location: DiffLocation, side: "old" | "new"): string =>
+  side === "old" ? location.oldText : location.newText;
+
+// A table's aggregate, row, column, and cell identities deliberately overlap
+// for attribution. A presentation must choose one non-overlapping level or it
+// repeats the same text several times.
+const presentationLocations = (
+  locations: ReadonlyArray<DiffLocation>,
+): ReadonlyArray<DiffLocation> => {
+  if (!locations.some((location) => location.kind === "table-row")) {
+    return locations;
+  }
+  return locations.filter(
+    (location) =>
+      location.kind !== "table" &&
+      location.kind !== "table-column" &&
+      location.kind !== "table-cell",
+  );
+};
+
+type ProsePresentation =
+  | "paragraph"
+  | "lede"
+  | "quote"
+  | "heading-1"
+  | "heading-2"
+  | "heading-3"
+  | "heading-4"
+  | "heading-5"
+  | "heading-6";
+
+const prosePresentationFor = (
+  anchor: HTMLElement,
+): ProsePresentation | undefined => {
+  const tag = anchor.tagName.toLocaleLowerCase();
+  if (/^h[1-6]$/u.test(tag)) {
+    return `heading-${tag.slice(1)}` as ProsePresentation;
+  }
+  if (tag === "blockquote") return "quote";
+  if (tag !== "p") return undefined;
+  return anchor.previousElementSibling?.matches("h1[data-authored-prose]") ===
+    true
+    ? "lede"
+    : "paragraph";
+};
+
+const WordRunContent = ({
+  runs,
+  presentation,
+}: {
+  readonly runs: ReadonlyArray<DiffRun>;
+  readonly presentation?: ProsePresentation;
+}) => {
+  const content = runsWithChanges(runs);
+  const properties = {
+    className: "m-0 max-w-[var(--measure)] [overflow-wrap:anywhere]",
+    "data-authored-prose": "",
+    "data-review-diff-content": "",
+    "data-review-diff-presentation": presentation ?? "paragraph",
+  } as const;
+  switch (presentation) {
+    case "heading-1":
+      return <h1 {...properties}>{content}</h1>;
+    case "heading-2":
+      return <h2 {...properties}>{content}</h2>;
+    case "heading-3":
+      return <h3 {...properties}>{content}</h3>;
+    case "heading-4":
+      return <h4 {...properties}>{content}</h4>;
+    case "heading-5":
+      return <h5 {...properties}>{content}</h5>;
+    case "heading-6":
+      return <h6 {...properties}>{content}</h6>;
+    case "quote":
+      return <blockquote {...properties}>{content}</blockquote>;
+    default:
+      return <p {...properties}>{content}</p>;
+  }
+};
+
+const SnapshotTable = ({
+  rows,
+  side,
+}: {
+  readonly rows: ReadonlyArray<DiffLocation>;
+  readonly side: "old" | "new";
+}) => (
+  <div className="max-w-full overflow-x-auto">
+    <table data-authored-prose="" data-review-diff-table="">
+      <tbody data-authored-prose="">
+        {rows.map((row, rowIndex) => {
+          const cells = sideText(row, side).trim().split(/\n+/u);
+          return (
+            <tr key={`${row.scope}-${rowIndex}`} data-authored-prose="">
+              {cells.map((cell, cellIndex) => {
+                const Cell = rowIndex === 0 ? "th" : "td";
+                return (
+                  <Cell key={`${cellIndex}-${cell}`} data-authored-prose="">
+                    {cell}
+                  </Cell>
+                );
+              })}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+);
+
+const SnapshotBlock = ({
+  location,
+  side,
+}: {
+  readonly location: DiffLocation;
+  readonly side: "old" | "new";
+}) => {
+  const text = sideText(location, side);
+  if (location.kind === "heading") {
+    return (
+      <h3 data-authored-prose="" data-review-diff-content="">
+        {text}
+      </h3>
+    );
+  }
+  if (location.kind === "quote") {
+    return (
+      <blockquote data-authored-prose="" data-review-diff-content="">
+        {text}
+      </blockquote>
+    );
+  }
+  if (location.kind === "code" || location.kind.startsWith("code-")) {
+    return (
+      <pre data-authored-prose="" data-review-diff-content="">
+        <code data-authored-prose="">{text}</code>
+      </pre>
+    );
+  }
+  if (location.kind === "list") {
+    const blockId = location.newBlockId ?? location.oldBlockId;
+    const current =
+      blockId === undefined
+        ? null
+        : document.querySelector<HTMLElement>(
+            `[data-block-id="${CSS.escape(blockId)}"]`,
+          );
+    const List = current?.tagName === "OL" ? "ol" : "ul";
+    const items = text
+      .split("\n")
+      .map((item) => item.trim())
+      .filter((item) => item !== "");
+    return (
+      <List data-authored-prose="" data-review-diff-content="">
+        {items.map((item, index) => (
+          <li key={`${index}-${item}`} data-authored-prose="">
+            {item}
+          </li>
+        ))}
+      </List>
+    );
+  }
+  return (
+    <p data-authored-prose="" data-review-diff-content="">
+      {text}
+    </p>
+  );
+};
+
+const SnapshotSideContent = ({
   locations,
   side,
 }: {
   readonly locations: ReadonlyArray<DiffLocation>;
   readonly side: "old" | "new";
-}): string =>
-  locations
-    .map((location) => (side === "old" ? location.oldText : location.newText))
-    .filter((text) => text !== "")
-    .join("\n\n");
+}) => {
+  const visible = presentationLocations(locations).filter(
+    (location) => sideText(location, side).trim() !== "",
+  );
+  const tableRows = visible.filter((location) => location.kind === "table-row");
+  const firstTableRow = tableRows[0];
+  return visible.map((location, index) => {
+    if (location.kind === "table-row") {
+      return location === firstTableRow ? (
+        <SnapshotTable key={`table-${side}`} rows={tableRows} side={side} />
+      ) : null;
+    }
+    return (
+      <SnapshotBlock
+        key={`${location.scope}-${location.kind}-${index}`}
+        location={location}
+        side={side}
+      />
+    );
+  });
+};
 
 /** Renders the common word-level or stacked Was/Now lens vocabulary. */
 export const DiffLensContent = ({
@@ -96,11 +282,13 @@ export const DiffLensContent = ({
   place,
   isHistorical,
   isSuperseded,
+  presentation,
 }: {
   readonly diff: SnapshotDiff;
   readonly place: DiffPlace;
   readonly isHistorical: boolean;
   readonly isSuperseded: boolean;
+  readonly presentation?: ProsePresentation;
 }) => {
   const locations = useMemo(
     () => placeLocations({ diff, place }),
@@ -113,16 +301,17 @@ export const DiffLensContent = ({
     (only.kind === "paragraph" ||
       only.kind === "heading" ||
       only.kind === "quote");
-  const oldText = joinedText({ locations, side: "old" });
-  const newText = joinedText({ locations, side: "new" });
+  const hasOldText = locations.some(
+    (location) => location.oldText.trim() !== "",
+  );
+  const hasNewText = locations.some(
+    (location) => location.newText.trim() !== "",
+  );
   const title = isHistorical
     ? "Historical change"
     : isSuperseded
       ? "What changed - plan revised again"
       : "What changed";
-  const isCode = locations.some(
-    (location) => location.kind === "code" || location.kind.startsWith("code-"),
-  );
   return (
     <section
       className="grid w-full min-w-0 max-w-[var(--measure)] gap-3 rounded-lg border border-dashed border-accent bg-raised p-4 text-ink shadow-raised"
@@ -137,41 +326,27 @@ export const DiffLensContent = ({
         <em className="text-2xs text-muted">{place.note}</em>
       </div>
       {canUseWordRuns && only !== undefined ? (
-        <p className="m-0 max-w-[var(--measure)] text-base [overflow-wrap:anywhere]">
-          {runsWithChanges(only.runs)}
-        </p>
+        <WordRunContent runs={only.runs} presentation={presentation} />
       ) : (
         <div className="grid min-w-0 gap-2">
-          {oldText === "" ? null : (
+          {!hasOldText ? null : (
             <div className="min-w-0 rounded-lg bg-[var(--diff-remove-bg)] p-3 text-[var(--diff-remove-c)] inset-shadow-well">
               <strong className="mb-1 block text-2xs uppercase tracking-caps">
                 Was
               </strong>
-              {isCode ? (
-                <pre className="m-0 max-w-full overflow-x-auto font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">
-                  <code>{oldText}</code>
-                </pre>
-              ) : (
-                <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
-                  {oldText}
-                </p>
-              )}
+              <div className="min-w-0 [&>:last-child]:mb-0">
+                <SnapshotSideContent locations={locations} side="old" />
+              </div>
             </div>
           )}
-          {newText === "" ? null : (
+          {!hasNewText ? null : (
             <div className="min-w-0 rounded-lg bg-[var(--diff-add-bg)] p-3 text-[var(--diff-add-c)] inset-shadow-well">
               <strong className="mb-1 block text-2xs uppercase tracking-caps">
                 Now
               </strong>
-              {isCode ? (
-                <pre className="m-0 max-w-full overflow-x-auto font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">
-                  <code>{newText}</code>
-                </pre>
-              ) : (
-                <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
-                  {newText}
-                </p>
-              )}
+              <div className="min-w-0 [&>:last-child]:mb-0">
+                <SnapshotSideContent locations={locations} side="new" />
+              </div>
             </div>
           )}
         </div>
@@ -214,9 +389,11 @@ const LensPortal = ({
   );
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [isHistorical, setIsHistorical] = useState(false);
+  const [presentation, setPresentation] = useState<ProsePresentation>();
   useEffect(() => {
     if (!isVisible) {
       setHost(null);
+      setPresentation(undefined);
       return;
     }
     const first = locations[0];
@@ -224,9 +401,11 @@ const LensPortal = ({
     if (anchor === null) {
       setIsHistorical(true);
       setHost(null);
+      setPresentation(undefined);
       return;
     }
     setIsHistorical(false);
+    setPresentation(prosePresentationFor(anchor));
     const direct = locations
       .map((location) => location.newBlockId)
       .filter((blockId): blockId is string => blockId !== undefined)
@@ -275,6 +454,7 @@ const LensPortal = ({
           place={place}
           isHistorical={false}
           isSuperseded={isSuperseded}
+          presentation={presentation}
         />,
         host,
       );
@@ -322,12 +502,13 @@ export const DiffTourProvider = ({
   }, [tour]);
   const value = useMemo<DiffTourValue>(
     () => ({
+      activeDiff: tour?.diff ?? null,
       activePlaceId: active?.placeId ?? null,
       activePlaceIsHistorical: isHistorical,
       openTour,
       closeTour,
     }),
-    [active?.placeId, isHistorical],
+    [active?.placeId, isHistorical, tour],
   );
   return (
     <DiffTourContext.Provider value={value}>

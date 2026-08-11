@@ -11,18 +11,22 @@ This is a causal diff review experience: it shows reviewers the exact Was and No
 - Historical answers preserve their claim-time baseline and result snapshots.
 - A guided tour moves through every changed place without losing context.
 
-> **Review note:** verify the causal boundary, the in-place lens, and the historical state.
+<Callout type="note" title="Review note">
 
-## Contrato de entrega
+Verify the causal boundary, the in-place lens, and the historical state.
 
-*Cada respuesta incluye la evidencia que dio lugar al resultado declarado.*
+</Callout>
 
-| Dónde la ven los revisores | Evidencia mostrada |
-| -------------------------- | ------------------ |
-| Hilo de comentarios | Diferencia Antes/Ahora atribuida a esos comentarios |
-| Chat sobre todo el plan | Resumen agrupado de cambios y recorrido guiado |
-| Plan actual | Fuente actual y diferencias históricas |
-| Comentarios sobre una versión anterior del plan | Indicador de obsolescencia y diferencia entre la premisa y el estado actual |
+## Delivery contract
+
+*Each answer includes the evidence that led to its declared outcome.*
+
+| Where reviewers see it | Evidence shown |
+| ---------------------- | -------------- |
+| Feedback thread | Was/Now diff attributed to that feedback |
+| Plan-wide chat | Grouped change digest and guided tour |
+| Current plan | Current source plus historical diffs |
+| Feedback on an older plan version | Stale badge and premise-to-current diff |
 
 ```ts
 type Outcome = "answered" | "changed" | "needs-input" | "declined";

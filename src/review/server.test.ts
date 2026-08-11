@@ -1013,6 +1013,141 @@ describe("review runtime feedback", () => {
     });
   });
 
+  it("should revert a current changed response before deleting its comment", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-revert-"));
+    const planPath = join(directory, "plan.mdx");
+    const baseline = `# Revert review\n\n## Status\n\nBefore the agent change.\n`;
+    const revised = baseline.replace("Before", "After");
+    await writeFile(planPath, baseline);
+    const isolated = await startReviewRuntime({ planPath });
+    try {
+      const descriptor: unknown = JSON.parse(
+        await readFile(isolated.store.sessionPath, "utf8"),
+      );
+      const isolatedToken =
+        typeof descriptor === "object" &&
+        descriptor !== null &&
+        "token" in descriptor &&
+        typeof descriptor.token === "string"
+          ? descriptor.token
+          : "";
+      const isolatedCall = ({
+        path,
+        body,
+      }: {
+        readonly path: string;
+        readonly body: unknown;
+      }) =>
+        fetch(`${isolated.url.replace(/\/$/u, "")}${path}`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-big-plan-review-token": isolatedToken,
+            "sec-fetch-site": "same-origin",
+            origin: isolated.url.replace(/\/$/u, ""),
+          },
+          body: JSON.stringify(body),
+        });
+      const comment = {
+        id: "e5e5e5e5",
+        body: "Make the status current.",
+        premiseSnapshot: deriveSnapshotDigest(baseline),
+        target: { type: "document" as const },
+      };
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            body: { comments: [comment] },
+          })
+        ).status,
+      ).toBe(200);
+      const exchange = await readAgentExchange({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+      });
+      const request = exchange.requests.find(
+        (candidate) => candidate.kind === "feedback",
+      );
+      if (request === undefined) throw new Error("Feedback was not queued");
+      const claimed = await claimAgentRequest({
+        store: isolated.store,
+        requestId: request.requestId,
+        baselineSnapshot: request.premiseSnapshot,
+        now: new Date().toISOString(),
+      });
+      await writeFile(planPath, revised);
+      const resultSnapshot = deriveSnapshotDigest(revised);
+      await writeSnapshot({
+        store: isolated.store,
+        snapshot: resultSnapshot,
+        source: revised,
+      });
+      await publishAgentResponse({
+        store: isolated.store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: request.requestId,
+            outcomes: [
+              {
+                commentId: comment.id,
+                state: "changed",
+                message: "Updated the status.",
+                changeTargets: ["section/status/paragraph-1"],
+              },
+            ],
+          },
+          request: claimed,
+          commentsById: commentsFromExchange(exchange),
+          changedBlocks: new Set(["section/status/paragraph-1"]),
+          currentSnapshot: resultSnapshot,
+          now: new Date().toISOString(),
+        }),
+      });
+
+      const reverted = await isolatedCall({
+        path: "/api/revert-agent-changes",
+        body: { requestId: request.requestId, commentId: comment.id },
+      });
+      expect(reverted.status).toBe(200);
+      expect(await readFile(planPath, "utf8")).toBe(baseline);
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/revert-agent-changes",
+            body: { requestId: request.requestId, commentId: comment.id },
+          })
+        ).status,
+      ).toBe(409);
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/comments-delete",
+            body: { commentId: comment.id },
+          })
+        ).status,
+      ).toBe(200);
+      const snapshot: unknown = await (
+        await fetch(`${isolated.url}api/drafts`, {
+          headers: {
+            "x-big-plan-review-token": isolatedToken,
+            "sec-fetch-site": "same-origin",
+            origin: isolated.url.replace(/\/$/u, ""),
+          },
+        })
+      ).json();
+      expect(snapshot).not.toMatchObject({
+        sent: expect.arrayContaining([
+          expect.objectContaining({ id: comment.id }),
+        ]),
+      });
+    } finally {
+      await isolated.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should keep answered history when a later follow-up is canceled", async () => {
     const comment = {
       id: "d4d4d4d4",

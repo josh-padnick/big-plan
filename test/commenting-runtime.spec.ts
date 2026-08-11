@@ -64,7 +64,7 @@ test("should restore and submit staged comments through the local review runtime
   const rail = page.getByRole("complementary", { name: "Feedback" });
   const kernel = page.locator("#big-plan-review-root");
   await expect(rail).toHaveCount(0);
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(rail).toContainText("Clarify the failure boundary.");
   await expect(rail).toContainText("Name the operator recovery path.");
   await expect(rail).toContainText("Remove this queued comment before pickup.");
@@ -72,7 +72,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(rail).toContainText("The agent is disconnected");
 
   await page.reload();
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(rail).toContainText("Clarify the failure boundary.");
   await expect(rail).toContainText("Name the operator recovery path.");
   await expect(rail).toContainText("Remove this queued comment before pickup.");
@@ -125,7 +125,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(rail).not.toContainText(
     "Remove this queued comment before pickup.",
   );
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   const blockedSummary = page.locator(
     ".review-contextual-summary[data-review-sent-thread='queued']",
   );
@@ -145,7 +145,7 @@ test("should restore and submit staged comments through the local review runtime
       name: "Expand comment: Clarify the failure boundary.",
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
 
   await rail.getByRole("tab", { name: "Agent" }).click();
   await expect(rail.getByText("Current status", { exact: true })).toBeVisible();
@@ -333,6 +333,30 @@ test("should restore and submit staged comments through the local review runtime
   const activeWork = rail.locator("[data-review-current-activity='working']");
   await expect(activeWork).toContainText("Responding to a comment");
   await expect(activeWork).toContainText("Reviewing the shared feedback batch");
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await rail
+    .getByPlaceholder("Ask about the plan as a whole…")
+    .fill("How does this affect the rollout?");
+  await rail.getByRole("button", { name: "Send", exact: true }).click();
+  const waitingChat = rail
+    .locator("li")
+    .filter({ hasText: "How does this affect the rollout?" });
+  await expect(waitingChat).toContainText(
+    "Waiting - the agent is working on another request",
+  );
+  await waitingChat
+    .getByRole("button", { name: "View active comment →" })
+    .click();
+  const linkedActiveComment = rail
+    .locator('[data-review-comment-id][data-review-selected="true"]')
+    .filter({ hasText: "Clarify the failure boundary." });
+  await expect(linkedActiveComment).toBeVisible();
+  await linkedActiveComment
+    .getByRole("button", { name: "Minimize thread" })
+    .click();
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await waitingChat.getByRole("button", { name: "Cancel request" }).click();
+  await expect(waitingChat).toContainText("Request canceled");
   await rail.getByRole("tab", { name: "Comments" }).click();
 
   const workingGroup = rail.locator("[data-review-thread-group='working']");
@@ -434,7 +458,7 @@ test("should restore and submit staged comments through the local review runtime
   await firstWorkingThread
     .getByRole("button", { name: "Minimize thread" })
     .click();
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await firstWorkingThread
     .getByRole("button", {
       name: "Expand comment: Clarify the failure boundary.",
@@ -611,7 +635,11 @@ test("should restore and submit staged comments through the local review runtime
     "data-review-associated",
     "true",
   );
-  await expect(page.locator("[data-slide]").first()).toHaveAttribute(
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-review-selection-active",
+    "",
+  );
+  await expect(page.locator("[data-slide]").first()).not.toHaveAttribute(
     "data-review-comment-associated",
     "",
   );
@@ -639,7 +667,11 @@ test("should restore and submit staged comments through the local review runtime
   await contextualThread
     .getByRole("button", { name: "1 · Details", exact: true })
     .evaluate((button) => button.click());
-  await expect(page.locator("[data-slide]").first()).toHaveAttribute(
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-review-selection-active",
+    "",
+  );
+  await expect(page.locator("[data-slide]").first()).not.toHaveAttribute(
     "data-review-comment-associated",
     "",
   );
@@ -652,7 +684,7 @@ test("should restore and submit staged comments through the local review runtime
   ).toHaveCount(1);
 
   await page.reload();
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(rail).toContainText("1 · Details");
   await expect(rail).not.toContainText(
     "Original target unavailable in this revision.",
@@ -707,7 +739,7 @@ test("should restore and submit staged comments through the local review runtime
       body: "not-json",
     }),
   );
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(
     rail.getByText("The review server is unreachable", { exact: true }),
   ).toBeVisible({ timeout: 6_000 });
@@ -721,7 +753,37 @@ test("should restore and submit staged comments through the local review runtime
     "Connected to the local review runtime.",
   );
   await page.unroute("**/api/agent");
-  await writeFile(session.plan, beforeSource, "utf8");
+  const revertResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/revert-agent-changes") &&
+      response.request().method() === "POST",
+  );
+  await continuedThread
+    .getByRole("button", { name: "Revert agent changes" })
+    .click();
+  const revertDialog = page.getByRole("alertdialog", {
+    name: "Revert agent changes?",
+  });
+  await expect(revertDialog).toContainText(
+    "The comment and thread will remain until you delete them.",
+  );
+  await revertDialog.getByRole("button", { name: "Revert changes" }).click();
+  expect((await revertResponse).status()).toBe(200);
+  await page.waitForLoadState("domcontentloaded");
+  expect(await readFile(session.plan, "utf8")).toBe(beforeSource);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const revertedThread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: "Name the operator recovery path." });
+  await revertedThread.getByRole("button", { name: "Delete comment" }).click();
+  const revertedDeleteDialog = page.getByRole("alertdialog", {
+    name: "Delete comment?",
+  });
+  await expect(revertedDeleteDialog).toContainText(
+    "The reverted plan changes stay reverted.",
+  );
+  await revertedDeleteDialog.getByRole("button", { name: "Delete" }).click();
+  await expect(rail).not.toContainText("Name the operator recovery path.");
 });
 
 test("should preview stale, historical, and multi-place causal diffs through the real pipeline", async ({
@@ -734,9 +796,14 @@ test("should preview stale, historical, and multi-place causal diffs through the
     new URL("../examples/diff-gallery-before.mdx", import.meta.url),
     "utf8",
   );
-  const after = await readFile(
-    new URL("../examples/diff-gallery-after.mdx", import.meta.url),
-    "utf8",
+  const after = (
+    await readFile(
+      new URL("../examples/diff-gallery-after.mdx", import.meta.url),
+      "utf8",
+    )
+  ).replace(
+    '<Callout type="note" title="Review note">\n\nVerify the causal boundary, the in-place lens, and the historical state.\n\n</Callout>',
+    "> **Review note:** verify the causal boundary, the in-place lens, and the historical state.",
   );
   await writeFile(planPath, after);
   const runtime = await startReviewRuntime({
@@ -786,13 +853,39 @@ test("should preview stale, historical, and multi-place causal diffs through the
       "Maximize code",
     ]);
     expect(codeChrome.gaps).toEqual([4, 4]);
-    await expect(page.locator("[data-review-diff-preview]")).toContainText(
-      "Temporary diff preview",
-    );
-    await page.getByRole("button", { name: /Feedback/u }).click();
+    await expect(page.locator("[data-review-diff-preview]")).toHaveCount(0);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
     const rail = page.getByRole("complementary", { name: "Feedback" });
-    await expect(rail).toContainText("Text changed since you commented");
-    await rail.getByRole("button", { name: "See what changed" }).click();
+    await expect(rail).toContainText("Current diff available");
+    await expect(rail).toContainText(
+      "This compares the plan when you commented with the current plan.",
+    );
+    const originalPresentation = await page
+      .locator("article > p[data-authored-prose]")
+      .first()
+      .evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          fontSize: style.fontSize,
+          lineHeight: style.lineHeight,
+          color: style.color,
+          borderBottomWidth: style.borderBottomWidth,
+        };
+      });
+    const anchoredThread = page
+      .locator("[data-review-thread-side] [data-review-sent-thread]")
+      .first();
+    await expect(anchoredThread).toBeVisible();
+    await page.waitForTimeout(250);
+    const threadPositionBeforeDiff = await anchoredThread.evaluate((thread) => {
+      const rect = thread.parentElement?.getBoundingClientRect();
+      if (rect === undefined)
+        throw new Error("The side thread host is missing");
+      return { left: Math.round(rect.left), top: Math.round(rect.top) };
+    });
+    await rail
+      .getByRole("button", { name: "Review premise → current" })
+      .click();
     await expect(page.locator("[data-review-diff-lens]")).toContainText(
       "What changed",
     );
@@ -800,6 +893,25 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(diffLens.locator("ins")).toHaveCSS(
       "background-color",
       "rgb(222, 234, 215)",
+    );
+    const diffPresentation = diffLens.locator(
+      '[data-review-diff-presentation="lede"]',
+    );
+    await expect(diffPresentation).toHaveCSS(
+      "font-size",
+      originalPresentation.fontSize,
+    );
+    await expect(diffPresentation).toHaveCSS(
+      "line-height",
+      originalPresentation.lineHeight,
+    );
+    await expect(diffPresentation).toHaveCSS(
+      "color",
+      originalPresentation.color,
+    );
+    await expect(diffPresentation).toHaveCSS(
+      "border-bottom-width",
+      originalPresentation.borderBottomWidth,
     );
     const readingWidths = await page.evaluate(() => {
       const lens = document.querySelector<HTMLElement>(
@@ -842,11 +954,39 @@ test("should preview stale, historical, and multi-place causal diffs through the
               threadRect.right > lensRect.left &&
               threadRect.top < lensRect.bottom &&
               threadRect.bottom > lensRect.top;
-            return overlaps ? [thread.dataset.reviewThreadFor ?? "thread"] : [];
+            return overlaps
+              ? [
+                  {
+                    thread: thread.dataset.reviewThreadFor ?? "thread",
+                    lens: {
+                      left: Math.round(lensRect.left),
+                      right: Math.round(lensRect.right),
+                      top: Math.round(lensRect.top),
+                      bottom: Math.round(lensRect.bottom),
+                    },
+                    card: {
+                      left: Math.round(threadRect.left),
+                      right: Math.round(threadRect.right),
+                      top: Math.round(threadRect.top),
+                      bottom: Math.round(threadRect.bottom),
+                    },
+                  },
+                ]
+              : [];
           });
         }),
       )
       .toEqual([]);
+    await expect
+      .poll(() =>
+        anchoredThread.evaluate((thread) => {
+          const rect = thread.parentElement?.getBoundingClientRect();
+          if (rect === undefined)
+            throw new Error("The side thread host is missing");
+          return { left: Math.round(rect.left), top: Math.round(rect.top) };
+        }),
+      )
+      .toEqual(threadPositionBeforeDiff);
     await page.keyboard.press("Escape");
 
     await rail.getByRole("tab", { name: "Chat" }).click();
@@ -854,6 +994,12 @@ test("should preview stale, historical, and multi-place causal diffs through the
       name: /\d+ changes across \d+ slides/u,
     });
     await expect(planWideDigest).toBeVisible();
+    await planWideDigest.click();
+    const deliverySection = rail
+      .locator("[data-review-diff-section]")
+      .filter({ hasText: "2 / Delivery contract" });
+    await expect(deliverySection).toBeVisible();
+    await expect(deliverySection.locator("svg")).toHaveCount(0);
     await rail.getByRole("button", { name: "See the change" }).click();
     await expect(
       rail.getByRole("region", { name: "Historical change" }),
@@ -875,6 +1021,35 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       `Change 2 of ${planWideChangeCount}`,
     );
+    const diffStepper = page.locator("[data-review-diff-stepper]");
+    for (let index = 2; index < planWideChangeCount; index += 1) {
+      if ((await diffStepper.textContent())?.includes("Delivery contract"))
+        break;
+      await page.getByRole("button", { name: "Next change" }).click();
+    }
+    await expect(diffStepper).toContainText("Delivery contract");
+    const tableDiffLens = page.locator("[data-review-diff-lens]");
+    await expect(tableDiffLens.locator("[data-review-diff-table]")).toHaveCount(
+      2,
+    );
+    const tableDiffStructure = await tableDiffLens.evaluate((lens) => ({
+      height: Math.round(lens.getBoundingClientRect().height),
+      headerCount: (lens.textContent?.match(/Where reviewers see it/gu) ?? [])
+        .length,
+    }));
+    expect(tableDiffStructure.height).toBeLessThan(1_000);
+    expect(tableDiffStructure.headerCount).toBe(1);
+    await page.keyboard.press("Escape");
+    await rail.getByRole("tab", { name: "Comments" }).click();
+    await rail.getByRole("button", { name: "Mark addressed" }).click();
+    await expect(rail.getByText("Resolved (1)")).toBeVisible();
+    await rail.getByText("Resolved (1)").click();
+    await expect(
+      rail.getByRole("button", { name: "Unresolve comment" }),
+    ).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await expect(rail.getByText("Resolved (1)")).toBeVisible();
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

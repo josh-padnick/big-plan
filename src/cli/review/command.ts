@@ -93,9 +93,6 @@ export const reviewCommand = async (
     feedback: runtime.store.feedbackDirectory,
     help: [
       ...warnings,
-      ...(diffPreview
-        ? ["Temporary diff preview is active with a synthetic answered request"]
-        : []),
       `Open ${runtime.url} in your browser to review and comment`,
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
       `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,

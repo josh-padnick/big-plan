@@ -214,6 +214,7 @@ export const RequestStatusStrip = ({
   commentCount = 1,
   onShowAgent,
   onCancelRequest,
+  activeRequestLink,
 }: {
   readonly status: AgentStatus;
   readonly activity: ReadonlyArray<MessageActivity>;
@@ -221,6 +222,10 @@ export const RequestStatusStrip = ({
   readonly commentCount?: number;
   readonly onShowAgent: () => void;
   readonly onCancelRequest?: () => void;
+  readonly activeRequestLink?: {
+    readonly label: string;
+    readonly onClick: () => void;
+  };
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const meaningful = activity
@@ -272,6 +277,15 @@ export const RequestStatusStrip = ({
           onClick={onShowAgent}
         >
           Show setup instructions →
+        </button>
+      ) : null}
+      {status.stage === "waiting" && activeRequestLink !== undefined ? (
+        <button
+          type="button"
+          className="mt-1 w-fit cursor-pointer border-0 bg-transparent p-0 font-semibold text-current underline underline-offset-[0.16em] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onClick={activeRequestLink.onClick}
+        >
+          {activeRequestLink.label} →
         </button>
       ) : null}
       {isWorking && surface === "thread" ? (
@@ -404,8 +418,13 @@ export const AgentChangeDigest = ({
   readonly onLoad: () => void;
   readonly actionLabel?: string;
 }) => {
-  const { activePlaceId, activePlaceIsHistorical, closeTour, openTour } =
-    useDiffTour();
+  const {
+    activeDiff,
+    activePlaceId,
+    activePlaceIsHistorical,
+    closeTour,
+    openTour,
+  } = useDiffTour();
   const available =
     diff === null
       ? []
@@ -427,16 +446,38 @@ export const AgentChangeDigest = ({
     );
   }
   if (available.length === 0) return null;
-  const isActive = available.some((place) => place.placeId === activePlaceId);
-  const historicalPlace = activePlaceIsHistorical
-    ? available.find((place) => place.placeId === activePlaceId)
-    : undefined;
+  const ownsActiveTour = activeDiff === diff;
+  const isActive =
+    ownsActiveTour &&
+    available.some((place) => place.placeId === activePlaceId);
+  const historicalPlace =
+    ownsActiveTour && activePlaceIsHistorical
+      ? available.find((place) => place.placeId === activePlaceId)
+      : undefined;
   const sections = new Map<string, Array<DiffPlace>>();
   for (const change of available) {
     const group = sections.get(change.section) ?? [];
     group.push(change);
     sections.set(change.section, group);
   }
+  const sectionKicker = (entries: ReadonlyArray<DiffPlace>): string | null => {
+    for (const entry of entries) {
+      for (const index of entry.locationIndexes) {
+        const location = diff.locations.at(index);
+        const blockId = location?.newBlockId ?? location?.oldBlockId;
+        if (blockId === undefined) continue;
+        const kicker = document
+          .querySelector<HTMLElement>(
+            `[data-block-id="${CSS.escape(blockId)}"]`,
+          )
+          ?.closest<HTMLElement>("[data-slide]")
+          ?.querySelector<HTMLElement>("[data-slide-kicker]")
+          ?.textContent?.trim();
+        if (kicker !== undefined && kicker !== "") return kicker;
+      }
+    }
+    return null;
+  };
   return (
     <div className="mt-2 grid min-w-0 gap-2 border-t border-edge pt-2">
       <button
@@ -453,9 +494,13 @@ export const AgentChangeDigest = ({
         <div className="min-w-0 overflow-hidden rounded-md border border-edge bg-paper">
           {Array.from(sections).map(([section, entries]) => (
             <div key={section}>
-              <div className="flex min-w-0 items-center gap-1 border-t border-edge bg-surface px-2 py-1 text-2xs font-bold text-muted first:border-t-0">
-                <Icon icon={CHEVRON_RIGHT_ICON} />
-                <span className="min-w-0 flex-1 truncate">{section}</span>
+              <div
+                className="flex min-w-0 items-center gap-2 border-t border-edge bg-surface px-2 py-1.5 text-2xs font-semibold text-subtle uppercase tracking-caps first:border-t-0"
+                data-review-diff-section=""
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {sectionKicker(entries) ?? section}
+                </span>
                 <span className="rounded-full bg-paper px-1 text-2xs">
                   {entries.length}
                 </span>

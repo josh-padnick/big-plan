@@ -24,7 +24,7 @@
 //    script running on this runtime's own origin.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { basename, extname, resolve } from "node:path";
@@ -136,6 +136,7 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "PUT", path: "/api/drafts" },
   { method: "POST", path: "/api/feedback" },
   { method: "POST", path: "/api/comments-delete" },
+  { method: "POST", path: "/api/revert-agent-changes" },
   { method: "GET", path: "/api/agent" },
   { method: "POST", path: "/api/agent-requests" },
   { method: "POST", path: "/api/agent-cancel" },
@@ -159,6 +160,23 @@ const constantTimeEquals = (left: string, right: string): boolean => {
   const b = Buffer.from(right, "utf8");
   // Length is not secret, and timingSafeEqual requires equal lengths.
   return a.length === b.length && timingSafeEqual(a, b);
+};
+
+const replacePlanSource = async ({
+  path,
+  source,
+}: {
+  readonly path: string;
+  readonly source: string;
+}): Promise<void> => {
+  const temporaryPath = `${path}.big-plan-revert-${randomBytes(8).toString("hex")}`;
+  const mode = (await stat(path)).mode;
+  try {
+    await writeFile(temporaryPath, source, { flag: "wx", mode });
+    await rename(temporaryPath, path);
+  } finally {
+    await unlink(temporaryPath).catch(() => undefined);
+  }
 };
 
 const readBody = async (request: IncomingMessage): Promise<unknown> => {
@@ -920,6 +938,100 @@ export const startReviewRuntime = async ({
       });
       return;
     }
+    if (route.path === "/api/revert-agent-changes") {
+      const payload =
+        typeof body === "object" && body !== null
+          ? (body as Readonly<Record<string, unknown>>)
+          : {};
+      const requestId = payload.requestId;
+      const commentId = payload.commentId;
+      if (typeof requestId !== "string" || typeof commentId !== "string") {
+        refuse({
+          response,
+          status: 400,
+          reason: "A request id and comment id are required",
+        });
+        return;
+      }
+      const exchange = await readAgentCommentHistory({
+        store,
+        sessionId,
+        planId,
+        commentId,
+      });
+      const request = exchange.requests.find(
+        (candidate) => candidate.requestId === requestId,
+      );
+      const agentResponse = exchange.responses.find(
+        (candidate) => candidate.requestId === requestId,
+      );
+      const changedOutcome =
+        agentResponse?.kind === "chat"
+          ? undefined
+          : agentResponse?.outcomes.find(
+              (outcome) =>
+                outcome.commentId === commentId && outcome.state === "changed",
+            );
+      if (
+        request === undefined ||
+        request.baselineSnapshot === undefined ||
+        agentResponse === undefined ||
+        changedOutcome === undefined
+      ) {
+        refuse({
+          response,
+          status: 404,
+          reason: "No reversible agent response exists for this comment",
+        });
+        return;
+      }
+      const currentSource = await readFile(resolvedPlanPath, "utf8");
+      if (
+        deriveSnapshotDigest(currentSource) !== agentResponse.resultSnapshot
+      ) {
+        refuse({
+          response,
+          status: 409,
+          reason:
+            "The plan changed after this response, so reverting it would overwrite newer work",
+        });
+        return;
+      }
+      let baselineSource: string;
+      try {
+        baselineSource = await readSnapshot({
+          store,
+          snapshot: request.baselineSnapshot,
+        });
+      } catch {
+        refuse({
+          response,
+          status: 404,
+          reason: "The response baseline is no longer available",
+        });
+        return;
+      }
+      renderDocument({
+        markdown: baselineSource,
+        fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+        identity: {},
+      });
+      await replacePlanSource({
+        path: resolvedPlanPath,
+        source: baselineSource,
+      });
+      acceptedSnapshot = request.baselineSnapshot;
+      sendJson({
+        response,
+        status: 200,
+        value: {
+          requestId,
+          commentId,
+          currentSnapshot: request.baselineSnapshot,
+        },
+      });
+      return;
+    }
     if (route.path === "/api/comments-delete") {
       const payload =
         typeof body === "object" && body !== null
@@ -949,17 +1061,41 @@ export const startReviewRuntime = async ({
             : [],
         ),
       );
+      const currentSnapshot = deriveSnapshotDigest(
+        await readFile(resolvedPlanPath, "utf8"),
+      );
+      const revertedAnsweredRequestIds = new Set(
+        exchange.requests.flatMap((candidate) =>
+          candidate.baselineSnapshot === currentSnapshot &&
+          answeredRequestIds.has(candidate.requestId)
+            ? [candidate.requestId]
+            : [],
+        ),
+      );
+      const revertedChangedResponse = exchange.responses.some(
+        (candidate) =>
+          candidate.kind !== "chat" &&
+          revertedAnsweredRequestIds.has(candidate.requestId) &&
+          candidate.outcomes.some(
+            (outcome) =>
+              outcome.commentId === commentId && outcome.state === "changed",
+          ),
+      );
       const commentRequests = exchange.requests;
-      if (answeredRequestIds.size > 0 || commentRequests.length === 0) {
+      if (
+        (answeredRequestIds.size > 0 && !revertedChangedResponse) ||
+        commentRequests.length === 0
+      ) {
         refuse({
           response,
           status: 409,
           reason:
-            "Only a queued or canceled comment can be deleted from the review",
+            "Only a queued, canceled, or reverted comment can be deleted from the review",
         });
         return;
       }
       if (
+        answeredRequestIds.size === 0 &&
         commentRequests.some((candidate) => candidate.claimedAt !== undefined)
       ) {
         refuse({
@@ -972,8 +1108,23 @@ export const startReviewRuntime = async ({
       const pendingRequests = commentRequests.filter(
         (candidate) => candidate.canceledAt === undefined,
       );
+      if (
+        answeredRequestIds.size > 0 &&
+        pendingRequests.some(
+          (candidate) => !answeredRequestIds.has(candidate.requestId),
+        )
+      ) {
+        refuse({
+          response,
+          status: 409,
+          reason: "A follow-up is still pending for this comment",
+        });
+        return;
+      }
       const now = new Date().toISOString();
-      for (const pending of pendingRequests) {
+      for (const pending of answeredRequestIds.size === 0
+        ? pendingRequests
+        : []) {
         if (pending.canceledAt !== undefined) continue;
         if (pending.kind === "feedback") {
           await removeCommentFromQueuedFeedbackRequest({
