@@ -3,6 +3,7 @@
 
 import { useState, type ReactNode } from "react";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
@@ -16,6 +17,7 @@ import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import { Icon } from "./icon.browser.js";
+import { Button } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
 
@@ -421,6 +423,8 @@ export const AgentChangeDigest = ({
   isLoading,
   onLoad,
   actionLabel,
+  onResolve,
+  resolved = false,
 }: {
   readonly diff: SnapshotDiff | null;
   readonly placeIds?: ReadonlyArray<string>;
@@ -429,8 +433,11 @@ export const AgentChangeDigest = ({
   readonly isLoading: boolean;
   readonly onLoad: () => void;
   readonly actionLabel?: string;
+  readonly onResolve?: () => void;
+  readonly resolved?: boolean;
 }) => {
-  const { activeDiff, activePlaceId, closeTour, openTour } = useDiffTour();
+  const { activeDiff, activePlaceId, isPlaceAccepted, closeTour, openTour } =
+    useDiffTour();
   const available =
     diff === null
       ? []
@@ -452,6 +459,10 @@ export const AgentChangeDigest = ({
     );
   }
   if (available.length === 0) return null;
+  const acceptedCount = available.filter((place) =>
+    isPlaceAccepted(diff, place.placeId),
+  ).length;
+  const allAccepted = acceptedCount === available.length;
   const ownsActiveTour = activeDiff === diff;
   const isActive =
     ownsActiveTour &&
@@ -491,6 +502,11 @@ export const AgentChangeDigest = ({
         <Icon icon={CHEVRON_RIGHT_ICON} />
         {available.length} change{available.length === 1 ? "" : "s"} across{" "}
         {sections.size} slide{sections.size === 1 ? "" : "s"}
+        {acceptedCount === 0 ? null : (
+          <span className="ml-auto font-medium text-accent">
+            {acceptedCount}/{available.length} reviewed
+          </span>
+        )}
       </button>
       {isExpanded ? (
         <div className="min-w-0 overflow-hidden rounded-md border border-edge bg-paper">
@@ -527,6 +543,15 @@ export const AgentChangeDigest = ({
                   <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                     {entry.label}
                   </span>
+                  {isPlaceAccepted(diff, entry.placeId) ? (
+                    <span
+                      className="inline-flex shrink-0 items-center gap-1 text-2xs font-semibold text-accent [&>svg]:size-3"
+                      aria-label="Accepted"
+                    >
+                      <Icon icon={CHECK_ICON} />
+                      Accepted
+                    </span>
+                  ) : null}
                   <em className="shrink-0 text-2xs font-normal text-muted">
                     {entry.note}
                   </em>
@@ -566,6 +591,19 @@ export const AgentChangeDigest = ({
               ? "See the change"
               : `See changes (${available.length})`))}
       </button>
+      {!allAccepted || onResolve === undefined ? null : (
+        <div
+          className="flex min-w-0 items-center gap-2 rounded-md border border-accent bg-accent-soft p-2 text-2xs text-accent"
+          data-review-changes-reviewed=""
+        >
+          <span className="min-w-0 flex-1 font-semibold">
+            All changes reviewed
+          </span>
+          <Button variant="accentOutline" size="micro" onClick={onResolve}>
+            {resolved ? "Unresolve comment" : "Resolve comment"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

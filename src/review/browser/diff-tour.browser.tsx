@@ -4,6 +4,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -28,11 +29,35 @@ type OpenTour = {
 type DiffTourValue = {
   readonly activeDiff: SnapshotDiff | null;
   readonly activePlaceId: string | null;
+  readonly isPlaceAccepted: (diff: SnapshotDiff, placeId: string) => boolean;
+  readonly acceptPlace: (diff: SnapshotDiff, placeId: string) => void;
   readonly openTour: (tour: OpenTour) => void;
   readonly closeTour: () => void;
 };
 
 const DiffTourContext = createContext<DiffTourValue | null>(null);
+const ACCEPTED_PLACES_STORAGE_KEY = "big-plan.review.accepted-diff-places.v1";
+
+const acceptedPlaceKey = (diff: SnapshotDiff, placeId: string): string =>
+  `${diff.from}:${diff.to}:${placeId}`;
+
+/** Restores only bounded diff identifiers from optional browser preference state. */
+const initialAcceptedPlaces = (): ReadonlySet<string> => {
+  try {
+    const parsed: unknown = JSON.parse(
+      window.localStorage.getItem(ACCEPTED_PLACES_STORAGE_KEY) ?? "[]",
+    );
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed.filter(
+        (entry): entry is string =>
+          typeof entry === "string" && entry.length <= 256,
+      ),
+    );
+  } catch {
+    return new Set();
+  }
+};
 
 /** Gives change attachments one shared tour without coupling them together. */
 export const useDiffTour = (): DiffTourValue => {
@@ -491,6 +516,7 @@ export const DiffTourProvider = ({
   const [tour, setTour] = useState<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
+  const [acceptedPlaces, setAcceptedPlaces] = useState(initialAcceptedPlaces);
   const places = useMemo(() => {
     if (tour === null) return [];
     const allowed = new Set(tour.placeIds);
@@ -498,6 +524,27 @@ export const DiffTourProvider = ({
   }, [tour]);
   const active = places.at(index);
   const closeTour = () => setTour(null);
+  const isPlaceAccepted = useCallback(
+    (diff: SnapshotDiff, placeId: string): boolean =>
+      acceptedPlaces.has(acceptedPlaceKey(diff, placeId)),
+    [acceptedPlaces],
+  );
+  const acceptPlace = useCallback(
+    (diff: SnapshotDiff, placeId: string): void => {
+      setAcceptedPlaces((current) => {
+        const next = new Set(current);
+        next.add(acceptedPlaceKey(diff, placeId));
+        return next;
+      });
+    },
+    [],
+  );
+  useEffect(() => {
+    window.localStorage.setItem(
+      ACCEPTED_PLACES_STORAGE_KEY,
+      JSON.stringify([...acceptedPlaces]),
+    );
+  }, [acceptedPlaces]);
   const openTour = (next: OpenTour): void => {
     const startIndex =
       next.startPlaceId === undefined
@@ -520,10 +567,12 @@ export const DiffTourProvider = ({
     () => ({
       activeDiff: tour?.diff ?? null,
       activePlaceId: active?.placeId ?? null,
+      isPlaceAccepted,
+      acceptPlace,
       openTour,
       closeTour,
     }),
-    [active?.placeId, tour],
+    [acceptPlace, active?.placeId, isPlaceAccepted, tour],
   );
   return (
     <DiffTourContext.Provider value={value}>
@@ -573,6 +622,16 @@ export const DiffTourProvider = ({
               onClick={() => setIsVisible((current) => !current)}
             >
               {isVisible ? "Show current text" : "Show changes"}
+            </button>
+            <button
+              type="button"
+              className="min-h-11 cursor-pointer rounded-full border border-accent bg-accent-soft px-3 font-semibold text-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:border-edge disabled:bg-surface disabled:text-muted wide:min-h-8"
+              disabled={isPlaceAccepted(tour.diff, active.placeId)}
+              onClick={() => acceptPlace(tour.diff, active.placeId)}
+            >
+              {isPlaceAccepted(tour.diff, active.placeId)
+                ? "Accepted"
+                : "Accept change"}
             </button>
             <button
               type="button"

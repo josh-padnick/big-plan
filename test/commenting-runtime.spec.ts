@@ -895,6 +895,12 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(page.locator("[data-review-diff-lens]")).toContainText(
       "What changed",
     );
+    await page.getByRole("button", { name: "Accept change" }).click();
+    const reviewedChange = rail.locator("[data-review-changes-reviewed]");
+    await expect(reviewedChange).toContainText("All changes reviewed");
+    await expect(
+      reviewedChange.getByRole("button", { name: "Resolve comment" }),
+    ).toBeVisible();
     const diffLens = page.locator("[data-review-diff-lens]");
     await expect(diffLens.locator("ins")).toHaveCSS(
       "background-color",

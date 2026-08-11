@@ -1834,6 +1834,8 @@ const ChangeAttachment = ({
   changeTargets,
   currentSnapshot,
   onStatus,
+  onResolve,
+  resolved,
 }: {
   readonly identity: RuntimeIdentity;
   readonly request: AgentRequest;
@@ -1841,6 +1843,8 @@ const ChangeAttachment = ({
   readonly changeTargets?: ReadonlyArray<string>;
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
+  readonly onResolve?: () => void;
+  readonly resolved?: boolean;
 }) => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -1878,6 +1882,8 @@ const ChangeAttachment = ({
       }
       isLoading={isLoading}
       onLoad={() => void load()}
+      onResolve={onResolve}
+      resolved={resolved}
     />
   );
 };
@@ -1973,6 +1979,7 @@ const StalePremiseNotice = ({
           isLoading={false}
           onLoad={() => undefined}
           actionLabel="Review premise → current"
+          onResolve={onResolve}
         />
       ) : null}
       {onResolve === undefined ? null : (
@@ -2489,6 +2496,13 @@ const SentThread = ({
                             changeTargets={requestOutcome.changeTargets}
                             currentSnapshot={currentSnapshot}
                             onStatus={onReplySent}
+                            onResolve={
+                              latestChanged?.request.requestId ===
+                              request.requestId
+                                ? onResolve
+                                : undefined
+                            }
+                            resolved={resolved}
                           />
                         ) : null}
                       </MessageTurn>
