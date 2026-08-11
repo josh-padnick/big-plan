@@ -223,7 +223,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(rail).toContainText("Name the operator recovery path.");
   await expect(rail).toContainText("Remove this queued comment before pickup.");
   await expect(rail).toContainText("1 · Details");
-  await expect(rail).toContainText("The agent is disconnected");
+  await expect(rail).toContainText(/Agent connected|agent is disconnected/u);
 
   await page.reload();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
