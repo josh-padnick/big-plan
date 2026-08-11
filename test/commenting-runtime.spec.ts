@@ -562,7 +562,7 @@ test("should restore and submit staged comments through the local review runtime
     sentThread.getByRole("button", { name: "Expand thread", exact: true }),
   ).toBeVisible();
   await expect(
-    sentThread.getByRole("button", { name: "Revert agent changes" }),
+    sentThread.getByRole("button", { name: "Revert response" }),
   ).toBeVisible();
   await expect(
     sentThread.getByRole("button", { name: "Resolve comment" }),
@@ -580,12 +580,10 @@ test("should restore and submit staged comments through the local review runtime
     );
   expect(changedNextStepLabels).toEqual([
     "Minimize thread",
-    "Revert agent changes",
+    "Revert response",
     "Resolve comment",
   ]);
-  await kernel
-    .getByRole("button", { name: /See (?:the change|changes)/u })
-    .click();
+  await kernel.getByRole("button", { name: /Review change/u }).click();
   await expect(page.locator("[data-review-diff-lens]")).toContainText(
     "What changed",
   );
@@ -593,13 +591,13 @@ test("should restore and submit staged comments through the local review runtime
     "Change 1 of",
   );
   await expect(kernel).toContainText("atomically");
-  const hideChange = sentThread.getByRole("button", {
-    name: "Hide the change",
+  const closeReview = sentThread.getByRole("button", {
+    name: "Close review",
   });
-  await expect(hideChange).toBeVisible();
-  await hideChange.click();
+  await expect(closeReview).toBeVisible();
+  await closeReview.click();
   await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
-  await sentThread.getByRole("button", { name: "See the change" }).click();
+  await sentThread.getByRole("button", { name: "Review change" }).click();
   await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
   await page.getByRole("button", { name: "Show current text" }).click();
   await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
@@ -763,15 +761,15 @@ test("should restore and submit staged comments through the local review runtime
       response.request().method() === "POST",
   );
   await continuedThread
-    .getByRole("button", { name: "Revert agent changes" })
+    .getByRole("button", { name: "Revert response" })
     .click();
   const revertDialog = page.getByRole("alertdialog", {
-    name: "Revert agent changes?",
+    name: "Revert response?",
   });
   await expect(revertDialog).toContainText(
     "The comment and thread will remain until you delete them.",
   );
-  await revertDialog.getByRole("button", { name: "Revert changes" }).click();
+  await revertDialog.getByRole("button", { name: "Revert response" }).click();
   expect((await revertResponse).status()).toBe(200);
   await page.waitForLoadState("domcontentloaded");
   expect(await readFile(session.plan, "utf8")).toBe(beforeSource);
@@ -818,10 +816,17 @@ test("should preview stale, historical, and multi-place causal diffs through the
   });
   try {
     await page.goto(runtime.url);
+    await page.waitForFunction(
+      () => typeof window.bigPlan?.feedback?.add === "function",
+    );
     const codeFigure = page.locator(".code-figure").last();
     await expect(
       codeFigure.getByRole("button", { name: /Comment on/u }),
     ).toBeVisible();
+    await expect(codeFigure.locator("[data-review-toolbar-host]")).toHaveCSS(
+      "opacity",
+      "1",
+    );
     const codeChrome = await codeFigure.evaluate((figure) => {
       const body = figure.querySelector(":scope > pre");
       const controls = Array.from(
@@ -895,12 +900,21 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(page.locator("[data-review-diff-lens]")).toContainText(
       "What changed",
     );
-    await page.getByRole("button", { name: "Accept change" }).click();
+    await page
+      .getByRole("button", { name: "Mark this change reviewed" })
+      .click();
     const reviewedChange = rail.locator("[data-review-changes-reviewed]");
-    await expect(reviewedChange).toContainText("All changes reviewed");
+    await expect(reviewedChange).toContainText("Review complete");
     await expect(
-      reviewedChange.getByRole("button", { name: "Resolve comment" }),
+      reviewedChange.getByRole("button", { name: "Resolve" }),
     ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Mark this change unreviewed" })
+      .click();
+    await expect(reviewedChange).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Mark this change reviewed" })
+      .click();
     const diffLens = page.locator("[data-review-diff-lens]");
     await expect(diffLens.locator("ins")).toHaveCSS(
       "background-color",
@@ -999,7 +1013,11 @@ test("should preview stale, historical, and multi-place causal diffs through the
         }),
       )
       .toEqual(threadPositionBeforeDiff);
-    await page.keyboard.press("Escape");
+    await reviewedChange.getByRole("button", { name: "Resolve" }).click();
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+    await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
+    await rail.getByText("Resolved (1)").click();
+    await rail.getByRole("button", { name: "Unresolve", exact: true }).click();
 
     await rail.getByRole("tab", { name: "Chat" }).click();
     const planWideDigest = rail.getByRole("button", {
@@ -1012,7 +1030,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
       .filter({ hasText: "2 / Delivery contract" });
     await expect(deliverySection).toBeVisible();
     await expect(deliverySection.locator("svg")).toHaveCount(0);
-    await rail.getByRole("button", { name: "See the change" }).click();
+    await rail.getByRole("button", { name: "Review change" }).click();
     const historicalChange = page
       .locator("main")
       .getByRole("region", { name: "Historical change" });
@@ -1029,7 +1047,9 @@ test("should preview stale, historical, and multi-place causal diffs through the
       (await planWideDigest.textContent()) ?? "0",
       10,
     );
-    await rail.getByRole("button", { name: /See changes \(\d+\)/u }).click();
+    await rail
+      .getByRole("button", { name: /Review changes \(\d+\)|Continue review/u })
+      .click();
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       `Change 1 of ${planWideChangeCount}`,
     );
@@ -1064,6 +1084,8 @@ test("should preview stale, historical, and multi-place causal diffs through the
     expect(tableDiffStructure.height).toBeLessThan(1_000);
     expect(tableDiffStructure.headerCount).toBe(1);
     expect(tableDiffStructure.overflowingTables).toBe(0);
+    await expect(tableDiffLens).toContainText("Baseline to result");
+    await expect(tableDiffLens).toContainText("Premise to current");
     await page.keyboard.press("Escape");
     await rail.getByRole("tab", { name: "Comments" }).click();
     await rail.getByRole("button", { name: "Mark addressed" }).click();
@@ -1079,6 +1101,45 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("should turn diagram notes and decision proposals into review comments", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await page.waitForFunction(
+    () => typeof window.bigPlan?.feedback?.add === "function",
+  );
+  await page.evaluate(() =>
+    window.bigPlan?.feedback?.add({
+      source: "flow-diagram",
+      anchor: null,
+      items: [{ kind: "comment", body: "Keep this source label explicit." }],
+    }),
+  );
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).toContainText("Diagram feedback:");
+  await expect(rail).toContainText("Keep this source label explicit.");
+
+  const sent = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await page.evaluate(() =>
+    window.bigPlan?.feedback?.add({
+      source: "decision",
+      anchor: null,
+      submit: "now",
+      items: [
+        { kind: "comment", body: "Suggest another option: local journal." },
+      ],
+    }),
+  );
+  expect((await sent).ok()).toBe(true);
+  await expect(rail).toContainText("Suggested decision option:");
+  await expect(rail).toContainText("Suggest another option: local journal.");
 });
 
 test("should mark a superseded review as read-only and link to its replacement", async ({
