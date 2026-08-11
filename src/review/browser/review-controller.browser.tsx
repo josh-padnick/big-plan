@@ -406,6 +406,18 @@ const writeLocalDrafts = (
   }
 };
 
+const persistedReviewFingerprint = ({
+  drafts,
+  resolvedCommentIds,
+}: {
+  readonly drafts: ReadonlyArray<ReviewComment>;
+  readonly resolvedCommentIds: ReadonlySet<string>;
+}): string =>
+  JSON.stringify({
+    drafts,
+    resolvedCommentIds: Array.from(resolvedCommentIds).sort(),
+  });
+
 const requestJson = async ({
   path,
   identity,
@@ -2813,6 +2825,7 @@ export const ReviewController = () => {
     [resolvedCommentIds, sent, unresolvedDrafts],
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
+  const persistedReviewState = useRef<string | null>(null);
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setAgent(snapshot);
     setCancelPendingRequestIds((current) =>
@@ -3102,9 +3115,16 @@ export const ReviewController = () => {
           await requestJson({ path: "/api/drafts", identity }),
         );
         if (current) {
+          const restoredResolvedCommentIds = new Set(
+            snapshot.resolvedCommentIds,
+          );
+          persistedReviewState.current = persistedReviewFingerprint({
+            drafts: snapshot.drafts,
+            resolvedCommentIds: restoredResolvedCommentIds,
+          });
           setDrafts(snapshot.drafts);
           setSent(snapshot.sent);
-          setResolvedCommentIds(new Set(snapshot.resolvedCommentIds));
+          setResolvedCommentIds(restoredResolvedCommentIds);
           setStatus("Connected to the local review runtime.");
           setIsHydrated(true);
         }
@@ -3126,6 +3146,12 @@ export const ReviewController = () => {
       if (planId !== "") writeLocalDrafts(planId, drafts);
       return;
     }
+    if (runtimeSession?.authoritative === false) return;
+    const fingerprint = persistedReviewFingerprint({
+      drafts,
+      resolvedCommentIds,
+    });
+    if (persistedReviewState.current === fingerprint) return;
     void serializeRuntimeWrite(() =>
       requestJson({
         path: "/api/drafts",
@@ -3137,13 +3163,18 @@ export const ReviewController = () => {
           resolvedCommentIds: Array.from(resolvedCommentIds),
         },
       }),
-    ).catch((error: unknown) => setStatus(errorMessage(error)));
+    )
+      .then(() => {
+        persistedReviewState.current = fingerprint;
+      })
+      .catch((error: unknown) => setStatus(errorMessage(error)));
   }, [
     drafts,
     identity,
     isHydrated,
     planId,
     resolvedCommentIds,
+    runtimeSession?.authoritative,
     serializeRuntimeWrite,
   ]);
 

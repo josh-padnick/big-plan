@@ -1277,6 +1277,12 @@ test("should mark a superseded review as read-only and link to its replacement",
   page,
   reviewRuntimeUrl,
 }) => {
+  let draftWrites = 0;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/drafts") && request.method() === "PUT") {
+      draftWrites += 1;
+    }
+  });
   await page.goto(reviewRuntimeUrl);
   const session = await page.evaluate(async () => {
     const root = document.documentElement;
@@ -1311,6 +1317,7 @@ test("should mark a superseded review as read-only and link to its replacement",
     await expect(
       rail.getByRole("link", { name: "Open latest review" }),
     ).toHaveAttribute("href", replacement.url);
+    expect(draftWrites).toBe(0);
   } finally {
     await replacement.close();
   }
