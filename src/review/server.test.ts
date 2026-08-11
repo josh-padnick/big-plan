@@ -819,6 +819,136 @@ describe("review runtime feedback", () => {
     });
   });
 
+  it("should preserve first-class component markup in snapshot diffs", async () => {
+    const before = `# Component snapshots
+
+## Choice
+
+<Decision question="Which path?">
+
+<Option title="Canary" recommended summary="Start narrow.">
+<Consideration label="Risk" verdict="Low" />
+</Option>
+
+<Option title="Global">
+<Consideration label="Risk" verdict="High" />
+</Option>
+
+</Decision>
+
+## Flow
+
+<FlowDiagram>
+
+<Stage title="Author">
+<Node id="source" label="Plan source" />
+</Stage>
+
+<Stage title="Review">
+<Node id="review" label="Review service" />
+</Stage>
+
+<Edge from="source" to="review" label="opens" />
+
+</FlowDiagram>
+
+## Sequence
+
+<MermaidDiagram>
+
+\`\`\`mermaid
+flowchart LR
+  A[Author] --> B[Review]
+\`\`\`
+
+</MermaidDiagram>
+
+## Layout
+
+<FileTree title="Review module">
+
+\`\`\`tree
+src/
+  service.ts - Coordinates review.
+\`\`\`
+
+</FileTree>
+
+<FileTreeDiff title="Planned changes">
+
+\`\`\`tree
+src/
+  service.ts [modified] - Coordinates review.
+\`\`\`
+
+</FileTreeDiff>
+`;
+    const after = before
+      .replace('question="Which path?"', 'question="Which rollout path?"')
+      .replace('label="Review service"', 'label="Local review service"')
+      .replace("A[Author] --> B[Review]", "A[Author] --> B[Plan review]")
+      .replace(
+        "  service.ts - Coordinates review.",
+        "  service.ts - Coordinates review.\n  repository.ts - Stores events.",
+      )
+      .replace(
+        "  service.ts [modified] - Coordinates review.",
+        "  service.ts [modified] - Coordinates plan review.",
+      );
+    const from = deriveSnapshotDigest(before);
+    const to = deriveSnapshotDigest(after);
+    await writeSnapshot({
+      store: runtime.store,
+      snapshot: from,
+      source: before,
+    });
+    await writeSnapshot({
+      store: runtime.store,
+      snapshot: to,
+      source: after,
+    });
+
+    const response = await call({
+      path: `/api/snapshot-diff?from=${from}&to=${to}`,
+    });
+    const value = (await response.json()) as {
+      readonly locations: ReadonlyArray<{
+        readonly kind: string;
+        readonly oldHtml?: string;
+        readonly newHtml?: string;
+      }>;
+    };
+    const decision = value.locations.find(
+      (location) => location.kind === "decision",
+    );
+    const flow = value.locations.find(
+      (location) => location.kind === "flow-diagram",
+    );
+    const fileTree = value.locations.find(
+      (location) => location.kind === "file-tree",
+    );
+    const mermaid = value.locations.find(
+      (location) => location.kind === "mermaid-diagram",
+    );
+    const fileTreeDiff = value.locations.find(
+      (location) => location.kind === "file-tree-diff",
+    );
+    expect(decision?.oldHtml).toContain("Which path?");
+    expect(decision?.newHtml).toContain("Which rollout path?");
+    expect(flow?.oldHtml).toContain("Review service");
+    expect(flow?.newHtml).toContain("Local review service");
+    expect(fileTree?.oldHtml).toContain("service.ts");
+    expect(fileTree?.newHtml).toContain("repository.ts");
+    expect(fileTree?.oldHtml).not.toContain("data-block-id");
+    expect(fileTree?.newHtml).not.toContain("data-block-id");
+    expect(mermaid?.oldHtml).toContain("Review");
+    expect(mermaid?.newHtml).toContain("Plan review");
+    expect(fileTreeDiff?.oldHtml).toContain("Coordinates review");
+    expect(fileTreeDiff?.newHtml).toContain("Coordinates plan review");
+    expect(mermaid?.oldHtml).toContain(`review-diff-was-${from}`);
+    expect(mermaid?.newHtml).toContain(`review-diff-now-${to}`);
+  });
+
   it("should reject malformed snapshot names at the diff boundary", async () => {
     expect(
       (

@@ -28,6 +28,8 @@ export type SnapshotDiffLocation = {
   readonly oldText: string;
   readonly newText: string;
   readonly runs: ReadonlyArray<DiffRun>;
+  readonly oldHtml?: string;
+  readonly newHtml?: string;
   readonly beforeBlockId?: string;
   readonly afterBlockId?: string;
 };
@@ -52,6 +54,33 @@ const ALIGNMENT_ACCEPTANCE = 0.52;
 const REWRITTEN_SURVIVAL = 0.2;
 const PLACE_LABEL_LIMIT = 90;
 const DERIVED_BLOCK_KINDS = new Set(["table-of-contents"]);
+
+/** Component roots stay opaque and use their compiled rendering as evidence. */
+export const RENDERED_SNAPSHOT_KINDS: ReadonlySet<string> = new Set([
+  "decision",
+  "quick-decision",
+  "decision-analysis",
+  "flow-diagram",
+  "mermaid-diagram",
+  "file-tree",
+  "file-tree-diff",
+]);
+
+const runsFor = ({
+  kind,
+  before,
+  after,
+}: {
+  readonly kind: string;
+  readonly before: string;
+  readonly after: string;
+}): ReadonlyArray<DiffRun> =>
+  RENDERED_SNAPSHOT_KINDS.has(kind)
+    ? [
+        ...(before === "" ? [] : [{ op: "del" as const, text: before }]),
+        ...(after === "" ? [] : [{ op: "ins" as const, text: after }]),
+      ]
+    : diffWords({ before, after });
 
 const normalized = (value: string): string =>
   value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
@@ -298,7 +327,11 @@ export const diffSnapshots = ({
       section: newBlock.section,
       oldText: oldBlock.text,
       newText: newBlock.text,
-      runs: diffWords({ before: oldBlock.text, after: newBlock.text }),
+      runs: runsFor({
+        kind: newBlock.kind,
+        before: oldBlock.text,
+        after: newBlock.text,
+      }),
     });
   }
   for (const [oldIndex, oldBlock] of before.entries()) {
@@ -476,9 +509,14 @@ export const buildSnapshotDiff = ({
       previous === undefined
         ? undefined
         : tableOwnerFor({ location: previous, before, after });
+    const renderedComponent = RENDERED_SNAPSHOT_KINDS.has(location.kind);
+    const previousRenderedComponent =
+      previous !== undefined && RENDERED_SNAPSHOT_KINDS.has(previous.kind);
     if (
       group !== undefined &&
       previous !== undefined &&
+      !renderedComponent &&
+      !previousRenderedComponent &&
       previous.section === location.section &&
       ((currentTableOwner !== undefined &&
         currentTableOwner === previousTableOwner) ||

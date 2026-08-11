@@ -1516,10 +1516,17 @@ export const DIAGRAM_SCRIPT = `
       const owner = selected.closest("[data-flow-diagram]") || selected;
       if (owner === diagram) {
         selected.removeAttribute("data-flow-selected");
+        syncEdgeDecorations(selected);
         selected = null;
-        buildActionBar();
       }
     }
+    // An edge paints its selection state onto labels and SVG markers. Clear
+    // every mirrored marker as a final invariant so handing a note off never
+    // leaves the authored target looking selected.
+    for (const marker of diagram.querySelectorAll("[data-flow-selected]")) {
+      marker.removeAttribute("data-flow-selected");
+    }
+    buildActionBar();
   };
 
   const pendingCountFor = (diagram) => {
@@ -1827,6 +1834,8 @@ export const DIAGRAM_SCRIPT = `
       " to the plan's feedback package.";
     announce("Added " + mine.length + " notes to the plan feedback package");
     paint();
+    clearDiagramChrome(diagram);
+    requestAnimationFrame(() => clearDiagramChrome(diagram));
   };
 
   const renderCollector = (diagram) => {

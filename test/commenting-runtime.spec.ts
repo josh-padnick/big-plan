@@ -699,9 +699,30 @@ test("should restore and submit staged comments through the local review runtime
   });
 
   await expect(kernel).toContainText("Changed");
+  await expect
+    .poll(() => page.locator('article [aria-label="Comment on slide"]').count())
+    .toBeGreaterThan(0);
+  await expect
+    .poll(() =>
+      page
+        .locator("article [data-review-block-button]")
+        .evaluateAll((buttons) =>
+          buttons.every((button) => button.isConnected),
+        ),
+    )
+    .toBe(true);
   const sentThread = rail
     .locator("[data-review-sent-thread]")
     .filter({ hasText: "Clarify the failure boundary." });
+  const commentSearch = rail.getByPlaceholder("Search comments");
+  await commentSearch.fill("Clarify the failure boundary");
+  await expect(sentThread).toBeVisible();
+  await expect(rail).not.toContainText("Name the operator recovery path.");
+  await commentSearch.fill("no thread contains these words");
+  await expect(rail).toContainText(
+    "No comments match “no thread contains these words”.",
+  );
+  await commentSearch.fill("");
   await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
     "font-size",
     "12px",
@@ -746,6 +767,14 @@ test("should restore and submit staged comments through the local review runtime
   await sentThread
     .getByRole("button", { name: "Expand thread", exact: true })
     .click();
+  await expect(sentThread.locator("[data-review-thread-scroll]")).toHaveCSS(
+    "max-height",
+    "480px",
+  );
+  await expect(sentThread.locator("[data-review-thread-scroll]")).toHaveCSS(
+    "overflow-y",
+    "auto",
+  );
   const agentResponseParagraph = sentThread
     .locator(
       '[data-review-message="agent"] [data-review-message-body="structured"] p',
@@ -1020,6 +1049,17 @@ test("should preview stale, historical, and multi-place causal diffs through the
       "utf8",
     )
   )
+    .replace(
+      /\| Where reviewers see it[\s\S]*?\n\n```ts/u,
+      `| Where reviewers see it | Evidence shown | Snapshot that anchors it |
+| ---------------------- | -------------- | ------------------------ |
+| Feedback thread | Was/Now diff attributed to that feedback | Baseline to result |
+| Plan-wide chat | Grouped change digest and guided tour | Latest result |
+| Current plan | Current source plus historical diffs | Result to current |
+| Feedback on an older plan version | Stale badge and premise-to-current diff | Premise to current |
+
+\`\`\`ts`,
+    )
     .replace(
       '<Callout type="note" title="Review note">\n\nVerify the causal boundary, the in-place lens, and the historical state.\n\n</Callout>',
       "> **Review note:** verify the causal boundary, the in-place lens, and the historical state.",

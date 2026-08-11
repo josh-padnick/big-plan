@@ -12,6 +12,11 @@ npx big-plan review plans/checkout-retry.mdx
 
 The command prints a `http://127.0.0.1:<port>/` address and keeps running.
 Open that address, review the plan, and stop the runtime with `Ctrl+C`.
+By default, an idle review ends normally after 10 minutes without reviewer
+activity. Set a different duration with `--idle-timeout <minutes>`, or pass
+`--idle-timeout 0` to keep the review open until it is stopped explicitly. A
+waiting agent receives that normal inactivity reason instead of a failed
+background command.
 
 ## Commenting workflow
 
@@ -67,8 +72,10 @@ discarding drafts, open threads, or scroll position.
 validated result snapshot. Each changed answer carries its own attributed
 places; plan-wide chat carries a grouped digest. The in-place lens shows
 word-level edits for close rewrites and stacked **Was**/**Now** bands for
-larger rewrites, additions, removals, tables, and code. The change navigator
-tours several places without losing reading context.
+larger rewrites, additions, removals, tables, and code. Decision, diagram, and
+file-tree changes retain their compiled component presentation behind a
+**Was**/**Now** switch instead of flattening their structure into prose. The
+change navigator tours several places without losing reading context.
 
 Comments retain their premise snapshot. If the plan changes before a comment
 is sent, a **Plan changed since this comment** badge opens the premise-to-current

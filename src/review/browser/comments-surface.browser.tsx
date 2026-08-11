@@ -4,6 +4,7 @@
 import type { ReactNode } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
+import { SEARCH_ICON } from "../../icons/lucide/search.js";
 import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { ReviewComment } from "../shared/comment.js";
@@ -19,6 +20,8 @@ const GROUPS = [
 ] as const;
 
 export type CommentsSurfaceModel = {
+  readonly query: string;
+  readonly onQueryChange: (query: string) => void;
   readonly drafts: ReadonlyArray<ReviewComment>;
   readonly sentCount: number;
   readonly hasRuntime: boolean;
@@ -45,7 +48,22 @@ export const CommentsSurface = ({
     aria-labelledby="review-tab-comments"
     tabIndex={0}
   >
-    {model.drafts.length === 0 ? (
+    {model.query === "" &&
+    model.sentCount === 0 &&
+    model.drafts.length === 0 ? null : (
+      <label className="mb-3 flex items-center gap-2 rounded-md border border-edge bg-surface px-2 py-1.5 text-muted focus-within:border-accent focus-within:text-ink">
+        <Icon icon={SEARCH_ICON} />
+        <span className="sr-only">Search comments</span>
+        <input
+          type="search"
+          value={model.query}
+          onChange={(event) => model.onQueryChange(event.target.value)}
+          placeholder="Search comments"
+          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-xs text-ink outline-none placeholder:text-muted"
+        />
+      </label>
+    )}
+    {model.query !== "" ? null : model.drafts.length === 0 ? (
       <div className="border-b border-edge pb-4 text-sm text-muted [&_p]:m-0 [&_p+p]:mt-2">
         {model.sentCount > 0 ? (
           <p>
@@ -144,6 +162,13 @@ export const CommentsSurface = ({
           Delete all comments
         </Button>
       </div>
+    ) : null}
+    {model.query !== "" &&
+    model.drafts.length === 0 &&
+    model.sentCount === 0 ? (
+      <p className="m-0 py-6 text-center text-xs text-muted">
+        No comments match “{model.query}”.
+      </p>
     ) : null}
   </div>
 );

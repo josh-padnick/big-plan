@@ -419,6 +419,57 @@ const SnapshotSideContent = ({
   });
 };
 
+const ComponentSnapshotComparison = ({
+  location,
+}: {
+  readonly location: DiffLocation;
+}) => {
+  const initialSide = location.newHtml === undefined ? "old" : "new";
+  const [side, setSide] = useState<"old" | "new">(initialSide);
+  useEffect(() => setSide(initialSide), [initialSide, location]);
+  const html = side === "old" ? location.oldHtml : location.newHtml;
+  return (
+    <div className="grid min-w-0 gap-2" data-review-component-diff="">
+      <div
+        className="flex w-fit items-center rounded-md border border-edge bg-surface p-0.5"
+        role="group"
+        aria-label="Choose component snapshot"
+      >
+        {location.oldHtml === undefined ? null : (
+          <button
+            type="button"
+            className="cursor-pointer rounded-sm px-2 py-1 text-2xs font-semibold text-muted aria-pressed:bg-paper aria-pressed:text-ink aria-pressed:shadow-raised"
+            aria-pressed={side === "old"}
+            onClick={() => setSide("old")}
+          >
+            Was
+          </button>
+        )}
+        {location.newHtml === undefined ? null : (
+          <button
+            type="button"
+            className="cursor-pointer rounded-sm px-2 py-1 text-2xs font-semibold text-muted aria-pressed:bg-paper aria-pressed:text-ink aria-pressed:shadow-raised"
+            aria-pressed={side === "new"}
+            onClick={() => setSide("new")}
+          >
+            Now
+          </button>
+        )}
+      </div>
+      <div
+        className="min-w-0 overflow-hidden rounded-lg bg-surface p-3 text-ink inset-shadow-well"
+        data-review-component-snapshot={side}
+      >
+        <div
+          className="pointer-events-none min-w-0 [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_[data-flow-controls]]:hidden"
+          inert
+          dangerouslySetInnerHTML={{ __html: html ?? "" }}
+        />
+      </div>
+    </div>
+  );
+};
+
 /** Renders the common word-level or stacked Was/Now lens vocabulary. */
 export const DiffLensContent = ({
   diff,
@@ -451,6 +502,10 @@ export const DiffLensContent = ({
   const hasNewText = locations.some(
     (location) => location.newText.trim() !== "",
   );
+  const componentLocation = locations.find(
+    (location) =>
+      location.oldHtml !== undefined || location.newHtml !== undefined,
+  );
   const title = isHistorical
     ? "Historical change"
     : isSuperseded
@@ -469,7 +524,9 @@ export const DiffLensContent = ({
         </strong>
         <em className="text-2xs text-muted">{place.note}</em>
       </div>
-      {canUseWordRuns && only !== undefined ? (
+      {componentLocation !== undefined ? (
+        <ComponentSnapshotComparison location={componentLocation} />
+      ) : canUseWordRuns && only !== undefined ? (
         only.kind === "list" ? (
           <ListRunContent runs={only.runs} location={only} />
         ) : (

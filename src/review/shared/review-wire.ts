@@ -94,6 +94,8 @@ export type DiffLocation = {
   readonly oldText: string;
   readonly newText: string;
   readonly runs: ReadonlyArray<DiffRun>;
+  readonly oldHtml?: string;
+  readonly newHtml?: string;
 };
 
 export type DiffPlace = {
@@ -499,6 +501,12 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
             : {}),
           ...(typeof location.afterBlockId === "string"
             ? { afterBlockId: location.afterBlockId }
+            : {}),
+          ...(typeof location.oldHtml === "string"
+            ? { oldHtml: location.oldHtml }
+            : {}),
+          ...(typeof location.newHtml === "string"
+            ? { newHtml: location.newHtml }
             : {}),
           runs,
         },

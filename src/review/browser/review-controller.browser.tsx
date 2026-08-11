@@ -895,86 +895,102 @@ const useBlockHosts = () => {
     }>
   >([]);
   useEffect(() => {
-    const mounted = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        '[data-block-id]:not([data-block-kind="part"])',
-      ),
-    )
-      .filter(
-        (block) =>
-          !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
-          !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
-          block.closest("[data-quick-summary]") === null,
+    const mount = () =>
+      Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-block-id]:not([data-block-kind="part"])',
+        ),
       )
-      .map((block) => {
-        const host = document.createElement("span");
-        if (
-          block.dataset.blockKind === "data-table" ||
-          block.dataset.blockKind === "table"
-        ) {
-          const tableActions = ownedDescendant(block, ".figure-action-group");
-          if (tableActions === null) {
-            host.dataset.reviewAnchorHost = "";
-            block.append(host);
-          } else {
-            host.dataset.reviewToolbarHost = "";
-            tableActions.prepend(host);
-          }
-        } else {
-          const plainCodeFigure = block.parentElement?.matches(".code-figure")
-            ? block.parentElement
-            : null;
-          const plainCodeActions = plainCodeFigure?.querySelector<HTMLElement>(
-            ".figure-control-bar",
-          );
-          const plainCodeCopy =
-            plainCodeActions?.querySelector<HTMLElement>("[data-copy-code]");
-          const copyControl = ownedDescendant(
-            block,
-            "[data-copy-source], [data-copy-code]",
-          );
-          const actionGroup = ownedDescendant(
-            block,
-            ".figure-action-group, .figure-control-bar",
-          );
-          const inlineHeader = ownedDescendant(
-            block,
-            ".file-tree-header, .callout-header",
-          );
-          const overlayHeader = ownedDescendant(
-            block,
-            ".decision-zone-question",
-          );
-          if (plainCodeActions !== undefined && plainCodeActions !== null) {
-            host.dataset.reviewToolbarHost = "";
-            if (plainCodeCopy === undefined || plainCodeCopy === null) {
-              plainCodeActions.prepend(host);
+        .filter(
+          (block) =>
+            !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
+            !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
+            block.closest("[data-quick-summary]") === null,
+        )
+        .map((block) => {
+          const host = document.createElement("span");
+          if (
+            block.dataset.blockKind === "data-table" ||
+            block.dataset.blockKind === "table"
+          ) {
+            const tableActions = ownedDescendant(block, ".figure-action-group");
+            if (tableActions === null) {
+              host.dataset.reviewAnchorHost = "";
+              block.append(host);
             } else {
-              plainCodeCopy.after(host);
+              host.dataset.reviewToolbarHost = "";
+              tableActions.prepend(host);
             }
-          } else if (copyControl !== null) {
-            host.dataset.reviewToolbarHost = "";
-            copyControl.before(host);
-          } else if (actionGroup !== null) {
-            host.dataset.reviewToolbarHost = "";
-            actionGroup.prepend(host);
-          } else if (inlineHeader !== null) {
-            host.dataset.reviewToolbarHost = "";
-            host.dataset.reviewToolbarInline = "";
-            inlineHeader.append(host);
-          } else if (overlayHeader !== null) {
-            host.dataset.reviewToolbarHost = "";
-            host.dataset.reviewToolbarOverlay = "";
-            overlayHeader.append(host);
           } else {
-            host.dataset.reviewAnchorHost = "";
-            block.append(host);
+            const plainCodeFigure = block.parentElement?.matches(".code-figure")
+              ? block.parentElement
+              : null;
+            const plainCodeActions =
+              plainCodeFigure?.querySelector<HTMLElement>(
+                ".figure-control-bar",
+              );
+            const plainCodeCopy =
+              plainCodeActions?.querySelector<HTMLElement>("[data-copy-code]");
+            const copyControl = ownedDescendant(
+              block,
+              "[data-copy-source], [data-copy-code]",
+            );
+            const actionGroup = ownedDescendant(
+              block,
+              ".figure-action-group, .figure-control-bar",
+            );
+            const inlineHeader = ownedDescendant(
+              block,
+              ".file-tree-header, .callout-header",
+            );
+            const overlayHeader = ownedDescendant(
+              block,
+              ".decision-zone-question",
+            );
+            if (plainCodeActions !== undefined && plainCodeActions !== null) {
+              host.dataset.reviewToolbarHost = "";
+              if (plainCodeCopy === undefined || plainCodeCopy === null) {
+                plainCodeActions.prepend(host);
+              } else {
+                plainCodeCopy.after(host);
+              }
+            } else if (copyControl !== null) {
+              host.dataset.reviewToolbarHost = "";
+              copyControl.before(host);
+            } else if (actionGroup !== null) {
+              host.dataset.reviewToolbarHost = "";
+              actionGroup.prepend(host);
+            } else if (inlineHeader !== null) {
+              host.dataset.reviewToolbarHost = "";
+              host.dataset.reviewToolbarInline = "";
+              inlineHeader.append(host);
+            } else if (overlayHeader !== null) {
+              host.dataset.reviewToolbarHost = "";
+              host.dataset.reviewToolbarOverlay = "";
+              overlayHeader.append(host);
+            } else {
+              host.dataset.reviewAnchorHost = "";
+              block.append(host);
+            }
           }
-        }
-        return { block, host };
-      });
+          return { block, host };
+        });
+    let article = document.querySelector("article");
+    let mounted = mount();
     setHosts(mounted);
-    return () => mounted.forEach(({ host }) => host.remove());
+    const observer = new MutationObserver(() => {
+      const nextArticle = document.querySelector("article");
+      if (nextArticle === article) return;
+      mounted.forEach(({ host }) => host.remove());
+      article = nextArticle;
+      mounted = mount();
+      setHosts(mounted);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      mounted.forEach(({ host }) => host.remove());
+    };
   }, []);
   return hosts;
 };
@@ -987,34 +1003,55 @@ const useReviewContainerHosts = () => {
     }>
   >([]);
   useEffect(() => {
-    const mounted = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        "[data-slide], [data-quick-summary]",
-      ),
-    )
-      .filter(
-        (container) =>
-          !container.matches("[data-quick-summary]") ||
-          container.closest("[data-slide]") === null,
+    const mount = () =>
+      Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[data-slide], [data-quick-summary]",
+        ),
       )
-      .map((container) => {
-        const host = document.createElement("span");
-        host.dataset.reviewSlideHost = "";
-        const collapseHeader = container.querySelector<HTMLElement>(
-          ":scope > [data-collapse-header]",
-        );
-        if (collapseHeader === null) container.append(host);
-        else collapseHeader.prepend(host);
-        container.dataset.reviewSlideSelectable = "";
-        return { container, host };
-      });
-    setHosts(mounted);
-    return () =>
+        .filter(
+          (container) =>
+            !container.matches("[data-quick-summary]") ||
+            container.closest("[data-slide]") === null,
+        )
+        .map((container) => {
+          const host = document.createElement("span");
+          host.dataset.reviewSlideHost = "";
+          const collapseHeader = container.querySelector<HTMLElement>(
+            ":scope > [data-collapse-header]",
+          );
+          if (collapseHeader === null) container.append(host);
+          else collapseHeader.prepend(host);
+          container.dataset.reviewSlideSelectable = "";
+          return { container, host };
+        });
+    const unmount = (
+      mounted: ReadonlyArray<{
+        readonly container: HTMLElement;
+        readonly host: HTMLSpanElement;
+      }>,
+    ) =>
       mounted.forEach(({ container, host }) => {
         host.remove();
         delete container.dataset.reviewSlideSelectable;
         delete container.dataset.reviewSlideSelected;
       });
+    let article = document.querySelector("article");
+    let mounted = mount();
+    setHosts(mounted);
+    const observer = new MutationObserver(() => {
+      const nextArticle = document.querySelector("article");
+      if (nextArticle === article) return;
+      unmount(mounted);
+      article = nextArticle;
+      mounted = mount();
+      setHosts(mounted);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      unmount(mounted);
+    };
   }, []);
   return hosts;
 };
@@ -2525,7 +2562,10 @@ const SentThread = ({
             recorded address; Big Plan did not guess a replacement.
           </p>
         ) : null}
-        <div className="mt-2 min-w-0">
+        <div
+          className="mt-2 max-h-[30rem] min-w-0 overflow-y-auto pr-1"
+          data-review-thread-scroll=""
+        >
           {exchanges.length === 0 ? (
             <MessageTurn
               role="user"
@@ -2862,6 +2902,7 @@ export const ReviewController = () => {
   const [isSending, setIsSending] = useState(false);
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatBody, setChatBody] = useState("");
+  const [commentQuery, setCommentQuery] = useState("");
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
   const [displayedSnapshot, setDisplayedSnapshot] = useState(initialSnapshot);
   const [cancelPendingRequestIds, setCancelPendingRequestIds] = useState<
@@ -2927,6 +2968,7 @@ export const ReviewController = () => {
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
   const persistedReviewState = useRef<string | null>(null);
+  const justSubmittedCommentIds = useRef<ReadonlySet<string>>(new Set());
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setAgent(snapshot);
     setCancelPendingRequestIds((current) =>
@@ -3487,6 +3529,10 @@ export const ReviewController = () => {
           ),
         );
         const ids = new Set(comments.map((comment) => comment.id));
+        justSubmittedCommentIds.current = new Set([
+          ...justSubmittedCommentIds.current,
+          ...ids,
+        ]);
         setDrafts((current) =>
           current.filter((comment) => !ids.has(comment.id)),
         );
@@ -3502,7 +3548,7 @@ export const ReviewController = () => {
         setIsSending(false);
       }
     },
-    [canSendToAgent, identity, serializeRuntimeWrite],
+    [canSendToAgent, identity, isOpen, serializeRuntimeWrite],
   );
 
   useEffect(() => {
@@ -3835,17 +3881,65 @@ export const ReviewController = () => {
   const unresolvedSent = sent.filter(
     (comment) => !resolvedCommentIds.has(comment.id),
   );
+  const normalizedCommentQuery = commentQuery.trim().toLocaleLowerCase();
+  const commentMatchesQuery = (comment: ReviewComment): boolean => {
+    if (normalizedCommentQuery === "") return true;
+    const thread = threadProjections.get(comment.id);
+    return [
+      comment.body,
+      ...(thread?.exchanges.flatMap((exchange) => [
+        exchange.request.body ?? "",
+        exchange.response?.message ?? "",
+        exchange.outcome?.message ?? "",
+      ]) ?? []),
+    ]
+      .join("\n")
+      .toLocaleLowerCase()
+      .includes(normalizedCommentQuery);
+  };
+  const visibleDrafts = unresolvedDrafts.filter(commentMatchesQuery);
+  const visibleResolvedDrafts = resolvedDrafts.filter(commentMatchesQuery);
+  const visibleUnresolvedSent = unresolvedSent.filter(commentMatchesQuery);
   const sentByGroup = new Map<ThreadGroup, ReadonlyArray<ReviewComment>>(
     (["needs-input", "ready", "working", "queued"] as const).map((group) => [
       group,
-      unresolvedSent.filter(
+      visibleUnresolvedSent.filter(
         (comment) => threadProjections.get(comment.id)?.group === group,
       ),
     ]),
   );
-  const resolvedSent = sent.filter((comment) =>
-    resolvedCommentIds.has(comment.id),
+  const resolvedSent = sent.filter(
+    (comment) =>
+      resolvedCommentIds.has(comment.id) && commentMatchesQuery(comment),
   );
+  useEffect(() => {
+    const started = [...justSubmittedCommentIds.current].filter(
+      (commentId) => threadProjections.get(commentId)?.group === "working",
+    );
+    if (started.length === 0) return;
+    const remaining = new Set(justSubmittedCommentIds.current);
+    started.forEach((commentId) => remaining.delete(commentId));
+    justSubmittedCommentIds.current = remaining;
+    const activeCommentId = started[0];
+    if (activeCommentId === undefined) return;
+    setThreadOpenState((current) =>
+      setThreadOpen({
+        state: setThreadOpen({
+          state: current,
+          commentId: activeCommentId,
+          kind: "sent",
+          surface: "rail",
+          isRailOpen: isOpen,
+          open: true,
+        }),
+        commentId: activeCommentId,
+        kind: "sent",
+        surface: "inline",
+        isRailOpen: false,
+        open: true,
+      }),
+    );
+  }, [isOpen, threadProjections]);
   const agentHealthLabel = deriveAgentHealthLabel({
     activity: currentAgentActivity,
     hasAgentRuntime: identity !== null,
@@ -4235,13 +4329,15 @@ export const ReviewController = () => {
           {tab === "comments" ? (
             <CommentsSurface
               model={{
-                drafts: unresolvedDrafts,
-                sentCount: sent.length,
+                query: commentQuery,
+                onQueryChange: setCommentQuery,
+                drafts: visibleDrafts,
+                sentCount: visibleUnresolvedSent.length + resolvedSent.length,
                 hasRuntime: identity !== null,
                 groups: sentByGroup,
                 resolved: resolvedSent,
-                resolvedDrafts,
-                canResolveAll: unresolvedSent.some(
+                resolvedDrafts: visibleResolvedDrafts,
+                canResolveAll: visibleUnresolvedSent.some(
                   (comment) =>
                     threadProjections.get(comment.id)?.group === "ready",
                 ),

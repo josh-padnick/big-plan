@@ -209,6 +209,34 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should explain a normal idle timeout to a waiting agent", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n");
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 1_000,
+    });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: true,
+        }),
+      ).resolves.toMatchObject({
+        pending: false,
+        ended: true,
+        reason:
+          "The review session ended normally after 1 second of inactivity.",
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should include complete original context when picking up an old reply", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-history-"));
     const planPath = join(directory, "plan.mdx");

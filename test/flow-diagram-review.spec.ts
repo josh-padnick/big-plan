@@ -693,6 +693,7 @@ test("should exit without an alert after handing off the last note", async ({
   await expect(toolbarAdd).toHaveText("Add 1 note to plan feedback");
   await toolbarAdd.click();
   await expect(toolbarAdd).toBeHidden();
+  await expect(diagram.locator("[data-flow-selected]")).toHaveCount(0);
   await page.keyboard.press(undoShortcut);
   await expect(toolbarAdd).toBeHidden();
 

@@ -17,7 +17,38 @@ import { startReviewRuntime } from "../../review/server.js";
 import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { renderDocument } from "../../render/render-document.js";
 
-const USAGE = "Usage: big-plan review <input.mdx> [--diff-preview]";
+const USAGE =
+  "Usage: big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]";
+
+const reviewArguments = (
+  args: ReadonlyArray<string>,
+): {
+  readonly positional: ReadonlyArray<string>;
+  readonly idleTimeoutMs: number;
+} => {
+  const positional: Array<string> = [];
+  let idleMinutes = 10;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--diff-preview") continue;
+    if (argument === "--idle-timeout") {
+      const value = args[index + 1];
+      const parsed = Number(value);
+      if (value === undefined || !Number.isFinite(parsed) || parsed < 0) {
+        throw new AxiError(
+          "--idle-timeout must be zero or a positive number of minutes",
+          "INVALID_INPUT",
+          [USAGE],
+        );
+      }
+      idleMinutes = parsed;
+      index += 1;
+      continue;
+    }
+    positional.push(argument ?? "");
+  }
+  return { positional, idleTimeoutMs: idleMinutes * 60_000 };
+};
 
 /** Serves one plan for interactive review on loopback. */
 export const reviewCommand = async (
@@ -26,9 +57,9 @@ export const reviewCommand = async (
   // Temporary development chrome: keep the product contract independent of
   // this gallery seed so the flag can disappear without a migration.
   const diffPreview = args.includes("--diff-preview");
-  const positionalArgs = args.filter((arg) => arg !== "--diff-preview");
+  const parsedArguments = reviewArguments(args);
   const { inputPath } = parseInputCommandArguments({
-    args: positionalArgs,
+    args: parsedArguments.positional,
     usage: USAGE,
     maximumArguments: 1,
   });
@@ -47,6 +78,7 @@ export const reviewCommand = async (
   try {
     runtime = await startReviewRuntime({
       planPath: inputPath,
+      idleTimeoutMs: parsedArguments.idleTimeoutMs,
       ...(diffPreview
         ? {
             diffPreviewSource: await readFile(
@@ -74,7 +106,7 @@ export const reviewCommand = async (
     if (stopping) return;
     stopping = true;
     void runtime
-      .close()
+      .close("The review session was stopped by the reviewer.")
       .catch((error: unknown) => {
         process.stderr.write(
           `Cannot stop the review runtime: ${String(error)}\n`,
@@ -97,6 +129,9 @@ export const reviewCommand = async (
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
       `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,
       "Press Ctrl+C to stop the review runtime",
+      parsedArguments.idleTimeoutMs === 0
+        ? "Idle timeout is disabled"
+        : `The session ends after ${parsedArguments.idleTimeoutMs / 60_000} minutes without reviewer activity; configure with --idle-timeout`,
     ],
   };
 };

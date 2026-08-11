@@ -38,6 +38,7 @@ import { diffSnapshots } from "./snapshot-diff.js";
 import {
   liveReviewSessionForPlan,
   reviewSessionIsRunning,
+  reviewSessionStopReason,
   SessionAuthorityRejected,
 } from "./session-authority.js";
 import {
@@ -245,9 +246,18 @@ const nextWork = async ({
         sessionId: session.sessionId,
       }))
     ) {
-      return fail(
-        "The review server stopped while the agent was waiting for feedback",
-      );
+      const reason = await reviewSessionStopReason({
+        store: session.store,
+        sessionId: session.sessionId,
+      });
+      return {
+        pending: false,
+        ended: true,
+        plan: session.planPath,
+        reason:
+          reason ?? "The review server stopped while the agent was waiting.",
+        help: ["Start a new review session to receive more feedback"],
+      };
     }
     await wait(500);
     snapshot = await readAgentExchange({

@@ -170,6 +170,45 @@ describe("snapshot block alignment", () => {
     ).toEqual([]);
   });
 
+  it("should keep adjacent rendered components as separate review places", () => {
+    const before = [
+      block({
+        id: "section/approach/decision-1",
+        kind: "decision",
+        text: "Old decision",
+      }),
+      block({
+        id: "section/approach/flow-diagram-1",
+        kind: "flow-diagram",
+        text: "Old diagram",
+      }),
+    ];
+    const after = [
+      block({
+        id: "section/approach/decision-1",
+        kind: "decision",
+        text: "New decision",
+      }),
+      block({
+        id: "section/approach/flow-diagram-1",
+        kind: "flow-diagram",
+        text: "New diagram",
+      }),
+    ];
+
+    const diff = buildSnapshotDiff({
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      before,
+      after,
+    });
+
+    expect(diff.places).toHaveLength(2);
+    expect(diff.locations.every((location) => location.runs.length === 2)).toBe(
+      true,
+    );
+  });
+
   it("should exclude derived table-of-contents blocks", () => {
     expect(
       diffSnapshots({

@@ -28,6 +28,9 @@ import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { basename, extname, resolve } from "node:path";
+import { fromHtml } from "hast-util-from-html";
+import { toHtml } from "hast-util-to-html";
+import type { Element, Root, RootContent, ElementContent } from "hast";
 import {
   renderDocument,
   MarkdownDiagnosticsError,
@@ -83,7 +86,7 @@ import {
   writeSnapshot,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
-import { buildSnapshotDiff } from "./snapshot-diff.js";
+import { buildSnapshotDiff, RENDERED_SNAPSHOT_KINDS } from "./snapshot-diff.js";
 import {
   agentConnectCommand,
   agentRecoveryPrompt,
@@ -106,6 +109,83 @@ import {
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const SHUTDOWN_GRACE_MS = 100;
+const isHastElement = (node: RootContent | ElementContent): node is Element =>
+  node.type === "element";
+
+const findRenderedBlock = ({
+  node,
+  blockId,
+}: {
+  readonly node: Root | Element;
+  readonly blockId: string;
+}): Element | null => {
+  for (const child of node.children) {
+    if (!isHastElement(child)) continue;
+    if (child.properties.dataBlockId === blockId) return child;
+    const nested = findRenderedBlock({ node: child, blockId });
+    if (nested !== null) return nested;
+  }
+  return null;
+};
+
+/** Extracts trusted inert component markup so historical snapshots keep their real presentation. */
+const renderedBlockHtml = ({
+  html,
+  blockId,
+  namespace,
+}: {
+  readonly html: string;
+  readonly blockId: string | undefined;
+  readonly namespace: string;
+}): string | undefined => {
+  if (blockId === undefined) return undefined;
+  const root = fromHtml(html);
+  const block = findRenderedBlock({ node: root, blockId });
+  if (block === null) return undefined;
+  const idPrefix = `review-diff-${namespace.replaceAll(/[^a-z0-9_-]/giu, "-")}-${blockId.replaceAll(/[^a-z0-9_-]/giu, "-")}-`;
+  const identifiers = new Map<string, string>();
+  const collectIdentifiers = (node: Element): void => {
+    if (typeof node.properties.id === "string") {
+      identifiers.set(node.properties.id, `${idPrefix}${node.properties.id}`);
+    }
+    for (const child of node.children) {
+      if (isHastElement(child)) collectIdentifiers(child);
+    }
+  };
+  collectIdentifiers(block);
+  const rewriteReferences = (value: string): string => {
+    let revised = value;
+    for (const [identifier, replacement] of identifiers) {
+      revised = revised
+        .replaceAll(`url(#${identifier})`, `url(#${replacement})`)
+        .replaceAll(`#${identifier}`, `#${replacement}`);
+      if (revised === identifier) revised = replacement;
+    }
+    return revised;
+  };
+  const scrubReviewIdentity = (node: Element): void => {
+    delete node.properties.dataBlockId;
+    delete node.properties.dataReviewSlideSelectable;
+    delete node.properties.dataReviewSlideSelected;
+    for (const [property, value] of Object.entries(node.properties)) {
+      if (typeof value === "string") {
+        node.properties[property] = rewriteReferences(value);
+      } else if (Array.isArray(value)) {
+        node.properties[property] = value.map((entry) =>
+          typeof entry === "string" ? rewriteReferences(entry) : entry,
+        );
+      }
+    }
+    for (const child of node.children) {
+      if (isHastElement(child)) scrubReviewIdentity(child);
+      else if (node.tagName === "style" && child.type === "text") {
+        child.value = rewriteReferences(child.value);
+      }
+    }
+  };
+  scrubReviewIdentity(block);
+  return toHtml(block, { allowDangerousHtml: false });
+};
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
@@ -152,7 +232,7 @@ export type ReviewRuntime = {
   readonly planId: string;
   readonly planPath: string;
   readonly store: ReviewStore;
-  readonly close: () => Promise<void>;
+  readonly close: (reason?: string) => Promise<void>;
 };
 
 const constantTimeEquals = (left: string, right: string): boolean => {
@@ -386,9 +466,11 @@ const storedFeedbackSubmission = ({
 export const startReviewRuntime = async ({
   planPath,
   diffPreviewSource,
+  idleTimeoutMs = 10 * 60 * 1_000,
 }: {
   readonly planPath: string;
   readonly diffPreviewSource?: string;
+  readonly idleTimeoutMs?: number;
 }): Promise<ReviewRuntime> => {
   const resolvedPlanPath = resolve(planPath);
   const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
@@ -1370,17 +1452,39 @@ export const startReviewRuntime = async ({
         fallbackTitle,
         identity: {},
       });
+      const snapshotDiff = buildSnapshotDiff({
+        from,
+        to,
+        before: before.blocks,
+        after: after.blocks,
+      });
       sendJson({
         response,
         status: 200,
-        value: encodeSnapshotDiff(
-          buildSnapshotDiff({
-            from,
-            to,
-            before: before.blocks,
-            after: after.blocks,
-          }),
-        ),
+        value: encodeSnapshotDiff({
+          ...snapshotDiff,
+          locations: snapshotDiff.locations.map((location) =>
+            RENDERED_SNAPSHOT_KINDS.has(location.kind)
+              ? (() => {
+                  const oldHtml = renderedBlockHtml({
+                    html: before.html,
+                    blockId: location.oldBlockId,
+                    namespace: `was-${from}`,
+                  });
+                  const newHtml = renderedBlockHtml({
+                    html: after.html,
+                    blockId: location.newBlockId,
+                    namespace: `now-${to}`,
+                  });
+                  return {
+                    ...location,
+                    ...(oldHtml === undefined ? {} : { oldHtml }),
+                    ...(newHtml === undefined ? {} : { newHtml }),
+                  };
+                })()
+              : location,
+          ),
+        }),
       });
       return;
     }
@@ -1418,6 +1522,7 @@ export const startReviewRuntime = async ({
       const method = request.method ?? "GET";
 
       if (method === DOCUMENT_ROUTE.method && target.pathname === "/") {
+        lastReviewActivityAt = Date.now();
         await handleDocument(response);
         return;
       }
@@ -1480,7 +1585,10 @@ export const startReviewRuntime = async ({
           const authority = await withReviewSessionAuthority({
             store,
             sessionId,
-            change: dispatch,
+            change: async () => {
+              lastReviewActivityAt = Date.now();
+              await dispatch();
+            },
           });
           if (!authority.authoritative) {
             refuse({
@@ -1533,7 +1641,10 @@ export const startReviewRuntime = async ({
   });
   let heartbeatWrite = Promise.resolve();
   let heartbeatFailureReported = false;
-  const queueHeartbeat = (running: boolean): Promise<void> => {
+  const queueHeartbeat = (
+    running: boolean,
+    stopReason?: string,
+  ): Promise<void> => {
     heartbeatWrite = heartbeatWrite
       .catch(() => undefined)
       .then(async () => {
@@ -1541,6 +1652,7 @@ export const startReviewRuntime = async ({
           store,
           sessionId,
           running,
+          ...(stopReason === undefined ? {} : { stopReason }),
         });
       })
       .catch((error: unknown) => {
@@ -1588,6 +1700,61 @@ export const startReviewRuntime = async ({
   }, REVIEW_HEARTBEAT_INTERVAL_MS);
   connectionTimer.unref();
 
+  let lastReviewActivityAt = Date.now();
+  let closed = false;
+  let idleTimer: ReturnType<typeof setInterval> | undefined;
+  const closeRuntime = async (
+    reason = "The review session was stopped.",
+  ): Promise<void> => {
+    if (closed) return;
+    closed = true;
+    clearInterval(heartbeatTimer);
+    clearInterval(connectionTimer);
+    if (idleTimer !== undefined) clearInterval(idleTimer);
+    await queueHeartbeat(false, reason).catch(() => undefined);
+    await connectionWrite.catch(() => undefined);
+    const closedServer = new Promise<void>((settle) => {
+      server.close(() => settle());
+    });
+    server.closeIdleConnections();
+    const forceClose = setTimeout(() => {
+      server.closeAllConnections();
+    }, SHUTDOWN_GRACE_MS);
+    forceClose.unref();
+    try {
+      await closedServer;
+    } finally {
+      clearTimeout(forceClose);
+    }
+  };
+  if (idleTimeoutMs > 0) {
+    idleTimer = setInterval(
+      () => {
+        void (async () => {
+          if (closed || Date.now() - lastReviewActivityAt < idleTimeoutMs)
+            return;
+          const presence = await readAgentPresence({ store, sessionId });
+          if (presence.connected && presence.state === "working") {
+            lastReviewActivityAt = Date.now();
+            return;
+          }
+          const minutes = idleTimeoutMs / 60_000;
+          const duration = Number.isInteger(minutes)
+            ? `${minutes} minute${minutes === 1 ? "" : "s"}`
+            : (() => {
+                const seconds = Math.round(idleTimeoutMs / 1_000);
+                return `${seconds} second${seconds === 1 ? "" : "s"}`;
+              })();
+          await closeRuntime(
+            `The review session ended normally after ${duration} of inactivity.`,
+          );
+        })();
+      },
+      Math.min(1_000, idleTimeoutMs),
+    );
+    idleTimer.unref();
+  }
+
   return {
     url,
     port,
@@ -1595,24 +1762,6 @@ export const startReviewRuntime = async ({
     planId,
     planPath: resolvedPlanPath,
     store,
-    close: async () => {
-      clearInterval(heartbeatTimer);
-      clearInterval(connectionTimer);
-      await queueHeartbeat(false).catch(() => undefined);
-      await connectionWrite.catch(() => undefined);
-      const closed = new Promise<void>((settle) => {
-        server.close(() => settle());
-      });
-      server.closeIdleConnections();
-      const forceClose = setTimeout(() => {
-        server.closeAllConnections();
-      }, SHUTDOWN_GRACE_MS);
-      forceClose.unref();
-      try {
-        await closed;
-      } finally {
-        clearTimeout(forceClose);
-      }
-    },
+    close: closeRuntime,
   };
 };

@@ -200,10 +200,10 @@ If the input argument is missing, `validate`, `render`, `compile`, or `review` r
 Usage: big-plan validate <input.mdx>
 Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
-Usage: big-plan review <input.mdx>
+Usage: big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
 ```
 
-`validate`, `render`, `compile`, `review`, and `skill` reject any dash-prefixed command argument as an unknown option.
+`validate`, `render`, `compile`, and `skill` reject any dash-prefixed command argument as an unknown option. `review` additionally accepts `--diff-preview` and `--idle-timeout <minutes>`; zero disables the idle timeout.
 `validate` and `review` reject a second positional argument; `render` and `compile` reject a third.
 Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 
