@@ -1074,7 +1074,9 @@ const installColumnPointerReorder = ({
 (() => {
   const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
   const fit = (screen) => {
-    const card = screen.querySelector(":scope > .wireframe-frame-card");
+    const card = screen.querySelector(
+      ":scope > .wireframe-device-block > .wireframe-frame-card",
+    );
     const frame = card === null ? null : card.querySelector(":scope > .wireframe-frame");
     if (card === null || frame === null || screen.clientWidth === 0) return;
     // offsetWidth stays in the frame's unscaled coordinate space. Writing a

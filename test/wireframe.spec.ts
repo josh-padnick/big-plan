@@ -158,6 +158,27 @@ test("should fill a maximized single-screen desktop workspace", async ({
   await frame.locator("[data-figure-maximize]").click();
   await expect(frame).toHaveAttribute("data-figure-maximized", "");
   await expect(frame.getByRole("heading", { name: "Feedback" })).toBeVisible();
+  await expect(frame.locator(".wireframe-screen-name")).toHaveText(
+    "Historical change",
+  );
+
+  const captionGeometry = await frame.evaluate((node) => {
+    const caption = node.querySelector<HTMLElement>(
+      ".wireframe-screen-caption",
+    );
+    const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
+    if (caption === null || card === null) {
+      throw new Error("single-screen caption and frame are incomplete");
+    }
+    const captionBox = caption.getBoundingClientRect();
+    const cardBox = card.getBoundingClientRect();
+    return {
+      leftDelta: Math.abs(captionBox.left - cardBox.left),
+      rightDelta: Math.abs(captionBox.right - cardBox.right),
+    };
+  });
+  expect(captionGeometry.leftDelta).toBeLessThan(4);
+  expect(captionGeometry.rightDelta).toBeLessThan(4);
 
   const geometry = await frame.evaluate((node) => {
     const artboard = node.querySelector<HTMLElement>(".wireframe-artboard");
@@ -213,6 +234,26 @@ test("should fill a multi-screen desktop workspace at rest and when maximized", 
   const screen = frame.locator('[data-wireframe-screen="first-thread"]');
   const workspace = screen.locator(".wireframe-row[data-wireframe-workspace]");
 
+  const assertCaptionMatchesFrame = async (): Promise<void> => {
+    const geometry = await screen.evaluate((node) => {
+      const caption = node.querySelector<HTMLElement>(
+        ".wireframe-screen-caption",
+      );
+      const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
+      if (caption === null || card === null) {
+        throw new Error("multi-screen caption and frame are incomplete");
+      }
+      const captionBox = caption.getBoundingClientRect();
+      const cardBox = card.getBoundingClientRect();
+      return {
+        leftDelta: Math.abs(captionBox.left - cardBox.left),
+        rightDelta: Math.abs(captionBox.right - cardBox.right),
+      };
+    });
+    expect(geometry.leftDelta).toBeLessThan(4);
+    expect(geometry.rightDelta).toBeLessThan(4);
+  };
+
   const assertWorkspaceFillsArtboard = async (): Promise<void> => {
     const geometry = await screen.evaluate((node) => {
       const artboard = node.querySelector<HTMLElement>(".wireframe-artboard");
@@ -252,10 +293,12 @@ test("should fill a multi-screen desktop workspace at rest and when maximized", 
     frame.getByRole("navigation", { name: "Prototype screens" }),
   ).toBeVisible();
   await expect(workspace).toBeVisible();
+  await assertCaptionMatchesFrame();
   await assertWorkspaceFillsArtboard();
 
   await frame.locator("[data-figure-maximize]").click();
   await expect(frame).toHaveAttribute("data-figure-maximized", "");
+  await assertCaptionMatchesFrame();
   await assertWorkspaceFillsArtboard();
 });
 

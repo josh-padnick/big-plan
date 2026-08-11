@@ -669,14 +669,9 @@ const WireframeElements = ({
 const Screen = ({
   screen,
   current,
-  named,
 }: {
   readonly screen: WireframeScreen;
   readonly current: boolean;
-  // Whether the screen's name is worth drawing. With one screen there is no
-  // switcher for it to name and the prose above already said what this is, so
-  // printing it again only competes with that.
-  readonly named: boolean;
 }) => {
   const preset = WIREFRAME_DEVICE_PRESETS[screen.device];
   const desktop = screen.device === "desktop";
@@ -691,52 +686,50 @@ const Screen = ({
       data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
-      <div className="wireframe-screen-caption mb-1.5 flex flex-wrap justify-between gap-2 text-xs text-muted">
-        {named ? (
+      <div className="wireframe-device-block w-fit max-w-full">
+        <div className="wireframe-screen-caption mb-1.5 flex flex-wrap justify-between gap-2 text-xs text-muted">
           <span className="wireframe-screen-name font-semibold tracking-caps">
             {screen.name}
           </span>
-        ) : (
-          <span />
-        )}
-        <span className="wireframe-screen-viewport">
-          {preset.label} · {preset.width} × {preset.height}px{" "}
-          {workspaceViewport
-            ? "workspace viewport"
-            : preset.heightPolicy === "fixed"
-              ? "fixed frame"
-              : "minimum · grows with content"}
-        </span>
-      </div>
-      <div className="wireframe-frame-card">
-        <div
-          className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
-          data-wireframe-device={screen.device}
-        >
-          {desktop ? (
-            <div className="wireframe-browser-bar">
-              <span className="wireframe-browser-dots" aria-hidden="true" />
-              <span className="wireframe-browser-address">
-                {screen.url ?? " "}
-              </span>
-            </div>
-          ) : null}
-          {!desktop && !phone ? (
-            <span className="wireframe-tablet-handle" aria-hidden="true" />
-          ) : null}
-          {phone ? (
-            <span className="wireframe-phone-notch" aria-hidden="true" />
-          ) : null}
+          <span className="wireframe-screen-viewport">
+            {preset.label} · {preset.width} × {preset.height}px{" "}
+            {workspaceViewport
+              ? "workspace viewport"
+              : preset.heightPolicy === "fixed"
+                ? "fixed frame"
+                : "minimum · grows with content"}
+          </span>
+        </div>
+        <div className="wireframe-frame-card">
           <div
-            className="wireframe-artboard"
+            className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
             data-wireframe-device={screen.device}
-            data-wireframe-height-policy={preset.heightPolicy}
-            {...(screen.pattern === undefined
-              ? {}
-              : { "data-wireframe-pattern": screen.pattern })}
           >
-            <div className="wireframe-canvas flex flex-col gap-4">
-              <WireframeElements nodes={screen.children} />
+            {desktop ? (
+              <div className="wireframe-browser-bar">
+                <span className="wireframe-browser-dots" aria-hidden="true" />
+                <span className="wireframe-browser-address">
+                  {screen.url ?? " "}
+                </span>
+              </div>
+            ) : null}
+            {!desktop && !phone ? (
+              <span className="wireframe-tablet-handle" aria-hidden="true" />
+            ) : null}
+            {phone ? (
+              <span className="wireframe-phone-notch" aria-hidden="true" />
+            ) : null}
+            <div
+              className="wireframe-artboard"
+              data-wireframe-device={screen.device}
+              data-wireframe-height-policy={preset.heightPolicy}
+              {...(screen.pattern === undefined
+                ? {}
+                : { "data-wireframe-pattern": screen.pattern })}
+            >
+              <div className="wireframe-canvas flex flex-col gap-4">
+                <WireframeElements nodes={screen.children} />
+              </div>
             </div>
           </div>
         </div>
@@ -789,7 +782,6 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
             key={screen.id}
             screen={screen}
             current={screen.id === model.initialScreenId}
-            named={model.screens.length > 1}
           />
         ))}
       </div>
