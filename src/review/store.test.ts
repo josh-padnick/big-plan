@@ -63,6 +63,7 @@ describe("review store placement", () => {
     for (const path of [
       store.reviewDirectory,
       store.feedbackDirectory,
+      store.feedbackSubmissionDirectory,
       store.agentRequestDirectory,
       store.agentResponseDirectory,
       store.agentDraftDirectory,

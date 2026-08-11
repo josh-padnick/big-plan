@@ -92,6 +92,52 @@ const readCurrentRequest = async ({
   return request;
 };
 
+const requestCreation = (request: AgentRequest): string => {
+  const created: Record<string, unknown> = { ...request };
+  delete created.claimedFromRevision;
+  delete created.claimedAt;
+  delete created.canceledAt;
+  return JSON.stringify(created);
+};
+
+export const ensureAgentRequest = async ({
+  store,
+  request,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+}): Promise<AgentRequest> => {
+  const intended = validateAgentRequest(request);
+  return withRequestLock({
+    store,
+    requestId: intended.requestId,
+    change: async () => {
+      const value = await readAgentRequestValue({
+        store,
+        requestId: intended.requestId,
+      });
+      if (value === undefined) {
+        await writeAgentRequestValue({
+          store,
+          requestId: intended.requestId,
+          value: intended,
+        });
+        return intended;
+      }
+      const existing = validateAgentRequest(value);
+      if (
+        existing.requestId !== intended.requestId ||
+        requestCreation(existing) !== requestCreation(intended)
+      ) {
+        throw new AgentExchangeRejected(
+          "The stored request conflicts with this feedback submission",
+        );
+      }
+      return existing;
+    },
+  });
+};
+
 /** Freezes the source baseline when an agent first claims a request. */
 export const claimAgentRequest = async ({
   store,

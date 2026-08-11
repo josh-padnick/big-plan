@@ -353,7 +353,7 @@ describe("agent exchange filesystem", () => {
     ).toThrow(/canceled by the reviewer/);
   });
 
-  it("should retain newest requests and their complete reply context", async () => {
+  it("should retain pending requests beside bounded terminal history", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-limit-"));
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, before);
@@ -364,15 +364,18 @@ describe("agent exchange filesystem", () => {
     for (let index = 1; index < 400; index += 1) {
       await writeAgentRequest({
         store,
-        request: messageAgentRequest({
-          kind: "chat",
-          requestId: index.toString(16).padStart(16, "0"),
-          sessionId,
-          planId,
-          sourceRevision: deriveSourceRevision(before),
-          createdAt: new Date(startedAt + index).toISOString(),
-          body: `Question ${index}`,
-        }),
+        request: {
+          ...messageAgentRequest({
+            kind: "chat",
+            requestId: index.toString(16).padStart(16, "0"),
+            sessionId,
+            planId,
+            sourceRevision: deriveSourceRevision(before),
+            createdAt: new Date(startedAt + index).toISOString(),
+            body: `Question ${index}`,
+          }),
+          canceledAt: new Date(startedAt + index).toISOString(),
+        },
       });
     }
     const reply = messageAgentRequest({
@@ -412,9 +415,11 @@ describe("agent exchange filesystem", () => {
     await publishAgentResponse({ store, response });
 
     const bounded = await readAgentExchange({ store, sessionId, planId });
-    expect(bounded.requests).toHaveLength(400);
-    expect(bounded.requests[0]?.requestId).toBe("0000000000000001");
+    expect(bounded.requests).toHaveLength(401);
+    expect(bounded.requests[0]?.requestId).toBe(request.requestId);
+    expect(bounded.requests[1]?.requestId).toBe("0000000000000001");
     expect(bounded.requests.at(-1)?.requestId).toBe(reply.requestId);
     expect(bounded.responses).toEqual([response]);
+    expect(nextPendingAgentRequest(bounded)).toEqual(request);
   });
 });

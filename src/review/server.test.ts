@@ -2,7 +2,14 @@
 // is covered here as behavior rather than as intent: each test is one refusal
 // the design promises, exercised against a real listening runtime.
 
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -304,6 +311,23 @@ describe("review runtime feedback", () => {
         expect.objectContaining({ id: "aa11bb22" }),
       ]),
     });
+    await expect(
+      (
+        await call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: { drafts, activeDraft: "", resolvedCommentIds: [] },
+        })
+      ).json(),
+    ).resolves.toEqual({ drafts: 1 });
+    await expect(
+      (await call({ path: "/api/drafts" })).json(),
+    ).resolves.toMatchObject({
+      drafts: [{ id: "cc33dd44" }],
+      sent: expect.arrayContaining([
+        expect.objectContaining({ id: "aa11bb22" }),
+      ]),
+    });
     const exchange = await readAgentExchange({
       store: runtime.store,
       sessionId: runtime.sessionId,
@@ -417,7 +441,7 @@ describe("review runtime feedback", () => {
     });
     expect(response.status).toBe(200);
     const written = await readdir(runtime.store.feedbackDirectory);
-    // Names come from a timestamp and a random id, never from comment text.
+    // Names come from a timestamp and runtime-generated id, never comment text.
     expect(
       written.some((name) => /^\d{14}-[a-f0-9]{16}\.json$/.test(name)),
     ).toBe(true);
@@ -582,6 +606,92 @@ describe("review runtime feedback", () => {
       );
     expect(matchingRequests(exchangeAfterFirst)).toHaveLength(1);
     expect(matchingRequests(exchangeAfterRetry)).toHaveLength(1);
+  });
+
+  it("should resume a partially published feedback submission once", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-retry-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const isolated = await startReviewRuntime({ planPath });
+    try {
+      const descriptor: unknown = JSON.parse(
+        await readFile(isolated.store.sessionPath, "utf8"),
+      );
+      const isolatedToken =
+        typeof descriptor === "object" &&
+        descriptor !== null &&
+        "token" in descriptor &&
+        typeof descriptor.token === "string"
+          ? descriptor.token
+          : "";
+      const post = () =>
+        fetch(`${isolated.url}api/feedback`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-big-plan-review-token": isolatedToken,
+            "sec-fetch-site": "same-origin",
+            origin: isolated.url.replace(/\/$/, ""),
+          },
+          body: JSON.stringify({
+            comments: [
+              {
+                id: "ee44ff55",
+                body: "Publish this feedback exactly once after recovery.",
+                target: { type: "document" },
+              },
+            ],
+          }),
+        });
+
+      await mkdir(isolated.store.sentPath);
+      expect((await post()).status).toBe(500);
+      const afterFailure = await readAgentExchange({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+      });
+      const created = afterFailure.requests.find(
+        (request) =>
+          request.kind === "feedback" &&
+          request.comments.some((comment) => comment.id === "ee44ff55"),
+      );
+      if (created === undefined) {
+        throw new Error("Partial publication did not reach the mailbox");
+      }
+      const claimedAt = new Date().toISOString();
+      await claimAgentRequest({
+        store: isolated.store,
+        requestId: created.requestId,
+        sourceRevision: created.sourceRevision,
+        now: claimedAt,
+      });
+
+      await rm(isolated.store.sentPath, { recursive: true });
+      expect((await post()).status).toBe(200);
+      const afterRetry = await readAgentExchange({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+      });
+      const matching = afterRetry.requests.filter(
+        (request) =>
+          request.kind === "feedback" &&
+          request.comments.some((comment) => comment.id === "ee44ff55"),
+      );
+      expect(matching).toHaveLength(1);
+      expect(matching[0]).toMatchObject({
+        requestId: created.requestId,
+        claimedAt,
+      });
+      expect(
+        await readdir(isolated.store.feedbackSubmissionDirectory),
+      ).toHaveLength(1);
+      expect(await readdir(isolated.store.feedbackDirectory)).toHaveLength(2);
+    } finally {
+      await isolated.close();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("should preserve feedback sent by overlapping requests", async () => {

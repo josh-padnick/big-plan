@@ -71,6 +71,7 @@ export type ReviewStore = {
   readonly root: string;
   readonly reviewDirectory: string;
   readonly feedbackDirectory: string;
+  readonly feedbackSubmissionDirectory: string;
   readonly agentRequestDirectory: string;
   readonly agentResponseDirectory: string;
   readonly agentDraftDirectory: string;
@@ -135,6 +136,10 @@ export const reviewStoreFor = ({
     root,
     reviewDirectory,
     feedbackDirectory: inside({ base: root, leaf: "feedback" }),
+    feedbackSubmissionDirectory: inside({
+      base: reviewDirectory,
+      leaf: "feedback-submissions",
+    }),
     agentRequestDirectory: inside({
       base: agentDirectory,
       leaf: "requests",
@@ -190,6 +195,10 @@ const IGNORE_ALL =
 export const prepareStore = async (store: ReviewStore): Promise<void> => {
   await mkdir(store.reviewDirectory, { recursive: true, mode: DIRECTORY_MODE });
   await mkdir(store.feedbackDirectory, {
+    recursive: true,
+    mode: DIRECTORY_MODE,
+  });
+  await mkdir(store.feedbackSubmissionDirectory, {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
@@ -627,6 +636,46 @@ export const writeFeedbackPackage = async ({
   await writeFile(briefPath, brief, { mode: FILE_MODE });
   await chmod(briefPath, FILE_MODE);
   return { jsonPath, briefPath };
+};
+
+const feedbackSubmissionPath = ({
+  store,
+  submissionId,
+}: {
+  readonly store: ReviewStore;
+  readonly submissionId: string;
+}): string => {
+  if (!/^[a-f0-9]{16}$/.test(submissionId)) {
+    throw new Error("A feedback submission id must be hexadecimal");
+  }
+  return inside({
+    base: store.feedbackSubmissionDirectory,
+    leaf: `${submissionId}.json`,
+  });
+};
+
+export const readFeedbackSubmissionValue = async ({
+  store,
+  submissionId,
+}: {
+  readonly store: ReviewStore;
+  readonly submissionId: string;
+}): Promise<unknown> =>
+  readJson(feedbackSubmissionPath({ store, submissionId }));
+
+export const writeFeedbackSubmissionValue = async ({
+  store,
+  submissionId,
+  value,
+}: {
+  readonly store: ReviewStore;
+  readonly submissionId: string;
+  readonly value: unknown;
+}): Promise<void> => {
+  await writeJson({
+    path: feedbackSubmissionPath({ store, submissionId }),
+    value,
+  });
 };
 
 const exchangePath = ({

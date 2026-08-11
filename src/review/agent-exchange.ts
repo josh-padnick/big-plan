@@ -756,9 +756,26 @@ export const readAgentExchange = async ({
     sessionId,
     planId,
   });
-  const requests = complete.requests.slice(-EXCHANGE_LIMIT);
+  const answeredRequestIds = new Set(
+    complete.responses.map((response) => response.requestId),
+  );
+  const pending = complete.requests.filter(
+    (request) =>
+      request.canceledAt === undefined &&
+      !answeredRequestIds.has(request.requestId),
+  );
+  const terminal = complete.requests
+    .filter(
+      (request) =>
+        request.canceledAt !== undefined ||
+        answeredRequestIds.has(request.requestId),
+    )
+    .slice(-EXCHANGE_LIMIT);
   const retainedRequestIds = new Set(
-    requests.map((request) => request.requestId),
+    [...pending, ...terminal].map((request) => request.requestId),
+  );
+  const requests = complete.requests.filter((request) =>
+    retainedRequestIds.has(request.requestId),
   );
   const responses = complete.responses.filter((response) =>
     retainedRequestIds.has(response.requestId),

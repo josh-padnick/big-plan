@@ -23,7 +23,7 @@
 //    pre-existing .html is never served, because arbitrary HTML is arbitrary
 //    script running on this runtime's own origin.
 
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
@@ -41,6 +41,7 @@ import {
   validateStoredComments,
 } from "./shared/comment.js";
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
+import type { FeedbackPackage } from "./feedback-package.js";
 import {
   AgentExchangeRejected,
   deriveSourceRevision,
@@ -48,11 +49,13 @@ import {
   messageAgentRequest,
   readAgentCommentHistory,
   readAgentExchange,
+  validateAgentRequest,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import {
   appendProgressEvent,
   cancelAgentRequest,
+  ensureAgentRequest,
   recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
 } from "./request-mailbox.js";
@@ -65,12 +68,14 @@ import {
   readAgentPresence,
   readComments,
   readProgress,
+  readFeedbackSubmissionValue,
   readResolvedCommentIds,
   readRevisionSnapshot,
   reviewStoreFor,
   writeActiveDraft,
   writeComments,
   writeFeedbackPackage,
+  writeFeedbackSubmissionValue,
   writeResolvedCommentIds,
   writeRevisionSnapshot,
 } from "./store.js";
@@ -220,6 +225,132 @@ const refuse = ({
   readonly status: number;
   readonly reason: string;
 }): void => sendJson({ response, status, value: { error: reason } });
+
+type FeedbackSubmission = {
+  readonly version: 1;
+  readonly submissionId: string;
+  readonly feedback: FeedbackPackage;
+  readonly source: string;
+  readonly sourceRevision: string;
+};
+
+const feedbackSubmissionId = ({
+  planId,
+  comments,
+}: {
+  readonly planId: string;
+  readonly comments: ReadonlyArray<ReviewComment>;
+}): string =>
+  createHash("sha256")
+    .update(
+      JSON.stringify({
+        planId,
+        comments: comments.map(({ id, body, target }) => ({
+          id,
+          body,
+          target,
+        })),
+      }),
+    )
+    .digest("hex")
+    .slice(0, 16);
+
+const feedbackSubmissionContent = (
+  comments: ReadonlyArray<ReviewComment>,
+): string =>
+  JSON.stringify(
+    comments.map(({ id, body, target }) => ({ id, body, target })),
+  );
+
+const storedFeedbackSubmission = ({
+  value,
+  submissionId,
+  planId,
+  planPath,
+  comments,
+}: {
+  readonly value: unknown;
+  readonly submissionId: string;
+  readonly planId: string;
+  readonly planPath: string;
+  readonly comments: ReadonlyArray<ReviewComment>;
+}): FeedbackSubmission => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("version" in value) ||
+    value.version !== 1 ||
+    !("submissionId" in value) ||
+    value.submissionId !== submissionId ||
+    !("feedback" in value) ||
+    typeof value.feedback !== "object" ||
+    value.feedback === null ||
+    Array.isArray(value.feedback) ||
+    !("version" in value.feedback) ||
+    value.feedback.version !== 1 ||
+    !("packageId" in value.feedback) ||
+    value.feedback.packageId !== submissionId ||
+    !("planId" in value.feedback) ||
+    value.feedback.planId !== planId ||
+    !("planPath" in value.feedback) ||
+    value.feedback.planPath !== planPath ||
+    !("sessionId" in value.feedback) ||
+    typeof value.feedback.sessionId !== "string" ||
+    !("createdAt" in value.feedback) ||
+    typeof value.feedback.createdAt !== "string" ||
+    !("comments" in value.feedback) ||
+    !("source" in value) ||
+    typeof value.source !== "string" ||
+    !("sourceRevision" in value) ||
+    typeof value.sourceRevision !== "string" ||
+    value.sourceRevision !== deriveSourceRevision(value.source)
+  ) {
+    throw new Error("The stored feedback submission is invalid");
+  }
+  const storedComments = validateStoredComments({
+    value: value.feedback.comments,
+    now: new Date().toISOString(),
+  });
+  if (
+    feedbackSubmissionContent(storedComments) !==
+    feedbackSubmissionContent(comments)
+  ) {
+    throw new Error("The stored feedback submission conflicts with this retry");
+  }
+  const candidateFeedback = buildFeedbackPackage({
+    sessionId: value.feedback.sessionId,
+    packageId: submissionId,
+    planId,
+    planPath,
+    createdAt: value.feedback.createdAt,
+    comments: storedComments,
+  });
+  const request = validateAgentRequest(
+    feedbackAgentRequest({
+      feedback: candidateFeedback,
+      sourceRevision: value.sourceRevision,
+    }),
+  );
+  if (request.kind !== "feedback") {
+    throw new Error("The stored feedback submission is invalid");
+  }
+  const feedback = buildFeedbackPackage({
+    sessionId: request.sessionId,
+    packageId: request.packageId,
+    planId: request.planId,
+    planPath,
+    createdAt: request.createdAt,
+    comments: request.comments,
+  });
+  return {
+    version: 1,
+    submissionId,
+    feedback,
+    source: value.source,
+    sourceRevision: request.sourceRevision,
+  };
+};
 
 /**
  * Starts the review runtime for one plan and resolves once it is listening.
@@ -426,13 +557,21 @@ export const startReviewRuntime = async ({
       const resolvedCommentIds = validateResolvedCommentIds(
         payload.resolvedCommentIds,
       );
-      await writeComments({ path: store.draftsPath, comments: drafts });
+      const sentIds = new Set(
+        (await readStoredComments(store.sentPath)).map((comment) => comment.id),
+      );
+      const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
+      await writeComments({ path: store.draftsPath, comments: unsentDrafts });
       await writeActiveDraft({
         path: store.activeDraftPath,
         value: activeDraft,
       });
       await writeResolvedCommentIds({ store, ids: resolvedCommentIds });
-      sendJson({ response, status: 200, value: { drafts: drafts.length } });
+      sendJson({
+        response,
+        status: 200,
+        value: { drafts: unsentDrafts.length },
+      });
       return;
     }
     if (route.path === "/api/feedback") {
@@ -483,33 +622,64 @@ export const startReviewRuntime = async ({
         });
         return;
       }
-      const feedback = buildFeedbackPackage({
-        sessionId,
-        packageId: randomId(8),
+      const submissionId = feedbackSubmissionId({
         planId,
-        planPath: resolvedPlanPath,
-        createdAt: new Date().toISOString(),
         comments: newlySent,
       });
+      const storedSubmission = await readFeedbackSubmissionValue({
+        store,
+        submissionId,
+      });
+      let submission: FeedbackSubmission;
+      if (storedSubmission === undefined) {
+        const source = await readFile(resolvedPlanPath, "utf8");
+        const sourceRevision = deriveSourceRevision(source);
+        const feedback = buildFeedbackPackage({
+          sessionId,
+          packageId: submissionId,
+          planId,
+          planPath: resolvedPlanPath,
+          createdAt: new Date().toISOString(),
+          comments: newlySent,
+        });
+        submission = {
+          version: 1,
+          submissionId,
+          feedback,
+          source,
+          sourceRevision,
+        };
+        await writeFeedbackSubmissionValue({
+          store,
+          submissionId,
+          value: submission,
+        });
+      } else {
+        submission = storedFeedbackSubmission({
+          value: storedSubmission,
+          submissionId,
+          planId,
+          planPath: resolvedPlanPath,
+          comments: newlySent,
+        });
+      }
+      const { feedback, source, sourceRevision } = submission;
       const written = await writeFeedbackPackage({
         store,
         feedback,
         brief: renderBrief(feedback),
       });
-      const source = await readFile(resolvedPlanPath, "utf8");
-      const revision = deriveSourceRevision(source);
-      await writeRevisionSnapshot({ store, revision, source });
-      const agentRequest = feedbackAgentRequest({
-        feedback,
-        sourceRevision: revision,
-      });
-      await writeAgentRequest({
+      await writeRevisionSnapshot({ store, revision: sourceRevision, source });
+      const agentRequest = await ensureAgentRequest({
         store,
-        request: agentRequest,
+        request: feedbackAgentRequest({
+          feedback,
+          sourceRevision,
+        }),
       });
       await writeComments({
         path: store.sentPath,
-        comments: [...alreadySent, ...newlySent],
+        comments: [...alreadySent, ...feedback.comments],
       });
       await writeComments({
         path: store.draftsPath,
