@@ -112,7 +112,7 @@ export const CommentsSurface = ({
       {model.query === "" &&
       model.sentCount === 0 &&
       model.drafts.length === 0 ? null : (
-        <label className="mb-3 flex items-center gap-2 rounded-md border border-edge bg-surface px-2 py-1.5 text-muted focus-within:border-accent focus-within:text-ink">
+        <label className="mb-4 flex items-center gap-2 rounded-md border border-edge-strong bg-well px-2 py-1.5 text-muted inset-shadow-well focus-within:border-accent focus-within:text-ink">
           <Icon icon={SEARCH_ICON} />
           <span className="sr-only">Search comments</span>
           <input
@@ -124,24 +124,8 @@ export const CommentsSurface = ({
           />
         </label>
       )}
-      {model.query !== "" || model.drafts.length > 0 ? null : (
-        <div className="pb-4 text-sm text-muted [&_p]:m-0 [&_p+p]:mt-2">
-          {model.sentCount > 0 ? (
-            <p>
-              {model.sentCount} comment{model.sentCount === 1 ? "" : "s"} sent
-              to the agent
-            </p>
-          ) : null}
-          <p>
-            {model.hasRuntime
-              ? "Select text to comment, or use a slide selector to select it all."
-              : "Reading offline: drafts stay in this browser until you start the local review runtime."}
-          </p>
-        </div>
-      )}
-
       {sectionCount === 0 ? null : (
-        <div className="grid min-w-0 gap-4">
+        <div className="grid min-w-0 gap-4 border-t border-edge pt-4">
           {ready.length === 0 ? null : (
             <LifecycleSection
               label="Ready for review"

@@ -84,54 +84,30 @@ here; all values use the document theme's closed token vocabulary.
 
   [data-review-toolbar-overlay] {
     position: absolute;
-    top: 0.75rem;
+    top: calc(0.75rem - 1px);
     right: 0.75rem;
   }
 
   :is([data-slide], [data-quick-summary]) > [data-review-slide-host] {
     position: absolute;
     z-index: 3;
-    top: calc(0.75rem - 1px);
-    right: calc(100% + 0.75rem);
+    top: 0.75rem;
+    left: calc(100% + 0.75rem);
     width: 1.4rem;
     height: 1.4rem;
   }
 
-  /* Collapsible headers own both gutter controls. The comment host precedes
-     the toggle in DOM/tab order and sits one closed toggle+gap unit farther
-     from the card. With the centered 14px/16px glyphs, the two 4px hit-box
-     insets produce a 12px visual ink gap while the chevron keeps its existing
-     8px ink-to-card gap. */
+  /* Keep slide comments at the same upper-right edge used by component
+     comments. The collapsible header is inset by the card padding, so its
+     host crosses both that inset and the outside spacing step. This leaves
+     the disclosure control alone in the slide's left gutter. */
   [data-collapse-header] > [data-review-slide-host] {
-    --review-slide-host-gutter: calc(
-      var(--deck-toggle-size) + var(--deck-toggle-gap) + var(--deck-toggle-gap)
-    );
-
     position: absolute;
     z-index: 3;
-    top: 50%;
-    right: calc(
-      100% + var(--deck-pad-x, 0rem) + var(--review-slide-host-gutter)
-    );
+    top: calc(0.75rem - var(--deck-pad-y, 0rem) - 1px);
+    left: calc(100% + var(--deck-pad-x, 0rem) + 0.75rem);
     width: 1.4rem;
     height: 1.4rem;
-    transform: translateY(-50%);
-  }
-
-  /* Sub-slide chrome is denser than slide chrome, so give its secondary
-     comment action one extra closed spacing step before the disclosure pair. */
-  @media (width >= 40rem) {
-    .plan-subslide-frame > [data-collapse-header] > [data-review-slide-host] {
-      --review-subslide-gutter-base: calc(
-        var(--deck-toggle-size) + var(--deck-toggle-gap)
-      );
-      --review-subslide-gutter-extra: calc(
-        var(--deck-toggle-gap) + var(--deck-toggle-gap)
-      );
-      --review-slide-host-gutter: calc(
-        var(--review-subslide-gutter-base) + var(--review-subslide-gutter-extra)
-      );
-    }
   }
 
   [data-review-compose-inline],
@@ -220,6 +196,7 @@ here; all values use the document theme's closed token vocabulary.
     :is([data-slide], [data-quick-summary]) > [data-review-slide-host] {
       top: 0.25rem;
       right: 0.25rem;
+      left: auto;
     }
 
     /* On phones both controls return inside the card edge; derive the same
@@ -228,6 +205,7 @@ here; all values use the document theme's closed token vocabulary.
     [data-collapse-header] > [data-review-slide-host] {
       top: calc(0.25rem - var(--deck-pad-y, 0rem));
       right: calc(0.25rem - var(--deck-pad-x, 0rem));
+      left: auto;
       transform: none;
     }
   }

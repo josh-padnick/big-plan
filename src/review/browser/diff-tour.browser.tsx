@@ -29,6 +29,7 @@ import type {
   SnapshotDiff,
 } from "../shared/review-wire.js";
 import { Icon } from "./icon.browser.js";
+import { Badge, Button } from "./ui.browser.js";
 
 type OpenTour = {
   readonly diff: SnapshotDiff;
@@ -39,6 +40,8 @@ type OpenTour = {
   readonly onRevert?: () => void;
   readonly canRevert?: boolean;
   readonly threadLabel?: string;
+  readonly onOpenThread?: () => void;
+  readonly onKeepChatting?: () => void;
 };
 
 type DiffTourValue = {
@@ -627,14 +630,29 @@ const LensPortal = ({
       container.dataset.reviewHistoricalDiff = "";
       container.className =
         "mx-auto my-4 min-w-0 w-full max-w-[var(--measure)] px-4";
-      const firstSlide = main.querySelector<HTMLElement>("[data-slide]");
-      if (firstSlide === null) main.prepend(container);
-      else firstSlide.before(container);
+      let archive = main.querySelector<HTMLElement>(
+        "[data-review-historical-changes]",
+      );
+      const ownsArchive = archive === null;
+      if (archive === null) {
+        archive = document.createElement("section");
+        archive.dataset.reviewHistoricalChanges = "";
+        archive.className = "mx-auto my-8 w-full max-w-[var(--measure)]";
+        archive.setAttribute("aria-label", "Historical changes");
+        const slides = main.querySelectorAll<HTMLElement>("[data-slide]");
+        const lastSlide = slides.item(slides.length - 1);
+        if (lastSlide === null) main.append(archive);
+        else lastSlide.after(archive);
+      }
+      archive.append(container);
       setHost(container);
       requestAnimationFrame(() =>
         container.scrollIntoView({ behavior: "smooth", block: "center" }),
       );
-      return () => container.remove();
+      return () => {
+        container.remove();
+        if (ownsArchive && archive?.childElementCount === 0) archive.remove();
+      };
     }
     setIsHistorical(false);
     setPresentation(prosePresentationFor(anchor));
@@ -699,6 +717,7 @@ export const DiffTourProvider = ({
 }) => {
   const [tour, setTour] = useState<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
+  const [showCompletionSummary, setShowCompletionSummary] = useState(false);
   const [acceptedPlaces, setAcceptedPlaces] = useState(initialAcceptedPlaces);
   const places = useMemo(() => {
     if (tour === null) return [];
@@ -755,6 +774,13 @@ export const DiffTourProvider = ({
         : Math.max(0, next.placeIds.indexOf(next.startPlaceId));
     setTour(next);
     setIndex(startIndex);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        document
+          .querySelector<HTMLElement>("[data-review-diff-lens]")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+      ),
+    );
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -791,6 +817,10 @@ export const DiffTourProvider = ({
     tour !== null &&
     places.length > 0 &&
     places.every((place) => isPlaceAccepted(tour.diff, place.placeId));
+  useEffect(() => {
+    if (!allAccepted) setShowCompletionSummary(false);
+    else setShowCompletionSummary(true);
+  }, [allAccepted, tour?.diff.from, tour?.diff.to]);
 
   /** Accepts the current evidence and advances to the next open decision. */
   const acceptActivePlace = (): void => {
@@ -823,33 +853,26 @@ export const DiffTourProvider = ({
             className="fixed right-4 bottom-4 left-4 z-40 mx-auto grid w-auto min-w-0 overflow-hidden rounded-xl border border-edge-strong bg-raised text-xs text-ink shadow-floating wide:w-fit wide:min-w-sm"
             data-review-diff-stepper=""
           >
-            <div className="flex min-w-0 items-center gap-2 border-b border-accent bg-accent-soft px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2 border-b border-accent bg-[color-mix(in_srgb,var(--accent-c)_10%,var(--raised))] px-3 py-2">
               <span className="inline-flex shrink-0 items-center gap-1 font-semibold text-ink [&>svg]:size-3.5">
                 <Icon icon={CHECK_ICON} />
                 Reviewing change set
               </span>
-              <span className="shrink-0 rounded-full bg-surface px-1.5 py-0.5 text-2xs font-semibold text-muted">
-                {index + 1} of {places.length}
-              </span>
-              <span
-                className="inline-flex min-w-0 flex-1 items-center gap-1 rounded-md bg-paper/70 px-2 py-1 text-muted [&>svg]:size-3.5"
-                aria-label={`Comment thread: ${tour.threadLabel ?? "Plan-wide chat"}`}
-                title={tour.threadLabel ?? "Plan-wide chat"}
-              >
-                <Icon icon={MESSAGE_SQUARE_ICON} />
-                <span className="truncate">
-                  {tour.threadLabel ?? "Plan-wide chat"}
-                </span>
-              </span>
-              {places.length <= 1 ? null : (
+              {!showCompletionSummary ? (
+                <Badge tone="statusNeutral" size="status">
+                  {index + 1} of {places.length}
+                </Badge>
+              ) : null}
+              {!showCompletionSummary && places.length > 1 ? (
                 <div
                   className="flex shrink-0 items-center gap-1"
                   role="group"
                   aria-label="Change navigation"
                 >
-                  <button
-                    type="button"
-                    className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:text-subtle [&>svg]:size-4 [&>svg]:rotate-180"
+                  <Button
+                    variant="ghost"
+                    size="compactIcon"
+                    className="[&>svg]:rotate-180"
                     disabled={index === 0}
                     aria-label="Previous change"
                     onClick={() => {
@@ -857,10 +880,10 @@ export const DiffTourProvider = ({
                     }}
                   >
                     <Icon icon={CHEVRON_RIGHT_ICON} />
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:text-subtle [&>svg]:size-4"
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="compactIcon"
                     disabled={index >= places.length - 1}
                     aria-label="Next change"
                     onClick={() => {
@@ -870,94 +893,126 @@ export const DiffTourProvider = ({
                     }}
                   >
                     <Icon icon={CHEVRON_RIGHT_ICON} />
-                  </button>
+                  </Button>
                 </div>
-              )}
-              <button
-                type="button"
-                className="inline-flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent [&>svg]:size-3.5"
-                onClick={closeTour}
+              ) : null}
+              <span className="min-w-0 flex-1" />
+              <Button
+                variant="ghost"
+                size="micro"
+                className="min-w-0 max-w-52 justify-start"
+                aria-label={`Open comment thread: ${tour.threadLabel ?? "Plan-wide chat"}`}
+                onClick={tour.onOpenThread}
               >
-                <Icon icon={X_ICON} />
-                Exit review
-              </button>
+                <Icon icon={MESSAGE_SQUARE_ICON} />
+                <span className="truncate">
+                  {tour.threadLabel ?? "Plan-wide chat"}
+                </span>
+              </Button>
+              {!showCompletionSummary ? null : (
+                <Badge tone="statusAccent" size="status">
+                  All changes accepted ({places.length} of {places.length})
+                </Badge>
+              )}
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-2 px-3 py-2">
-              {tour.onRevert === undefined ? null : (
-                <button
-                  type="button"
-                  className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-muted hover:bg-surface hover:text-danger focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:text-subtle [&>svg]:size-3.5"
-                  disabled={tour.canRevert !== true}
-                  aria-label={
-                    tour.canRevert === true
-                      ? "Revert the full agent response"
-                      : "Revert unavailable because the plan changed again"
-                  }
-                  onClick={tour.onRevert}
-                >
-                  <Icon icon={ROTATE_CCW_ICON} />
-                  Revert
-                </button>
-              )}
-              <span className="min-w-0 flex-1" />
-              {places.length <= 1 || allAccepted ? null : (
-                <button
-                  type="button"
-                  className="min-h-8 cursor-pointer rounded-md border border-accent bg-paper px-2 font-semibold text-accent hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-accent"
-                  onClick={() =>
-                    setPlacesAccepted(
-                      tour.diff,
-                      places.map((place) => place.placeId),
-                      true,
-                    )
-                  }
-                >
-                  Accept all
-                </button>
-              )}
-              {isActiveAccepted ? (
-                <div className="inline-flex min-h-8 items-center gap-2">
-                  <span className="inline-flex items-center gap-1 font-semibold text-accent [&>svg]:size-3.5">
-                    <Icon icon={CHECK_ICON} />
-                    Accepted
-                  </span>
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-md px-2 py-1 text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
-                    aria-label="Undo acceptance for this change"
-                    onClick={acceptActivePlace}
+              {showCompletionSummary ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="micro"
+                    onClick={() => setShowCompletionSummary(false)}
                   >
-                    Undo
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md border border-accent bg-accent px-3 font-semibold text-accent-ink shadow-raised hover:shadow-lifted focus-visible:outline-2 focus-visible:outline-accent [&>svg]:size-3.5"
-                  aria-label="Accept this change"
-                  onClick={acceptActivePlace}
-                >
-                  <Icon icon={CHECK_ICON} />
-                  Accept change
-                </button>
-              )}
-              {!allAccepted || tour.onResolve === undefined ? null : (
-                <div className="inline-flex items-center gap-2 border-l border-edge pl-2">
-                  <span className="text-2xs font-semibold text-muted">
-                    Thread
-                  </span>
-                  <button
-                    type="button"
-                    className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md bg-accent px-3 font-semibold text-accent-ink shadow-raised hover:shadow-lifted focus-visible:outline-2 focus-visible:outline-accent [&>svg]:size-3.5"
+                    Back to review
+                  </Button>
+                  <span className="min-w-0 flex-1" />
+                  <Button
+                    variant="secondary"
+                    size="micro"
                     onClick={() => {
-                      tour.onResolve?.();
                       closeTour();
+                      tour.onKeepChatting?.();
                     }}
                   >
-                    <Icon icon={CHECK_ICON} />
-                    Resolve thread
-                  </button>
-                </div>
+                    Keep chatting
+                  </Button>
+                  {tour.onResolve === undefined ? null : (
+                    <Button
+                      size="micro"
+                      onClick={() => {
+                        tour.onResolve?.();
+                        closeTour();
+                      }}
+                    >
+                      <Icon icon={CHECK_ICON} />
+                      Resolve thread
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" size="micro" onClick={closeTour}>
+                    <Icon icon={X_ICON} />
+                    Exit review
+                  </Button>
+                  <span className="min-w-0 flex-1" />
+                  {places.length <= 1 || allAccepted ? null : (
+                    <Button
+                      variant="accentOutline"
+                      size="micro"
+                      onClick={() =>
+                        setPlacesAccepted(
+                          tour.diff,
+                          places.map((place) => place.placeId),
+                          true,
+                        )
+                      }
+                    >
+                      Accept all
+                    </Button>
+                  )}
+                  {tour.onRevert === undefined ? null : (
+                    <Button
+                      variant="ghost"
+                      size="micro"
+                      className="hover:text-danger"
+                      disabled={tour.canRevert !== true}
+                      aria-label={
+                        tour.canRevert === true
+                          ? "Revert the full agent response"
+                          : "Revert unavailable because the plan changed again"
+                      }
+                      onClick={tour.onRevert}
+                    >
+                      <Icon icon={ROTATE_CCW_ICON} />
+                      Revert
+                    </Button>
+                  )}
+                  {isActiveAccepted ? (
+                    <>
+                      <Badge tone="statusAccent" size="status">
+                        Accepted
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="micro"
+                        aria-label="Undo acceptance for this change"
+                        onClick={acceptActivePlace}
+                      >
+                        Undo
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      size="micro"
+                      aria-label="Accept this change"
+                      onClick={acceptActivePlace}
+                    >
+                      <Icon icon={CHECK_ICON} />
+                      Accept change
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </div>

@@ -643,27 +643,31 @@ test("should replace an empty composer and protect a non-empty draft", async ({
   await expect(second).not.toHaveAttribute("data-review-slide-selected", "");
 });
 
-test("should give sub-slide comment controls one more gutter step", async ({
+test("should place slide comment controls just outside the upper-right edge", async ({
   page,
   deckViewerUrl,
 }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(deckViewerUrl);
 
-  const slide = page.locator('[data-collapsible="slide"]').first();
-  const subSlide = page.locator('[data-collapsible="subslide"]').first();
-  const gutter = async (card: typeof slide) => {
+  const cards = [
+    page.locator('[data-collapsible="slide"]').first(),
+    page.locator('[data-collapsible="subslide"]').first(),
+  ];
+  for (const card of cards) {
     const cardBox = await card.boundingBox();
     const buttonBox = await card
-      .getByRole("button", { name: "Comment on slide" })
+      .locator(
+        ':scope > [data-collapse-header] > [data-review-slide-host] > button[aria-label="Comment on slide"]',
+      )
       .boundingBox();
     if (cardBox === null || buttonBox === null) {
       throw new Error("Expected slide card and comment control bounds");
     }
-    return Math.round(cardBox.x - (buttonBox.x + buttonBox.width));
-  };
 
-  expect((await gutter(subSlide)) - (await gutter(slide))).toBe(4);
+    expect(Math.round(buttonBox.x - (cardBox.x + cardBox.width))).toBe(12);
+    expect(Math.round(buttonBox.y - cardBox.y)).toBe(12);
+  }
 });
 
 test("should show a sub-slide ordinal once in its comment toolbar", async ({

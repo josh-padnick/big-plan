@@ -1,7 +1,7 @@
 // Owns the shared legacy-compatible You/Agent turn, status-strip, activity,
 // Markdown, panel-pill, and change-digest presentation for the review island.
 
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
@@ -17,7 +17,7 @@ import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import { Icon } from "./icon.browser.js";
-import { Button } from "./ui.browser.js";
+import { Badge, Button } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
 
@@ -197,17 +197,38 @@ export const ReviewerMessagePreview = ({
 }: {
   readonly body: string;
   readonly onExpand: () => void;
-}) => (
-  <button
-    type="button"
-    className={`${THREAD_BASE} ${ROLE_CLASSES.user} review-sent-summary block cursor-pointer text-left text-xs text-ink [line-height:1.45] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
-    aria-label={`Expand thread: ${body}`}
-    aria-expanded="false"
-    onClick={onExpand}
-  >
-    <span className="line-clamp-3 [overflow-wrap:anywhere]">{body}</span>
-  </button>
-);
+}) => {
+  const previewRef = useRef<HTMLSpanElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+  useLayoutEffect(() => {
+    const preview = previewRef.current;
+    if (preview === null) return;
+    const update = () =>
+      setIsTruncated(preview.scrollHeight > preview.clientHeight + 1);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(preview);
+    return () => observer.disconnect();
+  }, [body]);
+  return (
+    <button
+      type="button"
+      className={`${THREAD_BASE} ${ROLE_CLASSES.user} review-sent-summary block cursor-pointer text-left text-xs text-ink [line-height:1.45] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+      aria-label={`Expand thread: ${body}`}
+      aria-expanded="false"
+      onClick={onExpand}
+    >
+      <span ref={previewRef} className="line-clamp-3 [overflow-wrap:anywhere]">
+        {body}
+      </span>
+      {isTruncated ? (
+        <span className="mt-1 block text-2xs font-semibold text-accent">
+          … more
+        </span>
+      ) : null}
+    </button>
+  );
+};
 
 const Spinner = () => (
   <span
@@ -446,7 +467,8 @@ export const AgentChangeDigest = ({
   onRevert,
   canRevert,
   threadLabel,
-  resolved = false,
+  onOpenThread,
+  onKeepChatting,
 }: {
   readonly diff: SnapshotDiff | null;
   readonly placeIds?: ReadonlyArray<string>;
@@ -459,7 +481,8 @@ export const AgentChangeDigest = ({
   readonly onRevert?: () => void;
   readonly canRevert?: boolean;
   readonly threadLabel?: string;
-  readonly resolved?: boolean;
+  readonly onOpenThread?: () => void;
+  readonly onKeepChatting?: () => void;
 }) => {
   const {
     activeDiff,
@@ -533,12 +556,16 @@ export const AgentChangeDigest = ({
         <Icon icon={CHEVRON_RIGHT_ICON} />
         {available.length} change{available.length === 1 ? "" : "s"} across{" "}
         {sections.size} slide{sections.size === 1 ? "" : "s"}
-        {acceptedCount === 0 ? null : (
+        {acceptedCount === 0 ? null : allAccepted ? (
+          <Badge className="ml-auto" size="status" tone="statusAccent">
+            Accepted
+          </Badge>
+        ) : (
           <span
             className="ml-auto shrink-0 font-medium text-accent"
             aria-label={`${acceptedCount} of ${available.length} changes accepted`}
           >
-            {allAccepted ? "Accepted" : `${acceptedCount}/${available.length}`}
+            {acceptedCount}/{available.length}
           </span>
         )}
       </button>
@@ -547,7 +574,7 @@ export const AgentChangeDigest = ({
           {Array.from(sections).map(([section, entries]) => (
             <div key={section}>
               <div
-                className="flex min-w-0 items-center gap-2 border-t border-edge bg-surface px-2 py-1.5 text-2xs font-semibold text-subtle uppercase tracking-caps first:border-t-0"
+                className="flex min-w-0 items-center gap-2 border-t border-edge bg-surface px-2 py-1.5 text-2xs font-semibold text-subtle first:border-t-0"
                 data-review-diff-section=""
               >
                 <span className="min-w-0 flex-1 truncate">
@@ -575,6 +602,8 @@ export const AgentChangeDigest = ({
                       onRevert,
                       canRevert,
                       threadLabel,
+                      onOpenThread,
+                      onKeepChatting,
                     })
                   }
                 >
@@ -604,6 +633,14 @@ export const AgentChangeDigest = ({
           elsewhere in this snapshot
         </p>
       )}
+      {allAccepted ? (
+        <p
+          className="m-0 border-t border-edge pt-2 text-2xs font-semibold text-accent"
+          data-review-changes-accepted=""
+        >
+          Change set accepted
+        </p>
+      ) : null}
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <button
           type="button"
@@ -621,6 +658,8 @@ export const AgentChangeDigest = ({
               onRevert,
               canRevert,
               threadLabel,
+              onOpenThread,
+              onKeepChatting,
             });
           }}
         >
@@ -649,19 +688,6 @@ export const AgentChangeDigest = ({
           </Button>
         )}
       </div>
-      {!allAccepted || onResolve === undefined ? null : (
-        <div
-          className="flex min-w-0 items-center gap-2 border-t border-edge pt-2 text-2xs text-accent"
-          data-review-changes-accepted=""
-        >
-          <span className="min-w-0 flex-1 font-semibold">
-            Change set accepted
-          </span>
-          <Button variant="default" size="micro" onClick={onResolve}>
-            {resolved ? "Unresolve thread" : "Resolve thread"}
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

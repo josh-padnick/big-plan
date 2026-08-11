@@ -93,7 +93,14 @@ import {
 import { Icon } from "./icon.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
 import { useDiffTour } from "./diff-tour.browser.js";
-import { AlertDialog, Badge, Button, Card, Textarea } from "./ui.browser.js";
+import {
+  AlertDialog,
+  Badge,
+  Button,
+  Card,
+  Textarea,
+  Tooltip,
+} from "./ui.browser.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT = 4000;
@@ -197,70 +204,6 @@ type FloatingPosition = {
 
 const rootElement = document.documentElement;
 
-const DelayedTooltip = ({
-  label,
-  children,
-}: {
-  readonly label: string;
-  readonly children: ReactNode;
-}) => {
-  const anchorRef = useRef<HTMLSpanElement>(null);
-  const timerRef = useRef<number | null>(null);
-  const [position, setPosition] = useState<{
-    readonly top: number;
-    readonly left: number;
-  } | null>(null);
-  const hide = () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    timerRef.current = null;
-    setPosition(null);
-  };
-  const show = () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => {
-      const rect = anchorRef.current?.getBoundingClientRect();
-      if (rect === undefined) return;
-      const center = rect.left + rect.width / 2;
-      const edge = Math.min(96, window.innerWidth / 2);
-      setPosition({
-        top: rect.top - 8,
-        left: Math.min(window.innerWidth - edge, Math.max(edge, center)),
-      });
-      timerRef.current = null;
-    }, 1_000);
-  };
-  useEffect(
-    () => () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    },
-    [],
-  );
-  return (
-    <span
-      ref={anchorRef}
-      className="inline-flex"
-      onMouseEnter={show}
-      onMouseLeave={hide}
-      onFocusCapture={show}
-      onBlurCapture={hide}
-    >
-      {children}
-      {position === null
-        ? null
-        : createPortal(
-            <span
-              role="tooltip"
-              className="pointer-events-none fixed z-[2147483647] w-max max-w-44 -translate-x-1/2 -translate-y-full rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs font-semibold leading-[1.35] text-[var(--bg)] shadow-floating"
-              style={{ top: position.top, left: position.left }}
-            >
-              {label}
-            </span>,
-            document.body,
-          )}
-    </span>
-  );
-};
-
 const ThreadIconButton = ({
   label,
   icon,
@@ -281,7 +224,7 @@ const ThreadIconButton = ({
         ? "hover:border-accent hover:bg-accent-wash hover:text-accent hover:shadow-raised focus-visible:border-accent focus-visible:bg-accent-wash focus-visible:text-accent"
         : "hover:bg-surface hover:text-ink hover:shadow-raised focus-visible:bg-surface focus-visible:text-ink";
   return (
-    <DelayedTooltip label={label}>
+    <Tooltip label={label}>
       <button
         type="button"
         className={`inline-flex size-6 flex-none cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent p-0 leading-none text-muted transition-[color,background-color,border-color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent active:inset-shadow-pressed disabled:cursor-default disabled:border-transparent disabled:bg-transparent disabled:text-subtle disabled:shadow-none [&>svg]:size-3.5 ${hoverClass}`}
@@ -294,7 +237,7 @@ const ThreadIconButton = ({
       >
         <Icon icon={icon} />
       </button>
-    </DelayedTooltip>
+    </Tooltip>
   );
 };
 
@@ -393,6 +336,37 @@ const bootstrapSnapshot = (): string => {
 const localStorageKey = (planId: string): string =>
   `big-plan:review:drafts:${planId}`;
 
+const archivedChatStorageKey = (planId: string): string =>
+  `big-plan:review:archived-chat:${planId}`;
+
+const readArchivedChatRequestIds = (planId: string): ReadonlySet<string> => {
+  try {
+    const raw = localStorage.getItem(archivedChatStorageKey(planId));
+    const parsed: unknown = raw === null ? [] : JSON.parse(raw);
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter((value): value is string => typeof value === "string")
+        : [],
+    );
+  } catch {
+    return new Set();
+  }
+};
+
+const writeArchivedChatRequestIds = (
+  planId: string,
+  requestIds: ReadonlySet<string>,
+): void => {
+  try {
+    localStorage.setItem(
+      archivedChatStorageKey(planId),
+      JSON.stringify([...requestIds]),
+    );
+  } catch {
+    // Browser-only presentation preferences are best effort.
+  }
+};
+
 const readLocalDrafts = (planId: string): ReadonlyArray<ReviewComment> => {
   try {
     const raw = localStorage.getItem(localStorageKey(planId));
@@ -470,6 +444,52 @@ const requestJson = async ({
   } finally {
     window.clearTimeout(timeout);
   }
+};
+
+type CachedSnapshotDiff =
+  | { readonly state: "pending"; readonly value: Promise<SnapshotDiff> }
+  | { readonly state: "ready"; readonly value: SnapshotDiff };
+const snapshotDiffCache = new Map<string, CachedSnapshotDiff>();
+
+const snapshotDiffKey = (
+  identity: RuntimeIdentity,
+  from: string,
+  to: string,
+): string => `${identity.planId}:${identity.sessionId}:${from}:${to}`;
+
+const cachedSnapshotDiff = (
+  identity: RuntimeIdentity,
+  from: string,
+  to: string,
+): Promise<SnapshotDiff> => {
+  const key = snapshotDiffKey(identity, from, to);
+  const cached = snapshotDiffCache.get(key);
+  if (cached !== undefined) return Promise.resolve(cached.value);
+  const pending = requestJson({
+    path: `/api/snapshot-diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    identity,
+  })
+    .then((value) => {
+      const parsed = parseSnapshotDiff(value);
+      if (parsed === null) throw new Error("The snapshot diff is unavailable");
+      snapshotDiffCache.set(key, { state: "ready", value: parsed });
+      return parsed;
+    })
+    .catch((error: unknown) => {
+      snapshotDiffCache.delete(key);
+      throw error;
+    });
+  snapshotDiffCache.set(key, { state: "pending", value: pending });
+  return pending;
+};
+
+const readySnapshotDiff = (
+  identity: RuntimeIdentity,
+  from: string,
+  to: string,
+): SnapshotDiff | null => {
+  const cached = snapshotDiffCache.get(snapshotDiffKey(identity, from, to));
+  return cached?.state === "ready" ? cached.value : null;
 };
 
 const randomId = (): string => {
@@ -1173,6 +1193,7 @@ const useThreadHosts = (
       const threadTopInset = 12;
       const threadWidth = 17 * 16;
       const diffThreadGap = 12;
+      const slideCommentControlClearance = 44;
       const positionItems: Array<{
         readonly id: string;
         readonly desiredTop: number;
@@ -1213,11 +1234,14 @@ const useThreadHosts = (
           1,
           host.firstElementChild?.getBoundingClientRect().height ?? 1,
         );
+        const isSlideAnchor = anchor.matches(
+          "[data-slide], [data-quick-summary]",
+        );
         const desiredTop =
           anchorRect.top +
           (targetOffsets.get(comment.id) ?? 0) +
           window.scrollY +
-          threadTopInset;
+          (isSlideAnchor ? slideCommentControlClearance : threadTopInset);
         positionItems.push({
           id: comment.id,
           desiredTop,
@@ -1226,9 +1250,7 @@ const useThreadHosts = (
         anchorRects.set(comment.id, anchorRect);
         rightThreadOffsets.set(
           comment.id,
-          anchor.matches("[data-slide], [data-quick-summary]")
-            ? -diffThreadGap
-            : diffThreadGap,
+          isSlideAnchor ? slideCommentControlClearance : diffThreadGap,
         );
       }
       for (const { id, top } of stackThreadPositions({
@@ -1815,7 +1837,7 @@ const StagedCard = ({
         >
           {resolved && onResolve !== undefined ? (
             <ThreadIconButton
-              label="Unresolve comment"
+              label="Unresolve thread"
               icon={CHECK_ICON}
               onClick={onResolve}
             />
@@ -2114,7 +2136,8 @@ const ChangeAttachment = ({
   onRevert,
   canRevert,
   threadLabel,
-  resolved,
+  onOpenThread,
+  onKeepChatting,
 }: {
   readonly identity: RuntimeIdentity;
   readonly request: AgentRequest;
@@ -2126,27 +2149,26 @@ const ChangeAttachment = ({
   readonly onRevert?: () => void;
   readonly canRevert?: boolean;
   readonly threadLabel?: string;
-  readonly resolved?: boolean;
+  readonly onOpenThread?: () => void;
+  readonly onKeepChatting?: () => void;
 }) => {
-  const [diff, setDiff] = useState<SnapshotDiff | null>(null);
+  const from = request.baselineSnapshot ?? request.premiseSnapshot;
+  const to = response.resultSnapshot;
+  const [diff, setDiff] = useState<SnapshotDiff | null>(() =>
+    readySnapshotDiff(identity, from, to),
+  );
   const [isLoading, setIsLoading] = useState(false);
   const load = useCallback(async () => {
     if (isLoading || diff !== null) return;
     setIsLoading(true);
     try {
-      const value = await requestJson({
-        path: `/api/snapshot-diff?from=${encodeURIComponent(request.baselineSnapshot ?? request.premiseSnapshot)}&to=${encodeURIComponent(response.resultSnapshot)}`,
-        identity,
-      });
-      const parsed = parseSnapshotDiff(value);
-      if (parsed === null) throw new Error("The snapshot diff is unavailable");
-      setDiff(parsed);
+      setDiff(await cachedSnapshotDiff(identity, from, to));
     } catch (error) {
       onStatus(errorMessage(error));
     } finally {
       setIsLoading(false);
     }
-  }, [diff, identity, isLoading, onStatus, request, response]);
+  }, [diff, from, identity, isLoading, onStatus, to]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -2168,7 +2190,8 @@ const ChangeAttachment = ({
       onRevert={onRevert}
       canRevert={canRevert}
       threadLabel={threadLabel}
-      resolved={resolved}
+      onOpenThread={onOpenThread}
+      onKeepChatting={onKeepChatting}
     />
   );
 };
@@ -2345,6 +2368,22 @@ const SentThread = ({
     canDeleteCanceled,
     group,
   } = thread;
+  useEffect(() => {
+    if (
+      identity === null ||
+      latestChanged === undefined ||
+      latestChanged.response === undefined
+    )
+      return;
+    const from =
+      latestChanged.request.baselineSnapshot ??
+      latestChanged.request.premiseSnapshot;
+    void cachedSnapshotDiff(
+      identity,
+      from,
+      latestChanged.response.resultSnapshot,
+    ).catch(() => undefined);
+  }, [identity, latestChanged]);
   const outcome = latestExchange?.outcome;
   const targetPresent = targetElement(comment.target) !== null;
   const cardClass = `mt-2 min-w-0 w-full overflow-hidden border border-edge transition-shadow data-[review-associated=true]:border-[var(--annotation-c)] data-[review-associated=true]:shadow-lifted data-[review-selected=true]:outline-3 data-[review-selected=true]:outline-offset-1 data-[review-selected=true]:outline-[color-mix(in_srgb,var(--annotation-c)_45%,var(--bg))] ${group === "working" ? "border-[var(--callout-note-c)]!" : ""} ${surface === "rail" ? "max-w-none bg-comment-body! p-0! shadow-raised" : "max-w-[17rem] bg-comment-body!"}`;
@@ -2476,7 +2515,7 @@ const SentThread = ({
           ) : null}
           {!latestPending ? (
             <ThreadIconButton
-              label={resolved ? "Unresolve comment" : "Resolve comment"}
+              label={resolved ? "Unresolve thread" : "Resolve thread"}
               icon={CHECK_ICON}
               onClick={onResolve}
             />
@@ -2586,7 +2625,7 @@ const SentThread = ({
             />
           )}
           <ThreadIconButton
-            label={resolved ? "Unresolve comment" : "Resolve comment"}
+            label={resolved ? "Unresolve thread" : "Resolve thread"}
             icon={CHECK_ICON}
             onClick={onResolve}
             tone="positive"
@@ -2699,7 +2738,7 @@ const SentThread = ({
           />
         )}
         <ThreadIconButton
-          label={resolved ? "Unresolve comment" : "Resolve comment"}
+          label={resolved ? "Unresolve thread" : "Resolve thread"}
           icon={CHECK_ICON}
           onClick={onResolve}
           tone="positive"
@@ -2708,9 +2747,8 @@ const SentThread = ({
       <div className={surface === "rail" ? "min-w-0 p-3" : ""}>
         {!targetPresent ? (
           <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)] [overflow-wrap:anywhere]">
-            The part of the plan you commented on has since been replaced or
-            removed. You can still review this thread and its saved change set
-            here.
+            The part of the plan you commented on has since been changed. You
+            can still review this thread, but won&apos;t see a full diff.
           </p>
         ) : null}
         <div
@@ -2801,9 +2839,13 @@ const SentThread = ({
                         <Badge
                           tone={
                             requestOutcome.state === "changed"
-                              ? "accent"
-                              : "secondary"
+                              ? "statusAccent"
+                              : requestOutcome.state === "warning" ||
+                                  requestOutcome.state === "needs-input"
+                                ? "statusWarning"
+                                : "statusNeutral"
                           }
+                          size="status"
                           className={
                             requestOutcome.state === "needs-input" ||
                             requestOutcome.state === "warning"
@@ -2865,7 +2907,17 @@ const SentThread = ({
                                 request.requestId && canRevertLatestChange
                             }
                             threadLabel={comment.body}
-                            resolved={resolved}
+                            onOpenThread={onJump}
+                            onKeepChatting={() => {
+                              onJump();
+                              window.setTimeout(
+                                () =>
+                                  document
+                                    .getElementById(`reply-${comment.id}`)
+                                    ?.focus(),
+                                0,
+                              );
+                            }}
                           />
                         ) : null}
                       </MessageTurn>
@@ -2920,12 +2972,17 @@ const SentThread = ({
                       tone="danger"
                     />
                   )}
-                  <ThreadIconButton
-                    label={resolved ? "Unresolve comment" : "Resolve comment"}
-                    icon={CHECK_ICON}
+                  <Button
+                    variant="accentOutline"
+                    size="micro"
+                    aria-label={
+                      resolved ? "Unresolve thread" : "Resolve thread"
+                    }
                     onClick={onResolve}
-                    tone="positive"
-                  />
+                  >
+                    <Icon icon={CHECK_ICON} />
+                    {resolved ? "Unresolve thread" : "Resolve thread"}
+                  </Button>
                 </div>
               </section>
             )}
@@ -2944,7 +3001,7 @@ const SentThread = ({
               }}
             />
             <div className="mt-2 flex justify-end">
-              <DelayedTooltip label={`Reply · ${MODIFIER_SHORTCUT}`}>
+              <Tooltip label={`Reply · ${MODIFIER_SHORTCUT}`}>
                 <Button
                   size="compact"
                   disabled={reply.trim() === "" || isReplying}
@@ -2952,7 +3009,7 @@ const SentThread = ({
                 >
                   {isReplying ? "Sending…" : "Reply"}
                 </Button>
-              </DelayedTooltip>
+              </Tooltip>
             </div>
           </div>
         )}
@@ -3065,6 +3122,11 @@ export const ReviewController = () => {
   const [isSending, setIsSending] = useState(false);
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatBody, setChatBody] = useState("");
+  const [archivedChatRequestIds, setArchivedChatRequestIds] = useState<
+    ReadonlySet<string>
+  >(() =>
+    planId === "" ? new Set<string>() : readArchivedChatRequestIds(planId),
+  );
   const [commentQuery, setCommentQuery] = useState("");
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
   const [displayedSnapshot, setDisplayedSnapshot] = useState(initialSnapshot);
@@ -3105,6 +3167,11 @@ export const ReviewController = () => {
       ? "Reading offline: drafts stay in this browser."
       : "Loading review…",
   );
+  useEffect(() => {
+    if (planId !== "") {
+      writeArchivedChatRequestIds(planId, archivedChatRequestIds);
+    }
+  }, [archivedChatRequestIds, planId]);
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
   const threadRuntime: ThreadRuntime =
     identity === null ? "static" : pollFailures >= 2 ? "offline" : "online";
@@ -4046,6 +4113,34 @@ export const ReviewController = () => {
   const chatRequests = agent.requests.filter(
     (request) => request.kind === "chat",
   );
+  const activeChatRequests = chatRequests.filter(
+    (request) => !archivedChatRequestIds.has(request.requestId),
+  );
+  const archivedChatRequests = chatRequests.filter((request) =>
+    archivedChatRequestIds.has(request.requestId),
+  );
+  const renderChatExchange = (request: (typeof chatRequests)[number]) => {
+    if (identity === null) return null;
+    const response = agent.responses.find(
+      (candidate) =>
+        candidate.requestId === request.requestId && candidate.kind === "chat",
+    );
+    return (
+      <ChatExchange
+        key={request.requestId}
+        request={request}
+        response={response}
+        identity={identity}
+        status={statusForRequest(request, "chat")}
+        activity={activityForRequest(request)}
+        onStatus={setStatus}
+        onShowAgent={showAgentSetup}
+        activeRequestLink={activeRequestLink}
+        onCancelRequest={(requestId) => void cancelRequest(requestId)}
+        currentSnapshot={currentSnapshot}
+      />
+    );
+  };
   const unresolvedSent = sent.filter(
     (comment) => !resolvedCommentIds.has(comment.id),
   );
@@ -4389,7 +4484,7 @@ export const ReviewController = () => {
             <>
               {agentHealthLabel === null ? (
                 identity !== null && agentConnected ? (
-                  <DelayedTooltip label="Agent session active">
+                  <Tooltip label="Agent session active">
                     <button
                       type="button"
                       className="inline-flex size-11 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-surface focus-visible:bg-surface focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent wide:size-8"
@@ -4406,7 +4501,7 @@ export const ReviewController = () => {
                         <span className="size-1.5 rounded-full bg-[var(--diff-add-c)]" />
                       </span>
                     </button>
-                  </DelayedTooltip>
+                  </Tooltip>
                 ) : null
               ) : (
                 <AgentHealthAlert
@@ -4737,36 +4832,19 @@ export const ReviewController = () => {
                 bodyLimit: BODY_LIMIT,
                 shortcutLabel: MODIFIER_SHORTCUT,
                 isSending: isSendingChat,
-                hasExchanges: chatRequests.length > 0,
-                exchanges:
-                  identity === null
-                    ? null
-                    : chatRequests.map((request) => {
-                        const response = agent.responses.find(
-                          (candidate) =>
-                            candidate.requestId === request.requestId &&
-                            candidate.kind === "chat",
-                        );
-                        return (
-                          <ChatExchange
-                            key={request.requestId}
-                            request={request}
-                            response={response}
-                            identity={identity}
-                            status={statusForRequest(request, "chat")}
-                            activity={activityForRequest(request)}
-                            onStatus={setStatus}
-                            onShowAgent={showAgentSetup}
-                            activeRequestLink={activeRequestLink}
-                            onCancelRequest={(requestId) =>
-                              void cancelRequest(requestId)
-                            }
-                            currentSnapshot={currentSnapshot}
-                          />
-                        );
-                      }),
+                hasExchanges: activeChatRequests.length > 0,
+                exchanges: activeChatRequests.map(renderChatExchange),
+                archivedCount: archivedChatRequests.length,
+                archivedExchanges: archivedChatRequests.map(renderChatExchange),
                 onBodyChange: setChatBody,
                 onSend: () => void sendChat(),
+                onArchive: () =>
+                  setArchivedChatRequestIds(
+                    new Set([
+                      ...archivedChatRequestIds,
+                      ...activeChatRequests.map((request) => request.requestId),
+                    ]),
+                  ),
               }}
             />
           ) : null}

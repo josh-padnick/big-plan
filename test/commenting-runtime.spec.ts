@@ -257,7 +257,8 @@ test("should restore and submit staged comments through the local review runtime
     "Clarify the failure boundary.",
   );
 
-  await expect(rail).toContainText("3 comments sent to the agent");
+  await expect(rail.getByPlaceholder("Search comments")).toBeVisible();
+  await expect(rail).not.toContainText("comments sent to the agent");
   await expect(
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
@@ -752,7 +753,7 @@ test("should restore and submit staged comments through the local review runtime
     sentThread.getByRole("button", { name: "Revert response" }),
   ).toBeVisible();
   await expect(
-    sentThread.getByRole("button", { name: "Resolve comment" }),
+    sentThread.getByRole("button", { name: "Resolve thread" }),
   ).toBeVisible();
   await page.setViewportSize({ width: 800, height: 1000 });
   await sentThread
@@ -815,7 +816,7 @@ test("should restore and submit staged comments through the local review runtime
   expect(changedNextStepLabels).toEqual([
     "Minimize thread",
     "Revert response",
-    "Resolve comment",
+    "Resolve thread",
   ]);
   await kernel.getByRole("button", { name: /Review change/u }).click();
   await expect(page.locator("[data-review-diff-lens]")).toContainText(
@@ -842,7 +843,7 @@ test("should restore and submit staged comments through the local review runtime
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
   const resolve = sentThread
-    .getByRole("button", { name: "Resolve comment" })
+    .getByRole("button", { name: "Resolve thread" })
     .first();
   const restingResolveBackground = await resolve.evaluate(
     (node) => getComputedStyle(node).backgroundColor,
@@ -914,7 +915,7 @@ test("should restore and submit staged comments through the local review runtime
     "",
   );
   await contextualThread
-    .getByRole("button", { name: "Resolve comment" })
+    .getByRole("button", { name: "Resolve thread" })
     .first()
     .click();
   await expect(
@@ -1225,8 +1226,11 @@ test("should preview stale, historical, and multi-place causal diffs through the
     const acceptedChange = rail.locator("[data-review-changes-accepted]");
     await expect(acceptedChange).toContainText("Change set accepted");
     await expect(
-      acceptedChange.getByRole("button", { name: "Resolve thread" }),
+      singletonStepper.getByRole("button", { name: "Resolve thread" }),
     ).toBeVisible();
+    await singletonStepper
+      .getByRole("button", { name: "Back to review" })
+      .click();
     await singletonStepper
       .getByRole("button", { name: "Undo acceptance for this change" })
       .click();
@@ -1306,7 +1310,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
         }),
       )
       .toBe(true);
-    await acceptedChange
+    await singletonStepper
       .getByRole("button", { name: "Resolve thread" })
       .click();
     await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
@@ -1328,10 +1332,10 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await rail.getByRole("button", { name: "Review change" }).click();
     const historicalChange = page
       .locator("main")
-      .getByRole("region", { name: "Historical change" });
+      .getByRole("region", { name: "Historical change", exact: true });
     await expect(historicalChange).toContainText("Retired experiment");
     await expect(
-      rail.getByRole("region", { name: "Historical change" }),
+      rail.getByRole("region", { name: "Historical change", exact: true }),
     ).toHaveCount(0);
     await page.screenshot({
       path: testInfo.outputPath("historical-change.png"),
@@ -1400,7 +1404,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(rail.getByText("Resolved (1)")).toBeVisible();
     await rail.getByText("Resolved (1)").click();
     await expect(
-      rail.getByRole("button", { name: "Unresolve comment" }),
+      rail.getByRole("button", { name: "Unresolve thread" }),
     ).toBeVisible();
     await page.reload();
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();

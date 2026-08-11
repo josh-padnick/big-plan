@@ -6,7 +6,7 @@ Make every meaningful agent change reviewable at its original place and long aft
 
 This is a causal diff review experience: it shows reviewers the exact Was and Now content beside each place an agent changed, and ties each change back to the feedback that caused it.
 
-- Thread answers carry only the changes caused by that feedback.
+- Thread answers carry only the changes your own feedback caused, and nothing more.
 - Chat answers carry a grouped, plan-wide change digest.
 - Historical answers preserve their claim-time baseline and result snapshots.
 - A guided tour moves through every changed place without losing context.
@@ -21,31 +21,47 @@ Verify the causal boundary, the in-place lens, and the historical state.
 
 *Each answer includes the evidence that led to its declared outcome.*
 
-| Where reviewers see it | Evidence shown | Snapshot that anchors it |
-| ---------------------- | -------------- | ------------------------ |
-| Feedback thread | Was/Now diff attributed to that feedback | Baseline to result |
-| Plan-wide chat | Grouped change digest and guided tour | Latest result |
-| Current plan | Current source plus historical diffs | Result to current |
-| Feedback on an older plan version | Stale badge and premise-to-current diff | Premise to current |
+| Where reviewers see it | Evidence shown | Baseline it compares against |
+| ---------------------- | -------------- | ---------------------------- |
+| Feedback thread | Was/Now diff attributed to that feedback | Baseline frozen when the agent claimed the request |
+| Plan-wide chat | Grouped change digest and guided tour | Baseline frozen when the agent claimed the chat request |
+| New plan | Current source plus historical diffs | Each answer's own result snapshot, kept after later edits |
+| Feedback on an older plan version | Stale badge and premise-to-current diff | Premise captured when that feedback was written |
+
+Each declared outcome carries its own evidence, and only one of them attaches a diff.
+
+| Outcome | What the agent did | Evidence attached |
+| ------- | ------------------ | ----------------- |
+| answered | Explained without revising the plan | None |
+| changed | Revised the plan source | Was/Now diff for every changed block |
+| needs-input | Asked the reviewer to decide | None, and the thread stays open |
+| declined | Refused the revision on principle | None |
 
 ```ts
+// What the agent declared for one review request.
+// Only "changed" attaches a diff; the rest answer without revising the plan.
 type Outcome = "answered" | "changed" | "needs-input" | "declined";
 
+// The plan states one exchange compares, each captured at a different moment.
 type SnapshotExchange = {
+  // The plan as it stood when the reviewer wrote the feedback.
   premiseSnapshot: string;
+  // The plan frozen when the agent claimed the request, so a diff cannot drift.
+  // Absent until the request is claimed.
   baselineSnapshot?: string;
+  // The plan after the agent answered: the Now side of every attributed diff.
   resultSnapshot: string;
 };
 ```
 
-## Rollout
+## Weighin' Anchor
 
-The first release enables the full experience for every local reviewer.
+The first release be throwin' open the whole experience to every local reviewer aboard.
 
-1. Capture the premise when feedback is authored.
-2. Freeze the baseline when the agent claims the request.
-3. Attach the result snapshot to the answer.
-4. Tour grouped changed places in the live document.
+1. Freeze the baseline when the agent lays claim to the request.
+2. Capture the premise when the feedback be written.
+3. Lash the result snapshot to the answer.
+4. Sail through the grouped changed places in the livin' document.
 
 <QuickSummary>
 
@@ -65,8 +81,9 @@ The first release enables the full experience for every local reviewer.
 
 <How>
 
-- Land persistence first, expose narrow service contracts, then enable the
-  review workspace behind a rollout flag.
+- Land persistence first.
+- Expose narrow service contracts.
+- Enable the review workspace behind a rollout flag.
 
 </How>
 
@@ -75,7 +92,7 @@ The first release enables the full experience for every local reviewer.
 <TableOfContents>
 <Entry section="What this experience does" gist="Explain the causal review promise" />
 <Entry section="Delivery contract" gist="Define snapshots, outcomes, and review locations" />
-<Entry section="Rollout" gist="Sequence the first release" />
+<Entry section="Weighin' Anchor" gist="Chart the order of the first voyage" />
 <Entry section="Review decisions" gist="Settle ownership, storage, and rollout boundaries" />
 <Entry section="System shape" gist="Show the service flow and planned file changes" />
 <Entry section="Service contracts" gist="Review code, data, table, HTTP, GraphQL, and gRPC contracts" />
@@ -117,17 +134,19 @@ A later shared service can retain the same repository interface.
 
 </Option>
 
-<Option title="Browser local storage" summary="Persist review state in each browser profile.">
+<Option title="Plan-adjacent files on disk" summary="Write review events beside the plan under a dot directory.">
 
-<Consideration label="Source authority" verdict="Ambiguous" tone="bad">
+<Consideration label="Source authority" verdict="Preserved" tone="good">
 
-Independent browser profiles can disagree about review state.
+Review records sit next to the plan without competing with it, and a reviewer
+can inspect them with ordinary file tools.
 
 </Consideration>
 
 <Consideration label="Migration path" verdict="Manual" tone="mixed">
 
-Existing browser records would need an export and reconciliation path.
+A shared service would have to import loose per-plan files and invent the
+ordering guarantees the format never enforced.
 
 </Consideration>
 
@@ -213,7 +232,7 @@ needs a migration.
 </Stage>
 
 <Stage title="Review">
-<Node id="review-service" label="Local review service" code="src/review/service.ts" />
+<Node id="review-service" label="Local service" code="src/review/service.ts" />
 </Stage>
 
 <Stage title="Consume">
@@ -234,14 +253,41 @@ One source file, one feedback stream, and two coordinated readers.
 <MermaidDiagram>
 
 ```mermaid
-flowchart LR
-  plan[Plan source] --> compile[[Compile]]
-  compile --> review{Review}
-  review -->|accept| execute([Execute])
-  review -.->|revise| plan
+sequenceDiagram
+  autonumber
+  actor Reviewer
+  participant Doc as Review document
+  participant Service as Local review service
+  participant Store as Event store
+  participant Agent as Authoring agent
+  participant Plan as Plan source
+
+  Reviewer->>Doc: Select a block and write feedback
+  Doc->>Service: Append comment with its anchor
+  Service->>Store: Persist event and premise snapshot
+  Service-->>Doc: Thread id and sequence
+  Service->>Agent: Deliver the pending request
+
+  Agent->>Service: Claim the request
+  Service->>Store: Freeze the baseline snapshot
+  Agent->>Plan: Read the current source
+
+  alt Outcome is changed
+    Agent->>Plan: Revise the plan source
+    Agent->>Service: Respond with changed block ids
+    Service->>Store: Record the result snapshot
+    Service-->>Doc: Was and Now diff for this feedback
+  else Answered, declined, or needs input
+    Agent->>Service: Respond without editing
+    Service-->>Doc: Answer with no diff
+  end
+
+  Reviewer->>Doc: Resolve the thread or reply again
+  Reviewer->>Service: Accept the plan
 ```
 
-Revision feedback cycles back to the authoritative plan source.
+One reviewer comment, from selection through the agent's outcome and back to the
+document as attributed evidence.
 
 </MermaidDiagram>
 
@@ -256,6 +302,14 @@ src/
   render/
     shell/
       viewer-script.ts - Sends review actions to the local service.
+data/
+  review.sqlite - Local event store the repository opens.
+  example-review-events.jsonl - One exported thread stream, newest event last.
+  example-anchors.json - Anchor records for that stream, before and after edits.
+samples/
+  thread-open.json - One unresolved thread with two replies.
+  thread-resolved.json - The same thread after an accept event.
+  anchors-edited-source.json - Selections replayed against an edited plan.
 ```
 
 </FileTree>
