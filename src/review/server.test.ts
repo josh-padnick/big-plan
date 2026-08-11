@@ -812,8 +812,11 @@ describe("review runtime feedback", () => {
           method: "PUT",
           body: { drafts: [], activeDraft: "", resolvedCommentIds: [] },
         }),
+        // A held gate blocks until the stalled request's own timeout, which is
+        // minutes away, so this budget stays decisive while tolerating the
+        // filesystem lock retries and JSON writes on a loaded runner.
         new Promise<"timeout">((settle) =>
-          setTimeout(() => settle("timeout"), 500),
+          setTimeout(() => settle("timeout"), 5_000),
         ),
       ]);
       expect(result).not.toBe("timeout");

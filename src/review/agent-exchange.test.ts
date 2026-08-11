@@ -361,7 +361,9 @@ describe("agent exchange filesystem", () => {
     await prepareStore(store);
     const startedAt = Date.parse("2026-08-02T12:00:00.000Z");
     await writeAgentRequest({ store, request });
-    for (let index = 1; index < 400; index += 1) {
+    // One more terminal request than the exchange retains, so the read has to
+    // drop the oldest terminal request while keeping the pending one.
+    for (let index = 1; index <= 400; index += 1) {
       await writeAgentRequest({
         store,
         request: {
@@ -384,7 +386,7 @@ describe("agent exchange filesystem", () => {
       sessionId,
       planId,
       sourceRevision: deriveSourceRevision(before),
-      createdAt: new Date(startedAt + 400).toISOString(),
+      createdAt: new Date(startedAt + 401).toISOString(),
       body: "Does the original feedback need a plan change?",
       commentId,
     });
@@ -393,7 +395,7 @@ describe("agent exchange filesystem", () => {
       store,
       requestId: reply.requestId,
       sourceRevision: reply.sourceRevision,
-      now: new Date(startedAt + 401).toISOString(),
+      now: new Date(startedAt + 402).toISOString(),
     });
     const response = validateAgentResponseDraft({
       value: {
@@ -410,14 +412,19 @@ describe("agent exchange filesystem", () => {
       commentsById: new Map([[commentId, comment]]),
       changedBlocks: new Set(),
       currentRevision: claimed.sourceRevision,
-      now: new Date(startedAt + 402).toISOString(),
+      now: new Date(startedAt + 403).toISOString(),
     });
     await publishAgentResponse({ store, response });
 
     const bounded = await readAgentExchange({ store, sessionId, planId });
     expect(bounded.requests).toHaveLength(401);
     expect(bounded.requests[0]?.requestId).toBe(request.requestId);
-    expect(bounded.requests[1]?.requestId).toBe("0000000000000001");
+    expect(bounded.requests[1]?.requestId).toBe("0000000000000002");
+    expect(
+      bounded.requests.some(
+        (retained) => retained.requestId === "0000000000000001",
+      ),
+    ).toBe(false);
     expect(bounded.requests.at(-1)?.requestId).toBe(reply.requestId);
     expect(bounded.responses).toEqual([response]);
     expect(nextPendingAgentRequest(bounded)).toEqual(request);
