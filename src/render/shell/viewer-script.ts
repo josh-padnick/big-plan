@@ -57,10 +57,43 @@ const moveColumnDragPreview = (drag, clientX, clientY) => {
 };
 
 const showColumnDragPreview = (drag, event) => {
+  const bounds = drag.head.getBoundingClientRect();
+  const sourceStyle = getComputedStyle(drag.head);
   const preview = document.createElement("div");
   preview.setAttribute("data-column-drag-preview", "");
   preview.setAttribute("aria-hidden", "true");
-  preview.textContent = (drag.head.textContent || "Column").trim();
+  preview.style.width = String(bounds.width) + "px";
+  preview.style.height = String(bounds.height) + "px";
+  preview.style.backgroundColor = sourceStyle.backgroundColor;
+
+  const table = document.createElement("table");
+  table.setAttribute("data-column-drag-preview-table", "");
+  const head = document.createElement("thead");
+  const row = document.createElement("tr");
+  const cell = drag.head.cloneNode(true);
+  cell.removeAttribute("id");
+  cell.removeAttribute("data-column-reorderable");
+  cell.removeAttribute("tabindex");
+  cell.removeAttribute("title");
+  cell.removeAttribute("aria-keyshortcuts");
+  cell.removeAttribute("aria-label");
+  cell.style.width = String(bounds.width) + "px";
+  cell.style.height = String(bounds.height) + "px";
+  cell.style.padding = sourceStyle.padding;
+  cell.style.color = sourceStyle.color;
+  cell.style.background = sourceStyle.background;
+  cell.style.border = sourceStyle.border;
+  cell.style.font = sourceStyle.font;
+  cell.style.letterSpacing = sourceStyle.letterSpacing;
+  cell.style.textAlign = sourceStyle.textAlign;
+  cell.style.textTransform = sourceStyle.textTransform;
+  for (const control of cell.querySelectorAll("button, [tabindex]")) {
+    control.setAttribute("tabindex", "-1");
+  }
+  row.appendChild(cell);
+  head.appendChild(row);
+  table.appendChild(head);
+  preview.appendChild(table);
   document.body?.appendChild(preview);
   drag.preview = preview;
   moveColumnDragPreview(drag, event.clientX, event.clientY);

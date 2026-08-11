@@ -222,6 +222,28 @@ test("should keep column drag cursors through pointer gestures in both themes", 
         await expect(body).toHaveAttribute("data-column-dragging", "");
         await expect(dragPreview).toBeVisible();
         await expect(dragPreview).not.toHaveText("");
+        const previewVisual = await dragPreview.evaluate((preview) => {
+          const rect = preview.getBoundingClientRect();
+          const style = getComputedStyle(preview);
+          return {
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            opacity: Number.parseFloat(style.opacity),
+            background: style.backgroundColor,
+          };
+        });
+        const headerVisual = await header.evaluate((column) => {
+          const rect = column.getBoundingClientRect();
+          return {
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            background: getComputedStyle(column).backgroundColor,
+          };
+        });
+        expect(previewVisual.width).toBe(headerVisual.width);
+        expect(previewVisual.height).toBe(headerVisual.height);
+        expect(previewVisual.opacity).toBeLessThan(1);
+        expect(previewVisual.background).toBe(headerVisual.background);
         expect(await cursorAt(controlPoint.x, controlPoint.y)).toBe("grabbing");
         await expect(plainTableHeader).toHaveCSS("cursor", "default");
         await expect(schemaRowHeader).toHaveCSS("cursor", "default");
