@@ -170,7 +170,7 @@ describe("request mailbox", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
-      baselineSnapshot: revision,
+      baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
     const response = validateAgentResponseDraft({
@@ -187,7 +187,7 @@ describe("request mailbox", () => {
       request: claimed,
       commentsById: new Map([[comment.id, comment]]),
       changedBlocks: new Set(),
-      currentSnapshot: revision,
+      currentSnapshot: snapshot,
       now: "2026-08-10T12:00:02.000Z",
     });
 
@@ -232,7 +232,7 @@ describe("request mailbox", () => {
       request,
       commentsById: new Map([[comment.id, comment]]),
       changedBlocks: new Set(),
-      currentSnapshot: revision,
+      currentSnapshot: snapshot,
       now: "2026-08-10T12:00:02.000Z",
     });
 
@@ -252,7 +252,7 @@ describe("request mailbox", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
-      baselineSnapshot: revision,
+      baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
     await writeAgentResponseValue({
@@ -280,7 +280,7 @@ describe("request mailbox", () => {
       request: claimed,
       commentsById: new Map([[comment.id, comment]]),
       changedBlocks: new Set(),
-      currentSnapshot: revision,
+      currentSnapshot: snapshot,
       now: "2026-08-10T12:00:02.000Z",
     });
 

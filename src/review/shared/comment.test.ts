@@ -294,6 +294,7 @@ describe("validateComments shape and bounds", () => {
       id: index.toString(16).padStart(4, "0"),
       body: `Comment ${index}`,
       createdAt: NOW,
+      premiseSnapshot: PREMISE,
       target: { type: "document" },
     }));
 
