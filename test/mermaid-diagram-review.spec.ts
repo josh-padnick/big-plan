@@ -525,3 +525,53 @@ test("should keep background comments open when Revert All closes with Escape", 
   await expect(revertAllDialog).toBeHidden();
   await expect(commentThread).toBeVisible();
 });
+
+test("should return focus to a live comment marker after a repaint", async ({
+  page,
+  mermaidDiagramViewerUrl,
+}) => {
+  await page.goto(mermaidDiagramViewerUrl);
+  await page.evaluate(() => {
+    document.documentElement.dataset["theme"] = "light";
+  });
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const source = diagram.locator('[data-flow-node="source"]:visible').first();
+  const anchor = await source.getAttribute("data-flow-anchor");
+  await source.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await diagram
+    .locator(".flow-diagram-compose textarea")
+    .fill("Read me after the theme changes.");
+  await page.keyboard.press("ControlOrMeta+Enter");
+
+  const marker = diagram.locator(
+    `[data-flow-comment-marker][data-flow-comment-anchor="${anchor ?? ""}"]`,
+  );
+  await expect(marker).toBeVisible();
+  await marker.click();
+  const commentThread = diagram.locator(".flow-diagram-comment-thread");
+  await expect(commentThread).toBeVisible();
+
+  // The theme swap repaints the diagram, so the marker the thread was opened
+  // from is no longer the same node by the time the thread closes.
+  await page.evaluate(() => {
+    document.documentElement.dataset["theme"] = "dark";
+  });
+  await expect(marker).toBeVisible();
+  await commentThread.getByRole("button", { name: "Close comment" }).click();
+  await expect(commentThread).toBeHidden();
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.activeElement?.getAttribute("data-flow-comment-anchor") ??
+          null,
+      ),
+    )
+    .toBe(anchor);
+  // Focus landing on a live control is what keeps the next comment reachable.
+  await page.keyboard.press("Enter");
+  await expect(commentThread).toBeVisible();
+});

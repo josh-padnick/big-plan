@@ -1339,7 +1339,8 @@ export const DIAGRAM_SCRIPT = `
       }
     }
     if (composeSubject && !onScreen(composeSubject)) closeCompose();
-    if (commentThreadSubject && !onScreen(commentThreadSubject)) closeCommentThread();
+    const openThreadTarget = commentThreadTarget();
+    if (openThreadTarget && !onScreen(openThreadTarget)) closeCommentThread();
   };
 
   // Everything anchored to the artboard is re-placed together, because every
@@ -1448,21 +1449,41 @@ export const DIAGRAM_SCRIPT = `
   commentThread.hidden = true;
   commentThread.setAttribute("role", "dialog");
   document.body.appendChild(commentThread);
-  let commentThreadSubject = null;
-  let commentThreadReturnFocus = null;
+  // A repaint - a theme variant swap, a refit, a maximize - replaces the SVG
+  // nodes an open thread was raised against. The thread therefore remembers
+  // what it is about, not which nodes said so, and resolves those nodes against
+  // the live diagram every time it needs them. Holding the nodes leaves the
+  // thread bound to detached elements: it reads as off-screen and closes, and
+  // its focus return lands nowhere, stranding a focus ring on the page and
+  // leaving the next element comment unreachable.
+  let commentThreadState = null;
+
+  const commentThreadTarget = () =>
+    commentThreadState === null
+      ? null
+      : targetForAnchor(commentThreadState.diagram, commentThreadState.anchor);
+
+  const commentThreadReturnTarget = () => {
+    if (commentThreadState === null) return null;
+    const { diagram, anchor, fromMarker } = commentThreadState;
+    if (!diagram || !diagram.isConnected) return null;
+    if (fromMarker) {
+      const marker = Array.from(
+        diagram.querySelectorAll("[data-flow-comment-marker]"),
+      ).find(
+        (node) => node.getAttribute("data-flow-comment-anchor") === anchor,
+      );
+      if (marker) return marker;
+    }
+    return targetForAnchor(diagram, anchor);
+  };
 
   const closeCommentThread = (restoreFocus = false) => {
     commentThread.hidden = true;
     commentThread.textContent = "";
-    commentThreadSubject = null;
-    if (
-      restoreFocus &&
-      commentThreadReturnFocus &&
-      commentThreadReturnFocus.isConnected
-    ) {
-      commentThreadReturnFocus.focus({ preventScroll: true });
-    }
-    commentThreadReturnFocus = null;
+    const target = restoreFocus ? commentThreadReturnTarget() : null;
+    commentThreadState = null;
+    if (target) target.focus({ preventScroll: true });
   };
 
   const closeCompose = (discard, restoreFocus = false) => {
@@ -1555,8 +1576,9 @@ export const DIAGRAM_SCRIPT = `
   };
 
   const positionCommentThread = () => {
-    if (commentThread.hidden || !commentThreadSubject) return;
-    const subject = commentThreadSubject.getBoundingClientRect();
+    const target = commentThread.hidden ? null : commentThreadTarget();
+    if (!target) return;
+    const subject = target.getBoundingClientRect();
     const size = commentThread.getBoundingClientRect();
     commentThread.style.left = clamp(subject.left, 8, innerWidth - size.width - 8) + "px";
     const below = subject.bottom + 8;
@@ -1985,8 +2007,13 @@ export const DIAGRAM_SCRIPT = `
     for (const draft of comments) {
       commentThread.appendChild(el("p", "flow-diagram-comment-thread-body", draft.body));
     }
-    commentThreadSubject = target;
-    commentThreadReturnFocus = opener || target;
+    commentThreadState = {
+      diagram,
+      anchor,
+      fromMarker: Boolean(
+        opener && opener.hasAttribute("data-flow-comment-marker"),
+      ),
+    };
     adopt(commentThread, target);
     commentThread.hidden = false;
     positionCommentThread();
@@ -2205,13 +2232,11 @@ export const DIAGRAM_SCRIPT = `
   const refreshMermaidVariants = () => {
     themeFrame = null;
     const thread =
-      commentThread.hidden || !commentThreadSubject
+      commentThread.hidden || commentThreadState === null
         ? null
         : {
-            diagram:
-              commentThreadSubject.closest("[data-flow-diagram]") ||
-              commentThreadSubject,
-            anchor: anchorOf(commentThreadSubject),
+            diagram: commentThreadState.diagram,
+            anchor: commentThreadState.anchor,
           };
     const visibleCounterpart = (subject) => {
       if (!subject) return subject;
