@@ -16,7 +16,8 @@
   },
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "examples/diff-gallery-before.mdx"
   ],
   "engines": {
     "node": ">=22"

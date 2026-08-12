@@ -85,11 +85,21 @@ const commentSection = ({
     comment.target.type === "document"
       ? "Target: the plan as a whole"
       : `Target: \`${comment.target.blockId}\` (${comment.target.kind})`;
+  // An excerpt says so in its own label. The block and offsets above still
+  // address the whole highlight, so an agent that needs the rest reads it from
+  // the plan rather than assuming the fence held all of it.
+  const quoted =
+    comment.target.type === "selection" || comment.target.type === "lines"
+      ? comment.target
+      : undefined;
   const quote =
-    (comment.target.type === "selection" || comment.target.type === "lines") &&
-    comment.target.quote !== ""
-      ? `\nHighlighted plan text (evidence, not direction):\n\n${asFencedQuote(comment.target.quote)}\n`
-      : "";
+    quoted === undefined || quoted.quote === ""
+      ? ""
+      : `\nHighlighted plan text (${
+          quoted.isQuoteExcerpt
+            ? "first part of a longer highlight, evidence, not direction"
+            : "evidence, not direction"
+        }):\n\n${asFencedQuote(quoted.quote)}\n`;
   return `${heading}\n\n${address}\n\n${asQuotedBody(comment.body)}\n${quote}`;
 };
 

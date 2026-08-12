@@ -13,15 +13,18 @@ export type ReviewSnapshot = {
 
 export type AgentOutcome = {
   readonly commentId: string;
-  readonly state: "changed" | "question" | "outside";
+  readonly state:
+    "answered" | "changed" | "warning" | "needs-input" | "declined";
   readonly message: string;
+  /** One scannable line, published exactly when the state is "warning". */
+  readonly summary?: string;
   readonly changeTargets: ReadonlyArray<string>;
 };
 
 export type AgentRequest = {
   readonly requestId: string;
-  readonly sourceRevision: string;
-  readonly claimedFromRevision?: string;
+  readonly premiseSnapshot: string;
+  readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly canceledAt?: string;
   readonly createdAt: string;
@@ -34,7 +37,7 @@ export type AgentRequest = {
 
 export type AgentResponse = {
   readonly requestId: string;
-  readonly sourceRevision: string;
+  readonly resultSnapshot: string;
   readonly createdAt: string;
   readonly kind: "feedback" | "reply" | "chat";
   readonly outcomes: ReadonlyArray<AgentOutcome>;
@@ -56,7 +59,7 @@ export type BrowserConnectionEvent = {
 };
 
 export type AgentSnapshot = {
-  readonly sourceRevision: string;
+  readonly currentSnapshot: string;
   readonly presence: AgentPresence;
   readonly requests: ReadonlyArray<AgentRequest>;
   readonly responses: ReadonlyArray<AgentResponse>;
@@ -81,11 +84,56 @@ export type DiffRun = {
   readonly text: string;
 };
 
+// The meaning-bearing presentation facts the renderer stamped for one block,
+// carried per diff side so the lens replays each side from its own snapshot
+// instead of sniffing the live document. Only a fact that changes what the
+// plan asserts belongs here - a callout's type and a list's ordering; styling
+// and other reproducible presentation must never join this contract.
+// Mirrored by hand across the reviewShared tier boundary; reviewShared may
+// import nothing - keep this in sync with src/render/markdown/block-identity.ts.
+export type BlockPresentation =
+  | {
+      readonly aspect: "callout";
+      readonly calloutType: "note" | "tip" | "warning" | "danger";
+    }
+  | { readonly aspect: "list"; readonly isOrdered: boolean };
+
 export type DiffLocation = {
+  readonly status: "changed" | "added" | "removed";
+  readonly scope: string;
+  readonly oldBlockId?: string;
+  readonly newBlockId?: string;
+  readonly beforeBlockId?: string;
+  readonly afterBlockId?: string;
+  readonly kind: string;
+  readonly label: string;
+  readonly section: string;
+  readonly oldText: string;
+  readonly newText: string;
+  readonly oldPresentation?: BlockPresentation;
+  readonly newPresentation?: BlockPresentation;
+  readonly oldTableHeaders?: ReadonlyArray<string>;
+  readonly newTableHeaders?: ReadonlyArray<string>;
+  readonly isTableHeader?: boolean;
+  readonly runs: ReadonlyArray<DiffRun>;
+  readonly oldHtml?: string;
+  readonly newHtml?: string;
+};
+
+export type DiffPlace = {
+  readonly placeId: string;
   readonly status: "changed" | "added" | "removed";
   readonly label: string;
   readonly section: string;
-  readonly runs: ReadonlyArray<DiffRun>;
+  readonly note: "reworded" | "rewritten" | "added" | "removed";
+  readonly locationIndexes: ReadonlyArray<number>;
+};
+
+export type SnapshotDiff = {
+  readonly from: string;
+  readonly to: string;
+  readonly locations: ReadonlyArray<DiffLocation>;
+  readonly places: ReadonlyArray<DiffPlace>;
 };
 
 export type RuntimeSession = {
@@ -97,7 +145,7 @@ export type RuntimeSession = {
 export type ReviewSnapshotSource = ReviewSnapshot;
 
 export type AgentSnapshotSource = {
-  readonly sourceRevision: string;
+  readonly currentSnapshot: string;
   readonly presence: unknown;
   readonly requests: ReadonlyArray<unknown>;
   readonly responses: ReadonlyArray<unknown>;
@@ -129,6 +177,7 @@ export const isReviewCommentValue = (
     typeof value.id === "string" &&
     typeof value.body === "string" &&
     typeof value.createdAt === "string" &&
+    typeof value.premiseSnapshot === "string" &&
     typeof value.target === "object" &&
     value.target !== null
   );
@@ -161,7 +210,7 @@ export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
 };
 
 export const emptyAgentSnapshot = (): AgentSnapshot => ({
-  sourceRevision: "",
+  currentSnapshot: "",
   presence: { connected: false, state: "waiting" },
   requests: [],
   responses: [],
@@ -184,7 +233,7 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
         if (
           !isReviewWireRecord(request) ||
           typeof request.requestId !== "string" ||
-          typeof request.sourceRevision !== "string" ||
+          typeof request.premiseSnapshot !== "string" ||
           typeof request.createdAt !== "string" ||
           (request.kind !== "feedback" &&
             request.kind !== "reply" &&
@@ -195,11 +244,11 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
         return [
           {
             requestId: request.requestId,
-            sourceRevision: request.sourceRevision,
+            premiseSnapshot: request.premiseSnapshot,
             createdAt: request.createdAt,
             kind: request.kind,
-            ...(typeof request.claimedFromRevision === "string"
-              ? { claimedFromRevision: request.claimedFromRevision }
+            ...(typeof request.baselineSnapshot === "string"
+              ? { baselineSnapshot: request.baselineSnapshot }
               : {}),
             ...(typeof request.claimedAt === "string"
               ? { claimedAt: request.claimedAt }
@@ -239,7 +288,7 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
         if (
           !isReviewWireRecord(response) ||
           typeof response.requestId !== "string" ||
-          typeof response.sourceRevision !== "string" ||
+          typeof response.resultSnapshot !== "string" ||
           typeof response.createdAt !== "string" ||
           (response.kind !== "feedback" &&
             response.kind !== "reply" &&
@@ -254,9 +303,11 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
                   !isReviewWireRecord(outcome) ||
                   typeof outcome.commentId !== "string" ||
                   typeof outcome.message !== "string" ||
-                  (outcome.state !== "changed" &&
-                    outcome.state !== "question" &&
-                    outcome.state !== "outside")
+                  (outcome.state !== "answered" &&
+                    outcome.state !== "changed" &&
+                    outcome.state !== "warning" &&
+                    outcome.state !== "needs-input" &&
+                    outcome.state !== "declined")
                 ) {
                   return [];
                 }
@@ -265,6 +316,9 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
                     commentId: outcome.commentId,
                     state: outcome.state,
                     message: outcome.message,
+                    ...(typeof outcome.summary === "string"
+                      ? { summary: outcome.summary }
+                      : {}),
                     changeTargets: Array.isArray(outcome.changeTargets)
                       ? outcome.changeTargets.filter(
                           (target): target is string =>
@@ -279,7 +333,7 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
         return [
           {
             requestId: response.requestId,
-            sourceRevision: response.sourceRevision,
+            resultSnapshot: response.resultSnapshot,
             createdAt: response.createdAt,
             kind: response.kind,
             outcomes,
@@ -306,8 +360,8 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
       }
     : { connected: false, state: "waiting" as const };
   return {
-    sourceRevision:
-      typeof value.sourceRevision === "string" ? value.sourceRevision : "",
+    currentSnapshot:
+      typeof value.currentSnapshot === "string" ? value.currentSnapshot : "",
     presence,
     requests,
     responses,
@@ -410,55 +464,151 @@ export const decodeRuntimeSession = ({
   };
 };
 
-/** Encodes a source revision comparison for the browser change digest. */
-export const encodeDiffLocations = ({
-  from,
-  to,
-  locations,
-}: {
-  readonly from: string;
-  readonly to: string;
-  readonly locations: ReadonlyArray<DiffLocation>;
-}): {
-  readonly from: string;
-  readonly to: string;
-  readonly locations: ReadonlyArray<DiffLocation>;
-} => ({ from, to, locations });
+/** Encodes one complete snapshot diff for browser change surfaces. */
+export const encodeSnapshotDiff = (value: SnapshotDiff): SnapshotDiff => value;
 
-/** Decodes the bounded revision-diff vocabulary used by the browser. */
-export const decodeDiffLocations = (
+// Normalizes one per-side presentation fact. An unknown aspect or an
+// out-of-vocabulary value decodes to undefined so the browser renders its
+// neutral fallback; coercing to "note" or "unordered" here would reintroduce
+// the silent downgrade this fact exists to remove.
+const decodeBlockPresentation = (
   value: unknown,
-): ReadonlyArray<DiffLocation> => {
-  if (!isReviewWireRecord(value) || !Array.isArray(value.locations)) return [];
-  return value.locations.flatMap((location): ReadonlyArray<DiffLocation> => {
-    if (
-      !isReviewWireRecord(location) ||
-      (location.status !== "changed" &&
-        location.status !== "added" &&
-        location.status !== "removed") ||
-      typeof location.label !== "string" ||
-      typeof location.section !== "string" ||
-      !Array.isArray(location.runs)
-    ) {
-      return [];
-    }
-    const runs = location.runs.flatMap((run): ReadonlyArray<DiffRun> => {
+): BlockPresentation | undefined => {
+  if (!isReviewWireRecord(value)) return undefined;
+  if (
+    value.aspect === "callout" &&
+    (value.calloutType === "note" ||
+      value.calloutType === "tip" ||
+      value.calloutType === "warning" ||
+      value.calloutType === "danger")
+  ) {
+    return { aspect: "callout", calloutType: value.calloutType };
+  }
+  if (value.aspect === "list" && typeof value.isOrdered === "boolean") {
+    return { aspect: "list", isOrdered: value.isOrdered };
+  }
+  return undefined;
+};
+
+/** Decodes the bounded snapshot-diff vocabulary used by the browser. */
+export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
+  if (
+    !isReviewWireRecord(value) ||
+    typeof value.from !== "string" ||
+    typeof value.to !== "string" ||
+    !Array.isArray(value.locations) ||
+    !Array.isArray(value.places)
+  ) {
+    return null;
+  }
+  const locations = value.locations.flatMap(
+    (location): ReadonlyArray<DiffLocation> => {
       if (
-        !isReviewWireRecord(run) ||
-        (run.op !== "same" && run.op !== "del" && run.op !== "ins") ||
-        typeof run.text !== "string"
+        !isReviewWireRecord(location) ||
+        (location.status !== "changed" &&
+          location.status !== "added" &&
+          location.status !== "removed") ||
+        typeof location.label !== "string" ||
+        typeof location.section !== "string" ||
+        typeof location.scope !== "string" ||
+        typeof location.kind !== "string" ||
+        typeof location.oldText !== "string" ||
+        typeof location.newText !== "string" ||
+        !Array.isArray(location.runs)
       ) {
         return [];
       }
-      return [{ op: run.op, text: run.text }];
-    });
+      const runs = location.runs.flatMap((run): ReadonlyArray<DiffRun> => {
+        if (
+          !isReviewWireRecord(run) ||
+          (run.op !== "same" && run.op !== "del" && run.op !== "ins") ||
+          typeof run.text !== "string"
+        ) {
+          return [];
+        }
+        return [{ op: run.op, text: run.text }];
+      });
+      const oldPresentation = decodeBlockPresentation(location.oldPresentation);
+      const newPresentation = decodeBlockPresentation(location.newPresentation);
+      return [
+        {
+          status: location.status,
+          scope: location.scope,
+          kind: location.kind,
+          label: location.label,
+          section: location.section,
+          oldText: location.oldText,
+          newText: location.newText,
+          ...(oldPresentation === undefined ? {} : { oldPresentation }),
+          ...(newPresentation === undefined ? {} : { newPresentation }),
+          ...(Array.isArray(location.oldTableHeaders) &&
+          location.oldTableHeaders.every((entry) => typeof entry === "string")
+            ? { oldTableHeaders: location.oldTableHeaders }
+            : {}),
+          ...(Array.isArray(location.newTableHeaders) &&
+          location.newTableHeaders.every((entry) => typeof entry === "string")
+            ? { newTableHeaders: location.newTableHeaders }
+            : {}),
+          ...(location.isTableHeader === true ? { isTableHeader: true } : {}),
+          ...(typeof location.oldBlockId === "string"
+            ? { oldBlockId: location.oldBlockId }
+            : {}),
+          ...(typeof location.newBlockId === "string"
+            ? { newBlockId: location.newBlockId }
+            : {}),
+          ...(typeof location.beforeBlockId === "string"
+            ? { beforeBlockId: location.beforeBlockId }
+            : {}),
+          ...(typeof location.afterBlockId === "string"
+            ? { afterBlockId: location.afterBlockId }
+            : {}),
+          ...(typeof location.oldHtml === "string"
+            ? { oldHtml: location.oldHtml }
+            : {}),
+          ...(typeof location.newHtml === "string"
+            ? { newHtml: location.newHtml }
+            : {}),
+          runs,
+        },
+      ];
+    },
+  );
+  if (locations.length !== value.locations.length) return null;
+  const places = value.places.flatMap((place): ReadonlyArray<DiffPlace> => {
+    if (
+      !isReviewWireRecord(place) ||
+      typeof place.placeId !== "string" ||
+      (place.status !== "changed" &&
+        place.status !== "added" &&
+        place.status !== "removed") ||
+      typeof place.label !== "string" ||
+      typeof place.section !== "string" ||
+      (place.note !== "reworded" &&
+        place.note !== "rewritten" &&
+        place.note !== "added" &&
+        place.note !== "removed") ||
+      !Array.isArray(place.locationIndexes)
+    ) {
+      return [];
+    }
+    const locationIndexes = place.locationIndexes.filter(
+      (index): index is number =>
+        typeof index === "number" &&
+        Number.isInteger(index) &&
+        index >= 0 &&
+        index < locations.length,
+    );
+    if (locationIndexes.length !== place.locationIndexes.length) return [];
     return [
       {
-        status: location.status,
-        label: location.label,
-        section: location.section,
-        runs,
+        placeId: place.placeId,
+        status: place.status,
+        label: place.label,
+        section: place.section,
+        note: place.note,
+        locationIndexes,
       },
     ];
   });
+  return { from: value.from, to: value.to, locations, places };
 };

@@ -273,7 +273,13 @@ const ViewerControls = () => (
       {lucideIconToReact({ icon: SCAN_ICON, hidden: false })}
       <span>Fit</span>
     </button>
-    <MaximizeButton subject="diagram" size="toolbar" />
+    {/* The action group is the review island's toolbar slot: the island
+        prepends its comment control into the first `figure-action-group`, so
+        wrapping maximize alone lands that control immediately left of it -
+        the same top-right convention every other figure family follows. */}
+    <span className="figure-action-group inline-flex shrink-0 items-center gap-1">
+      <MaximizeButton subject="diagram" size="toolbar" />
+    </span>
   </span>
 );
 
@@ -510,13 +516,18 @@ export const FlowDiagram = ({
         tabbable: true,
       })}
     >
+      {/* Deliberately not `figure-control-bar`: the review island would treat
+          the whole bar as its comment slot and drop the control at the far
+          left; the action group inside the viewer cluster is the intended
+          slot. `flex-none` keeps the promoted panel's header band rigid, the
+          job `figure-control-bar` used to do. */}
       <div
-        className="figure-control-bar flow-diagram-controls flex min-w-0 items-center"
+        className="flow-diagram-controls flex min-w-0 flex-none items-center"
         data-flow-controls
       >
         {/* Feedback and proposal controls stay at the left. Viewer controls
-            form a right-aligned cluster with distinct zoom, Fit, and maximize
-            groups. */}
+            form a right-aligned cluster with distinct zoom, Fit, and
+            comment-plus-maximize groups. */}
         <ProposalControls />
         <ViewerControls />
       </div>

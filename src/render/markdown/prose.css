@@ -103,7 +103,8 @@ is styled by its owning module, not here.
     padding-bottom: 0;
     margin-bottom: 0.3rem;
   }
-  article h1[data-authored-prose] + p[data-authored-prose] {
+  article h1[data-authored-prose] + p[data-authored-prose],
+  article p[data-review-diff-presentation="lede"] {
     font-size: var(--text-xl);
     line-height: 1.5;
     color: var(--color-subtle);

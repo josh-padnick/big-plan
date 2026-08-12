@@ -28,6 +28,15 @@
 // components/_model/figure-controls/figure-controls.ts. This file is a string
 // template and cannot import it, so a change to those attribute spellings
 // changes the strings here too.
+//
+// RE-WIRING. The review island replaces the whole article in place when the
+// agent publishes a revision and announces it with a document-level
+// "bigplan:article-replaced" event. Every leg therefore captures its nodes
+// inside a wire function that runs at load and again on that event. Wiring is
+// idempotent (per-leg WeakSets guard already-wired nodes), document- and
+// window-level listeners register exactly once and reach re-wireable state
+// through small registries, and module state that pointed into the replaced
+// article is cleared rather than resurrected.
 import { compareDataTableValues } from "../../components/data-table/sort-values.js";
 import { DIAGRAM_SCRIPT } from "./diagram-script.js";
 
@@ -48,6 +57,55 @@ const clearColumnDropIndicators = (drag) => {
     head.classList.remove(drag.beforeClass);
     head.classList.remove(drag.afterClass);
   }
+};
+
+const moveColumnDragPreview = (drag, clientX, clientY) => {
+  if (drag.preview === null) return;
+  drag.preview.style.left = String(clientX) + "px";
+  drag.preview.style.top = String(clientY) + "px";
+};
+
+const showColumnDragPreview = (drag, event) => {
+  const bounds = drag.head.getBoundingClientRect();
+  const sourceStyle = getComputedStyle(drag.head);
+  const preview = document.createElement("div");
+  preview.setAttribute("data-column-drag-preview", "");
+  preview.setAttribute("aria-hidden", "true");
+  preview.style.width = String(bounds.width) + "px";
+  preview.style.height = String(bounds.height) + "px";
+  preview.style.backgroundColor = sourceStyle.backgroundColor;
+
+  const table = document.createElement("table");
+  table.setAttribute("data-column-drag-preview-table", "");
+  const head = document.createElement("thead");
+  const row = document.createElement("tr");
+  const cell = drag.head.cloneNode(true);
+  cell.removeAttribute("id");
+  cell.removeAttribute("data-column-reorderable");
+  cell.removeAttribute("tabindex");
+  cell.removeAttribute("title");
+  cell.removeAttribute("aria-keyshortcuts");
+  cell.removeAttribute("aria-label");
+  cell.style.width = String(bounds.width) + "px";
+  cell.style.height = String(bounds.height) + "px";
+  cell.style.padding = sourceStyle.padding;
+  cell.style.color = sourceStyle.color;
+  cell.style.background = sourceStyle.background;
+  cell.style.border = sourceStyle.border;
+  cell.style.font = sourceStyle.font;
+  cell.style.letterSpacing = sourceStyle.letterSpacing;
+  cell.style.textAlign = sourceStyle.textAlign;
+  cell.style.textTransform = sourceStyle.textTransform;
+  for (const control of cell.querySelectorAll("button, [tabindex]")) {
+    control.setAttribute("tabindex", "-1");
+  }
+  row.appendChild(cell);
+  head.appendChild(row);
+  table.appendChild(head);
+  preview.appendChild(table);
+  document.body?.appendChild(preview);
+  drag.preview = preview;
+  moveColumnDragPreview(drag, event.clientX, event.clientY);
 };
 
 const columnTargetAt = (drag, clientX, clientY) => {
@@ -82,6 +140,7 @@ const finishColumnPointerReorder = (event, commit) => {
     }
   }
   clearColumnDropIndicators(drag);
+  drag.preview?.remove();
   activeColumnReorder = null;
   setColumnDragState({ pressed: false, dragging: false });
   if (drag.captureTarget.hasPointerCapture(drag.pointerId)) {
@@ -115,8 +174,10 @@ document.addEventListener("pointermove", (event) => {
     if (distance < 4) return;
     drag.dragging = true;
     setColumnDragState({ pressed: true, dragging: true });
+    showColumnDragPreview(drag, event);
   }
   event.preventDefault();
+  moveColumnDragPreview(drag, event.clientX, event.clientY);
   clearColumnDropIndicators(drag);
   const target = columnTargetAt(drag, event.clientX, event.clientY);
   if (target === null || target === drag.head) return;
@@ -190,6 +251,7 @@ const installColumnPointerReorder = ({
         startX: event.clientX,
         startY: event.clientY,
         dragging: false,
+        preview: null,
       };
       captureTarget.setPointerCapture(event.pointerId);
       setColumnDragState({ pressed: true, dragging: false });
@@ -197,7 +259,11 @@ const installColumnPointerReorder = ({
   }
 };
 
-(() => {
+// The scroll-spy re-reads its headings on every wire because an in-place plan
+// refresh replaces them all. The scroll and resize listeners register once and
+// call through this mutable reference.
+let applyScrollSpy = () => {};
+const wireScrollSpy = () => {
   const links = Array.from(document.querySelectorAll("[data-section-link]"));
   const overviewLinks = Array.from(
     document.querySelectorAll("[data-overview-link]"),
@@ -211,7 +277,8 @@ const installColumnPointerReorder = ({
   }
   const headings = Array.from(targets.keys());
   if (headings.length === 0) {
-    window.__bigPlanRefreshScrollSpy = () => {};
+    applyScrollSpy = () => {};
+    window.__bigPlanRefreshScrollSpy = applyScrollSpy;
     return;
   }
   const isReadableHeading = (heading) => {
@@ -263,21 +330,25 @@ const installColumnPointerReorder = ({
       else link.removeAttribute("aria-current");
     }
   };
+  applyScrollSpy = apply;
   window.__bigPlanRefreshScrollSpy = apply;
+  apply();
+};
+{
   let scheduled = false;
   const schedule = () => {
     if (scheduled) return;
     scheduled = true;
     requestAnimationFrame(() => {
       scheduled = false;
-      apply();
+      applyScrollSpy();
     });
   };
   addEventListener("scroll", schedule, { passive: true });
   addEventListener("resize", schedule, { passive: true });
-  apply();
-})();
-(() => {
+}
+const wiredCopyControls = new WeakSet();
+const wireCopyControls = () => {
   const clipboardWrite = async (text) => {
     if (navigator.clipboard?.writeText !== undefined) {
       await navigator.clipboard.writeText(text);
@@ -379,9 +450,11 @@ const installColumnPointerReorder = ({
   };
 
   for (const button of document.querySelectorAll(".code-figure [data-copy-code]")) {
+    if (wiredCopyControls.has(button)) continue;
     const figure = button.closest(".code-figure");
     const code = figure?.querySelector(":scope > pre > code");
     if (figure === null || code === null) continue;
+    wiredCopyControls.add(button);
     // Markdown code values omit the fence's structural final newline, while
     // the HTML code element includes one. Remove that byte only so copied
     // code matches the authored value exactly.
@@ -397,6 +470,7 @@ const installColumnPointerReorder = ({
   }
 
   for (const button of document.querySelectorAll("[data-copy-source]")) {
+    if (wiredCopyControls.has(button)) continue;
     const figure = button.closest(
       "[data-code-diff], [data-code-snippet], [data-data-table], [data-database-table-schema]",
     );
@@ -409,6 +483,7 @@ const installColumnPointerReorder = ({
       !(button instanceof HTMLButtonElement)
     )
       continue;
+    wiredCopyControls.add(button);
     const label = button.getAttribute("aria-label") || "Copy code";
     const tableSource = isTable ? () => tableToTsv(figure) : null;
     wireCopy({
@@ -417,13 +492,35 @@ const installColumnPointerReorder = ({
       label,
     });
   }
-})();
-(() => {
+};
+// Each popover's pinned state lives in its wiring closure, so the one
+// document-level dismiss and reposition listener pair reaches every live
+// popover through this registry; wire() prunes entries the refresh detached.
+const wiredInfoPopovers = new WeakSet();
+const infoPopoverRegistry = [];
+document.addEventListener("pointerdown", (event) => {
+  for (const entry of infoPopoverRegistry) entry.onOutsidePointerDown(event);
+});
+document.addEventListener(
+  "scroll",
+  () => {
+    for (const entry of infoPopoverRegistry) entry.onScroll();
+  },
+  { capture: true, passive: true },
+);
+const wireInfoPopovers = () => {
+  for (let index = infoPopoverRegistry.length - 1; index >= 0; index -= 1) {
+    if (!infoPopoverRegistry[index].info.isConnected) {
+      infoPopoverRegistry.splice(index, 1);
+    }
+  }
   const infos = document.querySelectorAll("details[data-info-popover]");
   for (const info of infos) {
+    if (wiredInfoPopovers.has(info)) continue;
     const summary = info.querySelector("summary");
     const body = info.querySelector("[data-info-popover-body]");
     if (summary === null || body === null) continue;
+    wiredInfoPopovers.add(info);
     info.setAttribute("data-info-popover-floating", "");
     // Hover/focus openings are transient; a click or tap pins the same
     // disclosure until an outside activation or Escape.
@@ -487,26 +584,26 @@ const installColumnPointerReorder = ({
       event.bigPlanEscapeHandled = true;
       close();
     });
-    document.addEventListener("pointerdown", (event) => {
-      if (
-        pinned &&
-        event.target instanceof Node &&
-        !info.contains(event.target)
-      ) {
-        pinned = false;
-        close();
-      }
-    });
-    document.addEventListener(
-      "scroll",
-      () => {
+    infoPopoverRegistry.push({
+      info,
+      onOutsidePointerDown: (event) => {
+        if (
+          pinned &&
+          event.target instanceof Node &&
+          !info.contains(event.target)
+        ) {
+          pinned = false;
+          close();
+        }
+      },
+      onScroll: () => {
         if (info.open) open();
       },
-      { capture: true, passive: true },
-    );
+    });
   }
-})();
-(() => {
+};
+const wiredAnnotationRoots = new WeakSet();
+const wireAnnotationHovers = () => {
   // One shared enhancement links annotation cards to their covered code rows
   // in both component families. The authored rows and cards remain complete
   // without it; this leg changes emphasis only while the pointer relates them.
@@ -524,6 +621,8 @@ const installColumnPointerReorder = ({
   };
 
   for (const diff of document.querySelectorAll("[data-code-diff]")) {
+    if (wiredAnnotationRoots.has(diff)) continue;
+    wiredAnnotationRoots.add(diff);
     const lines = Array.from(
       diff.querySelectorAll("[data-annotation-anchor]"),
     );
@@ -542,6 +641,8 @@ const installColumnPointerReorder = ({
   }
 
   for (const snippet of document.querySelectorAll("[data-code-snippet]")) {
+    if (wiredAnnotationRoots.has(snippet)) continue;
+    wiredAnnotationRoots.add(snippet);
     const lines = Array.from(snippet.querySelectorAll("[data-snippet-line]"));
     for (const card of snippet.querySelectorAll("[data-snippet-annotation]")) {
       const range = /^(\\d+)(?:-(\\d+))?$/u.exec(
@@ -559,8 +660,9 @@ const installColumnPointerReorder = ({
       );
     }
   }
-})();
-(() => {
+};
+const wiredCodeDiffViews = new WeakSet();
+const wireCodeDiffViews = () => {
   const diffs = Array.from(document.querySelectorAll("[data-code-diff]"));
   if (diffs.length === 0) return;
   const planId = document.documentElement.getAttribute("data-plan-id");
@@ -593,8 +695,10 @@ const installColumnPointerReorder = ({
     } catch (_) {}
   };
   for (const diff of diffs) {
+    if (wiredCodeDiffViews.has(diff)) continue;
     const group = diff.querySelector("[data-diff-toggle-group]");
     if (group === null) continue;
+    wiredCodeDiffViews.add(diff);
     applyView(diff, initialView);
     for (const button of group.querySelectorAll("[data-diff-set-view]")) {
       button.addEventListener("click", () => {
@@ -608,8 +712,9 @@ const installColumnPointerReorder = ({
     // and every native button has a handler.
     group.hidden = false;
   }
-})();
-(() => {
+};
+const wiredFileTreeDiffViews = new WeakSet();
+const wireFileTreeDiffViews = () => {
   const trees = Array.from(
     document.querySelectorAll("[data-file-tree-diff]"),
   );
@@ -644,8 +749,10 @@ const installColumnPointerReorder = ({
     } catch (_) {}
   };
   for (const tree of trees) {
+    if (wiredFileTreeDiffViews.has(tree)) continue;
     const group = tree.querySelector("[data-tree-toggle-group]");
     if (group === null) continue;
+    wiredFileTreeDiffViews.add(tree);
     applyView(tree, initialView);
     for (const button of group.querySelectorAll("[data-tree-set-view]")) {
       button.addEventListener("click", () => {
@@ -659,8 +766,24 @@ const installColumnPointerReorder = ({
     // and every native button has a handler.
     group.hidden = false;
   }
-})();
-(() => {
+};
+// Jump-target ids and flash timers persist across wires so a refreshed
+// article can never mint an id an earlier article already claimed. The one
+// document-level menu-dismiss listener reaches every live figure's popover
+// through this registry; wire() prunes entries the refresh detached.
+const wiredSchemaFigures = new WeakSet();
+let nextIndexTargetId = 1;
+const schemaIndexFlashTimers = new WeakMap();
+const schemaMenuRegistry = [];
+document.addEventListener("click", (event) => {
+  for (const entry of schemaMenuRegistry) entry.onDocumentClick(event);
+});
+const wireTableSchemas = () => {
+  for (let index = schemaMenuRegistry.length - 1; index >= 0; index -= 1) {
+    if (!schemaMenuRegistry[index].figure.isConnected) {
+      schemaMenuRegistry.splice(index, 1);
+    }
+  }
   const figures = Array.from(
     document.querySelectorAll("[data-database-table-schema]"),
   );
@@ -675,9 +798,10 @@ const installColumnPointerReorder = ({
       ? null
       : "big-plan:table:" + planId + ":" + tableName;
   };
-  let nextIndexTargetId = 1;
-  const indexFlashTimers = new WeakMap();
+  const indexFlashTimers = schemaIndexFlashTimers;
   for (const figure of figures) {
+    if (wiredSchemaFigures.has(figure)) continue;
+    wiredSchemaFigures.add(figure);
     const grid = figure.querySelector(".table-schema-grid");
     const headRow = grid?.querySelector("thead tr");
     if (grid === null || grid === undefined || headRow === null) continue;
@@ -987,23 +1111,31 @@ const installColumnPointerReorder = ({
         button.focus();
       }
     });
-    document.addEventListener("click", (event) => {
-      if (
-        !(event.target instanceof Node) ||
-        list.parentElement === null ||
-        !list.parentElement.contains(event.target)
-      ) {
-        setMenuOpen(false);
-      }
+    schemaMenuRegistry.push({
+      figure,
+      onDocumentClick: (event) => {
+        if (
+          !(event.target instanceof Node) ||
+          list.parentElement === null ||
+          !list.parentElement.contains(event.target)
+        ) {
+          setMenuOpen(false);
+        }
+      },
     });
     // The dormant menu becomes visible only after state restoration and every
     // reorder, visibility, persistence, and reset handler is installed.
     button.hidden = false;
   }
-})();
-(() => {
+};
+// The draft control lives in the shell header outside the article, so it
+// survives a refresh; the guard only keeps a second wire pass from
+// double-binding it.
+const wiredCommentDraftControls = new WeakSet();
+const wireCommentDraft = () => {
   const control = document.querySelector("[data-comment-draft-control]");
-  if (control === null) return;
+  if (control === null || wiredCommentDraftControls.has(control)) return;
+  wiredCommentDraftControls.add(control);
   const openButton = control.querySelector("[data-comment-draft-open]");
   const panel = control.querySelector("[data-comment-draft-panel]");
   const closeButton = control.querySelector("[data-comment-draft-close]");
@@ -1064,31 +1196,65 @@ const installColumnPointerReorder = ({
       openButton.focus();
     }
   });
-})();
-(() => {
-  const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
-  const fit = (screen) => {
-    const card = screen.querySelector(":scope > .wireframe-frame-card");
-    const frame = card === null ? null : card.querySelector(":scope > .wireframe-frame");
-    if (card === null || frame === null || screen.clientWidth === 0) return;
-    // offsetWidth stays in the frame's unscaled coordinate space. Writing a
-    // numeric zoom avoids relying on unsupported length division in CSS.
-    frame.style.zoom = "1";
-    // The card's padding and border sit outside the frame, so the space
-    // available to the frame is the screen's width minus that inset - read
-    // from computed style rather than a duplicated constant, so the two
-    // never drift out of sync.
-    const cardStyle = getComputedStyle(card);
-    const inset =
-      parseFloat(cardStyle.paddingLeft) +
-      parseFloat(cardStyle.paddingRight) +
-      parseFloat(cardStyle.borderLeftWidth) +
-      parseFloat(cardStyle.borderRightWidth);
-    frame.style.zoom = String(
-      Math.min(1, (screen.clientWidth - inset) / frame.offsetWidth),
+};
+const fitWireframeScreen = (screen) => {
+  const card = screen.querySelector(":scope > .wireframe-frame-card");
+  const frame = card === null ? null : card.querySelector(":scope > .wireframe-frame");
+  if (card === null || frame === null || screen.clientWidth === 0) return;
+  // offsetWidth stays in the frame's unscaled coordinate space. Writing a
+  // numeric zoom avoids relying on unsupported length division in CSS.
+  frame.style.zoom = "1";
+  // The card's padding and border sit outside the frame, so the space
+  // available to the frame is the screen's width minus that inset - read
+  // from computed style rather than a duplicated constant, so the two
+  // never drift out of sync.
+  const cardStyle = getComputedStyle(card);
+  const inset =
+    parseFloat(cardStyle.paddingLeft) +
+    parseFloat(cardStyle.paddingRight) +
+    parseFloat(cardStyle.borderLeftWidth) +
+    parseFloat(cardStyle.borderRightWidth);
+  frame.style.zoom = String(
+    Math.min(1, (screen.clientWidth - inset) / frame.offsetWidth),
+  );
+};
+// Maximizing (or restoring) changes the width available to the active frame
+// without firing a window resize event, and the expanded rail narrows it
+// further still. One shared observer on every screen's own box catches all of
+// those reflows instead of hand-wiring each transition.
+const wireframeSizeObserver =
+  "ResizeObserver" in window
+    ? new ResizeObserver((entries) => {
+        for (const entry of entries) fitWireframeScreen(entry.target);
+      })
+    : null;
+const wiredWireframeRoots = new WeakSet();
+let wireframeRoots = [];
+addEventListener("resize", () => {
+  for (const root of wireframeRoots) {
+    const current = root.querySelector(
+      "[data-wireframe-screen][data-wireframe-current]",
     );
-  };
+    if (current !== null) fitWireframeScreen(current);
+  }
+}, { passive: true });
+const wireWireframes = () => {
+  const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
+  if (wireframeSizeObserver !== null) {
+    for (const previousRoot of wireframeRoots) {
+      if (previousRoot.isConnected) continue;
+      for (const screen of previousRoot.querySelectorAll(
+        "[data-wireframe-screen]",
+      )) {
+        wireframeSizeObserver.unobserve(screen);
+      }
+    }
+  }
+  wireframeRoots = roots;
+  const fit = fitWireframeScreen;
   for (const root of roots) {
+    if (wiredWireframeRoots.has(root)) continue;
+    wiredWireframeRoots.add(root);
     const screens = Array.from(
       root.querySelectorAll("[data-wireframe-screen]"),
     );
@@ -1100,15 +1266,8 @@ const installColumnPointerReorder = ({
     // interactive then narrows it to one screen; without this script the
     // complete storyboard remains readable, with true-width frames scrolling.
     for (const screen of screens) fit(screen);
-    // Maximizing (or restoring) changes the width available to the active
-    // frame without firing a window resize event, and the expanded rail
-    // narrows it further still. Observing the screen's own box catches every
-    // one of those reflows instead of hand-wiring each transition.
-    if ("ResizeObserver" in window) {
-      const observer = new ResizeObserver((entries) => {
-        for (const entry of entries) fit(entry.target);
-      });
-      for (const screen of screens) observer.observe(screen);
+    if (wireframeSizeObserver !== null) {
+      for (const screen of screens) wireframeSizeObserver.observe(screen);
     }
     root.setAttribute("data-wireframe-interactive", "");
     const show = (id) => {
@@ -1170,116 +1329,155 @@ const installColumnPointerReorder = ({
       }
     });
   }
-  addEventListener("resize", () => {
-    for (const root of roots) {
-      const current = root.querySelector(
-        "[data-wireframe-screen][data-wireframe-current]",
-      );
-      if (current !== null) fit(current);
-    }
-  }, { passive: true });
-})();
-(() => {
-  const blocks = Array.from(document.querySelectorAll("[data-collapsible]"));
-  if (blocks.length === 0) return;
+};
+// The collapse leg's helpers and global listeners live at module level
+// because the hash-expansion click and hashchange handlers must keep working
+// across article refreshes; the block lists they act on are re-read by
+// wireCollapse so bulk operations always see the live article.
+const collapseStorageKey = (id) => {
   const planId = document.documentElement.getAttribute("data-plan-id");
-  const storageKey = (id) =>
-    planId === null || planId === ""
-      ? null
-      : "big-plan:collapse:" + planId + ":" + id;
-  // deck-collapse.ts guarantees one header per collapsible and that the body
-  // is its sibling, so every lookup here is a direct-child query.
-  const headerFor = (block) =>
-    block.querySelector(":scope > [data-collapse-header]");
-  const toggleFor = (block) => {
-    const header = headerFor(block);
-    return header === null
-      ? null
-      : header.querySelector(":scope > [data-collapse-toggle]");
-  };
-  // State only: attribute, control labels, persistence. No scroll handling, so
-  // a bulk run can apply it many times and correct the viewport once.
-  const applyCollapsed = (block, collapsed) => {
-    if (collapsed) block.setAttribute("data-collapsed", "");
-    else block.removeAttribute("data-collapsed");
-    const button = toggleFor(block);
-    if (button !== null) {
-      button.setAttribute("aria-expanded", collapsed ? "false" : "true");
-      const kind = block.getAttribute("data-collapsible") || "section";
-      button.setAttribute(
-        "aria-label",
-        collapsed ? "Expand " + kind : "Collapse " + kind,
-      );
-    }
-    const id = block.getAttribute("data-collapse-id");
-    if (id !== null && id !== "") {
-      const key = storageKey(id);
-      if (key !== null) {
-        try {
-          localStorage.setItem(key, collapsed ? "1" : "0");
-        } catch (_) {}
-      }
-    }
-  };
-  const refreshScrollSpy = () => {
-    if (typeof window.__bigPlanRefreshScrollSpy === "function") {
-      window.__bigPlanRefreshScrollSpy();
-    }
-  };
-  // Holds a chosen element still in the viewport across a layout change, then
-  // refreshes the scroll-spy. Header chrome is geometry-stable, so a single
-  // toggle normally measures zero drift; this still matters when the document
-  // shortens enough that the browser clamps scrollTop, which would otherwise
-  // slide the page under the reader.
-  const holdInPlace = (anchor, change) => {
-    const beforeTop = anchor === null ? 0 : anchor.getBoundingClientRect().top;
-    change();
-    const settle = () => {
-      if (anchor !== null) {
-        const delta = anchor.getBoundingClientRect().top - beforeTop;
-        if (Math.abs(delta) > 0.5) {
-          const se = document.scrollingElement;
-          if (se) se.scrollTop += delta;
-          else window.scrollBy(0, delta);
-        }
-      }
-      refreshScrollSpy();
-    };
-    settle();
-    requestAnimationFrame(settle);
-  };
-  const setCollapsed = (block, collapsed) => {
-    holdInPlace(headerFor(block) || block, () =>
-      applyCollapsed(block, collapsed),
+  return planId === null || planId === ""
+    ? null
+    : "big-plan:collapse:" + planId + ":" + id;
+};
+let collapseBlocks = [];
+let collapseTopLevel = [];
+const wiredCollapseBlocks = new WeakSet();
+const wiredCollapseControls = new WeakSet();
+// deck-collapse.ts guarantees one header per collapsible and that the body
+// is its sibling, so every lookup here is a direct-child query.
+const headerFor = (block) =>
+  block.querySelector(":scope > [data-collapse-header]");
+const toggleFor = (block) => {
+  const header = headerFor(block);
+  return header === null
+    ? null
+    : header.querySelector(":scope > [data-collapse-toggle]");
+};
+// State only: attribute, control labels, persistence. No scroll handling, so
+// a bulk run can apply it many times and correct the viewport once.
+const applyCollapsed = (block, collapsed) => {
+  if (collapsed) block.setAttribute("data-collapsed", "");
+  else block.removeAttribute("data-collapsed");
+  const button = toggleFor(block);
+  if (button !== null) {
+    button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    const kind = block.getAttribute("data-collapsible") || "section";
+    button.setAttribute(
+      "aria-label",
+      collapsed ? "Expand " + kind : "Collapse " + kind,
     );
+  }
+  const id = block.getAttribute("data-collapse-id");
+  if (id !== null && id !== "") {
+    const key = collapseStorageKey(id);
+    if (key !== null) {
+      try {
+        localStorage.setItem(key, collapsed ? "1" : "0");
+      } catch (_) {}
+    }
+  }
+};
+const refreshScrollSpy = () => {
+  if (typeof window.__bigPlanRefreshScrollSpy === "function") {
+    window.__bigPlanRefreshScrollSpy();
+  }
+};
+// Holds a chosen element still in the viewport across a layout change, then
+// refreshes the scroll-spy. Header chrome is geometry-stable, so a single
+// toggle normally measures zero drift; this still matters when the document
+// shortens enough that the browser clamps scrollTop, which would otherwise
+// slide the page under the reader.
+const holdInPlace = (anchor, change) => {
+  const beforeTop = anchor === null ? 0 : anchor.getBoundingClientRect().top;
+  change();
+  const settle = () => {
+    if (anchor !== null) {
+      const delta = anchor.getBoundingClientRect().top - beforeTop;
+      if (Math.abs(delta) > 0.5) {
+        const se = document.scrollingElement;
+        if (se) se.scrollTop += delta;
+        else window.scrollBy(0, delta);
+      }
+    }
+    refreshScrollSpy();
   };
-  // Only a top-level region's header is guaranteed to stay visible in both
-  // states, so bulk operations anchor on the one the reader is inside.
-  const topLevel = blocks.filter(
+  settle();
+  requestAnimationFrame(settle);
+};
+const setCollapsed = (block, collapsed) => {
+  holdInPlace(headerFor(block) || block, () =>
+    applyCollapsed(block, collapsed),
+  );
+};
+// Only a top-level region's header is guaranteed to stay visible in both
+// states, so bulk operations anchor on the one the reader is inside.
+const bulkAnchor = () => {
+  const readingLine = window.innerHeight * 0.25;
+  let found = null;
+  for (const block of collapseTopLevel) {
+    const header = headerFor(block);
+    if (header === null) continue;
+    if (header.getBoundingClientRect().top <= readingLine) found = header;
+  }
+  if (found !== null) return found;
+  const fallback = collapseTopLevel[0] || collapseBlocks[0];
+  return fallback ? headerFor(fallback) : null;
+};
+const setAllCollapsed = (collapsed) => {
+  holdInPlace(bulkAnchor(), () => {
+    for (const block of collapseBlocks) applyCollapsed(block, collapsed);
+  });
+};
+const expandAncestors = (target) => {
+  let expanded = false;
+  let node = target;
+  while (node instanceof Element) {
+    if (
+      node.hasAttribute("data-collapsible") &&
+      node.hasAttribute("data-collapsed")
+    ) {
+      applyCollapsed(node, false);
+      expanded = true;
+    }
+    node = node.parentElement;
+  }
+  if (expanded) refreshScrollSpy();
+  return expanded;
+};
+const expandHash = (hash) => {
+  if (!hash || hash === "#") return null;
+  const id = decodeURIComponent(hash.slice(1));
+  if (id === "") return null;
+  const target = document.getElementById(id);
+  if (target === null) return null;
+  return { revealed: expandAncestors(target), target };
+};
+document.addEventListener("click", (event) => {
+  const link = event.target.closest('a[href^="#"]');
+  if (link === null) return;
+  const href = link.getAttribute("href");
+  if (href === null) return;
+  expandHash(href);
+});
+addEventListener("hashchange", () => {
+  const result = expandHash(location.hash);
+  if (result !== null && result.revealed) result.target.scrollIntoView();
+});
+const wireCollapse = () => {
+  collapseBlocks = Array.from(document.querySelectorAll("[data-collapsible]"));
+  collapseTopLevel = collapseBlocks.filter(
     (block) =>
       block.parentElement === null ||
       block.parentElement.closest("[data-collapsible]") === null,
   );
-  const bulkAnchor = () => {
-    const readingLine = window.innerHeight * 0.25;
-    let found = null;
-    for (const block of topLevel) {
-      const header = headerFor(block);
-      if (header === null) continue;
-      if (header.getBoundingClientRect().top <= readingLine) found = header;
-    }
-    return found === null ? headerFor(topLevel[0] || blocks[0]) : found;
-  };
-  const setAllCollapsed = (collapsed) => {
-    holdInPlace(bulkAnchor(), () => {
-      for (const block of blocks) applyCollapsed(block, collapsed);
-    });
-  };
   let restoredCollapse = false;
-  for (const block of blocks) {
+  for (const block of collapseBlocks) {
+    if (wiredCollapseBlocks.has(block)) continue;
+    wiredCollapseBlocks.add(block);
     const id = block.getAttribute("data-collapse-id");
     if (id !== null && id !== "") {
-      const key = storageKey(id);
+      const key = collapseStorageKey(id);
       try {
         if (key !== null && localStorage.getItem(key) === "1") {
           applyCollapsed(block, true);
@@ -1302,16 +1500,29 @@ const installColumnPointerReorder = ({
       event.stopPropagation();
       toggle();
     });
-    // The title text is the only extra pointer target. Empty header space and
-    // the kicker remain reading chrome; the chevron stays the explicit
-    // keyboard and assistive-technology control.
+    // The region's name is the only extra pointer target, at every level that
+    // marks one (deck-collapse invariant 4). Empty header space and a slide's
+    // kicker remain reading chrome; the chevron stays the explicit keyboard
+    // and assistive-technology control, so the name adds no second tab stop.
     header.addEventListener("click", (event) => {
       if (
-        event.target.closest("a, button, input, textarea, select, summary, label")
+        event.target.closest(
+          "a, button, input, textarea, select, summary, label",
+        )
       )
         return;
-      const title = event.target.closest(".plan-slide-title");
-      if (title === null || !header.contains(title)) return;
+      const name = event.target.closest("[data-collapse-name]");
+      if (name === null || !header.contains(name)) return;
+      // A drag that selects text inside the name ends with a click on it. The
+      // reader asked for the words, not for the region to close under them.
+      const selection = window.getSelection();
+      if (
+        selection !== null &&
+        !selection.isCollapsed &&
+        selection.toString().trim() !== ""
+      ) {
+        return;
+      }
       event.preventDefault();
       toggle();
     });
@@ -1319,6 +1530,8 @@ const installColumnPointerReorder = ({
   if (restoredCollapse) refreshScrollSpy();
   // Bulk controls ship hidden so a scripts-disabled document never offers a
   // control it cannot honour; revealing them here is what makes them real.
+  // They live in the shell outside the article, so the guard keeps a re-wire
+  // from double-binding the surviving buttons.
   for (const controls of document.querySelectorAll(
     "[data-collapse-all-controls]",
   )) {
@@ -1326,55 +1539,40 @@ const installColumnPointerReorder = ({
     controls.setAttribute("data-shown", "");
   }
   for (const button of document.querySelectorAll("[data-expand-all]")) {
+    if (wiredCollapseControls.has(button)) continue;
+    wiredCollapseControls.add(button);
     button.addEventListener("click", (event) => {
       event.preventDefault();
       setAllCollapsed(false);
     });
   }
   for (const button of document.querySelectorAll("[data-collapse-all]")) {
+    if (wiredCollapseControls.has(button)) continue;
+    wiredCollapseControls.add(button);
     button.addEventListener("click", (event) => {
       event.preventDefault();
       setAllCollapsed(true);
     });
   }
-  const expandAncestors = (target) => {
-    let expanded = false;
-    let node = target;
-    while (node instanceof Element) {
-      if (
-        node.hasAttribute("data-collapsible") &&
-        node.hasAttribute("data-collapsed")
-      ) {
-        applyCollapsed(node, false);
-        expanded = true;
-      }
-      node = node.parentElement;
-    }
-    if (expanded) refreshScrollSpy();
-    return expanded;
-  };
-  const expandHash = (hash) => {
-    if (!hash || hash === "#") return null;
-    const id = decodeURIComponent(hash.slice(1));
-    if (id === "") return null;
-    const target = document.getElementById(id);
-    if (target === null) return null;
-    return { revealed: expandAncestors(target), target };
-  };
-  document.addEventListener("click", (event) => {
-    const link = event.target.closest('a[href^="#"]');
-    if (link === null) return;
-    const href = link.getAttribute("href");
-    if (href === null) return;
-    expandHash(href);
-  });
   expandHash(location.hash);
-  addEventListener("hashchange", () => {
-    const result = expandHash(location.hash);
-    if (result !== null && result.revealed) result.target.scrollIntoView();
-  });
-})();
-(() => {
+};
+// The one document-level dismiss and Escape listener pair reaches every live
+// table's popovers through this registry; wire() prunes detached entries.
+const wiredDataTables = new WeakSet();
+const tableMenuRegistry = [];
+document.addEventListener("click", (event) => {
+  for (const entry of tableMenuRegistry) entry.onDocumentClick(event);
+});
+document.addEventListener("keydown", (event) => {
+  for (const entry of tableMenuRegistry) entry.onDocumentKeydown(event);
+});
+const compareDataTableValues = ${COMPARE_DATA_TABLE_VALUES_SOURCE};
+const wireDataTables = () => {
+  for (let index = tableMenuRegistry.length - 1; index >= 0; index -= 1) {
+    if (!tableMenuRegistry[index].figure.isConnected) {
+      tableMenuRegistry.splice(index, 1);
+    }
+  }
   const tables = Array.from(document.querySelectorAll("[data-data-table]"));
   if (tables.length === 0) return;
   const planId = document.documentElement.getAttribute("data-plan-id");
@@ -1393,13 +1591,14 @@ const installColumnPointerReorder = ({
       localStorage.setItem(key, JSON.stringify(value));
     } catch (_) {}
   };
-  const compareDataTableValues = ${COMPARE_DATA_TABLE_VALUES_SOURCE};
   for (const figure of tables) {
+    if (wiredDataTables.has(figure)) continue;
     const grid = figure.querySelector("table");
     if (grid === null) continue;
     const headRow = grid.querySelector("thead tr");
     const authoredBody = grid.querySelector("tbody");
     if (headRow === null || authoredBody === null) continue;
+    wiredDataTables.add(figure);
     const heads = Array.from(headRow.children);
     const rows = Array.from(authoredBody.querySelectorAll("[data-table-row]"));
     const authoredRows = rows.slice().sort(
@@ -1975,37 +2174,38 @@ const installColumnPointerReorder = ({
       });
     }
     if (popovers.length !== 0) {
-      document.addEventListener("click", (event) => {
-        // A click inside either of this figure's popovers is the reader still
-        // using it; anything else dismisses.
-        const inside =
-          event.target instanceof Element &&
-          figure.contains(event.target) &&
-          event.target.closest("[data-table-menu]") !== null;
-        if (!inside) closeMenus(false);
-      });
-      document.addEventListener("keydown", (event) => {
-        if (event.key !== "Escape") return;
-        const openMenu = popovers.some((entry) => !entry.list.hidden);
-        if (!openMenu) return;
-        event.bigPlanEscapeHandled = true;
-        closeMenus(true);
+      tableMenuRegistry.push({
+        figure,
+        onDocumentClick: (event) => {
+          // A click inside either of this figure's popovers is the reader
+          // still using it; anything else dismisses.
+          const inside =
+            event.target instanceof Element &&
+            figure.contains(event.target) &&
+            event.target.closest("[data-table-menu]") !== null;
+          if (!inside) closeMenus(false);
+        },
+        onDocumentKeydown: (event) => {
+          if (event.key !== "Escape") return;
+          const openMenu = popovers.some((entry) => !entry.list.hidden);
+          if (!openMenu) return;
+          event.bigPlanEscapeHandled = true;
+          closeMenus(true);
+        },
       });
     }
 
     applySort();
     applyFilter();
   }
-})();
-(() => {
-  // One maximize behavior for every supported figure family. The vocabulary
-  // is owned by components/_model/figure-controls/figure-controls.ts; this leg
-  // is a string template and cannot import it, so any change there changes
-  // these three attribute names too.
-  const frames = Array.from(
-    document.querySelectorAll("[data-figure-maximizable]"),
-  );
-  if (frames.length === 0) return;
+};
+// One maximize behavior for every supported figure family. The vocabulary
+// is owned by components/_model/figure-controls/figure-controls.ts; this leg
+// is a string template and cannot import it, so any change there changes
+// these three attribute names too. The block keeps the leg's mutable state
+// private; only the wire entry point escapes it.
+let wireFigureMaximize = () => {};
+{
   let open = null;
   // How the open panel was activated. Restoring focus is required either way -
   // a keyboard reader must land back on the control they pressed - but the
@@ -2168,9 +2368,28 @@ const installColumnPointerReorder = ({
     // settled, so a focusin handler cannot immediately select it again.
     frame.dispatchEvent(new CustomEvent("figure-restored"));
   };
-  for (const frame of frames) {
-    const trigger = frame.querySelector("[data-figure-maximize]");
-    if (trigger === null) continue;
+  const wiredFrames = new WeakSet();
+  wireFigureMaximize = () => {
+    // A refresh while a figure was maximized replaced that figure, stranding
+    // the backdrop attribute on the root with no live frame. Clear the whole
+    // open state rather than letting it point at the detached panel.
+    if (open !== null && !open.isConnected) {
+      restoreIsolation();
+      if (dialogAttributes?.frame === open) dialogAttributes = null;
+      open = null;
+      document.documentElement.removeAttribute("data-figure-maximized-open");
+    }
+    for (const frame of document.querySelectorAll(
+      "[data-figure-maximizable]",
+    )) {
+      if (wiredFrames.has(frame)) continue;
+      const trigger = frame.querySelector("[data-figure-maximize]");
+      if (trigger === null) continue;
+      wiredFrames.add(frame);
+      wireFrame(frame, trigger);
+    }
+  };
+  const wireFrame = (frame, trigger) => {
     trigger.hidden = false;
     trigger.addEventListener("click", (event) => {
       // A click synthesised by Enter or Space carries detail 0; a pointer
@@ -2196,7 +2415,7 @@ const installColumnPointerReorder = ({
       if (!frame.hasAttribute("data-figure-maximized")) return;
       finishRestore(frame, openedByKeyboard, true);
     });
-  }
+  };
   document.addEventListener("keydown", (event) => {
     if (event.key === "Tab" && open !== null) {
       const tabbable = tabbableElements(open);
@@ -2250,13 +2469,16 @@ const installColumnPointerReorder = ({
       true,
     );
   }
-})();
-(() => {
-  // Decision matrices. Native radios already own picking an option and the
-  // selected column header, so this leg adds only what markup cannot express:
-  // highlighting the whole column, swapping the rationale panel without
-  // moving the page, gating the confirm action, and the answered state.
+}
+// Decision matrices. Native radios already own picking an option and the
+// selected column header, so this leg adds only what markup cannot express:
+// highlighting the whole column, swapping the rationale panel without
+// moving the page, gating the confirm action, and the answered state.
+const wiredDecisions = new WeakSet();
+const wireDecisions = () => {
   for (const decision of document.querySelectorAll("[data-decision]")) {
+    if (wiredDecisions.has(decision)) continue;
+    wiredDecisions.add(decision);
     // A Decision may sit inside another Decision's context, so every lookup
     // is scoped to the nearest owning card. Without this an outer Decision
     // binds the inner one's controls and the two corrupt each other.
@@ -2291,6 +2513,20 @@ const installColumnPointerReorder = ({
       choice.hasAttribute("data-decision-proposal-choice");
     const proposalValue = () =>
       proposalText === null ? "" : proposalText.value.trim();
+    const proposalBatch = document.createElement("button");
+    proposalBatch.type = "button";
+    proposalBatch.className = "decision-proposal-action";
+    proposalBatch.textContent = "Add to feedback";
+    proposalBatch.hidden = true;
+    const proposalNow = document.createElement("button");
+    proposalNow.type = "button";
+    proposalNow.className = "decision-proposal-action decision-proposal-now";
+    proposalNow.textContent = "Send now";
+    proposalNow.hidden = true;
+    if (footer !== null && confirm !== null) {
+      footer.insertBefore(proposalBatch, confirm);
+      footer.insertBefore(proposalNow, confirm);
+    }
     let previousOptionChoice =
       choices.find((choice) => choice.checked && !proposes(choice)) || null;
 
@@ -2531,9 +2767,15 @@ const installColumnPointerReorder = ({
       const index = choice === null ? null : choice.getAttribute("data-option-index");
       showPanel(index === null ? defaultIndex : index);
       paintColumn(index, false);
-      confirm.textContent = proposing ? "Submit proposal" : "Confirm choice";
+      confirm.textContent = proposing
+        ? "Include with acceptance"
+        : "Confirm choice";
       confirm.disabled =
         choice === null || (proposing && proposalValue() === "");
+      proposalBatch.hidden = !proposing;
+      proposalNow.hidden = !proposing;
+      proposalBatch.disabled = proposalValue() === "";
+      proposalNow.disabled = proposalValue() === "";
       if (summary !== null) {
         summary.textContent =
           choice === null
@@ -2552,6 +2794,34 @@ const installColumnPointerReorder = ({
       if (proposes(event.target) && proposalText !== null) proposalText.focus();
     });
     if (proposalText !== null) proposalText.addEventListener("input", sync);
+    const handOffProposal = (submit) => {
+      const target = window.bigPlan?.feedback;
+      if (typeof target?.add !== "function") {
+        if (summary !== null) {
+          summary.textContent =
+            "Open this document in a live review to submit feedback.";
+        }
+        return;
+      }
+      target.add({
+        source: "decision",
+        anchor: decision.id,
+        submit,
+        items: [
+          {
+            kind: "comment",
+            body: "Suggest another option: " + proposalValue(),
+          },
+        ],
+      });
+      const proposalChoice = choices.find(proposes) || null;
+      if (proposalChoice !== null) proposalChoice.checked = false;
+      if (previousOptionChoice !== null) previousOptionChoice.checked = true;
+      if (proposalText !== null) proposalText.value = "";
+      sync();
+    };
+    proposalBatch.addEventListener("click", () => handOffProposal("batch"));
+    proposalNow.addEventListener("click", () => handOffProposal("now"));
     decision.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || event.bigPlanEscapeHandled === true) return;
       const choice = picked();
@@ -2656,24 +2926,43 @@ const installColumnPointerReorder = ({
     });
     sync();
   }
-  // focusVisible is not honoured everywhere; the attribute is the fallback and
-  // is spent the moment the reader does anything else.
-  for (const type of ["keydown", "pointerdown", "blur"]) {
-    document.addEventListener(
-      type,
-      (event) => {
-        // This same Escape may just have installed the quiet marker. Leave it
-        // for the next interaction to spend.
-        if (event.type === "keydown" && event.key === "Escape") return;
-        for (const quiet of document.querySelectorAll(
-          "[data-decision-focus-quiet]",
-        )) {
-          quiet.removeAttribute("data-decision-focus-quiet");
-        }
-      },
-      true,
-    );
-  }
-})();
+};
+// focusVisible is not honoured everywhere; the attribute is the fallback and
+// is spent the moment the reader does anything else.
+for (const type of ["keydown", "pointerdown", "blur"]) {
+  document.addEventListener(
+    type,
+    (event) => {
+      // This same Escape may just have installed the quiet marker. Leave it
+      // for the next interaction to spend.
+      if (event.type === "keydown" && event.key === "Escape") return;
+      for (const quiet of document.querySelectorAll(
+        "[data-decision-focus-quiet]",
+      )) {
+        quiet.removeAttribute("data-decision-focus-quiet");
+      }
+    },
+    true,
+  );
+}
+// Runs at load and again whenever the review island replaces the article in
+// place. Each leg guards its own nodes, so the whole pass is idempotent.
+const wireViewer = () => {
+  wireScrollSpy();
+  wireCopyControls();
+  wireInfoPopovers();
+  wireAnnotationHovers();
+  wireCodeDiffViews();
+  wireFileTreeDiffViews();
+  wireTableSchemas();
+  wireCommentDraft();
+  wireWireframes();
+  wireCollapse();
+  wireDataTables();
+  wireFigureMaximize();
+  wireDecisions();
+};
+wireViewer();
+document.addEventListener("bigplan:article-replaced", wireViewer);
 ${DIAGRAM_SCRIPT}
 </script>`;

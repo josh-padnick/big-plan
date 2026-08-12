@@ -22,6 +22,12 @@
 //     a nested region cannot bubble into an ancestor's hit target.
 //  3. The collapsible element is itself the visible frame. There is no
 //     separate wrapper whose geometry could drift from the frame's.
+//  4. Every slide and sub-slide header marks its name with
+//     COLLAPSE_NAME_ATTRIBUTE. The viewer script offers that name as a
+//     pointer target, so a level that stops marking it silently loses the
+//     ability to open by clicking what the region is called. That is exactly
+//     how sub-slides lost it once: the hit target was narrowed to a class only
+//     the slide-level title carried, and nothing named the contract.
 //
 // GEOMETRY MODEL (deck.css owns the numbers; this is the shape it relies on)
 // The header is the containing block for [toggle, chrome]; the absolutely
@@ -54,6 +60,13 @@ export const COLLAPSE_BODY_ATTRIBUTE = "data-collapse-body";
 /** The chevron control; keyboard and assistive-technology entry point. */
 export const COLLAPSE_TOGGLE_ATTRIBUTE = "data-collapse-toggle";
 
+/**
+ * The one chrome element holding the region's name. It is the only pointer
+ * target in the header besides the chevron, so a reader can open a region by
+ * clicking what it is called - see invariant 4.
+ */
+export const COLLAPSE_NAME_ATTRIBUTE = "data-collapse-name";
+
 /** The deck levels that collapse. Each renders the same canonical shape. */
 export type CollapseKind = "part" | "slide" | "subslide";
 
@@ -75,12 +88,11 @@ const TOGGLE_CLASSES = [
   "focus-visible:outline-accent",
 ] as const;
 
-const HEADER_CLASSES = [
-  "plan-collapse-header",
-  "relative",
-  "min-w-0",
-  "data-[shown]:cursor-pointer",
-] as const;
+// The header carries no pointer cursor of its own: empty header space and a
+// slide's kicker are reading chrome, and only the chevron and the marked name
+// act. deck.css gives the name its cursor, scoped to a wired header so a
+// scripts-disabled document never promises a control it cannot honour.
+const HEADER_CLASSES = ["plan-collapse-header", "relative", "min-w-0"] as const;
 
 // Builds the inert collapse control; the viewer script wires behavior and the
 // document stays fully readable when scripts are disabled. The chevron is the

@@ -24,10 +24,13 @@
 //    script running on this runtime's own origin.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { basename, extname, resolve } from "node:path";
+import { fromHtml } from "hast-util-from-html";
+import { toHtml } from "hast-util-to-html";
+import type { Element, Root, RootContent, ElementContent } from "hast";
 import {
   renderDocument,
   MarkdownDiagnosticsError,
@@ -44,18 +47,21 @@ import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
   AgentExchangeRejected,
-  deriveSourceRevision,
+  deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
   readAgentCommentHistory,
   readAgentExchange,
   validateAgentRequest,
+  validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import {
   appendProgressEvent,
   cancelAgentRequest,
+  claimAgentRequest,
   ensureAgentRequest,
+  publishAgentResponse,
   recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
 } from "./request-mailbox.js";
@@ -70,24 +76,24 @@ import {
   readProgress,
   readFeedbackSubmissionValue,
   readResolvedCommentIds,
-  readRevisionSnapshot,
+  readSnapshot,
   reviewStoreFor,
   writeActiveDraft,
   writeComments,
   writeFeedbackPackage,
   writeFeedbackSubmissionValue,
   writeResolvedCommentIds,
-  writeRevisionSnapshot,
+  writeSnapshot,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
-import { diffRevisions } from "./revision-diff.js";
+import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
 import {
   agentConnectCommand,
   agentRecoveryPrompt,
 } from "./shared/agent-command.js";
 import {
   encodeAgentSnapshot,
-  encodeDiffLocations,
+  encodeSnapshotDiff,
   encodeProgress,
   encodeReviewSnapshot,
   encodeRuntimeSession,
@@ -103,6 +109,97 @@ import {
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const SHUTDOWN_GRACE_MS = 100;
+const isHastElement = (node: RootContent | ElementContent): node is Element =>
+  node.type === "element";
+
+const findRenderedBlock = ({
+  node,
+  blockId,
+}: {
+  readonly node: Root | Element;
+  readonly blockId: string;
+}): Element | null => {
+  for (const child of node.children) {
+    if (!isHastElement(child)) continue;
+    if (child.properties.dataBlockId === blockId) return child;
+    const nested = findRenderedBlock({ node: child, blockId });
+    if (nested !== null) return nested;
+  }
+  return null;
+};
+
+/** Extracts trusted inert component markup so historical snapshots keep their real presentation. */
+const renderedBlockHtml = ({
+  html,
+  blockId,
+  namespace,
+}: {
+  readonly html: string;
+  readonly blockId: string | undefined;
+  readonly namespace: string;
+}): string | undefined => {
+  if (blockId === undefined) return undefined;
+  const root = fromHtml(html);
+  const block = findRenderedBlock({ node: root, blockId });
+  if (block === null) return undefined;
+  const idPrefix = `review-diff-${namespace.replaceAll(/[^a-z0-9_-]/giu, "-")}-${blockId.replaceAll(/[^a-z0-9_-]/giu, "-")}-`;
+  const identifiers = new Map<string, string>();
+  const collectIdentifiers = (node: Element): void => {
+    if (typeof node.properties.id === "string") {
+      identifiers.set(node.properties.id, `${idPrefix}${node.properties.id}`);
+    }
+    for (const child of node.children) {
+      if (isHastElement(child)) collectIdentifiers(child);
+    }
+  };
+  collectIdentifiers(block);
+  const rewriteReferences = (value: string): string => {
+    const exactReplacement = identifiers.get(value);
+    if (exactReplacement !== undefined) return exactReplacement;
+    const tokens = value.split(/\s+/u);
+    if (tokens.length > 1 && tokens.every((token) => identifiers.has(token))) {
+      return tokens.map((token) => identifiers.get(token) ?? token).join(" ");
+    }
+    return value.replace(
+      /url\(#([^)]+)\)|#([A-Za-z][A-Za-z0-9_:-]*)/gu,
+      (
+        match,
+        urlIdentifier: string | undefined,
+        hashIdentifier: string | undefined,
+      ) => {
+        const identifier = urlIdentifier ?? hashIdentifier;
+        if (identifier === undefined) return match;
+        const replacement = identifiers.get(identifier);
+        if (replacement === undefined) return match;
+        return urlIdentifier === undefined
+          ? `#${replacement}`
+          : `url(#${replacement})`;
+      },
+    );
+  };
+  const scrubReviewIdentity = (node: Element): void => {
+    delete node.properties.dataBlockId;
+    delete node.properties.dataReviewSlideSelectable;
+    delete node.properties.dataReviewSlideSelected;
+    for (const [property, value] of Object.entries(node.properties)) {
+      if (typeof value === "string") {
+        node.properties[property] = rewriteReferences(value);
+      } else if (Array.isArray(value)) {
+        node.properties[property] = value.map((entry) =>
+          typeof entry === "string" ? rewriteReferences(entry) : entry,
+        );
+      }
+    }
+    for (const child of node.children) {
+      if (isHastElement(child)) scrubReviewIdentity(child);
+      else if (node.tagName === "style" && child.type === "text") {
+        child.value = rewriteReferences(child.value);
+      }
+    }
+  };
+  scrubReviewIdentity(block);
+  return toHtml(block, { allowDangerousHtml: false });
+};
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
@@ -133,11 +230,12 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "PUT", path: "/api/drafts" },
   { method: "POST", path: "/api/feedback" },
   { method: "POST", path: "/api/comments-delete" },
+  { method: "POST", path: "/api/revert-agent-changes" },
   { method: "GET", path: "/api/agent" },
   { method: "POST", path: "/api/agent-requests" },
   { method: "POST", path: "/api/agent-cancel" },
   { method: "GET", path: "/api/progress" },
-  { method: "GET", path: "/api/revision-diff" },
+  { method: "GET", path: "/api/snapshot-diff" },
 ];
 
 /** A running review runtime. */
@@ -148,7 +246,7 @@ export type ReviewRuntime = {
   readonly planId: string;
   readonly planPath: string;
   readonly store: ReviewStore;
-  readonly close: () => Promise<void>;
+  readonly close: (reason?: string) => Promise<void>;
 };
 
 const constantTimeEquals = (left: string, right: string): boolean => {
@@ -156,6 +254,23 @@ const constantTimeEquals = (left: string, right: string): boolean => {
   const b = Buffer.from(right, "utf8");
   // Length is not secret, and timingSafeEqual requires equal lengths.
   return a.length === b.length && timingSafeEqual(a, b);
+};
+
+const replacePlanSource = async ({
+  path,
+  source,
+}: {
+  readonly path: string;
+  readonly source: string;
+}): Promise<void> => {
+  const temporaryPath = `${path}.big-plan-revert-${randomBytes(8).toString("hex")}`;
+  const mode = (await stat(path)).mode;
+  try {
+    await writeFile(temporaryPath, source, { flag: "wx", mode });
+    await rename(temporaryPath, path);
+  } finally {
+    await unlink(temporaryPath).catch(() => undefined);
+  }
 };
 
 const readBody = async (request: IncomingMessage): Promise<unknown> => {
@@ -231,22 +346,8 @@ type FeedbackSubmission = {
   readonly submissionId: string;
   readonly feedback: FeedbackPackage;
   readonly source: string;
-  readonly sourceRevision: string;
+  readonly premiseSnapshot: string;
 };
-
-// One submission carries a set of comments, not a sequence, so a retry that
-// sends the same comments in a different order has to reach the same stored
-// submission instead of duplicating the artifacts and the agent request.
-const canonicalSubmissionComments = (
-  comments: ReadonlyArray<ReviewComment>,
-): ReadonlyArray<{
-  readonly id: string;
-  readonly body: string;
-  readonly target: ReviewComment["target"];
-}> =>
-  [...comments]
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .map(({ id, body, target }) => ({ id, body, target }));
 
 const feedbackSubmissionId = ({
   planId,
@@ -259,7 +360,12 @@ const feedbackSubmissionId = ({
     .update(
       JSON.stringify({
         planId,
-        comments: canonicalSubmissionComments(comments),
+        comments: comments.map(({ id, body, premiseSnapshot, target }) => ({
+          id,
+          body,
+          premiseSnapshot,
+          target,
+        })),
       }),
     )
     .digest("hex")
@@ -267,7 +373,15 @@ const feedbackSubmissionId = ({
 
 const feedbackSubmissionContent = (
   comments: ReadonlyArray<ReviewComment>,
-): string => JSON.stringify(canonicalSubmissionComments(comments));
+): string =>
+  JSON.stringify(
+    comments.map(({ id, body, premiseSnapshot, target }) => ({
+      id,
+      body,
+      premiseSnapshot,
+      target,
+    })),
+  );
 
 const storedFeedbackSubmission = ({
   value,
@@ -309,15 +423,16 @@ const storedFeedbackSubmission = ({
     !("comments" in value.feedback) ||
     !("source" in value) ||
     typeof value.source !== "string" ||
-    !("sourceRevision" in value) ||
-    typeof value.sourceRevision !== "string" ||
-    value.sourceRevision !== deriveSourceRevision(value.source)
+    !("premiseSnapshot" in value) ||
+    typeof value.premiseSnapshot !== "string" ||
+    value.premiseSnapshot !== deriveSnapshotDigest(value.source)
   ) {
     throw new Error("The stored feedback submission is invalid");
   }
   const storedComments = validateStoredComments({
     value: value.feedback.comments,
     now: new Date().toISOString(),
+    fallbackPremiseSnapshot: deriveSnapshotDigest(value.source),
   });
   if (
     feedbackSubmissionContent(storedComments) !==
@@ -336,7 +451,7 @@ const storedFeedbackSubmission = ({
   const request = validateAgentRequest(
     feedbackAgentRequest({
       feedback: candidateFeedback,
-      sourceRevision: value.sourceRevision,
+      premiseSnapshot: value.premiseSnapshot,
     }),
   );
   if (request.kind !== "feedback") {
@@ -355,7 +470,7 @@ const storedFeedbackSubmission = ({
     submissionId,
     feedback,
     source: value.source,
-    sourceRevision: request.sourceRevision,
+    premiseSnapshot: request.premiseSnapshot,
   };
 };
 
@@ -365,8 +480,12 @@ const storedFeedbackSubmission = ({
  */
 export const startReviewRuntime = async ({
   planPath,
+  diffPreviewSource,
+  idleTimeoutMs = 10 * 60 * 1_000,
 }: {
   readonly planPath: string;
+  readonly diffPreviewSource?: string;
+  readonly idleTimeoutMs?: number;
 }): Promise<ReviewRuntime> => {
   const resolvedPlanPath = resolve(planPath);
   const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
@@ -389,12 +508,223 @@ export const startReviewRuntime = async ({
     fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
     identity: {},
   });
-  const initialSourceRevision = deriveSourceRevision(initialSource);
-  await writeRevisionSnapshot({
+  const initialSnapshot = deriveSnapshotDigest(initialSource);
+  await writeSnapshot({
     store,
-    revision: initialSourceRevision,
+    snapshot: initialSnapshot,
     source: initialSource,
   });
+  const storedComments = (path: string) =>
+    readComments({
+      path,
+      validate: (value) =>
+        validateStoredComments({
+          value,
+          now: new Date().toISOString(),
+          fallbackPremiseSnapshot: initialSnapshot,
+        }),
+    });
+  const [storedDrafts, storedSent, storedResolved, storedExchange] =
+    await Promise.all([
+      storedComments(store.draftsPath),
+      storedComments(store.sentPath),
+      readResolvedCommentIds({ store, validate: validateResolvedCommentIds }),
+      readAgentExchange({ store, sessionId, planId }),
+    ]);
+  const reviewAlreadyStarted =
+    storedDrafts.length > 0 ||
+    storedSent.length > 0 ||
+    storedResolved.length > 0 ||
+    storedExchange.requests.length > 0 ||
+    storedExchange.responses.length > 0;
+  if (diffPreviewSource !== undefined && !reviewAlreadyStarted) {
+    const premiseSnapshot = deriveSnapshotDigest(diffPreviewSource);
+    await writeSnapshot({
+      store,
+      snapshot: premiseSnapshot,
+      source: diffPreviewSource,
+    });
+    const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
+    const before = renderDocument({
+      markdown: diffPreviewSource,
+      fallbackTitle,
+      identity: {},
+    });
+    const after = renderDocument({
+      markdown: initialSource,
+      fallbackTitle,
+      identity: {},
+    });
+    const previewDiff = buildSnapshotDiff({
+      from: premiseSnapshot,
+      to: initialSnapshot,
+      before: before.blocks,
+      after: after.blocks,
+    });
+    const changeTargets = [
+      ...new Set(
+        previewDiff.locations.flatMap((location) =>
+          location.newBlockId === undefined
+            ? location.oldBlockId === undefined
+              ? []
+              : [location.oldBlockId]
+            : [location.newBlockId],
+        ),
+      ),
+    ];
+    const previewBlock = after.blocks.find((block) =>
+      changeTargets.includes(block.id),
+    );
+    const createdAt = new Date().toISOString();
+    const previewComment: ReviewComment = {
+      id: randomId(8),
+      body: "Make every causal change reviewable in place.",
+      createdAt,
+      premiseSnapshot,
+      target:
+        previewBlock === undefined
+          ? { type: "document" }
+          : {
+              type: "block",
+              blockId: previewBlock.id,
+              kind: previewBlock.kind,
+              label: previewBlock.label,
+              ...(previewBlock.section === undefined
+                ? {}
+                : { section: previewBlock.section }),
+            },
+    };
+    const feedback = buildFeedbackPackage({
+      sessionId,
+      packageId: randomId(8),
+      planId,
+      planPath: resolvedPlanPath,
+      createdAt,
+      comments: [previewComment],
+    });
+    const feedbackRequest = feedbackAgentRequest({
+      feedback,
+      premiseSnapshot,
+    });
+    await writeComments({ path: store.sentPath, comments: [previewComment] });
+    await writeAgentRequest({ store, request: feedbackRequest });
+    const claimedFeedbackRequest = await claimAgentRequest({
+      store,
+      requestId: feedbackRequest.requestId,
+      baselineSnapshot: premiseSnapshot,
+      now: createdAt,
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: feedbackRequest.requestId,
+          outcomes: [
+            changeTargets.length === 0
+              ? {
+                  commentId: previewComment.id,
+                  state: "answered",
+                  message:
+                    "The preview source matches the plan, so there is no causal change to show yet.",
+                }
+              : {
+                  commentId: previewComment.id,
+                  state: "changed",
+                  message:
+                    "The answer now carries its own causal Was/Now evidence.",
+                  changeTargets,
+                },
+          ],
+        },
+        request: claimedFeedbackRequest,
+        commentsById: new Map([[previewComment.id, previewComment]]),
+        changedBlocks: new Set(changeTargets),
+        currentSnapshot: initialSnapshot,
+        now: createdAt,
+      }),
+    });
+    const historicalSource = `${diffPreviewSource.trimEnd()}\n\n## Retired experiment\n\nThis temporary policy is removed by the next revision.\n`;
+    const historicalSnapshot = deriveSnapshotDigest(historicalSource);
+    await writeSnapshot({
+      store,
+      snapshot: historicalSnapshot,
+      source: historicalSource,
+    });
+    const historicalRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: randomId(8),
+      sessionId,
+      planId,
+      premiseSnapshot,
+      createdAt: new Date(Date.parse(createdAt) + 1).toISOString(),
+      body: "Add the temporary policy for review.",
+    });
+    await writeAgentRequest({ store, request: historicalRequest });
+    const claimedHistoricalRequest = await claimAgentRequest({
+      store,
+      requestId: historicalRequest.requestId,
+      baselineSnapshot: premiseSnapshot,
+      now: new Date(Date.parse(createdAt) + 1).toISOString(),
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: historicalRequest.requestId,
+          message:
+            "I added the temporary policy, which a later revision removed.",
+        },
+        request: claimedHistoricalRequest,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: historicalSnapshot,
+        now: new Date(Date.parse(createdAt) + 1).toISOString(),
+      }),
+    });
+    const chatRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: randomId(8),
+      sessionId,
+      planId,
+      premiseSnapshot,
+      createdAt: new Date(Date.parse(createdAt) + 2).toISOString(),
+      body: "Show the causal diff gallery.",
+    });
+    await writeAgentRequest({ store, request: chatRequest });
+    const claimedChatRequest = await claimAgentRequest({
+      store,
+      requestId: chatRequest.requestId,
+      baselineSnapshot: premiseSnapshot,
+      now: new Date(Date.parse(createdAt) + 2).toISOString(),
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: chatRequest.requestId,
+          message:
+            "I updated the gallery so every changed place can be reviewed.",
+        },
+        request: claimedChatRequest,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: initialSnapshot,
+        now: new Date(Date.parse(createdAt) + 2).toISOString(),
+      }),
+    });
+    if (previewBlock !== undefined) {
+      await writeComments({
+        path: store.draftsPath,
+        comments: [
+          {
+            ...previewComment,
+            id: randomId(8),
+            body: "Check this comment against its older premise.",
+          },
+        ],
+      });
+    }
+  }
 
   // The current render map authorizes newly created targets. Stored comments
   // carry their already-validated target metadata across later revisions.
@@ -404,10 +734,14 @@ export const startReviewRuntime = async ({
   const observedResponseIds = new Set(
     initialExchange.responses.map((response) => response.requestId),
   );
-  let acceptedSourceRevision = initialSourceRevision;
+  let acceptedSnapshot = initialSnapshot;
 
   const validateStored = (value: unknown): ReadonlyArray<ReviewComment> =>
-    validateStoredComments({ value, now: new Date().toISOString() });
+    validateStoredComments({
+      value,
+      now: new Date().toISOString(),
+      fallbackPremiseSnapshot: initialSnapshot,
+    });
 
   const readStoredComments = (
     path: string,
@@ -442,7 +776,8 @@ export const startReviewRuntime = async ({
         }),
       }),
       agent: await readAgentExchange({ store, sessionId, planId }),
-      sourceRevision: deriveSourceRevision(markdown),
+      currentSnapshot: deriveSnapshotDigest(markdown),
+      diffPreview: diffPreviewSource !== undefined,
     });
 
   const renderPlan = async (): Promise<string> => {
@@ -640,7 +975,7 @@ export const startReviewRuntime = async ({
       let submission: FeedbackSubmission;
       if (storedSubmission === undefined) {
         const source = await readFile(resolvedPlanPath, "utf8");
-        const sourceRevision = deriveSourceRevision(source);
+        const premiseSnapshot = deriveSnapshotDigest(source);
         const feedback = buildFeedbackPackage({
           sessionId,
           packageId: submissionId,
@@ -654,7 +989,7 @@ export const startReviewRuntime = async ({
           submissionId,
           feedback,
           source,
-          sourceRevision,
+          premiseSnapshot,
         };
         await writeFeedbackSubmissionValue({
           store,
@@ -670,18 +1005,18 @@ export const startReviewRuntime = async ({
           comments: newlySent,
         });
       }
-      const { feedback, source, sourceRevision } = submission;
+      const { feedback, source, premiseSnapshot } = submission;
       const written = await writeFeedbackPackage({
         store,
         feedback,
         brief: renderBrief(feedback),
       });
-      await writeRevisionSnapshot({ store, revision: sourceRevision, source });
+      await writeSnapshot({ store, snapshot: premiseSnapshot, source });
       const agentRequest = await ensureAgentRequest({
         store,
         request: feedbackAgentRequest({
           feedback,
-          sourceRevision,
+          premiseSnapshot,
         }),
       });
       await writeComments({
@@ -719,6 +1054,100 @@ export const startReviewRuntime = async ({
       });
       return;
     }
+    if (route.path === "/api/revert-agent-changes") {
+      const payload =
+        typeof body === "object" && body !== null
+          ? (body as Readonly<Record<string, unknown>>)
+          : {};
+      const requestId = payload.requestId;
+      const commentId = payload.commentId;
+      if (typeof requestId !== "string" || typeof commentId !== "string") {
+        refuse({
+          response,
+          status: 400,
+          reason: "A request id and comment id are required",
+        });
+        return;
+      }
+      const exchange = await readAgentCommentHistory({
+        store,
+        sessionId,
+        planId,
+        commentId,
+      });
+      const request = exchange.requests.find(
+        (candidate) => candidate.requestId === requestId,
+      );
+      const agentResponse = exchange.responses.find(
+        (candidate) => candidate.requestId === requestId,
+      );
+      const changedOutcome =
+        agentResponse?.kind === "chat"
+          ? undefined
+          : agentResponse?.outcomes.find(
+              (outcome) =>
+                outcome.commentId === commentId && outcome.state === "changed",
+            );
+      if (
+        request === undefined ||
+        request.baselineSnapshot === undefined ||
+        agentResponse === undefined ||
+        changedOutcome === undefined
+      ) {
+        refuse({
+          response,
+          status: 404,
+          reason: "No reversible agent response exists for this comment",
+        });
+        return;
+      }
+      const currentSource = await readFile(resolvedPlanPath, "utf8");
+      if (
+        deriveSnapshotDigest(currentSource) !== agentResponse.resultSnapshot
+      ) {
+        refuse({
+          response,
+          status: 409,
+          reason:
+            "The plan changed after this response, so reverting it would overwrite newer work",
+        });
+        return;
+      }
+      let baselineSource: string;
+      try {
+        baselineSource = await readSnapshot({
+          store,
+          snapshot: request.baselineSnapshot,
+        });
+      } catch {
+        refuse({
+          response,
+          status: 404,
+          reason: "The response baseline is no longer available",
+        });
+        return;
+      }
+      renderDocument({
+        markdown: baselineSource,
+        fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+        identity: {},
+      });
+      await replacePlanSource({
+        path: resolvedPlanPath,
+        source: baselineSource,
+      });
+      acceptedSnapshot = request.baselineSnapshot;
+      sendJson({
+        response,
+        status: 200,
+        value: {
+          requestId,
+          commentId,
+          currentSnapshot: request.baselineSnapshot,
+        },
+      });
+      return;
+    }
     if (route.path === "/api/comments-delete") {
       const payload =
         typeof body === "object" && body !== null
@@ -748,17 +1177,41 @@ export const startReviewRuntime = async ({
             : [],
         ),
       );
+      const currentSnapshot = deriveSnapshotDigest(
+        await readFile(resolvedPlanPath, "utf8"),
+      );
+      const revertedAnsweredRequestIds = new Set(
+        exchange.requests.flatMap((candidate) =>
+          candidate.baselineSnapshot === currentSnapshot &&
+          answeredRequestIds.has(candidate.requestId)
+            ? [candidate.requestId]
+            : [],
+        ),
+      );
+      const revertedChangedResponse = exchange.responses.some(
+        (candidate) =>
+          candidate.kind !== "chat" &&
+          revertedAnsweredRequestIds.has(candidate.requestId) &&
+          candidate.outcomes.some(
+            (outcome) =>
+              outcome.commentId === commentId && outcome.state === "changed",
+          ),
+      );
       const commentRequests = exchange.requests;
-      if (answeredRequestIds.size > 0 || commentRequests.length === 0) {
+      if (
+        (answeredRequestIds.size > 0 && !revertedChangedResponse) ||
+        commentRequests.length === 0
+      ) {
         refuse({
           response,
           status: 409,
           reason:
-            "Only a queued or canceled comment can be deleted from the review",
+            "Only a queued, canceled, or reverted comment can be deleted from the review",
         });
         return;
       }
       if (
+        answeredRequestIds.size === 0 &&
         commentRequests.some((candidate) => candidate.claimedAt !== undefined)
       ) {
         refuse({
@@ -771,8 +1224,23 @@ export const startReviewRuntime = async ({
       const pendingRequests = commentRequests.filter(
         (candidate) => candidate.canceledAt === undefined,
       );
+      if (
+        answeredRequestIds.size > 0 &&
+        pendingRequests.some(
+          (candidate) => !answeredRequestIds.has(candidate.requestId),
+        )
+      ) {
+        refuse({
+          response,
+          status: 409,
+          reason: "A follow-up is still pending for this comment",
+        });
+        return;
+      }
       const now = new Date().toISOString();
-      for (const pending of pendingRequests) {
+      for (const pending of answeredRequestIds.size === 0
+        ? pendingRequests
+        : []) {
         if (pending.canceledAt !== undefined) continue;
         if (pending.kind === "feedback") {
           await removeCommentFromQueuedFeedbackRequest({
@@ -818,7 +1286,7 @@ export const startReviewRuntime = async ({
       const exchange = await readAgentExchange({ store, sessionId, planId });
       for (const agentResponse of exchange.responses) {
         if (!observedResponseIds.has(agentResponse.requestId)) {
-          acceptedSourceRevision = agentResponse.sourceRevision;
+          acceptedSnapshot = agentResponse.resultSnapshot;
         }
         observedResponseIds.add(agentResponse.requestId);
       }
@@ -835,7 +1303,7 @@ export const startReviewRuntime = async ({
           // rendered, linted, and accepted. Watching the raw file here would
           // navigate the reviewer onto a transient parse error while an agent
           // is midway through editing the authoritative MDX.
-          sourceRevision: acceptedSourceRevision,
+          currentSnapshot: acceptedSnapshot,
           presence,
           connectionLog,
           plan: resolvedPlanPath,
@@ -872,14 +1340,14 @@ export const startReviewRuntime = async ({
         return;
       }
       const source = await readFile(resolvedPlanPath, "utf8");
-      const revision = deriveSourceRevision(source);
-      await writeRevisionSnapshot({ store, revision, source });
+      const premiseSnapshot = deriveSnapshotDigest(source);
+      await writeSnapshot({ store, snapshot: premiseSnapshot, source });
       const agentRequest = messageAgentRequest({
         kind,
         requestId: randomId(8),
         sessionId,
         planId,
-        sourceRevision: revision,
+        premiseSnapshot,
         createdAt: new Date().toISOString(),
         body: messageBody,
         ...(kind === "reply" && typeof payload.commentId === "string"
@@ -978,21 +1446,32 @@ export const startReviewRuntime = async ({
       sendJson({ response, status: 200, value: { request: canceled } });
       return;
     }
-    if (route.path === "/api/revision-diff") {
+    if (route.path === "/api/snapshot-diff") {
       const from = query.get("from") ?? "";
       const to = query.get("to") ?? "";
       if (!/^[a-f0-9]{16,64}$/.test(from) || !/^[a-f0-9]{16,64}$/.test(to)) {
         refuse({
           response,
           status: 400,
-          reason: "Revision diff requires hexadecimal from and to revisions",
+          reason: "Snapshot diff requires hexadecimal from and to snapshots",
         });
         return;
       }
-      const [beforeSource, afterSource] = await Promise.all([
-        readRevisionSnapshot({ store, revision: from }),
-        readRevisionSnapshot({ store, revision: to }),
-      ]);
+      let beforeSource: string;
+      let afterSource: string;
+      try {
+        [beforeSource, afterSource] = await Promise.all([
+          readSnapshot({ store, snapshot: from }),
+          readSnapshot({ store, snapshot: to }),
+        ]);
+      } catch {
+        refuse({
+          response,
+          status: 404,
+          reason: "This diff's baseline or result snapshot is unavailable",
+        });
+        return;
+      }
       const fallbackTitle = basename(
         resolvedPlanPath,
         extname(resolvedPlanPath),
@@ -1007,16 +1486,38 @@ export const startReviewRuntime = async ({
         fallbackTitle,
         identity: {},
       });
+      const snapshotDiff = buildSnapshotDiff({
+        from,
+        to,
+        before: before.blocks,
+        after: after.blocks,
+      });
       sendJson({
         response,
         status: 200,
-        value: encodeDiffLocations({
-          from,
-          to,
-          locations: diffRevisions({
-            before: before.blocks,
-            after: after.blocks,
-          }),
+        value: encodeSnapshotDiff({
+          ...snapshotDiff,
+          locations: snapshotDiff.locations.map((location) =>
+            usesRenderedSnapshot(location)
+              ? (() => {
+                  const oldHtml = renderedBlockHtml({
+                    html: before.html,
+                    blockId: location.oldBlockId,
+                    namespace: `was-${from}`,
+                  });
+                  const newHtml = renderedBlockHtml({
+                    html: after.html,
+                    blockId: location.newBlockId,
+                    namespace: `now-${to}`,
+                  });
+                  return {
+                    ...location,
+                    ...(oldHtml === undefined ? {} : { oldHtml }),
+                    ...(newHtml === undefined ? {} : { newHtml }),
+                  };
+                })()
+              : location,
+          ),
         }),
       });
       return;
@@ -1029,6 +1530,7 @@ export const startReviewRuntime = async ({
     throw new Error(`Unhandled review route ${route.path}`);
   };
 
+  let lastReviewActivityAt = Date.now();
   const handle = async ({
     request,
     response,
@@ -1055,6 +1557,7 @@ export const startReviewRuntime = async ({
       const method = request.method ?? "GET";
 
       if (method === DOCUMENT_ROUTE.method && target.pathname === "/") {
+        lastReviewActivityAt = Date.now();
         await handleDocument(response);
         return;
       }
@@ -1117,7 +1620,10 @@ export const startReviewRuntime = async ({
           const authority = await withReviewSessionAuthority({
             store,
             sessionId,
-            change: dispatch,
+            change: async () => {
+              lastReviewActivityAt = Date.now();
+              await dispatch();
+            },
           });
           if (!authority.authoritative) {
             refuse({
@@ -1130,14 +1636,6 @@ export const startReviewRuntime = async ({
         });
       }
     } catch (error: unknown) {
-      if (response.headersSent) {
-        // A dispatch that answered and then failed leaves nothing to refuse
-        // with. Writing a second status would throw ERR_HTTP_HEADERS_SENT out
-        // of this handler, and the caller runs it with `void`, so that throw
-        // would become an unhandled rejection and end the CLI process.
-        response.destroy();
-        return;
-      }
       if (error instanceof CommentRejected) {
         refuse({ response, status: 400, reason: error.message });
         return;
@@ -1160,32 +1658,28 @@ export const startReviewRuntime = async ({
     typeof address === "object" && address !== null ? address.port : 0;
   const url = `http://127.0.0.1:${port}/`;
 
-  try {
-    await activateReviewSession({
-      store,
-      descriptor: {
-        version: 1,
-        sessionId,
-        planId,
-        plan: resolvedPlanPath,
-        url,
-        port,
-        pid: process.pid,
-        startedAt: new Date().toISOString(),
-        // The token is here so the reviewer's own tools can reach the runtime;
-        // the file is owner-only, which is what keeps that safe.
-        token,
-      },
-    });
-  } catch (error: unknown) {
-    await new Promise<void>((settle) => {
-      server.close(() => settle());
-    }).catch(() => undefined);
-    throw error;
-  }
+  await activateReviewSession({
+    store,
+    descriptor: {
+      version: 1,
+      sessionId,
+      planId,
+      plan: resolvedPlanPath,
+      url,
+      port,
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+      // The token is here so the reviewer's own tools can reach the runtime;
+      // the file is owner-only, which is what keeps that safe.
+      token,
+    },
+  });
   let heartbeatWrite = Promise.resolve();
   let heartbeatFailureReported = false;
-  const queueHeartbeat = (running: boolean): Promise<void> => {
+  const queueHeartbeat = (
+    running: boolean,
+    stopReason?: string,
+  ): Promise<void> => {
     heartbeatWrite = heartbeatWrite
       .catch(() => undefined)
       .then(async () => {
@@ -1193,6 +1687,7 @@ export const startReviewRuntime = async ({
           store,
           sessionId,
           running,
+          ...(stopReason === undefined ? {} : { stopReason }),
         });
       })
       .catch((error: unknown) => {
@@ -1240,6 +1735,60 @@ export const startReviewRuntime = async ({
   }, REVIEW_HEARTBEAT_INTERVAL_MS);
   connectionTimer.unref();
 
+  let closed = false;
+  let idleTimer: ReturnType<typeof setInterval> | undefined;
+  const closeRuntime = async (
+    reason = "The review session was stopped.",
+  ): Promise<void> => {
+    if (closed) return;
+    closed = true;
+    clearInterval(heartbeatTimer);
+    clearInterval(connectionTimer);
+    if (idleTimer !== undefined) clearInterval(idleTimer);
+    await queueHeartbeat(false, reason).catch(() => undefined);
+    await connectionWrite.catch(() => undefined);
+    const closedServer = new Promise<void>((settle) => {
+      server.close(() => settle());
+    });
+    server.closeIdleConnections();
+    const forceClose = setTimeout(() => {
+      server.closeAllConnections();
+    }, SHUTDOWN_GRACE_MS);
+    forceClose.unref();
+    try {
+      await closedServer;
+    } finally {
+      clearTimeout(forceClose);
+    }
+  };
+  if (idleTimeoutMs > 0) {
+    idleTimer = setInterval(
+      () => {
+        void (async () => {
+          if (closed || Date.now() - lastReviewActivityAt < idleTimeoutMs)
+            return;
+          const presence = await readAgentPresence({ store, sessionId });
+          if (presence.connected && presence.state === "working") {
+            lastReviewActivityAt = Date.now();
+            return;
+          }
+          const minutes = idleTimeoutMs / 60_000;
+          const duration = Number.isInteger(minutes)
+            ? `${minutes} minute${minutes === 1 ? "" : "s"}`
+            : (() => {
+                const seconds = Math.round(idleTimeoutMs / 1_000);
+                return `${seconds} second${seconds === 1 ? "" : "s"}`;
+              })();
+          await closeRuntime(
+            `The review session ended normally after ${duration} of inactivity.`,
+          );
+        })();
+      },
+      Math.min(1_000, idleTimeoutMs),
+    );
+    idleTimer.unref();
+  }
+
   return {
     url,
     port,
@@ -1247,24 +1796,6 @@ export const startReviewRuntime = async ({
     planId,
     planPath: resolvedPlanPath,
     store,
-    close: async () => {
-      clearInterval(heartbeatTimer);
-      clearInterval(connectionTimer);
-      await queueHeartbeat(false).catch(() => undefined);
-      await connectionWrite.catch(() => undefined);
-      const closed = new Promise<void>((settle) => {
-        server.close(() => settle());
-      });
-      server.closeIdleConnections();
-      const forceClose = setTimeout(() => {
-        server.closeAllConnections();
-      }, SHUTDOWN_GRACE_MS);
-      forceClose.unref();
-      try {
-        await closed;
-      } finally {
-        clearTimeout(forceClose);
-      }
-    },
+    close: closeRuntime,
   };
 };

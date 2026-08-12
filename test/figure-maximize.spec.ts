@@ -163,7 +163,7 @@ test("should maximize and restore every supported figure family in both themes",
   }
 });
 
-test("should switch a plain code figure's controls from a resting hover stack to a horizontal maximized row", async ({
+test("should keep a plain code figure's controls horizontal at rest and while maximized", async ({
   page,
   componentsViewerUrl,
 }) => {
@@ -176,15 +176,16 @@ test("should switch a plain code figure's controls from a resting hover stack to
 
   await frame.scrollIntoViewIfNeeded();
   await frame.hover();
-  await expect(toolbar).toHaveCSS("flex-direction", "column");
+  await expect(toolbar).toHaveCSS("flex-direction", "row");
   const copyBoxAtRest = await copy.boundingBox();
   const maximizeBoxAtRest = await maximize.boundingBox();
   expect(copyBoxAtRest).not.toBeNull();
   expect(maximizeBoxAtRest).not.toBeNull();
-  // A resting hover stack lays its controls out top to bottom.
-  expect(maximizeBoxAtRest?.y).toBeGreaterThan(copyBoxAtRest?.y ?? 0);
+  // The resting row leaves room for the comment action between these controls.
+  expect(maximizeBoxAtRest?.x).toBeGreaterThan(copyBoxAtRest?.x ?? 0);
+  expect(maximizeBoxAtRest?.y).toBeCloseTo(copyBoxAtRest?.y ?? 0, 0);
   // The control is a bare icon at rest, like every other icon in the product;
-  // the stack carries the affordance, not a chip behind each glyph.
+  // the row carries the affordance, not a chip behind each glyph.
   await expect(copy).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 
   await maximize.click();
@@ -202,7 +203,7 @@ test("should switch a plain code figure's controls from a resting hover stack to
 
   await maximize.click();
   await expect(frame).not.toHaveAttribute("data-figure-maximized");
-  await expect(toolbar).toHaveCSS("flex-direction", "column");
+  await expect(toolbar).toHaveCSS("flex-direction", "row");
 });
 
 test("should copy plain code and make figure hints wait for a linger", async ({

@@ -376,6 +376,31 @@ test("should group and right-align the diagram viewer controls", async ({
   await expect(fit).toHaveAttribute("aria-pressed", "true");
 });
 
+test("should place a comment action just left of maximize in the diagram toolbar", async ({
+  page,
+  flowDiagramViewerUrl,
+}) => {
+  await page.goto(flowDiagramViewerUrl);
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  await diagram.scrollIntoViewIfNeeded();
+  await diagram.hover();
+
+  // The review island portals its comment control into the figure's action
+  // group, so the toolbar ends [comment, maximize] like every other figure.
+  const group = diagram.locator(".figure-action-group");
+  const actions = group.getByRole("button");
+  await expect(actions).toHaveCount(2);
+  await expect(actions.nth(0)).toHaveAccessibleName(/^Comment on /u);
+  await expect(actions.nth(1)).toHaveAccessibleName("Maximize diagram");
+
+  const commentBox = await actions.nth(0).boundingBox();
+  const maximizeBox = await actions.nth(1).boundingBox();
+  expect(commentBox).not.toBeNull();
+  expect(maximizeBox).not.toBeNull();
+  expect(commentBox?.x ?? 0).toBeLessThan(maximizeBox?.x ?? 0);
+});
+
 test("should keep populated viewer toolbar actions reachable at narrow widths", async ({
   page,
   flowDiagramViewerUrl,
@@ -693,6 +718,7 @@ test("should exit without an alert after handing off the last note", async ({
   await expect(toolbarAdd).toHaveText("Add 1 note to plan feedback");
   await toolbarAdd.click();
   await expect(toolbarAdd).toBeHidden();
+  await expect(diagram.locator("[data-flow-selected]")).toHaveCount(0);
   await page.keyboard.press(undoShortcut);
   await expect(toolbarAdd).toBeHidden();
 
@@ -859,21 +885,14 @@ test("should keep review chrome stable through zoom and maximize in both themes"
       if (add === null) return null;
       const barRect = element.getBoundingClientRect();
       const addRect = add.getBoundingClientRect();
-      const firstProductControl = Array.from(element.children).find(
-        (child) => !child.hasAttribute("data-review-toolbar-host"),
-      );
       return {
-        first: firstProductControl === add,
-        followsReviewAction: add.previousElementSibling?.hasAttribute(
-          "data-review-toolbar-host",
-        ),
+        first: element.firstElementChild === add,
         contained:
           addRect.left >= barRect.left && addRect.right <= barRect.right,
       };
     });
     expect(placement).not.toBeNull();
     expect(placement?.first).toBe(true);
-    expect(placement?.followsReviewAction).toBe(true);
     expect(placement?.contained).toBe(true);
   });
 
@@ -997,8 +1016,12 @@ test("should keep review chrome stable through zoom and maximize in both themes"
     await toolbarAdd.click();
     const status = diagram.locator(".flow-collector-status");
     await expect(status).not.toHaveAttribute("hidden", "");
-    await expect(status).toHaveAttribute("data-tone", "unavailable");
-    await expect(status).toContainText("nothing was added");
-    await expect(toolbarAdd).toBeVisible();
+    await expect(status).toHaveAttribute("data-tone", "added");
+    await expect(status).toContainText("Added 2 notes");
+    await expect(toolbarAdd).toBeHidden();
+    await page.getByRole("button", { name: /^Feedback/u }).click();
+    await expect(
+      page.getByText("Diagram feedback:", { exact: true }),
+    ).toHaveCount(1);
   });
 });

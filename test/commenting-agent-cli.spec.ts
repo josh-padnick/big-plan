@@ -140,6 +140,23 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
     await expect(chat).toContainText(
       "It lets a reviewer understand and discuss the plan.",
     );
+    await rail.getByRole("button", { name: "Archive", exact: true }).click();
+    await expect(
+      rail.getByText("No active plan-wide questions."),
+    ).toBeVisible();
+    await expect(rail.getByText("Archived (1)", { exact: true })).toBeVisible();
+    await expect(chat).not.toBeVisible();
+
+    await page.reload();
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    await expect(
+      rail.getByText("No active plan-wide questions."),
+    ).toBeVisible();
+    await rail.getByText("Archived (1)", { exact: true }).click();
+    await expect(chat).toContainText(
+      "It lets a reviewer understand and discuss the plan.",
+    );
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

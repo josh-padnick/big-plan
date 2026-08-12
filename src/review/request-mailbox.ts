@@ -94,7 +94,7 @@ const readCurrentRequest = async ({
 
 const requestCreation = (request: AgentRequest): string => {
   const created: Record<string, unknown> = { ...request };
-  delete created.claimedFromRevision;
+  delete created.baselineSnapshot;
   delete created.claimedAt;
   delete created.canceledAt;
   return JSON.stringify(created);
@@ -147,12 +147,12 @@ export const ensureAgentRequest = async ({
 export const claimAgentRequest = async ({
   store,
   requestId,
-  sourceRevision: claimedFromRevision,
+  baselineSnapshot,
   now,
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
-  readonly sourceRevision: string;
+  readonly baselineSnapshot: string;
   readonly now: string;
 }): Promise<AgentRequest> =>
   withRequestLock({
@@ -165,10 +165,10 @@ export const claimAgentRequest = async ({
           "The request was canceled by the reviewer",
         );
       }
-      if (request.claimedFromRevision !== undefined) return request;
+      if (request.baselineSnapshot !== undefined) return request;
       const claimed = validateAgentRequest({
         ...request,
-        claimedFromRevision,
+        baselineSnapshot,
         claimedAt: now,
       });
       await writeAgentRequestValue({ store, requestId, value: claimed });
@@ -228,7 +228,7 @@ export const publishAgentResponse = async ({
       }
       if (
         request.claimedAt === undefined ||
-        request.claimedFromRevision === undefined
+        request.baselineSnapshot === undefined
       ) {
         throw new AgentExchangeRejected(
           "The request must be claimed before it can be answered",
