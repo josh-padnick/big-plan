@@ -1,6 +1,6 @@
 # Testing at Big Plan
 
-Start with [AGENTS.md](AGENTS.md) for Big Plan product orientation, domain vocabulary, architecture, and repository conventions.
+Start with [AGENTS.md](../AGENTS.md) for Big Plan product orientation, domain vocabulary, architecture, and repository conventions.
 This document owns the testing philosophy and the choice of test layer.
 
 ## Philosophy: agility requires safety

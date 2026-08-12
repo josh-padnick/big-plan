@@ -174,7 +174,7 @@ Mechanically enforced facts remain owned by their checks.
 
 ## Testing
 
-Before adding a feature, fixing a bug, or adding or changing tests, read [TESTING.md](TESTING.md).
+Before adding a feature, fixing a bug, or adding or changing tests, read [_internal/TESTING.md](_internal/TESTING.md).
 It owns the judgment framework for which tests earn their place and which test layer to use.
 
 ## Design
