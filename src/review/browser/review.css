@@ -110,6 +110,19 @@ here; all values use the document theme's closed token vocabulary.
     height: 1.4rem;
   }
 
+  /* A sub-slide's gutter is the padding its parent slide card opened around
+     it, not the page margin a slide hangs into. Centring the control in that
+     band keeps every sub-slide affordance in one column and stops it
+     straddling the parent card's edge. --deck-pad-x is the sub-slide's own
+     inset, so clearing it lands on the sub-slide card edge; --deck-slide-pad-x
+     is still the parent's padding, which is the band to centre within. */
+  [data-subslide] > [data-collapse-header] > [data-review-slide-host] {
+    left: calc(
+      100% + var(--deck-pad-x, 0rem) +
+        (var(--deck-slide-pad-x, 1.5rem) - 1.4rem) / 2
+    );
+  }
+
   [data-review-compose-inline],
   [data-review-thread-for]:not([data-review-thread-side]) {
     display: flow-root;
@@ -213,6 +226,12 @@ here; all values use the document theme's closed token vocabulary.
       right: calc(0.25rem - var(--deck-pad-x, 0rem));
       left: auto;
       transform: none;
+    }
+
+    /* The gutter rule for sub-slides outranks the phone reset, so it releases
+       its own edge here rather than fighting the inset above. */
+    [data-subslide] > [data-collapse-header] > [data-review-slide-host] {
+      left: auto;
     }
   }
 

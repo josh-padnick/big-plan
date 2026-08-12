@@ -650,24 +650,59 @@ test("should place slide comment controls just outside the upper-right edge", as
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(deckViewerUrl);
 
-  const cards = [
-    page.locator('[data-collapsible="slide"]').first(),
-    page.locator('[data-collapsible="subslide"]').first(),
-  ];
-  for (const card of cards) {
-    const cardBox = await card.boundingBox();
-    const buttonBox = await card
+  const card = page.locator('[data-collapsible="slide"]').first();
+  const control = card.locator(
+    ':scope > [data-collapse-header] > [data-review-slide-host] > button[aria-label="Comment on slide"]',
+  );
+  const cardBox = await card.boundingBox();
+  const buttonBox = await control.boundingBox();
+  if (cardBox === null || buttonBox === null) {
+    throw new Error("Expected slide card and comment control bounds");
+  }
+
+  expect(Math.round(buttonBox.x - (cardBox.x + cardBox.width))).toBe(12);
+  expect(Math.round(buttonBox.y - cardBox.y)).toBe(12);
+
+  // The control is ink at rest so it never reads as a chip beside the card;
+  // the ground arrives on hover.
+  await expect(control).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await control.hover();
+  await expect(control).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+
+  // A sub-slide's gutter is the padding its parent card opened around it, not
+  // the page margin a slide hangs into, and a sub-slide card is only as wide
+  // as its own content. Measuring from that card's own edge scattered the
+  // affordance across a column per sub-slide and let it straddle the parent
+  // card's edge.
+  const subSlides = page.locator('[data-collapsible="subslide"]');
+  const count = await subSlides.count();
+  expect(count).toBeGreaterThan(1);
+  const columns = new Set<number>();
+  for (let index = 0; index < count; index += 1) {
+    const subCard = subSlides.nth(index);
+    const parent = subCard.locator(
+      'xpath=ancestor::*[@data-collapsible="slide"][1]',
+    );
+    const subBox = await subCard.boundingBox();
+    const parentBox = await parent.boundingBox();
+    const subButtonBox = await subCard
       .locator(
         ':scope > [data-collapse-header] > [data-review-slide-host] > button[aria-label="Comment on slide"]',
       )
       .boundingBox();
-    if (cardBox === null || buttonBox === null) {
-      throw new Error("Expected slide card and comment control bounds");
+    if (subBox === null || parentBox === null || subButtonBox === null) {
+      throw new Error("Expected sub-slide, parent slide, and control bounds");
     }
-
-    expect(Math.round(buttonBox.x - (cardBox.x + cardBox.width))).toBe(12);
-    expect(Math.round(buttonBox.y - cardBox.y)).toBe(12);
+    const before = subButtonBox.x - (subBox.x + subBox.width);
+    const after =
+      parentBox.x + parentBox.width - (subButtonBox.x + subButtonBox.width);
+    expect(before).toBeGreaterThan(0);
+    expect(after).toBeGreaterThan(0);
+    expect(Math.abs(before - after)).toBeLessThanOrEqual(1);
+    columns.add(Math.round(subButtonBox.x));
   }
+  // Every sub-slide under one slide reads as one column of affordances.
+  expect(columns.size).toBe(1);
 });
 
 test("should show a sub-slide ordinal once in its comment toolbar", async ({

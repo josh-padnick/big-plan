@@ -4494,7 +4494,10 @@ export const ReviewController = () => {
         return createPortal(
           <button
             type="button"
-            className="group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] p-0 text-comment-rest hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:bg-surface aria-pressed:text-ink [&>svg]:size-3.5"
+            // The control stands alone in a gutter, so it rests as ink only:
+            // a ground at rest would read as a chip competing with the card
+            // beside it. Hover, focus, and pressed still raise the ground.
+            className="group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent p-0 text-comment-rest hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:bg-surface aria-pressed:text-ink [&>svg]:size-3.5"
             aria-label={label}
             aria-pressed={pressed}
             onClick={() =>

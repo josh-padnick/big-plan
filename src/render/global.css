@@ -625,6 +625,14 @@ are declared, so a role or a scale step is the only thing a utility can name.
   [data-slide]:has([data-table-scroll-container]) {
     max-width: none;
   }
+  /* A sub-slide sits inside a slide that already earned its width, so it
+     fills that column instead of hugging the measure a second time. Nested
+     cards then share one right edge, which is both what the deck's uniform
+     sub-slide card intends and what keeps the comment affordance hanging in
+     that card's gutter from scattering across a column per sub-slide. */
+  [data-slide][data-subslide] {
+    max-width: none;
+  }
 
   /* Section navigation glides instead of jumping; readers who ask the OS for
      reduced motion keep instant jumps. */
