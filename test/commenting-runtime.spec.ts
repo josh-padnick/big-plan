@@ -1071,7 +1071,13 @@ test("should mark a superseded review as read-only and link to its replacement",
   page,
   reviewRuntimeUrl,
 }) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
   await page.goto(reviewRuntimeUrl);
+  expect((await initialPersistence).status()).toBe(200);
   const session = await page.evaluate(async () => {
     const root = document.documentElement;
     const response = await fetch("/api/session", {
