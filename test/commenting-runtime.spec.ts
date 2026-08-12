@@ -161,6 +161,139 @@ test("should merge a staged comment when hydration finishes late", async ({
   await expect(rail).toContainText("Keep the comment staged during hydration.");
 });
 
+test("should keep a submitted comment when hydration finishes late", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(reviewRuntimeUrl);
+  await initialPersistence;
+
+  let releaseHydration = (): void => undefined;
+  const hydrationGate = new Promise<void>((settle) => {
+    releaseHydration = settle;
+  });
+  let markHydrationRequested = (): void => undefined;
+  const hydrationRequested = new Promise<void>((settle) => {
+    markHydrationRequested = settle;
+  });
+  await page.route("**/api/drafts", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    markHydrationRequested();
+    await hydrationGate;
+    await route.fulfill({ response });
+  });
+  await page.reload();
+  await hydrationRequested;
+
+  const body = "Keep the comment submitted during hydration.";
+  const feedbackSubmitted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer.getByLabel("Add a comment").fill(body);
+  await composer.getByRole("button", { name: "Submit Now" }).click();
+  await feedbackSubmitted;
+
+  const persisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  releaseHydration();
+  await persisted;
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  await expect(
+    page.getByRole("complementary", { name: "Feedback" }),
+  ).toContainText(body);
+});
+
+test("should persist edits after transient hydration failure", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(reviewRuntimeUrl);
+  await initialPersistence;
+
+  let draftReads = 0;
+  let markHydrationFailed = (): void => undefined;
+  const hydrationFailed = new Promise<void>((settle) => {
+    markHydrationFailed = settle;
+  });
+  let releaseRetry = (): void => undefined;
+  const retryGate = new Promise<void>((settle) => {
+    releaseRetry = settle;
+  });
+  await page.route("**/api/drafts", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    draftReads += 1;
+    if (draftReads === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "not-json",
+      });
+      markHydrationFailed();
+      return;
+    }
+    const response = await route.fetch();
+    await retryGate;
+    await route.fulfill({ response });
+  });
+  await page.reload();
+  await hydrationFailed;
+
+  const stagedBody = "Persist this comment after hydration recovers.";
+  const activeDraft = "Persist this plan-wide draft after recovery.";
+  await stageComment(page, stagedBody);
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await rail.getByRole("textbox", { name: "Plan-wide chat" }).fill(activeDraft);
+  await expect
+    .poll(() => draftReads, { timeout: 1_500 })
+    .toBeGreaterThanOrEqual(2);
+
+  const persisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  releaseRetry();
+  await persisted;
+  await page.unroute("**/api/drafts");
+  await page.reload();
+
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  const restoredRail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(restoredRail).toContainText(stagedBody);
+  await restoredRail.getByRole("tab", { name: "Chat" }).click();
+  await expect(
+    restoredRail.getByRole("textbox", { name: "Plan-wide chat" }),
+  ).toHaveValue(activeDraft);
+});
+
 test("should round-trip the active plan-wide draft through hydration", async ({
   page,
   reviewRuntimeUrl,
