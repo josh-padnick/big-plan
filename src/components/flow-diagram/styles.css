@@ -938,7 +938,7 @@ classes.
    is the cascade-chasing that `_shared/figure-controls` documents and
    deletes: dragging resting utilities into stylesheets, or re-pointing the
    token a utility happens to read. Both only relocate the fragility. See
-   ENGINEERING_PRACTICES.md under Styling owned markup. */
+   _internal/ENGINEERING_PRACTICES.md under Styling owned markup. */
 @layer bp-state {
   /* Override invariant: proposed removal paint beats resting text-color
      utilities. Removed, never vanished: the element keeps its place and its

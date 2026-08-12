@@ -6,3 +6,5 @@ playwright-report/
 examples/*.html
 .DS_Store
 .claude/
+.big-plan/
+data/

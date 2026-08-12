@@ -1,5 +1,5 @@
 // ESLint flat config. Two jobs: the typescript-eslint recommended baseline
-// with the conventions ENGINEERING_PRACTICES.md promises (separate type
+// with the conventions _internal/ENGINEERING_PRACTICES.md promises (separate type
 // imports), and the project-specific guardrails that convention alone cannot
 // enforce - most importantly that Playwright specs use the extended test from
 // test/fixtures (which fails on console errors) instead of importing

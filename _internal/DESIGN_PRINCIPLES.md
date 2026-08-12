@@ -1,7 +1,7 @@
 # Big Plan design principles
 
 Owns how Big Plan looks and why.
-[AGENTS.md](AGENTS.md) owns the product model and source placement.
+[AGENTS.md](../AGENTS.md) owns the product model and source placement.
 [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) owns how to write the styling code.
 `src/render/global.css` owns the token values; this document owns the rules for choosing among them.
 
