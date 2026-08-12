@@ -34,7 +34,13 @@ const reviewArguments = (
     if (argument === "--idle-timeout") {
       const value = args[index + 1];
       const parsed = Number(value);
-      if (value === undefined || !Number.isFinite(parsed) || parsed < 0) {
+      if (
+        value === undefined ||
+        value.trim() === "" ||
+        !Number.isFinite(parsed) ||
+        parsed < 0 ||
+        !Number.isFinite(parsed * 60_000)
+      ) {
         throw new AxiError(
           "--idle-timeout must be zero or a positive number of minutes",
           "INVALID_INPUT",

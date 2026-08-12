@@ -990,6 +990,7 @@ Restores the selected snapshot as a new current plan.
     // A component root without a dedicated text treatment defaults to the
     // rendered evidence; components with one keep the text path so the lens
     // can diff their declared sub-targets instead.
+    expect(httpEndpoint).toBeDefined();
     expect(httpEndpoint?.oldHtml).toBeUndefined();
     expect(httpEndpoint?.newHtml).toBeUndefined();
     const httpEndpointField = value.locations.find(
@@ -998,8 +999,10 @@ Restores the selected snapshot as a new current plan.
     expect(httpEndpointField).toBeDefined();
     expect(httpEndpointField?.oldHtml).toBeUndefined();
     expect(httpEndpointField?.newHtml).toBeUndefined();
+    expect(quickSummary).toBeDefined();
     expect(quickSummary?.oldHtml).toBeUndefined();
     expect(quickSummary?.newHtml).toBeUndefined();
+    expect(quickSummaryFacet).toBeDefined();
     expect(quickSummaryFacet?.oldHtml).toBeUndefined();
     expect(quickSummaryFacet?.newHtml).toBeUndefined();
     // This case compiles both snapshots through every first-class component,

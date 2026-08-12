@@ -257,26 +257,47 @@ const SnapshotTable = ({
       data-authored-prose=""
       data-review-diff-table=""
     >
-      <tbody data-authored-prose="">
-        {rows.map((row, rowIndex) => {
-          const cells = sideText(row, side).trim().split(/\n+/u);
-          return (
-            <tr key={`${row.scope}-${rowIndex}`} data-authored-prose="">
-              {cells.map((cell, cellIndex) => {
-                const Cell = rowIndex === 0 ? "th" : "td";
-                return (
-                  <Cell
-                    key={`${cellIndex}-${cell}`}
-                    className="min-w-0 [overflow-wrap:anywhere]"
-                    data-authored-prose=""
-                  >
-                    {cell}
-                  </Cell>
-                );
-              })}
+      {(() => {
+        const headers = rows.find((row) =>
+          side === "old"
+            ? row.oldTableHeaders !== undefined
+            : row.newTableHeaders !== undefined,
+        );
+        const labels =
+          side === "old" ? headers?.oldTableHeaders : headers?.newTableHeaders;
+        return labels === undefined ? null : (
+          <thead data-authored-prose="">
+            <tr data-authored-prose="">
+              {labels.map((label) => (
+                <th key={label} data-authored-prose="">
+                  {label}
+                </th>
+              ))}
             </tr>
-          );
-        })}
+          </thead>
+        );
+      })()}
+      <tbody data-authored-prose="">
+        {rows
+          .filter((row) => !row.isTableHeader)
+          .map((row, rowIndex) => {
+            const cells = sideText(row, side).trim().split(/\n+/u);
+            return (
+              <tr key={`${row.scope}-${rowIndex}`} data-authored-prose="">
+                {cells.map((cell, cellIndex) => {
+                  return (
+                    <td
+                      key={`${cellIndex}-${cell}`}
+                      className="min-w-0 [overflow-wrap:anywhere]"
+                      data-authored-prose=""
+                    >
+                      {cell}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
       </tbody>
     </table>
   </div>

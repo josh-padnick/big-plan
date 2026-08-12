@@ -181,7 +181,7 @@ const liveBlockText = (element: HTMLElement): string => {
   const clone = element.cloneNode(true);
   if (!(clone instanceof HTMLElement)) return element.textContent ?? "";
   for (const injected of clone.querySelectorAll(
-    ".sr-only, [hidden], [data-review-anchor-host], [data-review-toolbar-host], [data-flow-comment-marker]",
+    ".sr-only, [hidden], [data-review-anchor-host], [data-review-toolbar-host], [data-review-slide-host], [data-flow-comment-marker]",
   )) {
     injected.remove();
   }

@@ -430,14 +430,22 @@ export const validateComments = ({
 export const validateStoredComments = ({
   value,
   now,
+  fallbackPremiseSnapshot,
 }: {
   readonly value: unknown;
   readonly now: string;
+  readonly fallbackPremiseSnapshot?: string;
 }): ReadonlyArray<ReviewComment> =>
   validateCommentList({
     value,
     now,
     targetFor: (comment) => validateStoredTarget(comment.target),
+    premiseSnapshotFor: (comment) =>
+      asSnapshotDigest(
+        comment.premiseSnapshot ??
+          comment.sourceRevision ??
+          fallbackPremiseSnapshot,
+      ),
   });
 
 /** Validates draft edits while preserving targets already accepted by the runtime. */
@@ -466,6 +474,6 @@ export const validateCommentUpdates = ({
       existingById.get(id)?.createdAt ?? asTimestamp(comment.createdAt, now),
     premiseSnapshotFor: (comment, id) =>
       existingById.get(id)?.premiseSnapshot ??
-      asSnapshotDigest(comment.premiseSnapshot),
+      asSnapshotDigest(comment.premiseSnapshot ?? comment.sourceRevision),
   });
 };

@@ -1240,6 +1240,16 @@ addEventListener("resize", () => {
 }, { passive: true });
 const wireWireframes = () => {
   const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
+  if (wireframeSizeObserver !== null) {
+    for (const previousRoot of wireframeRoots) {
+      if (previousRoot.isConnected) continue;
+      for (const screen of previousRoot.querySelectorAll(
+        "[data-wireframe-screen]",
+      )) {
+        wireframeSizeObserver.unobserve(screen);
+      }
+    }
+  }
   wireframeRoots = roots;
   const fit = fitWireframeScreen;
   for (const root of roots) {

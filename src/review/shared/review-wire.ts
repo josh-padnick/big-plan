@@ -111,6 +111,9 @@ export type DiffLocation = {
   readonly newText: string;
   readonly oldPresentation?: BlockPresentation;
   readonly newPresentation?: BlockPresentation;
+  readonly oldTableHeaders?: ReadonlyArray<string>;
+  readonly newTableHeaders?: ReadonlyArray<string>;
+  readonly isTableHeader?: boolean;
   readonly runs: ReadonlyArray<DiffRun>;
   readonly oldHtml?: string;
   readonly newHtml?: string;
@@ -538,6 +541,15 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
           newText: location.newText,
           ...(oldPresentation === undefined ? {} : { oldPresentation }),
           ...(newPresentation === undefined ? {} : { newPresentation }),
+          ...(Array.isArray(location.oldTableHeaders) &&
+          location.oldTableHeaders.every((entry) => typeof entry === "string")
+            ? { oldTableHeaders: location.oldTableHeaders }
+            : {}),
+          ...(Array.isArray(location.newTableHeaders) &&
+          location.newTableHeaders.every((entry) => typeof entry === "string")
+            ? { newTableHeaders: location.newTableHeaders }
+            : {}),
+          ...(location.isTableHeader === true ? { isTableHeader: true } : {}),
           ...(typeof location.oldBlockId === "string"
             ? { oldBlockId: location.oldBlockId }
             : {}),
@@ -561,6 +573,7 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
       ];
     },
   );
+  if (locations.length !== value.locations.length) return null;
   const places = value.places.flatMap((place): ReadonlyArray<DiffPlace> => {
     if (
       !isReviewWireRecord(place) ||

@@ -53,6 +53,9 @@ export type BlockDescriptor = {
   // its rows, columns, and cells, or the component root for its declared
   // internals. Absent on every top-level block.
   readonly ownerId?: string;
+  /** Header labels carried by table rows so isolated row diffs keep semantics. */
+  readonly tableHeaders?: ReadonlyArray<string>;
+  readonly isTableHeader?: boolean;
   // The block's meaning-bearing presentation facts. Absent when the block
   // carries none, and absence downstream renders neutrally rather than as a
   // guessed default.
@@ -435,6 +438,8 @@ const stampBlock = ({
   counter,
   isComponentRoot = false,
   ownerId,
+  tableHeaders,
+  isTableHeader = false,
 }: {
   readonly node: Element;
   readonly kind: string;
@@ -445,6 +450,8 @@ const stampBlock = ({
   readonly counter: ScopeCounter;
   readonly isComponentRoot?: boolean;
   readonly ownerId?: string;
+  readonly tableHeaders?: ReadonlyArray<string>;
+  readonly isTableHeader?: boolean;
 }): string => {
   const id = allocateId({ scope, kind, counter });
   node.properties["data-block-id"] = id;
@@ -460,6 +467,8 @@ const stampBlock = ({
     text: textOf(node),
     isComponentRoot,
     ...(ownerId === undefined ? {} : { ownerId }),
+    ...(tableHeaders === undefined ? {} : { tableHeaders }),
+    ...(isTableHeader ? { isTableHeader: true } : {}),
     ...(presentation === undefined ? {} : { presentation }),
   });
   return id;
@@ -498,6 +507,13 @@ const stampTableTargets = ({
       const firstCell = cells[0];
       const label =
         firstCell === undefined ? "Table row" : summarize(textOf(firstCell));
+      const isHeader = cells.some((cell) => cell.tagName === "th");
+      if (isHeader) {
+        columnLabels = cells.map((cell, index) => {
+          const cellLabel = summarize(textOf(cell));
+          return cellLabel.length > 0 ? cellLabel : `Column ${index + 1}`;
+        });
+      }
       stampBlock({
         node: candidate,
         kind: "table-row",
@@ -507,11 +523,12 @@ const stampTableTargets = ({
         blocks,
         counter,
         ownerId: tableId,
+        tableHeaders: columnLabels,
+        isTableHeader: isHeader,
       });
 
-      const isHeader = cells.some((cell) => cell.tagName === "th");
       if (isHeader) {
-        columnLabels = cells.map((cell, index) => {
+        cells.forEach((cell, index) => {
           const cellLabel = summarize(textOf(cell));
           const columnLabel =
             cellLabel.length > 0 ? cellLabel : `Column ${index + 1}`;
@@ -525,7 +542,6 @@ const stampTableTargets = ({
             counter,
             ownerId: tableId,
           });
-          return columnLabel;
         });
         return;
       }

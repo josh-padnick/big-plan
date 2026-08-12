@@ -6,9 +6,16 @@ import type {
   ComponentPropsWithRef,
   HTMLAttributes,
   KeyboardEvent,
-  ReactNode,
+  ReactElement,
 } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  cloneElement,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 const joinClasses = (
@@ -202,7 +209,7 @@ export const Badge = ({
 
 type TooltipProps = {
   readonly label: string;
-  readonly children: ReactNode;
+  readonly children: ReactElement<{ "aria-describedby"?: string }>;
   readonly isInstant?: boolean;
 };
 
@@ -212,6 +219,7 @@ export const Tooltip = ({
   children,
   isInstant = false,
 }: TooltipProps) => {
+  const tooltipId = useId();
   const anchorRef = useRef<HTMLSpanElement>(null);
   const timerRef = useRef<number | null>(null);
   const [position, setPosition] = useState<{
@@ -250,6 +258,26 @@ export const Tooltip = ({
     },
     [],
   );
+  useEffect(() => {
+    if (position === null) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      hide();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [position]);
+  useLayoutEffect(() => {
+    if (position === null) return;
+    const reposition = () => reveal();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [position]);
   return (
     <span
       ref={anchorRef}
@@ -259,11 +287,12 @@ export const Tooltip = ({
       onFocusCapture={show}
       onBlurCapture={hide}
     >
-      {children}
+      {cloneElement(children, { "aria-describedby": tooltipId })}
       {position === null
         ? null
         : createPortal(
             <span
+              id={tooltipId}
               role="tooltip"
               className="pointer-events-none fixed z-[2147483647] w-max max-w-44 -translate-x-1/2 -translate-y-full rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs font-semibold leading-[1.35] text-[var(--bg)] shadow-floating"
               style={{ top: position.top, left: position.left }}

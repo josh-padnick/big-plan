@@ -188,6 +188,26 @@ describe("review store revision history", () => {
     await expect(readSnapshot({ store, snapshot })).resolves.toBe("# First\n");
   });
 
+  it("should migrate legacy revisions into snapshots without overwriting them", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    const snapshot = "2222222222222222";
+    const legacyDirectory = join(store.reviewDirectory, "revisions");
+    await mkdir(legacyDirectory, { recursive: true });
+    await writeFile(join(legacyDirectory, `${snapshot}.mdx`), "# Legacy\n");
+
+    await prepareStore(store);
+    await expect(readSnapshot({ store, snapshot })).resolves.toBe("# Legacy\n");
+    await writeFile(
+      join(store.snapshotDirectory, `${snapshot}.mdx`),
+      "# Current\n",
+    );
+    await prepareStore(store);
+    await expect(readSnapshot({ store, snapshot })).resolves.toBe(
+      "# Current\n",
+    );
+  });
+
   it("should persist resolved threads independently of browser storage", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });

@@ -29,7 +29,7 @@ Verify the causal boundary, the in-place lens, and the historical state.
 | Feedback on an older plan version | Stale badge and premise-to-current diff | Premise to current |
 
 ```ts
-type Outcome = "answered" | "changed" | "needs-input" | "declined";
+type Outcome = "answered" | "changed" | "warning" | "needs-input" | "declined";
 
 type SnapshotExchange = {
   premiseSnapshot: string;

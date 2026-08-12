@@ -166,7 +166,12 @@ const CurrentActivityCard = ({
     if (attentionKey === 0) return;
     const card = cardRef.current;
     if (card === null) return;
-    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    card.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "nearest",
+    });
     card.focus({ preventScroll: true });
     setIsAttentionActive(true);
     const timer = window.setTimeout(() => setIsAttentionActive(false), 1_200);

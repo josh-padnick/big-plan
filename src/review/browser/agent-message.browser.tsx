@@ -282,8 +282,7 @@ export const RequestStatusStrip = ({
     .filter(
       (event, index, events) =>
         index === 0 ||
-        events[index - 1]?.step.toLocaleLowerCase() !==
-          event.step.toLocaleLowerCase(),
+        events[index - 1]?.step.toLowerCase() !== event.step.toLowerCase(),
     )
     .slice(-8);
   const current = meaningful.at(-1);
@@ -519,7 +518,8 @@ export const AgentChangeDigest = ({
     isPlaceAccepted(diff, place.placeId),
   ).length;
   const allAccepted = acceptedCount === available.length;
-  const ownsActiveTour = activeDiff === diff;
+  const ownsActiveTour =
+    activeDiff?.from === diff.from && activeDiff?.to === diff.to;
   const isActive =
     ownsActiveTour &&
     available.some((place) => place.placeId === activePlaceId);

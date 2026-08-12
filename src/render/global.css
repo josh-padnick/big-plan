@@ -200,7 +200,7 @@ it that way: a band carries primary or secondary text, never tertiary.
      alone (slide gutter, table corner, callout, decision) recedes one ramp step
      past tertiary text until hover restores ink. A comment control inside a
      shared control bar keeps the ordinary control colour. */
-  --comment-rest-c: var(--grey-400);
+  --comment-rest-c: var(--grey-500);
 
   /* Lines. Kept because a few separations genuinely need one; depth is the
      first choice and a border is the exception. */

@@ -136,9 +136,9 @@ export const agentPresenceIsFresh = ({
 }): boolean =>
   connected &&
   Number.isFinite(heartbeatAt) &&
+  Number.isFinite(now) &&
   heartbeatAt > 0 &&
-  now - heartbeatAt >= 0 &&
-  now - heartbeatAt <= AGENT_STALL_MS;
+  Math.max(0, now - heartbeatAt) <= AGENT_STALL_MS;
 
 /** Explains a lost lease without claiming why the external agent stopped. */
 const disconnectedSupporting = ({
@@ -148,7 +148,10 @@ const disconnectedSupporting = ({
   readonly heartbeatAt: number;
   readonly now: number;
 }): string => {
-  const quietFor = compactDurationLabel({ start: heartbeatAt, end: now });
+  const quietFor = compactDurationLabel({
+    start: heartbeatAt,
+    end: Math.max(now, heartbeatAt),
+  });
   return quietFor === null
     ? "Reconnect the coding agent to continue. All comments are safe."
     : `No agent signal for ${quietFor}; the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;

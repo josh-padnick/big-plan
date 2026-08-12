@@ -5,4 +5,4 @@
 
 /** Normalizes text for identity comparison across snapshots and renderings. */
 export const normalizedText = (value: string): string =>
-  value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  value.replace(/\s+/g, " ").trim().toLowerCase();

@@ -2343,7 +2343,10 @@ export const DIAGRAM_SCRIPT = `
       );
     }
     for (const key of Array.from(canvas.keys())) {
-      if (!key.isConnected) canvas.delete(key);
+      if (!key.isConnected) {
+        sizes?.unobserve(key);
+        canvas.delete(key);
+      }
     }
     for (const key of Array.from(collectors.keys())) {
       if (!key.isConnected) collectors.delete(key);

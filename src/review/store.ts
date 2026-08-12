@@ -192,6 +192,39 @@ export const reviewStoreFor = ({
 const IGNORE_ALL =
   "# Review state is local to this machine and never shared.\n*\n";
 
+const migrateLegacySnapshots = async (store: ReviewStore): Promise<void> => {
+  const legacyDirectory = inside({
+    base: store.reviewDirectory,
+    leaf: "revisions",
+  });
+  let entries;
+  try {
+    entries = await readdir(legacyDirectory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || !/^[a-f0-9]{16,64}\.mdx$/.test(entry.name)) {
+      continue;
+    }
+    const sourcePath = inside({ base: legacyDirectory, leaf: entry.name });
+    const targetPath = inside({
+      base: store.snapshotDirectory,
+      leaf: entry.name,
+    });
+    const source = await readFile(sourcePath, "utf8");
+    await writeFile(targetPath, source, { mode: FILE_MODE, flag: "wx" }).catch(
+      async (error: unknown) => {
+        try {
+          await readFile(targetPath, "utf8");
+        } catch {
+          throw error;
+        }
+      },
+    );
+  }
+};
+
 /** Creates the review directories owner-only and keeps them out of git. */
 export const prepareStore = async (store: ReviewStore): Promise<void> => {
   await mkdir(store.reviewDirectory, { recursive: true, mode: DIRECTORY_MODE });
@@ -219,6 +252,7 @@ export const prepareStore = async (store: ReviewStore): Promise<void> => {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
+  await migrateLegacySnapshots(store);
   await mkdir(store.agentConnectionDirectory, {
     recursive: true,
     mode: DIRECTORY_MODE,

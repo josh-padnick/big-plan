@@ -35,13 +35,20 @@ test("should review a static Mermaid SVG through the diagram canvas", async ({
   ).toHaveAttribute("aria-pressed", "true");
   const viewerCluster = diagram.locator("[data-flow-zoom-controls]");
   const toolbarOrder = await viewerCluster.evaluate((element) =>
-    Array.from(element.children).map((child) => {
-      if (child.matches(".flow-diagram-zoom")) return "zoom";
-      if (child.matches(".flow-diagram-fit")) return "fit";
-      if (child.matches("[data-flow-figure-comment]")) return "comment";
-      if (child.matches("[data-figure-maximize]")) return "maximize";
-      if (child.getAttribute("aria-hidden") === "true") return "separator";
-      return "other";
+    Array.from(element.children).flatMap((child) => {
+      if (child.matches(".figure-action-group")) {
+        return Array.from(child.querySelectorAll("button")).map((button) =>
+          button.matches("[data-flow-figure-comment]")
+            ? "comment"
+            : button.matches("[data-figure-maximize]")
+              ? "maximize"
+              : "other",
+        );
+      }
+      if (child.matches(".flow-diagram-zoom")) return ["zoom"];
+      if (child.matches(".flow-diagram-fit")) return ["fit"];
+      if (child.getAttribute("aria-hidden") === "true") return ["separator"];
+      return ["other"];
     }),
   );
   expect(toolbarOrder).toEqual([
@@ -592,12 +599,12 @@ test("should offer one whole-figure comment control, left of maximize", async ({
   await expect(comments).toHaveCount(1);
 
   const order = await diagram
-    .locator("[data-flow-zoom-controls]")
+    .locator("[data-flow-zoom-controls] .figure-action-group")
     .evaluate((element) =>
-      Array.from(element.children)
-        .map((child) => {
-          if (child.matches("[data-flow-figure-comment]")) return "comment";
-          if (child.matches("[data-figure-maximize]")) return "maximize";
+      Array.from(element.querySelectorAll("button"))
+        .map((button) => {
+          if (button.matches("[data-flow-figure-comment]")) return "comment";
+          if (button.matches("[data-figure-maximize]")) return "maximize";
           return null;
         })
         .filter((entry) => entry !== null),

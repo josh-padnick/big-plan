@@ -163,6 +163,17 @@ const snapshotDigest = (value: unknown, field: string): string => {
   return candidate;
 };
 
+const migratedSnapshot = ({
+  value,
+  currentField,
+  legacyField,
+}: {
+  readonly value: Readonly<Record<string, unknown>>;
+  readonly currentField: string;
+  readonly legacyField: string;
+}): string =>
+  snapshotDigest(value[currentField] ?? value[legacyField], currentField);
+
 const target = (value: unknown): CommentTarget => {
   if (!isRecord(value)) {
     throw new AgentExchangeRejected(
@@ -236,10 +247,11 @@ const comment = (value: unknown): ReviewComment => {
     id: exchangeCommentId(value.id, "comment.id"),
     body: text({ value: value.body, field: "comment.body" }),
     createdAt: timestamp(value.createdAt),
-    premiseSnapshot: snapshotDigest(
-      value.premiseSnapshot,
-      "comment.premiseSnapshot",
-    ),
+    premiseSnapshot: migratedSnapshot({
+      value,
+      currentField: "premiseSnapshot",
+      legacyField: "sourceRevision",
+    }),
     target: target(value.target),
   };
 };
@@ -250,10 +262,12 @@ const requestBase = (
   if (value.version !== 1) {
     throw new AgentExchangeRejected("Unsupported agent request version");
   }
+  const rawBaselineSnapshot =
+    value.baselineSnapshot ?? value.claimedFromRevision;
   const baselineSnapshot =
-    value.baselineSnapshot === undefined
+    rawBaselineSnapshot === undefined
       ? undefined
-      : snapshotDigest(value.baselineSnapshot, "baselineSnapshot");
+      : snapshotDigest(rawBaselineSnapshot, "baselineSnapshot");
   const claimedAt =
     value.claimedAt === undefined ? undefined : timestamp(value.claimedAt);
   const canceledAt =
@@ -268,7 +282,11 @@ const requestBase = (
     requestId: id(value.requestId, "requestId"),
     sessionId: id(value.sessionId, "sessionId"),
     planId: id(value.planId, "planId"),
-    premiseSnapshot: snapshotDigest(value.premiseSnapshot, "premiseSnapshot"),
+    premiseSnapshot: migratedSnapshot({
+      value,
+      currentField: "premiseSnapshot",
+      legacyField: "sourceRevision",
+    }),
     createdAt: timestamp(value.createdAt),
     ...(baselineSnapshot === undefined ? {} : { baselineSnapshot, claimedAt }),
     ...(canceledAt === undefined ? {} : { canceledAt }),
@@ -543,7 +561,11 @@ const validateStoredResponse = ({
     requestId: request.requestId,
     sessionId: request.sessionId,
     planId: request.planId,
-    resultSnapshot: snapshotDigest(value.resultSnapshot, "resultSnapshot"),
+    resultSnapshot: migratedSnapshot({
+      value,
+      currentField: "resultSnapshot",
+      legacyField: "sourceRevision",
+    }),
     createdAt: timestamp(value.createdAt),
   };
   if (request.kind === "chat") {

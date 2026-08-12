@@ -154,14 +154,28 @@ const renderedBlockHtml = ({
   };
   collectIdentifiers(block);
   const rewriteReferences = (value: string): string => {
-    let revised = value;
-    for (const [identifier, replacement] of identifiers) {
-      revised = revised
-        .replaceAll(`url(#${identifier})`, `url(#${replacement})`)
-        .replaceAll(`#${identifier}`, `#${replacement}`);
-      if (revised === identifier) revised = replacement;
+    const exactReplacement = identifiers.get(value);
+    if (exactReplacement !== undefined) return exactReplacement;
+    const tokens = value.split(/\s+/u);
+    if (tokens.length > 1 && tokens.every((token) => identifiers.has(token))) {
+      return tokens.map((token) => identifiers.get(token) ?? token).join(" ");
     }
-    return revised;
+    return value.replace(
+      /url\(#([^)]+)\)|#([A-Za-z][A-Za-z0-9_:-]*)/gu,
+      (
+        match,
+        urlIdentifier: string | undefined,
+        hashIdentifier: string | undefined,
+      ) => {
+        const identifier = urlIdentifier ?? hashIdentifier;
+        if (identifier === undefined) return match;
+        const replacement = identifiers.get(identifier);
+        if (replacement === undefined) return match;
+        return urlIdentifier === undefined
+          ? `#${replacement}`
+          : `url(#${replacement})`;
+      },
+    );
   };
   const scrubReviewIdentity = (node: Element): void => {
     delete node.properties.dataBlockId;
@@ -418,6 +432,7 @@ const storedFeedbackSubmission = ({
   const storedComments = validateStoredComments({
     value: value.feedback.comments,
     now: new Date().toISOString(),
+    fallbackPremiseSnapshot: deriveSnapshotDigest(value.source),
   });
   if (
     feedbackSubmissionContent(storedComments) !==
@@ -503,7 +518,11 @@ export const startReviewRuntime = async ({
     readComments({
       path,
       validate: (value) =>
-        validateStoredComments({ value, now: new Date().toISOString() }),
+        validateStoredComments({
+          value,
+          now: new Date().toISOString(),
+          fallbackPremiseSnapshot: initialSnapshot,
+        }),
     });
   const [storedDrafts, storedSent, storedResolved, storedExchange] =
     await Promise.all([
@@ -545,7 +564,11 @@ export const startReviewRuntime = async ({
     const changeTargets = [
       ...new Set(
         previewDiff.locations.flatMap((location) =>
-          location.newBlockId === undefined ? [] : [location.newBlockId],
+          location.newBlockId === undefined
+            ? location.oldBlockId === undefined
+              ? []
+              : [location.oldBlockId]
+            : [location.newBlockId],
         ),
       ),
     ];
@@ -597,13 +620,20 @@ export const startReviewRuntime = async ({
         value: {
           requestId: feedbackRequest.requestId,
           outcomes: [
-            {
-              commentId: previewComment.id,
-              state: "changed",
-              message:
-                "The answer now carries its own causal Was/Now evidence.",
-              changeTargets,
-            },
+            changeTargets.length === 0
+              ? {
+                  commentId: previewComment.id,
+                  state: "answered",
+                  message:
+                    "The preview source matches the plan, so there is no causal change to show yet.",
+                }
+              : {
+                  commentId: previewComment.id,
+                  state: "changed",
+                  message:
+                    "The answer now carries its own causal Was/Now evidence.",
+                  changeTargets,
+                },
           ],
         },
         request: claimedFeedbackRequest,
@@ -707,7 +737,11 @@ export const startReviewRuntime = async ({
   let acceptedSnapshot = initialSnapshot;
 
   const validateStored = (value: unknown): ReadonlyArray<ReviewComment> =>
-    validateStoredComments({ value, now: new Date().toISOString() });
+    validateStoredComments({
+      value,
+      now: new Date().toISOString(),
+      fallbackPremiseSnapshot: initialSnapshot,
+    });
 
   const readStoredComments = (
     path: string,
@@ -1496,6 +1530,7 @@ export const startReviewRuntime = async ({
     throw new Error(`Unhandled review route ${route.path}`);
   };
 
+  let lastReviewActivityAt = Date.now();
   const handle = async ({
     request,
     response,
@@ -1700,7 +1735,6 @@ export const startReviewRuntime = async ({
   }, REVIEW_HEARTBEAT_INTERVAL_MS);
   connectionTimer.unref();
 
-  let lastReviewActivityAt = Date.now();
   let closed = false;
   let idleTimer: ReturnType<typeof setInterval> | undefined;
   const closeRuntime = async (

@@ -37,6 +37,8 @@ type BuiltSnapshotDiff = Omit<SnapshotDiff, "locations"> & {
 };
 
 const ALIGNMENT_ACCEPTANCE = 0.52;
+const ALIGNMENT_INDEX_WINDOW = 80;
+const MAX_LCS_CELLS = 40_000;
 const REWRITTEN_SURVIVAL = 0.2;
 const PLACE_LABEL_LIMIT = 90;
 const DERIVED_BLOCK_KINDS = new Set(["table-of-contents"]);
@@ -174,6 +176,12 @@ export const diffWords = ({
 }): ReadonlyArray<DiffRun> => {
   const oldTokens = tokens(before);
   const newTokens = tokens(after);
+  if (oldTokens.length * newTokens.length > MAX_LCS_CELLS) {
+    return [
+      ...(before === "" ? [] : [{ op: "del" as const, text: before }]),
+      ...(after === "" ? [] : [{ op: "ins" as const, text: after }]),
+    ];
+  }
   const pairs = lcsPairs({
     left: oldTokens.map((_, index) => index),
     right: newTokens.map((_, index) => index),
@@ -248,6 +256,20 @@ const textSimilarity = (left: string, right: string): number => {
   return (2 * overlap) / Math.max(1, leftTokens.size + rightTokens.size);
 };
 
+const samePresentation = (
+  left: SnapshotBlock["presentation"],
+  right: SnapshotBlock["presentation"],
+): boolean =>
+  left === undefined || right === undefined
+    ? left === right
+    : left.aspect !== right.aspect
+      ? false
+      : left.aspect === "callout" && right.aspect === "callout"
+        ? left.calloutType === right.calloutType
+        : left.aspect === "list" && right.aspect === "list"
+          ? left.isOrdered === right.isOrdered
+          : true;
+
 const pairScore = ({
   oldBlock,
   newBlock,
@@ -300,13 +322,33 @@ export const diffSnapshots = ({
   const pairs: Array<readonly [number, number]> = [];
   const usedOld = new Set<number>();
   const usedNew = new Set<number>();
-  const candidates = before.flatMap((oldBlock, oldIndex) =>
-    after.map((newBlock, newIndex) => ({
-      oldIndex,
-      newIndex,
-      score: pairScore({ oldBlock, newBlock, oldIndex, newIndex }),
-    })),
-  );
+  const candidates: Array<{
+    readonly oldIndex: number;
+    readonly newIndex: number;
+    readonly score: number;
+  }> = [];
+  for (const [oldIndex, oldBlock] of before.entries()) {
+    if (usedOld.has(oldIndex)) continue;
+    const firstNewIndex = Math.max(0, oldIndex - ALIGNMENT_INDEX_WINDOW);
+    const lastNewIndex = Math.min(
+      after.length - 1,
+      oldIndex + ALIGNMENT_INDEX_WINDOW,
+    );
+    for (
+      let newIndex = firstNewIndex;
+      newIndex <= lastNewIndex;
+      newIndex += 1
+    ) {
+      if (usedNew.has(newIndex)) continue;
+      const newBlock = after.at(newIndex);
+      if (newBlock === undefined || oldBlock.kind !== newBlock.kind) continue;
+      candidates.push({
+        oldIndex,
+        newIndex,
+        score: pairScore({ oldBlock, newBlock, oldIndex, newIndex }),
+      });
+    }
+  }
   candidates.sort(
     (left, right) =>
       right.score - left.score ||
@@ -333,7 +375,10 @@ export const diffSnapshots = ({
     const oldBlock = before.at(oldIndex);
     const newBlock = after.at(newIndex);
     if (oldBlock === undefined || newBlock === undefined) continue;
-    if (normalizedText(oldBlock.text) === normalizedText(newBlock.text))
+    if (
+      normalizedText(oldBlock.text) === normalizedText(newBlock.text) &&
+      samePresentation(oldBlock.presentation, newBlock.presentation)
+    )
       continue;
     locations.push({
       status: "changed",
@@ -352,6 +397,13 @@ export const diffSnapshots = ({
       ...(newBlock.presentation === undefined
         ? {}
         : { newPresentation: newBlock.presentation }),
+      ...(oldBlock.tableHeaders === undefined
+        ? {}
+        : { oldTableHeaders: oldBlock.tableHeaders }),
+      ...(newBlock.tableHeaders === undefined
+        ? {}
+        : { newTableHeaders: newBlock.tableHeaders }),
+      ...(newBlock.isTableHeader ? { isTableHeader: true } : {}),
       runs: runsFor({
         kind: newBlock.kind,
         isComponentRoot: newBlock.isComponentRoot,
@@ -393,6 +445,10 @@ export const diffSnapshots = ({
       ...(oldBlock.presentation === undefined
         ? {}
         : { oldPresentation: oldBlock.presentation }),
+      ...(oldBlock.tableHeaders === undefined
+        ? {}
+        : { oldTableHeaders: oldBlock.tableHeaders }),
+      ...(oldBlock.isTableHeader ? { isTableHeader: true } : {}),
       runs: [{ op: "del", text: oldBlock.text }],
       ...(afterBlockId === undefined ? {} : { afterBlockId }),
       ...(beforeBlockId === undefined ? {} : { beforeBlockId }),
@@ -400,7 +456,7 @@ export const diffSnapshots = ({
   }
   for (const [newIndex, newBlock] of after.entries()) {
     if (usedNew.has(newIndex)) continue;
-    const previous = after.at(newIndex - 1);
+    const previous = newIndex === 0 ? undefined : after.at(newIndex - 1);
     const next = after.at(newIndex + 1);
     locations.push({
       status: "added",
@@ -415,6 +471,10 @@ export const diffSnapshots = ({
       ...(newBlock.presentation === undefined
         ? {}
         : { newPresentation: newBlock.presentation }),
+      ...(newBlock.tableHeaders === undefined
+        ? {}
+        : { newTableHeaders: newBlock.tableHeaders }),
+      ...(newBlock.isTableHeader ? { isTableHeader: true } : {}),
       runs: [{ op: "ins", text: newBlock.text }],
       ...(previous === undefined ? {} : { afterBlockId: previous.id }),
       ...(next === undefined ? {} : { beforeBlockId: next.id }),

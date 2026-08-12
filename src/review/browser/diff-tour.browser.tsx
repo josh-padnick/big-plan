@@ -52,6 +52,10 @@ type DiffTourValue = {
 
 const DiffTourContext = createContext<DiffTourValue | null>(null);
 const ACCEPTED_PLACES_STORAGE_KEY = "big-plan.review.accepted-diff-places.v1";
+const ACCEPTED_PLACES_LIMIT = 2_000;
+type EscapeKeyboardEvent = KeyboardEvent & {
+  bigPlanEscapeHandled?: boolean;
+};
 
 const acceptedPlaceKey = (diff: SnapshotDiff, placeId: string): string =>
   `${diff.from}:${diff.to}:${placeId}`;
@@ -136,10 +140,15 @@ export const DiffTourProvider = ({
     [],
   );
   useEffect(() => {
-    window.localStorage.setItem(
-      ACCEPTED_PLACES_STORAGE_KEY,
-      JSON.stringify([...acceptedPlaces]),
-    );
+    try {
+      const entries = [...acceptedPlaces].slice(-ACCEPTED_PLACES_LIMIT);
+      window.localStorage.setItem(
+        ACCEPTED_PLACES_STORAGE_KEY,
+        JSON.stringify(entries),
+      );
+    } catch {
+      // Acceptance remains in memory for this session.
+    }
   }, [acceptedPlaces]);
   const openTour = (next: OpenTour): void => {
     setTour(next);
@@ -150,8 +159,15 @@ export const DiffTourProvider = ({
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape" || tour === null) return;
+      const escapeEvent = event as EscapeKeyboardEvent;
+      if (
+        event.key !== "Escape" ||
+        tour === null ||
+        escapeEvent.bigPlanEscapeHandled === true
+      )
+        return;
       event.preventDefault();
+      escapeEvent.bigPlanEscapeHandled = true;
       closeTour();
     };
     document.addEventListener("keydown", onKeyDown);
