@@ -3011,6 +3011,7 @@ const SentThread = ({
                         {requestOutcome.state === "changed" &&
                         identity !== null ? (
                           <ChangeAttachment
+                            key={`${request.requestId}:${response.resultSnapshot}`}
                             identity={identity}
                             request={request}
                             response={response}
@@ -3203,6 +3204,7 @@ const ChatExchange = ({
         >
           {hasChanges ? (
             <ChangeAttachment
+              key={`${request.requestId}:${response.resultSnapshot}`}
               identity={identity}
               request={request}
               response={response}

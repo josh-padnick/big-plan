@@ -2773,9 +2773,11 @@ ${lowerContent}
       () => typeof window.bigPlan?.feedback?.add === "function",
     );
     const target = page.locator(".code-figure").first();
-    await target.getByRole("button", {
-      name: "Comment on this code snippet",
-    }).click();
+    await target
+      .getByRole("button", {
+        name: "Comment on this code snippet",
+      })
+      .click();
     const composer = page.getByRole("dialog", { name: /Comment on/ });
     const submitRightAway = composer.getByRole("switch", {
       name: "Submit right away",
@@ -2811,7 +2813,9 @@ ${lowerContent}
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
-    const comment = request.comments.find((entry) => entry.body === commentBody);
+    const comment = request.comments.find(
+      (entry) => entry.body === commentBody,
+    );
     if (comment === undefined || comment.target.type !== "block") {
       throw new Error("The paragraph comment did not retain a block target");
     }
@@ -2906,6 +2910,239 @@ ${lowerContent}
         }),
       )
       .toBe(true);
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should refresh a thread digest when a later reply changes another block", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-digest-refresh-"));
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = `# Digest refresh
+
+## Delivery
+
+~~~ts
+const delivery = "first";
+~~~
+
+## Verification
+
+~~~ts
+const verification = "first";
+~~~
+`;
+  const firstSource = initialSource.replace(
+    'const delivery = "first";',
+    'const delivery = "revised";',
+  );
+  const secondSource = firstSource.replace(
+    'const verification = "first";',
+    'const verification = "revised";',
+  );
+  const commentBody = "Review both delivery and verification.";
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await page.waitForFunction(
+      () => typeof window.bigPlan?.feedback?.add === "function",
+    );
+    const target = page.locator(".code-figure").first();
+    await target
+      .getByRole("button", {
+        name: "Comment on this code snippet",
+      })
+      .click();
+    const composer = page.getByRole("dialog", { name: /Comment on/ });
+    const submitRightAway = composer.getByRole("switch", {
+      name: "Submit right away",
+    });
+    if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+      await submitRightAway.click();
+    }
+    await composer.getByLabel("Add a comment").fill(commentBody);
+    await composer.getByRole("button", { name: "Add Comment" }).click();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    const session = await liveReviewSession(page);
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const firstExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const firstRequest = nextPendingAgentRequest(firstExchange);
+    if (firstRequest === undefined || firstRequest.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+    const comment = firstRequest.comments.find(
+      (entry) => entry.body === commentBody,
+    );
+    if (comment === undefined || comment.target.type !== "block") {
+      throw new Error("The code comment did not retain a block target");
+    }
+    const firstRender = renderDocument({
+      markdown: initialSource,
+      fallbackTitle: "Digest refresh",
+      identity: {},
+    });
+    const firstRevisionRender = renderDocument({
+      markdown: firstSource,
+      fallbackTitle: "Digest refresh",
+      identity: {},
+    });
+    const firstChangedBlocks = new Set(
+      diffSnapshots({
+        before: firstRender.blocks,
+        after: firstRevisionRender.blocks,
+      }).flatMap((location) =>
+        location.newBlockId === undefined ? [] : [location.newBlockId],
+      ),
+    );
+    const firstSnapshot = deriveSnapshotDigest(firstSource);
+    await writeSnapshot({
+      store,
+      snapshot: firstSnapshot,
+      source: firstSource,
+    });
+    await writeFile(session.plan, firstSource, "utf8");
+    const firstClaimed = await claimAgentRequest({
+      store,
+      requestId: firstRequest.requestId,
+      baselineSnapshot: firstRequest.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: firstRequest.requestId,
+          outcomes: [
+            {
+              commentId: comment.id,
+              state: "changed",
+              message: "Revised the delivery boundary.",
+              changeTargets: [comment.target.blockId],
+            },
+          ],
+        },
+        request: firstClaimed,
+        commentsById: commentsFromExchange(firstExchange),
+        changedBlocks: firstChangedBlocks,
+        currentSnapshot: firstSnapshot,
+        now: new Date().toISOString(),
+      }),
+    });
+    await expect(page.locator("article")).toContainText(
+      'const delivery = "revised";',
+      { timeout: 15_000 },
+    );
+
+    const sentThread = rail
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: commentBody });
+    await sentThread
+      .getByRole("button", { name: "Expand thread", exact: true })
+      .click();
+    const reply = sentThread.getByPlaceholder("Reply to the agent…");
+    await reply.fill("Now update verification too.");
+    const replyResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/agent-requests") &&
+        response.request().method() === "POST",
+    );
+    await sentThread.getByRole("button", { name: "Reply" }).click();
+    expect((await replyResponse).ok()).toBe(true);
+
+    const secondExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const secondRequest = nextPendingAgentRequest(secondExchange);
+    if (secondRequest === undefined || secondRequest.kind !== "reply") {
+      throw new Error("The thread reply did not create pending work");
+    }
+    const secondRevisionRender = renderDocument({
+      markdown: secondSource,
+      fallbackTitle: "Digest refresh",
+      identity: {},
+    });
+    const secondChangedBlocks = new Set(
+      diffSnapshots({
+        before: firstRevisionRender.blocks,
+        after: secondRevisionRender.blocks,
+      }).flatMap((location) =>
+        location.newBlockId === undefined ? [] : [location.newBlockId],
+      ),
+    );
+    const secondSnapshot = deriveSnapshotDigest(secondSource);
+    await writeSnapshot({
+      store,
+      snapshot: secondSnapshot,
+      source: secondSource,
+    });
+    await writeFile(session.plan, secondSource, "utf8");
+    const secondClaimed = await claimAgentRequest({
+      store,
+      requestId: secondRequest.requestId,
+      baselineSnapshot: secondRequest.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: secondRequest.requestId,
+          outcomes: [
+            {
+              commentId: comment.id,
+              state: "changed",
+              message: "Revised the verification boundary.",
+              changeTargets: [...secondChangedBlocks],
+            },
+          ],
+        },
+        request: secondClaimed,
+        commentsById: commentsFromExchange(secondExchange),
+        changedBlocks: secondChangedBlocks,
+        currentSnapshot: secondSnapshot,
+        now: new Date().toISOString(),
+      }),
+    });
+    await expect(page.locator("article")).toContainText(
+      'const verification = "revised";',
+      { timeout: 15_000 },
+    );
+
+    await expect(
+      sentThread.getByRole("button", { name: "Review change" }).last(),
+    ).toBeVisible();
+    await sentThread
+      .getByRole("button", { name: "Review change" })
+      .last()
+      .click();
+    const lens = page.locator("[data-review-diff-lens]");
+    await expect(lens).toContainText('const verification = "revised";');
+    await expect(lens).not.toContainText('const delivery = "revised";');
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
