@@ -2914,6 +2914,15 @@ const SentThread = ({
                                   ? "Needs your answer"
                                   : "Declined"}
                         </Badge>
+                        {/* The agent-authored one-line reason scans directly
+                            under the badge as emphasized text, never a second
+                            badge; the badge alone carries the hazard glyph. */}
+                        {requestOutcome.state === "warning" &&
+                        requestOutcome.summary !== undefined ? (
+                          <p className="mt-1.5 text-xs text-[var(--callout-warning-c)]">
+                            <em>{requestOutcome.summary}</em>
+                          </p>
+                        ) : null}
                         {requestOutcome.state === "warning" ? (
                           <div className="mt-2 flex items-center gap-2 border-t border-[color-mix(in_srgb,var(--callout-warning-c)_24%,transparent)] pt-2">
                             <Button

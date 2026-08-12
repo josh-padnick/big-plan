@@ -227,6 +227,74 @@ describe("agent exchange response contract", () => {
   it("should collect original comments as reply validation context", () => {
     expect(commentsFromExchange(snapshot()).get(commentId)).toEqual(comment);
   });
+
+  it("should reject a warning when its scannable summary is missing", () => {
+    expect(() =>
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "warning",
+              message: "This request would cross the standard template.",
+            },
+          ],
+        },
+        request,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set(),
+        currentSnapshot: request.premiseSnapshot,
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toThrow(/one short line naming the boundary/);
+  });
+
+  it("should reject a warning when its summary is only whitespace", () => {
+    expect(() =>
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "warning",
+              summary: "   ",
+              message: "This request would cross the standard template.",
+            },
+          ],
+        },
+        request,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set(),
+        currentSnapshot: request.premiseSnapshot,
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toThrow(/one short line naming the boundary/);
+  });
+
+  it("should reject a warning when its summary exceeds one scannable line", () => {
+    expect(() =>
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "warning",
+              summary: "x".repeat(81),
+              message: "This request would cross the standard template.",
+            },
+          ],
+        },
+        request,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set(),
+        currentSnapshot: request.premiseSnapshot,
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toThrow(/longer than 80 characters/);
+  });
 });
 
 describe("agent exchange filesystem", () => {
@@ -320,6 +388,7 @@ describe("agent exchange filesystem", () => {
             {
               commentId,
               state: "warning",
+              summary: "Would depart from the standard template",
               message:
                 "Fulfilling this request would deviate from the standard template.",
             },
@@ -335,6 +404,7 @@ describe("agent exchange filesystem", () => {
       outcomes: [
         {
           state: "warning",
+          summary: "Would depart from the standard template",
           message:
             "Fulfilling this request would deviate from the standard template.",
         },

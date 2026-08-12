@@ -178,7 +178,8 @@ a model provider itself. The launched coding-agent session uses:
 
 A `changed` outcome is accepted only when the result snapshot differs and every
 named target belongs to the computed snapshot diff. Other outcomes are
-`answered`, `warning`, `needs-input`, and `declined`; a warning makes no edit
+`answered`, `warning`, `needs-input`, and `declined`; a warning makes no edit,
+must carry a short scannable `summary` of the boundary it would cross,
 and waits for explicit reviewer confirmation. **What changed** uses retained
 premise, claim-time baseline, and result snapshots rather than DOM mutation.
 The temporary development-only `review --diff-preview` flag seeds a synthetic

@@ -24,6 +24,8 @@ export type ThreadOutcome = {
   readonly state:
     "answered" | "changed" | "warning" | "needs-input" | "declined";
   readonly message: string;
+  /** One scannable line, published exactly when the state is "warning". */
+  readonly summary?: string;
   readonly changeTargets?: ReadonlyArray<string>;
 };
 

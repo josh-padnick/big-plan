@@ -62,6 +62,7 @@ and publishes one outcome for every comment.
 Until a response exists, a sent thread says **With agent**. A real response
 records an `answered`, `changed`, `warning`, `needs-input`, or `declined`
 outcome and shows the agent's message. A warning leaves the plan unchanged,
+shows its short one-line summary directly under the **Warning** badge,
 explains the standard or template the request would cross, and lets the
 reviewer explicitly choose **Do it anyway**. An accepted result updates the plan in place without
 discarding drafts, open threads, or scroll position.

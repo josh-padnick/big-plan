@@ -148,6 +148,7 @@ test("should pause a nonstandard request behind an explicit warning", async ({
       outcomes: request.comments.map((comment) => ({
         commentId: comment.id,
         state: "warning",
+        summary: "Would depart from the standard template",
         message:
           "Fulfilling this request would deviate from the standard template.",
       })),
@@ -169,6 +170,10 @@ test("should pause a nonstandard request behind an explicit warning", async ({
   await expect(rail).toContainText(
     "Fulfilling this request would deviate from the standard template.",
   );
+  const warningSummary = rail.locator("em", {
+    hasText: "Would depart from the standard template",
+  });
+  await expect(warningSummary).toBeVisible();
   const doItAnyway = rail.getByRole("button", { name: "Do it anyway" });
   await expect(doItAnyway).toBeVisible();
   const override = page.waitForResponse(

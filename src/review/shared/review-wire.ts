@@ -15,6 +15,8 @@ export type AgentOutcome = {
   readonly state:
     "answered" | "changed" | "warning" | "needs-input" | "declined";
   readonly message: string;
+  /** One scannable line, published exactly when the state is "warning". */
+  readonly summary?: string;
   readonly changeTargets: ReadonlyArray<string>;
 };
 
@@ -295,6 +297,9 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
                     commentId: outcome.commentId,
                     state: outcome.state,
                     message: outcome.message,
+                    ...(typeof outcome.summary === "string"
+                      ? { summary: outcome.summary }
+                      : {}),
                     changeTargets: Array.isArray(outcome.changeTargets)
                       ? outcome.changeTargets.filter(
                           (target): target is string =>

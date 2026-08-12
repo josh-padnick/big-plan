@@ -17,6 +17,7 @@ import type { ReviewStore } from "./store.js";
 const TEXT_LIMIT = 4000;
 const MESSAGE_LIMIT = 200;
 const EXCHANGE_LIMIT = 400;
+const WARNING_SUMMARY_LIMIT = 80;
 const ID = /^[a-f0-9]{16}$/;
 const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
 
@@ -59,6 +60,8 @@ export type AgentOutcome = {
   readonly commentId: string;
   readonly state: AgentOutcomeState;
   readonly message: string;
+  /** One scannable line, present exactly when the state is "warning". */
+  readonly summary?: string;
   readonly changeTargets?: ReadonlyArray<string>;
 };
 
@@ -346,6 +349,26 @@ const expectedCommentIds = ({
   return [request.commentId];
 };
 
+/**
+ * A warning pauses the reviewer behind an explicit confirmation, so its badge
+ * needs one scannable line naming the boundary; browser code must never slice
+ * the summary out of the longer message.
+ */
+const warningSummary = (value: unknown): string => {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new AgentExchangeRejected(
+      'A "warning" outcome must carry a "summary": one short line naming the boundary the request would cross, such as "Would mix languages in one list"',
+    );
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > WARNING_SUMMARY_LIMIT) {
+    throw new AgentExchangeRejected(
+      `"summary" is longer than ${WARNING_SUMMARY_LIMIT} characters; keep it to one scannable line`,
+    );
+  }
+  return trimmed;
+};
+
 const outcome = ({
   value,
   request,
@@ -377,6 +400,7 @@ const outcome = ({
     commentId: checkedCommentId,
     state,
     message: text({ value: value.message, field: "message" }),
+    ...(state === "warning" ? { summary: warningSummary(value.summary) } : {}),
   };
   if (state !== "changed") {
     return result;
@@ -549,6 +573,9 @@ const validateStoredResponse = ({
       commentId: checkedCommentId,
       state: entry.state,
       message: text({ value: entry.message, field: "message" }),
+      ...(entry.state === "warning"
+        ? { summary: warningSummary(entry.summary) }
+        : {}),
     };
     if (entry.state !== "changed") {
       return result;
