@@ -882,6 +882,32 @@ src/
 \`\`\`
 
 </FileTreeDiff>
+
+## Contract
+
+<HttpEndpoint method="POST" path="/api/restore" summary="Restore a historical version">
+
+Restores the selected snapshot as a new current plan.
+
+</HttpEndpoint>
+
+## Summary
+
+<QuickSummary>
+
+<Why>
+
+- Reviewers need durable history.
+
+</Why>
+
+<What>
+
+- Version every resolution.
+
+</What>
+
+</QuickSummary>
 `;
     const after = before
       .replace('question="Which path?"', 'question="Which rollout path?"')
@@ -894,7 +920,12 @@ src/
       .replace(
         "  service.ts [modified] - Coordinates review.",
         "  service.ts [modified] - Coordinates plan review.",
-      );
+      )
+      .replace(
+        "Restores the selected snapshot as a new current plan.",
+        "Restores the selected snapshot as a new current plan after confirmation.",
+      )
+      .replace("Version every resolution.", "Version every resolved thread.");
     const from = deriveSnapshotDigest(before);
     const to = deriveSnapshotDigest(after);
     await writeSnapshot({
@@ -933,6 +964,15 @@ src/
     const fileTreeDiff = value.locations.find(
       (location) => location.kind === "file-tree-diff",
     );
+    const httpEndpoint = value.locations.find(
+      (location) => location.kind === "http-endpoint",
+    );
+    const quickSummary = value.locations.find(
+      (location) => location.kind === "quick-summary",
+    );
+    const quickSummaryFacet = value.locations.find(
+      (location) => location.kind === "quick-summary-facet",
+    );
     expect(decision?.oldHtml).toContain("Which path?");
     expect(decision?.newHtml).toContain("Which rollout path?");
     expect(flow?.oldHtml).toContain("Review service");
@@ -947,6 +987,15 @@ src/
     expect(fileTreeDiff?.newHtml).toContain("Coordinates plan review");
     expect(mermaid?.oldHtml).toContain(`review-diff-was-${from}`);
     expect(mermaid?.newHtml).toContain(`review-diff-now-${to}`);
+    // A component root without a dedicated text treatment defaults to the
+    // rendered evidence; components with one keep the text path so the lens
+    // can diff their declared sub-targets instead.
+    expect(httpEndpoint?.oldHtml).toContain("/api/restore");
+    expect(httpEndpoint?.newHtml).toContain("after confirmation");
+    expect(quickSummary?.oldHtml).toBeUndefined();
+    expect(quickSummary?.newHtml).toBeUndefined();
+    expect(quickSummaryFacet?.oldHtml).toBeUndefined();
+    expect(quickSummaryFacet?.newHtml).toBeUndefined();
     // This case compiles both snapshots through every first-class component,
     // including the Mermaid renderer, so it needs the same headroom the
     // renderer's own suites take rather than the default per-test timeout.

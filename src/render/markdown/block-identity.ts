@@ -28,6 +28,14 @@ export type BlockDescriptor = {
   // Plain authored presentation text is retained for revision alignment and
   // diffing. It never enters an id or path and is not exposed as markup.
   readonly text: string;
+  // Whether the block is a built-in component's root. Only this walk can
+  // answer that structurally, so it is recorded here instead of being
+  // re-derived downstream from kind strings.
+  readonly isComponentRoot: boolean;
+  // The id of the block that declared this one as a sub-target: the table for
+  // its rows, columns, and cells, or the component root for its declared
+  // internals. Absent on every top-level block.
+  readonly ownerId?: string;
 };
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -53,8 +61,53 @@ const NEVER_A_BLOCK = new Set(["hr", "br", "script", "style"]);
 // short enough to sit in a narrow rail.
 const LABEL_LIMIT = 72;
 
+// Block-level tags whose boundaries must survive text extraction. Markdown
+// HAST separates siblings with whitespace text nodes, but component views
+// render through JSX, which has none - without an inserted boundary a
+// component's headings, labels, cells, and list items run together into one
+// unreadable string wherever the flattened text is shown or diffed.
+const TEXT_BOUNDARY_TAGS = new Set([
+  "p",
+  "div",
+  "section",
+  "article",
+  "aside",
+  "header",
+  "footer",
+  "figure",
+  "figcaption",
+  "ul",
+  "ol",
+  "li",
+  "dl",
+  "dt",
+  "dd",
+  "table",
+  "thead",
+  "tbody",
+  "tfoot",
+  "tr",
+  "td",
+  "th",
+  "blockquote",
+  "pre",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+]);
+
+// Flattens an element to plain text, keeping a newline at every block-level
+// boundary so downstream consumers can tell adjacent units apart.
 const textOf = (node: Element): string => {
   let text = "";
+  const markBoundary = (): void => {
+    if (text !== "" && !/\s$/.test(text)) {
+      text += "\n";
+    }
+  };
   for (const child of node.children) {
     if (child.type === "text") {
       text += child.value;
@@ -63,7 +116,10 @@ const textOf = (node: Element): string => {
       const className = child.properties.className;
       const hidden = Array.isArray(className) && className.includes("sr-only");
       if (!hidden) {
+        const isBoundary = TEXT_BOUNDARY_TAGS.has(child.tagName);
+        if (isBoundary) markBoundary();
         text += textOf(child);
+        if (isBoundary) markBoundary();
       }
     }
   }
@@ -325,6 +381,8 @@ const stampBlock = ({
   section,
   blocks,
   counter,
+  isComponentRoot = false,
+  ownerId,
 }: {
   readonly node: Element;
   readonly kind: string;
@@ -333,13 +391,24 @@ const stampBlock = ({
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
   readonly counter: ScopeCounter;
-}): void => {
+  readonly isComponentRoot?: boolean;
+  readonly ownerId?: string;
+}): string => {
   const id = allocateId({ scope, kind, counter });
   node.properties["data-block-id"] = id;
   node.properties["data-block-kind"] = kind;
   node.properties["data-block-label"] = label;
   node.properties["data-block-section"] = section;
-  blocks.push({ id, kind, label, section, text: textOf(node) });
+  blocks.push({
+    id,
+    kind,
+    label,
+    section,
+    text: textOf(node),
+    isComponentRoot,
+    ...(ownerId === undefined ? {} : { ownerId }),
+  });
+  return id;
 };
 
 // A Markdown table exposes the whole table, each row, every body cell, and one
@@ -347,12 +416,14 @@ const stampBlock = ({
 // single anchor honestly serves both the header cell and the whole column.
 const stampTableTargets = ({
   table,
+  tableId,
   scope,
   section,
   blocks,
   counter,
 }: {
   readonly table: Element;
+  readonly tableId: string;
   readonly scope: string;
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
@@ -381,6 +452,7 @@ const stampTableTargets = ({
         section,
         blocks,
         counter,
+        ownerId: tableId,
       });
 
       const isHeader = cells.some((cell) => cell.tagName === "th");
@@ -397,6 +469,7 @@ const stampTableTargets = ({
             section,
             blocks,
             counter,
+            ownerId: tableId,
           });
           return columnLabel;
         });
@@ -414,6 +487,7 @@ const stampTableTargets = ({
           section,
           blocks,
           counter,
+          ownerId: tableId,
         });
       });
     },
@@ -422,12 +496,14 @@ const stampTableTargets = ({
 
 const stampDeclaredTargets = ({
   component,
+  componentId,
   scope,
   section,
   blocks,
   counter,
 }: {
   readonly component: Element;
+  readonly componentId: string;
   readonly scope: string;
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
@@ -456,6 +532,7 @@ const stampDeclaredTargets = ({
         section,
         blocks,
         counter,
+        ownerId: componentId,
       });
     },
   });
@@ -498,7 +575,7 @@ const stampScope = ({
       continue;
     }
     const label = labelOf({ node: child, kind });
-    stampBlock({
+    const id = stampBlock({
       node: child,
       kind,
       label,
@@ -506,15 +583,24 @@ const stampScope = ({
       section,
       blocks,
       counter,
+      isComponentRoot: componentName(child) !== undefined,
     });
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);
     } else if (kind === "table") {
-      stampTableTargets({ table: child, scope, section, blocks, counter });
+      stampTableTargets({
+        table: child,
+        tableId: id,
+        scope,
+        section,
+        blocks,
+        counter,
+      });
     }
     if (componentName(child) !== undefined) {
       stampDeclaredTargets({
         component: child,
+        componentId: id,
         scope,
         section,
         blocks,

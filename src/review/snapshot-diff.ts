@@ -10,6 +10,12 @@ export type SnapshotBlock = {
   readonly label: string;
   readonly section: string;
   readonly text: string;
+  // Stamped by block identity: whether the block is a component root, and the
+  // block that declared it as a sub-target (a table for its rows, a component
+  // for its declared internals). The renderer owns these facts structurally;
+  // this module never re-derives them from kind strings.
+  readonly isComponentRoot: boolean;
+  readonly ownerId?: string;
 };
 
 export type DiffRun = {
@@ -23,6 +29,7 @@ export type SnapshotDiffLocation = {
   readonly oldBlockId?: string;
   readonly newBlockId?: string;
   readonly kind: string;
+  readonly isComponentRoot: boolean;
   readonly label: string;
   readonly section: string;
   readonly oldText: string;
@@ -55,27 +62,57 @@ const REWRITTEN_SURVIVAL = 0.2;
 const PLACE_LABEL_LIMIT = 90;
 const DERIVED_BLOCK_KINDS = new Set(["table-of-contents"]);
 
-/** Component roots stay opaque and use their compiled rendering as evidence. */
-export const RENDERED_SNAPSHOT_KINDS: ReadonlySet<string> = new Set([
-  "decision",
-  "quick-decision",
-  "decision-analysis",
-  "flow-diagram",
-  "mermaid-diagram",
-  "file-tree",
-  "file-tree-diff",
+// Component roots whose changes read better as text diffs than as opaque
+// rendered Was/Now snapshots. Every OTHER component root defaults to the
+// rendered treatment - a component's flattened text extraction is presentation
+// evidence, not authored prose, so word-diffing it degrades into noise while
+// its compiled rendering stays first-class. A new component therefore needs no
+// registration here; list a kind only when the review lens has a dedicated
+// text-level treatment that beats the rendered snapshot:
+// - callout: the lens re-renders the callout with its type, icon, and title.
+// - code-snippet / code-diff: authored code diffs as preformatted text.
+// - data-table: the lens diffs the declared table-row sub-targets row by row.
+// - quick-summary: the lens diffs the declared quick-summary-facet sub-targets
+//   with word-level runs, which shows the exact edit inside a facet.
+//
+// Interim placement, by explicit product decision: http-endpoint,
+// graphql-operation, grpc-method, and database-table-schema are field-bearing
+// and should eventually diff field by field the way quick-summary diffs its
+// facets - each view declares its fields with data-commentable-kind and a
+// label, the field kinds join the lens's overlap and word-run rules, and the
+// kind moves into this set. Until those views declare their fields they stay
+// on the rendered path, which is the least-bad whole-component evidence.
+// wireframe stays rendered permanently: a picture has no field-level units
+// worth marking, so compiled Was and Now is the honest presentation.
+const TEXT_DIFF_COMPONENT_KINDS: ReadonlySet<string> = new Set([
+  "callout",
+  "code-snippet",
+  "code-diff",
+  "data-table",
+  "quick-summary",
 ]);
+
+/** Whether a block's change is evidenced by its compiled rendering. */
+export const usesRenderedSnapshot = ({
+  kind,
+  isComponentRoot,
+}: {
+  readonly kind: string;
+  readonly isComponentRoot: boolean;
+}): boolean => isComponentRoot && !TEXT_DIFF_COMPONENT_KINDS.has(kind);
 
 const runsFor = ({
   kind,
+  isComponentRoot,
   before,
   after,
 }: {
   readonly kind: string;
+  readonly isComponentRoot: boolean;
   readonly before: string;
   readonly after: string;
 }): ReadonlyArray<DiffRun> =>
-  RENDERED_SNAPSHOT_KINDS.has(kind)
+  usesRenderedSnapshot({ kind, isComponentRoot })
     ? [
         ...(before === "" ? [] : [{ op: "del" as const, text: before }]),
         ...(after === "" ? [] : [{ op: "ins" as const, text: after }]),
@@ -323,12 +360,14 @@ export const diffSnapshots = ({
       oldBlockId: oldBlock.id,
       newBlockId: newBlock.id,
       kind: newBlock.kind,
+      isComponentRoot: newBlock.isComponentRoot,
       label: newBlock.label,
       section: newBlock.section,
       oldText: oldBlock.text,
       newText: newBlock.text,
       runs: runsFor({
         kind: newBlock.kind,
+        isComponentRoot: newBlock.isComponentRoot,
         before: oldBlock.text,
         after: newBlock.text,
       }),
@@ -359,6 +398,7 @@ export const diffSnapshots = ({
       scope: scopeOf(oldBlock),
       oldBlockId: oldBlock.id,
       kind: oldBlock.kind,
+      isComponentRoot: oldBlock.isComponentRoot,
       label: oldBlock.label,
       section: oldBlock.section,
       oldText: oldBlock.text,
@@ -377,6 +417,7 @@ export const diffSnapshots = ({
       scope: scopeOf(newBlock),
       newBlockId: newBlock.id,
       kind: newBlock.kind,
+      isComponentRoot: newBlock.isComponentRoot,
       label: newBlock.label,
       section: newBlock.section,
       oldText: "",
@@ -420,12 +461,23 @@ const placeNote = (
     : "reworded";
 };
 
-const placeLabel = (locations: ReadonlyArray<SnapshotDiffLocation>): string => {
-  if (locations.length > 1) return "Whole section";
-  const label = locations[0]?.label ?? "Change";
-  return label.length <= PLACE_LABEL_LIMIT
+const truncatedLabel = (label: string): string =>
+  label.length <= PLACE_LABEL_LIMIT
     ? label
     : `${label.slice(0, PLACE_LABEL_LIMIT - 1).trimEnd()}…`;
+
+const placeLabel = (locations: ReadonlyArray<SnapshotDiffLocation>): string => {
+  if (locations.length > 1) {
+    // A component root grouped with its declared sub-targets is one revision
+    // of that component, so the place carries the component's own name rather
+    // than the anonymous multi-block fallback.
+    const componentRoots = locations.filter(
+      (location) => location.isComponentRoot,
+    );
+    const owner = componentRoots.length === 1 ? componentRoots[0] : undefined;
+    return owner === undefined ? "Whole section" : truncatedLabel(owner.label);
+  }
+  return truncatedLabel(locations[0]?.label ?? "Change");
 };
 
 const placeId = ({
@@ -452,7 +504,13 @@ const placeId = ({
     .digest("hex")
     .slice(0, 16);
 
-const tableOwnerFor = ({
+// The grouping key that keeps one block's revision together: a declared
+// sub-target answers with the block that owns it, and every other block
+// answers with itself, so a table or component root and its own rows or
+// facets share a key even when the changed sub-targets are not adjacent.
+// Structural ids are stable across sides, so an old-side owner matches its
+// new-side counterpart.
+const ownerKeyFor = ({
   location,
   before,
   after,
@@ -461,21 +519,11 @@ const tableOwnerFor = ({
   readonly before: ReadonlyArray<SnapshotBlock>;
   readonly after: ReadonlyArray<SnapshotBlock>;
 }): string | undefined => {
-  if (location.kind !== "table" && !location.kind.startsWith("table-")) {
-    return undefined;
-  }
   const blocks = location.newBlockId === undefined ? before : after;
   const blockId = location.newBlockId ?? location.oldBlockId;
-  const position = blocks.findIndex((block) => block.id === blockId);
-  if (position < 0) return undefined;
-  for (let index = position; index >= 0; index -= 1) {
-    const candidate = blocks.at(index);
-    if (candidate === undefined || candidate.section !== location.section) {
-      continue;
-    }
-    if (candidate.kind === "table") return candidate.id;
-  }
-  return undefined;
+  const block = blocks.find((candidate) => candidate.id === blockId);
+  if (block === undefined) return undefined;
+  return block.ownerId ?? block.id;
 };
 
 /** Groups adjacent changed blocks within a section into calm review stops. */
@@ -504,22 +552,22 @@ export const buildSnapshotDiff = ({
       previous === undefined
         ? -2
         : after.findIndex((block) => block.id === locationAnchor(previous));
-    const currentTableOwner = tableOwnerFor({ location, before, after });
-    const previousTableOwner =
+    const currentOwnerKey = ownerKeyFor({ location, before, after });
+    const previousOwnerKey =
       previous === undefined
         ? undefined
-        : tableOwnerFor({ location: previous, before, after });
-    const renderedComponent = RENDERED_SNAPSHOT_KINDS.has(location.kind);
+        : ownerKeyFor({ location: previous, before, after });
+    const renderedComponent = usesRenderedSnapshot(location);
     const previousRenderedComponent =
-      previous !== undefined && RENDERED_SNAPSHOT_KINDS.has(previous.kind);
+      previous !== undefined && usesRenderedSnapshot(previous);
     if (
       group !== undefined &&
       previous !== undefined &&
       !renderedComponent &&
       !previousRenderedComponent &&
       previous.section === location.section &&
-      ((currentTableOwner !== undefined &&
-        currentTableOwner === previousTableOwner) ||
+      ((currentOwnerKey !== undefined &&
+        currentOwnerKey === previousOwnerKey) ||
         currentPosition - previousPosition <= 1)
     ) {
       group.push(index);

@@ -1029,17 +1029,33 @@ test("should restore and submit staged comments through the local review runtime
     name: "Revert response?",
   });
   await expect(revertDialog).toContainText(
+    "Earlier changes stay in place - this is not a reset to the original plan.",
+  );
+  await expect(revertDialog).toContainText(
     "The comment and thread will remain until you delete them.",
   );
   await revertDialog.getByRole("button", { name: "Revert response" }).click();
   expect((await revertResponse).status()).toBe(200);
-  await page.waitForLoadState("domcontentloaded");
   expect(await readFile(session.plan, "utf8")).toBe(beforeSource);
-  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  // The revert refreshes the plan in place instead of reloading, so the
+  // thread it was confirmed from stays open with its controls reachable.
+  await expect(page.locator("article")).toContainText(
+    "Keep every reviewer note safe while the plan is discussed.",
+    { timeout: 15_000 },
+  );
+  await expect(
+    continuedThread.getByPlaceholder("Reply to the agent…"),
+  ).toBeVisible();
+  await expect(
+    continuedThread.getByRole("button", { name: "Response reverted" }).first(),
+  ).toBeVisible();
   const revertedThread = rail
     .locator("[data-review-sent-thread]")
     .filter({ hasText: "Name the operator recovery path." });
-  await revertedThread.getByRole("button", { name: "Delete comment" }).click();
+  await revertedThread
+    .getByRole("button", { name: "Delete comment" })
+    .first()
+    .click();
   const revertedDeleteDialog = page.getByRole("alertdialog", {
     name: "Delete comment?",
   });
@@ -1579,6 +1595,118 @@ test("should colour a component snapshot switch as a diff", async ({
   }
 });
 
+test("should render an API contract change as a component snapshot instead of flattened text", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-endpoint-diff-"));
+  const planPath = join(directory, "api.mdx");
+  const after = await readFile(
+    new URL("../examples/api-endpoints.mdx", import.meta.url),
+    "utf8",
+  );
+  const before = after.replace(
+    "Queues a deduplicated refresh job per cache key and returns immediately; the worker pool performs the refreshes asynchronously.",
+    "Queues a refresh job per cache key and returns immediately.",
+  );
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    const componentDiff = lens.locator("[data-review-component-diff]");
+    await expect(componentDiff).toHaveCount(1);
+    const snapshot = componentDiff.locator("[data-review-component-snapshot]");
+    // The endpoint shows as its compiled card - method, path, and prose in
+    // their own places - never as one run-together text wall.
+    await expect(snapshot).toContainText("/catalog/refresh");
+    await expect(snapshot).toContainText(
+      "the worker pool performs the refreshes asynchronously",
+    );
+    await expect(lens.locator("[data-review-diff-content]")).toHaveCount(0);
+    await componentDiff.getByRole("button", { name: "Was" }).click();
+    await expect(snapshot).toContainText(
+      "Queues a refresh job per cache key and returns immediately.",
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("http-endpoint-component-diff.png"),
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should diff a quick summary at facet level with word runs", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-summary-diff-"));
+  const planPath = join(directory, "summary.mdx");
+  const after = await readFile(
+    new URL("../examples/quick-summary.mdx", import.meta.url),
+    "utf8",
+  );
+  const before = after.replace(
+    "Record every attempt in the audit trail.",
+    "Record attempts in the audit trail.",
+  );
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    // The component root and its changed facet are one review stop, and the
+    // lens shows only the facet that changed: its term as a header and the
+    // exact removed and inserted words in the body.
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      "1 of 1",
+    );
+    const facet = lens.locator("[data-review-diff-facet]");
+    await expect(facet).toHaveCount(1);
+    await expect(facet).toContainText("How");
+    await expect(facet.locator("del")).toContainText("attempts");
+    await expect(facet.locator("ins")).toContainText(["every", "attempt"]);
+    // The other facets did not change, so their text stays out of the lens
+    // instead of returning as the old flattened component wall.
+    await expect(lens).not.toContainText("checkout to stay fast");
+    await page.screenshot({
+      path: testInfo.outputPath("quick-summary-facet-diff.png"),
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // The refresh journey needs one plan carrying every shell surface it asserts:
 // a collapsible slide, a mermaid diagram, and a copyable code figure.
 const REFRESH_REWIRE_MDX = `# Refresh rewire
@@ -1786,6 +1914,34 @@ test("should keep shell interactions wired after an agent revision refreshes the
       await copy.click();
       await expect(copy).toHaveAttribute("data-copy-state", "copied");
       await expect(copy).toHaveAccessibleName("Copied code");
+    });
+    await test.step("a component comment reports its batch in the rail", async () => {
+      const diagram = page.locator("[data-flow-diagram]").first();
+      const node = diagram.locator('[data-flow-node="source"]:visible').first();
+      await node.click();
+      await diagram.locator('[data-flow-action="comment"]').click();
+      await diagram
+        .locator(".flow-diagram-compose textarea")
+        .fill("Rename this node to Input.");
+      await diagram
+        .locator('.flow-diagram-compose button[data-variant="primary"]')
+        .click();
+      // The note joined the diagram's own batch, so a reviewer hunting for it
+      // in the rail is told where it waits and where it is submitted from.
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      const batchNote = rail.locator("[data-review-component-batch-note]");
+      await expect(batchNote).toContainText(
+        "Comments on a diagram wait in that diagram's batch.",
+      );
+      await expect(batchNote).toContainText(
+        "Add them to this review from the diagram's toolbar.",
+      );
+      await diagram
+        .getByRole("button", { name: "Add 1 note to plan feedback" })
+        .click();
+      await expect(rail).toContainText("Diagram feedback:");
+      await expect(rail).toContainText("Rename this node to Input.");
+      await expect(batchNote).toHaveCount(0);
     });
   } finally {
     await runtime.close();

@@ -134,21 +134,29 @@ const runsWithChanges = (runs: ReadonlyArray<DiffRun>): ReactNode =>
 const sideText = (location: DiffLocation, side: "old" | "new"): string =>
   side === "old" ? location.oldText : location.newText;
 
-// A table's aggregate, row, column, and cell identities deliberately overlap
-// for attribution. A presentation must choose one non-overlapping level or it
-// repeats the same text several times.
+// A block that declares sub-targets deliberately overlaps with them for
+// attribution: a table with its rows, columns, and cells, and a component
+// root with its declared internals. A presentation must choose one
+// non-overlapping level or it repeats the same text several times, so rows
+// win over every other table identity and declared internals win over the
+// component root that contains them.
 const presentationLocations = (
   locations: ReadonlyArray<DiffLocation>,
 ): ReadonlyArray<DiffLocation> => {
-  if (!locations.some((location) => location.kind === "table-row")) {
-    return locations;
+  let visible = locations;
+  if (visible.some((location) => location.kind === "table-row")) {
+    visible = visible.filter(
+      (location) =>
+        location.kind !== "table" &&
+        location.kind !== "data-table" &&
+        location.kind !== "table-column" &&
+        location.kind !== "table-cell",
+    );
   }
-  return locations.filter(
-    (location) =>
-      location.kind !== "table" &&
-      location.kind !== "table-column" &&
-      location.kind !== "table-cell",
-  );
+  if (visible.some((location) => location.kind === "quick-summary-facet")) {
+    visible = visible.filter((location) => location.kind !== "quick-summary");
+  }
+  return visible;
 };
 
 type ProsePresentation =
@@ -350,6 +358,89 @@ const SnapshotCallout = ({
   );
 };
 
+// A quick-summary facet's flattened text leads with the facet's own term,
+// which the header above the body already names, so the term is stripped
+// before the body is shown.
+const facetBodyText = (location: DiffLocation, side: "old" | "new"): string => {
+  const term = location.label.trim();
+  const raw = sideText(location, side).trim();
+  return raw.startsWith(term) ? raw.slice(term.length).trim() : raw;
+};
+
+const FacetTerm = ({ location }: { readonly location: DiffLocation }) => (
+  <strong className="mb-1 block text-2xs font-semibold uppercase tracking-caps">
+    {location.label.trim()}
+  </strong>
+);
+
+const SnapshotSummaryFacet = ({
+  location,
+  side,
+}: {
+  readonly location: DiffLocation;
+  readonly side: "old" | "new";
+}) => {
+  const body = facetBodyText(location, side);
+  const items = body
+    .split("\n")
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+  return (
+    <div data-review-diff-facet="">
+      <FacetTerm location={location} />
+      {items.length > 1 ? (
+        <ul className="m-0 list-disc pl-4" data-authored-prose="">
+          {items.map((item, index) => (
+            <li key={`${index}-${item}`} data-authored-prose="">
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="m-0" data-authored-prose="">
+          {body}
+        </p>
+      )}
+    </div>
+  );
+};
+
+/** Drops the facet term the header already names from the leading run. */
+const runsWithoutLeadingTerm = (
+  runs: ReadonlyArray<DiffRun>,
+  term: string,
+): ReadonlyArray<DiffRun> => {
+  const [first, ...rest] = runs;
+  if (first === undefined || first.op !== "same") return runs;
+  const text = first.text.trimStart();
+  if (!text.startsWith(term)) return runs;
+  const remainder = text.slice(term.length).trimStart();
+  return remainder === "" ? rest : [{ op: "same", text: remainder }, ...rest];
+};
+
+// The word-level lens for one reworded facet: the facet term stays a calm
+// header while the body carries the exact removed and inserted words, with
+// authored line boundaries preserved so multi-item facets read as their items.
+const FacetRunContent = ({
+  runs,
+  location,
+}: {
+  readonly runs: ReadonlyArray<DiffRun>;
+  readonly location: DiffLocation;
+}) => (
+  <div data-review-diff-facet="">
+    <FacetTerm location={location} />
+    <p
+      className="m-0 max-w-[var(--measure)] whitespace-pre-line [overflow-wrap:anywhere]"
+      data-authored-prose=""
+      data-review-diff-content=""
+      data-review-diff-presentation="facet"
+    >
+      {runsWithChanges(runsWithoutLeadingTerm(runs, location.label.trim()))}
+    </p>
+  </div>
+);
+
 const SnapshotBlock = ({
   location,
   side,
@@ -360,6 +451,9 @@ const SnapshotBlock = ({
   const text = sideText(location, side);
   if (location.kind === "callout") {
     return <SnapshotCallout location={location} side={side} />;
+  }
+  if (location.kind === "quick-summary-facet") {
+    return <SnapshotSummaryFacet location={location} side={side} />;
   }
   if (location.kind === "heading") {
     return (
@@ -415,7 +509,7 @@ const SnapshotSideContent = ({
   readonly locations: ReadonlyArray<DiffLocation>;
   readonly side: "old" | "new";
 }) => {
-  const visible = presentationLocations(locations).filter(
+  const visible = locations.filter(
     (location) => sideText(location, side).trim() !== "",
   );
   const tableRows = visible.filter((location) => location.kind === "table-row");
@@ -513,21 +607,28 @@ export const DiffLensContent = ({
     () => placeLocations({ diff, place }),
     [diff, place],
   );
-  const only = locations.length === 1 ? locations[0] : undefined;
+  // One overlap-free level is chosen up front so a component root grouped
+  // with its declared sub-targets never repeats their text.
+  const visibleLocations = useMemo(
+    () => presentationLocations(locations),
+    [locations],
+  );
+  const only = visibleLocations.length === 1 ? visibleLocations[0] : undefined;
   const canUseWordRuns =
     only?.status === "changed" &&
     place.note === "reworded" &&
     (only.kind === "paragraph" ||
       only.kind === "heading" ||
       only.kind === "quote" ||
-      only.kind === "list");
-  const hasOldText = locations.some(
+      only.kind === "list" ||
+      only.kind === "quick-summary-facet");
+  const hasOldText = visibleLocations.some(
     (location) => location.oldText.trim() !== "",
   );
-  const hasNewText = locations.some(
+  const hasNewText = visibleLocations.some(
     (location) => location.newText.trim() !== "",
   );
-  const componentLocation = locations.find(
+  const componentLocation = visibleLocations.find(
     (location) =>
       location.oldHtml !== undefined || location.newHtml !== undefined,
   );
@@ -554,6 +655,8 @@ export const DiffLensContent = ({
       ) : canUseWordRuns && only !== undefined ? (
         only.kind === "list" ? (
           <ListRunContent runs={only.runs} location={only} />
+        ) : only.kind === "quick-summary-facet" ? (
+          <FacetRunContent runs={only.runs} location={only} />
         ) : (
           <WordRunContent runs={only.runs} presentation={presentation} />
         )
@@ -565,7 +668,7 @@ export const DiffLensContent = ({
                 Was
               </strong>
               <div className="min-w-0 [&>:last-child]:mb-0">
-                <SnapshotSideContent locations={locations} side="old" />
+                <SnapshotSideContent locations={visibleLocations} side="old" />
               </div>
             </div>
           )}
@@ -575,7 +678,7 @@ export const DiffLensContent = ({
                 Now
               </strong>
               <div className="min-w-0 [&>:last-child]:mb-0">
-                <SnapshotSideContent locations={locations} side="new" />
+                <SnapshotSideContent locations={visibleLocations} side="new" />
               </div>
             </div>
           )}

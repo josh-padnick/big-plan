@@ -86,7 +86,7 @@ import {
   writeSnapshot,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
-import { buildSnapshotDiff, RENDERED_SNAPSHOT_KINDS } from "./snapshot-diff.js";
+import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
 import {
   agentConnectCommand,
   agentRecoveryPrompt,
@@ -1464,7 +1464,7 @@ export const startReviewRuntime = async ({
         value: encodeSnapshotDiff({
           ...snapshotDiff,
           locations: snapshotDiff.locations.map((location) =>
-            RENDERED_SNAPSHOT_KINDS.has(location.kind)
+            usesRenderedSnapshot(location)
               ? (() => {
                   const oldHtml = renderedBlockHtml({
                     html: before.html,

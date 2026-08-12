@@ -302,4 +302,50 @@ describe("block identity boundaries", () => {
     expect(html).toContain('data-block-line="12"');
     expect(html).toContain('data-block-line="13"');
   });
+
+  it("should mark only a component's root and hand its declared internals the root as owner", () => {
+    const { blocks } = compile(
+      "## Summary\n\nIntro.\n\n<QuickSummary>\n\n<Why>\n\n- Value.\n\n</Why>\n\n<What>\n\n- Build it.\n\n</What>\n\n</QuickSummary>\n",
+    );
+    const summary = blocks.find((block) => block.kind === "quick-summary");
+    const facets = blocks.filter(
+      (block) => block.kind === "quick-summary-facet",
+    );
+    const paragraph = blocks.find((block) => block.kind === "paragraph");
+    expect(summary?.isComponentRoot).toBe(true);
+    expect(paragraph?.isComponentRoot).toBe(false);
+    expect(facets).toHaveLength(2);
+    for (const facet of facets) {
+      expect(facet.isComponentRoot).toBe(false);
+      expect(facet.ownerId).toBe(summary?.id);
+    }
+  });
+
+  it("should hand a Markdown table's rows, columns, and cells the table as owner", () => {
+    const { blocks } = compile(
+      "## Rows\n\n| Field | Meaning |\n| --- | --- |\n| `versionId` | Content hash |\n",
+    );
+    const table = blocks.find((block) => block.kind === "table");
+    const subTargets = blocks.filter((block) =>
+      ["table-row", "table-column", "table-cell"].includes(block.kind),
+    );
+    expect(table?.isComponentRoot).toBe(false);
+    expect(subTargets.length).toBeGreaterThan(0);
+    for (const subTarget of subTargets) {
+      expect(subTarget.ownerId).toBe(table?.id);
+    }
+  });
+
+  it("should keep block boundaries apart when component text is flattened", () => {
+    const { blocks } = compile(
+      "## Summary\n\n<QuickSummary>\n\n<Why>\n\n- Value.\n\n</Why>\n\n<What>\n\n- Build it.\n\n</What>\n\n<How>\n\n- Move retries out.\n- Record every attempt.\n\n</How>\n\n</QuickSummary>\n",
+    );
+    const facet = blocks.find(
+      (block) => block.kind === "quick-summary-facet" && block.label === "How",
+    );
+    expect(facet?.text).toMatch(/^How\n/);
+    expect(facet?.text).toMatch(
+      /Move retries out\.\s*\nRecord every attempt\./,
+    );
+  });
 });

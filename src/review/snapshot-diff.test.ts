@@ -7,22 +7,31 @@ import {
   diffRunSimilarity,
   diffSnapshots,
   diffWords,
+  usesRenderedSnapshot,
 } from "./snapshot-diff.js";
 
 const block = ({
   id,
   text,
   kind = "paragraph",
+  label,
+  isComponentRoot = false,
+  ownerId,
 }: {
   readonly id: string;
   readonly text: string;
   readonly kind?: string;
+  readonly label?: string;
+  readonly isComponentRoot?: boolean;
+  readonly ownerId?: string;
 }) => ({
   id,
   kind,
-  label: text,
+  label: label ?? text,
   section: "Approach",
   text,
+  isComponentRoot,
+  ...(ownerId === undefined ? {} : { ownerId }),
 });
 
 describe("snapshot word diff", () => {
@@ -88,6 +97,7 @@ describe("snapshot block alignment", () => {
         id: "section/approach/table-row-1",
         kind: "table-row",
         text: "Remove me.",
+        ownerId: "section/approach/table-1",
       }),
     ];
     const after = [
@@ -176,11 +186,13 @@ describe("snapshot block alignment", () => {
         id: "section/approach/decision-1",
         kind: "decision",
         text: "Old decision",
+        isComponentRoot: true,
       }),
       block({
         id: "section/approach/flow-diagram-1",
         kind: "flow-diagram",
         text: "Old diagram",
+        isComponentRoot: true,
       }),
     ];
     const after = [
@@ -188,11 +200,13 @@ describe("snapshot block alignment", () => {
         id: "section/approach/decision-1",
         kind: "decision",
         text: "New decision",
+        isComponentRoot: true,
       }),
       block({
         id: "section/approach/flow-diagram-1",
         kind: "flow-diagram",
         text: "New diagram",
+        isComponentRoot: true,
       }),
     ];
 
@@ -273,31 +287,37 @@ describe("snapshot block alignment", () => {
         id: "section/approach/table-row-1",
         kind: "table-row",
         text: "Name\nValue",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-cell-1-1",
         kind: "table-cell",
         text: "Name",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-cell-1-2",
         kind: "table-cell",
         text: "Value",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-row-2",
         kind: "table-row",
         text: "Alpha\nOne",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-cell-2-1",
         kind: "table-cell",
         text: "Alpha",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-cell-2-2",
         kind: "table-cell",
         text: "One",
+        ownerId: "section/approach/table-1",
       }),
     ];
     const after = [
@@ -310,41 +330,49 @@ describe("snapshot block alignment", () => {
         id: "section/approach/table-row-1",
         kind: "table-row",
         text: "Name\nValue\nEvidence",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-cell-1-1",
         kind: "table-cell",
         text: "Name",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-cell-1-2",
         kind: "table-cell",
         text: "Value",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-column-3",
         kind: "table-column",
         text: "Evidence",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-row-2",
         kind: "table-row",
         text: "Alpha\nOne\nBaseline",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-cell-2-1",
         kind: "table-cell",
         text: "Alpha",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-cell-2-2",
         kind: "table-cell",
         text: "One",
+        ownerId: "section/approach/table-1",
       }),
       block({
         id: "section/approach/table-cell-2-3",
         kind: "table-cell",
         text: "Baseline",
+        ownerId: "section/approach/table-1",
       }),
     ];
 
@@ -357,5 +385,127 @@ describe("snapshot block alignment", () => {
 
     expect(diff.places).toHaveLength(1);
     expect(diff.places[0]?.locationIndexes).toHaveLength(5);
+  });
+
+  it("should replace both sides wholesale when any component root without a text treatment changes", () => {
+    const locations = diffSnapshots({
+      before: [
+        block({
+          id: "section/approach/http-endpoint-1",
+          kind: "http-endpoint",
+          text: "POST\n/api/restore\nRestore a historical version",
+          isComponentRoot: true,
+        }),
+      ],
+      after: [
+        block({
+          id: "section/approach/http-endpoint-1",
+          kind: "http-endpoint",
+          text: "POST\n/api/restore\nRestore the selected historical version",
+          isComponentRoot: true,
+        }),
+      ],
+    });
+    expect(locations[0]?.runs.map((run) => run.op)).toEqual(["del", "ins"]);
+  });
+
+  it("should keep word-level runs when a component root has a dedicated text treatment", () => {
+    const locations = diffSnapshots({
+      before: [
+        block({
+          id: "document/quick-summary-1",
+          kind: "quick-summary",
+          text: "Quick summary\nWhy\nValue holds.",
+          isComponentRoot: true,
+        }),
+      ],
+      after: [
+        block({
+          id: "document/quick-summary-1",
+          kind: "quick-summary",
+          text: "Quick summary\nWhy\nValue compounds.",
+          isComponentRoot: true,
+        }),
+      ],
+    });
+    expect(locations[0]?.runs.some((run) => run.op === "same")).toBe(true);
+  });
+
+  it("should group a component root with its non-adjacent declared internal when both change", () => {
+    const summary = ({ how }: { readonly how: string }) => [
+      block({
+        id: "document/quick-summary-1",
+        kind: "quick-summary",
+        label: "Quick summary",
+        text: `Quick summary\nWhy\nValue.\nWhat\nBuild it.\nHow\n${how}`,
+        isComponentRoot: true,
+      }),
+      block({
+        id: "document/quick-summary-facet-1",
+        kind: "quick-summary-facet",
+        label: "Why",
+        text: "Why\nValue.",
+        ownerId: "document/quick-summary-1",
+      }),
+      block({
+        id: "document/quick-summary-facet-2",
+        kind: "quick-summary-facet",
+        label: "What",
+        text: "What\nBuild it.",
+        ownerId: "document/quick-summary-1",
+      }),
+      block({
+        id: "document/quick-summary-facet-3",
+        kind: "quick-summary-facet",
+        label: "How",
+        text: `How\n${how}`,
+        ownerId: "document/quick-summary-1",
+      }),
+    ];
+
+    const diff = buildSnapshotDiff({
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      before: summary({ how: "Carefully." }),
+      after: summary({ how: "Very carefully." }),
+    });
+
+    expect(diff.places).toHaveLength(1);
+    expect(diff.places[0]).toMatchObject({
+      label: "Quick summary",
+      note: "reworded",
+    });
+    expect(diff.places[0]?.locationIndexes).toHaveLength(2);
+  });
+});
+
+describe("rendered snapshot rule", () => {
+  it("should give every component root a rendered snapshot when no text treatment exists", () => {
+    for (const kind of [
+      "http-endpoint",
+      "graphql-operation",
+      "grpc-method",
+      "database-table-schema",
+      "wireframe",
+      "decision",
+      "a-future-component",
+    ]) {
+      expect(usesRenderedSnapshot({ kind, isComponentRoot: true })).toBe(true);
+    }
+  });
+
+  it("should keep text-treatment components and ordinary blocks on the text path", () => {
+    for (const kind of [
+      "callout",
+      "code-snippet",
+      "code-diff",
+      "data-table",
+      "quick-summary",
+    ]) {
+      expect(usesRenderedSnapshot({ kind, isComponentRoot: true })).toBe(false);
+    }
+    expect(
+      usesRenderedSnapshot({ kind: "paragraph", isComponentRoot: false }),
+    ).toBe(false);
   });
 });
