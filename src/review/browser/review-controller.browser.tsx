@@ -94,6 +94,12 @@ import { Icon } from "./icon.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
+  foundElement,
+  liveBlock,
+  liveFlowAnchor,
+} from "./live-target.browser.js";
+import { useArticleVersion } from "./use-article-version.browser.js";
+import {
   AlertDialog,
   Badge,
   Button,
@@ -200,26 +206,6 @@ type FloatingRect = {
 type FloatingPosition = {
   readonly top: number;
   readonly left: number;
-};
-
-/**
- * Resolves a diagram anchor to the element the reader can actually see. A
- * diagram ships one copy per theme variant and only one is displayed, and a
- * What-changed lens renders a snapshot copy whose block ids are scrubbed but
- * whose flow anchors are not - so a first-match query can hand back a hidden
- * node, or a clone whose enclosing block is a different block entirely.
- */
-const liveFlowAnchor = (anchor: string): HTMLElement | null => {
-  const candidates = document.querySelectorAll<HTMLElement>(
-    `[data-flow-anchor="${CSS.escape(anchor)}"]`,
-  );
-  let hidden: HTMLElement | null = null;
-  for (const candidate of candidates) {
-    if (candidate.closest("[data-review-diff-lens]") !== null) continue;
-    if (candidate.getClientRects().length > 0) return candidate;
-    hidden ??= candidate;
-  }
-  return hidden;
 };
 
 const rootElement = document.documentElement;
@@ -788,11 +774,13 @@ const blockCommentLabel = (block: HTMLElement): string =>
     ? "Comment on this code snippet"
     : `Comment on ${block.dataset.blockLabel ?? "this component"}`;
 
+// Decoration, geometry, and containment callers treat an absent target as a
+// no-op, so this keeps the nullable shape while the resolver owns the query.
+// The callers that owe the reader an explanation when a target is gone say so
+// themselves; jumpTo is the one that does.
 const targetElement = (target: CommentTarget): HTMLElement | null => {
   if (target.type === "document") return document.querySelector("main");
-  const block = document.querySelector<HTMLElement>(
-    `[data-block-id="${CSS.escape(target.blockId)}"]`,
-  );
+  const block = foundElement(liveBlock(target.blockId));
   return target.type === "block" && target.kind === "slide"
     ? (block?.closest<HTMLElement>("[data-slide]") ?? block)
     : block;
@@ -840,9 +828,7 @@ const selectionRange = (
   const endBlock =
     target.endBlockId === undefined
       ? startBlock
-      : document.querySelector<HTMLElement>(
-          `[data-block-id="${CSS.escape(target.endBlockId)}"]`,
-        );
+      : foundElement(liveBlock(target.endBlockId));
   if (startBlock === null || endBlock === null) return null;
   const textPoint = (
     block: HTMLElement,
@@ -1196,6 +1182,10 @@ const useInlineComposeHost = (
 ): HTMLDivElement | null => {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const isNarrow = !useWide();
+  // The host sits after the block being commented on, so a refresh that
+  // replaces that block takes the open composer with it unless the host is
+  // placed again beside the block's live copy.
+  const articleVersion = useArticleVersion();
   useEffect(() => {
     if ((!isOpen && !isNarrow) || compose === null) {
       setHost(null);
@@ -1213,7 +1203,7 @@ const useInlineComposeHost = (
     return () => {
       next.remove();
     };
-  }, [compose, isNarrow, isOpen]);
+  }, [articleVersion, compose, isNarrow, isOpen]);
   return host;
 };
 
@@ -2337,11 +2327,7 @@ const StalePremiseNotice = ({
   const currentTargetExists = attributedPlaces.some((place) =>
     place.locationIndexes.some((index) => {
       const blockId = diff.locations.at(index)?.newBlockId;
-      return (
-        blockId !== undefined &&
-        document.querySelector(`[data-block-id="${CSS.escape(blockId)}"]`) !==
-          null
-      );
+      return blockId !== undefined && "found" in liveBlock(blockId);
     }),
   );
   return (
@@ -3311,6 +3297,10 @@ export const ReviewController = () => {
   );
   const inlineComposeHost = useInlineComposeHost(compose, isOpen);
   const threadHosts = useThreadHosts(reviewComments, isOpen);
+  // An in-place refresh replaces exactly the nodes an effect captured, so
+  // every effect below that resolves plan elements, ranges, or listeners once
+  // and holds them names this and resolves them again.
+  const articleVersion = useArticleVersion();
   const componentBatchNotes = useComponentBatchNotes(
     isOpen && tab === "comments",
   );
@@ -3381,7 +3371,13 @@ export const ReviewController = () => {
       setSelectionHighlights([], null);
       rootElement.removeAttribute("data-review-selection-active");
     };
-  }, [associatedTarget, associationActive, compose, reviewComments]);
+  }, [
+    articleVersion,
+    associatedTarget,
+    associationActive,
+    compose,
+    reviewComments,
+  ]);
 
   useEffect(() => {
     if (associatedTarget === null) return undefined;
@@ -3394,7 +3390,7 @@ export const ReviewController = () => {
         delete element.dataset.reviewCommentAssociated;
       }
     };
-  }, [associatedTarget]);
+  }, [articleVersion, associatedTarget]);
 
   useEffect(() => {
     if (selectedCommentId === null) return undefined;
@@ -3411,7 +3407,7 @@ export const ReviewController = () => {
         delete element.dataset.reviewCommentSelected;
       }
     };
-  }, [reviewComments, selectedCommentId]);
+  }, [articleVersion, reviewComments, selectedCommentId]);
 
   useEffect(() => {
     const marked = new Set<HTMLElement>();
@@ -3521,7 +3517,7 @@ export const ReviewController = () => {
       window.removeEventListener("resize", refresh);
       for (const element of marked) delete element.dataset.reviewHasComment;
     };
-  }, [reviewComments]);
+  }, [articleVersion, reviewComments]);
 
   useEffect(() => {
     const selection =
@@ -3540,7 +3536,7 @@ export const ReviewController = () => {
       };
     }
     return undefined;
-  }, [compose]);
+  }, [articleVersion, compose]);
 
   useEffect(() => {
     for (const { container } of reviewContainerHosts) {
@@ -3876,10 +3872,17 @@ export const ReviewController = () => {
       add: (payload: ExternalFeedbackPayload): void => {
         const source =
           payload.source === "flow-diagram" && payload.anchor !== undefined
-            ? liveFlowAnchor(payload.anchor ?? "")
+            ? // A diagram element that no longer resolves still deserves its
+              // feedback: the note names the element in its own words, so the
+              // comment falls back to the whole plan rather than being lost.
+              foundElement(liveFlowAnchor(payload.anchor ?? ""))
             : payload.anchor === undefined || payload.anchor === null
               ? null
-              : document.getElementById(payload.anchor);
+              : // A decision anchor is a document id raised by the live viewer
+                // script, and every id inside a lens snapshot is namespaced
+                // when the server scrubs it, so a copy cannot answer here and
+                // this needs no resolver.
+                document.getElementById(payload.anchor);
         const block = source?.closest<HTMLElement>("[data-block-id]") ?? null;
         const subject =
           payload.source === "flow-diagram"
@@ -4032,10 +4035,15 @@ export const ReviewController = () => {
   };
   const jumpTo = (comment: ReviewComment) => {
     setAssociatedTarget(comment.target);
-    targetElement(comment.target)?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
+    const element = targetElement(comment.target);
+    // Scrolling nowhere reads as a broken control, and the comment card
+    // already tells the reader when its target left the plan, so the same fact
+    // is said out loud here instead of silently doing nothing.
+    if (element === null) {
+      setStatus("This comment's target is no longer in the plan.");
+      return;
+    }
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
   };
   const updateDraft = (id: string, body: string) => {
     setDrafts((current) =>

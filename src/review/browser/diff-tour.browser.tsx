@@ -28,13 +28,14 @@ import type {
   DiffRun,
   SnapshotDiff,
 } from "../shared/review-wire.js";
-import {
-  candidateMatchesLiveText,
-  lensAnchorCandidates,
-  tourStartIndex,
-  type LensPlacement,
-} from "./diff-anchor.js";
+import { tourStartIndex, type LensPlacement } from "./diff-anchor.js";
 import { Icon } from "./icon.browser.js";
+import {
+  foundElement,
+  liveBlock,
+  liveLensAnchor,
+} from "./live-target.browser.js";
+import { useArticleVersion } from "./use-article-version.browser.js";
 import { Badge, Button } from "./ui.browser.js";
 
 type OpenTour = {
@@ -324,16 +325,18 @@ const SNAPSHOT_CALLOUT_ICONS = {
   danger: OCTAGON_ALERT_ICON,
 } satisfies Readonly<Record<SnapshotCalloutType, LucideIcon>>;
 
+// Two authored facts a snapshot never recorded - a callout's type and whether
+// a list is ordered - are readable only from the block still in the plan, so
+// the presentation asks the live document for them. The block legitimately
+// has no live copy for a removed side, and then the presentation falls back to
+// its plainest form; a diff that carried these facts on the wire would retire
+// that fallback.
 const currentBlockFor = (
   location: DiffLocation,
   side: "old" | "new",
 ): HTMLElement | null => {
   const blockId = side === "old" ? location.oldBlockId : location.newBlockId;
-  return blockId === undefined
-    ? null
-    : document.querySelector<HTMLElement>(
-        `[data-block-id="${CSS.escape(blockId)}"]`,
-      );
+  return blockId === undefined ? null : foundElement(liveBlock(blockId));
 };
 
 const SnapshotCallout = ({
@@ -719,54 +722,19 @@ type LensAnchor = {
 };
 
 /**
- * Resolves a block id to the block the reader is reading, never to a copy of
- * that block rendered inside another lens's Was/Now snapshot.
+ * Finds the first of a place's locations that still has somewhere to land. A
+ * place can describe several locations, and one unresolvable location does not
+ * make the place historical while another can still show the change in place.
  */
-const documentBlock = (blockId: string): HTMLElement | null => {
-  const candidates = document.querySelectorAll<HTMLElement>(
-    `[data-block-id="${CSS.escape(blockId)}"]`,
-  );
-  for (const candidate of candidates) {
-    if (candidate.closest("[data-review-diff-lens]") === null) return candidate;
-  }
-  return null;
-};
-
-/**
- * Reads the text a live block presents to the reader, mirroring what
- * compile-time extraction recorded: screen-reader-only scaffolding and markup
- * shipped with the hidden attribute never enter a snapshot's text, and review
- * chrome injected after load did not exist at compile time, so all are
- * stripped before this text is compared with a snapshot's record of the block.
- */
-const liveBlockText = (element: HTMLElement): string => {
-  const clone = element.cloneNode(true);
-  if (!(clone instanceof HTMLElement)) return element.textContent ?? "";
-  for (const injected of clone.querySelectorAll(
-    ".sr-only, [hidden], [data-review-anchor-host], [data-review-toolbar-host], [data-flow-comment-marker]",
-  )) {
-    injected.remove();
-  }
-  return clone.textContent ?? "";
-};
-
-const anchorFor = (
-  location: DiffLocation,
+const firstLiveAnchor = (
+  locations: ReadonlyArray<DiffLocation>,
   isSuperseded: boolean,
 ): LensAnchor | null => {
-  for (const candidate of lensAnchorCandidates(location, { isSuperseded })) {
-    const element = documentBlock(candidate.blockId);
-    if (element === null) continue;
-    // A block id resolved across a snapshot boundary can name different
-    // content than the diff recorded. Such a drifted candidate is treated as
-    // missing, so the change falls back to the honest historical archive
-    // instead of rendering beside the wrong block.
-    if (
-      !candidateMatchesLiveText({ candidate, liveText: liveBlockText(element) })
-    ) {
-      continue;
+  for (const location of locations) {
+    const anchor = liveLensAnchor(location, { isSuperseded });
+    if ("found" in anchor) {
+      return { element: anchor.found, placement: anchor.placement };
     }
-    return { element, placement: candidate.placement };
   }
   return null;
 };
@@ -789,16 +757,19 @@ const LensPortal = ({
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [isHistorical, setIsHistorical] = useState(false);
   const [presentation, setPresentation] = useState<ProsePresentation>();
+  // The host, the anchor it sits beside, and the blocks it hides all belong to
+  // the article that was displayed when the lens opened. A refresh replaces
+  // that article, so the lens re-resolves against the new one: it lands beside
+  // the revised block, or falls back to the archive when the block it was
+  // showing is no longer there.
+  const articleVersion = useArticleVersion();
   useEffect(() => {
     if (!isVisible) {
       setHost(null);
       setPresentation(undefined);
       return;
     }
-    const anchor =
-      locations
-        .map((location) => anchorFor(location, isSuperseded))
-        .find((candidate) => candidate !== null) ?? null;
+    const anchor = firstLiveAnchor(locations, isSuperseded);
     if (anchor === null) {
       setIsHistorical(true);
       setPresentation(undefined);
@@ -841,7 +812,7 @@ const LensPortal = ({
     const direct = locations
       .map((location) => location.newBlockId)
       .filter((blockId): blockId is string => blockId !== undefined)
-      .map((blockId) => documentBlock(blockId))
+      .map((blockId) => foundElement(liveBlock(blockId)))
       .filter((element): element is HTMLElement => element !== null);
     const displayValues = direct.map((element) => element.style.display);
     direct.forEach((element) => {
@@ -876,7 +847,7 @@ const LensPortal = ({
       });
       removalNode.remove();
     };
-  }, [isSuperseded, isVisible, locations]);
+  }, [articleVersion, isSuperseded, isVisible, locations]);
   return host === null
     ? null
     : createPortal(

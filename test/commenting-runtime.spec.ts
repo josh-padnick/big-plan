@@ -27,7 +27,7 @@ import {
   writeSnapshot,
 } from "../src/review/store.js";
 import { renderDocument } from "../src/render/render-document.js";
-import { expect, stageComment, test } from "./fixtures";
+import { expect, stageComment, test, type Page } from "./fixtures";
 
 test("should expire a held connected snapshot when the reviewer returns", async ({
   page,
@@ -2404,4 +2404,497 @@ test("should leave shell interactions wired exactly once after repeated re-wires
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
+});
+
+/** Reads the live session the runtime handed the page, or fails the journey. */
+const liveReviewSession = async (
+  page: Page,
+): Promise<{
+  readonly sessionId: string;
+  readonly planId: string;
+  readonly plan: string;
+}> => {
+  const session: unknown = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: { "x-big-plan-review-token": root.dataset.reviewToken ?? "" },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The journey requires a live review session");
+  }
+  return {
+    sessionId: session.sessionId,
+    planId: session.planId,
+    plan: session.plan,
+  };
+};
+
+/**
+ * Counts the persistent selection highlights and how many of them still cover
+ * text in the displayed plan. Removing a node collapses the ranges that held
+ * it onto its parent rather than dropping them, so a registry left over from a
+ * discarded article stays registered with empty ranges and paints nothing;
+ * only a range that still spans text inside the live article is a highlight
+ * the reader can see.
+ */
+const liveSelectionHighlights = async (
+  page: Page,
+): Promise<{ readonly total: number; readonly inLivePlan: number }> =>
+  page.evaluate(() => {
+    const registry = (
+      CSS as unknown as {
+        highlights?: { get(name: string): Iterable<Range> | undefined };
+      }
+    ).highlights;
+    const highlight = registry?.get("big-plan-review-selection");
+    const ranges = highlight === undefined ? [] : Array.from(highlight);
+    const article = document.querySelector("article");
+    return {
+      total: ranges.length,
+      inLivePlan: ranges.filter(
+        (range) =>
+          range.toString().trim() !== "" &&
+          article?.contains(range.startContainer) === true,
+      ).length,
+    };
+  });
+
+// A digest entry names the slide it will take the reader to, so "a lens is
+// visible" is not the promise being made: the lens must land in the slide the
+// entry's own header names. A resolver that anchors a plausible-looking
+// neighbour keeps every lens assertion green, so this journey compares the
+// header the digest rendered with the kicker of the slide the lens reached.
+const DIGEST_KICKER_MDX = `# Change digest
+
+## Delivery
+
+The delivery gate runs manual checks before merge.
+
+## Verification
+
+Reviewers confirm the output by hand.
+`;
+
+test("should open a digest entry in the slide its section header names", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-digest-kicker-"));
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = DIGEST_KICKER_MDX;
+  const revisedSource = initialSource
+    .replace(
+      "The delivery gate runs manual checks before merge.",
+      "The delivery gate runs automated checks before merge.",
+    )
+    .replace(
+      "Reviewers confirm the output by hand.",
+      "Reviewers confirm the output from the recorded run.",
+    );
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await stageComment(page, "Automate both checks.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    const session = await liveReviewSession(page);
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+    const fallbackTitle = "Change digest";
+    const changedBlockIds = diffSnapshots({
+      before: renderDocument({
+        markdown: initialSource,
+        fallbackTitle,
+        identity: {},
+      }).blocks,
+      after: renderDocument({
+        markdown: revisedSource,
+        fallbackTitle,
+        identity: {},
+      }).blocks,
+    }).flatMap((location) =>
+      location.status === "changed" && location.newBlockId !== undefined
+        ? [location.newBlockId]
+        : [],
+    );
+    expect(changedBlockIds.length).toBeGreaterThanOrEqual(2);
+    const revisedSnapshot = deriveSnapshotDigest(revisedSource);
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: revisedSource,
+    });
+    await writeFile(session.plan, revisedSource, "utf8");
+    const answeredAt = new Date().toISOString();
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: answeredAt,
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: request.comments.map((comment) => ({
+            commentId: comment.id,
+            state: "changed",
+            message: "Automated both checks.",
+            changeTargets: changedBlockIds,
+          })),
+        },
+        request: claimed,
+        commentsById: commentsFromExchange(exchange),
+        changedBlocks: new Set(changedBlockIds),
+        currentSnapshot: revisedSnapshot,
+        now: answeredAt,
+      }),
+    });
+
+    await expect(page.locator("article")).toContainText(
+      "from the recorded run",
+      { timeout: 15_000 },
+    );
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    const sections = rail.locator("[data-review-diff-section]");
+    await expect(sections).toHaveCount(2, { timeout: 15_000 });
+    const header = sections.nth(1);
+    const headerLabel = (
+      await header.locator("span").first().textContent()
+    )?.trim();
+    expect(headerLabel).not.toBe("");
+    const entry = header.locator("xpath=following-sibling::button[1]");
+    await entry.click();
+
+    const lens = page.locator(
+      "[data-review-diff-lens-host]:not([data-review-historical-diff]) [data-review-diff-lens]",
+    );
+    await expect(lens).toHaveCount(1);
+    // The slide the reader actually arrived in must be the slide the entry's
+    // header named, not merely some slide.
+    const arrivedKicker = await lens.evaluate(
+      (element) =>
+        element
+          .closest("[data-slide]")
+          ?.querySelector("[data-slide-kicker]")
+          ?.textContent?.trim() ?? null,
+    );
+    expect(arrivedKicker).toBe(headerLabel);
+    await expect(entry).toHaveAttribute("aria-current", "step");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// The refresh's own status line promises that open threads and review state
+// were preserved. Every element the island resolved before the swap belongs to
+// the article that was thrown away, and each loss is silent: the hover cache
+// still holds entries, the highlight registry still holds ranges, and the lens
+// still renders - into nodes no reader can see. These assertions therefore
+// check that the state landed back in the live article, not that it exists.
+const REFRESH_STATE_MDX = `# Refresh state
+
+## Delivery
+
+The delivery gate runs manual checks before merge.
+
+## Verification
+
+Reviewers confirm the recorded output by hand.
+
+## Rollout
+
+The rollout waits for a green build.
+`;
+
+test("should re-anchor an open lens, its highlights, and hover association when a second revision refreshes the plan", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-refresh-state-"));
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = REFRESH_STATE_MDX;
+  const revisedSource = initialSource.replace(
+    "The delivery gate runs manual checks before merge.",
+    "The delivery gate runs automated checks before merge.",
+  );
+  const latestSource = revisedSource.replace(
+    "The rollout waits for a green build.",
+    "The rollout waits for a green build and a signed release.",
+  );
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    const commentedSlide = page.locator("[data-slide]").first();
+    await stageComment(page, "Automate the delivery gate.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    await test.step("a selection comment stages its own persistent highlight", async () => {
+      const quoted = page
+        .locator("[data-block-kind='paragraph']")
+        .filter({ hasText: "Reviewers confirm the recorded output" })
+        .first();
+      await quoted.scrollIntoViewIfNeeded();
+      const selected = await quoted.evaluate((element) => {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        const text = walker.nextNode();
+        if (!(text instanceof Text)) return "";
+        const quote = text.data.slice(0, 18);
+        const range = document.createRange();
+        range.setStart(text, 0);
+        range.setEnd(text, quote.length);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        document.dispatchEvent(new Event("selectionchange"));
+        return quote;
+      });
+      expect(selected).not.toBe("");
+      await page
+        .getByRole("button", { name: "Comment on selected text" })
+        .click();
+      const dialog = page.getByRole("dialog", {
+        name: /Comment on Selected text in/u,
+      });
+      const submitRightAway = dialog.getByRole("switch", {
+        name: "Submit right away",
+      });
+      if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+        await submitRightAway.click();
+      }
+      await dialog.getByLabel("Add a comment").fill("Name the recorded run.");
+      await dialog.getByRole("button", { name: "Add Comment" }).click();
+      expect(await liveSelectionHighlights(page)).toEqual({
+        total: 1,
+        inLivePlan: 1,
+      });
+    });
+
+    const session = await liveReviewSession(page);
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+    const fallbackTitle = "Refresh state";
+    const changedBlockId = diffSnapshots({
+      before: renderDocument({
+        markdown: initialSource,
+        fallbackTitle,
+        identity: {},
+      }).blocks,
+      after: renderDocument({
+        markdown: revisedSource,
+        fallbackTitle,
+        identity: {},
+      }).blocks,
+    }).find((location) => location.status === "changed")?.newBlockId;
+    if (changedBlockId === undefined) {
+      throw new Error("The simulated revision produced no changed block");
+    }
+    const revisedSnapshot = deriveSnapshotDigest(revisedSource);
+    const latestSnapshot = deriveSnapshotDigest(latestSource);
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: revisedSource,
+    });
+    await writeSnapshot({
+      store,
+      snapshot: latestSnapshot,
+      source: latestSource,
+    });
+
+    const answeredAt = new Date().toISOString();
+    await test.step("the agent answers the feedback and the plan refreshes", async () => {
+      await writeFile(session.plan, revisedSource, "utf8");
+      const claimed = await claimAgentRequest({
+        store,
+        requestId: request.requestId,
+        baselineSnapshot: request.premiseSnapshot,
+        now: answeredAt,
+      });
+      await publishAgentResponse({
+        store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: request.requestId,
+            outcomes: request.comments.map((comment) => ({
+              commentId: comment.id,
+              state: "changed",
+              message: "Automated the delivery gate.",
+              changeTargets: [changedBlockId],
+            })),
+          },
+          request: claimed,
+          commentsById: commentsFromExchange(exchange),
+          changedBlocks: new Set([changedBlockId]),
+          currentSnapshot: revisedSnapshot,
+          now: answeredAt,
+        }),
+      });
+      await expect(page.locator("article")).toContainText("automated checks", {
+        timeout: 15_000,
+      });
+    });
+
+    const lensHost = page.locator(
+      "[data-review-diff-lens-host]:not([data-review-historical-diff])",
+    );
+    const anchorKicker = async (): Promise<string | null> =>
+      lensHost.evaluate(
+        (element) =>
+          element
+            .closest("[data-slide]")
+            ?.querySelector("[data-slide-kicker]")
+            ?.textContent?.trim() ?? null,
+      );
+    let openedKicker: string | null = null;
+    await test.step("the reviewer opens the change in its slide", async () => {
+      await rail
+        .getByRole("button", { name: /Expand thread:/u })
+        .first()
+        .click();
+      await rail.getByRole("button", { name: "Review change" }).click();
+      await expect(lensHost).toHaveCount(1);
+      openedKicker = await anchorKicker();
+      expect(openedKicker).not.toBeNull();
+    });
+
+    await test.step("the agent revises a different slide while the lens is open", async () => {
+      const revisedAgainAt = new Date(Date.parse(answeredAt) + 1).toISOString();
+      const followUp = messageAgentRequest({
+        kind: "chat",
+        requestId: randomBytes(8).toString("hex"),
+        sessionId: session.sessionId,
+        planId: session.planId,
+        premiseSnapshot: revisedSnapshot,
+        createdAt: revisedAgainAt,
+        body: "Require a signed release before rollout.",
+      });
+      await writeAgentRequest({ store, request: followUp });
+      await writeFile(session.plan, latestSource, "utf8");
+      const claimedFollowUp = await claimAgentRequest({
+        store,
+        requestId: followUp.requestId,
+        baselineSnapshot: revisedSnapshot,
+        now: revisedAgainAt,
+      });
+      await publishAgentResponse({
+        store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: followUp.requestId,
+            message: "The rollout now waits for a signed release.",
+          },
+          request: claimedFollowUp,
+          commentsById: new Map(),
+          changedBlocks: new Set(),
+          currentSnapshot: latestSnapshot,
+          now: revisedAgainAt,
+        }),
+      });
+      await expect(page.locator("article")).toContainText("signed release", {
+        timeout: 15_000,
+      });
+    });
+
+    await test.step("the open lens re-anchors in the live slide it named", async () => {
+      await expect(lensHost).toHaveCount(1);
+      expect(await anchorKicker()).toBe(openedKicker);
+      // The lens stands in for the block it replaces, so that block must be
+      // hidden in the live article, not in the one that was discarded.
+      await expect(
+        page
+          .locator("article p[data-block-kind='paragraph']")
+          .filter({ hasText: "runs automated checks" }),
+      ).toBeHidden();
+      await expect(
+        page
+          .locator("article p[data-block-kind='paragraph']")
+          .filter({ hasText: "signed release" }),
+      ).toBeVisible();
+    });
+
+    await test.step("the selection highlight is registered against live text", async () => {
+      await expect
+        .poll(() => liveSelectionHighlights(page))
+        .toEqual({ total: 1, inLivePlan: 1 });
+    });
+
+    await test.step("hovering the commented slide associates it again", async () => {
+      await expect(commentedSlide).toHaveAttribute(
+        "data-review-has-comment",
+        "",
+      );
+      // Hover association deliberately yields to a focused thread, so the
+      // reader turns back to the plan before a hover can mean anything.
+      await rail.getByRole("button", { name: "Close feedback" }).click();
+      await commentedSlide.locator("h2").first().hover();
+      await expect(commentedSlide).toHaveAttribute(
+        "data-review-comment-associated",
+        "",
+      );
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });

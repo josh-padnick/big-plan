@@ -17,6 +17,7 @@ import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import { Icon } from "./icon.browser.js";
+import { foundElement, liveBlock } from "./live-target.browser.js";
 import { Badge, Button } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
@@ -533,10 +534,7 @@ export const AgentChangeDigest = ({
         const location = diff.locations.at(index);
         const blockId = location?.newBlockId ?? location?.oldBlockId;
         if (blockId === undefined) continue;
-        const kicker = document
-          .querySelector<HTMLElement>(
-            `[data-block-id="${CSS.escape(blockId)}"]`,
-          )
+        const kicker = foundElement(liveBlock(blockId))
           ?.closest<HTMLElement>("[data-slide]")
           ?.querySelector<HTMLElement>("[data-slide-kicker]")
           ?.textContent?.trim();
