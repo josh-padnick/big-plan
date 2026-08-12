@@ -28,6 +28,11 @@ import type {
   DiffRun,
   SnapshotDiff,
 } from "../shared/review-wire.js";
+import {
+  lensAnchorCandidates,
+  tourStartIndex,
+  type LensPlacement,
+} from "./diff-anchor.js";
 import { Icon } from "./icon.browser.js";
 import { Badge, Button } from "./ui.browser.js";
 
@@ -572,19 +577,34 @@ export const DiffLensContent = ({
   );
 };
 
+type LensAnchor = {
+  readonly element: HTMLElement;
+  readonly placement: LensPlacement;
+};
+
+/**
+ * Resolves a block id to the block the reader is reading, never to a copy of
+ * that block rendered inside another lens's Was/Now snapshot.
+ */
+const documentBlock = (blockId: string): HTMLElement | null => {
+  const candidates = document.querySelectorAll<HTMLElement>(
+    `[data-block-id="${CSS.escape(blockId)}"]`,
+  );
+  for (const candidate of candidates) {
+    if (candidate.closest("[data-review-diff-lens]") === null) return candidate;
+  }
+  return null;
+};
+
 const anchorFor = (
   location: DiffLocation,
   isSuperseded: boolean,
-): HTMLElement | null => {
-  const blockIds = isSuperseded
-    ? [location.newBlockId]
-    : [location.newBlockId, location.beforeBlockId, location.afterBlockId];
-  for (const blockId of blockIds) {
-    if (blockId === undefined) continue;
-    const element = document.querySelector<HTMLElement>(
-      `[data-block-id="${CSS.escape(blockId)}"]`,
-    );
-    if (element !== null) return element;
+): LensAnchor | null => {
+  for (const { blockId, placement } of lensAnchorCandidates(location, {
+    isSuperseded,
+  })) {
+    const element = documentBlock(blockId);
+    if (element !== null) return { element, placement };
   }
   return null;
 };
@@ -655,15 +675,11 @@ const LensPortal = ({
       };
     }
     setIsHistorical(false);
-    setPresentation(prosePresentationFor(anchor));
+    setPresentation(prosePresentationFor(anchor.element));
     const direct = locations
       .map((location) => location.newBlockId)
       .filter((blockId): blockId is string => blockId !== undefined)
-      .map((blockId) =>
-        document.querySelector<HTMLElement>(
-          `[data-block-id="${CSS.escape(blockId)}"]`,
-        ),
-      )
+      .map((blockId) => documentBlock(blockId))
       .filter((element): element is HTMLElement => element !== null);
     const displayValues = direct.map((element) => element.style.display);
     direct.forEach((element) => {
@@ -673,16 +689,20 @@ const LensPortal = ({
     container.dataset.reviewDiffLensHost = "";
     container.className = "my-4 min-w-0 max-w-full";
     let removalNode: HTMLElement = container;
-    if (anchor instanceof HTMLTableRowElement) {
+    const target = anchor.element;
+    if (target instanceof HTMLTableRowElement) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
-      cell.colSpan = Math.max(1, anchor.cells.length);
+      cell.colSpan = Math.max(1, target.cells.length);
       cell.append(container);
       row.append(cell);
-      anchor.before(row);
+      if (anchor.placement === "after") target.after(row);
+      else target.before(row);
       removalNode = row;
+    } else if (anchor.placement === "after") {
+      target.after(container);
     } else {
-      anchor.before(container);
+      target.before(container);
     }
     setHost(container);
     requestAnimationFrame(() =>
@@ -768,19 +788,11 @@ export const DiffTourProvider = ({
     );
   }, [acceptedPlaces]);
   const openTour = (next: OpenTour): void => {
-    const startIndex =
-      next.startPlaceId === undefined
-        ? 0
-        : Math.max(0, next.placeIds.indexOf(next.startPlaceId));
     setTour(next);
-    setIndex(startIndex);
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>("[data-review-diff-lens]")
-          ?.scrollIntoView({ behavior: "smooth", block: "center" }),
-      ),
-    );
+    setIndex(tourStartIndex(next));
+    // The lens scrolls itself into view once it knows where it landed. A scroll
+    // from here could only guess, and picking the document's first lens would
+    // send the reader to a historical change instead of the one they opened.
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
