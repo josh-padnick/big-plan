@@ -1075,13 +1075,12 @@ const installColumnPointerReorder = ({
   const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
   const fit = (screen) => {
     const card = screen.querySelector(
-      ":scope > .wireframe-device-block > .wireframe-frame-card",
+      ":scope > .wireframe-frame-card",
     );
-    const deviceBlock = card?.parentElement;
     const frame = card === null ? null : card.querySelector(":scope > .wireframe-frame");
+    const caption = screen.querySelector(":scope > .wireframe-screen-caption");
     if (
       card === null ||
-      !(deviceBlock instanceof HTMLElement) ||
       frame === null ||
       screen.clientWidth === 0
     )
@@ -1105,7 +1104,6 @@ const installColumnPointerReorder = ({
       parseFloat(cardStyle.paddingBottom) +
       parseFloat(cardStyle.borderTopWidth) +
       parseFloat(cardStyle.borderBottomWidth);
-    const caption = card.nextElementSibling;
     const frameWidth = frame.offsetWidth;
     const frameHeight = frame.offsetHeight;
     const widthScale =
@@ -1113,8 +1111,9 @@ const installColumnPointerReorder = ({
     let scale = Math.min(1, widthScale);
     for (let fitPass = 0; fitPass < 8; fitPass += 1) {
       frame.style.zoom = String(scale);
-      deviceBlock.style.width =
-        String(frameWidth * scale + horizontalInset) + "px";
+      const paintedWidth = String(frameWidth * scale + horizontalInset) + "px";
+      card.style.width = paintedWidth;
+      if (caption instanceof HTMLElement) caption.style.width = paintedWidth;
       let captionHeight = 0;
       if (caption instanceof HTMLElement) {
         const captionStyle = getComputedStyle(caption);
@@ -1138,7 +1137,9 @@ const installColumnPointerReorder = ({
       scale = nextScale;
     }
     frame.style.zoom = String(scale);
-    deviceBlock.style.width = String(frameWidth * scale + horizontalInset) + "px";
+    const paintedWidth = String(frameWidth * scale + horizontalInset) + "px";
+    card.style.width = paintedWidth;
+    if (caption instanceof HTMLElement) caption.style.width = paintedWidth;
   };
   for (const root of roots) {
     const screens = Array.from(

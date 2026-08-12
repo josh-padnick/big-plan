@@ -346,7 +346,7 @@ const WIREFRAME_LONG_CAPTION_DESKTOP_MDX = `# Long-caption desktop workspace
 <Wireframe id="long-caption-desktop" title="Long caption alignment">
   <Screen
     id="historical"
-    name="Historical change across a deliberately long reviewer-visible desktop screen caption that must wrap without outgrowing its frame"
+    name="Historical change across a deliberately long reviewer-visible desktop screen caption that must wrap without outgrowing its frame while preserving readable typography, subordinate viewport metadata, frame alignment, and the complete maximized desktop silhouette at every supported review width"
     device="desktop"
   >
     <Panel title="Review thread">

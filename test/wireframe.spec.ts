@@ -274,11 +274,12 @@ test("should align a long caption with a height-fitted desktop frame", async ({
     .toBe(0);
 
   const geometry = await wireframe.evaluate((node) => {
+    const screen = node.querySelector<HTMLElement>(".wireframe-screen");
     const caption = node.querySelector<HTMLElement>(
       ".wireframe-screen-caption",
     );
     const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
-    if (caption === null || card === null) {
+    if (screen === null || caption === null || card === null) {
       throw new Error("long-caption desktop screen is incomplete");
     }
     const captionBox = caption.getBoundingClientRect();
@@ -292,26 +293,46 @@ test("should align a long caption with a height-fitted desktop frame", async ({
     }
     const nameBox = name.getBoundingClientRect();
     const viewportBox = viewport.getBoundingClientRect();
+    const captionStyle = getComputedStyle(caption);
+    const nameStyle = getComputedStyle(name);
+    const viewportStyle = getComputedStyle(viewport);
+    const nameLineHeight = parseFloat(nameStyle.lineHeight);
     return {
-      captionHeight: captionBox.height,
+      directChild: caption.parentElement === screen,
+      nameLineCount: nameBox.height / nameLineHeight,
       captionTopGap: captionBox.top - cardBox.bottom,
       leftDelta: Math.abs(captionBox.left - cardBox.left),
       rightDelta: Math.abs(captionBox.right - cardBox.right),
       metadataGap: viewportBox.top - nameBox.bottom,
-      metadataFont: getComputedStyle(viewport).fontSize,
-      captionFont: getComputedStyle(caption).fontFamily,
+      nameDisplay: nameStyle.display,
+      nameFontSize: parseFloat(nameStyle.fontSize),
+      nameLineHeight,
+      captionFont: captionStyle.fontFamily,
+      captionTracking: captionStyle.letterSpacing,
+      nameColor: nameStyle.color,
+      metadataColor: viewportStyle.color,
+      metadataDisplay: viewportStyle.display,
+      metadataFontSize: parseFloat(viewportStyle.fontSize),
     };
   });
 
-  expect(geometry.captionHeight).toBeGreaterThan(16);
+  expect(geometry.directChild).toBe(true);
+  expect(geometry.nameLineCount).toBeGreaterThanOrEqual(2);
   expect(geometry.captionTopGap).toBeGreaterThanOrEqual(10);
   expect(geometry.captionTopGap).toBeLessThanOrEqual(14);
   expect(geometry.leftDelta).toBeLessThan(4);
   expect(geometry.rightDelta).toBeLessThan(4);
   expect(geometry.metadataGap).toBeGreaterThanOrEqual(4);
   expect(geometry.metadataGap).toBeLessThanOrEqual(6);
-  expect(geometry.metadataFont).toBe("12px");
-  expect(geometry.captionFont).toContain("-apple-system");
+  expect(geometry.nameDisplay).toBe("block");
+  expect(geometry.nameFontSize).toBe(14);
+  expect(geometry.nameLineHeight / geometry.nameFontSize).toBeCloseTo(1.45, 1);
+  expect(["normal", "0px"]).toContain(geometry.captionTracking);
+  expect(geometry.captionFont).toContain("system-ui");
+  expect(geometry.metadataDisplay).toBe("block");
+  expect(geometry.metadataFontSize).toBe(12);
+  expect(geometry.metadataFontSize).toBeLessThan(geometry.nameFontSize);
+  expect(geometry.metadataColor).not.toBe(geometry.nameColor);
 
   const screenOverflow = await wireframe
     .locator(".wireframe-screen")
@@ -341,21 +362,58 @@ test("should keep a long wireframe caption aligned and readable on mobile", asyn
     }
     const captionBox = caption.getBoundingClientRect();
     const cardBox = card.getBoundingClientRect();
+    const name = caption.querySelector<HTMLElement>(".wireframe-screen-name");
+    const viewport = caption.querySelector<HTMLElement>(
+      ".wireframe-screen-viewport",
+    );
+    if (name === null || viewport === null) {
+      throw new Error("mobile wireframe caption metadata is incomplete");
+    }
+    const nameBox = name.getBoundingClientRect();
+    const viewportBox = viewport.getBoundingClientRect();
+    const captionStyle = getComputedStyle(caption);
+    const nameStyle = getComputedStyle(name);
+    const viewportStyle = getComputedStyle(viewport);
+    const nameFontSize = parseFloat(nameStyle.fontSize);
+    const nameLineHeight = parseFloat(nameStyle.lineHeight);
     return {
-      captionHeight: captionBox.height,
+      directChild: caption.parentElement === screen,
+      nameLineCount: nameBox.height / nameLineHeight,
       captionTopGap: captionBox.top - cardBox.bottom,
       leftDelta: Math.abs(captionBox.left - cardBox.left),
       rightDelta: Math.abs(captionBox.right - cardBox.right),
+      metadataGap: viewportBox.top - nameBox.bottom,
       horizontalOverflow: screen.scrollWidth - screen.clientWidth,
+      nameDisplay: nameStyle.display,
+      nameFontSize,
+      nameLineHeight,
+      captionFont: captionStyle.fontFamily,
+      captionTracking: captionStyle.letterSpacing,
+      nameColor: nameStyle.color,
+      metadataColor: viewportStyle.color,
+      metadataDisplay: viewportStyle.display,
+      metadataFontSize: parseFloat(viewportStyle.fontSize),
     };
   });
 
-  expect(geometry.captionHeight).toBeGreaterThan(16);
+  expect(geometry.directChild).toBe(true);
+  expect(geometry.nameLineCount).toBeGreaterThanOrEqual(2);
   expect(geometry.captionTopGap).toBeGreaterThanOrEqual(10);
   expect(geometry.captionTopGap).toBeLessThanOrEqual(14);
   expect(geometry.leftDelta).toBeLessThan(2);
   expect(geometry.rightDelta).toBeLessThan(2);
+  expect(geometry.metadataGap).toBeGreaterThanOrEqual(4);
+  expect(geometry.metadataGap).toBeLessThanOrEqual(6);
   expect(geometry.horizontalOverflow).toBe(0);
+  expect(geometry.nameDisplay).toBe("block");
+  expect(geometry.nameFontSize).toBe(14);
+  expect(geometry.nameLineHeight / geometry.nameFontSize).toBeCloseTo(1.45, 1);
+  expect(["normal", "0px"]).toContain(geometry.captionTracking);
+  expect(geometry.captionFont).toContain("system-ui");
+  expect(geometry.metadataDisplay).toBe("block");
+  expect(geometry.metadataFontSize).toBe(12);
+  expect(geometry.metadataFontSize).toBeLessThan(geometry.nameFontSize);
+  expect(geometry.metadataColor).not.toBe(geometry.nameColor);
 });
 
 test("should fill a multi-screen desktop workspace at rest and when maximized", async ({

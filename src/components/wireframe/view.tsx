@@ -691,54 +691,52 @@ const Screen = ({
       data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
-      <div className="wireframe-device-block w-fit max-w-full">
-        <div className="wireframe-frame-card">
+      <div className="wireframe-frame-card mx-auto w-fit">
+        <div
+          className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
+          data-wireframe-device={screen.device}
+        >
+          {desktop ? (
+            <div className="wireframe-browser-bar">
+              <span className="wireframe-browser-dots" aria-hidden="true" />
+              <span className="wireframe-browser-address">
+                {screen.url ?? " "}
+              </span>
+            </div>
+          ) : null}
+          {!desktop && !phone ? (
+            <span className="wireframe-tablet-handle" aria-hidden="true" />
+          ) : null}
+          {phone ? (
+            <span className="wireframe-phone-notch" aria-hidden="true" />
+          ) : null}
           <div
-            className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
+            className="wireframe-artboard"
             data-wireframe-device={screen.device}
+            data-wireframe-height-policy={preset.heightPolicy}
+            {...(screen.pattern === undefined
+              ? {}
+              : { "data-wireframe-pattern": screen.pattern })}
           >
-            {desktop ? (
-              <div className="wireframe-browser-bar">
-                <span className="wireframe-browser-dots" aria-hidden="true" />
-                <span className="wireframe-browser-address">
-                  {screen.url ?? " "}
-                </span>
-              </div>
-            ) : null}
-            {!desktop && !phone ? (
-              <span className="wireframe-tablet-handle" aria-hidden="true" />
-            ) : null}
-            {phone ? (
-              <span className="wireframe-phone-notch" aria-hidden="true" />
-            ) : null}
-            <div
-              className="wireframe-artboard"
-              data-wireframe-device={screen.device}
-              data-wireframe-height-policy={preset.heightPolicy}
-              {...(screen.pattern === undefined
-                ? {}
-                : { "data-wireframe-pattern": screen.pattern })}
-            >
-              <div className="wireframe-canvas flex flex-col gap-4">
-                <WireframeElements nodes={screen.children} />
-              </div>
+            <div className="wireframe-canvas flex flex-col gap-4">
+              <WireframeElements nodes={screen.children} />
             </div>
           </div>
         </div>
-        <figcaption className="wireframe-screen-caption mt-3 w-full min-w-0 font-sans text-sm leading-[1.45] tracking-normal text-ink">
-          <span className="wireframe-screen-name block min-w-0 break-words">
-            {screen.name}
-          </span>
-          <span className="wireframe-screen-viewport mt-1 block min-w-0 break-words text-xs leading-normal text-muted">
-            {preset.label} · {preset.width} × {preset.height}px{" "}
-            {workspaceViewport
-              ? "workspace viewport"
-              : preset.heightPolicy === "fixed"
-                ? "fixed frame"
-                : "minimum · grows with content"}
-          </span>
-        </figcaption>
       </div>
+      <figcaption className="wireframe-screen-caption mx-auto mt-3 w-full min-w-0 font-sans text-sm leading-[1.45] tracking-normal text-ink">
+        <span className="wireframe-screen-name block min-w-0 break-words">
+          {screen.name}
+        </span>
+        <span className="wireframe-screen-viewport mt-1 block min-w-0 break-words text-xs leading-normal text-muted">
+          {preset.label} · {preset.width} × {preset.height}px{" "}
+          {workspaceViewport
+            ? "workspace viewport"
+            : preset.heightPolicy === "fixed"
+              ? "fixed frame"
+              : "minimum · grows with content"}
+        </span>
+      </figcaption>
     </figure>
   );
 };
