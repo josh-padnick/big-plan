@@ -1,5 +1,5 @@
 // ESLint flat config. Two jobs: the typescript-eslint recommended baseline
-// with the conventions ENGINEERING_PRACTICES.md promises (separate type
+// with the conventions _internal/ENGINEERING_PRACTICES.md promises (separate type
 // imports), and the project-specific guardrails that convention alone cannot
 // enforce - most importantly that Playwright specs use the extended test from
 // test/fixtures (which fails on console errors) instead of importing
@@ -164,7 +164,7 @@ export default tseslint.config(
         // controls, the code-figure transform draws the maximize control - and
         // a glyph either drew itself would be locally defined icon data, which
         // the icons layer exists to prevent.
-        mayImport: ["components", "icons", "model", "planVocabulary"],
+        mayImport: ["components", "icons", "model", "planVocabulary", "ui"],
       },
       shell: {
         files: ["src/render/shell/**/*.ts"],

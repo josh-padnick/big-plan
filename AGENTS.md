@@ -83,10 +83,13 @@ Machine delivery collects that data as JSON.
 Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
 Validation renders the plan in memory while collecting the same component models in one pass.
 It discards the generated HTML, then applies its registered linting rules to the authored plan.
-React is a presentation-edge implementation tool.
-A rendered document ships a typed React interaction island for commenting plus the page envelope's first-paint preference bootstrap and the shell's self-contained viewer scripts for the [documented reader interactions](docs/src/content/docs/intro/features.md).
-The browser React interaction island never renders, replaces, or gates the server-rendered plan content, which remains fully readable when scripts are disabled.
-Big Plan ships no separate script-free HTML variant.
+React is a presentation-edge implementation tool. A rendered document ships a
+typed React interaction island for commenting plus the page envelope's
+first-paint preference bootstrap and the shell's self-contained viewer scripts
+for the [documented reader interactions](docs/src/content/docs/intro/features.md).
+The browser React interaction island never renders, replaces, or gates the
+server-rendered plan content, which remains fully readable when scripts are
+disabled. Big Plan ships no separate script-free HTML variant.
 Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
 
 Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
@@ -139,7 +142,7 @@ Route by the kind of fact:
 
 - A fact about one file lives in that file's header comment; a fact a check enforces lives in the check and its error message.
 - Current product capabilities and human or agent usage guidance live in `docs/`.
-- How the product looks, and the scales and rules a visual decision picks from, live in [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md); token values stay in `src/render/global.css`.
+- How the product looks, and the scales and rules a visual decision picks from, live in [_internal/DESIGN_PRINCIPLES.md](_internal/DESIGN_PRINCIPLES.md); token values stay in `src/render/global.css`.
 - Setup, build, run, and shortest-path usage procedures live in the root [README.md](README.md).
 - DCO, branches, pull requests, CI expectations, and other contribution workflow live in [CONTRIBUTING.md](CONTRIBUTING.md).
 - A directory-scoped, multi-file, unenforced placement boundary lives in that directory's `README.md` local map.
@@ -166,12 +169,17 @@ Guidance is demand-driven: add a document, rule, or map entry only after an agen
 
 ## Engineering practices
 
-Read and follow [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for the authoritative coding, comments, error-handling, logging, testing, browser-runtime, styling, and tooling practices.
+Read and follow [_internal/ENGINEERING_PRACTICES.md](_internal/ENGINEERING_PRACTICES.md) for the authoritative coding, comments, error-handling, logging, testing, browser-runtime, styling, and tooling practices.
 Mechanically enforced facts remain owned by their checks.
+
+## Testing
+
+Before adding a feature, fixing a bug, or adding or changing tests, read [_internal/TESTING.md](_internal/TESTING.md).
+It owns the judgment framework for which tests earn their place and which test layer to use.
 
 ## Design
 
-Read and follow [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) before changing anything a reader sees.
+Read and follow [_internal/DESIGN_PRINCIPLES.md](_internal/DESIGN_PRINCIPLES.md) before changing anything a reader sees.
 It owns the spacing, type, colour, and elevation scales, and the rules for picking a step from each.
 Engineering practices own how to write the styling code; the design principles own what to write.
 
