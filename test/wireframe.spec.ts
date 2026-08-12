@@ -177,6 +177,22 @@ test("should fill a maximized single-screen desktop workspace", async ({
   await expect(frame.locator(".wireframe-screen-name")).toHaveText(
     "Historical change",
   );
+  const artboard = frame.locator(".wireframe-artboard");
+  const rail = frame.locator(".wireframe-rail");
+
+  const assertFixedWorkspaceViewport = async (): Promise<void> => {
+    const viewportGeometry = await artboard.evaluate((node) => ({
+      height: node.offsetHeight,
+      overflow: node.scrollHeight - node.clientHeight,
+    }));
+    expect(viewportGeometry.height).toBe(820);
+    expect(viewportGeometry.overflow).toBe(0);
+
+    const railScrollRange = await rail.evaluate(
+      (node) => node.scrollHeight - node.clientHeight,
+    );
+    expect(railScrollRange).toBeGreaterThan(0);
+  };
 
   const assertCaptionMatchesFrame = async (): Promise<void> => {
     const captionGeometry = await frame.evaluate((node) => {
@@ -199,10 +215,12 @@ test("should fill a maximized single-screen desktop workspace", async ({
   };
 
   await assertCaptionMatchesFrame();
+  await assertFixedWorkspaceViewport();
   await frame.locator("[data-figure-maximize]").click();
   await expect(frame).toHaveAttribute("data-figure-maximized", "");
   await expect(frame.getByRole("heading", { name: "Feedback" })).toBeVisible();
   await assertCaptionMatchesFrame();
+  await assertFixedWorkspaceViewport();
 
   const geometry = await frame.evaluate((node) => {
     const artboard = node.querySelector<HTMLElement>(".wireframe-artboard");
@@ -243,7 +261,6 @@ test("should fill a maximized single-screen desktop workspace", async ({
     .evaluate((node) => node.scrollHeight - node.clientHeight);
   expect(screenOverflow).toBe(0);
 
-  const rail = frame.locator(".wireframe-rail");
   const scrollRange = await rail.evaluate(
     (node) => node.scrollHeight - node.clientHeight,
   );

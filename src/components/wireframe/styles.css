@@ -381,10 +381,11 @@ marks and a plan diff never jitters.
     overflow-y: auto;
   }
   /* A desktop application is a viewport, not an endlessly growing page.
-     Its shell owns the device height; persistent chrome stays anchored
-     while workspace panes take responsibility for their own overflow. */
+     Its workspace host owns the device height; persistent chrome stays
+     anchored while workspace panes take responsibility for their own overflow. */
   .wireframe-artboard[data-wireframe-device="desktop"]:has(
-      .wireframe-app-shell
+      .wireframe-app-shell,
+      > .wireframe-canvas > .wireframe-row[data-wireframe-workspace]
     ) {
     height: var(--wf-min-height);
     min-height: 0;
@@ -394,7 +395,10 @@ marks and a plan diff never jitters.
     flex: 1;
     min-width: 0;
   }
-  .wireframe-artboard[data-wireframe-device="desktop"]:has(.wireframe-app-shell)
+  .wireframe-artboard[data-wireframe-device="desktop"]:has(
+      .wireframe-app-shell,
+      > .wireframe-canvas > .wireframe-row[data-wireframe-workspace]
+    )
     > .wireframe-canvas {
     height: 100%;
     min-height: 0;
