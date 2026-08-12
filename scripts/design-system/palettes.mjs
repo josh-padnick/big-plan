@@ -1,10 +1,10 @@
-// Enforces the colour-theme contract described in DESIGN_PRINCIPLES.md: a
+// Enforces the colour-theme contract described in _internal/DESIGN_PRINCIPLES.md: a
 // palette is a set of shade ramps behind one shared role mapping, so every
 // palette must supply every ramp step the roles reach, and every text pairing a
 // document can produce must meet WCAG AA in that palette's light and dark half.
 //
 // This check owns the exact required pairings and the exact contrast floor;
-// DESIGN_PRINCIPLES.md owns why colour is expressed as roles over ramps. The
+// _internal/DESIGN_PRINCIPLES.md owns why colour is expressed as roles over ramps. The
 // palette id list is authored in src/render/preference-options.js and
 // re-exported by src/render/preferences.ts for application consumers.
 
@@ -60,7 +60,7 @@ const SYNTAX_TOKEN_PATTERN = /^syntax-[a-z]+-(?:c|bg)$/;
 const CONTRAST_FLOOR = 4.5;
 
 // Reading surfaces a document can put primary or secondary text on. Tertiary
-// text is deliberately absent from the bands: DESIGN_PRINCIPLES.md holds that a
+// text is deliberately absent from the bands: _internal/DESIGN_PRINCIPLES.md holds that a
 // band carries primary or secondary text and never tertiary.
 const PAGE_GROUNDS = ["--bg", "--raised-c"];
 const BAND_GROUNDS = [

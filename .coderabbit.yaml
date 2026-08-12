@@ -4,7 +4,7 @@
 # (scripts/style-contract/check.mjs) mechanically enforces placement, volume,
 # and class-only selectors; these instructions ask the review layer for the
 # judgement the check cannot make, in the vocabulary of
-# ENGINEERING_PRACTICES.md "Styling owned markup".
+# _internal/ENGINEERING_PRACTICES.md "Styling owned markup".
 language: en-US
 reviews:
   path_instructions:

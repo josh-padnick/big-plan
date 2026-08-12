@@ -16,12 +16,12 @@ Visual quality is established by human review of the rendered review document pl
 
 When you change anything a reader sees:
 
-- Pick values from the scales in [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) rather than inventing new ones.
+- Pick values from the scales in [_internal/DESIGN_PRINCIPLES.md](_internal/DESIGN_PRINCIPLES.md) rather than inventing new ones.
 - Render an affected example, such as `node bin/big-plan.mjs render examples/all-components.mdx`, and read the result in both light and dark appearances at desktop and phone widths before opening the pull request. For colour-theme work, exercise every affected theme.
 - Keep `bun run lint` green: the stylesheet-contract and design-system checks enforce the CSS escape-hatch rules and the declaration ratchet.
 - Describe the intended visual change in the pull request so a reviewer knows what to look at.
 
-See [AGENTS.md](AGENTS.md) for architecture, [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) for the design scales a visual change picks from, [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for engineering practices, and [README.md](README.md) for development commands.
+See [AGENTS.md](AGENTS.md) for architecture, [_internal/DESIGN_PRINCIPLES.md](_internal/DESIGN_PRINCIPLES.md) for the design scales a visual change picks from, [_internal/ENGINEERING_PRACTICES.md](_internal/ENGINEERING_PRACTICES.md) for engineering practices, and [README.md](README.md) for development commands.
 
 Wireframe changes must also pass the rendered geometry fence in `test/wireframe-quality.spec.ts`.
 That browser check renders the proof and form-factor showcase documents at their declared device sizes and rejects cramped panes, overlapping regions, dead layout bands, and device-shell mismatches.

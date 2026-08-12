@@ -1,6 +1,6 @@
 <!--
 Owns Big Plan's detailed coding, testing, diagnostics, logging, browser-runtime, and styling practices.
-Repository orientation and source placement stay in AGENTS.md; mechanically enforced details stay with their checks.
+Repository orientation and source placement stay in [AGENTS.md](../AGENTS.md); mechanically enforced details stay with their checks.
 -->
 
 # Engineering Practices
@@ -8,7 +8,7 @@ Repository orientation and source placement stay in AGENTS.md; mechanically enfo
 These practices were distilled from [`fabricahq/app`](https://github.com/fabricahq/app) at `origin/main` `bd48a1da` (2026-07-08), then adapted for Big Plan's TypeScript and Bun toolchain, static rendering edge, and vanilla-JavaScript document viewer.
 That repository is provenance, not a dependency.
 
-Read [AGENTS.md](AGENTS.md) first for product orientation, vocabulary, architecture, source placement, and contribution guardrails.
+Read [AGENTS.md](../AGENTS.md) first for product orientation, vocabulary, architecture, source placement, and contribution guardrails.
 This file is the authoritative review standard for authored code, configuration, tests, and engineering documentation.
 Generated files are exempt because their generators own them.
 Exact mechanically enforced behavior lives in `eslint.config.mjs`, `tsconfig.json`, the stylesheet-contract and design-system checks, and the test harness.

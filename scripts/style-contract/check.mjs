@@ -1,5 +1,5 @@
 // Enforces the repository-wide CSS escape-hatch and cascade contract described
-// in ENGINEERING_PRACTICES.md. This check owns the exact marker and layer
+// in _internal/ENGINEERING_PRACTICES.md. This check owns the exact marker and layer
 // syntax, the volume a stylesheet may occupy, and where a stylesheet may live.
 //
 // The header markers say a file's CSS is justified in principle. The rules

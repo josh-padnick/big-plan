@@ -101,7 +101,7 @@ node bin/big-plan.mjs render examples/sample.mdx
 Formatting exclusions and their rationale are documented in [.prettierignore](.prettierignore).
 Use `bun run test`, not `bun test` - the latter invokes Bun's own test runner instead of the package script.
 
-See [AGENTS.md](AGENTS.md) for architecture, [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for engineering practices, and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
+See [AGENTS.md](AGENTS.md) for architecture, [_internal/ENGINEERING_PRACTICES.md](_internal/ENGINEERING_PRACTICES.md) for engineering practices, and [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
 
 ## Documentation
 
