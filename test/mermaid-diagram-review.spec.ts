@@ -575,3 +575,32 @@ test("should return focus to a live comment marker after a repaint", async ({
   await page.keyboard.press("Enter");
   await expect(commentThread).toBeVisible();
 });
+
+test("should offer one whole-figure comment control, left of maximize", async ({
+  page,
+  mermaidDiagramViewerUrl,
+}) => {
+  await page.goto(mermaidDiagramViewerUrl);
+  const diagram = page.locator("[data-flow-diagram]").first();
+  await diagram.hover();
+
+  // The figure owns its whole-figure comment, so its notes join the batch the
+  // reader submits from the figure. The review island must not portal a second
+  // control into the same toolbar.
+  await expect(diagram.locator("[data-review-toolbar-host]")).toHaveCount(0);
+  const comments = diagram.getByRole("button", { name: /^Comment on/u });
+  await expect(comments).toHaveCount(1);
+
+  const order = await diagram
+    .locator("[data-flow-zoom-controls]")
+    .evaluate((element) =>
+      Array.from(element.children)
+        .map((child) => {
+          if (child.matches("[data-flow-figure-comment]")) return "comment";
+          if (child.matches("[data-figure-maximize]")) return "maximize";
+          return null;
+        })
+        .filter((entry) => entry !== null),
+    );
+  expect(order).toEqual(["comment", "maximize"]);
+});

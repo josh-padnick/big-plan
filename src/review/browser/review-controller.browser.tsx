@@ -224,6 +224,41 @@ const liveFlowAnchor = (anchor: string): HTMLElement | null => {
 
 const rootElement = document.documentElement;
 
+/**
+ * True while a first-class component is still batching feedback notes of its
+ * own. A diagram collects notes locally and hands them over only when the
+ * reviewer submits the batch from the diagram itself, so the review island
+ * cannot be told about them; it watches for the one marker the diagram paints
+ * per commented element, skipping snapshot copies inside a What-changed lens.
+ */
+const hasComponentBatchNotes = (): boolean =>
+  Array.from(
+    document.querySelectorAll<HTMLElement>("[data-flow-comment-marker]"),
+  ).some((marker) => marker.closest("[data-review-diff-lens]") === null);
+
+// Watches the document for component-batched notes while the Comments tab is
+// visible, so the tab can explain where those notes are submitted from.
+const useComponentBatchNotes = (isWatching: boolean): boolean => {
+  const [hasNotes, setHasNotes] = useState(false);
+  useEffect(() => {
+    if (!isWatching) return undefined;
+    let frame = 0;
+    const measure = () => setHasNotes(hasComponentBatchNotes());
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [isWatching]);
+  return isWatching && hasNotes;
+};
+
 const ThreadIconButton = ({
   label,
   icon,
@@ -960,7 +995,13 @@ const useBlockHosts = () => {
           (block) =>
             !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
             !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
-            block.closest("[data-quick-summary]") === null,
+            block.closest("[data-quick-summary]") === null &&
+            // A figure that already offers its own whole-figure comment owns
+            // that affordance, and its notes join the batch the reader submits
+            // from the figure. Portaling a second control here would put two
+            // comment icons in one toolbar and split one figure's feedback
+            // across two mechanisms.
+            ownedDescendant(block, "[data-flow-figure-comment]") === null,
         )
         .map((block) => {
           const host = document.createElement("span");
@@ -2455,6 +2496,14 @@ const SentThread = ({
     latestChanged.baselineSnapshot === currentSnapshot;
   const canRevertLatestChange =
     latestChanged?.response?.resultSnapshot === currentSnapshot;
+  // One label for every revert control in this thread. After a successful
+  // revert the control stays visible in the still-open thread, so it must
+  // say the revert happened rather than blame a newer plan change.
+  const revertActionLabel = canRevertLatestChange
+    ? "Revert response"
+    : latestChangeWasReverted
+      ? "Response reverted"
+      : "Revert unavailable - the plan changed again";
   const canDeleteComment =
     canDeleteQueued || canDeleteCanceled || latestChangeWasReverted;
   const deleteCommentLabel = latestChangeWasReverted
@@ -2561,11 +2610,7 @@ const SentThread = ({
           ) : null}
           {latestChanged === undefined ? null : (
             <ThreadIconButton
-              label={
-                canRevertLatestChange
-                  ? "Revert response"
-                  : "Revert unavailable — the plan changed again"
-              }
+              label={revertActionLabel}
               icon={ROTATE_CCW_ICON}
               disabled={!canRevertLatestChange}
               onClick={() =>
@@ -2648,11 +2693,7 @@ const SentThread = ({
           ) : null}
           {latestChanged === undefined ? null : (
             <ThreadIconButton
-              label={
-                canRevertLatestChange
-                  ? "Revert response"
-                  : "Revert unavailable — the plan changed again"
-              }
+              label={revertActionLabel}
               icon={ROTATE_CCW_ICON}
               disabled={!canRevertLatestChange}
               onClick={() =>
@@ -2761,11 +2802,7 @@ const SentThread = ({
         ) : null}
         {latestChanged === undefined ? null : (
           <ThreadIconButton
-            label={
-              canRevertLatestChange
-                ? "Revert response"
-                : "Revert unavailable — the plan changed again"
-            }
+            label={revertActionLabel}
             icon={ROTATE_CCW_ICON}
             disabled={!canRevertLatestChange}
             onClick={() =>
@@ -3008,11 +3045,7 @@ const SentThread = ({
                   ) : null}
                   {latestChanged === undefined ? null : (
                     <ThreadIconButton
-                      label={
-                        canRevertLatestChange
-                          ? "Revert response"
-                          : "Revert unavailable — the plan changed again"
-                      }
+                      label={revertActionLabel}
                       icon={ROTATE_CCW_ICON}
                       disabled={!canRevertLatestChange}
                       onClick={() =>
@@ -3278,6 +3311,9 @@ export const ReviewController = () => {
   );
   const inlineComposeHost = useInlineComposeHost(compose, isOpen);
   const threadHosts = useThreadHosts(reviewComments, isOpen);
+  const componentBatchNotes = useComponentBatchNotes(
+    isOpen && tab === "comments",
+  );
   const feedbackTabs =
     identity === null ? STATIC_FEEDBACK_TABS : LIVE_FEEDBACK_TABS;
   const selectFeedbackTab = (next: FeedbackTab) => {
@@ -3968,7 +4004,7 @@ export const ReviewController = () => {
     if (identity === null || pendingRevert === null) return;
     const revert = pendingRevert;
     // Same reason as deletion: acknowledge the confirmed action immediately,
-    // then let the reload or the error message report how it went.
+    // then let the refreshed plan or the error message report how it went.
     setPendingRevert(null);
     setStatus("Reverting the agent's changes…");
     try {
@@ -3980,7 +4016,16 @@ export const ReviewController = () => {
           body: revert,
         }),
       );
-      window.location.reload();
+      // The reverted change set no longer exists, so a tour narrating it
+      // would walk stale content.
+      closeTour();
+      // No full reload: pulling the fresh agent snapshot lets the in-place
+      // plan refresh swap the article while React state survives, so the
+      // thread the reviewer confirmed this from stays open and can drive
+      // the next revert.
+      acceptAgentSnapshot(
+        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
+      );
     } catch (error) {
       setStatus(errorMessage(error));
     }
@@ -4671,6 +4716,7 @@ export const ReviewController = () => {
                 drafts: visibleDrafts,
                 sentCount: visibleUnresolvedSent.length + resolvedSent.length,
                 hasRuntime: identity !== null,
+                hasComponentBatchNotes: componentBatchNotes,
                 groups: sentByGroup,
                 workingBatch:
                   activeBatchRequest === undefined ||
@@ -5164,7 +5210,7 @@ export const ReviewController = () => {
       <AlertDialog
         open={pendingRevert !== null}
         title="Revert response?"
-        description="This restores the plan to its state before this agent response. The comment and thread will remain until you delete them."
+        description="This restores the plan to its state just before this response. Earlier changes stay in place - this is not a reset to the original plan. The comment and thread will remain until you delete them."
         actionLabel="Revert response"
         onCancel={() => setPendingRevert(null)}
         onAction={() => void revertAgentChanges()}
