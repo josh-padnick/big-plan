@@ -5,7 +5,7 @@ scripts/gen-css.mjs into an inlined <style> block, so rendered documents stay
 fully self-contained. This file owns the design system: the shade palette, the
 type scale, the spacing scale, the elevation scale, the light and dark role
 tokens built from them, the layout breakpoint, and page-level rules.
-DESIGN_PRINCIPLES.md owns the rules for choosing among these tokens.
+_internal/DESIGN_PRINCIPLES.md owns the rules for choosing among these tokens.
 It imports prose, syntax-token, and component styles colocated with the
 modules that emit their markup.
 Light and dark follow the reader's OS in inert exports.

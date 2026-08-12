@@ -100,7 +100,8 @@ Never overwrite installed skill files unless the human (or an explicit `skill wr
 - **Pinned old version:** local or lockfile pins keep old guidance; use `@latest` or bump the dependency when freshness matters.
 - **Offline / no registry:** use the already-installed local binary; skill text and guidance still match that installed version.
 - **Skill not installed in the harness:** the agent can still run `npx big-plan@latest skill` and follow this workflow without a harness skill entry.
-- **Missing guidance acknowledgment:** `validate` and `render` stay locked until `big-plan guidance` is run for the working directory.
+- **Missing guidance acknowledgment:** `validate`, `render`, and `review` stay locked until `big-plan guidance` is run for the working directory.
+  When no writable state directory exists, they proceed with a warning instead of locking, so a sandboxed agent is never locked out.
 
 ## Out of scope for this skill
 

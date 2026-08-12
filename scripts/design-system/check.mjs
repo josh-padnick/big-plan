@@ -1,4 +1,4 @@
-// Enforces the closed design scales described in DESIGN_PRINCIPLES.md. This
+// Enforces the closed design scales described in _internal/DESIGN_PRINCIPLES.md. This
 // check owns the exact allowed steps; the document owns why they are the steps.
 //
 // Colour and type need no check here, because the theme already closes them:
@@ -229,7 +229,7 @@ const check = async () => {
   }
   if (failures.length > 0) {
     console.error(
-      "design system: authored markup must pick from the closed scales in DESIGN_PRINCIPLES.md",
+      "design system: authored markup must pick from the closed scales in _internal/DESIGN_PRINCIPLES.md",
     );
     for (const failure of failures) {
       console.error(`  ${failure}`);

@@ -21,8 +21,8 @@ Before writing the plan, run:
 npx big-plan guidance
 ```
 
-It prints the plan-writing principles and unlocks `validate` and `render` for the working directory for 24 hours.
-Both commands fail with `GUIDANCE_REQUIRED` until it has been run.
+It prints the plan-writing principles and unlocks `validate`, `render`, and `review` for the working directory for 24 hours.
+All three commands fail with `GUIDANCE_REQUIRED` until it has been run.
 
 ## Validate while authoring
 
