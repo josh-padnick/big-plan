@@ -119,6 +119,39 @@ const resolveWithin = (
 const blockSelector = (blockId: string): string =>
   `[data-block-id="${CSS.escape(blockId)}"]`;
 
+/**
+ * Names the block ids a lens is currently showing in place of. The lens sets
+ * it when it hides those blocks, because only the lens knows which ones it
+ * replaced; nothing about the hidden block itself records that it was.
+ */
+export const LENS_STAND_IN_ATTRIBUTE = "data-review-diff-lens-for";
+
+/**
+ * The element a reader can actually be sent to for a target, when the target
+ * itself is off screen because a What-changed lens replaced it. Scrolling to
+ * an element with no box does nothing at all, which reads as a control that
+ * jumps somewhere random; the lens holds the reader's content, so it is where
+ * the jump belongs. Returns null whenever the target can be scrolled to on its
+ * own, which includes a block merely inside a collapsed slide.
+ */
+export const displayedStandIn = (element: HTMLElement): HTMLElement | null => {
+  if (element.getClientRects().length > 0) return null;
+  const blockId =
+    element.dataset.blockId ??
+    element.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
+  if (blockId === undefined || blockId === "") return null;
+  const lenses = document.querySelectorAll<HTMLElement>(
+    `[${LENS_STAND_IN_ATTRIBUTE}]`,
+  );
+  for (const lens of lenses) {
+    const names = (lens.getAttribute(LENS_STAND_IN_ATTRIBUTE) ?? "").split(" ");
+    if (names.includes(blockId) && lens.getClientRects().length > 0) {
+      return lens;
+    }
+  }
+  return null;
+};
+
 /** Resolves a block id to the block the reader is reading. */
 export const liveBlock = (blockId: string): LiveTargetResult => {
   const article = liveArticle();

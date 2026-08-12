@@ -95,6 +95,7 @@ import { Icon } from "./icon.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
+  displayedStandIn,
   foundElement,
   liveBlock,
   liveFlowAnchor,
@@ -4085,7 +4086,12 @@ export const ReviewController = () => {
       setStatus("This comment's target is no longer in the plan.");
       return;
     }
-    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    // With a What-changed lens open over the target, the reader's content is
+    // in the lens and the block behind it has no box at all.
+    (displayedStandIn(element) ?? element).scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
   };
   const updateDraft = (id: string, body: string) => {
     setDrafts((current) =>

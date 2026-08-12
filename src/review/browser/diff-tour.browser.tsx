@@ -33,6 +33,7 @@ import { tourStartIndex, type LensPlacement } from "./diff-anchor.js";
 import { Icon } from "./icon.browser.js";
 import {
   foundElement,
+  LENS_STAND_IN_ATTRIBUTE,
   liveBlock,
   liveLensAnchor,
 } from "./live-target.browser.js";
@@ -832,17 +833,31 @@ const LensPortal = ({
     }
     setIsHistorical(false);
     setPresentation(prosePresentationFor(anchor.element));
-    const direct = locations
+    const replaced = locations
       .map((location) => location.newBlockId)
       .filter((blockId): blockId is string => blockId !== undefined)
-      .map((blockId) => foundElement(liveBlock(blockId)))
-      .filter((element): element is HTMLElement => element !== null);
+      .map((blockId) => ({
+        blockId,
+        element: foundElement(liveBlock(blockId)),
+      }))
+      .filter(
+        (entry): entry is { blockId: string; element: HTMLElement } =>
+          entry.element !== null,
+      );
+    const direct = replaced.map((entry) => entry.element);
     const displayValues = direct.map((element) => element.style.display);
     direct.forEach((element) => {
       element.style.display = "none";
     });
     const container = document.createElement("div");
     container.dataset.reviewDiffLensHost = "";
+    // A hidden block has no box, so anything sending a reader to it would
+    // scroll nowhere. Naming the blocks this lens shows in place of is what
+    // lets a jump land on the content the reader can actually see.
+    container.setAttribute(
+      LENS_STAND_IN_ATTRIBUTE,
+      replaced.map((entry) => entry.blockId).join(" "),
+    );
     container.className = "my-4 min-w-0 max-w-full";
     let removalNode: HTMLElement = container;
     const target = anchor.element;
