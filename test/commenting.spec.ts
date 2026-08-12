@@ -1311,13 +1311,27 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
   await expect(
     quickSummary.locator("[data-block-kind='quick-summary-facet']"),
   ).toHaveCount(3);
+  // A comment control that stands alone rests quieter than one sitting in a
+  // control bar: the slide gutter and header forms take the comment-rest
+  // colour while a control-bar form keeps the shared muted control colour.
+  await expect(quickSummaryComment).toHaveCSS("color", "rgb(164, 156, 139)");
   for (const kind of ["callout", "decision-analysis", "file-tree"] as const) {
     const component = page.locator(`[data-block-kind='${kind}']`).first();
     await expect(component.locator(".review-toolbar-comment")).toBeVisible();
+    await expect(component.locator(".review-toolbar-comment")).toHaveCSS(
+      "color",
+      "rgb(164, 156, 139)",
+    );
     await expect(
       component.locator("button[data-review-block-button]"),
     ).toHaveCount(0);
   }
+  const controlBarComment = page
+    .locator(
+      "[data-review-toolbar-host]:not([data-review-toolbar-inline]):not([data-review-toolbar-overlay]) .review-toolbar-comment",
+    )
+    .first();
+  await expect(controlBarComment).toHaveCSS("color", "rgb(79, 74, 63)");
   // The field-bearing protocol cards expose their declared fields as
   // additional comment targets, so the whole-card control is found by its
   // accessible name rather than being the only control in the card.

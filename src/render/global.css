@@ -196,6 +196,11 @@ it that way: a band carries primary or secondary text, never tertiary.
   --muted-c: var(--grey-700);
   --subtle-c: var(--grey-600);
   --support-c: var(--grey-600);
+  /* The rest colour of a standalone comment affordance: an icon that floats
+     alone (slide gutter, table corner, callout, decision) recedes one ramp step
+     past tertiary text until hover restores ink. A comment control inside a
+     shared control bar keeps the ordinary control colour. */
+  --comment-rest-c: var(--grey-400);
 
   /* Lines. Kept because a few separations genuinely need one; depth is the
      first choice and a border is the exception. */
@@ -296,6 +301,9 @@ same separation.
     --muted-c: var(--grey-300);
     --subtle-c: var(--grey-400);
     --support-c: var(--grey-400);
+    /* Quieter than dark-theme tertiary text means one ramp step darker, so the
+       resting affordance recedes toward the page instead of brightening. */
+    --comment-rest-c: var(--grey-500);
 
     --edge-c: var(--grey-800);
     --edge-strong-c: var(--grey-700);
@@ -371,6 +379,8 @@ same separation.
   --muted-c: var(--grey-300);
   --subtle-c: var(--grey-400);
   --support-c: var(--grey-400);
+  /* Quieter than dark-theme tertiary text; see the OS-dark role above. */
+  --comment-rest-c: var(--grey-500);
 
   --edge-c: var(--grey-800);
   --edge-strong-c: var(--grey-700);
@@ -468,6 +478,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-header: var(--header-bg);
   --color-comment-body: var(--comment-body-c);
   --color-comment-toolbar: var(--comment-toolbar-c);
+  --color-comment-rest: var(--comment-rest-c);
   --color-ink: var(--ink-c);
   --color-muted: var(--muted-c);
   --color-subtle: var(--subtle-c);

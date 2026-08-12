@@ -963,6 +963,15 @@ const ownedDescendant = (
     (element) => element.closest<HTMLElement>("[data-block-id]") === block,
   ) ?? null;
 
+// A comment control that stands alone - floating beside a card, hovering over
+// a block, or sitting by itself in a component header - rests at the quieter
+// comment-rest colour. Only a control mounted beside other controls in a real
+// control bar keeps the shared muted control colour.
+const isStandaloneCommentHost = (host: HTMLElement): boolean =>
+  host.dataset.reviewToolbarHost === undefined ||
+  host.dataset.reviewToolbarInline !== undefined ||
+  host.dataset.reviewToolbarOverlay !== undefined;
+
 const useBlockHosts = () => {
   const [hosts, setHosts] = useState<
     ReadonlyArray<{
@@ -1001,6 +1010,11 @@ const useBlockHosts = () => {
               block.append(host);
             } else {
               host.dataset.reviewToolbarHost = "";
+              // An action group with no other control leaves the comment
+              // standing alone rather than joining a control bar.
+              if (tableActions.childElementCount === 0) {
+                host.dataset.reviewToolbarInline = "";
+              }
               tableActions.prepend(host);
             }
           } else {
@@ -1041,6 +1055,11 @@ const useBlockHosts = () => {
               copyControl.before(host);
             } else if (actionGroup !== null) {
               host.dataset.reviewToolbarHost = "";
+              // An action group with no other control leaves the comment
+              // standing alone rather than joining a control bar.
+              if (actionGroup.childElementCount === 0) {
+                host.dataset.reviewToolbarInline = "";
+              }
               actionGroup.prepend(host);
             } else if (inlineHeader !== null) {
               host.dataset.reviewToolbarHost = "";
@@ -4470,7 +4489,7 @@ export const ReviewController = () => {
         return createPortal(
           <button
             type="button"
-            className="group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] p-0 text-subtle hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:bg-surface aria-pressed:text-ink [&>svg]:size-3.5"
+            className="group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] p-0 text-comment-rest hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:bg-surface aria-pressed:text-ink [&>svg]:size-3.5"
             aria-label={label}
             aria-pressed={pressed}
             onClick={() =>
@@ -4499,7 +4518,7 @@ export const ReviewController = () => {
             block.dataset.blockKind === "table" ? (
             <button
               type="button"
-              className="review-table-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-muted hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
+              className={`review-table-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 ${isStandaloneCommentHost(host) ? "text-comment-rest" : "text-muted"} hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5`}
               aria-label="Comment on this table"
               aria-pressed={
                 compose?.target.type === "block" &&
@@ -4523,7 +4542,7 @@ export const ReviewController = () => {
           ) : host.dataset.reviewToolbarHost !== undefined ? (
             <button
               type="button"
-              className="review-toolbar-comment inline-flex size-6 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
+              className={`review-toolbar-comment inline-flex size-6 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 ${isStandaloneCommentHost(host) ? "text-comment-rest" : "text-muted"} hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5`}
               aria-label={blockCommentLabel(block)}
               aria-pressed={
                 compose?.target.type === "block" &&
