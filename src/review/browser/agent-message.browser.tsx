@@ -467,8 +467,7 @@ export const AgentChangeDigest = ({
   onResolve,
   onRevert,
   canRevert,
-  threadLabel,
-  onOpenThread,
+  thread,
   onKeepChatting,
 }: {
   readonly diff: SnapshotDiff | null;
@@ -481,8 +480,10 @@ export const AgentChangeDigest = ({
   readonly onResolve?: () => void;
   readonly onRevert?: () => void;
   readonly canRevert?: boolean;
-  readonly threadLabel?: string;
-  readonly onOpenThread?: () => void;
+  readonly thread?: {
+    readonly label: string;
+    readonly onOpen: () => void;
+  };
   readonly onKeepChatting?: () => void;
 }) => {
   const {
@@ -599,8 +600,7 @@ export const AgentChangeDigest = ({
                       onResolve,
                       onRevert,
                       canRevert,
-                      threadLabel,
-                      onOpenThread,
+                      thread,
                       onKeepChatting,
                     })
                   }
@@ -655,8 +655,7 @@ export const AgentChangeDigest = ({
               onResolve,
               onRevert,
               canRevert,
-              threadLabel,
-              onOpenThread,
+              thread,
               onKeepChatting,
             });
           }}

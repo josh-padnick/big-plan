@@ -2039,6 +2039,7 @@ const StagedCard = ({
               currentSnapshot={currentSnapshot}
               onStatus={onStatus}
               onResolve={!resolved ? onResolve : undefined}
+              thread={{ label: comment.body, onOpen: onJump }}
             />
             {long && !expanded ? (
               <button
@@ -2196,6 +2197,7 @@ const StagedCard = ({
             currentSnapshot={currentSnapshot}
             onStatus={onStatus}
             onResolve={onResolve}
+            thread={{ label: comment.body, onOpen: onJump }}
           />
           <p className="mt-2 mb-0 text-xs text-muted">
             <time dateTime={comment.createdAt}>
@@ -2248,8 +2250,7 @@ const ChangeAttachment = ({
   onResolve,
   onRevert,
   canRevert,
-  threadLabel,
-  onOpenThread,
+  thread,
   onKeepChatting,
 }: {
   readonly identity: RuntimeIdentity;
@@ -2261,8 +2262,10 @@ const ChangeAttachment = ({
   readonly onResolve?: () => void;
   readonly onRevert?: () => void;
   readonly canRevert?: boolean;
-  readonly threadLabel?: string;
-  readonly onOpenThread?: () => void;
+  readonly thread?: {
+    readonly label: string;
+    readonly onOpen: () => void;
+  };
   readonly onKeepChatting?: () => void;
 }) => {
   const from = request.baselineSnapshot ?? request.premiseSnapshot;
@@ -2302,8 +2305,7 @@ const ChangeAttachment = ({
       onResolve={onResolve}
       onRevert={onRevert}
       canRevert={canRevert}
-      threadLabel={threadLabel}
-      onOpenThread={onOpenThread}
+      thread={thread}
       onKeepChatting={onKeepChatting}
     />
   );
@@ -2315,12 +2317,17 @@ const StalePremiseNotice = ({
   currentSnapshot,
   onStatus,
   onResolve,
+  thread,
 }: {
   readonly comment: ReviewComment;
   readonly identity: RuntimeIdentity | null;
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
   readonly onResolve?: () => void;
+  readonly thread?: {
+    readonly label: string;
+    readonly onOpen: () => void;
+  };
 }) => {
   const [diff, setDiff] = useState<SnapshotDiff | null>(null);
   const blockIds = useMemo(
@@ -2396,7 +2403,7 @@ const StalePremiseNotice = ({
           isLoading={false}
           onLoad={() => undefined}
           actionLabel="Review premise → current"
-          threadLabel={comment.body}
+          thread={thread}
           onResolve={onResolve}
         />
       ) : null}
@@ -3026,8 +3033,7 @@ const SentThread = ({
                               latestChanged?.request.requestId ===
                                 request.requestId && canRevertLatestChange
                             }
-                            threadLabel={comment.body}
-                            onOpenThread={onJump}
+                            thread={{ label: comment.body, onOpen: onJump }}
                             onKeepChatting={() => {
                               onJump();
                               window.setTimeout(
@@ -3202,7 +3208,6 @@ const ChatExchange = ({
               response={response}
               currentSnapshot={currentSnapshot}
               onStatus={onStatus}
-              threadLabel={request.body}
             />
           ) : null}
         </MessageTurn>

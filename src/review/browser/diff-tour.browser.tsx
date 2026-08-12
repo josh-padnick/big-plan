@@ -48,8 +48,10 @@ type OpenTour = {
   readonly onResolve?: () => void;
   readonly onRevert?: () => void;
   readonly canRevert?: boolean;
-  readonly threadLabel?: string;
-  readonly onOpenThread?: () => void;
+  readonly thread?: {
+    readonly label: string;
+    readonly onOpen: () => void;
+  };
   readonly onKeepChatting?: () => void;
 };
 
@@ -1091,18 +1093,18 @@ export const DiffTourProvider = ({
                 </div>
               ) : null}
               <span className="min-w-0 flex-1" />
-              <Button
-                variant="ghost"
-                size="compact"
-                className="min-w-0 max-w-64 justify-start [&>svg]:size-4"
-                aria-label={`Open comment thread: ${tour.threadLabel ?? "Plan-wide chat"}`}
-                onClick={tour.onOpenThread}
-              >
-                <Icon icon={MESSAGE_SQUARE_ICON} />
-                <span className="truncate">
-                  {tour.threadLabel ?? "Plan-wide chat"}
-                </span>
-              </Button>
+              {tour.thread === undefined ? null : (
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  className="min-w-0 max-w-64 justify-start [&>svg]:size-4"
+                  aria-label={`Open comment thread: ${tour.thread.label}`}
+                  onClick={tour.thread.onOpen}
+                >
+                  <Icon icon={MESSAGE_SQUARE_ICON} />
+                  <span className="truncate">{tour.thread.label}</span>
+                </Button>
+              )}
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-2 px-3 py-2">
               {showCompletionSummary ? (

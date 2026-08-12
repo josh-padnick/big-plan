@@ -1235,6 +1235,14 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(page.locator("[data-review-diff-lens]")).toContainText(
       "What changed",
     );
+    const staleThreadLink = page.getByRole("button", {
+      name: "Open comment thread: Check this comment against its older premise.",
+    });
+    await expect(staleThreadLink).toHaveCount(1);
+    await staleThreadLink.click();
+    await expect(
+      rail.locator(".review-staged-card[data-review-associated=true]"),
+    ).toHaveCount(1);
     const singletonStepper = page.locator("[data-review-diff-stepper]");
     await expect(singletonStepper).toContainText("Reviewing change set");
     await expect(singletonStepper).toContainText("1 of 1");
@@ -1379,31 +1387,20 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       `1 of ${planWideChangeCount}`,
     );
-    // The stepper floats clear of the viewport edge, and the thread that
-    // caused the change sits at the far end of the row from the change count.
+    // The stepper floats clear of the viewport edge. This chat digest has no
+    // thread handler, so it must not advertise a dead thread control.
     const stepperLayout = await page
       .locator("[data-review-diff-stepper]")
       .evaluate((node) => {
         const rect = node.getBoundingClientRect();
-        const count = node.querySelector("span");
-        const thread = node.querySelector<HTMLElement>(
-          'button[aria-label^="Open comment thread:"]',
-        );
-        if (count === null || thread === null) {
-          throw new Error("The stepper must show a count and a thread link");
-        }
-        return {
-          bottomGap: Math.round(
-            document.documentElement.clientHeight - rect.bottom,
-          ),
-          gapToThread: Math.round(
-            thread.getBoundingClientRect().left -
-              count.getBoundingClientRect().right,
-          ),
-        };
+        return Math.round(document.documentElement.clientHeight - rect.bottom);
       });
-    expect(stepperLayout.bottomGap).toBe(44);
-    expect(stepperLayout.gapToThread).toBeGreaterThan(80);
+    expect(stepperLayout).toBe(44);
+    await expect(
+      page.locator(
+        '[data-review-diff-stepper] button[aria-label^="Open comment thread:"]',
+      ),
+    ).toHaveCount(0);
     await expect(
       page.getByRole("button", {
         name: "Undo acceptance for this change",
