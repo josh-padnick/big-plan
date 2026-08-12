@@ -60,6 +60,9 @@ export type CommentsSurfaceModel = {
   readonly drafts: ReadonlyArray<ReviewComment>;
   readonly sentCount: number;
   readonly hasRuntime: boolean;
+  // Notes still batched inside a component (a commented diagram element, for
+  // example) that the reviewer must hand to this review from the component.
+  readonly hasComponentBatchNotes: boolean;
   readonly groups: ReadonlyMap<ThreadGroup, ReadonlyArray<ReviewComment>>;
   readonly workingBatch?: {
     readonly count: number;
@@ -128,6 +131,15 @@ export const CommentsSurface = ({
           />
         </label>
       )}
+      {model.hasComponentBatchNotes ? (
+        <p
+          className="m-0 mb-4 rounded-md bg-surface p-2 text-xs text-muted"
+          data-review-component-batch-note=""
+        >
+          Comments on a diagram wait in that diagram&apos;s batch. Add them to
+          this review from the diagram&apos;s toolbar.
+        </p>
+      ) : null}
       {sectionCount === 0 ? null : (
         <div className="grid min-w-0 gap-4 border-t border-edge pt-4">
           {ready.length === 0 ? null : (
