@@ -5,6 +5,26 @@
 
 import { boxOf, expect, test } from "./fixtures";
 
+type TestLocator = Parameters<typeof boxOf>[0];
+
+const maximizeAfterFrameFit = async (wireframe: TestLocator): Promise<void> => {
+  const frame = wireframe.locator(".wireframe-frame");
+  const restingZoom = await frame.evaluate((node) =>
+    parseFloat(getComputedStyle(node).zoom),
+  );
+  await wireframe.locator("[data-figure-maximize]").click();
+  await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
+  await expect
+    .poll(() =>
+      frame.evaluate(
+        (node, resting) =>
+          Math.abs(parseFloat(getComputedStyle(node).zoom) - resting),
+        restingZoom,
+      ),
+    )
+    .toBeGreaterThan(0.0001);
+};
+
 test("should walk the wireframe prototype between screens", async ({
   page,
   wireframeViewerUrl,
@@ -280,24 +300,7 @@ test("should align a long caption with a height-fitted desktop frame", async ({
   await page.goto(wireframeLongCaptionDesktopViewerUrl);
 
   const wireframe = page.locator('[data-wireframe="long-caption-desktop"]');
-  const card = wireframe.locator(".wireframe-screen > .wireframe-frame-card");
-  const restingCard = await card.evaluate((node) => {
-    const box = node.getBoundingClientRect();
-    return { width: box.width, height: box.height };
-  });
-  await wireframe.locator("[data-figure-maximize]").click();
-  await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
-  await expect
-    .poll(() =>
-      card.evaluate((node, resting) => {
-        const box = node.getBoundingClientRect();
-        return Math.max(
-          Math.abs(box.width - resting.width),
-          Math.abs(box.height - resting.height),
-        );
-      }, restingCard),
-    )
-    .toBeGreaterThan(1);
+  await maximizeAfterFrameFit(wireframe);
 
   const geometry = await wireframe.evaluate((node) => {
     const body = node.querySelector<HTMLElement>(":scope > [data-figure-body]");
@@ -384,24 +387,7 @@ test("should keep a long wireframe caption aligned and readable on mobile", asyn
   await page.goto(wireframeLongCaptionDesktopViewerUrl);
 
   const wireframe = page.locator('[data-wireframe="long-caption-desktop"]');
-  const card = wireframe.locator(".wireframe-screen > .wireframe-frame-card");
-  const restingCard = await card.evaluate((node) => {
-    const box = node.getBoundingClientRect();
-    return { width: box.width, height: box.height };
-  });
-  await wireframe.locator("[data-figure-maximize]").click();
-  await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
-  await expect
-    .poll(() =>
-      card.evaluate((node, resting) => {
-        const box = node.getBoundingClientRect();
-        return Math.max(
-          Math.abs(box.width - resting.width),
-          Math.abs(box.height - resting.height),
-        );
-      }, restingCard),
-    )
-    .toBeGreaterThan(1);
+  await maximizeAfterFrameFit(wireframe);
 
   const geometry = await wireframe.evaluate((node) => {
     const body = node.querySelector<HTMLElement>(":scope > [data-figure-body]");
