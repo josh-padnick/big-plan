@@ -15,7 +15,7 @@ big-plan skill [write <path>]
 big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
-big-plan review <input.mdx>
+big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
 big-plan agent <input.mdx>
 big-plan agent next <input.mdx> [--wait]
 big-plan agent note <input.mdx> "<progress>"
@@ -39,7 +39,7 @@ npx big-plan skill write <path/to/SKILL.md>
 npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
-npx big-plan review <input.mdx>
+npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
 npx big-plan agent <input.mdx>
 npx big-plan agent next <input.mdx> --wait
 npx big-plan agent note <input.mdx> "<progress>"
@@ -161,8 +161,9 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 It writes no output.
 
 `review` returns the loopback address, resolved plan path, session id, and
-feedback directory, then keeps running until `Ctrl+C`. It owns the local
-session token, heartbeat, durable review state, and source snapshots.
+feedback directory, then keeps running until `Ctrl+C` or the configured idle
+timeout. It owns the local session token, heartbeat, durable review state, and
+source snapshots.
 
 `agent <input.mdx>` reads the matching live session and returns the owner-only
 prompt plus pasteable Codex and Claude launch commands. Big Plan does not call

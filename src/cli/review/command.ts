@@ -2,7 +2,7 @@
 // local review runtime and reports where the reviewer opens it. The command
 // keeps running because the runtime is the product - it is the only way submit
 // and progress can work - so it returns the address and then stays listening
-// until the reviewer stops it.
+// until the reviewer stops it or the configured idle policy closes it.
 
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";

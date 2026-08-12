@@ -53,6 +53,9 @@ artifact is authoritative for human review.
 - Interactive affordances may depend on the embedded viewer scripts and must be
   hidden or otherwise dormant before those scripts wire them.
 - New commenting UI uses React and shadcn/ui inside interaction islands, with
-  design-token theming; React must not replace the server-rendered content floor.
+  design-token theming; React must not replace the server-rendered content floor
+  with client-rendered plan content.
+  A live revision may swap in a newly server-rendered article without changing
+  that ownership boundary.
 - Changes to the delivery contract require amending this ADR and updating the
   docs and tests that enforce it.

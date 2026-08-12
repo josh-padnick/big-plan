@@ -93,4 +93,4 @@ An MDX syntax error can stop parsing before component validation begins, so fix 
 The rendered document embeds everything it needs, makes no external requests, and works offline.
 See the [two-artifact delivery ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0001-two-artifact-plan-delivery.md) for the authoritative artifact definitions and script-dependent behavior.
 Rendering the static artifact touches no server, account, or other machine.
-The live `review` command adds an owner-only runtime on a loopback address so the browser and local coding agent can exchange comments, progress, and responses; its state remains beside the plan on the reviewer's machine.
+The live `review` command adds a loopback runtime with a per-session API token so the browser and local coding agent can exchange comments, progress, and responses; its owner-only state remains beside the plan on the reviewer's machine.

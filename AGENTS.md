@@ -83,13 +83,11 @@ Machine delivery collects that data as JSON.
 Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
 Validation renders the plan in memory while collecting the same component models in one pass.
 It discards the generated HTML, then applies its registered linting rules to the authored plan.
-React is a presentation-edge implementation tool. A rendered document ships a
-typed React interaction island for commenting plus the page envelope's
-first-paint preference bootstrap and the shell's self-contained viewer scripts
-for the [documented reader interactions](docs/src/content/docs/intro/features.md).
-The browser React interaction island never renders, replaces, or gates the
-server-rendered plan content, which remains fully readable when scripts are
-disabled. Big Plan ships no separate script-free HTML variant.
+React is a presentation-edge implementation tool.
+A rendered document ships a typed React interaction island for commenting plus the page envelope's first-paint preference bootstrap and the shell's self-contained viewer scripts for the [documented reader interactions](docs/src/content/docs/intro/features.md).
+The browser React interaction island never client-renders or gates the plan content.
+When a revision arrives, it may swap in the newly server-rendered article through the single replacement boundary described below.
+The plan remains fully readable when scripts are disabled, and Big Plan ships no separate script-free HTML variant.
 Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
 
 Two runtime contracts hold that browser layer together, and both exist because
@@ -104,7 +102,7 @@ lens, and answers with an element or a reason it is missing; a lint rule keeps i
 the only such place, because a raw selector silently returns a plausible wrong
 node instead of failing.
 
-Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
+Dependencies follow ownership inward: the CLI owns public command I/O, the review layer owns the local human-agent exchange, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
 The exact dependency allow-list and completeness guard live in `eslint.config.mjs`.
 
 ## Source ownership and placement
@@ -118,6 +116,7 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 | `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep component-specific behavior in its component slice.                             |
 | `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                                                 |
 | `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                                                   |
+| `src/review/`            | Local review persistence, loopback transport, agent exchange, causal snapshot diffs, and the browser interaction island. Keep browser-only React under `browser/`, browser-safe contracts under `shared/`, and Node-owned runtime behavior at the root.                 |
 | `src/icons/`             | Framework-neutral Lucide icon data. Add one catalog-named file per glyph; adapt it to HAST or React only at the relevant rendering edge.                                                                                                                                |
 | `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                                                       |
 | `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                                                        |
@@ -131,6 +130,7 @@ Use these placement tests:
 - A validate-only authoring-quality check belongs in `src/lint/rules/`; structural acceptance remains in the renderer and component compilers.
 - Document-wide parsing, transformation, or delivery behavior belongs in `src/render/`; component-specific validation and presentation stay with the component.
 - Reading and navigation chrome belongs in the shell; doctype, head, and embedded packaging belong in the page envelope.
+- Local comments, agent exchange, snapshot comparison, and review-only browser behavior belong in `src/review/`; shared browser-server contracts stay framework-free.
 - A pure rule gets a colocated unit test; only a critical integrated reading journey gets a Playwright spec in `test/`.
 - A public authoring change updates its validated example and the appropriate human or agent-facing product documentation.
 

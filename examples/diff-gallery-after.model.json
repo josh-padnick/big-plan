@@ -611,10 +611,7 @@
             "detail": []
           }
         ],
-        "discriminating": [
-          0,
-          1
-        ]
+        "discriminating": [0, 1]
       }
     },
     {
@@ -993,9 +990,7 @@
             "detail": []
           }
         ],
-        "discriminating": [
-          1
-        ],
+        "discriminating": [1],
         "reversibility": {
           "rating": "somewhat-hard",
           "detail": [
@@ -1399,9 +1394,7 @@
               "type": "element",
               "tagName": "span",
               "properties": {
-                "className": [
-                  "hljs-keyword"
-                ]
+                "className": ["hljs-keyword"]
               },
               "children": [
                 {
@@ -1418,9 +1411,7 @@
               "type": "element",
               "tagName": "span",
               "properties": {
-                "className": [
-                  "hljs-keyword"
-                ]
+                "className": ["hljs-keyword"]
               },
               "children": [
                 {
@@ -1437,10 +1428,7 @@
               "type": "element",
               "tagName": "span",
               "properties": {
-                "className": [
-                  "hljs-title",
-                  "function_"
-                ]
+                "className": ["hljs-title", "function_"]
               },
               "children": [
                 {
@@ -1463,9 +1451,7 @@
               "type": "element",
               "tagName": "span",
               "properties": {
-                "className": [
-                  "hljs-attr"
-                ]
+                "className": ["hljs-attr"]
               },
               "children": [
                 {
@@ -1482,10 +1468,7 @@
               "type": "element",
               "tagName": "span",
               "properties": {
-                "className": [
-                  "hljs-title",
-                  "class_"
-                ]
+                "className": ["hljs-title", "class_"]
               },
               "children": [
                 {
@@ -1508,10 +1491,7 @@
               "type": "element",
               "tagName": "span",
               "properties": {
-                "className": [
-                  "hljs-title",
-                  "class_"
-                ]
+                "className": ["hljs-title", "class_"]
               },
               "children": [
                 {
@@ -1528,10 +1508,7 @@
               "type": "element",
               "tagName": "span",
               "properties": {
-                "className": [
-                  "hljs-title",
-                  "class_"
-                ]
+                "className": ["hljs-title", "class_"]
               },
               "children": [
                 {
@@ -1554,10 +1531,7 @@
               "type": "element",
               "tagName": "span",
               "properties": {
-                "className": [
-                  "hljs-title",
-                  "function_"
-                ]
+                "className": ["hljs-title", "function_"]
               },
               "children": [
                 {
@@ -1574,9 +1548,7 @@
               "type": "element",
               "tagName": "span",
               "properties": {
-                "className": [
-                  "hljs-function"
-                ]
+                "className": ["hljs-function"]
               },
               "children": [
                 {
@@ -1587,9 +1559,7 @@
                   "type": "element",
                   "tagName": "span",
                   "properties": {
-                    "className": [
-                      "hljs-params"
-                    ]
+                    "className": ["hljs-params"]
                   },
                   "children": [
                     {
@@ -1612,10 +1582,7 @@
               "type": "element",
               "tagName": "span",
               "properties": {
-                "className": [
-                  "hljs-title",
-                  "function_"
-                ]
+                "className": ["hljs-title", "function_"]
               },
               "children": [
                 {
@@ -1875,11 +1842,7 @@
           ],
           "indexes": [
             {
-              "columns": [
-                "plan_id",
-                "thread_id",
-                "id"
-              ],
+              "columns": ["plan_id", "thread_id", "id"],
               "unique": false,
               "name": "review_events_thread_idx"
             }
@@ -2435,9 +2398,7 @@
                   "type": "element",
                   "tagName": "code",
                   "properties": {
-                    "className": [
-                      "language-json"
-                    ],
+                    "className": ["language-json"],
                     "data-authored-prose": ""
                   },
                   "children": [
@@ -2492,9 +2453,7 @@
                     "type": "element",
                     "tagName": "code",
                     "properties": {
-                      "className": [
-                        "language-json"
-                      ],
+                      "className": ["language-json"],
                       "data-authored-prose": ""
                     },
                     "children": [
@@ -2548,9 +2507,7 @@
                     "type": "element",
                     "tagName": "code",
                     "properties": {
-                      "className": [
-                        "language-json"
-                      ],
+                      "className": ["language-json"],
                       "data-authored-prose": ""
                     },
                     "children": [
@@ -2604,9 +2561,7 @@
                     "type": "element",
                     "tagName": "code",
                     "properties": {
-                      "className": [
-                        "language-json"
-                      ],
+                      "className": ["language-json"],
                       "data-authored-prose": ""
                     },
                     "children": [
