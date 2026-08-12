@@ -1817,18 +1817,21 @@ test("should diff an HTTP endpoint at field level inside one rendering", async (
     await rail.getByRole("button", { name: "Review change" }).click();
     const lens = page.locator("[data-review-diff-lens]");
     // The endpoint's changed Description is one review stop, marked in place
-    // within a single rendering: its label as a header and the exact removed
-    // and inserted words in the body, never a Was/Now pair of complete cards.
+    // within one field-level Was/Now comparison rather than two complete
+    // component cards.
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       "1 of 1",
     );
     const field = lens.locator("[data-review-diff-field]");
-    await expect(field).toHaveCount(1);
-    await expect(field).toContainText("Description");
-    await expect(field.locator("ins")).toContainText([
-      "deduplicated",
-      "the worker pool performs the refreshes asynchronously",
-    ]);
+    await expect(field).toHaveCount(2);
+    await expect(field.first()).toContainText("Description");
+    await expect(field.first()).toContainText(
+      "Queues a refresh job per cache key and returns immediately.",
+    );
+    await expect(field.last()).toContainText("Description");
+    await expect(field.last()).toContainText(
+      "Queues a deduplicated refresh job per cache key and returns immediately; the worker pool performs the refreshes asynchronously.",
+    );
     await expect(lens.locator("[data-review-component-diff]")).toHaveCount(0);
     // The untouched fields stay out of the lens instead of returning as the
     // old flattened component wall.
@@ -1877,16 +1880,17 @@ test("should diff a database schema at column level inside one rendering", async
     await rail.getByRole("button", { name: "Review change" }).click();
     const lens = page.locator("[data-review-diff-lens]");
     // The retyped column is one review stop marked in place: the column's own
-    // label as a header, the exact type change in the body, and no second
-    // complete rendering of the schema to compare by eye.
+    // label in a field-level Was/Now comparison, and no complete schema
+    // rendering to compare by eye.
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       "1 of 1",
     );
     const field = lens.locator("[data-review-diff-field]");
-    await expect(field).toHaveCount(1);
-    await expect(field).toContainText("Column: seats");
-    await expect(field.locator("del")).toContainText("smallint");
-    await expect(field.locator("ins")).toContainText("integer");
+    await expect(field).toHaveCount(2);
+    await expect(field.first()).toContainText("Column: seats");
+    await expect(field.first()).toContainText("smallint");
+    await expect(field.last()).toContainText("Column: seats");
+    await expect(field.last()).toContainText("integer");
     await expect(lens.locator("[data-review-component-diff]")).toHaveCount(0);
     // The other columns did not change, so the schema root never claims the
     // change and their text stays out of the lens.

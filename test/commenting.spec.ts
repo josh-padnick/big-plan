@@ -1435,13 +1435,13 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
   // A comment control that stands alone rests quieter than one sitting in a
   // control bar: the slide gutter and header forms take the comment-rest
   // colour while a control-bar form keeps the shared muted control colour.
-  await expect(quickSummaryComment).toHaveCSS("color", "rgb(164, 156, 139)");
+  await expect(quickSummaryComment).toHaveCSS("color", "rgb(138, 130, 116)");
   for (const kind of ["callout", "decision-analysis", "file-tree"] as const) {
     const component = page.locator(`[data-block-kind='${kind}']`).first();
     await expect(component.locator(".review-toolbar-comment")).toBeVisible();
     await expect(component.locator(".review-toolbar-comment")).toHaveCSS(
       "color",
-      "rgb(164, 156, 139)",
+      "rgb(138, 130, 116)",
     );
     await expect(
       component.locator("button[data-review-block-button]"),
