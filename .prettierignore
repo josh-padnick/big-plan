@@ -21,3 +21,6 @@ bun.lock
 # Review runtime stores are machine-written session state beside a plan,
 # not authored source; a live agent rewrites them mid-session.
 **/.big-plan/review/
+
+# Feedback packages are machine-written session state beside a plan.
+**/.big-plan/feedback/
