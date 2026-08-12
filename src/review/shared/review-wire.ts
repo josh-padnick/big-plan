@@ -7,6 +7,7 @@ import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
 export type ReviewSnapshot = {
   readonly drafts: ReadonlyArray<ReviewComment>;
   readonly sent: ReadonlyArray<ReviewComment>;
+  readonly activeDraft: string;
   readonly resolvedCommentIds: ReadonlyArray<string>;
 };
 
@@ -93,9 +94,7 @@ export type RuntimeSession = {
   readonly latestReviewUrl?: string;
 };
 
-export type ReviewSnapshotSource = ReviewSnapshot & {
-  readonly activeDraft?: string;
-};
+export type ReviewSnapshotSource = ReviewSnapshot;
 
 export type AgentSnapshotSource = {
   readonly sourceRevision: string;
@@ -143,7 +142,7 @@ export const encodeReviewSnapshot = (
 /** Decodes comments while dropping malformed local or transport values. */
 export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
   if (!isReviewWireRecord(value)) {
-    return { drafts: [], sent: [], resolvedCommentIds: [] };
+    return { drafts: [], sent: [], activeDraft: "", resolvedCommentIds: [] };
   }
   return {
     drafts: Array.isArray(value.drafts)
@@ -152,6 +151,7 @@ export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
     sent: Array.isArray(value.sent)
       ? value.sent.filter(isReviewCommentValue)
       : [],
+    activeDraft: typeof value.activeDraft === "string" ? value.activeDraft : "",
     resolvedCommentIds: Array.isArray(value.resolvedCommentIds)
       ? value.resolvedCommentIds.filter(
           (id): id is string => typeof id === "string",

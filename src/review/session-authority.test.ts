@@ -251,7 +251,12 @@ describe("session authority", () => {
     }).then(() => {
       order.push("replacement");
     });
-    await Promise.resolve();
+    // Custody replacement does filesystem work, so a single microtask proves
+    // nothing. Give it many event-loop turns: without the store lock it has
+    // ample time to finish first, and the ordering below then fails.
+    for (let turn = 0; turn < 20; turn += 1) {
+      await new Promise((settle) => setTimeout(settle, 1));
+    }
     expect(order).toEqual([]);
     releaseMutation();
     await Promise.all([mutation, replacement]);

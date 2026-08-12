@@ -160,26 +160,19 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 
 It writes no output.
 
-`review` returns the loopback address, resolved plan path, session id, and
-feedback directory, then keeps running until `Ctrl+C`. It owns the local
-session token, heartbeat, durable review state, and revision snapshots.
+`review` returns the loopback address, resolved plan path, session id, and feedback directory, then keeps running until `Ctrl+C`.
+It owns the local session token, heartbeat, durable review state, and revision snapshots.
 
-`agent <input.mdx>` reads the matching live session and returns the owner-only
-prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
-a model provider itself. The launched coding-agent session uses:
+`agent <input.mdx>` reads the matching live session and returns the owner-only prompt plus pasteable Codex and Claude launch commands.
+Big Plan does not call a model provider itself.
+The launched coding-agent session uses:
 
-- `agent next <input.mdx> --wait` to receive the oldest pending feedback,
-  thread reply, or plan-wide chat question, its prior conversation, a validated
-  response template, and the exact publish command;
-- `agent note <input.mdx> "<progress>"` to keep the reviewer informed as each
-  meaningful work step begins; and
-- `agent respond <input.mdx> <response.json>` to publish one complete answer
-  after the current MDX has rendered and passed lint.
+- `agent next <input.mdx> --wait` to receive the oldest pending feedback, thread reply, or plan-wide chat question, its prior conversation, a validated response template, and the exact publish command;
+- `agent note <input.mdx> "<progress>"` to keep the reviewer informed as each meaningful work step begins; and
+- `agent respond <input.mdx> <response.json>` to publish one complete answer after the current MDX has rendered and passed lint.
 
-A `changed` outcome is accepted only when the source revision changed and
-every named target belongs to the computed revision diff. See [Reviewing a
-plan](/reference/reviewing/) for the reviewer-facing status, revision, and
-anchor contracts.
+A `changed` outcome is accepted only when the source revision changed and every named target belongs to the computed revision diff.
+See [Reviewing a plan](/reference/reviewing/) for the reviewer-facing status, revision, and anchor contracts.
 
 `guidance` returns the guidance Markdown itself rather than a structured result.
 `skill` with no arguments returns the skill Markdown the same way.
@@ -203,8 +196,7 @@ Usage: big-plan review <input.mdx>
 `validate` and `review` reject a second positional argument; `render` and `compile` reject a third.
 Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 
-`agent` rejects an unknown action or invalid action arguments with
-`INVALID_INPUT` and its complete multi-line usage text.
+`agent` rejects an unknown action or invalid action arguments with `INVALID_INPUT` and its complete multi-line usage text.
 
 If the input for `validate`, `render`, `compile`, or `review` cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.

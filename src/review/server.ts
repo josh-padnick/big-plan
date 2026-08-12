@@ -234,6 +234,20 @@ type FeedbackSubmission = {
   readonly sourceRevision: string;
 };
 
+// One submission carries a set of comments, not a sequence, so a retry that
+// sends the same comments in a different order has to reach the same stored
+// submission instead of duplicating the artifacts and the agent request.
+const canonicalSubmissionComments = (
+  comments: ReadonlyArray<ReviewComment>,
+): ReadonlyArray<{
+  readonly id: string;
+  readonly body: string;
+  readonly target: ReviewComment["target"];
+}> =>
+  [...comments]
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map(({ id, body, target }) => ({ id, body, target }));
+
 const feedbackSubmissionId = ({
   planId,
   comments,
@@ -245,11 +259,7 @@ const feedbackSubmissionId = ({
     .update(
       JSON.stringify({
         planId,
-        comments: comments.map(({ id, body, target }) => ({
-          id,
-          body,
-          target,
-        })),
+        comments: canonicalSubmissionComments(comments),
       }),
     )
     .digest("hex")
@@ -257,10 +267,7 @@ const feedbackSubmissionId = ({
 
 const feedbackSubmissionContent = (
   comments: ReadonlyArray<ReviewComment>,
-): string =>
-  JSON.stringify(
-    comments.map(({ id, body, target }) => ({ id, body, target })),
-  );
+): string => JSON.stringify(canonicalSubmissionComments(comments));
 
 const storedFeedbackSubmission = ({
   value,
@@ -1123,6 +1130,14 @@ export const startReviewRuntime = async ({
         });
       }
     } catch (error: unknown) {
+      if (response.headersSent) {
+        // A dispatch that answered and then failed leaves nothing to refuse
+        // with. Writing a second status would throw ERR_HTTP_HEADERS_SENT out
+        // of this handler, and the caller runs it with `void`, so that throw
+        // would become an unhandled rejection and end the CLI process.
+        response.destroy();
+        return;
+      }
       if (error instanceof CommentRejected) {
         refuse({ response, status: 400, reason: error.message });
         return;
@@ -1145,22 +1160,29 @@ export const startReviewRuntime = async ({
     typeof address === "object" && address !== null ? address.port : 0;
   const url = `http://127.0.0.1:${port}/`;
 
-  await activateReviewSession({
-    store,
-    descriptor: {
-      version: 1,
-      sessionId,
-      planId,
-      plan: resolvedPlanPath,
-      url,
-      port,
-      pid: process.pid,
-      startedAt: new Date().toISOString(),
-      // The token is here so the reviewer's own tools can reach the runtime;
-      // the file is owner-only, which is what keeps that safe.
-      token,
-    },
-  });
+  try {
+    await activateReviewSession({
+      store,
+      descriptor: {
+        version: 1,
+        sessionId,
+        planId,
+        plan: resolvedPlanPath,
+        url,
+        port,
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        // The token is here so the reviewer's own tools can reach the runtime;
+        // the file is owner-only, which is what keeps that safe.
+        token,
+      },
+    });
+  } catch (error: unknown) {
+    await new Promise<void>((settle) => {
+      server.close(() => settle());
+    }).catch(() => undefined);
+    throw error;
+  }
   let heartbeatWrite = Promise.resolve();
   let heartbeatFailureReported = false;
   const queueHeartbeat = (running: boolean): Promise<void> => {

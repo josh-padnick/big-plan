@@ -24,6 +24,395 @@ import {
 import { renderDocument } from "../src/render/render-document.js";
 import { expect, stageComment, test } from "./fixtures";
 
+test("should preserve durable review state when draft hydration fails", async ({
+  page,
+  isolatedReviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(isolatedReviewRuntimeUrl);
+  await initialPersistence;
+  const durableState = {
+    drafts: [
+      {
+        id: "aabbccdd",
+        body: "Keep this durable draft.",
+        target: { type: "document" },
+      },
+    ],
+    activeDraft: "Keep this unfinished document note.",
+    resolvedCommentIds: ["1122aabb"],
+  };
+  await page.evaluate(async (state) => {
+    const root = document.documentElement;
+    const response = await fetch("/api/drafts", {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+      body: JSON.stringify(state),
+    });
+    if (!response.ok) throw new Error("Could not seed durable review state");
+  }, durableState);
+
+  await page.route("**/api/drafts", (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "not-json",
+      });
+    }
+    return route.continue();
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Feedback", exact: true }),
+  ).toBeVisible();
+  await page.evaluate(
+    () =>
+      new Promise<void>((settle) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => settle())),
+      ),
+  );
+  await page.unroute("**/api/drafts");
+
+  const persisted = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/drafts", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  expect(persisted).toMatchObject(durableState);
+});
+
+test("should merge a staged comment when hydration finishes late", async ({
+  page,
+  isolatedReviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(isolatedReviewRuntimeUrl);
+  await initialPersistence;
+  await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/drafts", {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+      body: JSON.stringify({
+        drafts: [
+          {
+            id: "aabbccdd",
+            body: "Keep the durable server draft.",
+            target: { type: "document" },
+          },
+        ],
+        activeDraft: "",
+        resolvedCommentIds: [],
+      }),
+    });
+    if (!response.ok) throw new Error("Could not seed the server draft");
+  });
+
+  let releaseHydration = (): void => undefined;
+  const hydrationGate = new Promise<void>((settle) => {
+    releaseHydration = settle;
+  });
+  let markHydrationRequested = (): void => undefined;
+  const hydrationRequested = new Promise<void>((settle) => {
+    markHydrationRequested = settle;
+  });
+  await page.route("**/api/drafts", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    markHydrationRequested();
+    await hydrationGate;
+    await route.continue();
+  });
+  await page.reload();
+  await hydrationRequested;
+  await stageComment(page, "Keep the comment staged during hydration.");
+  const persisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  releaseHydration();
+  await persisted;
+
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).toContainText("Keep the durable server draft.");
+  await expect(rail).toContainText("Keep the comment staged during hydration.");
+});
+
+test("should keep a submitted comment when hydration finishes late", async ({
+  page,
+  isolatedReviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(isolatedReviewRuntimeUrl);
+  await initialPersistence;
+
+  let releaseHydration = (): void => undefined;
+  const hydrationGate = new Promise<void>((settle) => {
+    releaseHydration = settle;
+  });
+  let markHydrationRequested = (): void => undefined;
+  const hydrationRequested = new Promise<void>((settle) => {
+    markHydrationRequested = settle;
+  });
+  await page.route("**/api/drafts", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    markHydrationRequested();
+    await hydrationGate;
+    await route.fulfill({ response });
+  });
+  await page.reload();
+  await hydrationRequested;
+
+  const body = "Keep the comment submitted during hydration.";
+  const feedbackSubmitted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer.getByLabel("Add a comment").fill(body);
+  await composer.getByRole("button", { name: "Submit Now" }).click();
+  await feedbackSubmitted;
+
+  const persisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  releaseHydration();
+  await persisted;
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  await expect(
+    page.getByRole("complementary", { name: "Feedback" }),
+  ).toContainText(body);
+});
+
+test("should persist edits after transient hydration failure", async ({
+  page,
+  isolatedReviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(isolatedReviewRuntimeUrl);
+  await initialPersistence;
+
+  let draftReads = 0;
+  let markHydrationFailed = (): void => undefined;
+  const hydrationFailed = new Promise<void>((settle) => {
+    markHydrationFailed = settle;
+  });
+  let releaseRetry = (): void => undefined;
+  const retryGate = new Promise<void>((settle) => {
+    releaseRetry = settle;
+  });
+  await page.route("**/api/drafts", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    draftReads += 1;
+    if (draftReads === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "not-json",
+      });
+      markHydrationFailed();
+      return;
+    }
+    const response = await route.fetch();
+    await retryGate;
+    await route.fulfill({ response });
+  });
+  await page.reload();
+  await hydrationFailed;
+
+  const stagedBody = "Persist this comment after hydration recovers.";
+  const activeDraft = "Persist this plan-wide draft after recovery.";
+  await stageComment(page, stagedBody);
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await rail.getByRole("textbox", { name: "Plan-wide chat" }).fill(activeDraft);
+  await expect
+    .poll(() => draftReads, { timeout: 1_500 })
+    .toBeGreaterThanOrEqual(2);
+
+  const persisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  releaseRetry();
+  await persisted;
+  await page.unroute("**/api/drafts");
+  await page.reload();
+
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  const restoredRail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(restoredRail).toContainText(stagedBody);
+  await restoredRail.getByRole("tab", { name: "Chat" }).click();
+  await expect(
+    restoredRail.getByRole("textbox", { name: "Plan-wide chat" }),
+  ).toHaveValue(activeDraft);
+});
+
+test("should persist edits after the hydration retry ramp", async ({
+  page,
+  isolatedReviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(isolatedReviewRuntimeUrl);
+  await initialPersistence;
+
+  let draftReads = 0;
+  let markRetryRampExhausted = (): void => undefined;
+  const retryRampExhausted = new Promise<void>((settle) => {
+    markRetryRampExhausted = settle;
+  });
+  await page.route("**/api/drafts", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    draftReads += 1;
+    if (draftReads <= 4) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "not-json",
+      });
+      if (draftReads === 4) markRetryRampExhausted();
+      return;
+    }
+    await route.continue();
+  });
+  await page.reload();
+  await retryRampExhausted;
+
+  const stagedBody = "Persist this comment after the retry ramp.";
+  const activeDraft = "Persist this plan-wide draft after the retry ramp.";
+  await stageComment(page, stagedBody);
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await rail.getByRole("textbox", { name: "Plan-wide chat" }).fill(activeDraft);
+
+  const persisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+    { timeout: 4_500 },
+  );
+  await persisted;
+  await page.unroute("**/api/drafts");
+  await page.reload();
+
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  const restoredRail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(restoredRail).toContainText(stagedBody);
+  await restoredRail.getByRole("tab", { name: "Chat" }).click();
+  await expect(
+    restoredRail.getByRole("textbox", { name: "Plan-wide chat" }),
+  ).toHaveValue(activeDraft);
+});
+
+test("should round-trip the active plan-wide draft through hydration", async ({
+  page,
+  isolatedReviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(isolatedReviewRuntimeUrl);
+  await initialPersistence;
+  const activeDraft = "Keep this unfinished plan-wide question.";
+  await page.evaluate(async (body) => {
+    const root = document.documentElement;
+    const response = await fetch("/api/drafts", {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+      body: JSON.stringify({
+        drafts: [],
+        activeDraft: body,
+        resolvedCommentIds: [],
+      }),
+    });
+    if (!response.ok) throw new Error("Could not seed the active draft");
+  }, activeDraft);
+
+  const persisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.reload();
+  await persisted;
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await expect(
+    rail.getByRole("textbox", { name: "Plan-wide chat" }),
+  ).toHaveValue(activeDraft);
+
+  const snapshot = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/drafts", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  expect(snapshot).toMatchObject({ activeDraft });
+});
+
 test("should restore and submit staged comments through the local review runtime", async ({
   page,
   reviewRuntimeUrl,
@@ -424,265 +813,280 @@ test("should restore and submit staged comments through the local review runtime
     .click();
 
   const beforeSource = await readFile(session.plan, "utf8");
-  const afterSource = beforeSource
-    .replace(
-      "Keep every reviewer note safe while the plan is discussed.\n\n",
-      "",
-    )
-    .replace(
-      "Sending writes one real feedback package beside this plan.",
-      "Sending atomically writes one real feedback package beside this plan.",
+  try {
+    const afterSource = beforeSource
+      .replace(
+        "Keep every reviewer note safe while the plan is discussed.\n\n",
+        "",
+      )
+      .replace(
+        "Sending writes one real feedback package beside this plan.",
+        "Sending atomically writes one real feedback package beside this plan.",
+      );
+    await writeFile(session.plan, afterSource, "utf8");
+    const before = renderDocument({
+      markdown: beforeSource,
+      fallbackTitle: "Review persistence",
+      identity: {},
+    });
+    const after = renderDocument({
+      markdown: afterSource,
+      fallbackTitle: "Review persistence",
+      identity: {},
+    });
+    const locations = diffRevisions({
+      before: before.blocks,
+      after: after.blocks,
+    });
+    const changedBlocks = new Set(
+      locations.flatMap((location) =>
+        location.newBlockId === undefined ? [] : [location.newBlockId],
+      ),
     );
-  await writeFile(session.plan, afterSource, "utf8");
-  const before = renderDocument({
-    markdown: beforeSource,
-    fallbackTitle: "Review persistence",
-    identity: {},
-  });
-  const after = renderDocument({
-    markdown: afterSource,
-    fallbackTitle: "Review persistence",
-    identity: {},
-  });
-  const locations = diffRevisions({
-    before: before.blocks,
-    after: after.blocks,
-  });
-  const changedBlocks = new Set(
-    locations.flatMap((location) =>
-      location.newBlockId === undefined ? [] : [location.newBlockId],
-    ),
-  );
-  const changeTarget = [...changedBlocks].at(-1);
-  if (changeTarget === undefined) {
-    throw new Error("The simulated rewrite produced no changed target");
-  }
-  const revision = deriveSourceRevision(afterSource);
-  await writeRevisionSnapshot({
-    store,
-    revision,
-    source: afterSource,
-  });
-  const claimed = await claimAgentRequest({
-    store,
-    requestId: request.requestId,
-    sourceRevision: request.sourceRevision,
-    now: new Date().toISOString(),
-  });
-  await publishAgentResponse({
-    store,
-    response: validateAgentResponseDraft({
-      value: {
-        requestId: request.requestId,
-        outcomes: request.comments.map((comment) => ({
-          commentId: comment.id,
-          state: "changed",
-          message: "Removed the ambiguous promise and tightened delivery.",
-          changeTargets: [changeTarget],
-        })),
-      },
-      request: claimed,
-      commentsById: commentsFromExchange(exchange),
-      changedBlocks,
-      currentRevision: revision,
+    const changeTarget = [...changedBlocks].at(-1);
+    if (changeTarget === undefined) {
+      throw new Error("The simulated rewrite produced no changed target");
+    }
+    const revision = deriveSourceRevision(afterSource);
+    await writeRevisionSnapshot({
+      store,
+      revision,
+      source: afterSource,
+    });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      sourceRevision: request.sourceRevision,
       now: new Date().toISOString(),
-    }),
-  });
-
-  await expect(kernel).toContainText("Changed");
-  const sentThread = rail
-    .locator("[data-review-sent-thread]")
-    .filter({ hasText: "Clarify the failure boundary." });
-  await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
-    "font-size",
-    "12px",
-  );
-  await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
-    "padding-left",
-    "2px",
-  );
-  await expect(sentThread.locator(".review-sent-summary")).toHaveCSS(
-    "font-size",
-    "14px",
-  );
-  await expect(
-    sentThread.getByRole("button", { name: "Expand thread", exact: true }),
-  ).toBeVisible();
-  await expect(
-    sentThread.getByRole("button", { name: "Revert agent changes" }),
-  ).toBeVisible();
-  await expect(
-    sentThread.getByRole("button", { name: "Resolve comment" }),
-  ).toBeVisible();
-  await sentThread
-    .getByRole("button", { name: "Expand thread", exact: true })
-    .click();
-  await expect(kernel).toContainText(
-    "Removed the ambiguous promise and tightened delivery.",
-  );
-  await expect(kernel).toContainText("A revised plan is ready.");
-  const changedNextStepLabels = await sentThread
-    .locator("[data-review-thread-next-steps] button")
-    .evaluateAll((buttons) =>
-      buttons.map((button) => button.getAttribute("aria-label")),
-    );
-  expect(changedNextStepLabels).toEqual([
-    "Minimize thread",
-    "Revert agent changes",
-    "Resolve comment",
-  ]);
-  await kernel.getByRole("button", { name: "See changes" }).click();
-  await expect(kernel).toContainText("atomically");
-  const resolve = sentThread
-    .getByRole("button", { name: "Resolve comment" })
-    .first();
-  const restingResolveBackground = await resolve.evaluate(
-    (node) => getComputedStyle(node).backgroundColor,
-  );
-  await resolve.hover();
-  await expect
-    .poll(() =>
-      resolve.evaluate((node) => getComputedStyle(node).backgroundColor),
-    )
-    .not.toBe(restingResolveBackground);
-  await expect(resolve).toHaveCSS("color", "rgb(22, 101, 52)");
-  await sentThread
-    .getByRole("button", { name: "Minimize thread" })
-    .first()
-    .click();
-
-  await rail.getByRole("button", { name: "Close feedback" }).click();
-  const contextualThread = page
-    .locator("[data-review-thread-side] [data-review-sent-thread]")
-    .filter({ hasText: "Clarify the failure boundary." });
-  await expect(contextualThread).toContainText("READY FOR REVIEW");
-  await expect(contextualThread).toContainText("Clarify the failure boundary.");
-  await expect(contextualThread.locator(".review-sent-target")).toHaveCount(0);
-  const contextualActions = contextualThread.locator(":scope > div");
-  await expect(contextualActions).toHaveCSS("opacity", "0");
-  await contextualThread.hover();
-  await expect(contextualThread).toHaveAttribute(
-    "data-review-associated",
-    "true",
-  );
-  await expect(page.locator("[data-slide]").first()).toHaveAttribute(
-    "data-review-comment-associated",
-    "",
-  );
-  await expect(contextualActions).toHaveCSS("opacity", "1");
-  await contextualThread
-    .getByRole("button", {
-      name: "Expand comment: Clarify the failure boundary.",
-    })
-    .click();
-  await expect
-    .poll(() =>
-      contextualThread.evaluate((card) => {
-        const toolbar = card.querySelector(".review-thread-meta");
-        if (!(toolbar instanceof HTMLElement)) return null;
-        const cardRect = card.getBoundingClientRect();
-        const toolbarRect = toolbar.getBoundingClientRect();
-        return {
-          left: Math.round(toolbarRect.left - cardRect.left),
-          right: Math.round(cardRect.right - toolbarRect.right),
-          top: Math.round(toolbarRect.top - cardRect.top),
-        };
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: request.comments.map((comment) => ({
+            commentId: comment.id,
+            state: "changed",
+            message: "Removed the ambiguous promise and tightened delivery.",
+            changeTargets: [changeTarget],
+          })),
+        },
+        request: claimed,
+        commentsById: commentsFromExchange(exchange),
+        changedBlocks,
+        currentRevision: revision,
+        now: new Date().toISOString(),
       }),
-    )
-    .toEqual({ left: 1, right: 1, top: 1 });
-  await contextualThread
-    .getByRole("button", { name: "1 · Details", exact: true })
-    .evaluate((button) => button.click());
-  await expect(page.locator("[data-slide]").first()).toHaveAttribute(
-    "data-review-comment-associated",
-    "",
-  );
-  await contextualThread
-    .getByRole("button", { name: "Resolve comment" })
-    .first()
-    .click();
-  await expect(
-    page.locator("[data-review-thread-side] [data-review-sent-thread]"),
-  ).toHaveCount(1);
+    });
 
-  await page.reload();
-  await page.getByRole("button", { name: /Feedback/ }).click();
-  await expect(rail).toContainText("1 · Details");
-  await expect(rail).not.toContainText(
-    "Original target unavailable in this revision.",
-  );
+    await expect(kernel).toContainText("Changed");
+    const sentThread = rail
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: "Clarify the failure boundary." });
+    await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
+      "font-size",
+      "12px",
+    );
+    await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
+      "padding-left",
+      "2px",
+    );
+    await expect(sentThread.locator(".review-sent-summary")).toHaveCSS(
+      "font-size",
+      "14px",
+    );
+    await expect(
+      sentThread.getByRole("button", { name: "Expand thread", exact: true }),
+    ).toBeVisible();
+    await expect(
+      sentThread.getByRole("button", { name: "Revert agent changes" }),
+    ).toBeVisible();
+    await expect(
+      sentThread.getByRole("button", { name: "Resolve comment" }),
+    ).toBeVisible();
+    await sentThread
+      .getByRole("button", { name: "Expand thread", exact: true })
+      .click();
+    await expect(kernel).toContainText(
+      "Removed the ambiguous promise and tightened delivery.",
+    );
+    await expect(kernel).toContainText("A revised plan is ready.");
+    const changedNextStepLabels = await sentThread
+      .locator("[data-review-thread-next-steps] button")
+      .evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute("aria-label")),
+      );
+    expect(changedNextStepLabels).toEqual([
+      "Minimize thread",
+      "Revert agent changes",
+      "Resolve comment",
+    ]);
+    await kernel.getByRole("button", { name: "See changes" }).click();
+    await expect(kernel).toContainText("atomically");
+    const resolve = sentThread
+      .getByRole("button", { name: "Resolve comment" })
+      .first();
+    const restingResolveBackground = await resolve.evaluate(
+      (node) => getComputedStyle(node).backgroundColor,
+    );
+    await resolve.hover();
+    await expect
+      .poll(() =>
+        resolve.evaluate((node) => getComputedStyle(node).backgroundColor),
+      )
+      .not.toBe(restingResolveBackground);
+    await expect(resolve).toHaveCSS("color", "rgb(22, 101, 52)");
+    await sentThread
+      .getByRole("button", { name: "Minimize thread" })
+      .first()
+      .click();
 
-  const continuedThread = rail
-    .locator("[data-review-sent-thread]")
-    .filter({ hasText: "Name the operator recovery path." });
-  await continuedThread
-    .getByRole("button", { name: "Expand thread", exact: true })
-    .click();
-  const continuedReply = continuedThread.getByPlaceholder(
-    "Reply to the agent…",
-  );
-  await continuedReply.fill("Keep the recovery steps concise.");
-  const replyButton = continuedThread.getByRole("button", { name: "Reply" });
-  await replyButton.hover();
-  await expect(
-    page.getByRole("tooltip").filter({ hasText: /Reply ·/u }),
-  ).toBeVisible();
-  await replyButton.click();
-  await continuedThread.getByRole("button", { name: "Cancel request" }).click();
-  await expect(continuedThread).toContainText("Request canceled");
-  await rail.getByRole("button", { name: "Close feedback" }).click();
-  const canceledInline = page
-    .locator("[data-review-thread-side] [data-review-sent-thread]")
-    .filter({ hasText: "Name the operator recovery path." });
-  await canceledInline
-    .getByRole("button", { name: "1 · Details", exact: true })
-    .click();
-  await expect(
-    canceledInline.getByRole("button", {
-      name: "Expand comment: Name the operator recovery path.",
-    }),
-  ).toBeVisible();
-  await canceledInline
-    .getByRole("button", {
-      name: "Expand comment: Name the operator recovery path.",
-    })
-    .click();
-  await expect(
-    canceledInline.getByRole("button", { name: "Delete canceled comment" }),
-  ).toHaveCount(0);
-  await expect(canceledInline).toContainText(
-    "Removed the ambiguous promise and tightened delivery.",
-  );
-  await stageComment(page, "Keep this draft while the runtime is offline.");
-  await page.route("**/api/agent", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: "not-json",
-    }),
-  );
-  await page.getByRole("button", { name: /Feedback/ }).click();
-  await expect(
-    rail.getByText("The review server is unreachable", { exact: true }),
-  ).toBeVisible({ timeout: 6_000 });
-  await expect(
-    rail.getByRole("button", { name: "Send all comments to agent" }),
-  ).toBeDisabled();
-  await expect(
-    rail.getByRole("img", { name: "The review server is unreachable" }),
-  ).toBeVisible();
-  await expect(rail).not.toContainText(
-    "Connected to the local review runtime.",
-  );
-  await page.unroute("**/api/agent");
-  await writeFile(session.plan, beforeSource, "utf8");
+    await rail.getByRole("button", { name: "Close feedback" }).click();
+    const contextualThread = page
+      .locator("[data-review-thread-side] [data-review-sent-thread]")
+      .filter({ hasText: "Clarify the failure boundary." });
+    await expect(contextualThread).toContainText("READY FOR REVIEW");
+    await expect(contextualThread).toContainText(
+      "Clarify the failure boundary.",
+    );
+    await expect(contextualThread.locator(".review-sent-target")).toHaveCount(
+      0,
+    );
+    const contextualActions = contextualThread.locator(":scope > div");
+    await expect(contextualActions).toHaveCSS("opacity", "0");
+    await contextualThread.hover();
+    await expect(contextualThread).toHaveAttribute(
+      "data-review-associated",
+      "true",
+    );
+    await expect(page.locator("[data-slide]").first()).toHaveAttribute(
+      "data-review-comment-associated",
+      "",
+    );
+    await expect(contextualActions).toHaveCSS("opacity", "1");
+    await contextualThread
+      .getByRole("button", {
+        name: "Expand comment: Clarify the failure boundary.",
+      })
+      .click();
+    await expect
+      .poll(() =>
+        contextualThread.evaluate((card) => {
+          const toolbar = card.querySelector(".review-thread-meta");
+          if (!(toolbar instanceof HTMLElement)) return null;
+          const cardRect = card.getBoundingClientRect();
+          const toolbarRect = toolbar.getBoundingClientRect();
+          return {
+            left: Math.round(toolbarRect.left - cardRect.left),
+            right: Math.round(cardRect.right - toolbarRect.right),
+            top: Math.round(toolbarRect.top - cardRect.top),
+          };
+        }),
+      )
+      .toEqual({ left: 1, right: 1, top: 1 });
+    await contextualThread
+      .getByRole("button", { name: "1 · Details", exact: true })
+      .evaluate((button) => button.click());
+    await expect(page.locator("[data-slide]").first()).toHaveAttribute(
+      "data-review-comment-associated",
+      "",
+    );
+    await contextualThread
+      .getByRole("button", { name: "Resolve comment" })
+      .first()
+      .click();
+    await expect(
+      page.locator("[data-review-thread-side] [data-review-sent-thread]"),
+    ).toHaveCount(1);
+
+    await page.reload();
+    await page.getByRole("button", { name: /Feedback/ }).click();
+    await expect(rail).toContainText("1 · Details");
+    await expect(rail).not.toContainText(
+      "Original target unavailable in this revision.",
+    );
+
+    const continuedThread = rail
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: "Name the operator recovery path." });
+    await continuedThread
+      .getByRole("button", { name: "Expand thread", exact: true })
+      .click();
+    const continuedReply = continuedThread.getByPlaceholder(
+      "Reply to the agent…",
+    );
+    await continuedReply.fill("Keep the recovery steps concise.");
+    const replyButton = continuedThread.getByRole("button", { name: "Reply" });
+    await replyButton.hover();
+    await expect(
+      page.getByRole("tooltip").filter({ hasText: /Reply ·/u }),
+    ).toBeVisible();
+    await replyButton.click();
+    await continuedThread
+      .getByRole("button", { name: "Cancel request" })
+      .click();
+    await expect(continuedThread).toContainText("Request canceled");
+    await rail.getByRole("button", { name: "Close feedback" }).click();
+    const canceledInline = page
+      .locator("[data-review-thread-side] [data-review-sent-thread]")
+      .filter({ hasText: "Name the operator recovery path." });
+    await canceledInline
+      .getByRole("button", { name: "1 · Details", exact: true })
+      .click();
+    await expect(
+      canceledInline.getByRole("button", {
+        name: "Expand comment: Name the operator recovery path.",
+      }),
+    ).toBeVisible();
+    await canceledInline
+      .getByRole("button", {
+        name: "Expand comment: Name the operator recovery path.",
+      })
+      .click();
+    await expect(
+      canceledInline.getByRole("button", { name: "Delete canceled comment" }),
+    ).toHaveCount(0);
+    await expect(canceledInline).toContainText(
+      "Removed the ambiguous promise and tightened delivery.",
+    );
+    await stageComment(page, "Keep this draft while the runtime is offline.");
+    await page.route("**/api/agent", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "not-json",
+      }),
+    );
+    await page.getByRole("button", { name: /Feedback/ }).click();
+    await expect(
+      rail.getByText("The review server is unreachable", { exact: true }),
+    ).toBeVisible({ timeout: 6_000 });
+    await expect(
+      rail.getByRole("button", { name: "Send all comments to agent" }),
+    ).toBeDisabled();
+    await expect(
+      rail.getByRole("img", { name: "The review server is unreachable" }),
+    ).toBeVisible();
+    await expect(rail).not.toContainText(
+      "Connected to the local review runtime.",
+    );
+    await page.unroute("**/api/agent");
+  } finally {
+    await writeFile(session.plan, beforeSource, "utf8");
+  }
 });
 
 test("should mark a superseded review as read-only and link to its replacement", async ({
   page,
   reviewRuntimeUrl,
 }) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
   await page.goto(reviewRuntimeUrl);
+  expect((await initialPersistence).status()).toBe(200);
   const session = await page.evaluate(async () => {
     const root = document.documentElement;
     const response = await fetch("/api/session", {

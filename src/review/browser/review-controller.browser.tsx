@@ -91,6 +91,7 @@ const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT = 4000;
 const LONG_COMMENT = 180;
 const REQUEST_TIMEOUT_MS = 10_000;
+const HYDRATION_RETRY_DELAYS_MS = [250, 1_000, 3_000] as const;
 const PROSE_KINDS = new Set(["heading", "paragraph", "list", "blockquote"]);
 const TABLE_PRECISION_KINDS = new Set([
   "table-cell",
@@ -2653,13 +2654,14 @@ export const ReviewController = () => {
   }, [blockHosts, compose]);
 
   useEffect(() => {
+    if (identity === null) {
+      setDrafts(planId === "" ? [] : readLocalDrafts(planId));
+      setIsHydrated(true);
+      return undefined;
+    }
     let current = true;
-    void (async () => {
-      if (identity === null) {
-        setDrafts(planId === "" ? [] : readLocalDrafts(planId));
-        setIsHydrated(true);
-        return;
-      }
+    let retryTimer: number | undefined;
+    const hydrate = async (attempt: number): Promise<void> => {
       try {
         const session = parseRuntimeSession({
           value: await requestJson({ path: "/api/session", identity }),
@@ -2668,26 +2670,58 @@ export const ReviewController = () => {
         if (session === null) {
           throw new Error("This page is not connected to its review runtime.");
         }
-        setRuntimeSession(session);
         const snapshot = parseSnapshot(
           await requestJson({ path: "/api/drafts", identity }),
         );
         if (current) {
-          setDrafts(snapshot.drafts);
-          setSent(snapshot.sent);
-          setResolvedCommentIds(new Set(snapshot.resolvedCommentIds));
+          setRuntimeSession(session);
+          setDrafts((existing) => {
+            const hydratedIds = new Set(
+              snapshot.drafts.map((draft) => draft.id),
+            );
+            return [
+              ...snapshot.drafts,
+              ...existing.filter((draft) => !hydratedIds.has(draft.id)),
+            ];
+          });
+          setSent((existing) => {
+            const hydratedIds = new Set(
+              snapshot.sent.map((comment) => comment.id),
+            );
+            return [
+              ...snapshot.sent,
+              ...existing.filter((comment) => !hydratedIds.has(comment.id)),
+            ];
+          });
+          setChatBody((existing) =>
+            existing === "" ? snapshot.activeDraft : existing,
+          );
+          setResolvedCommentIds(
+            (existing) =>
+              new Set([...snapshot.resolvedCommentIds, ...existing]),
+          );
           setStatus("Connected to the local review runtime.");
           setIsHydrated(true);
         }
       } catch (error) {
-        if (current) {
-          setStatus(errorMessage(error));
-          setIsHydrated(true);
-        }
+        if (!current) return;
+        const retryDelay =
+          HYDRATION_RETRY_DELAYS_MS[
+            Math.min(attempt, HYDRATION_RETRY_DELAYS_MS.length - 1)
+          ];
+        setStatus(`${errorMessage(error)} Retrying review state…`);
+        retryTimer = window.setTimeout(() => {
+          retryTimer = undefined;
+          if (!current) return;
+          setStatus("Retrying review state…");
+          void hydrate(attempt + 1);
+        }, retryDelay);
       }
-    })();
+    };
+    void hydrate(0);
     return () => {
       current = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
   }, [identity, planId]);
 
@@ -2704,12 +2738,13 @@ export const ReviewController = () => {
         method: "PUT",
         body: {
           drafts,
-          activeDraft: "",
+          activeDraft: chatBody,
           resolvedCommentIds: Array.from(resolvedCommentIds),
         },
       }),
     ).catch((error: unknown) => setStatus(errorMessage(error)));
   }, [
+    chatBody,
     drafts,
     identity,
     isHydrated,

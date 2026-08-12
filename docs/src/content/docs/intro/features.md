@@ -21,6 +21,11 @@ Everything on this page is shipped and works today.
 - Collapse controls on Parts, slides, and sub-slides, plus document-wide expand-all and collapse-all controls in the table of contents; TOC jumps expand collapsed ancestors.
 - Collapse choices, CodeDiff and FileTreeDiff views, database-schema column order and visibility, and a document-level review-comment draft persist only for the exact source path and authored revision, so same-titled plans and distinct authored revisions never share viewer state.
 
+## Feedback and revision
+
+- `big-plan review` serves the plan locally for anchored comments, plan-wide chat, agent progress, revision-aware responses, and source diffs without an account or third-party service.
+- `big-plan agent` connects a coding-agent session to that live review while the MDX remains authoritative; [Reviewing a plan](/reference/reviewing/) owns the workflow, persistence, revision, and trust-boundary details.
+
 ## Code
 
 - Syntax highlighting for fenced code blocks with a declared language.

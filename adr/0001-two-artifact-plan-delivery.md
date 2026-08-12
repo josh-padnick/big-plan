@@ -28,10 +28,9 @@ A plan ships as exactly two review artifacts: the authoritative MDX source and
 one self-contained interactive HTML render. Big Plan does not ship a separate
 script-free HTML variant.
 
-The interaction tier uses React and off-the-shelf shadcn/ui for new commenting
-surfaces, themed through the design tokens. React owns interaction islands
-only. The server-rendered readable HTML content floor is an explicit
-inviolable line.
+The interaction tier uses React and off-the-shelf shadcn/ui for new commenting surfaces, themed through the design tokens.
+React owns interaction islands only.
+The server-rendered readable HTML content floor is an explicit inviolable line.
 
 ## Rationale
 

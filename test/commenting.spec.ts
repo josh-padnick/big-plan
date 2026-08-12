@@ -135,6 +135,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await input.fill(
     "Keep `leaseOwner` explicit. <strong>Literal reviewer text</strong>",
   );
+  await expect(submit).toBeEnabled();
   const shortcutTooltip = dialog.getByRole("tooltip");
   await expect(shortcutTooltip).not.toBeVisible();
   await submit.hover();
