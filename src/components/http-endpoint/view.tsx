@@ -53,6 +53,21 @@ const STATUS_CLASSES: Readonly<
 const DEPRECATED_CLASSES =
   "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]";
 
+// Each field a reviewer can point at is declared as a commentable sub-target,
+// so a comment or a causal diff names one parameter or response instead of the
+// whole card. The labels below are the words a reviewer would use in a thread.
+const FIELD_KIND = "http-endpoint-field";
+
+// The reviewer-facing name of each parameter location.
+const PARAM_FIELD_LABELS: Readonly<
+  Record<CompiledHttpParam["location"], string>
+> = {
+  path: "Path parameter",
+  query: "Query parameter",
+  header: "Header",
+  body: "Body field",
+};
+
 // Splits brace-delimited placeholders from the literal path without treating
 // the authored string as markup.
 const pathChildren = (path: string): ReadonlyArray<ReactNode> =>
@@ -78,20 +93,26 @@ const pathChildren = (path: string): ReadonlyArray<ReactNode> =>
 // per-row badge would restate the section label.
 const ParamEntry = ({ param }: { readonly param: CompiledHttpParam }) => (
   <DefinitionEntry
-    dataProperties={{ "data-http-param-location": param.location }}
+    dataProperties={{
+      "data-http-param-location": param.location,
+      "data-commentable-kind": FIELD_KIND,
+      "data-commentable-label": `${PARAM_FIELD_LABELS[param.location]}: ${param.name}`,
+    }}
     term={
+      // The literal spaces keep word boundaries in the flattened diff text;
+      // the flex layout never renders whitespace-only text between items.
       <>
-        <span className="font-mono text-sm font-semibold">{param.name}</span>
+        <span className="font-mono text-sm font-semibold">{param.name}</span>{" "}
         {param.dataType === undefined ? null : (
           <span className="text-xs text-muted">{param.dataType}</span>
-        )}
+        )}{" "}
         {param.required ? (
           <span className="text-2xs font-bold text-ink">{"required"}</span>
         ) : (
           <>
             {/* Optional-ness is a visual property beside the name, never a
                 separate cell; an authored default rides right next to it. */}
-            <span className="text-2xs text-muted">{"optional"}</span>
+            <span className="text-2xs text-muted">{"optional"}</span>{" "}
             {param.defaultValue === undefined ? null : (
               <span className="text-2xs text-muted">
                 {"default "}
@@ -156,8 +177,12 @@ const RequestSection = ({
   readonly bodyParams: ReadonlyArray<CompiledHttpParam>;
 }) => (
   <CardSection dataProperties={{ "data-http-section": "request-body" }}>
-    <div className="mb-3 flex flex-wrap items-center gap-2">
-      <SectionLabel label="Request body" />
+    <div
+      className="mb-3 flex flex-wrap items-center gap-2"
+      data-commentable-kind={FIELD_KIND}
+      data-commentable-label="Request body"
+    >
+      <SectionLabel label="Request body" />{" "}
       {request?.contentType === undefined ? null : (
         // Media types stay lowercase monospace, the way every API reference
         // prints them; the uppercase chip is for labels.
@@ -189,7 +214,11 @@ const RequestSection = ({
         >
           <SectionLabel label="Example" />
         </div>
-        <div className="[&>:last-child]:mb-0">
+        <div
+          className="[&>:last-child]:mb-0"
+          data-commentable-kind={FIELD_KIND}
+          data-commentable-label="Request example"
+        >
           {hastContentToReact(request.children)}
         </div>
       </>
@@ -205,6 +234,8 @@ const ResponseEntry = ({
   <div
     className="border-b border-edge py-3 last:border-b-0"
     data-http-response={response.status}
+    data-commentable-kind={FIELD_KIND}
+    data-commentable-label={`Response: ${response.status}${response.label === undefined ? "" : ` ${response.label}`}`}
   >
     <div className="mb-2 flex flex-wrap items-center gap-2">
       <BadgePill
@@ -214,7 +245,7 @@ const ResponseEntry = ({
           STATUS_CLASSES[response.statusClass],
         ]}
         dataProperties={{ "data-http-status-class": response.statusClass }}
-      />
+      />{" "}
       {response.label === undefined ? null : (
         <span className="text-sm text-muted">{response.label}</span>
       )}
@@ -239,7 +270,11 @@ export const HttpEndpoint = ({
     {...(model.deprecated ? { "data-http-deprecated": "" } : {})}
   >
     <header className="flex min-w-0 items-start justify-between gap-1 bg-header px-4 py-3">
-      <div className="min-w-0">
+      <div
+        className="min-w-0"
+        data-commentable-kind={FIELD_KIND}
+        data-commentable-label={`${model.method} ${model.path}`}
+      >
         <div className="flex flex-wrap items-center gap-3">
           <BadgePill
             label={model.method}
@@ -247,7 +282,7 @@ export const HttpEndpoint = ({
               "http-endpoint-method-pill",
               METHOD_CLASSES[model.method],
             ]}
-          />
+          />{" "}
           <span
             className={[
               "http-endpoint-path",
@@ -258,10 +293,10 @@ export const HttpEndpoint = ({
             ].join(" ")}
           >
             {pathChildren(model.path)}
-          </span>
+          </span>{" "}
           {model.summary === undefined ? null : (
             <span className="text-sm text-muted">{model.summary}</span>
-          )}
+          )}{" "}
           {model.deprecated ? (
             <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
           ) : null}
@@ -276,7 +311,11 @@ export const HttpEndpoint = ({
       <span className="figure-action-group inline-flex shrink-0 items-center gap-1" />
     </header>
     {model.description.length === 0 ? null : (
-      <div className="px-4 py-4 [&>:last-child]:mb-0">
+      <div
+        className="px-4 py-4 [&>:last-child]:mb-0"
+        data-commentable-kind={FIELD_KIND}
+        data-commentable-label="Description"
+      >
         {hastContentToReact(model.description)}
       </div>
     )}

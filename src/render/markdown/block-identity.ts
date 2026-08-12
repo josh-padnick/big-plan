@@ -112,9 +112,15 @@ const textOf = (node: Element): string => {
     if (child.type === "text") {
       text += child.value;
     } else if (isElement(child)) {
-      // Screen-reader-only prefixes are announcement scaffolding, not content.
+      // Screen-reader-only prefixes are announcement scaffolding, and markup
+      // shipped with the hidden attribute (dormant controls, collapsed menus,
+      // a component's hidden machine-readable source) is not presented to the
+      // reader, so neither belongs to a block's diffable text.
       const className = child.properties.className;
-      const hidden = Array.isArray(className) && className.includes("sr-only");
+      const hidden =
+        (Array.isArray(className) && className.includes("sr-only")) ||
+        (child.properties.hidden !== undefined &&
+          child.properties.hidden !== false);
       if (!hidden) {
         const isBoundary = TEXT_BOUNDARY_TAGS.has(child.tagName);
         if (isBoundary) markBoundary();

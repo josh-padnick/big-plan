@@ -36,6 +36,19 @@ const KIND_CLASSES: Readonly<Record<CompiledGraphqlOperation["kind"], string>> =
 const DEPRECATED_CLASSES =
   "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]";
 
+// Each field a reviewer can point at is declared as a commentable sub-target,
+// so a comment or a causal diff names one argument or payload field instead of
+// the whole card. The labels are the words a reviewer would use in a thread.
+const FIELD_KIND = "graphql-operation-field";
+
+// The reviewer-facing name of each expanded-field side.
+const FIELD_SIDE_LABELS: Readonly<
+  Record<CompiledGraphqlField["side"], string>
+> = {
+  input: "Input field",
+  payload: "Payload field",
+};
+
 const MonoType = ({ value }: { readonly value: string }) => (
   <span className="font-mono text-xs text-muted">{value}</span>
 );
@@ -49,10 +62,16 @@ const ArgumentEntry = ({
   readonly argument: CompiledGraphqlArgument;
 }) => (
   <DefinitionEntry
-    dataProperties={{ "data-graphql-argument": argument.name }}
+    dataProperties={{
+      "data-graphql-argument": argument.name,
+      "data-commentable-kind": FIELD_KIND,
+      "data-commentable-label": `Argument: ${argument.name}`,
+    }}
     term={
+      // The literal space keeps a word boundary in the flattened diff text;
+      // the flex layout never renders whitespace-only text between items.
       <>
-        <span className="font-mono text-sm font-semibold">{argument.name}</span>
+        <span className="font-mono text-sm font-semibold">{argument.name}</span>{" "}
         <MonoType value={argument.argumentType} />
       </>
     }
@@ -64,11 +83,15 @@ const ArgumentEntry = ({
 // beside that, and the markdown description beneath.
 const FieldEntry = ({ field }: { readonly field: CompiledGraphqlField }) => (
   <DefinitionEntry
-    dataProperties={{ "data-graphql-field": field.side }}
+    dataProperties={{
+      "data-graphql-field": field.side,
+      "data-commentable-kind": FIELD_KIND,
+      "data-commentable-label": `${FIELD_SIDE_LABELS[field.side]}: ${field.name}`,
+    }}
     term={
       <>
-        <span className="font-mono text-sm font-semibold">{field.name}</span>
-        <MonoType value={field.fieldType} />
+        <span className="font-mono text-sm font-semibold">{field.name}</span>{" "}
+        <MonoType value={field.fieldType} />{" "}
         {field.defaultValue === undefined ? null : (
           <span className="text-2xs text-muted">
             {"default "}
@@ -111,7 +134,11 @@ export const GraphqlOperation = ({
     {...(model.deprecated ? { "data-graphql-deprecated": "" } : {})}
   >
     <header className="flex min-w-0 items-start justify-between gap-1 bg-header px-4 py-3">
-      <div className="min-w-0">
+      <div
+        className="min-w-0"
+        data-commentable-kind={FIELD_KIND}
+        data-commentable-label={`${model.kind} ${model.name}`}
+      >
         <div className="flex flex-wrap items-center gap-3">
           <BadgePill
             label={model.kind}
@@ -119,7 +146,7 @@ export const GraphqlOperation = ({
               "graphql-operation-kind-pill",
               KIND_CLASSES[model.kind],
             ]}
-          />
+          />{" "}
           <span
             className={[
               "font-mono",
@@ -129,10 +156,10 @@ export const GraphqlOperation = ({
             ].join(" ")}
           >
             {model.name}
-          </span>
+          </span>{" "}
           {model.deprecated ? (
             <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
-          ) : null}
+          ) : null}{" "}
           {model.deprecationReason === undefined ? null : (
             <span className="text-sm text-muted">
               {model.deprecationReason}
@@ -149,7 +176,11 @@ export const GraphqlOperation = ({
       <span className="figure-action-group inline-flex shrink-0 items-center gap-1" />
     </header>
     {model.description.length === 0 ? null : (
-      <div className="px-4 py-4 [&>:last-child]:mb-0">
+      <div
+        className="px-4 py-4 [&>:last-child]:mb-0"
+        data-commentable-kind={FIELD_KIND}
+        data-commentable-label="Description"
+      >
         {hastContentToReact(model.description)}
       </div>
     )}
@@ -200,6 +231,10 @@ const ReturnsSection = ({
     {returns === undefined ? null : (
       <DefinitionList>
         <DefinitionEntry
+          dataProperties={{
+            "data-commentable-kind": FIELD_KIND,
+            "data-commentable-label": `Returns: ${returns.returnType}`,
+          }}
           term={
             <span className="font-mono text-sm font-semibold">
               {returns.returnType}
@@ -226,7 +261,15 @@ const ExampleSection = ({
   readonly variables?: CompiledGraphqlExample;
   readonly responses: ReadonlyArray<CompiledGraphqlResponse>;
 }) => (
-  <CardSection dataProperties={{ "data-graphql-example": "" }}>
+  <CardSection
+    dataProperties={{
+      "data-graphql-example": "",
+      // One grouped example is one reviewable field: the operation, its
+      // variables, and its responses only make sense as a unit.
+      "data-commentable-kind": FIELD_KIND,
+      "data-commentable-label": "Example",
+    }}
+  >
     <div className="mb-3">
       <SectionLabel label="Example" />
     </div>

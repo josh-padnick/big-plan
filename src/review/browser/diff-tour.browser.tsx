@@ -135,6 +135,18 @@ const runsWithChanges = (runs: ReadonlyArray<DiffRun>): ReactNode =>
 const sideText = (location: DiffLocation, side: "old" | "new"): string =>
   side === "old" ? location.oldText : location.newText;
 
+// The field-bearing components: each declares its reviewable fields as
+// sub-targets of this kind, and when a field changed the fields own the
+// presentation, so the owning root kind on the right is suppressed instead of
+// restating the whole card as one text wall.
+const COMPONENT_FIELD_KINDS: Readonly<Record<string, string>> = {
+  "quick-summary-facet": "quick-summary",
+  "http-endpoint-field": "http-endpoint",
+  "graphql-operation-field": "graphql-operation",
+  "grpc-method-field": "grpc-method",
+  "database-table-schema-field": "database-table-schema",
+};
+
 // A block that declares sub-targets deliberately overlaps with them for
 // attribution: a table with its rows, columns, and cells, and a component
 // root with its declared internals. A presentation must choose one
@@ -154,8 +166,10 @@ const presentationLocations = (
         location.kind !== "table-cell",
     );
   }
-  if (visible.some((location) => location.kind === "quick-summary-facet")) {
-    visible = visible.filter((location) => location.kind !== "quick-summary");
+  for (const [fieldKind, ownerKind] of Object.entries(COMPONENT_FIELD_KINDS)) {
+    if (visible.some((location) => location.kind === fieldKind)) {
+      visible = visible.filter((location) => location.kind !== ownerKind);
+    }
   }
   return visible;
 };
@@ -359,36 +373,44 @@ const SnapshotCallout = ({
   );
 };
 
-// A quick-summary facet's flattened text leads with the facet's own term,
-// which the header above the body already names, so the term is stripped
-// before the body is shown.
-const facetBodyText = (location: DiffLocation, side: "old" | "new"): string => {
-  const term = location.label.trim();
+// The words a field's body repeats from its label: a plain label repeats
+// itself ("Why"), while a prefixed label repeats only its subject
+// ("Column: user_id" opens with "user_id").
+const fieldTermOf = (label: string): string => {
+  const trimmed = label.trim();
+  const separator = trimmed.indexOf(": ");
+  return separator < 0 ? trimmed : trimmed.slice(separator + 2).trim();
+};
+
+// A field's flattened text leads with the words its own label already names,
+// so that lead is stripped before the body is shown under the label header.
+const fieldBodyText = (location: DiffLocation, side: "old" | "new"): string => {
+  const term = fieldTermOf(location.label);
   const raw = sideText(location, side).trim();
   return raw.startsWith(term) ? raw.slice(term.length).trim() : raw;
 };
 
-const FacetTerm = ({ location }: { readonly location: DiffLocation }) => (
+const FieldTerm = ({ location }: { readonly location: DiffLocation }) => (
   <strong className="mb-1 block text-2xs font-semibold uppercase tracking-caps">
     {location.label.trim()}
   </strong>
 );
 
-const SnapshotSummaryFacet = ({
+const SnapshotFieldBlock = ({
   location,
   side,
 }: {
   readonly location: DiffLocation;
   readonly side: "old" | "new";
 }) => {
-  const body = facetBodyText(location, side);
+  const body = fieldBodyText(location, side);
   const items = body
     .split("\n")
     .map((item) => item.trim())
     .filter((item) => item !== "");
   return (
-    <div data-review-diff-facet="">
-      <FacetTerm location={location} />
+    <div data-review-diff-field="">
+      <FieldTerm location={location} />
       {items.length > 1 ? (
         <ul className="m-0 list-disc pl-4" data-authored-prose="">
           {items.map((item, index) => (
@@ -406,7 +428,7 @@ const SnapshotSummaryFacet = ({
   );
 };
 
-/** Drops the facet term the header already names from the leading run. */
+/** Drops the field term the header already names from the leading run. */
 const runsWithoutLeadingTerm = (
   runs: ReadonlyArray<DiffRun>,
   term: string,
@@ -419,25 +441,27 @@ const runsWithoutLeadingTerm = (
   return remainder === "" ? rest : [{ op: "same", text: remainder }, ...rest];
 };
 
-// The word-level lens for one reworded facet: the facet term stays a calm
+// The word-level lens for one reworded field: the field's label stays a calm
 // header while the body carries the exact removed and inserted words, with
-// authored line boundaries preserved so multi-item facets read as their items.
-const FacetRunContent = ({
+// authored line boundaries preserved so multi-line fields read as their lines.
+const FieldRunContent = ({
   runs,
   location,
 }: {
   readonly runs: ReadonlyArray<DiffRun>;
   readonly location: DiffLocation;
 }) => (
-  <div data-review-diff-facet="">
-    <FacetTerm location={location} />
+  <div data-review-diff-field="">
+    <FieldTerm location={location} />
     <p
       className="m-0 max-w-[var(--measure)] whitespace-pre-line [overflow-wrap:anywhere]"
       data-authored-prose=""
       data-review-diff-content=""
-      data-review-diff-presentation="facet"
+      data-review-diff-presentation="field"
     >
-      {runsWithChanges(runsWithoutLeadingTerm(runs, location.label.trim()))}
+      {runsWithChanges(
+        runsWithoutLeadingTerm(runs, fieldTermOf(location.label)),
+      )}
     </p>
   </div>
 );
@@ -453,8 +477,8 @@ const SnapshotBlock = ({
   if (location.kind === "callout") {
     return <SnapshotCallout location={location} side={side} />;
   }
-  if (location.kind === "quick-summary-facet") {
-    return <SnapshotSummaryFacet location={location} side={side} />;
+  if (location.kind in COMPONENT_FIELD_KINDS) {
+    return <SnapshotFieldBlock location={location} side={side} />;
   }
   if (location.kind === "heading") {
     return (
@@ -622,7 +646,7 @@ export const DiffLensContent = ({
       only.kind === "heading" ||
       only.kind === "quote" ||
       only.kind === "list" ||
-      only.kind === "quick-summary-facet");
+      only.kind in COMPONENT_FIELD_KINDS);
   const hasOldText = visibleLocations.some(
     (location) => location.oldText.trim() !== "",
   );
@@ -656,8 +680,8 @@ export const DiffLensContent = ({
       ) : canUseWordRuns && only !== undefined ? (
         only.kind === "list" ? (
           <ListRunContent runs={only.runs} location={only} />
-        ) : only.kind === "quick-summary-facet" ? (
-          <FacetRunContent runs={only.runs} location={only} />
+        ) : only.kind in COMPONENT_FIELD_KINDS ? (
+          <FieldRunContent runs={only.runs} location={only} />
         ) : (
           <WordRunContent runs={only.runs} presentation={presentation} />
         )
@@ -710,16 +734,16 @@ const documentBlock = (blockId: string): HTMLElement | null => {
 
 /**
  * Reads the text a live block presents to the reader, mirroring what
- * compile-time extraction recorded: screen-reader-only scaffolding never
- * enters a snapshot's text, and review chrome injected after load did not
- * exist at compile time, so both are stripped before this text is compared
- * with a snapshot's record of the block.
+ * compile-time extraction recorded: screen-reader-only scaffolding and markup
+ * shipped with the hidden attribute never enter a snapshot's text, and review
+ * chrome injected after load did not exist at compile time, so all are
+ * stripped before this text is compared with a snapshot's record of the block.
  */
 const liveBlockText = (element: HTMLElement): string => {
   const clone = element.cloneNode(true);
   if (!(clone instanceof HTMLElement)) return element.textContent ?? "";
   for (const injected of clone.querySelectorAll(
-    ".sr-only, [data-review-anchor-host], [data-review-toolbar-host], [data-flow-comment-marker]",
+    ".sr-only, [hidden], [data-review-anchor-host], [data-review-toolbar-host], [data-flow-comment-marker]",
   )) {
     injected.remove();
   }

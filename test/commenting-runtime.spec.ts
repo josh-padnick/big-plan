@@ -1598,7 +1598,7 @@ test("should colour a component snapshot switch as a diff", async ({
   }
 });
 
-test("should render an API contract change as a component snapshot instead of flattened text", async ({
+test("should diff an HTTP endpoint at field level inside one rendering", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -1631,22 +1631,83 @@ test("should render an API contract change as a component snapshot instead of fl
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
     const lens = page.locator("[data-review-diff-lens]");
-    const componentDiff = lens.locator("[data-review-component-diff]");
-    await expect(componentDiff).toHaveCount(1);
-    const snapshot = componentDiff.locator("[data-review-component-snapshot]");
-    // The endpoint shows as its compiled card - method, path, and prose in
-    // their own places - never as one run-together text wall.
-    await expect(snapshot).toContainText("/catalog/refresh");
-    await expect(snapshot).toContainText(
+    // The endpoint's changed Description is one review stop, marked in place
+    // within a single rendering: its label as a header and the exact removed
+    // and inserted words in the body, never a Was/Now pair of complete cards.
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      "1 of 1",
+    );
+    const field = lens.locator("[data-review-diff-field]");
+    await expect(field).toHaveCount(1);
+    await expect(field).toContainText("Description");
+    await expect(field.locator("ins")).toContainText([
+      "deduplicated",
       "the worker pool performs the refreshes asynchronously",
-    );
-    await expect(lens.locator("[data-review-diff-content]")).toHaveCount(0);
-    await componentDiff.getByRole("button", { name: "Was" }).click();
-    await expect(snapshot).toContainText(
-      "Queues a refresh job per cache key and returns immediately.",
-    );
+    ]);
+    await expect(lens.locator("[data-review-component-diff]")).toHaveCount(0);
+    // The untouched fields stay out of the lens instead of returning as the
+    // old flattened component wall.
+    await expect(lens).not.toContainText("X-Request-Id");
+    await expect(lens).not.toContainText("Refresh queued");
     await page.screenshot({
-      path: testInfo.outputPath("http-endpoint-component-diff.png"),
+      path: testInfo.outputPath("http-endpoint-field-diff.png"),
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should diff a database schema at column level inside one rendering", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-schema-diff-"));
+  const planPath = join(directory, "schema.mdx");
+  const after = await readFile(
+    new URL("../examples/database-table-schema.mdx", import.meta.url),
+    "utf8",
+  );
+  const before = after.replace(
+    "seats        integer       [not null, default: 1, check: 'seats > 0']",
+    "seats        smallint      [not null, default: 1, check: 'seats > 0']",
+  );
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    // The retyped column is one review stop marked in place: the column's own
+    // label as a header, the exact type change in the body, and no second
+    // complete rendering of the schema to compare by eye.
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      "1 of 1",
+    );
+    const field = lens.locator("[data-review-diff-field]");
+    await expect(field).toHaveCount(1);
+    await expect(field).toContainText("Column: seats");
+    await expect(field.locator("del")).toContainText("smallint");
+    await expect(field.locator("ins")).toContainText("integer");
+    await expect(lens.locator("[data-review-component-diff]")).toHaveCount(0);
+    // The other columns did not change, so the schema root never claims the
+    // change and their text stays out of the lens.
+    await expect(lens).not.toContainText("customer_id");
+    await page.screenshot({
+      path: testInfo.outputPath("database-table-schema-field-diff.png"),
     });
   } finally {
     await runtime.close();
@@ -1693,7 +1754,7 @@ test("should diff a quick summary at facet level with word runs", async ({
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       "1 of 1",
     );
-    const facet = lens.locator("[data-review-diff-facet]");
+    const facet = lens.locator("[data-review-diff-field]");
     await expect(facet).toHaveCount(1);
     await expect(facet).toContainText("How");
     await expect(facet.locator("del")).toContainText("attempts");

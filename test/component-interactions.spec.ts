@@ -142,13 +142,18 @@ test("should expose endpoint comment controls and one shared selected-scope trea
 }) => {
   await page.goto(allComponentsViewerUrl);
 
-  for (const selector of [
-    "[data-http-endpoint]",
-    "[data-grpc-method]",
-    "[data-graphql-operation]",
-  ]) {
+  // Each card also exposes its declared fields as comment targets, so the
+  // whole-card control is found by its accessible name.
+  for (const [selector, rootName] of [
+    ["[data-http-endpoint]", "Comment on Http endpoint"],
+    ["[data-grpc-method]", "Comment on Grpc method"],
+    ["[data-graphql-operation]", "Comment on Graphql operation"],
+  ] as const) {
     const component = page.locator(selector).first();
-    const comment = component.getByRole("button", { name: /Comment on/u });
+    const comment = component.getByRole("button", {
+      name: rootName,
+      exact: true,
+    });
     await expect(comment).toBeVisible();
     await comment.click();
     await expect(component).toHaveAttribute("data-review-scope-selected", "");

@@ -391,17 +391,17 @@ describe("snapshot block alignment", () => {
     const locations = diffSnapshots({
       before: [
         block({
-          id: "section/approach/http-endpoint-1",
-          kind: "http-endpoint",
-          text: "POST\n/api/restore\nRestore a historical version",
+          id: "section/approach/wireframe-1",
+          kind: "wireframe",
+          text: "Restore a historical version",
           isComponentRoot: true,
         }),
       ],
       after: [
         block({
-          id: "section/approach/http-endpoint-1",
-          kind: "http-endpoint",
-          text: "POST\n/api/restore\nRestore the selected historical version",
+          id: "section/approach/wireframe-1",
+          kind: "wireframe",
+          text: "Restore the selected historical version",
           isComponentRoot: true,
         }),
       ],
@@ -477,19 +477,89 @@ describe("snapshot block alignment", () => {
     });
     expect(diff.places[0]?.locationIndexes).toHaveLength(2);
   });
+
+  it("should group a field-bearing component root with its changed field and keep word runs", () => {
+    const endpoint = ({ summary }: { readonly summary: string }) => [
+      block({
+        id: "section/api/http-endpoint-1",
+        kind: "http-endpoint",
+        label: "Http endpoint",
+        text: `POST /queue ${summary}\nDescription of the endpoint.`,
+        isComponentRoot: true,
+      }),
+      block({
+        id: "section/api/http-endpoint-field-1",
+        kind: "http-endpoint-field",
+        label: "POST /queue",
+        text: `POST /queue ${summary}`,
+        ownerId: "section/api/http-endpoint-1",
+      }),
+    ];
+
+    const diff = buildSnapshotDiff({
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      before: endpoint({ summary: "Queue a refresh" }),
+      after: endpoint({ summary: "Queue one refresh" }),
+    });
+
+    expect(diff.places).toHaveLength(1);
+    expect(diff.places[0]).toMatchObject({
+      label: "Http endpoint",
+      note: "reworded",
+    });
+    const field = diff.locations.find(
+      (location) => location.kind === "http-endpoint-field",
+    );
+    expect(field?.runs.some((run) => run.op === "same")).toBe(true);
+  });
+
+  it("should keep two adjacent field-bearing components as separate review places when both change", () => {
+    const cards = ({ suffix }: { readonly suffix: string }) => [
+      block({
+        id: "section/api/http-endpoint-1",
+        kind: "http-endpoint",
+        label: "Http endpoint",
+        text: `POST /queue Queue ${suffix}`,
+        isComponentRoot: true,
+      }),
+      block({
+        id: "section/api/http-endpoint-field-1",
+        kind: "http-endpoint-field",
+        label: "POST /queue",
+        text: `POST /queue Queue ${suffix}`,
+        ownerId: "section/api/http-endpoint-1",
+      }),
+      block({
+        id: "section/api/http-endpoint-2",
+        kind: "http-endpoint",
+        label: "Http endpoint",
+        text: `GET /queue Read ${suffix}`,
+        isComponentRoot: true,
+      }),
+      block({
+        id: "section/api/http-endpoint-field-2",
+        kind: "http-endpoint-field",
+        label: "GET /queue",
+        text: `GET /queue Read ${suffix}`,
+        ownerId: "section/api/http-endpoint-2",
+      }),
+    ];
+
+    const diff = buildSnapshotDiff({
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      before: cards({ suffix: "a refresh" }),
+      after: cards({ suffix: "one refresh" }),
+    });
+
+    expect(diff.places).toHaveLength(2);
+  });
 });
 
 describe("rendered snapshot rule", () => {
   it("should give every component root a rendered snapshot when no text treatment exists", () => {
-    for (const kind of [
-      "http-endpoint",
-      "graphql-operation",
-      "grpc-method",
-      "database-table-schema",
-      "wireframe",
-      "decision",
-      "a-future-component",
-    ]) {
+    for (const kind of ["wireframe", "decision", "a-future-component"]) {
       expect(usesRenderedSnapshot({ kind, isComponentRoot: true })).toBe(true);
     }
   });
@@ -501,6 +571,10 @@ describe("rendered snapshot rule", () => {
       "code-diff",
       "data-table",
       "quick-summary",
+      "http-endpoint",
+      "graphql-operation",
+      "grpc-method",
+      "database-table-schema",
     ]) {
       expect(usesRenderedSnapshot({ kind, isComponentRoot: true })).toBe(false);
     }

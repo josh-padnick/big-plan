@@ -11,6 +11,7 @@ import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import { CopyButton } from "../_shared/figure-controls/copy-button.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
 import { MutedText } from "./view-elements.js";
+import { FIELD_KIND } from "./view-layouts.js";
 
 // /* off-scale */ Phase A preserves the legacy inset header radius, compact
 // caption/menu geometry, and menu shadow exactly. Phase B may regularize them
@@ -155,7 +156,11 @@ export const TableSchemaHeader = ({
   readonly schemaName?: string;
   readonly note?: string;
 }) => (
-  <figcaption className="table-schema-header min-w-0 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
+  <figcaption
+    className="table-schema-header min-w-0 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1"
+    data-commentable-kind={FIELD_KIND}
+    data-commentable-label={`Table: ${schemaName ?? ""}${tableName}`}
+  >
     <span className="table-schema-header-row flex min-w-0 items-center justify-between gap-3">
       <TableIdentity
         tableName={tableName}

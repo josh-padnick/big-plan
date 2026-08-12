@@ -75,14 +75,12 @@ const DERIVED_BLOCK_KINDS = new Set(["table-of-contents"]);
 // - data-table: the lens diffs the declared table-row sub-targets row by row.
 // - quick-summary: the lens diffs the declared quick-summary-facet sub-targets
 //   with word-level runs, which shows the exact edit inside a facet.
+// - http-endpoint, graphql-operation, grpc-method, database-table-schema:
+//   field-bearing cards whose views declare every reviewable field with
+//   data-commentable-kind and a reviewer-worded label, so the lens diffs the
+//   changed fields the way quick-summary diffs its facets instead of stacking
+//   two complete card renderings.
 //
-// Interim placement, by explicit product decision: http-endpoint,
-// graphql-operation, grpc-method, and database-table-schema are field-bearing
-// and should eventually diff field by field the way quick-summary diffs its
-// facets - each view declares its fields with data-commentable-kind and a
-// label, the field kinds join the lens's overlap and word-run rules, and the
-// kind moves into this set. Until those views declare their fields they stay
-// on the rendered path, which is the least-bad whole-component evidence.
 // wireframe stays rendered permanently: a picture has no field-level units
 // worth marking, so compiled Was and Now is the honest presentation.
 const TEXT_DIFF_COMPONENT_KINDS: ReadonlySet<string> = new Set([
@@ -91,6 +89,10 @@ const TEXT_DIFF_COMPONENT_KINDS: ReadonlySet<string> = new Set([
   "code-diff",
   "data-table",
   "quick-summary",
+  "http-endpoint",
+  "graphql-operation",
+  "grpc-method",
+  "database-table-schema",
 ]);
 
 /** Whether a block's change is evidenced by its compiled rendering. */
@@ -527,6 +529,31 @@ const ownerKeyFor = ({
   return block.ownerId ?? block.id;
 };
 
+// The component a location belongs to, when it belongs to one: a component
+// root answers with itself, and a declared sub-target answers with its owning
+// root. Two different components must never share a review stop - adjacency
+// can bridge a component boundary when one card's last field sits right beside
+// the next card's root, and a merged stop would hide which component owns
+// which change.
+const componentKeyFor = ({
+  location,
+  before,
+  after,
+}: {
+  readonly location: SnapshotDiffLocation;
+  readonly before: ReadonlyArray<SnapshotBlock>;
+  readonly after: ReadonlyArray<SnapshotBlock>;
+}): string | undefined => {
+  const blocks = location.newBlockId === undefined ? before : after;
+  const blockId = location.newBlockId ?? location.oldBlockId;
+  const block = blocks.find((candidate) => candidate.id === blockId);
+  if (block === undefined) return undefined;
+  if (block.isComponentRoot) return block.id;
+  if (block.ownerId === undefined) return undefined;
+  const owner = blocks.find((candidate) => candidate.id === block.ownerId);
+  return owner?.isComponentRoot === true ? owner.id : undefined;
+};
+
 /** Groups adjacent changed blocks within a section into calm review stops. */
 export const buildSnapshotDiff = ({
   from,
@@ -558,6 +585,11 @@ export const buildSnapshotDiff = ({
       previous === undefined
         ? undefined
         : ownerKeyFor({ location: previous, before, after });
+    const currentComponentKey = componentKeyFor({ location, before, after });
+    const previousComponentKey =
+      previous === undefined
+        ? undefined
+        : componentKeyFor({ location: previous, before, after });
     const renderedComponent = usesRenderedSnapshot(location);
     const previousRenderedComponent =
       previous !== undefined && usesRenderedSnapshot(previous);
@@ -567,6 +599,9 @@ export const buildSnapshotDiff = ({
       !renderedComponent &&
       !previousRenderedComponent &&
       previous.section === location.section &&
+      (currentComponentKey === undefined ||
+        previousComponentKey === undefined ||
+        currentComponentKey === previousComponentKey) &&
       ((currentOwnerKey !== undefined &&
         currentOwnerKey === previousOwnerKey) ||
         currentPosition - previousPosition <= 1)
