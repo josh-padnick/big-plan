@@ -263,25 +263,36 @@ test("should align a long caption with a height-fitted desktop frame", async ({
   await page.goto(wireframeLongCaptionDesktopViewerUrl);
 
   const wireframe = page.locator('[data-wireframe="long-caption-desktop"]');
+  const card = wireframe.locator(".wireframe-screen > .wireframe-frame-card");
+  const restingCard = await card.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    return { width: box.width, height: box.height };
+  });
   await wireframe.locator("[data-figure-maximize]").click();
   await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
   await expect
     .poll(() =>
-      wireframe
-        .locator(".wireframe-screen")
-        .evaluate((node) => node.scrollWidth - node.clientWidth),
+      card.evaluate((node, resting) => {
+        const box = node.getBoundingClientRect();
+        return Math.max(
+          Math.abs(box.width - resting.width),
+          Math.abs(box.height - resting.height),
+        );
+      }, restingCard),
     )
-    .toBe(0);
+    .toBeGreaterThan(1);
 
   const geometry = await wireframe.evaluate((node) => {
+    const body = node.querySelector<HTMLElement>(":scope > [data-figure-body]");
     const screen = node.querySelector<HTMLElement>(".wireframe-screen");
     const caption = node.querySelector<HTMLElement>(
       ".wireframe-screen-caption",
     );
     const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
-    if (screen === null || caption === null || card === null) {
+    if (body === null || screen === null || caption === null || card === null) {
       throw new Error("long-caption desktop screen is incomplete");
     }
+    const bodyBox = body.getBoundingClientRect();
     const captionBox = caption.getBoundingClientRect();
     const cardBox = card.getBoundingClientRect();
     const name = caption.querySelector<HTMLElement>(".wireframe-screen-name");
@@ -313,6 +324,12 @@ test("should align a long caption with a height-fitted desktop frame", async ({
       metadataColor: viewportStyle.color,
       metadataDisplay: viewportStyle.display,
       metadataFontSize: parseFloat(viewportStyle.fontSize),
+      stackHeight: captionBox.bottom - cardBox.top,
+      availableHeight: bodyBox.height,
+      stackTopInset: cardBox.top - bodyBox.top,
+      stackBottomInset: bodyBox.bottom - captionBox.bottom,
+      horizontalOverflow: body.scrollWidth - body.clientWidth,
+      verticalOverflow: body.scrollHeight - body.clientHeight,
     };
   });
 
@@ -333,11 +350,13 @@ test("should align a long caption with a height-fitted desktop frame", async ({
   expect(geometry.metadataFontSize).toBe(12);
   expect(geometry.metadataFontSize).toBeLessThan(geometry.nameFontSize);
   expect(geometry.metadataColor).not.toBe(geometry.nameColor);
-
-  const screenOverflow = await wireframe
-    .locator(".wireframe-screen")
-    .evaluate((node) => node.scrollHeight - node.clientHeight);
-  expect(screenOverflow).toBe(0);
+  expect(geometry.stackHeight).toBeLessThanOrEqual(
+    geometry.availableHeight + 1,
+  );
+  expect(geometry.stackTopInset).toBeGreaterThanOrEqual(-1);
+  expect(geometry.stackBottomInset).toBeGreaterThanOrEqual(-1);
+  expect(geometry.horizontalOverflow).toBe(0);
+  expect(geometry.verticalOverflow).toBe(0);
 });
 
 test("should keep a long wireframe caption aligned and readable on mobile", async ({
@@ -348,18 +367,36 @@ test("should keep a long wireframe caption aligned and readable on mobile", asyn
   await page.goto(wireframeLongCaptionDesktopViewerUrl);
 
   const wireframe = page.locator('[data-wireframe="long-caption-desktop"]');
+  const card = wireframe.locator(".wireframe-screen > .wireframe-frame-card");
+  const restingCard = await card.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    return { width: box.width, height: box.height };
+  });
   await wireframe.locator("[data-figure-maximize]").click();
   await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
+  await expect
+    .poll(() =>
+      card.evaluate((node, resting) => {
+        const box = node.getBoundingClientRect();
+        return Math.max(
+          Math.abs(box.width - resting.width),
+          Math.abs(box.height - resting.height),
+        );
+      }, restingCard),
+    )
+    .toBeGreaterThan(1);
 
   const geometry = await wireframe.evaluate((node) => {
+    const body = node.querySelector<HTMLElement>(":scope > [data-figure-body]");
     const screen = node.querySelector<HTMLElement>(".wireframe-screen");
     const caption = node.querySelector<HTMLElement>(
       ".wireframe-screen figcaption",
     );
     const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
-    if (screen === null || caption === null || card === null) {
+    if (body === null || screen === null || caption === null || card === null) {
       throw new Error("mobile wireframe caption is incomplete");
     }
+    const bodyBox = body.getBoundingClientRect();
     const captionBox = caption.getBoundingClientRect();
     const cardBox = card.getBoundingClientRect();
     const name = caption.querySelector<HTMLElement>(".wireframe-screen-name");
@@ -383,7 +420,7 @@ test("should keep a long wireframe caption aligned and readable on mobile", asyn
       leftDelta: Math.abs(captionBox.left - cardBox.left),
       rightDelta: Math.abs(captionBox.right - cardBox.right),
       metadataGap: viewportBox.top - nameBox.bottom,
-      horizontalOverflow: screen.scrollWidth - screen.clientWidth,
+      horizontalOverflow: body.scrollWidth - body.clientWidth,
       nameDisplay: nameStyle.display,
       nameFontSize,
       nameLineHeight,
@@ -393,6 +430,11 @@ test("should keep a long wireframe caption aligned and readable on mobile", asyn
       metadataColor: viewportStyle.color,
       metadataDisplay: viewportStyle.display,
       metadataFontSize: parseFloat(viewportStyle.fontSize),
+      stackHeight: captionBox.bottom - cardBox.top,
+      availableHeight: bodyBox.height,
+      stackTopInset: cardBox.top - bodyBox.top,
+      stackBottomInset: bodyBox.bottom - captionBox.bottom,
+      verticalOverflow: body.scrollHeight - body.clientHeight,
     };
   });
 
@@ -414,6 +456,12 @@ test("should keep a long wireframe caption aligned and readable on mobile", asyn
   expect(geometry.metadataFontSize).toBe(12);
   expect(geometry.metadataFontSize).toBeLessThan(geometry.nameFontSize);
   expect(geometry.metadataColor).not.toBe(geometry.nameColor);
+  expect(geometry.stackHeight).toBeLessThanOrEqual(
+    geometry.availableHeight + 1,
+  );
+  expect(geometry.stackTopInset).toBeGreaterThanOrEqual(-1);
+  expect(geometry.stackBottomInset).toBeGreaterThanOrEqual(-1);
+  expect(geometry.verticalOverflow).toBe(0);
 });
 
 test("should fill a multi-screen desktop workspace at rest and when maximized", async ({
