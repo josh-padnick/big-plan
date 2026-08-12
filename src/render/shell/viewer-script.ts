@@ -1105,7 +1105,7 @@ const installColumnPointerReorder = ({
       parseFloat(cardStyle.paddingBottom) +
       parseFloat(cardStyle.borderTopWidth) +
       parseFloat(cardStyle.borderBottomWidth);
-    const caption = card.previousElementSibling;
+    const caption = card.nextElementSibling;
     const frameWidth = frame.offsetWidth;
     const frameHeight = frame.offsetHeight;
     const widthScale =
@@ -1123,8 +1123,13 @@ const installColumnPointerReorder = ({
           parseFloat(captionStyle.marginTop) +
           parseFloat(captionStyle.marginBottom);
       }
-      const heightScale =
-        (availableHeight - captionHeight - verticalInset) / frameHeight;
+      // Only a maximized figure has a bounded panel that must keep the full
+      // device and its caption visible. At rest the document owns vertical
+      // scrolling; leaving this axis at true size preserves measured phone
+      // and tablet controls while width still fits the review column.
+      const heightScale = screen.closest("[data-figure-maximized]")
+        ? (availableHeight - captionHeight - verticalInset) / frameHeight
+        : 1;
       const nextScale = Math.min(1, widthScale, heightScale);
       if (Math.abs(nextScale - scale) < 0.0001) {
         scale = nextScale;

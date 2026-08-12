@@ -237,7 +237,7 @@ marks and a plan diff never jitters.
     --wf-min-height: 720px;
     max-width: calc(390px + 12px + 0.8rem + var(--wf-card-inset));
   }
-  /* The caption describes the device below it, so its left and right edges
+  /* The caption describes the device above it, so its left and right edges
      must follow the frame card rather than the whole maximized screen column.
      A shrink-wrapped block keeps the two aligned at rest and when the screen
      column grows around the true device width. */

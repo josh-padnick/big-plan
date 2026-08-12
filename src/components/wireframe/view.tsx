@@ -684,7 +684,7 @@ const Screen = ({
         (child.element === "Row" && isWorkspaceRow(child.children)),
     );
   return (
-    <section
+    <figure
       className="wireframe-screen mx-auto w-full overflow-x-auto [container-type:inline-size]"
       aria-label={`${screen.name}, ${preset.label}`}
       data-wireframe-screen={screen.id}
@@ -692,19 +692,6 @@ const Screen = ({
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
       <div className="wireframe-device-block w-fit max-w-full">
-        <div className="wireframe-screen-caption mb-1.5 flex flex-wrap justify-between gap-2 text-xs text-muted">
-          <span className="wireframe-screen-name font-semibold tracking-caps">
-            {screen.name}
-          </span>
-          <span className="wireframe-screen-viewport">
-            {preset.label} · {preset.width} × {preset.height}px{" "}
-            {workspaceViewport
-              ? "workspace viewport"
-              : preset.heightPolicy === "fixed"
-                ? "fixed frame"
-                : "minimum · grows with content"}
-          </span>
-        </div>
         <div className="wireframe-frame-card">
           <div
             className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
@@ -738,8 +725,21 @@ const Screen = ({
             </div>
           </div>
         </div>
+        <figcaption className="wireframe-screen-caption mt-3 w-full min-w-0 font-sans text-sm leading-[1.45] tracking-normal text-ink">
+          <span className="wireframe-screen-name block min-w-0 break-words">
+            {screen.name}
+          </span>
+          <span className="wireframe-screen-viewport mt-1 block min-w-0 break-words text-xs leading-normal text-muted">
+            {preset.label} · {preset.width} × {preset.height}px{" "}
+            {workspaceViewport
+              ? "workspace viewport"
+              : preset.heightPolicy === "fixed"
+                ? "fixed frame"
+                : "minimum · grows with content"}
+          </span>
+        </figcaption>
       </div>
-    </section>
+    </figure>
   );
 };
 

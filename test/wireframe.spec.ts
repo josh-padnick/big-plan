@@ -276,21 +276,79 @@ test("should align a long caption with a height-fitted desktop frame", async ({
     }
     const captionBox = caption.getBoundingClientRect();
     const cardBox = card.getBoundingClientRect();
+    const name = caption.querySelector<HTMLElement>(".wireframe-screen-name");
+    const viewport = caption.querySelector<HTMLElement>(
+      ".wireframe-screen-viewport",
+    );
+    if (name === null || viewport === null) {
+      throw new Error("long-caption metadata is incomplete");
+    }
+    const nameBox = name.getBoundingClientRect();
+    const viewportBox = viewport.getBoundingClientRect();
     return {
       captionHeight: captionBox.height,
+      captionTopGap: captionBox.top - cardBox.bottom,
       leftDelta: Math.abs(captionBox.left - cardBox.left),
       rightDelta: Math.abs(captionBox.right - cardBox.right),
+      metadataGap: viewportBox.top - nameBox.bottom,
+      metadataFont: getComputedStyle(viewport).fontSize,
+      captionFont: getComputedStyle(caption).fontFamily,
     };
   });
 
   expect(geometry.captionHeight).toBeGreaterThan(16);
+  expect(geometry.captionTopGap).toBeGreaterThanOrEqual(10);
+  expect(geometry.captionTopGap).toBeLessThanOrEqual(14);
   expect(geometry.leftDelta).toBeLessThan(4);
   expect(geometry.rightDelta).toBeLessThan(4);
+  expect(geometry.metadataGap).toBeGreaterThanOrEqual(4);
+  expect(geometry.metadataGap).toBeLessThanOrEqual(6);
+  expect(geometry.metadataFont).toBe("12px");
+  expect(geometry.captionFont).toContain("-apple-system");
 
   const screenOverflow = await wireframe
     .locator(".wireframe-screen")
     .evaluate((node) => node.scrollHeight - node.clientHeight);
   expect(screenOverflow).toBe(0);
+});
+
+test("should keep a long wireframe caption aligned and readable on mobile", async ({
+  page,
+  wireframeLongCaptionDesktopViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(wireframeLongCaptionDesktopViewerUrl);
+
+  const wireframe = page.locator('[data-wireframe="long-caption-desktop"]');
+  await wireframe.locator("[data-figure-maximize]").click();
+  await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
+
+  const geometry = await wireframe.evaluate((node) => {
+    const screen = node.querySelector<HTMLElement>(".wireframe-screen");
+    const caption = node.querySelector<HTMLElement>(
+      ".wireframe-screen figcaption",
+    );
+    const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
+    if (screen === null || caption === null || card === null) {
+      throw new Error("mobile wireframe caption is incomplete");
+    }
+    const captionBox = caption.getBoundingClientRect();
+    const cardBox = card.getBoundingClientRect();
+    return {
+      captionHeight: captionBox.height,
+      captionTopGap: captionBox.top - cardBox.bottom,
+      leftDelta: Math.abs(captionBox.left - cardBox.left),
+      rightDelta: Math.abs(captionBox.right - cardBox.right),
+      horizontalOverflow: screen.scrollWidth - screen.clientWidth,
+    };
+  });
+
+  expect(geometry.captionHeight).toBeGreaterThan(16);
+  expect(geometry.captionTopGap).toBeGreaterThanOrEqual(10);
+  expect(geometry.captionTopGap).toBeLessThanOrEqual(14);
+  expect(geometry.leftDelta).toBeLessThan(2);
+  expect(geometry.rightDelta).toBeLessThan(2);
+  expect(geometry.horizontalOverflow).toBe(0);
 });
 
 test("should fill a multi-screen desktop workspace at rest and when maximized", async ({
