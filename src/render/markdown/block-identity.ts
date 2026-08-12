@@ -30,6 +30,8 @@ import { COMPONENT_NAME_ATTRIBUTE } from "./component-pipeline/component-name.js
 // replayed as bullets misstate whether sequence matters. Styling and layout
 // stay out - they are reproducible presentation, and carrying them would grow
 // this into a second rendering contract.
+// Mirrored by hand across the reviewShared tier boundary; reviewShared may
+// import nothing - keep this in sync with src/review/shared/review-wire.ts.
 export type BlockPresentation =
   | { readonly aspect: "callout"; readonly calloutType: CalloutType }
   | { readonly aspect: "list"; readonly isOrdered: boolean };

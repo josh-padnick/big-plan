@@ -3,75 +3,37 @@
 // server, attribution validator, and browser share one answer.
 
 import { createHash } from "node:crypto";
+import type { BlockDescriptor } from "../render/render-document.js";
 import { normalizedText } from "./shared/normalized-text.js";
+import type {
+  DiffLocation,
+  DiffPlace,
+  DiffRun,
+  SnapshotDiff,
+} from "./shared/review-wire.js";
+export type {
+  BlockPresentation,
+  DiffPlace,
+  DiffRun,
+  SnapshotDiff,
+} from "./shared/review-wire.js";
 
-// Stamped by block identity: the meaning-bearing presentation facts a diff
-// must replay without the live document - a callout's type and a list's
-// ordering. Only a fact that changes what the plan asserts rides here; the
-// renderer owns the vocabulary, and styling never enters it.
-export type BlockPresentation =
-  | {
-      readonly aspect: "callout";
-      readonly calloutType: "note" | "tip" | "warning" | "danger";
-    }
-  | { readonly aspect: "list"; readonly isOrdered: boolean };
+// The renderer owns the block shape and this layer adds no snapshot-only
+// fields, so preserve the old name as a type-only alias for its public callers.
+export type SnapshotBlock = BlockDescriptor;
 
-export type SnapshotBlock = {
-  readonly id: string;
-  readonly kind: string;
-  readonly label: string;
-  readonly section: string;
-  readonly text: string;
-  // Stamped by block identity: whether the block is a component root, and the
-  // block that declared it as a sub-target (a table for its rows, a component
-  // for its declared internals). The renderer owns these facts structurally;
-  // this module never re-derives them from kind strings.
+// The review builder records component-root ownership before handing locations
+// to the wire contract, so keep that stronger internal intersection here.
+export type SnapshotDiffLocation = DiffLocation & {
   readonly isComponentRoot: boolean;
-  readonly ownerId?: string;
-  readonly presentation?: BlockPresentation;
 };
 
-export type DiffRun = {
-  readonly op: "same" | "del" | "ins";
-  readonly text: string;
-};
+// Keep the historical internal name for callers while the wire owns the place
+// vocabulary shared with browser delivery.
+export type SnapshotDiffPlace = DiffPlace;
 
-export type SnapshotDiffLocation = {
-  readonly status: "changed" | "added" | "removed";
-  readonly scope: string;
-  readonly oldBlockId?: string;
-  readonly newBlockId?: string;
-  readonly kind: string;
-  readonly isComponentRoot: boolean;
-  readonly label: string;
-  readonly section: string;
-  readonly oldText: string;
-  readonly newText: string;
-  // Each side carries the presentation facts its own snapshot recorded: the
-  // Was side must never borrow them from the block that replaced it.
-  readonly oldPresentation?: BlockPresentation;
-  readonly newPresentation?: BlockPresentation;
-  readonly runs: ReadonlyArray<DiffRun>;
-  readonly oldHtml?: string;
-  readonly newHtml?: string;
-  readonly beforeBlockId?: string;
-  readonly afterBlockId?: string;
-};
-
-export type SnapshotDiffPlace = {
-  readonly placeId: string;
-  readonly status: "changed" | "added" | "removed";
-  readonly label: string;
-  readonly section: string;
-  readonly note: "reworded" | "rewritten" | "added" | "removed";
-  readonly locationIndexes: ReadonlyArray<number>;
-};
-
-export type SnapshotDiff = {
-  readonly from: string;
-  readonly to: string;
+type BuiltSnapshotDiff = Omit<SnapshotDiff, "locations"> & {
   readonly locations: ReadonlyArray<SnapshotDiffLocation>;
-  readonly places: ReadonlyArray<SnapshotDiffPlace>;
 };
 
 const ALIGNMENT_ACCEPTANCE = 0.52;
@@ -593,7 +555,7 @@ export const buildSnapshotDiff = ({
   readonly to: string;
   readonly before: ReadonlyArray<SnapshotBlock>;
   readonly after: ReadonlyArray<SnapshotBlock>;
-}): SnapshotDiff => {
+}): BuiltSnapshotDiff => {
   const locations = diffSnapshots({ before, after });
   const groups: Array<Array<number>> = [];
   for (const [index, location] of locations.entries()) {

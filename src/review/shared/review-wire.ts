@@ -88,6 +88,8 @@ export type DiffRun = {
 // instead of sniffing the live document. Only a fact that changes what the
 // plan asserts belongs here - a callout's type and a list's ordering; styling
 // and other reproducible presentation must never join this contract.
+// Mirrored by hand across the reviewShared tier boundary; reviewShared may
+// import nothing - keep this in sync with src/render/markdown/block-identity.ts.
 export type BlockPresentation =
   | {
       readonly aspect: "callout";
