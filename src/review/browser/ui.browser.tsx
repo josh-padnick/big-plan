@@ -304,7 +304,10 @@ export const AlertDialog = ({
     window.getSelection()?.removeAllRanges();
     dialogRef.current?.focus();
     return () => {
-      previousFocus?.focus();
+      // The element that opened this dialog can be replaced while the dialog
+      // is up - the plan refreshes in place - and focusing a detached node
+      // drops focus to the body instead of returning it.
+      if (previousFocus?.isConnected === true) previousFocus.focus();
     };
   }, [open]);
 

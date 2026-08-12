@@ -202,6 +202,26 @@ type FloatingPosition = {
   readonly left: number;
 };
 
+/**
+ * Resolves a diagram anchor to the element the reader can actually see. A
+ * diagram ships one copy per theme variant and only one is displayed, and a
+ * What-changed lens renders a snapshot copy whose block ids are scrubbed but
+ * whose flow anchors are not - so a first-match query can hand back a hidden
+ * node, or a clone whose enclosing block is a different block entirely.
+ */
+const liveFlowAnchor = (anchor: string): HTMLElement | null => {
+  const candidates = document.querySelectorAll<HTMLElement>(
+    `[data-flow-anchor="${CSS.escape(anchor)}"]`,
+  );
+  let hidden: HTMLElement | null = null;
+  for (const candidate of candidates) {
+    if (candidate.closest("[data-review-diff-lens]") !== null) continue;
+    if (candidate.getClientRects().length > 0) return candidate;
+    hidden ??= candidate;
+  }
+  return hidden;
+};
+
 const rootElement = document.documentElement;
 
 const ThreadIconButton = ({
@@ -580,7 +600,7 @@ const targetLabel = (
   const slideReference = kicker?.match(/^(\d+(?:\.\d+)*)\s*\//u)?.[1];
   const slideTitle = reviewContainer
     ?.querySelector<HTMLElement>(
-      "[data-collapse-header] h2, [data-collapse-header] h3",
+      ":scope > [data-collapse-header] h2, :scope > [data-collapse-header] h3",
     )
     ?.textContent?.trim();
   if (slideTitle === undefined || slideTitle === "") return label;
@@ -3805,9 +3825,7 @@ export const ReviewController = () => {
       add: (payload: ExternalFeedbackPayload): void => {
         const source =
           payload.source === "flow-diagram" && payload.anchor !== undefined
-            ? document.querySelector<HTMLElement>(
-                `[data-flow-anchor="${CSS.escape(payload.anchor ?? "")}"]`,
-              )
+            ? liveFlowAnchor(payload.anchor ?? "")
             : payload.anchor === undefined || payload.anchor === null
               ? null
               : document.getElementById(payload.anchor);
