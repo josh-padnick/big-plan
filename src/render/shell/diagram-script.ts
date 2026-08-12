@@ -30,6 +30,14 @@
 // It never promotes or restores a figure itself. The shared leg owns that
 // toggle; this one watches for the attribute and refits the canvas.
 //
+// RE-WIRING. The review island replaces the whole article in place when the
+// agent publishes a revision and announces it with a document-level
+// "bigplan:article-replaced" event. Every per-diagram capture here therefore
+// runs through wire(): once at load and again on that event. Wiring is
+// idempotent (a WeakSet guards each diagram), document- and window-level
+// listeners register exactly once, and state that pointed into the replaced
+// article is released rather than resurrected.
+//
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { X_ICON } from "../../icons/lucide/x.js";
@@ -41,8 +49,11 @@ const ICON_CLOSE = lucideIconToMarkup(X_ICON);
 
 export const DIAGRAM_SCRIPT = `
 (() => {
-  const diagrams = Array.from(document.querySelectorAll("[data-flow-diagram]"));
-  if (diagrams.length === 0) return;
+  // The live diagrams in the current article. An in-place plan refresh
+  // replaces the article, so wire() re-reads this list on every
+  // "bigplan:article-replaced" event and detached entries drop out.
+  let diagrams = [];
+  const wiredDiagrams = new WeakSet();
 
   const ICON = {
     comment: '${ICON_COMMENT}',
@@ -93,9 +104,10 @@ export const DIAGRAM_SCRIPT = `
     target.closest('button, a[href], input, select, textarea, summary');
 
   // --- Announcements ----------------------------------------------------
+  // Appended to the body by wire() once a diagram exists, and re-appended
+  // after a plan refresh destroys an adopted copy with the old article.
   const live = el("div", "flow-diagram-live");
   live.setAttribute("aria-live", "polite");
-  document.body.appendChild(live);
   let announceTimer = null;
   const announce = (message) => {
     live.textContent = "";
@@ -222,14 +234,16 @@ export const DIAGRAM_SCRIPT = `
 
   // Originals live here rather than in attributes: a proposal repaints the
   // document and must be able to put back exactly what the agent wrote.
+  // wire() fills them per diagram, so a refreshed article records its own
+  // server-rendered text as the new original.
   const originalHtml = new WeakMap();
   const originalText = new WeakMap();
-  for (const diagram of diagrams) {
+  const captureOriginals = (diagram) => {
     for (const field of diagram.querySelectorAll("[data-flow-field]")) {
       originalHtml.set(field, field.innerHTML);
       originalText.set(field, (field.textContent || "").trim());
     }
-  }
+  };
   const labelOfNode = (node) => {
     const field = node.querySelector('[data-flow-field="label"]');
     return field
@@ -301,14 +315,14 @@ export const DIAGRAM_SCRIPT = `
   // One transform per diagram. Nothing scrolls; x, y and zoom are the whole
   // state, and every affordance is re-anchored from them.
   const canvas = new Map();
-  for (const diagram of diagrams) {
+  const createCanvas = (diagram) => {
     const viewport = diagram.querySelector("[data-flow-viewport]");
     const sizer = diagram.querySelector("[data-flow-sizer]");
     const artboard = diagram.querySelector("[data-flow-artboard]");
-    if (!viewport || !sizer || !artboard) continue;
+    if (!viewport || !sizer || !artboard) return;
     canvas.set(diagram, { viewport, sizer, artboard, x: 0, y: 0, zoom: 1 });
     diagram.setAttribute("data-flow-canvas", "");
-  }
+  };
 
   const applyTransform = (diagram) => {
     const c = canvas.get(diagram);
@@ -423,9 +437,9 @@ export const DIAGRAM_SCRIPT = `
     c.viewport.style.height = Math.max(height, 140) + "px";
   };
 
-  for (const diagram of diagrams) {
+  const wireCanvasInteractions = (diagram) => {
     const c = canvas.get(diagram);
-    if (!c) continue;
+    if (!c) return;
 
     // A pinch is always an explicit canvas gesture. Plain two-finger panning
     // belongs to the canvas only while it is promoted; at rest, the same
@@ -522,7 +536,7 @@ export const DIAGRAM_SCRIPT = `
       requestAnimationFrame(() => fit(diagram));
     }).observe(diagram, { attributes: true, attributeFilter: ["data-figure-maximized"] });
 
-  }
+  };
 
   // --- Selection ----------------------------------------------------------
   let selected = null;
@@ -559,9 +573,9 @@ export const DIAGRAM_SCRIPT = `
     buildActionBar();
   };
 
-  for (const diagram of diagrams) {
+  const wireSelectionListeners = (diagram) => {
     const c = canvas.get(diagram);
-    if (!c) continue;
+    if (!c) return;
     diagram.addEventListener("click", (event) => {
       const marker = event.target.closest?.(
         ".mermaid-diagram-toolbar-comment-marker",
@@ -599,7 +613,7 @@ export const DIAGRAM_SCRIPT = `
       if (event.target === diagram) select(diagram);
     });
     diagram.addEventListener("figure-restored", () => clearDiagramChrome(diagram));
-  }
+  };
 
   // --- Editing in place ---------------------------------------------------
   const startEditing = (field) => {
@@ -1193,7 +1207,6 @@ export const DIAGRAM_SCRIPT = `
     // Isolation may have stamped it while it was still on the body.
     if (element.inert) element.inert = false;
   };
-  document.body.appendChild(actionBar);
 
   // A shortcut is a key, so it is drawn as one rather than described in prose.
   const keycapHint = (pairs) => {
@@ -1437,7 +1450,6 @@ export const DIAGRAM_SCRIPT = `
   const compose = el("div", "flow-diagram-compose");
   compose.hidden = true;
   compose.setAttribute("role", "dialog");
-  document.body.appendChild(compose);
   let composeSubject = null;
   let composeReturnFocus = null;
 
@@ -1448,7 +1460,6 @@ export const DIAGRAM_SCRIPT = `
   const commentThread = el("aside", "flow-diagram-comment-thread");
   commentThread.hidden = true;
   commentThread.setAttribute("role", "dialog");
-  document.body.appendChild(commentThread);
   // A repaint - a theme variant swap, a refit, a maximize - replaces the SVG
   // nodes an open thread was raised against. The thread therefore remembers
   // what it is about, not which nodes said so, and resolves those nodes against
@@ -2141,8 +2152,11 @@ export const DIAGRAM_SCRIPT = `
   };
 
   // --- Figure-level proposal chrome --------------------------------------
-  for (const diagram of diagrams) {
-    const revertAllAlert = buildRevertAllAlert(diagram, diagrams.indexOf(diagram));
+  // Alert ids stay unique across re-wires; an index into the current diagram
+  // list would collide with the ids a replaced article already claimed.
+  let alertSequence = 0;
+  const wireFigureChrome = (diagram) => {
+    const revertAllAlert = buildRevertAllAlert(diagram, alertSequence++);
     const figureComment = diagram.querySelector("[data-flow-figure-comment]");
     if (figureComment) {
       figureComment.addEventListener("click", (event) => {
@@ -2177,7 +2191,7 @@ export const DIAGRAM_SCRIPT = `
         revertAllAlert.open();
       });
     }
-  }
+  };
 
   document.addEventListener("pointerdown", (event) => {
     if (
@@ -2196,41 +2210,29 @@ export const DIAGRAM_SCRIPT = `
     if (!composeText()) closeCompose();
     deselect();
   });
-  diagrams.forEach((diagram, index) => {
-    buildExitAlert(diagram, index);
-    buildCollector(diagram);
-  });
-
-  // First layout runs last: fitting the canvas re-anchors the action bar, so
-  // it has to exist before anything is fitted.
-  for (const diagram of diagrams) {
-    sizeRestingCanvas(diagram);
-    fit(diagram);
-  }
-
   // Collapsing a slide changes no attribute on the diagram itself, so the
   // teardown is driven by what actually changed: the size of its host.
-  if (typeof ResizeObserver === "function") {
-    const sizes = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const diagram = entry.target;
-        if (
-          entry.contentRect.width > 0 &&
-          entry.contentRect.height > 0 &&
-          !diagram.hasAttribute("data-figure-maximized")
-        ) {
-          refitIfUntouched(diagram);
-          if (isMermaidDiagram(diagram)) scheduleMermaidVariantRefresh();
+  const sizes = typeof ResizeObserver === "function"
+    ? new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const diagram = entry.target;
+          if (
+            entry.contentRect.width > 0 &&
+            entry.contentRect.height > 0 &&
+            !diagram.hasAttribute("data-figure-maximized")
+          ) {
+            refitIfUntouched(diagram);
+            if (isMermaidDiagram(diagram)) scheduleMermaidVariantRefresh();
+          }
         }
-      }
-      reanchor();
-    });
-    for (const diagram of diagrams) sizes.observe(diagram);
-  }
+        reanchor();
+      })
+    : null;
 
   let themeFrame = null;
   const refreshMermaidVariants = () => {
     themeFrame = null;
+    if (!diagrams.some(isMermaidDiagram)) return;
     const thread =
       commentThread.hidden || commentThreadState === null
         ? null
@@ -2279,23 +2281,111 @@ export const DIAGRAM_SCRIPT = `
     if (themeFrame !== null) cancelAnimationFrame(themeFrame);
     themeFrame = requestAnimationFrame(refreshMermaidVariants);
   };
-  if (diagrams.some(isMermaidDiagram)) {
-    new MutationObserver(scheduleMermaidVariantRefresh).observe(
-      document.documentElement,
-      { attributes: true, attributeFilter: ["data-theme"] },
-    );
-    const systemTheme = matchMedia("(prefers-color-scheme: dark)");
-    systemTheme.addEventListener("change", () => {
-      if (!document.documentElement.hasAttribute("data-theme")) {
-        scheduleMermaidVariantRefresh();
-      }
-    });
-  }
+  // Registered once whether or not the current article holds a mermaid
+  // diagram: a refreshed article may introduce one, and the refresh itself
+  // returns early when none exists.
+  new MutationObserver(scheduleMermaidVariantRefresh).observe(
+    document.documentElement,
+    { attributes: true, attributeFilter: ["data-theme"] },
+  );
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (!document.documentElement.hasAttribute("data-theme")) {
+      scheduleMermaidVariantRefresh();
+    }
+  });
 
   addEventListener("scroll", reanchor, { passive: true, capture: true });
   addEventListener("resize", () => {
     for (const diagram of diagrams) sizeRestingCanvas(diagram);
     reanchor();
   }, { passive: true });
+
+  // The overlays are singletons parented to the body, but adopt() re-homes
+  // them into whichever diagram owns the current selection. A plan refresh
+  // that replaces the article therefore destroys an adopted copy, so wire()
+  // puts every missing overlay back on the body before anything positions it.
+  const ensureOverlayChrome = () => {
+    for (const chrome of [live, actionBar, compose, commentThread]) {
+      if (!chrome.isConnected) document.body.appendChild(chrome);
+    }
+  };
+
+  // Reviewer state that pointed into a replaced article cannot be trusted
+  // afterwards, so it is released rather than resurrected: unsent notes on a
+  // replaced diagram are dropped with the DOM that anchored them, and gating
+  // state is cleared so the keyboard never stays captured by a detached alert.
+  const releaseDetachedState = () => {
+    if (activeExitAlert !== null && !activeExitAlert.isConnected) {
+      activeExitAlert = null;
+    }
+    if (activeRevertAllAlert !== null && !activeRevertAllAlert.isConnected) {
+      activeRevertAllAlert = null;
+    }
+    if (editing !== null && !editing.field.isConnected) editing = null;
+    if (selected !== null && !selected.isConnected) selected = null;
+    if (composeSubject !== null && !composeSubject.isConnected) {
+      compose.hidden = true;
+      compose.textContent = "";
+      composeSubject = null;
+    }
+    if (composeReturnFocus !== null && !composeReturnFocus.isConnected) {
+      composeReturnFocus = null;
+    }
+    if (commentThreadState !== null && !commentThreadState.diagram.isConnected) {
+      commentThread.hidden = true;
+      commentThread.textContent = "";
+      commentThreadState = null;
+    }
+    drafts = drafts.filter((draft) => draft.diagram.isConnected);
+    for (let index = 0; index < history.length; index += 1) {
+      history[index] = history[index].filter(
+        (draft) => draft.diagram.isConnected,
+      );
+    }
+    for (const key of Array.from(canvas.keys())) {
+      if (!key.isConnected) canvas.delete(key);
+    }
+    for (const key of Array.from(collectors.keys())) {
+      if (!key.isConnected) collectors.delete(key);
+    }
+    // With the stale selection gone the bar must not keep offering actions
+    // for it; rebuilding against the cleared state hides and empties it.
+    buildActionBar();
+  };
+
+  // Everything one diagram needs, in the load-time order: originals, canvas,
+  // gesture and selection listeners, figure chrome, alerts, collector, first
+  // layout, and the host-size observer.
+  const wireDiagram = (diagram) => {
+    captureOriginals(diagram);
+    createCanvas(diagram);
+    wireCanvasInteractions(diagram);
+    wireSelectionListeners(diagram);
+    wireFigureChrome(diagram);
+    buildExitAlert(diagram, alertSequence++);
+    buildCollector(diagram);
+    sizeRestingCanvas(diagram);
+    fit(diagram);
+    if (sizes) sizes.observe(diagram);
+  };
+
+  // Runs at load and again on every in-place article replacement. Wiring a
+  // diagram twice is impossible (the WeakSet remembers), so the whole pass is
+  // idempotent. It never paints: drafts anchored in a replaced article are
+  // released above, and a freshly wired diagram starts in the same dormant
+  // state a fresh page load gives it.
+  const wire = () => {
+    diagrams = Array.from(document.querySelectorAll("[data-flow-diagram]"));
+    releaseDetachedState();
+    if (diagrams.length === 0) return;
+    ensureOverlayChrome();
+    for (const diagram of diagrams) {
+      if (wiredDiagrams.has(diagram)) continue;
+      wiredDiagrams.add(diagram);
+      wireDiagram(diagram);
+    }
+  };
+  wire();
+  document.addEventListener("bigplan:article-replaced", wire);
 })();
 `;

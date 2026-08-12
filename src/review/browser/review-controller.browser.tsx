@@ -888,6 +888,20 @@ const setSelectionHighlights = (
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "Something went wrong.";
 
+// The only place plan DOM is replaced. Swapping the article detaches every
+// node the shell scripts wired at load, so the swap and its announcement stay
+// one ritual: replace the reading surface, then dispatch
+// "bigplan:article-replaced" so each shell script re-wires the live article.
+const replacePlanArticle = (nextDocument: Document): void => {
+  const nextArticle = nextDocument.querySelector("article");
+  const currentArticle = document.querySelector("article");
+  if (nextArticle === null || currentArticle === null) {
+    throw new Error("The revised plan did not contain its reading surface");
+  }
+  currentArticle.replaceWith(document.importNode(nextArticle, true));
+  document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+};
+
 const inlineMarkdown = (source: string): ReadonlyArray<ReactNode> =>
   parseCommentMarkdownLine(source).map((token, index) => {
     const key = `${index}-${token.value}`;
@@ -3673,15 +3687,7 @@ export const ReviewController = () => {
       })
       .then((html) => {
         if (!current) return;
-        const nextDocument = new DOMParser().parseFromString(html, "text/html");
-        const nextArticle = nextDocument.querySelector("article");
-        const currentArticle = document.querySelector("article");
-        if (nextArticle === null || currentArticle === null) {
-          throw new Error(
-            "The revised plan did not contain its reading surface",
-          );
-        }
-        currentArticle.replaceWith(document.importNode(nextArticle, true));
+        replacePlanArticle(new DOMParser().parseFromString(html, "text/html"));
         setDisplayedSnapshot(agent.currentSnapshot);
         window.scrollTo({ left: scrollX, top: scrollY });
         setStatus(

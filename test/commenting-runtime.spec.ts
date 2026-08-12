@@ -1574,6 +1574,220 @@ test("should colour a component snapshot switch as a diff", async ({
   }
 });
 
+// The refresh journey needs one plan carrying every shell surface it asserts:
+// a collapsible slide, a mermaid diagram, and a copyable code figure.
+const REFRESH_REWIRE_MDX = `# Refresh rewire
+
+## Flow
+
+The flow explains the runtime.
+
+<MermaidDiagram>
+
+\`\`\`mermaid
+flowchart LR
+  source[Source] -->|ships| result((Result))
+\`\`\`
+
+Static SVG content remains readable with scripts disabled.
+
+</MermaidDiagram>
+
+## Delivery
+
+\`\`\`ts
+export const deliver = (): string => "package";
+\`\`\`
+
+Sending writes one real feedback package beside this plan.
+`;
+
+test("should keep shell interactions wired after an agent revision refreshes the plan in place", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  // The copy assertion needs a deterministic clipboard in headless Chromium.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          (
+            window as typeof window & { __bigPlanCopiedCode?: string }
+          ).__bigPlanCopiedCode = text;
+        },
+      },
+    });
+  });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-refresh-rewire-"));
+  const planPath = join(directory, "plan.mdx");
+  const beforeSource = REFRESH_REWIRE_MDX;
+  await writeFile(planPath, beforeSource, "utf8");
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const { renderDocument: renderCompiledDocument } =
+    await import("../dist/render/render-document.js");
+  const runtime = await startCompiledReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    const collapseToggle = page
+      .locator("[data-slide]")
+      .first()
+      .locator("[data-collapse-toggle]")
+      .first();
+    await test.step("the shell is wired at load", async () => {
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "true");
+      await collapseToggle.click();
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "false");
+      await collapseToggle.click();
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "true");
+    });
+
+    await stageComment(page, "Tighten the delivery wording.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+    await rail.getByRole("button", { name: "Close feedback" }).click();
+
+    const session: unknown = await page.evaluate(async () => {
+      const root = document.documentElement;
+      const response = await fetch("/api/session", {
+        headers: {
+          "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+        },
+      });
+      return response.json();
+    });
+    if (
+      typeof session !== "object" ||
+      session === null ||
+      !("sessionId" in session) ||
+      !("planId" in session) ||
+      !("plan" in session) ||
+      typeof session.sessionId !== "string" ||
+      typeof session.planId !== "string" ||
+      typeof session.plan !== "string"
+    ) {
+      throw new Error("The refresh journey requires a live review session");
+    }
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+
+    const afterSource = beforeSource.replace(
+      "Sending writes one real feedback package beside this plan.",
+      "Sending atomically writes one real feedback package beside this plan.",
+    );
+    await writeFile(session.plan, afterSource, "utf8");
+    const before = renderCompiledDocument({
+      markdown: beforeSource,
+      fallbackTitle: "Refresh rewire",
+      identity: {},
+    });
+    const after = renderCompiledDocument({
+      markdown: afterSource,
+      fallbackTitle: "Refresh rewire",
+      identity: {},
+    });
+    const locations = diffSnapshots({
+      before: before.blocks,
+      after: after.blocks,
+    });
+    const changedBlocks = new Set(
+      locations.flatMap((location) =>
+        location.newBlockId === undefined ? [] : [location.newBlockId],
+      ),
+    );
+    const changeTarget = [...changedBlocks].at(-1);
+    if (changeTarget === undefined) {
+      throw new Error("The simulated revision produced no changed target");
+    }
+    const resultSnapshot = deriveSnapshotDigest(afterSource);
+    await writeSnapshot({
+      store,
+      snapshot: resultSnapshot,
+      source: afterSource,
+    });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: request.comments.map((comment) => ({
+            commentId: comment.id,
+            state: "changed",
+            message: "Tightened the delivery wording.",
+            changeTargets: [changeTarget],
+          })),
+        },
+        request: claimed,
+        commentsById: commentsFromExchange(exchange),
+        changedBlocks,
+        currentSnapshot: resultSnapshot,
+        now: new Date().toISOString(),
+      }),
+    });
+
+    await test.step("the revision refreshes the article in place", async () => {
+      await expect(page.locator("article")).toContainText(
+        "Sending atomically writes",
+        { timeout: 15_000 },
+      );
+    });
+    await test.step("a slide still collapses after the refresh", async () => {
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "true");
+      await collapseToggle.click();
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "false");
+      await collapseToggle.click();
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "true");
+    });
+    await test.step("a diagram node still selects and offers actions", async () => {
+      const diagram = page.locator("[data-flow-diagram]").first();
+      const node = diagram.locator('[data-flow-node="source"]:visible').first();
+      await node.click();
+      await expect(node).toHaveAttribute("data-flow-selected", "");
+      await expect(
+        diagram.locator('[data-flow-action="comment"]'),
+      ).toBeVisible();
+    });
+    await test.step("a copy control still responds", async () => {
+      const copy = page.locator(".code-figure [data-copy-code]").first();
+      await copy.click();
+      await expect(copy).toHaveAttribute("data-copy-state", "copied");
+      await expect(copy).toHaveAccessibleName("Copied code");
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should highlight only changed words inside a revised list", async ({
   page,
 }) => {
@@ -1710,4 +1924,30 @@ test("should mark a superseded review as read-only and link to its replacement",
   } finally {
     await replacement.close();
   }
+});
+
+test("should leave shell interactions wired exactly once after repeated re-wires", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.goto(deckViewerUrl);
+  const toggle = page
+    .locator('[data-collapsible="slide"]')
+    .first()
+    .locator(":scope > [data-collapse-header] > [data-collapse-toggle]");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+  // Re-wiring is announced, not counted, so the shell has to tolerate an
+  // announcement for an article it has already wired. A second listener on an
+  // already-wired node would handle one click twice and cancel itself out.
+  await page.evaluate(() => {
+    for (let index = 0; index < 4; index += 1) {
+      document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+    }
+  });
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
 });
