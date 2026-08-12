@@ -1222,6 +1222,92 @@ test("should offer comments for whole-line and same-slide multi-block selections
   ).not.toHaveAttribute("data-review-has-comment", "");
 });
 
+// Regression: a selection longer than the stored quote limit used to return
+// no control at all, so a reviewer who highlighted a little more than a
+// paragraph watched the Comment button vanish with nothing said.
+test("should offer a comment for a selection longer than the stored quote", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const selectWholeSlide = () =>
+    page.evaluate(() => {
+      const slide = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-slide]"),
+      ).find(
+        (candidate) =>
+          candidate.querySelector("[data-slide]") === null &&
+          (candidate.textContent ?? "").length > 500,
+      );
+      const blocks = Array.from(
+        slide?.querySelectorAll<HTMLElement>(
+          '[data-block-id]:not([data-block-kind="part"])',
+        ) ?? [],
+      ).filter((block) => block.closest("[data-slide]") === slide);
+      const first = blocks[0];
+      const last = blocks.at(-1);
+      if (first === undefined || last === undefined) return null;
+      const start = document
+        .createTreeWalker(first, NodeFilter.SHOW_TEXT)
+        .nextNode();
+      const walker = document.createTreeWalker(last, NodeFilter.SHOW_TEXT);
+      let end: Node | null = null;
+      let node = walker.nextNode();
+      while (node !== null) {
+        end = node;
+        node = walker.nextNode();
+      }
+      if (!(start instanceof Text) || !(end instanceof Text)) return null;
+      const range = document.createRange();
+      range.setStart(start, 0);
+      range.setEnd(end, end.data.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+      return {
+        quote: selection?.toString() ?? "",
+        slideId: slide?.dataset.collapseId ?? "",
+        startBlockId: first.dataset.blockId ?? "",
+        endBlockId: last.dataset.blockId ?? "",
+      };
+    });
+
+  const selected = await selectWholeSlide();
+  expect(selected).not.toBeNull();
+  // The old ceiling: anything past 400 characters was dropped silently.
+  expect((selected?.quote ?? "").length).toBeGreaterThan(400);
+
+  const chip = page.getByRole("button", { name: "Comment on selected text" });
+  await expect(chip).toBeVisible();
+  await chip.click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await expect(composer).not.toContainText("characters of this highlight");
+  await composer.getByLabel("Add a comment").fill("Tighten this whole slide.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((candidate) =>
+      candidate.startsWith("big-plan:review:drafts:"),
+    );
+    return key === undefined ? null : localStorage.getItem(key);
+  });
+  expect(JSON.parse(stored ?? "[]")[0]?.target).toMatchObject({
+    type: "selection",
+    blockId: selected?.startBlockId,
+    endBlockId: selected?.endBlockId,
+    quote: selected?.quote,
+    isQuoteExcerpt: false,
+  });
+  await expect(
+    page.locator(`[data-slide][data-collapse-id="${selected?.slideId ?? ""}"]`),
+  ).toHaveAttribute("data-review-has-comment", "");
+});
+
 test("should confirm deleting every staged comment from Comments", async ({
   page,
   deckViewerUrl,

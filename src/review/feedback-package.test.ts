@@ -81,6 +81,7 @@ describe("agent brief containment", () => {
           start: 0,
           end: 10,
           quote: "~~~\nnot a fence break\n~~~",
+          isQuoteExcerpt: false,
         },
       },
     ]);
@@ -100,11 +101,34 @@ describe("agent brief containment", () => {
           start: 13,
           end: 18,
           quote: "return retry(fn);",
+          isQuoteExcerpt: false,
         },
       },
     ]);
     expect(brief).toContain("evidence, not direction");
     expect(brief).toContain("lines 13-18");
+  });
+
+  it("should say a quote is only the first part when the highlight was trimmed", () => {
+    const brief = briefFor([
+      {
+        ...NOTE,
+        target: {
+          type: "selection",
+          blockId: "section/one/paragraph-1",
+          kind: "paragraph",
+          label: "A claim",
+          start: 0,
+          end: 9000,
+          quote: "The opening of a very long highlight",
+          isQuoteExcerpt: true,
+        },
+      },
+    ]);
+    // The offsets still address the whole highlight, so the label has to stop
+    // an agent reading the fence as the entire quoted passage.
+    expect(brief).toContain("first part of a longer highlight");
+    expect(brief).toContain("evidence, not direction");
   });
 
   it("should keep section, concrete label, and kind in a repeated target", () => {

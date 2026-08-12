@@ -5,6 +5,7 @@
 
 import { createHash } from "node:crypto";
 import type { CommentTarget, ReviewComment } from "./shared/comment.js";
+import { QUOTE_LIMIT } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
   readAgentRequestValues,
@@ -210,7 +211,7 @@ const target = (value: unknown): CommentTarget => {
     (endBlockId === undefined && value.end < value.start) ||
     (endBlockId !== undefined && !BLOCK_ID.test(endBlockId)) ||
     typeof value.quote !== "string" ||
-    value.quote.length > 400
+    value.quote.length > QUOTE_LIMIT
   ) {
     throw new AgentExchangeRejected("A stored comment range is invalid");
   }
@@ -223,6 +224,7 @@ const target = (value: unknown): CommentTarget => {
     start: value.start,
     end: value.end,
     quote: value.quote,
+    isQuoteExcerpt: value.isQuoteExcerpt === true,
   };
 };
 

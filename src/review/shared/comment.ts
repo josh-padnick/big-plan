@@ -28,6 +28,7 @@ export type CommentTarget =
       readonly start: number;
       readonly end: number;
       readonly quote: string;
+      readonly isQuoteExcerpt: boolean;
     }
   | {
       readonly type: "lines";
@@ -38,6 +39,7 @@ export type CommentTarget =
       readonly start: number;
       readonly end: number;
       readonly quote: string;
+      readonly isQuoteExcerpt: boolean;
     };
 
 /** One reviewer note, after validation. */
@@ -66,11 +68,33 @@ export class CommentRejected extends Error {
 
 // Bounds exist so one submit cannot fill the disk or produce a brief no agent
 // can read; they are limits, not sanitization.
+//
+// A range target is anchored by its block and offsets, so the quote is a copy
+// held for the agent's brief rather than the address of anything. That is why
+// the bound may never gate the affordance: a selection longer than this is
+// stored as a marked excerpt of the same range, never refused. The bound
+// matches BODY_LIMIT because a quote and a comment body cost a brief the same.
 const BODY_LIMIT = 4000;
-export const QUOTE_LIMIT = 400;
+export const QUOTE_LIMIT = BODY_LIMIT;
 const ID_LIMIT = 64;
 const COMMENT_LIMIT = 200;
 const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
+
+/** What a producer stores for a highlight, once bounded. */
+export type QuoteExcerpt = {
+  readonly quote: string;
+  readonly isQuoteExcerpt: boolean;
+};
+
+/**
+ * Bounds highlighted plan text into the copy stored with a range target.
+ * The caller keeps the whole range either way: the bound trims what travels
+ * with the comment, and never decides whether a highlight may be commented on.
+ */
+export const boundQuote = (selected: string): QuoteExcerpt =>
+  selected.length > QUOTE_LIMIT
+    ? { quote: selected.slice(0, QUOTE_LIMIT), isQuoteExcerpt: true }
+    : { quote: selected, isQuoteExcerpt: false };
 
 const asRecord = ({
   value,
@@ -241,6 +265,7 @@ const validateTarget = ({
         field: "quote",
         limit: QUOTE_LIMIT,
       }),
+      isQuoteExcerpt: target.isQuoteExcerpt === true,
     };
   }
   throw new CommentRejected(`Unsupported comment target "${String(type)}"`);
@@ -317,6 +342,7 @@ const validateStoredTarget = (value: unknown): CommentTarget => {
       field: "quote",
       limit: QUOTE_LIMIT,
     }),
+    isQuoteExcerpt: target.isQuoteExcerpt === true,
   };
 };
 

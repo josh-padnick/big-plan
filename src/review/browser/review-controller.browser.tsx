@@ -38,6 +38,7 @@ import {
   type AgentStatus,
 } from "../shared/agent-status.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
+import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
 import { parseCommentMarkdownLine } from "../shared/comment-markdown.js";
 import {
   reconcilePendingCancellations,
@@ -740,8 +741,13 @@ const selectionControlState = (): SelectionControlState | null => {
   ) {
     return null;
   }
-  const quote = selection.toString();
-  if (quote.trim() === "" || quote.length > 400) return null;
+  const selected = selection.toString();
+  if (selected.trim() === "") return null;
+  // Length never withdraws the affordance. The block and offsets below are the
+  // address of the highlight; the quote is only the copy carried into the
+  // agent's brief, so an outsized selection keeps its whole range and stores a
+  // marked excerpt instead of being dropped without telling the reviewer.
+  const { quote, isQuoteExcerpt } = boundQuote(selected);
   const start = selectionOffsetWithin({
     block: startBlock,
     container: range.startContainer,
@@ -766,6 +772,7 @@ const selectionControlState = (): SelectionControlState | null => {
       start,
       end,
       quote,
+      isQuoteExcerpt,
     },
     top: Math.max(8, rect.top - 44),
     left: Math.max(8, Math.min(window.innerWidth - 132, rect.left)),
@@ -1518,6 +1525,17 @@ const CommentComposer = ({
         onChange={(event) => onBodyChange(event.target.value)}
         onKeyDown={handleKeyDown}
       />
+      {(compose.target.type === "selection" ||
+        compose.target.type === "lines") &&
+      compose.target.isQuoteExcerpt ? (
+        // The whole highlight stays the comment's target; only the copy sent
+        // with it is trimmed, and the reviewer is told so rather than
+        // discovering it in the agent's reply.
+        <p className="review-compose-excerpt mt-1 mb-0 text-2xs text-subtle">
+          The agent gets the first {QUOTE_LIMIT.toLocaleString()} characters of
+          this highlight as a quote, and the whole highlight as the target.
+        </p>
+      ) : null}
       <p className="review-compose-hint mt-1 mb-0 text-2xs text-subtle">
         Escape cancels · {MODIFIER_SHORTCUT} adds
       </p>
