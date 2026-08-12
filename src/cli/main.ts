@@ -4,6 +4,7 @@
 
 import { readFile } from "node:fs/promises";
 import { runAxiCli } from "axi-sdk-js";
+import { agentCommand } from "./agent/command.js";
 import { compileCommand } from "./compile/command.js";
 import { guidanceCommand } from "./guidance/command.js";
 import { renderCommand } from "./render/command.js";
@@ -19,9 +20,9 @@ const TOP_LEVEL_HELP = `big-plan - ${DESCRIPTION}
 
 Usage:
   big-plan guidance [component]               Read the plan-writing guidance
-                                             (required before validate,
-                                             render, and review), or one
-                                             component's usage guidance
+                                             (required before validate and
+                                             render), or one component's
+                                             usage guidance
   big-plan skill [write <path>]               Print the agent skill shell, or
                                              write it to an explicit path
   big-plan render <input.mdx> [output.html]   Render an MDX plan to a
@@ -34,10 +35,12 @@ Usage:
                                              and authoring lint without
                                              writing an output file
   big-plan review <input.mdx>                 Serve the plan on loopback for
-                                             interactive review: comment on
-                                             blocks and selected text, then
-                                             send one feedback package to the
-                                             agent
+                                             interactive review with anchored
+                                             comments and real agent responses
+  big-plan agent <input.mdx>                  Print the ready-to-paste prompt
+                                             for a real coding-agent review
+                                             session; agent next and agent
+                                             respond drive its loop
 `;
 
 // Reads this package's own version for --version output, tolerating a missing
@@ -79,6 +82,7 @@ export const main = async (): Promise<void> => {
       compile: (args) => compileCommand(args),
       validate: (args) => validateCommand(args),
       review: (args) => reviewCommand(args),
+      agent: (args) => agentCommand(args),
     },
   });
 };

@@ -1,14 +1,16 @@
-// Owns the framework-free figure-control vocabulary shared by rendered
-// figures: the maximize DOM attributes and the maximize and copy labels.
+// Owns the maximize contract shared by every figure a reader can promote to
+// the viewport: the attribute vocabulary, the labels, and nothing else.
 //
 // WHY THIS MODULE EXISTS
-// React views draw component controls and a HAST transform draws the same
-// controls for plain fenced code. Their shared vocabulary lives here so those
-// rendering edges cannot drift. The viewer script and stylesheet consume the
-// maximize DOM attributes by name rather than importing them because one is a
-// string template and the other is CSS.
+// Maximize is drawn three different ways - a React view for components, a HAST
+// transform for plain fenced code, and CSS for the panel geometry - and driven
+// by a fourth, the viewer script. Four places agreeing on attribute spellings
+// by copy-paste is how collapse first broke (see markdown/deck-collapse.ts).
+// The spellings live here so the React edge and the HAST edge cannot drift;
+// the viewer script and stylesheet cite this module rather than importing it,
+// because one is a string template and the other is CSS.
 //
-// MAXIMIZE DOM CONTRACT
+// DOM CONTRACT
 //  1. The maximizable element carries MAXIMIZABLE_ATTRIBUTE and is the frame
 //     the reader sees promoted. There is no separate wrapper.
 //  2. Exactly one descendant carries TRIGGER_ATTRIBUTE and is a real button
@@ -41,11 +43,6 @@ export const MAXIMIZED_ATTRIBUTE = "data-figure-maximized";
  * last.
  */
 export const BODY_ATTRIBUTE = "data-figure-body";
-
-/** The subject nouns used by copy controls and their accessible labels. */
-export type CopySubject = "code" | "diff" | "schema" | "table";
-
-export const copyLabel = (subject: CopySubject): string => `Copy ${subject}`;
 
 /**
  * What the control says. The noun names the thing being promoted, so a

@@ -39,13 +39,11 @@ const BUTTON_VARIANTS: Readonly<Record<ButtonVariant, string>> = {
 };
 
 const BUTTON_SIZES: Readonly<Record<ButtonSize, string>> = {
-  default: "review-button-padded min-h-11 wide:min-h-0",
-  md: "review-button-padded min-h-11 text-sm wide:min-h-0",
-  sm: "review-button-padded min-h-11 min-w-11 text-xs wide:min-h-0 wide:min-w-0",
-  compact:
-    "review-button-padded min-h-11 min-w-11 text-xs wide:min-h-0 wide:min-w-0",
-  micro:
-    "review-button-padded min-h-11 min-w-11 text-2xs wide:min-h-0 wide:min-w-0",
+  default: "min-h-11 px-2 py-1 wide:min-h-0",
+  md: "min-h-11 px-2 py-1 text-sm wide:min-h-0",
+  sm: "min-h-11 min-w-11 px-2 py-1 text-xs wide:min-h-0 wide:min-w-0",
+  compact: "min-h-11 min-w-11 px-2 py-1 text-xs wide:min-h-0 wide:min-w-0",
+  micro: "min-h-11 min-w-11 px-2 py-1 text-2xs wide:min-h-0 wide:min-w-0",
   compactIcon: "size-11 p-0 wide:size-6",
   icon: "size-11 p-0",
 };
@@ -132,7 +130,9 @@ export const Card = ({
 /** Token-themed shadcn Badge primitive. */
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
   readonly size?: "default" | "compact" | "micro";
-  readonly tone?: "neutral" | "accentOutline" | "secondary";
+  readonly shape?: "badge" | "pill";
+  readonly tone?:
+    "neutral" | "accent" | "accentOutline" | "annotation" | "secondary";
   readonly weight?: "semibold" | "bold";
 };
 
@@ -144,8 +144,16 @@ const BADGE_SIZES = {
 
 const BADGE_TONES = {
   neutral: "border border-transparent bg-surface text-muted",
+  accent: "border border-transparent bg-accent text-accent-ink",
   accentOutline: "border border-accent bg-transparent text-accent",
+  annotation:
+    "border border-[var(--annotation-c)] bg-transparent text-[var(--annotation-c)]",
   secondary: "border border-transparent bg-well text-muted",
+} as const;
+
+const BADGE_SHAPES = {
+  badge: "rounded-md",
+  pill: "rounded-full",
 } as const;
 
 const BADGE_WEIGHTS = {
@@ -156,14 +164,16 @@ const BADGE_WEIGHTS = {
 export const Badge = ({
   className,
   size = "default",
+  shape = "pill",
   tone = "neutral",
   weight = "semibold",
   ...props
 }: BadgeProps) => (
   <span
     className={joinClasses(
-      "inline-flex items-center rounded-full",
+      "inline-flex items-center",
       BADGE_SIZES[size],
+      BADGE_SHAPES[shape],
       BADGE_TONES[tone],
       BADGE_WEIGHTS[weight],
       className,
@@ -197,6 +207,7 @@ export const AlertDialog = ({
   useLayoutEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
+    window.getSelection()?.removeAllRanges();
     dialogRef.current?.focus();
     return () => {
       previousFocus?.focus();

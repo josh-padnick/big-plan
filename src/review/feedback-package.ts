@@ -8,12 +8,12 @@
 // comment bodies inside a blockquote, quoted plan text inside a fence - so no
 // note can forge a heading and read as though the runtime wrote it.
 
-import type { ReviewComment } from "./comment.js";
+import type { ReviewComment } from "./shared/comment.js";
 
 export type FeedbackPackage = {
   readonly version: 1;
   readonly sessionId: string;
-  // Random per submit, so a package replayed from disk is detectable.
+  // Stable per submit, so retrying publication cannot duplicate agent work.
   readonly packageId: string;
   readonly planId: string;
   // Resolved by the runtime from the plan it was started on, never taken from

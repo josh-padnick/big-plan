@@ -3,7 +3,7 @@ title: CLI reference
 description: Reference the complete Big Plan command surface, defaults, results, and errors.
 ---
 
-Big Plan exposes six product commands through the `big-plan` executable: `guidance` for the plan-writing principles, `skill` for the agent skill shell, `validate` for a no-write authoring check, `render` for the human-facing HTML document, `compile` for the machine-facing plan model, and `review` for the interactive loopback review runtime.
+Big Plan exposes seven product commands through the `big-plan` executable: `guidance` for the plan-writing principles, `skill` for the agent skill shell, `validate` for a no-write authoring check, `render` for the human-facing HTML document, `compile` for the machine-facing plan model, `review` for local commenting, and `agent` for the local coding-agent exchange.
 The CLI uses `axi-sdk-js` for dispatch, help, version output, structured errors, and result serialization.
 `axi-sdk-js` also reserves a built-in `update` command for optional package self-update of global installs.
 
@@ -16,15 +16,18 @@ big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
 big-plan review <input.mdx>
+big-plan agent <input.mdx>
+big-plan agent next <input.mdx> [--wait]
+big-plan agent note <input.mdx> "<progress>"
+big-plan agent respond <input.mdx> <response.json>
 big-plan update [--check]
 ```
 
 `guidance` optionally takes one component name.
 `skill` with no arguments prints the skill shell; `skill write <path>` writes it only when that action is explicit.
 For the plan-file commands `<input.mdx>` is required.
-`validate` and `review` accept no output argument.
+`validate` accepts no output argument.
 The output argument is optional for `render` and `compile`.
-See [Reviewing a plan](/reference/reviewing/) for what `review` serves.
 `update` is the optional `axi-sdk-js` built-in rather than a Big Plan product command.
 
 The equivalent package runner forms are:
@@ -37,6 +40,10 @@ npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
 npx big-plan review <input.mdx>
+npx big-plan agent <input.mdx>
+npx big-plan agent next <input.mdx> --wait
+npx big-plan agent note <input.mdx> "<progress>"
+npx big-plan agent respond <input.mdx> <response.json>
 npx big-plan update --check
 ```
 
@@ -53,7 +60,7 @@ The component form records no acknowledgment, and an unknown name fails with the
 `validate`, `render`, and `review` require a current acknowledgment and fail with a structured `GUIDANCE_REQUIRED` error until `guidance` has been run.
 An acknowledgment is current when it was recorded for the same working directory within the last 24 hours against the guidance content the installed CLI ships.
 Updating Big Plan to a release with changed guidance therefore re-locks all three commands until `guidance` is read again.
-`compile` and `skill` are not gated, so machine tooling and skill install can run without the authoring workflow.
+`compile`, `skill`, and `agent` are not gated, so machine tooling, skill install, and an already-live agent loop can run without the authoring workflow.
 
 Acknowledgment state lives outside the project: in `.big-plan/` under the user's home directory, falling back to a `big-plan/` directory under the system temporary directory when the home directory rejects writes, as workspace-scoped sandboxes commonly do.
 Setting the `BIG_PLAN_STATE_DIR` environment variable pins state to exactly one directory, which test suites and sandboxed environments use to keep state isolated.
@@ -97,9 +104,9 @@ Neither derived-output command permits the output to resolve to the input file, 
 
 ## Document metadata
 
-`render`, `compile`, and `validate` choose and report the document title from the MDX content; `review` renders the plan with the same title.
+`validate`, `render`, and `compile` choose the document title from the MDX content.
 The input filename without its extension is the fallback title.
-The section count reported by `render`, `compile`, and `validate` comes from the document's level-two sections.
+The reported section count comes from the document's level-two sections.
 
 ## The compiled plan model
 
@@ -153,15 +160,19 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 
 It writes no output.
 
-`review` returns:
+`review` returns the loopback address, resolved plan path, session id, and feedback directory, then keeps running until `Ctrl+C`.
+It owns the local session token, heartbeat, durable review state, and revision snapshots.
 
-- `review`: the loopback URL for the review runtime.
-- `plan`: the absolute input path.
-- `session`: the review session identifier.
-- `feedback`: the absolute directory where sent feedback packages are written.
-- `help`: instructions for opening the review runtime, locating local feedback, and stopping the process.
+`agent <input.mdx>` reads the matching live session and returns the owner-only prompt plus pasteable Codex and Claude launch commands.
+Big Plan does not call a model provider itself.
+The launched coding-agent session uses:
 
-The process keeps listening until it receives `SIGINT` or `SIGTERM`.
+- `agent next <input.mdx> --wait` to receive the oldest pending feedback, thread reply, or plan-wide chat question, its prior conversation, a validated response template, and the exact publish command;
+- `agent note <input.mdx> "<progress>"` to keep the reviewer informed as each meaningful work step begins; and
+- `agent respond <input.mdx> <response.json>` to publish one complete answer after the current MDX has rendered and passed lint.
+
+A `changed` outcome is accepted only when the source revision changed and every named target belongs to the computed revision diff.
+See [Reviewing a plan](/reference/reviewing/) for the reviewer-facing status, revision, and anchor contracts.
 
 `guidance` returns the guidance Markdown itself rather than a structured result.
 `skill` with no arguments returns the skill Markdown the same way.
@@ -172,7 +183,7 @@ The process keeps listening until it receives `SIGINT` or `SIGTERM`.
 
 ## Errors
 
-If the input argument is missing, any plan-file command raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and its command-specific usage line.
+If the input argument is missing, `validate`, `render`, `compile`, or `review` raises a structured `VALIDATION_ERROR` with the message `Missing input MDX file` and its command-specific usage line.
 
 ```text
 Usage: big-plan validate <input.mdx>
@@ -181,24 +192,24 @@ Usage: big-plan compile <input.mdx> [output.json]
 Usage: big-plan review <input.mdx>
 ```
 
-The four plan-file commands and `skill` reject any dash-prefixed command argument as an unknown option.
+`validate`, `render`, `compile`, `review`, and `skill` reject any dash-prefixed command argument as an unknown option.
 `validate` and `review` reject a second positional argument; `render` and `compile` reject a third.
 Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 
-If the input cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
+`agent` rejects an unknown action or invalid action arguments with `INVALID_INPUT` and its complete multi-line usage text.
+
+If the input for `validate`, `render`, `compile`, or `review` cannot be read, the command raises a structured `INPUT_NOT_FOUND` error with the resolved absolute input path and the same usage line.
 The read error covers any failure to read the input file.
 
-If the output would overwrite the input file, `render` and `compile` raise a structured `VALIDATION_ERROR` with the message `Output path would overwrite the input MDX file` and the command-specific usage line.
-`validate` and `review` accept no output argument, so they cannot raise it.
+If the output would overwrite the input file, the command raises a structured `VALIDATION_ERROR` with the message `Output path would overwrite the input MDX file` and the command-specific usage line.
 The input file is left unchanged.
 
 If parsing or component validation fails, the command raises a structured `VALIDATION_ERROR` with `Cannot validate document with invalid MDX`, `Cannot render document with invalid MDX`, `Cannot compile document with invalid MDX`, or `Cannot review a document with invalid MDX`, according to the command.
-Its help entries contain every collected authoring diagnostic as `line:column message`, no output file is written, and the review runtime does not start.
+Its help entries contain every collected authoring diagnostic as `line:column message`, and no output file is written.
 
 If authoring lint fails, `validate`, `render`, and `review` raise `VALIDATION_ERROR` with `Plan failed authoring lint`.
 Each help entry is `line:column [rule-id] message`.
-`render` runs lint before writing, so a lint failure leaves no output file.
-`review` runs lint before opening a port, so a lint failure leaves no review runtime running.
+`render` runs lint before writing, and `review` runs it before opening a port.
 
 If guidance has not been acknowledged for the working directory, `validate`, `render`, and `review` raise a structured `GUIDANCE_REQUIRED` error whose help entries name the `big-plan guidance` command and the acknowledgment window.
 

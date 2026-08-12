@@ -14,10 +14,7 @@ Everything a plan author has to judge - the title, the structure, the deck shape
 
 Run `big-plan guidance` before writing a plan.
 It prints the principles for writing a plan a human loves to review, and it is the only place those principles live.
-Reading it recently is required: `validate`, `render`, and `review` fail with `GUIDANCE_REQUIRED` until guidance has been run from the same working directory within 24 hours.
-
-The acknowledgment is recorded per directory and expires after 24 hours, or immediately when the guidance content itself changes, so a stale reading never unlocks a changed contract.
-`compile` stays open, because it produces machine-readable output rather than a document a human will read.
+Reading it recently is required before gated authoring and human-review commands; the [CLI reference](/reference/cli/#guidance-and-the-acknowledgment-gate) owns the gated command list, acknowledgment lifetime, storage, and degraded behavior.
 
 Run `big-plan guidance <Component>` for one component's usage guidance, which is authored beside that component rather than in the shared principles.
 Run `big-plan guidance Slide` once before drafting to receive the complete guidance-bearing slide-type catalog; it is one digest for the whole authoring pass, not a per-slide command.

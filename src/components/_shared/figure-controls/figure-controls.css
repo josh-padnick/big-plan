@@ -1,6 +1,6 @@
 /* CSS escape hatch: shared visual primitive and selector relationships.
-   Owns transient copy feedback plus the maximized panel and its
-   document-level backdrop, shared by rendered figure families.
+   Owns the maximized panel and its document-level backdrop, shared by every
+   figure family a reader can promote to the viewport.
 
    THE PANEL
    A maximized figure keeps an equal inset on all four sides and rounds every
@@ -16,47 +16,14 @@
    clearer as selectors; resting figure and control presentation stays in
    utilities on the authored elements. */
 
-@layer components {
-  @media (prefers-reduced-motion: no-preference) {
-    /* The copy button remains a transparent icon control, with a small tactile
-       press response that does not alter its resting toolbar geometry. */
-    article [data-copy-code]:active,
-    article [data-copy-source]:active {
-      transform: scale(0.85);
-    }
-  }
-}
-
 /* This late layer outranks the resting Tailwind utilities on the shared
    button. See the DataTable focus rules for the same chrome vocabulary. */
 @layer bp-state {
   /* The copied state keeps the fixed icon box and uses the success token in
-     every colour theme and both appearances.
+     both the light and dark palettes.
      Override invariant: copied success state beats the resting control color. */
   article [data-copy-state="copied"] {
     color: var(--accent-c);
-  }
-
-  /* Override invariant: copied success suppresses the resting tooltip. */
-  article [data-copy-state="copied"]::after {
-    content: none;
-  }
-
-  /* A checkmark is the complete success confirmation. It uses the copied
-     state colour and enters with the shared document motion token.
-     Override invariant: copied success beats the resting check icon. */
-  article [data-copy-state="copied"] [data-lucide="check"] {
-    transform-origin: center;
-    animation: boost-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    /* Override invariant: reduced motion beats the success animation. */
-    article [data-copy-state="copied"] [data-lucide="check"] {
-      animation: none;
-      opacity: 1;
-      transform: none;
-    }
   }
 
   /* A pointer reader who never saw a focus ring should not be handed one when

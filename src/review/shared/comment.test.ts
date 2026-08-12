@@ -5,6 +5,8 @@ import {
   QUOTE_LIMIT,
   validateActiveDraft,
   validateComments,
+  validateResolvedCommentIds,
+  validateStoredComments,
 } from "./comment.js";
 
 const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
@@ -14,6 +16,15 @@ const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
       id: "section/status-quo/paragraph-1",
       kind: "paragraph",
       label: "Today's reality",
+      section: "Status quo",
+    },
+  ],
+  [
+    "section/status-quo/paragraph-2",
+    {
+      id: "section/status-quo/paragraph-2",
+      kind: "paragraph",
+      label: "What changes next",
       section: "Status quo",
     },
   ],
@@ -62,6 +73,30 @@ describe("validateComments acceptance", () => {
     });
   });
 
+  it("should accept selected text spanning two renderer-owned blocks", () => {
+    const [comment] = validate(
+      commentOn({
+        type: "selection",
+        blockId: "section/status-quo/paragraph-1",
+        endBlockId: "section/status-quo/paragraph-2",
+        start: 12,
+        end: 4,
+        quote: "reality\nWhat",
+      }),
+    );
+    expect(comment?.target).toEqual({
+      type: "selection",
+      blockId: "section/status-quo/paragraph-1",
+      endBlockId: "section/status-quo/paragraph-2",
+      kind: "paragraph",
+      label: "Today's reality",
+      section: "Status quo",
+      start: 12,
+      end: 4,
+      quote: "reality\nWhat",
+    });
+  });
+
   it("should accept an empty batch when nothing is pending", () => {
     expect(validate([])).toEqual([]);
   });
@@ -71,6 +106,21 @@ describe("validateComments target resolution", () => {
   it("should refuse a target naming a block this document does not contain", () => {
     expect(() =>
       validate(commentOn({ type: "block", blockId: "section/made-up/p-1" })),
+    ).toThrow(CommentRejected);
+  });
+
+  it("should refuse a cross-block selection with an unknown end block", () => {
+    expect(() =>
+      validate(
+        commentOn({
+          type: "selection",
+          blockId: "section/status-quo/paragraph-1",
+          endBlockId: "section/status-quo/made-up",
+          start: 0,
+          end: 4,
+          quote: "Some text",
+        }),
+      ),
     ).toThrow(CommentRejected);
   });
 
@@ -119,6 +169,21 @@ describe("validateComments target resolution", () => {
     ).toThrow(CommentRejected);
   });
 
+  it("should refuse a reversed selection with an explicit same-block end", () => {
+    expect(() =>
+      validate(
+        commentOn({
+          type: "selection",
+          blockId: "section/status-quo/paragraph-1",
+          endBlockId: "section/status-quo/paragraph-1",
+          start: 20,
+          end: 4,
+          quote: "backwards",
+        }),
+      ),
+    ).toThrow(CommentRejected);
+  });
+
   it("should refuse a quote beyond the highlight limit", () => {
     expect(() =>
       validate(
@@ -154,6 +219,24 @@ describe("validateActiveDraft", () => {
   });
 });
 
+describe("validateResolvedCommentIds", () => {
+  it("should refuse duplicate ids", () => {
+    expect(() => validateResolvedCommentIds(["aabbccdd", "aabbccdd"])).toThrow(
+      "Resolved comment ids must be unique",
+    );
+  });
+
+  it("should retain durable resolution history beyond one submission batch", () => {
+    expect(
+      validateResolvedCommentIds(
+        Array.from({ length: 201 }, (_, index) =>
+          index.toString(16).padStart(4, "0"),
+        ),
+      ),
+    ).toHaveLength(201);
+  });
+});
+
 describe("validateComments shape and bounds", () => {
   it("should refuse anything that is not a list of comments", () => {
     expect(() => validate({ comments: [] })).toThrow(CommentRejected);
@@ -171,6 +254,40 @@ describe("validateComments shape and bounds", () => {
     expect(() =>
       validate([{ id: "aabbccdd", body: "   ", target: { type: "document" } }]),
     ).toThrow(CommentRejected);
+  });
+
+  it("should refuse duplicate comment ids", () => {
+    expect(() =>
+      validate([
+        { id: "aabbccdd", body: "First.", target: { type: "document" } },
+        { id: "aabbccdd", body: "Second.", target: { type: "document" } },
+      ]),
+    ).toThrow("Comment ids must be unique");
+  });
+
+  it("should refuse more than 200 comments", () => {
+    expect(() =>
+      validate(
+        Array.from({ length: 201 }, (_, index) => ({
+          id: index.toString(16).padStart(4, "0"),
+          body: `Comment ${index}`,
+          target: { type: "document" },
+        })),
+      ),
+    ).toThrow("More than 200 comments in one batch");
+  });
+
+  it("should retain durable history beyond one submission batch", () => {
+    const history = Array.from({ length: 201 }, (_, index) => ({
+      id: index.toString(16).padStart(4, "0"),
+      body: `Comment ${index}`,
+      createdAt: NOW,
+      target: { type: "document" },
+    }));
+
+    expect(validateStoredComments({ value: history, now: NOW })).toHaveLength(
+      201,
+    );
   });
 
   it("should refuse a body beyond the length limit", () => {

@@ -58,8 +58,5 @@ export const STYLESHEET_BUDGETS = {
   "src/render/markdown/deck.css": { declarations: 48 },
   "src/render/markdown/prose.css": { declarations: 122 },
   "src/render/markdown/syntax-highlighting.css": { declarations: 71 },
-  // Debt from the commenting foundation (#84). The review island styles its own
-  // markup through `.review-*` classes here instead of utilities. Both numbers
-  // shrink as the Feedback UI rewrite moves those rules onto the island's JSX.
-  "src/review/browser/review.css": { declarations: 520, classOnlyRules: 47 },
+  "src/review/browser/review.css": { declarations: 520 },
 };

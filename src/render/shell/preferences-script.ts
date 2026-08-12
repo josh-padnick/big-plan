@@ -1,6 +1,5 @@
 // Owns the deferred browser behavior for the settings dialog: live appearance
-// and colour-theme changes, guarded persistence, focus isolation, and keyboard
-// escape routes.
+// changes, guarded persistence, focus isolation, and keyboard escape routes.
 
 import {
   PREFERENCES_RECORD_VERSION,
@@ -15,17 +14,13 @@ export const PREFERENCES_SCRIPT = `<script>
   const openButton = document.querySelector("[data-preferences-open]");
   const closeButton = document.querySelector("[data-preferences-close]");
   const modes = Array.from(document.querySelectorAll("[data-preference-mode]"));
-  const palettes = Array.from(
-    document.querySelectorAll("[data-preference-palette]"),
-  );
   if (
     !(control instanceof HTMLElement) ||
     !(dialog instanceof HTMLElement) ||
     !(backdrop instanceof HTMLElement) ||
     !(openButton instanceof HTMLButtonElement) ||
     !(closeButton instanceof HTMLButtonElement) ||
-    modes.length === 0 ||
-    palettes.length === 0
+    modes.length === 0
   )
     return;
 
@@ -35,16 +30,12 @@ export const PREFERENCES_SCRIPT = `<script>
   let open = false;
   let openedByKeyboard = false;
 
-  // The record is written whole from what the document is showing, so the two
-  // fields can never disagree with each other or with the page.
-  const save = () => {
+  const saveMode = (mode) => {
     try {
-      const record = { version };
-      const mode = currentMode();
-      const palette = currentPalette();
-      if (mode !== "system") record.mode = mode;
-      if (palette !== "default") record.palette = palette;
-      localStorage.setItem(key, JSON.stringify(record));
+      localStorage.setItem(
+        key,
+        JSON.stringify(mode === "system" ? { version } : { version, mode }),
+      );
     } catch (_) {}
   };
 
@@ -53,16 +44,11 @@ export const PREFERENCES_SCRIPT = `<script>
     else document.documentElement.setAttribute("data-theme", mode);
   };
 
-  const applyPalette = (palette) => {
-    if (palette === "default")
-      document.documentElement.removeAttribute("data-palette");
-    else document.documentElement.setAttribute("data-palette", palette);
-  };
-
-  const syncGroup = (controls, attribute, value) => {
-    for (const candidate of controls) {
+  const syncControls = (mode) => {
+    for (const candidate of modes) {
       if (candidate instanceof HTMLInputElement) {
-        candidate.checked = candidate.getAttribute(attribute) === value;
+        candidate.checked =
+          candidate.getAttribute("data-preference-mode") === mode;
       }
     }
   };
@@ -73,39 +59,12 @@ export const PREFERENCES_SCRIPT = `<script>
     !element.matches(":disabled") &&
     element.closest("[hidden], [inert]") === null;
 
-  // A radio group is one tab stop, not one per option: the browser moves
-  // between its members with the arrow keys and skips the rest. Counting every
-  // radio would put the last tab stop in the middle of the list and let the
-  // trap's final Tab escape the dialog.
-  const isSkippedRadio = (element, all) =>
-    element instanceof HTMLInputElement &&
-    element.type === "radio" &&
-    element.name !== "" &&
-    element !==
-      (all.find(
-        (candidate) =>
-          candidate instanceof HTMLInputElement &&
-          candidate.type === "radio" &&
-          candidate.name === element.name &&
-          candidate.checked,
-      ) ??
-        all.find(
-          (candidate) =>
-            candidate instanceof HTMLInputElement &&
-            candidate.type === "radio" &&
-            candidate.name === element.name,
-        ));
-
-  const tabbableElements = () => {
-    const candidates = Array.from(
+  const tabbableElements = () =>
+    Array.from(
       dialog.querySelectorAll(
         'a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])',
       ),
     ).filter(isTabbable);
-    return candidates.filter(
-      (candidate) => !isSkippedRadio(candidate, candidates),
-    );
-  };
 
   const isolate = () => {
     isolatedElements = [];
@@ -154,17 +113,7 @@ export const PREFERENCES_SCRIPT = `<script>
     return theme === "light" || theme === "dark" ? theme : "system";
   };
 
-  const currentPalette = () => {
-    const palette = document.documentElement.getAttribute("data-palette");
-    return palettes.some(
-      (candidate) => candidate.getAttribute("data-preference-palette") === palette,
-    )
-      ? palette
-      : "default";
-  };
-
-  syncGroup(modes, "data-preference-mode", currentMode());
-  syncGroup(palettes, "data-preference-palette", currentPalette());
+  syncControls(currentMode());
   control.hidden = false;
   openButton.addEventListener("click", (event) => {
     event.preventDefault();
@@ -183,17 +132,8 @@ export const PREFERENCES_SCRIPT = `<script>
       const mode = modeControl.getAttribute("data-preference-mode");
       if (mode !== "light" && mode !== "dark" && mode !== "system") return;
       applyMode(mode);
-      syncGroup(modes, "data-preference-mode", mode);
-      save();
-    });
-  }
-  for (const paletteControl of palettes) {
-    paletteControl.addEventListener("change", () => {
-      const palette = paletteControl.getAttribute("data-preference-palette");
-      if (palette === null) return;
-      applyPalette(palette);
-      syncGroup(palettes, "data-preference-palette", palette);
-      save();
+      syncControls(mode);
+      saveMode(mode);
     });
   }
   document.addEventListener("keydown", (event) => {

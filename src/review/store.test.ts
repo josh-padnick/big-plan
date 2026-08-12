@@ -1,6 +1,8 @@
 import {
   chmod,
+  mkdir,
   mkdtemp,
+  open,
   readFile,
   rm,
   stat,
@@ -9,14 +11,25 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { AGENT_STALL_MS } from "./shared/agent-status.js";
 import {
-  appendProgress,
+  appendAgentConnectionEvent,
+  appendProgressValue,
   deriveReviewPlanId,
   prepareStore,
   readActiveDraft,
+  readAgentConnectionEvents,
+  readAgentPresence,
   readProgress,
+  readResolvedCommentIds,
+  readRevisionSnapshot,
   reviewStoreFor,
   writeActiveDraft,
+  writeAgentHeartbeat,
+  writeResolvedCommentIds,
+  writeRevisionSnapshot,
+  writeSessionHeartbeatValue,
+  withReviewStoreLock,
 } from "./store.js";
 
 const created: Array<string> = [];
@@ -50,11 +63,22 @@ describe("review store placement", () => {
     for (const path of [
       store.reviewDirectory,
       store.feedbackDirectory,
+      store.feedbackSubmissionDirectory,
+      store.agentRequestDirectory,
+      store.agentResponseDirectory,
+      store.agentDraftDirectory,
+      store.agentPromptPath,
+      store.revisionDirectory,
       store.draftsPath,
       store.activeDraftPath,
       store.sentPath,
       store.progressPath,
+      store.agentConnectionDirectory,
+      store.resolvedPath,
       store.sessionPath,
+      store.heartbeatPath,
+      store.sessionLockPath,
+      store.agentHeartbeatPath,
     ]) {
       expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
     }
@@ -65,6 +89,8 @@ describe("review store placement", () => {
     const one = reviewStoreFor({ planPath, planId: "aaaaaaaaaaaaaaaa" });
     const other = reviewStoreFor({ planPath, planId: "bbbbbbbbbbbbbbbb" });
     expect(one.draftsPath).not.toBe(other.draftsPath);
+    expect(one.sessionPath).not.toBe(other.sessionPath);
+    expect(one.heartbeatPath).not.toBe(other.heartbeatPath);
   });
 
   it("should refuse a plan id that would climb out of the review directory", async () => {
@@ -72,6 +98,176 @@ describe("review store placement", () => {
     expect(() =>
       reviewStoreFor({ planPath, planId: "../../../../etc" }),
     ).toThrow(/outside/);
+  });
+});
+
+describe("review store locking", () => {
+  it("should recover an ownerless lock generation", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await mkdir(store.sessionLockPath);
+
+    let active = 0;
+    let mostActive = 0;
+    const change = (result: string) =>
+      withReviewStoreLock({
+        lockPath: store.sessionLockPath,
+        change: async () => {
+          active += 1;
+          mostActive = Math.max(mostActive, active);
+          await new Promise((settle) => setTimeout(settle, 5));
+          active -= 1;
+          return result;
+        },
+        timeoutError: () => new Error("lock timed out"),
+      });
+
+    await expect(
+      Promise.all([change("first"), change("second")]),
+    ).resolves.toEqual(["first", "second"]);
+    expect(mostActive).toBe(1);
+    await expect(stat(store.sessionLockPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("should return a completed change after another process retired the lock", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+
+    await expect(
+      withReviewStoreLock({
+        lockPath: store.sessionLockPath,
+        change: async () => {
+          await rm(store.sessionLockPath, { recursive: true, force: true });
+          return "written";
+        },
+        timeoutError: () => new Error("lock timed out"),
+      }),
+    ).resolves.toBe("written");
+  });
+
+  it("should keep the change error when the lock changed owners", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+
+    await expect(
+      withReviewStoreLock({
+        lockPath: store.sessionLockPath,
+        change: async () => {
+          await writeFile(
+            join(store.sessionLockPath, "owner.json"),
+            `${JSON.stringify({ pid: process.pid, token: "0".repeat(32) })}\n`,
+          );
+          throw new Error("the change itself failed");
+        },
+        timeoutError: () => new Error("lock timed out"),
+      }),
+    ).rejects.toThrow("the change itself failed");
+  });
+
+  it("should leave a generation it no longer owns in place", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const successor = { pid: process.pid, token: "f".repeat(32) };
+
+    await withReviewStoreLock({
+      lockPath: store.sessionLockPath,
+      change: async () => {
+        await writeFile(
+          join(store.sessionLockPath, "owner.json"),
+          `${JSON.stringify(successor)}\n`,
+        );
+      },
+      timeoutError: () => new Error("lock timed out"),
+    });
+
+    expect(
+      JSON.parse(
+        await readFile(join(store.sessionLockPath, "owner.json"), "utf8"),
+      ),
+    ).toEqual(successor);
+  });
+});
+
+describe("agent connection history", () => {
+  it("should preserve ordered transitions for only the running session", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "session-a",
+        connected: false,
+        at: "2026-08-08T20:00:02.000Z",
+        reason: "Heartbeat timed out",
+      },
+    });
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "session-a",
+        connected: true,
+        at: "2026-08-08T20:00:01.000Z",
+      },
+    });
+    await appendAgentConnectionEvent({
+      store,
+      event: {
+        sessionId: "other-session",
+        connected: true,
+        at: "2026-08-08T20:00:00.000Z",
+      },
+    });
+
+    expect(
+      await readAgentConnectionEvents({ store, sessionId: "session-a" }),
+    ).toMatchObject([
+      { connected: true, at: "2026-08-08T20:00:01.000Z" },
+      {
+        connected: false,
+        at: "2026-08-08T20:00:02.000Z",
+        reason: "Heartbeat timed out",
+      },
+    ]);
+  });
+});
+
+describe("review store revision history", () => {
+  it("should retain an immutable source snapshot by revision digest", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const revision = "1111111111111111";
+    await writeRevisionSnapshot({ store, revision, source: "# First\n" });
+    await writeRevisionSnapshot({ store, revision, source: "# Second\n" });
+    await expect(readRevisionSnapshot({ store, revision })).resolves.toBe(
+      "# First\n",
+    );
+  });
+
+  it("should persist resolved threads independently of browser storage", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeResolvedCommentIds({
+      store,
+      ids: ["aabbccdd", "11223344"],
+    });
+    await expect(
+      readResolvedCommentIds({
+        store,
+        validate: (value) =>
+          Array.isArray(value)
+            ? value.filter((entry) => typeof entry === "string")
+            : [],
+      }),
+    ).resolves.toEqual(["aabbccdd", "11223344"]);
   });
 });
 
@@ -122,6 +318,93 @@ describe("review store creation", () => {
   });
 });
 
+describe("review store session files", () => {
+  it("should replace heartbeat snapshots without mutating an open reader", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeSessionHeartbeatValue({
+      store,
+      value: {
+        sessionId: "aaaaaaaaaaaaaaaa",
+        running: true,
+        updatedAtMs: 10_000,
+      },
+    });
+    const previousSnapshot = await open(store.heartbeatPath, "r");
+    try {
+      await writeSessionHeartbeatValue({
+        store,
+        value: {
+          sessionId: "aaaaaaaaaaaaaaaa",
+          running: true,
+          updatedAtMs: 11_000,
+        },
+      });
+      expect(JSON.parse(await previousSnapshot.readFile("utf8"))).toMatchObject(
+        {
+          updatedAtMs: 10_000,
+        },
+      );
+    } finally {
+      await previousSnapshot.close();
+    }
+  });
+});
+
+describe("review store agent presence", () => {
+  it("reports only a fresh heartbeat from the matching agent session", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "working",
+      requestId: "bbbbbbbbbbbbbbbb",
+      now: 10_000,
+    });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 12_000,
+      }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "working",
+      requestId: "bbbbbbbbbbbbbbbb",
+      updatedAtMs: 10_000,
+    });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "cccccccccccccccc",
+        now: 12_000,
+      }),
+    ).resolves.toEqual({ connected: false, state: "waiting" });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 10_000 + AGENT_STALL_MS - 1,
+      }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "working",
+      requestId: "bbbbbbbbbbbbbbbb",
+      updatedAtMs: 10_000,
+    });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 10_000 + AGENT_STALL_MS + 1,
+      }),
+    ).resolves.toEqual({ connected: false, state: "waiting" });
+  });
+});
+
 describe("review store progress relay", () => {
   const line = (value: unknown) => `${JSON.stringify(value)}\n`;
 
@@ -135,24 +418,54 @@ describe("review store progress relay", () => {
 
   it("should relay an event that belongs to the running session", async () => {
     const store = await storeWithProgress(
-      line({ sessionId: "s1", seq: 1, step: "Revising", state: "live" }),
+      line({
+        sessionId: "s1",
+        seq: 1,
+        stepCode: "agent-note",
+        step: "Revising",
+        state: "live",
+      }),
     );
     expect(await readProgress({ store, sessionId: "s1" })).toEqual([
-      { sessionId: "s1", seq: 1, step: "Revising", state: "live" },
+      {
+        sessionId: "s1",
+        seq: 1,
+        stepCode: "agent-note",
+        step: "Revising",
+        state: "live",
+      },
     ]);
   });
 
   it("should drop an event written for another session", async () => {
     const store = await storeWithProgress(
-      line({ sessionId: "other", seq: 1, step: "Ready", state: "done" }),
+      line({
+        sessionId: "other",
+        seq: 1,
+        stepCode: "agent-note",
+        step: "Ready",
+        state: "done",
+      }),
     );
     expect(await readProgress({ store, sessionId: "s1" })).toEqual([]);
   });
 
   it("should drop an event that does not advance the sequence", async () => {
     const store = await storeWithProgress(
-      line({ sessionId: "s1", seq: 2, step: "Revising", state: "live" }) +
-        line({ sessionId: "s1", seq: 1, step: "Replayed", state: "done" }),
+      line({
+        sessionId: "s1",
+        seq: 2,
+        stepCode: "agent-note",
+        step: "Revising",
+        state: "live",
+      }) +
+        line({
+          sessionId: "s1",
+          seq: 1,
+          stepCode: "agent-note",
+          step: "Replayed",
+          state: "done",
+        }),
     );
     const events = await readProgress({ store, sessionId: "s1" });
     expect(events.map((event) => event.step)).toEqual(["Revising"]);
@@ -163,6 +476,7 @@ describe("review store progress relay", () => {
       line({
         sessionId: "s1",
         seq: 1,
+        stepCode: "agent-note",
         step: "Redirect",
         state: "navigate:https://evil.example.com",
       }),
@@ -173,7 +487,13 @@ describe("review store progress relay", () => {
   it("should survive a hand-edited status file rather than failing the session", async () => {
     const store = await storeWithProgress(
       "not json at all\n" +
-        line({ sessionId: "s1", seq: 1, step: "Revising", state: "live" }),
+        line({
+          sessionId: "s1",
+          seq: 1,
+          stepCode: "agent-note",
+          step: "Revising",
+          state: "live",
+        }),
     );
     expect(await readProgress({ store, sessionId: "s1" })).toHaveLength(1);
   });
@@ -183,6 +503,7 @@ describe("review store progress relay", () => {
       line({
         sessionId: "s1",
         seq: 1,
+        stepCode: "agent-note",
         step: "x".repeat(500),
         state: "live",
       }),
@@ -195,20 +516,22 @@ describe("review store progress relay", () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
-    await appendProgress({
+    await appendProgressValue({
       store,
       event: {
         sessionId: "s1",
         seq: 1,
+        stepCode: "agent-note",
         step: "Feedback package received",
         state: "done",
       },
     });
-    await appendProgress({
+    await appendProgressValue({
       store,
       event: {
         sessionId: "s1",
         seq: 2,
+        stepCode: "agent-note",
         step: "Agent started",
         state: "live",
       },
@@ -218,5 +541,23 @@ describe("review store progress relay", () => {
         (event) => event.step,
       ),
     ).toEqual(["Feedback package received", "Agent started"]);
+  });
+
+  it("should relay the latest 200 events", async () => {
+    const store = await storeWithProgress(
+      Array.from({ length: 205 }, (_, index) =>
+        line({
+          sessionId: "s1",
+          seq: index + 1,
+          stepCode: "agent-note",
+          step: `Step ${index + 1}`,
+          state: "live",
+        }),
+      ).join(""),
+    );
+    const events = await readProgress({ store, sessionId: "s1" });
+    expect(events).toHaveLength(200);
+    expect(events[0]?.seq).toBe(6);
+    expect(events.at(-1)?.seq).toBe(205);
   });
 });

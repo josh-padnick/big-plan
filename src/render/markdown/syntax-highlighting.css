@@ -3,13 +3,6 @@ CSS escape hatch: externally owned markup and token definitions.
 The syntax-highlighting palette and highlight.js token styles emitted by
 rehype-highlight. Palette variables follow the viewer's OS preference or its
 explicit theme override while staying independent of the surrounding shell.
-
-A code block is part of the reading surface, so the reviewer's colour theme
-reaches it too: each `data-palette` block below restates the seven token hues in
-that palette's own accents. The added and removed lines take the palette's tip
-and danger families instead of a hue of their own, so a diff inside a snippet
-agrees with a diff anywhere else in the document.
-src/render/global.css owns the two-attribute model and the ramps.
 */
 
 :root {
@@ -24,61 +17,6 @@ src/render/global.css owns the two-attribute model and the ramps.
   --syntax-addition-bg: light-dark(#dafbe1, #033a16);
   --syntax-deletion-c: light-dark(#82071e, #ffdcd7);
   --syntax-deletion-bg: light-dark(#ffebe9, #67060c);
-}
-[data-palette="rose-pine"] {
-  --syntax-keyword-c: light-dark(#286983, #3d90b1);
-  --syntax-entity-c: light-dark(#7e649b, #c4a7e7);
-  --syntax-constant-c: light-dark(#44757e, #9ccfd8);
-  --syntax-string-c: light-dark(#9b6010, #f6c177);
-  --syntax-variable-c: light-dark(#c2423c, #ebbcba);
-  --syntax-comment-c: light-dark(#6f6b89, #908caa);
-  --syntax-tag-c: light-dark(#ab526c, #eb6f92);
-  --syntax-addition-c: light-dark(var(--success-700), var(--success-300));
-  --syntax-addition-bg: light-dark(var(--success-50), var(--success-900));
-  --syntax-deletion-c: light-dark(var(--danger-700), var(--danger-300));
-  --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
-}
-
-[data-palette="nord"] {
-  --syntax-keyword-c: light-dark(#496e93, #88a6c4);
-  --syntax-entity-c: light-dark(#347283, #88c0d0);
-  --syntax-constant-c: light-dark(#8a5c82, #bb99b5);
-  --syntax-string-c: light-dark(#577140, #a3be8c);
-  --syntax-variable-c: light-dark(#a85237, #d5947f);
-  --syntax-comment-c: light-dark(#4c566a, #98a4b7);
-  --syntax-tag-c: light-dark(#447170, #8fbcbb);
-  --syntax-addition-c: light-dark(var(--success-700), var(--success-300));
-  --syntax-addition-bg: light-dark(var(--success-50), var(--success-900));
-  --syntax-deletion-c: light-dark(var(--danger-700), var(--danger-300));
-  --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
-}
-
-[data-palette="catppuccin"] {
-  --syntax-keyword-c: light-dark(#8839ef, #cba6f7);
-  --syntax-entity-c: light-dark(#0f5cf4, #89b4fa);
-  --syntax-constant-c: light-dark(#b94401, #fab387);
-  --syntax-string-c: light-dark(#307820, #a6e3a1);
-  --syntax-variable-c: light-dark(#cf1c2b, #eba0ac);
-  --syntax-comment-c: light-dark(#66697b, #9399b2);
-  --syntax-tag-c: light-dark(#12747a, #94e2d5);
-  --syntax-addition-c: light-dark(var(--success-700), var(--success-300));
-  --syntax-addition-bg: light-dark(var(--success-50), var(--success-900));
-  --syntax-deletion-c: light-dark(var(--danger-700), var(--danger-300));
-  --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
-}
-
-[data-palette="brutalist"] {
-  --syntax-keyword-c: light-dark(#c02d0e, #ff6a3d);
-  --syntax-entity-c: light-dark(#0b57c2, #4d9dff);
-  --syntax-constant-c: light-dark(#8c1ca8, #e07bff);
-  --syntax-string-c: light-dark(#1e781e, #3ddc57);
-  --syntax-variable-c: light-dark(#945900, #ffc300);
-  --syntax-comment-c: light-dark(#5c594e, #a5a294);
-  --syntax-tag-c: light-dark(#0e6d6d, #3ee0e0);
-  --syntax-addition-c: light-dark(var(--success-700), var(--success-300));
-  --syntax-addition-bg: light-dark(var(--success-50), var(--success-900));
-  --syntax-deletion-c: light-dark(var(--danger-700), var(--danger-300));
-  --syntax-deletion-bg: light-dark(var(--danger-50), var(--danger-900));
 }
 
 @layer components {
@@ -131,7 +69,7 @@ src/render/global.css owns the two-attribute model and the ramps.
   }
   article .hljs-section {
     color: var(--syntax-constant-c);
-    font-weight: var(--font-weight-semibold);
+    font-weight: 600;
   }
   article .hljs-bullet {
     color: var(--syntax-variable-c);
@@ -140,7 +78,7 @@ src/render/global.css owns the two-attribute model and the ramps.
     font-style: italic;
   }
   article .hljs-strong {
-    font-weight: var(--font-weight-semibold);
+    font-weight: 600;
   }
   article .hljs-addition {
     color: var(--syntax-addition-c);

@@ -25,6 +25,9 @@ export type BlockDescriptor = {
   readonly kind: string;
   readonly label: string;
   readonly section: string;
+  // Plain authored presentation text is retained for revision alignment and
+  // diffing. It never enters an id or path and is not exposed as markup.
+  readonly text: string;
 };
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -336,7 +339,7 @@ const stampBlock = ({
   node.properties["data-block-kind"] = kind;
   node.properties["data-block-label"] = label;
   node.properties["data-block-section"] = section;
-  blocks.push({ id, kind, label, section });
+  blocks.push({ id, kind, label, section, text: textOf(node) });
 };
 
 // A Markdown table exposes the whole table, each row, every body cell, and one

@@ -7,11 +7,10 @@ Everything on this page is shipped and works today.
 
 ## Reading experience
 
-- One reading column with coordinated light and dark variants for every colour theme.
-- A `Settings` dialog behind the branding bar's gear, offering `Light`, `Dark`, and `System` appearance; phones get compact full-width choices in a centered, internally scrollable sheet, while wider screens keep the three-card layout. The choice applies immediately, is saved for every review document in this browser, and is applied before the first paint so the other appearance never flashes.
-- A `Color theme` row in the same dialog, offering `Default`, `Rosé Pine`, `Nord`, `Catppuccin`, and `Brutalist`. A theme is a palette rather than a mode: each one works in both light and dark, appearance still decides which, and every swatch previews that theme's own shades. The choice also applies immediately, is saved across review documents, and is restored before the first paint. `Default` is Big Plan's warm paper look and is what a document with no saved choice renders. `Brutalist` also squares cards and controls, replaces the soft shadows with hard offset slabs, and sets one weight heavier, so it changes the shape of the reading surface and not only its colours; pill-shaped badges stay round.
+- One reading column with warm, paper-like light and dark palettes.
+- A `Settings` dialog behind the branding bar's gear, offering `Light`, `Dark`, and `System` appearance; phones get compact full-width choices in a centered, internally scrollable sheet, while wider screens keep the three-card layout. The choice applies immediately, is saved for every review document in this browser, and is applied before the first paint so the other palette never flashes.
 - `System` follows your OS preference, and is the value you get on a first run or when the browser refuses storage.
-- A sticky branding bar whose logo follows the effective light or dark appearance, independently of the colour theme.
+- A sticky branding bar whose logo follows the active theme.
 - In-document `Maximize` controls for fenced code, code snippets and diffs, tree diffs, data tables, database schemas, [flow diagrams](/components/flow-diagram/), and [wireframes](/components/wireframe/), with Escape restoring the reading view after any pending-feedback prompt is resolved.
 
 ## Navigation
@@ -22,11 +21,15 @@ Everything on this page is shipped and works today.
 - Collapse controls on Parts, slides, and sub-slides, plus document-wide expand-all and collapse-all controls in the table of contents; TOC jumps expand collapsed ancestors.
 - Collapse choices, CodeDiff and FileTreeDiff views, database-schema column order and visibility, and a document-level review-comment draft persist only for the exact source path and authored revision, so same-titled plans and distinct authored revisions never share viewer state.
 
+## Feedback and revision
+
+- `big-plan review` serves the plan locally for anchored comments, plan-wide chat, agent progress, revision-aware responses, and source diffs without an account or third-party service.
+- `big-plan agent` connects a coding-agent session to that live review while the MDX remains authoritative; [Reviewing a plan](/reference/reviewing/) owns the workflow, persistence, revision, and trust-boundary details.
+
 ## Code
 
 - Syntax highlighting for fenced code blocks with a declared language.
 - Unknown and undeclared languages stay plain and readable.
-- Keyboard-accessible copy controls for fenced code, code snippets and diffs, data tables, and database schemas; success replaces the copy icon with a check without shifting the toolbar, updates the accessible name, and suppresses the tooltip until the control resets.
 
 ## Plan authoring
 
@@ -50,9 +53,6 @@ Everything on this page is shipped and works today.
 ## Output
 
 - Local, self-contained review delivery; the [two-artifact delivery ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0001-two-artifact-plan-delivery.md) owns the artifact and script-behavior contract.
-- With JavaScript disabled, the render explains that its full content remains readable while interactive affordances such as sorting, collapse, maximize, and comments are unavailable.
-- One self-contained HTML file with styling and branding embedded.
-- A tiny embedded head script that applies a saved appearance and colour theme before the first paint, an embedded settings script for the dialog's appearance and colour-theme controls, and one embedded viewer script (TOC scroll-spy, hover popovers, CodeDiff and FileTreeDiff view selection, deck collapse, database-schema columns and index jumps, comment drafts, figure maximize, flow-diagram review, and wireframe navigation and scaling); content stays fully readable with scripts disabled.
 - No external requests, ever.
 - Renders anywhere Node.js 22+ runs, straight from `npx big-plan render`.
 

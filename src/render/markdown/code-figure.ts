@@ -1,5 +1,5 @@
-// Wraps every plain fenced code block in a figure carrying the shared copy and
-// maximize controls, so a dense sketch a reviewer must actually read is not
+// Wraps every plain fenced code block in a figure carrying the shared
+// maximize control, so a dense sketch a reviewer must actually read is not
 // stuck at the width of the reading column.
 //
 // A fence rendered by a component (CodeSnippet, CodeDiff, DataTable, and the
@@ -7,19 +7,15 @@
 // those add the control themselves through the React edge. This transform
 // therefore only claims a pre that is still a bare child of the document.
 //
-// The maximize attributes and both control labels are owned by
-// components/_model/figure-controls; the shared visual primitive owns the
-// fixed control presentation.
+// The attribute vocabulary is owned by components/_model/figure-controls.
 
 import type { Element, Root, RootContent } from "hast";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
 import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
-import { FIGURE_CONTROL_BUTTON_CLASSES } from "../../components/_shared/figure-controls/control-button-classes.js";
 import {
   BODY_ATTRIBUTE,
-  copyLabel,
   MAXIMIZABLE_ATTRIBUTE,
   TRIGGER_ATTRIBUTE,
   maximizeLabel,
@@ -29,14 +25,21 @@ import { lucideIconToHast } from "./lucide-icon-hast.js";
 const isElement = (node: RootContent): node is Element =>
   node.type === "element";
 
+// /* off-scale */ Phase A preserves the legacy floating-control offsets and
+// z-index exactly; Phase B will choose their scale-backed replacements.
+// Matches the React edge's resting-quiet button so the two affordances are
+// the same affordance.
+const BUTTON_CLASSES =
+  "figure-control inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-colors hover:bg-transparent hover:text-ink focus-visible:bg-transparent focus-visible:text-ink focus-visible:shadow-focus focus-visible:outline-none [&_svg]:size-3.5";
+
 const copyButton = (): Element => {
-  const label = copyLabel("code");
-  const button: Element = {
+  const label = "Copy code";
+  return {
     type: "element",
     tagName: "button",
     properties: {
       type: "button",
-      className: FIGURE_CONTROL_BUTTON_CLASSES.split(" "),
+      className: BUTTON_CLASSES.split(" "),
       "aria-label": label,
       "data-tooltip": label,
       "data-tooltip-delay": "1s",
@@ -48,7 +51,6 @@ const copyButton = (): Element => {
       lucideIconToHast({ icon: CHECK_ICON, hidden: true }),
     ],
   };
-  return button;
 };
 
 const maximizeButton = (): Element => {
@@ -58,7 +60,7 @@ const maximizeButton = (): Element => {
     tagName: "button",
     properties: {
       type: "button",
-      className: FIGURE_CONTROL_BUTTON_CLASSES.split(" "),
+      className: BUTTON_CLASSES.split(" "),
       "aria-label": label,
       "data-tooltip": label,
       "data-tooltip-delay": "1s",

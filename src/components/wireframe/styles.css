@@ -1,7 +1,6 @@
 /*
 CSS escape hatch: selector relationships isolate the drawing from generated
-prose markup, and the sketch primitives are a declared drawing system named in
-scripts/style-contract/allowlist.mjs.
+prose markup, while local readability keeps its sketch primitives together.
 
 Wireframe's hand-drawn visual language.
 
@@ -79,11 +78,10 @@ marks and a plan diff never jitters.
      title so the control still has a stable home; MaximizeButton itself
      ships hidden until the viewer script reveals it. */
   .wireframe-header {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
   }
   .wireframe[data-figure-maximized] > .wireframe-header {
     flex: none;
-    margin-bottom: 0;
   }
 
   /* The screens live beside the switcher rather than under it, so the same
@@ -121,7 +119,7 @@ marks and a plan diff never jitters.
   .wireframe-switch {
     padding: 0.2rem 0.6rem;
     border: 2px solid var(--edge-c);
-    border-radius: var(--radius-md);
+    border-radius: 0.375rem;
     font-size: 0.8125rem;
     color: var(--color-muted);
     cursor: pointer;
@@ -141,7 +139,7 @@ marks and a plan diff never jitters.
      item shows no extra ring at all; only a focused inactive item gets the
      halo, since aria-current cannot speak for it. */
   .wireframe-switch:focus-visible {
-    border-radius: var(--radius-sm);
+    border-radius: 0.25rem;
     outline: none;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
   }
@@ -242,10 +240,10 @@ marks and a plan diff never jitters.
      background). It wraps outside the hand-drawn device bezel `.wireframe-frame`
      already draws for desktop/tablet/phone, so nothing doubles up inside it.
      The viewer script reads this padding and border back out of computed
-     style to keep the frame's uniform fit math correct, so the two stay in
+     style to keep the frame's fit-to-width math correct, so the two stay in
      sync without a duplicated constant. */
   .wireframe-frame-card {
-    display: block;
+    display: inline-block;
     max-width: 100%;
     padding: 0.5rem;
     border: 1px solid var(--edge-c);
@@ -381,11 +379,10 @@ marks and a plan diff never jitters.
     overflow-y: auto;
   }
   /* A desktop application is a viewport, not an endlessly growing page.
-     Its workspace host owns the device height; persistent chrome stays
-     anchored while workspace panes take responsibility for their own overflow. */
+     Its shell owns the device height; persistent chrome stays anchored
+     while workspace panes take responsibility for their own overflow. */
   .wireframe-artboard[data-wireframe-device="desktop"]:has(
-      .wireframe-app-shell,
-      > .wireframe-canvas > .wireframe-row[data-wireframe-workspace]
+      .wireframe-app-shell
     ) {
     height: var(--wf-min-height);
     min-height: 0;
@@ -395,10 +392,7 @@ marks and a plan diff never jitters.
     flex: 1;
     min-width: 0;
   }
-  .wireframe-artboard[data-wireframe-device="desktop"]:has(
-      .wireframe-app-shell,
-      > .wireframe-canvas > .wireframe-row[data-wireframe-workspace]
-    )
+  .wireframe-artboard[data-wireframe-device="desktop"]:has(.wireframe-app-shell)
     > .wireframe-canvas {
     height: 100%;
     min-height: 0;
@@ -634,7 +628,7 @@ marks and a plan diff never jitters.
      application viewport: the master and inspector remain bounded, the
      primary surface absorbs the rest, and no pane can force app-wide scroll. */
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace] {
     flex: 1 1 0;
     flex-wrap: nowrap;
@@ -645,15 +639,15 @@ marks and a plan diff never jitters.
     overflow: hidden;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > .wireframe-panel,
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > .wireframe-stack,
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > .wireframe-center {
     display: flex;
@@ -670,7 +664,7 @@ marks and a plan diff never jitters.
   /* A queue/list is a stable master pane. The primary sibling receives the
      remaining width, which keeps conversation, document, or canvas dominant. */
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > [data-wireframe-master] {
     flex: 0 1 20rem;
@@ -682,7 +676,7 @@ marks and a plan diff never jitters.
      surface and the Rail is its bounded judgment preview. Three-pane triage
      keeps the collection bounded so the conversation can absorb spare width. */
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > [data-wireframe-master]:first-child:nth-last-child(2):has(
       + .wireframe-rail:last-child
@@ -692,7 +686,7 @@ marks and a plan diff never jitters.
     max-width: none;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > .wireframe-panel
     > .wireframe-panel-body {
@@ -705,24 +699,19 @@ marks and a plan diff never jitters.
     .wireframe-app-content
     > .wireframe-row
     > [data-wireframe-master]
-    .wireframe-list-item,
-  .wireframe-artboard[data-wireframe-device="desktop"]
-    > .wireframe-canvas
-    > .wireframe-row[data-wireframe-workspace]
-    > [data-wireframe-master]
     .wireframe-list-item {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > .wireframe-panel::after {
     display: none;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > *
     + * {
@@ -730,10 +719,6 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    .wireframe-panel-body,
-  .wireframe-artboard[data-wireframe-device="desktop"]
-    > .wireframe-canvas
-    > .wireframe-row[data-wireframe-workspace]
     .wireframe-panel-body {
     gap: 0.45rem;
     min-height: 0;
@@ -742,10 +727,6 @@ marks and a plan diff never jitters.
      composer remain anchored at the foot of the dominant primary pane. */
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    .wireframe-panel-body[data-wireframe-conversation],
-  .wireframe-artboard[data-wireframe-device="desktop"]
-    > .wireframe-canvas
-    > .wireframe-row[data-wireframe-workspace]
     .wireframe-panel-body[data-wireframe-conversation] {
     display: flex;
     flex-direction: column;
@@ -753,19 +734,11 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    .wireframe-panel:has(> .wireframe-panel-body[data-wireframe-conversation]),
-  .wireframe-artboard[data-wireframe-device="desktop"]
-    > .wireframe-canvas
-    > .wireframe-row[data-wireframe-workspace]
     .wireframe-panel:has(> .wireframe-panel-body[data-wireframe-conversation]) {
     overflow: hidden;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    .wireframe-thread,
-  .wireframe-artboard[data-wireframe-device="desktop"]
-    > .wireframe-canvas
-    > .wireframe-row[data-wireframe-workspace]
     .wireframe-thread {
     flex: 1 1 0;
     min-height: 0;
@@ -773,10 +746,6 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
-    .wireframe-composer,
-  .wireframe-artboard[data-wireframe-device="desktop"]
-    > .wireframe-canvas
-    > .wireframe-row[data-wireframe-workspace]
     .wireframe-composer {
     flex: none;
     padding-top: 0.5rem;
@@ -796,7 +765,7 @@ marks and a plan diff never jitters.
   }
   /* A settings form beside a Rail stays a readable measure, not full bleed. */
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > .wireframe-stack:not(.wireframe-rail) {
     max-width: 38rem;
@@ -2178,11 +2147,10 @@ marks and a plan diff never jitters.
     max-width: 20rem;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
-    :is(.wireframe-app-content, .wireframe-canvas)
+    .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > .wireframe-rail {
     min-height: 0;
-    contain: size;
     overflow-y: auto;
   }
 

@@ -18,7 +18,7 @@
     padding-top: 0.25rem;
     padding-bottom: 0.25rem;
     color: var(--color-muted);
-    font-weight: var(--font-weight-medium);
+    font-weight: 500;
     /* A column name is a label, not prose. Wrapping one costs a row of
        height and breaks the alignment the grid is read by, so a narrow
        figure scrolls in its own container instead. */

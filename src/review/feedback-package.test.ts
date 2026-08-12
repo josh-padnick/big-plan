@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ReviewComment } from "./comment.js";
+import type { ReviewComment } from "./shared/comment.js";
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 
 const packageOf = (comments: ReadonlyArray<ReviewComment>) =>

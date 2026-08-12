@@ -39,6 +39,13 @@ const renderThroughCli = async ({
   );
 };
 
+// A test that writes durable review state cannot share the worker-scoped
+// runtime: one `.big-plan/` store is reused for every test in the worker, so
+// seeded drafts and sent comments would reach whichever test runs next.
+type TestFixtures = {
+  readonly isolatedReviewRuntimeUrl: string;
+};
+
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly codeSnippetSyntaxMaximizeViewerUrl: string;
@@ -69,10 +76,6 @@ type WorkerFixtures = {
   readonly wireframeFormFactorsViewerUrl: string;
   readonly wireframeQualityViewerUrl: string;
   readonly wireframeShortContentViewerUrl: string;
-  readonly wireframeDirectPanelViewerUrl: string;
-  readonly wireframeLongCaptionDesktopViewerUrl: string;
-  readonly wireframeMultiDesktopViewerUrl: string;
-  readonly wireframeSingleDesktopViewerUrl: string;
   readonly wireframeViewerUrl: string;
 };
 
@@ -271,139 +274,6 @@ const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
 </Wireframe>
 `;
 
-const WIREFRAME_DIRECT_PANEL_MDX = `# Direct desktop panel
-
-<Wireframe id="direct-panel" title="Standalone desktop content">
-  <Screen id="standalone" name="Standalone" device="desktop">
-    <Panel title="Standalone panel">
-      <Text text="First line." />
-      <Text text="Second line." />
-    </Panel>
-  </Screen>
-</Wireframe>
-`;
-
-const WIREFRAME_SINGLE_DESKTOP_MDX = `# Single desktop workspace
-
-<Wireframe id="single-desktop" title="Historical change inside the thread card">
-  <Screen
-    id="historical"
-    name="Historical change"
-    device="desktop"
-    url="review.example.test/thread/4821"
-  >
-    <TopBar title="Review thread">
-      <Button label="Resolve" emphasis="tertiary" />
-    </TopBar>
-    <Row gap="none">
-      <Panel title="Thread">
-        <Message
-          author="Alex"
-          time="Now"
-          kind="agent"
-          text="The historical change remains visible in context."
-        />
-        <Message
-          author="Maya"
-          time="1m"
-          kind="customer"
-          text="Keep the earlier answer reviewable."
-        />
-      </Panel>
-      <Rail>
-        <Panel title="Feedback">
-          <Text text="Historical change" role="section" />
-          <Text text="Superseded changes remain reviewable." role="body" />
-          <List>
-            <ListItem label="Feedback detail 01" meta="Pending" />
-            <ListItem label="Feedback detail 02" meta="Pending" />
-            <ListItem label="Feedback detail 03" meta="Pending" />
-            <ListItem label="Feedback detail 04" meta="Pending" />
-            <ListItem label="Feedback detail 05" meta="Pending" />
-            <ListItem label="Feedback detail 06" meta="Pending" />
-            <ListItem label="Feedback detail 07" meta="Pending" />
-            <ListItem label="Feedback detail 08" meta="Pending" />
-            <ListItem label="Feedback detail 09" meta="Pending" />
-            <ListItem label="Feedback detail 10" meta="Pending" />
-            <ListItem label="Feedback detail 11" meta="Pending" />
-            <ListItem label="Feedback detail 12" meta="Pending" />
-            <ListItem label="Feedback detail 13" meta="Pending" />
-            <ListItem label="Feedback detail 14" meta="Pending" />
-            <ListItem label="Feedback detail 15" meta="Pending" />
-            <ListItem label="Feedback detail 16" meta="Pending" />
-            <ListItem label="Feedback detail 17" meta="Pending" />
-            <ListItem label="Feedback detail 18" meta="Pending" />
-          </List>
-        </Panel>
-      </Rail>
-    </Row>
-  </Screen>
-</Wireframe>
-`;
-
-const WIREFRAME_LONG_CAPTION_DESKTOP_MDX = `# Long-caption desktop workspace
-
-<Wireframe id="long-caption-desktop" title="Long caption alignment">
-  <Screen
-    id="historical"
-    name="Historical change across a deliberately long reviewer-visible desktop screen caption that must wrap without outgrowing its frame while preserving readable typography, subordinate viewport metadata, frame alignment, and the complete maximized desktop silhouette at every supported review width"
-    device="desktop"
-  >
-    <Panel title="Review thread">
-      <Text text="The complete caption remains aligned with this desktop frame." />
-    </Panel>
-  </Screen>
-</Wireframe>
-`;
-
-const WIREFRAME_MULTI_DESKTOP_MDX = `# Multi-screen desktop workspace
-
-<Wireframe id="multi-desktop" title="Two threads, one block, two truthful diffs">
-  <Screen
-    id="first-thread"
-    name="First thread"
-    device="desktop"
-    url="review.example.test/thread/4821"
-  >
-    <TopBar title="Review thread">
-      <Button label="Resolve" emphasis="tertiary" />
-    </TopBar>
-    <Row gap="none">
-      <Panel title="Thread one">
-        <Message author="Alex" time="Now" kind="agent" text="The first answer changed this block." />
-      </Panel>
-      <Rail>
-        <Panel title="Feedback">
-          <Text text="First historical change" role="section" />
-          <Text text="The earlier answer remains reviewable." role="body" />
-        </Panel>
-      </Rail>
-    </Row>
-  </Screen>
-  <Screen
-    id="second-thread"
-    name="Second thread"
-    device="desktop"
-    url="review.example.test/thread/4822"
-  >
-    <TopBar title="Review thread">
-      <Button label="Resolve" emphasis="tertiary" />
-    </TopBar>
-    <Row gap="none">
-      <Panel title="Thread two">
-        <Message author="Maya" time="Now" kind="customer" text="The second answer touched the same block." />
-      </Panel>
-      <Rail>
-        <Panel title="Feedback">
-          <Text text="Second historical change" role="section" />
-          <Text text="The two changes stay separately reviewable." role="body" />
-        </Panel>
-      </Rail>
-    </Row>
-  </Screen>
-</Wireframe>
-`;
-
 const REVIEW_RUNTIME_MDX = `# Review persistence
 
 Keep every reviewer note safe while the plan is discussed.
@@ -422,7 +292,21 @@ The table has adjacent targets that must remain distinguishable.
 Sending writes one real feedback package beside this plan.
 `;
 
-export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
+export const test = base.extend<TestFixtures, WorkerFixtures>({
+  isolatedReviewRuntimeUrl: async ({}, use) => {
+    const outputDir = await mkdtemp(
+      join(tmpdir(), "big-plan-isolated-review-runtime-"),
+    );
+    const inputPath = join(outputDir, "plan.mdx");
+    await writeFile(inputPath, REVIEW_RUNTIME_MDX, "utf8");
+    const runtime = await startReviewRuntime({ planPath: inputPath });
+    try {
+      await use(runtime.url);
+    } finally {
+      await runtime.close();
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  },
   reviewRuntimeUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(
@@ -875,62 +759,6 @@ export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
       const inputPath = join(outputDir, "wireframe-short-content.mdx");
       const outputPath = join(outputDir, "wireframe-short-content.html");
       await writeFile(inputPath, WIREFRAME_SHORT_CONTENT_MDX, "utf8");
-      await renderThroughCli({ inputPath, outputPath, outputDir });
-      await use(pathToFileURL(outputPath).href);
-      await rm(outputDir, { recursive: true, force: true });
-    },
-    { scope: "worker" },
-  ],
-  wireframeDirectPanelViewerUrl: [
-    async ({}, use) => {
-      const outputDir = await mkdtemp(
-        join(tmpdir(), "big-plan-wireframe-direct-panel-"),
-      );
-      const inputPath = join(outputDir, "wireframe-direct-panel.mdx");
-      const outputPath = join(outputDir, "wireframe-direct-panel.html");
-      await writeFile(inputPath, WIREFRAME_DIRECT_PANEL_MDX, "utf8");
-      await renderThroughCli({ inputPath, outputPath, outputDir });
-      await use(pathToFileURL(outputPath).href);
-      await rm(outputDir, { recursive: true, force: true });
-    },
-    { scope: "worker" },
-  ],
-  wireframeSingleDesktopViewerUrl: [
-    async ({}, use) => {
-      const outputDir = await mkdtemp(
-        join(tmpdir(), "big-plan-wireframe-single-desktop-"),
-      );
-      const inputPath = join(outputDir, "wireframe-single-desktop.mdx");
-      const outputPath = join(outputDir, "wireframe-single-desktop.html");
-      await writeFile(inputPath, WIREFRAME_SINGLE_DESKTOP_MDX, "utf8");
-      await renderThroughCli({ inputPath, outputPath, outputDir });
-      await use(pathToFileURL(outputPath).href);
-      await rm(outputDir, { recursive: true, force: true });
-    },
-    { scope: "worker" },
-  ],
-  wireframeLongCaptionDesktopViewerUrl: [
-    async ({}, use) => {
-      const outputDir = await mkdtemp(
-        join(tmpdir(), "big-plan-wireframe-long-caption-desktop-"),
-      );
-      const inputPath = join(outputDir, "wireframe-long-caption-desktop.mdx");
-      const outputPath = join(outputDir, "wireframe-long-caption-desktop.html");
-      await writeFile(inputPath, WIREFRAME_LONG_CAPTION_DESKTOP_MDX, "utf8");
-      await renderThroughCli({ inputPath, outputPath, outputDir });
-      await use(pathToFileURL(outputPath).href);
-      await rm(outputDir, { recursive: true, force: true });
-    },
-    { scope: "worker" },
-  ],
-  wireframeMultiDesktopViewerUrl: [
-    async ({}, use) => {
-      const outputDir = await mkdtemp(
-        join(tmpdir(), "big-plan-wireframe-multi-desktop-"),
-      );
-      const inputPath = join(outputDir, "wireframe-multi-desktop.mdx");
-      const outputPath = join(outputDir, "wireframe-multi-desktop.html");
-      await writeFile(inputPath, WIREFRAME_MULTI_DESKTOP_MDX, "utf8");
       await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });

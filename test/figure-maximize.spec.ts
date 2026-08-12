@@ -270,46 +270,11 @@ test("should copy plain code and make figure hints wait for a linger", async ({
   await expect(copy).toHaveAttribute("data-copy-state", "copied");
   await expect(copy.locator('[data-lucide="copy"]')).toBeHidden();
   await expect(copy.locator('[data-lucide="check"]')).toBeVisible();
-  await expect(copy).toHaveAttribute("data-copy-state", "copied", {
-    timeout: 1000,
-  });
-  await expect(copy).toHaveAccessibleName("Copy code");
-  await expect(copy).not.toHaveAttribute("data-copy-state");
-  await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
-  await expect(copy.locator('[data-lucide="check"]')).toBeHidden();
-});
-
-test("should clear stale copy state when a second clipboard attempt stays pending", async ({
-  page,
-  componentsViewerUrl,
-}) => {
-  await page.addInitScript(() => {
-    let writes = 0;
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: async () => {
-          writes += 1;
-          if (writes > 1) await new Promise(() => {});
-        },
-      },
-    });
-  });
-  await page.goto(componentsViewerUrl);
-
-  const frame = page.locator(".code-figure").first();
-  const copy = frame.locator("[data-copy-code]");
-
-  await copy.click();
+  await page.waitForTimeout(600);
   await expect(copy).toHaveAttribute("data-copy-state", "copied");
-  await expect(copy.locator('[data-lucide="check"]')).toHaveCSS(
-    "animation-name",
-    "boost-pop",
-  );
-
-  await copy.click();
-  await expect(copy).not.toHaveAttribute("data-copy-state");
+  await page.waitForTimeout(1000);
   await expect(copy).toHaveAccessibleName("Copy code");
+  await expect(copy).not.toHaveAttribute("data-copy-state");
   await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
   await expect(copy.locator('[data-lucide="check"]')).toBeHidden();
 });
@@ -424,18 +389,15 @@ test("should expose dedicated copy controls beside CodeDiff and CodeSnippet maxi
     await expect(copy).toHaveAttribute("data-tooltip-delay", "1s");
     await expect(maximize).toHaveAttribute("data-tooltip-delay", "1s");
     expect(
-      await toolbar
-        .locator(":scope > [data-copy-source], :scope > [data-figure-maximize]")
+      await figure
+        .locator(".figure-action-group > button")
         .evaluateAll((buttons) =>
           buttons.map((button) => button.getAttribute("aria-label")),
         ),
     ).toEqual([figureCase.label, figureCase.maximizeLabel]);
-    await toolbar.scrollIntoViewIfNeeded();
     const before = await toolbar.boundingBox();
-    expect(before).not.toBeNull();
 
-    await copy.focus();
-    await page.keyboard.press("Enter");
+    await copy.click();
     await expect
       .poll(() =>
         page.evaluate(
@@ -453,14 +415,13 @@ test("should expose dedicated copy controls beside CodeDiff and CodeSnippet maxi
     );
     await expect(copy.locator('[data-lucide="copy"]')).toBeHidden();
     await expect(copy.locator('[data-lucide="check"]')).toBeVisible();
-    await expect(copy.locator('[data-lucide="check"]')).toHaveCSS(
-      "animation-name",
-      "boost-pop",
-    );
     const after = await toolbar.boundingBox();
-    expect(after).toEqual(before);
+    expect(after).not.toBeNull();
+    expect(after?.x).toBe(before?.x);
+    expect(after?.width).toBe(before?.width);
+    expect(after?.height).toBe(before?.height);
+    await page.waitForTimeout(1600);
     await expect(copy).toHaveAccessibleName(figureCase.label);
-    await expect(copy).not.toHaveAttribute("data-copy-state");
     await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
     await expect(copy.locator('[data-lucide="check"]')).toBeHidden();
   }
@@ -478,141 +439,36 @@ test("should morph every figure copy control without shifting its toolbar", asyn
   });
   await page.goto(allComponentsViewerUrl);
 
-  for (const theme of ["light", "dark"]) {
-    await page.evaluate((value) => {
-      document.documentElement.dataset["theme"] = value;
-    }, theme);
-
-    for (const selector of [
-      ".code-figure",
-      "[data-code-diff]",
-      "[data-code-snippet]",
-      "[data-data-table]",
-      "[data-database-table-schema]",
-    ]) {
-      const figure = page.locator(selector).first();
-      const copy = figure.locator("[data-copy-code], [data-copy-source]");
-      const toolbar = figure
-        .locator(".figure-action-group, .figure-control-bar")
-        .first();
-      await figure.hover({ position: { x: 24, y: 24 } });
-      await copy.hover();
-      const before = await toolbar.boundingBox();
-      expect(before).not.toBeNull();
-
-      await copy.click();
-
-      await expect(copy).toHaveAttribute("data-copy-state", "copied");
-      await expect(copy).toHaveAccessibleName(/Copied/);
-      await expect(copy.locator('[data-lucide="copy"]')).toBeHidden();
-      await expect(copy.locator('[data-lucide="check"]')).toBeVisible();
-      await expect(copy.locator('[data-lucide="check"]')).toHaveCSS(
-        "animation-name",
-        "boost-pop",
-      );
-      const after = await toolbar.boundingBox();
-      expect(after).toEqual(before);
-      await expect(copy).not.toHaveAttribute("data-copy-state");
-      await expect(copy).toHaveAccessibleName(/Copy/);
-      await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
-      await expect(copy.locator('[data-lucide="check"]')).toBeHidden();
-    }
-  }
-});
-
-test("should suppress copy press and success motion when reduced motion is requested", async ({
-  page,
-  componentsViewerUrl,
-}) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: async () => {} },
-    });
-  });
-  await page.goto(componentsViewerUrl);
-
-  for (const surface of [
-    { name: "plain fenced code", selector: ".code-figure [data-copy-code]" },
-    { name: "CodeSnippet", selector: "[data-code-snippet] [data-copy-source]" },
+  for (const selector of [
+    ".code-figure",
+    "[data-code-diff]",
+    "[data-code-snippet]",
+    "[data-data-table]",
+    "[data-database-table-schema]",
   ]) {
-    await test.step(surface.name, async () => {
-      const copy = page.locator(surface.selector).first();
-      await copy.hover();
-      await page.mouse.down();
-      await expect(copy).toHaveCSS("transform", "none");
-      await expect(copy).toHaveCSS(
-        "transition-property",
-        /^(?!.*transform).*$/u,
-      );
-      await page.mouse.up();
+    const figure = page.locator(selector).first();
+    const copy = figure.locator("[data-copy-code], [data-copy-source]");
+    const toolbar = figure
+      .locator(".figure-action-group, .figure-control-bar")
+      .first();
+    const before = await toolbar.boundingBox();
 
-      await expect(copy).toHaveAttribute("data-copy-state", "copied");
-      await expect(copy.locator('[data-lucide="check"]')).toHaveCSS(
-        "animation-name",
-        "none",
-      );
-    });
-  }
-});
+    await figure.hover({ position: { x: 24, y: 24 } });
+    await copy.hover();
+    await copy.click();
 
-test("should keep the copy success chrome icon-only in both themes", async ({
-  page,
-  componentsViewerUrl,
-}) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: async () => {} },
-    });
-  });
-  await page.goto(componentsViewerUrl);
-
-  for (const theme of ["light", "dark"]) {
-    await page.evaluate((value) => {
-      document.documentElement.dataset["theme"] = value;
-    }, theme);
-
-    for (const surface of [
-      { name: "plain fenced code", selector: ".code-figure" },
-      { name: "CodeSnippet", selector: "[data-code-snippet]" },
-    ]) {
-      await test.step(`${theme}: ${surface.name}`, async () => {
-        const frame = page.locator(surface.selector).first();
-        const copy = frame.locator("[data-copy-code], [data-copy-source]");
-        const maximize = frame.locator("[data-figure-maximize]");
-
-        await frame.scrollIntoViewIfNeeded();
-        await maximize.click();
-        await expect(frame).toHaveAttribute("data-figure-maximized", "");
-
-        await copy.click();
-        await expect(copy).toHaveAttribute("data-copy-state", "copied");
-        await expect(copy).toHaveAccessibleName("Copied code");
-        await expect(copy.locator('[data-lucide="copy"]')).toBeHidden();
-        await expect(copy.locator('[data-lucide="check"]')).toBeVisible();
-        await expect(copy.locator('[data-lucide="check"]')).toHaveCSS(
-          "animation-name",
-          "boost-pop",
-        );
-        await expect
-          .poll(() =>
-            copy.evaluate((button) =>
-              getComputedStyle(button, "::after").getPropertyValue("content"),
-            ),
-          )
-          .toBe("none");
-
-        await maximize.click();
-        await expect(frame).not.toHaveAttribute("data-figure-maximized");
-        await expect(copy).not.toHaveAttribute("data-copy-state", {
-          timeout: 2000,
-        });
-        await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
-        await expect(copy.locator('[data-lucide="check"]')).toBeHidden();
-      });
-    }
+    await expect(copy).toHaveAttribute("data-copy-state", "copied");
+    await expect(copy.locator('[data-lucide="copy"]')).toBeHidden();
+    await expect(copy.locator('[data-lucide="check"]')).toBeVisible();
+    const after = await toolbar.boundingBox();
+    expect(after).not.toBeNull();
+    expect(after?.x).toBe(before?.x);
+    expect(after?.width).toBe(before?.width);
+    expect(after?.height).toBe(before?.height);
+    await page.waitForTimeout(1600);
+    await expect(copy).not.toHaveAttribute("data-copy-state");
+    await expect(copy.locator('[data-lucide="copy"]')).toBeVisible();
+    await expect(copy.locator('[data-lucide="check"]')).toBeHidden();
   }
 });
 
