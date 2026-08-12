@@ -1,0 +1,21 @@
+{
+  "title": "Causal Diff Gallery",
+  "sections": [
+    {
+      "id": "what-this-experience-does",
+      "name": "What this experience does",
+      "title": "What this experience does"
+    },
+    {
+      "id": "delivery-contract",
+      "name": "Delivery contract",
+      "title": "Delivery contract"
+    },
+    {
+      "id": "rollout",
+      "name": "Rollout",
+      "title": "Rollout"
+    }
+  ],
+  "components": []
+}
