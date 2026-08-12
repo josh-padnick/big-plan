@@ -2854,10 +2854,22 @@ const SentThread = ({
                           className={
                             requestOutcome.state === "needs-input" ||
                             requestOutcome.state === "warning"
-                              ? "mt-2 bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
+                              ? "mt-2 gap-1 bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
                               : "mt-2"
                           }
                         >
+                          {/* The hazard glyph belongs with the word it
+                              qualifies, not beside the action further down;
+                              proximity is what makes the pair read as one
+                              label. */}
+                          {requestOutcome.state === "warning" ? (
+                            <span
+                              className="inline-flex [&>svg]:size-3.5"
+                              aria-hidden="true"
+                            >
+                              <Icon icon={TRIANGLE_ALERT_ICON} />
+                            </span>
+                          ) : null}
                           {requestOutcome.state === "answered"
                             ? "Answered"
                             : requestOutcome.state === "changed"
@@ -2870,12 +2882,6 @@ const SentThread = ({
                         </Badge>
                         {requestOutcome.state === "warning" ? (
                           <div className="mt-2 flex items-center gap-2 border-t border-[color-mix(in_srgb,var(--callout-warning-c)_24%,transparent)] pt-2">
-                            <span
-                              className="inline-flex text-[var(--callout-warning-c)] [&>svg]:size-4"
-                              aria-hidden="true"
-                            >
-                              <Icon icon={TRIANGLE_ALERT_ICON} />
-                            </span>
                             <Button
                               variant="accentOutline"
                               size="micro"
