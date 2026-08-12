@@ -1074,25 +1074,72 @@ const installColumnPointerReorder = ({
 (() => {
   const roots = Array.from(document.querySelectorAll("[data-wireframe]"));
   const fit = (screen) => {
-    const card = screen.querySelector(":scope > .wireframe-frame-card");
+    const card = screen.querySelector(
+      ":scope > .wireframe-frame-card",
+    );
     const frame = card === null ? null : card.querySelector(":scope > .wireframe-frame");
-    if (card === null || frame === null || screen.clientWidth === 0) return;
+    const caption = screen.querySelector(":scope > .wireframe-screen-caption");
+    if (
+      card === null ||
+      frame === null ||
+      screen.clientWidth === 0
+    )
+      return;
     // offsetWidth stays in the frame's unscaled coordinate space. Writing a
     // numeric zoom avoids relying on unsupported length division in CSS.
     frame.style.zoom = "1";
+    const availableHeight = screen.clientHeight;
     // The card's padding and border sit outside the frame, so the space
     // available to the frame is the screen's width minus that inset - read
     // from computed style rather than a duplicated constant, so the two
     // never drift out of sync.
     const cardStyle = getComputedStyle(card);
-    const inset =
+    const horizontalInset =
       parseFloat(cardStyle.paddingLeft) +
       parseFloat(cardStyle.paddingRight) +
       parseFloat(cardStyle.borderLeftWidth) +
       parseFloat(cardStyle.borderRightWidth);
-    frame.style.zoom = String(
-      Math.min(1, (screen.clientWidth - inset) / frame.offsetWidth),
-    );
+    const verticalInset =
+      parseFloat(cardStyle.paddingTop) +
+      parseFloat(cardStyle.paddingBottom) +
+      parseFloat(cardStyle.borderTopWidth) +
+      parseFloat(cardStyle.borderBottomWidth);
+    const frameWidth = frame.offsetWidth;
+    const frameHeight = frame.offsetHeight;
+    const widthScale =
+      (screen.clientWidth - horizontalInset) / frameWidth;
+    let scale = Math.min(1, widthScale);
+    for (let fitPass = 0; fitPass < 8; fitPass += 1) {
+      frame.style.zoom = String(scale);
+      const paintedWidth = String(frameWidth * scale + horizontalInset) + "px";
+      card.style.width = paintedWidth;
+      if (caption instanceof HTMLElement) caption.style.width = paintedWidth;
+      let captionHeight = 0;
+      if (caption instanceof HTMLElement) {
+        const captionStyle = getComputedStyle(caption);
+        captionHeight =
+          caption.getBoundingClientRect().height +
+          parseFloat(captionStyle.marginTop) +
+          parseFloat(captionStyle.marginBottom);
+      }
+      // Only a maximized figure has a bounded panel that must keep the full
+      // device and its caption visible. At rest the document owns vertical
+      // scrolling; leaving this axis at true size preserves measured phone
+      // and tablet controls while width still fits the review column.
+      const heightScale = screen.closest("[data-figure-maximized]")
+        ? (availableHeight - captionHeight - verticalInset) / frameHeight
+        : 1;
+      const nextScale = Math.min(1, widthScale, heightScale);
+      if (Math.abs(nextScale - scale) < 0.0001) {
+        scale = nextScale;
+        break;
+      }
+      scale = nextScale;
+    }
+    frame.style.zoom = String(scale);
+    const paintedWidth = String(frameWidth * scale + horizontalInset) + "px";
+    card.style.width = paintedWidth;
+    if (caption instanceof HTMLElement) caption.style.width = paintedWidth;
   };
   for (const root of roots) {
     const screens = Array.from(

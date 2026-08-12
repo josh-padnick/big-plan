@@ -177,9 +177,10 @@ export const WIREFRAME_PATTERNS: ReadonlyArray<WireframePattern> = [
  * One device preset's logical frame and reader-facing name.
  *
  * The artboard lays out at this true size and scales as one unit to fit the
- * review surface. Desktop and phone use a minimum height and grow with
- * content. Tablet holds an iPad-shaped viewport; overflow stays inside the
- * device instead of stretching its bezel.
+ * review surface. Desktop and phone normally use a minimum height and grow
+ * with content; a desktop workspace instead holds the 1200 × 820 silhouette.
+ * Tablet holds an iPad-shaped viewport; overflow stays inside the device
+ * instead of stretching its bezel.
  */
 export type WireframeDevicePreset = {
   readonly label: string;

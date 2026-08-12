@@ -669,46 +669,29 @@ const WireframeElements = ({
 const Screen = ({
   screen,
   current,
-  named,
 }: {
   readonly screen: WireframeScreen;
   readonly current: boolean;
-  // Whether the screen's name is worth drawing. With one screen there is no
-  // switcher for it to name and the prose above already said what this is, so
-  // printing it again only competes with that.
-  readonly named: boolean;
 }) => {
   const preset = WIREFRAME_DEVICE_PRESETS[screen.device];
   const desktop = screen.device === "desktop";
   const phone = screen.device === "phone";
   const workspaceViewport =
-    desktop && screen.children.some((child) => child.element === "AppShell");
+    desktop &&
+    screen.children.some(
+      (child) =>
+        child.element === "AppShell" ||
+        (child.element === "Row" && isWorkspaceRow(child.children)),
+    );
   return (
-    <section
+    <figure
       className="wireframe-screen mx-auto w-full overflow-x-auto [container-type:inline-size]"
       aria-label={`${screen.name}, ${preset.label}`}
       data-wireframe-screen={screen.id}
       data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
-      <div className="wireframe-screen-caption mb-1.5 flex flex-wrap justify-between gap-2 text-xs text-muted">
-        {named ? (
-          <span className="wireframe-screen-name font-semibold tracking-caps">
-            {screen.name}
-          </span>
-        ) : (
-          <span />
-        )}
-        <span className="wireframe-screen-viewport">
-          {preset.label} · {preset.width} × {preset.height}px{" "}
-          {workspaceViewport
-            ? "workspace viewport"
-            : preset.heightPolicy === "fixed"
-              ? "fixed frame"
-              : "minimum · grows with content"}
-        </span>
-      </div>
-      <div className="wireframe-frame-card">
+      <div className="wireframe-frame-card mx-auto w-fit">
         <div
           className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
           data-wireframe-device={screen.device}
@@ -741,7 +724,20 @@ const Screen = ({
           </div>
         </div>
       </div>
-    </section>
+      <figcaption className="wireframe-screen-caption mx-auto mt-3 w-full min-w-0 font-sans text-sm leading-[1.45] tracking-normal text-ink">
+        <span className="wireframe-screen-name block min-w-0 break-words">
+          {screen.name}
+        </span>
+        <span className="wireframe-screen-viewport mt-1 block min-w-0 break-words text-xs leading-normal text-muted">
+          {preset.label} · {preset.width} × {preset.height}px{" "}
+          {workspaceViewport
+            ? "workspace viewport"
+            : preset.heightPolicy === "fixed"
+              ? "fixed frame"
+              : "minimum · grows with content"}
+        </span>
+      </figcaption>
+    </figure>
   );
 };
 
@@ -789,7 +785,6 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
             key={screen.id}
             screen={screen}
             current={screen.id === model.initialScreenId}
-            named={model.screens.length > 1}
           />
         ))}
       </div>

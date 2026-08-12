@@ -81,14 +81,28 @@ test("should review a static Mermaid SVG through the diagram canvas", async ({
   expect(removedPoints).toMatch(/^2\.55,0 /u);
   expect(removedPoints).toContain("0,2.55");
   await expect(removedMarker).toBeVisible();
-  const sourceBox = await source.boundingBox();
-  const removedBox = await removedMarker.boundingBox();
-  expect(removedBox?.width).toBeCloseTo((sourceBox?.width ?? 0) * 0.46, 0);
-  expect(removedBox?.height).toBeCloseTo((sourceBox?.height ?? 0) * 0.46, 0);
-  const markerAt100 = await removedMarker.boundingBox();
+  let markerWidthAt100 = 0;
+  await expect
+    .poll(async () => {
+      const [sourceBox, removedBox] = await Promise.all([
+        source.boundingBox(),
+        removedMarker.boundingBox(),
+      ]);
+      if (!sourceBox || !removedBox) return null;
+      markerWidthAt100 = removedBox.width;
+      return {
+        heightDelta: removedBox.height - sourceBox.height * 0.46,
+        widthDelta: removedBox.width - sourceBox.width * 0.46,
+      };
+    })
+    .toEqual({
+      heightDelta: expect.closeTo(0, 0),
+      widthDelta: expect.closeTo(0, 0),
+    });
   await diagram.getByRole("button", { name: "Zoom in" }).click();
-  const markerAt125 = await removedMarker.boundingBox();
-  expect(markerAt125?.width).toBeGreaterThan(markerAt100?.width ?? 0);
+  await expect
+    .poll(async () => (await removedMarker.boundingBox())?.width ?? 0)
+    .toBeGreaterThan(markerWidthAt100);
   await expect(source).toHaveAccessibleName("Source, proposed for removal");
   const sourceAnchor = await source.getAttribute("data-flow-anchor");
   await page.evaluate(() => {
