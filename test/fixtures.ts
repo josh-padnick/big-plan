@@ -39,6 +39,13 @@ const renderThroughCli = async ({
   );
 };
 
+// A test that writes durable review state cannot share the worker-scoped
+// runtime: one `.big-plan/` store is reused for every test in the worker, so
+// seeded drafts and sent comments would reach whichever test runs next.
+type TestFixtures = {
+  readonly isolatedReviewRuntimeUrl: string;
+};
+
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly codeSnippetSyntaxMaximizeViewerUrl: string;
@@ -285,7 +292,21 @@ The table has adjacent targets that must remain distinguishable.
 Sending writes one real feedback package beside this plan.
 `;
 
-export const test = base.extend<NonNullable<unknown>, WorkerFixtures>({
+export const test = base.extend<TestFixtures, WorkerFixtures>({
+  isolatedReviewRuntimeUrl: async ({}, use) => {
+    const outputDir = await mkdtemp(
+      join(tmpdir(), "big-plan-isolated-review-runtime-"),
+    );
+    const inputPath = join(outputDir, "plan.mdx");
+    await writeFile(inputPath, REVIEW_RUNTIME_MDX, "utf8");
+    const runtime = await startReviewRuntime({ planPath: inputPath });
+    try {
+      await use(runtime.url);
+    } finally {
+      await runtime.close();
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  },
   reviewRuntimeUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(

@@ -26,14 +26,14 @@ import { expect, stageComment, test } from "./fixtures";
 
 test("should preserve durable review state when draft hydration fails", async ({
   page,
-  reviewRuntimeUrl,
+  isolatedReviewRuntimeUrl,
 }) => {
   const initialPersistence = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/drafts") &&
       response.request().method() === "PUT",
   );
-  await page.goto(reviewRuntimeUrl);
+  await page.goto(isolatedReviewRuntimeUrl);
   await initialPersistence;
   const durableState = {
     drafts: [
@@ -95,14 +95,14 @@ test("should preserve durable review state when draft hydration fails", async ({
 
 test("should merge a staged comment when hydration finishes late", async ({
   page,
-  reviewRuntimeUrl,
+  isolatedReviewRuntimeUrl,
 }) => {
   const initialPersistence = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/drafts") &&
       response.request().method() === "PUT",
   );
-  await page.goto(reviewRuntimeUrl);
+  await page.goto(isolatedReviewRuntimeUrl);
   await initialPersistence;
   await page.evaluate(async () => {
     const root = document.documentElement;
@@ -163,14 +163,14 @@ test("should merge a staged comment when hydration finishes late", async ({
 
 test("should keep a submitted comment when hydration finishes late", async ({
   page,
-  reviewRuntimeUrl,
+  isolatedReviewRuntimeUrl,
 }) => {
   const initialPersistence = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/drafts") &&
       response.request().method() === "PUT",
   );
-  await page.goto(reviewRuntimeUrl);
+  await page.goto(isolatedReviewRuntimeUrl);
   await initialPersistence;
 
   let releaseHydration = (): void => undefined;
@@ -223,14 +223,14 @@ test("should keep a submitted comment when hydration finishes late", async ({
 
 test("should persist edits after transient hydration failure", async ({
   page,
-  reviewRuntimeUrl,
+  isolatedReviewRuntimeUrl,
 }) => {
   const initialPersistence = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/drafts") &&
       response.request().method() === "PUT",
   );
-  await page.goto(reviewRuntimeUrl);
+  await page.goto(isolatedReviewRuntimeUrl);
   await initialPersistence;
 
   let draftReads = 0;
@@ -296,14 +296,14 @@ test("should persist edits after transient hydration failure", async ({
 
 test("should persist edits after the hydration retry ramp", async ({
   page,
-  reviewRuntimeUrl,
+  isolatedReviewRuntimeUrl,
 }) => {
   const initialPersistence = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/drafts") &&
       response.request().method() === "PUT",
   );
-  await page.goto(reviewRuntimeUrl);
+  await page.goto(isolatedReviewRuntimeUrl);
   await initialPersistence;
 
   let draftReads = 0;
@@ -360,14 +360,14 @@ test("should persist edits after the hydration retry ramp", async ({
 
 test("should round-trip the active plan-wide draft through hydration", async ({
   page,
-  reviewRuntimeUrl,
+  isolatedReviewRuntimeUrl,
 }) => {
   const initialPersistence = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/drafts") &&
       response.request().method() === "PUT",
   );
-  await page.goto(reviewRuntimeUrl);
+  await page.goto(isolatedReviewRuntimeUrl);
   await initialPersistence;
   const activeDraft = "Keep this unfinished plan-wide question.";
   await page.evaluate(async (body) => {
