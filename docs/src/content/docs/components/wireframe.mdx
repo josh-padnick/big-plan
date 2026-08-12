@@ -102,7 +102,8 @@ All screen copy lives in attributes; loose prose inside `Wireframe`, `Screen`, o
 Its optional `title` labels the figure, and `initialScreen` names which child opens first; without it, the first authored screen opens first.
 
 Every `Screen` requires a unique `id`, a non-empty `name`, and one `device`.
-Its caption presents the screen name on the first line, followed by muted device and viewport metadata as a subordinate second line.
+Each screen renders as a semantic `<figure>` with a direct-child `<figcaption>` beneath the frame.
+The caption presents the screen name on the first line, followed by muted device and viewport metadata as a subordinate second line.
 Both lines stay aligned to the frame at rest and while maximized, wrap naturally within its width, and remain present even when the wireframe contains only one screen.
 
 | `device`          | Logical size                      | Frame                 |
