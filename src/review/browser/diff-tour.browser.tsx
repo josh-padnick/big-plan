@@ -447,6 +447,10 @@ const ComponentSnapshotComparison = ({
   const html = side === "old" ? location.oldHtml : location.newHtml;
   return (
     <div className="grid min-w-0 gap-2" data-review-component-diff="">
+      {/* A component snapshot is a diff, not a pair of ordinary tabs, so the
+          selected side and the panel it opens carry the same removed/added
+          colours the word-level lens uses. The border repeats the colour at
+          the edge of the content, where the reader is actually looking. */}
       <div
         className="flex w-fit items-center rounded-md border border-edge bg-surface p-0.5"
         role="group"
@@ -455,7 +459,7 @@ const ComponentSnapshotComparison = ({
         {location.oldHtml === undefined ? null : (
           <button
             type="button"
-            className="cursor-pointer rounded-sm px-2 py-1 text-2xs font-semibold text-muted aria-pressed:bg-paper aria-pressed:text-ink aria-pressed:shadow-raised"
+            className="cursor-pointer rounded-sm px-2 py-1 text-2xs font-semibold text-muted aria-pressed:bg-[var(--diff-remove-bg)] aria-pressed:text-[var(--diff-remove-c)] aria-pressed:shadow-raised"
             aria-pressed={side === "old"}
             onClick={() => setSide("old")}
           >
@@ -465,7 +469,7 @@ const ComponentSnapshotComparison = ({
         {location.newHtml === undefined ? null : (
           <button
             type="button"
-            className="cursor-pointer rounded-sm px-2 py-1 text-2xs font-semibold text-muted aria-pressed:bg-paper aria-pressed:text-ink aria-pressed:shadow-raised"
+            className="cursor-pointer rounded-sm px-2 py-1 text-2xs font-semibold text-muted aria-pressed:bg-[var(--diff-add-bg)] aria-pressed:text-[var(--diff-add-c)] aria-pressed:shadow-raised"
             aria-pressed={side === "new"}
             onClick={() => setSide("new")}
           >
@@ -474,7 +478,11 @@ const ComponentSnapshotComparison = ({
         )}
       </div>
       <div
-        className="min-w-0 overflow-hidden rounded-lg bg-surface p-3 text-ink inset-shadow-well"
+        className={`min-w-0 overflow-hidden rounded-lg border-2 bg-surface p-3 text-ink inset-shadow-well ${
+          side === "old"
+            ? "border-[var(--diff-remove-c)]"
+            : "border-[var(--diff-add-c)]"
+        }`}
         data-review-component-snapshot={side}
       >
         <div
@@ -862,7 +870,11 @@ export const DiffTourProvider = ({
             isSuperseded={tour.isSuperseded === true}
           />
           <div
-            className="fixed right-4 bottom-4 left-4 z-40 mx-auto grid w-auto min-w-0 overflow-hidden rounded-xl border border-edge-strong bg-raised text-xs text-ink shadow-floating wide:w-fit wide:min-w-sm"
+            // The bar floats clear of the viewport edge rather than hugging
+            // it, and holds a wide enough measure that the change it is
+            // reviewing and the thread that caused it read as two separate
+            // ends of the same row.
+            className="fixed right-4 bottom-11 left-4 z-40 mx-auto grid w-auto min-w-0 overflow-hidden rounded-xl border border-edge-strong bg-raised text-xs text-ink shadow-floating wide:w-fit wide:min-w-lg"
             data-review-diff-stepper=""
           >
             <div className="flex min-w-0 items-center gap-2 border-b border-accent bg-[color-mix(in_srgb,var(--accent-c)_10%,var(--raised))] px-3 py-2">
@@ -870,11 +882,18 @@ export const DiffTourProvider = ({
                 <Icon icon={CHECK_ICON} />
                 Reviewing change set
               </span>
-              {!showCompletionSummary ? (
+              {/* Progress through the set and the fact that the set is
+                  finished are the same piece of information, so they share one
+                  slot beside the title instead of sitting at opposite ends. */}
+              {showCompletionSummary ? (
+                <Badge tone="statusAccent" size="status">
+                  All changes accepted ({places.length} of {places.length})
+                </Badge>
+              ) : (
                 <Badge tone="statusNeutral" size="status">
                   {index + 1} of {places.length}
                 </Badge>
-              ) : null}
+              )}
               {!showCompletionSummary && places.length > 1 ? (
                 <div
                   className="flex shrink-0 items-center gap-1"
@@ -911,8 +930,8 @@ export const DiffTourProvider = ({
               <span className="min-w-0 flex-1" />
               <Button
                 variant="ghost"
-                size="micro"
-                className="min-w-0 max-w-52 justify-start"
+                size="compact"
+                className="min-w-0 max-w-64 justify-start [&>svg]:size-4"
                 aria-label={`Open comment thread: ${tour.threadLabel ?? "Plan-wide chat"}`}
                 onClick={tour.onOpenThread}
               >
@@ -921,11 +940,6 @@ export const DiffTourProvider = ({
                   {tour.threadLabel ?? "Plan-wide chat"}
                 </span>
               </Button>
-              {!showCompletionSummary ? null : (
-                <Badge tone="statusAccent" size="status">
-                  All changes accepted ({places.length} of {places.length})
-                </Badge>
-              )}
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-2 px-3 py-2">
               {showCompletionSummary ? (

@@ -1352,6 +1352,31 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(page.locator("[data-review-diff-stepper]")).toContainText(
       `1 of ${planWideChangeCount}`,
     );
+    // The stepper floats clear of the viewport edge, and the thread that
+    // caused the change sits at the far end of the row from the change count.
+    const stepperLayout = await page
+      .locator("[data-review-diff-stepper]")
+      .evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        const count = node.querySelector("span");
+        const thread = node.querySelector<HTMLElement>(
+          'button[aria-label^="Open comment thread:"]',
+        );
+        if (count === null || thread === null) {
+          throw new Error("The stepper must show a count and a thread link");
+        }
+        return {
+          bottomGap: Math.round(
+            document.documentElement.clientHeight - rect.bottom,
+          ),
+          gapToThread: Math.round(
+            thread.getBoundingClientRect().left -
+              count.getBoundingClientRect().right,
+          ),
+        };
+      });
+    expect(stepperLayout.bottomGap).toBe(44);
+    expect(stepperLayout.gapToThread).toBeGreaterThan(80);
     await expect(
       page.getByRole("button", {
         name: "Undo acceptance for this change",
@@ -1474,6 +1499,75 @@ test("should keep component replacements inside their slide and preserve Callout
     await page.screenshot({
       path: testInfo.outputPath("callout-diff-in-slide.png"),
     });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should colour a component snapshot switch as a diff", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-component-diff-"));
+  const planPath = join(directory, "decision.mdx");
+  const after = await readFile(
+    new URL("../examples/decision.mdx", import.meta.url),
+    "utf8",
+  );
+  const before = after.replace(
+    "The repository copy remains canonical either way.",
+    "The repository copy stays canonical no matter which channel wins.",
+  );
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const componentDiff = page.locator("[data-review-component-diff]");
+    await expect(componentDiff).toHaveCount(1);
+    const snapshot = componentDiff.locator("[data-review-component-snapshot]");
+    const now = componentDiff.getByRole("button", { name: "Now" });
+    const was = componentDiff.getByRole("button", { name: "Was" });
+
+    await expect(snapshot).toHaveAttribute(
+      "data-review-component-snapshot",
+      "new",
+    );
+    const added = await now.evaluate((node) => ({
+      background: getComputedStyle(node).backgroundColor,
+      color: getComputedStyle(node).color,
+    }));
+    await expect(snapshot).toHaveCSS("border-top-color", added.color);
+
+    await was.click();
+    await expect(snapshot).toHaveAttribute(
+      "data-review-component-snapshot",
+      "old",
+    );
+    const removed = await was.evaluate((node) => ({
+      background: getComputedStyle(node).backgroundColor,
+      color: getComputedStyle(node).color,
+    }));
+    await expect(snapshot).toHaveCSS("border-top-color", removed.color);
+
+    // The two sides must not merely differ from the resting chrome; they must
+    // differ from each other, which is what makes the switch read as a diff.
+    expect(removed.color).not.toBe(added.color);
+    expect(removed.background).not.toBe(added.background);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
