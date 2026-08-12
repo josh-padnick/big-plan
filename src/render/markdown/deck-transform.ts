@@ -30,7 +30,11 @@ import {
   OUTLINE_SLIDE_TOC_ATTRIBUTE,
   OUTLINE_SLIDE_TYPE_ATTRIBUTE,
 } from "./component-pipeline/outline-placeholder.js";
-import { appendCollapseBody, createCollapsible } from "./deck-collapse.js";
+import {
+  appendCollapseBody,
+  COLLAPSE_NAME_ATTRIBUTE,
+  createCollapsible,
+} from "./deck-collapse.js";
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
   node.type === "element";
@@ -367,6 +371,8 @@ const buildSubSlides = ({
     const subLabel = `${label}.${subIndex}`;
     const subId =
       typeof h3.properties.id === "string" ? h3.properties.id : subLabel;
+    // The kicker is a sub-slide's whole name, so it carries the name marker
+    // that a slide puts on its separate title (deck-collapse invariant 4).
     const subKicker: Element = {
       type: "element",
       tagName: "h3",
@@ -375,6 +381,7 @@ const buildSubSlides = ({
           ? { id: h3.properties.id }
           : {}),
         "data-slide-kicker": "",
+        [COLLAPSE_NAME_ATTRIBUTE]: "",
         className: [...SUBSLIDE_KICKER_CLASSES],
       },
       children: [{ type: "text", value: `${subLabel} / ${textOf(h3)}` }],
@@ -526,6 +533,9 @@ const wrapSlides = (
       ...existingHeadingClasses,
       ...SLIDE_TITLE_CLASSES,
     ];
+    // The h2 is the slide's name at both slide shapes below, so marking it
+    // here covers a plain slide and a slide split into sub-slides.
+    child.properties[COLLAPSE_NAME_ATTRIBUTE] = "";
     const kicker: Element = {
       type: "element",
       tagName: "p",

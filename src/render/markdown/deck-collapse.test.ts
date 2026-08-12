@@ -14,6 +14,7 @@ import type { Element, ElementContent, Root, RootContent } from "hast";
 import {
   COLLAPSE_BODY_ATTRIBUTE,
   COLLAPSE_HEADER_ATTRIBUTE,
+  COLLAPSE_NAME_ATTRIBUTE,
   COLLAPSE_TOGGLE_ATTRIBUTE,
   COLLAPSIBLE_ATTRIBUTE,
 } from "./deck-collapse.js";
@@ -122,6 +123,27 @@ describe("collapse structure contract", () => {
           has(element, COLLAPSIBLE_ATTRIBUTE),
         ),
       ).toHaveLength(0);
+    }
+  });
+
+  it("should mark exactly one name in every slide and sub-slide header", () => {
+    const tree = parse(NESTED_FIXTURE);
+    // Invariant 4. A sub-slide once lost this because its name is the kicker
+    // rather than a separate title, so a hit target keyed on the slide-level
+    // title class silently stopped matching it.
+    const named = collapsibles(tree).filter((block) => {
+      const kind = block.properties[COLLAPSIBLE_ATTRIBUTE];
+      return kind === "slide" || kind === "subslide";
+    });
+    expect(named.length).toBeGreaterThan(1);
+    for (const block of named) {
+      const header = headerOf(block);
+      expect(header).toBeDefined();
+      expect(
+        collect(header as Element, (element) =>
+          has(element, COLLAPSE_NAME_ATTRIBUTE),
+        ),
+      ).toHaveLength(1);
     }
   });
 

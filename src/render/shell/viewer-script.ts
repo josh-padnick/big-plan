@@ -1490,16 +1490,29 @@ const wireCollapse = () => {
       event.stopPropagation();
       toggle();
     });
-    // The title text is the only extra pointer target. Empty header space and
-    // the kicker remain reading chrome; the chevron stays the explicit
-    // keyboard and assistive-technology control.
+    // The region's name is the only extra pointer target, at every level that
+    // marks one (deck-collapse invariant 4). Empty header space and a slide's
+    // kicker remain reading chrome; the chevron stays the explicit keyboard
+    // and assistive-technology control, so the name adds no second tab stop.
     header.addEventListener("click", (event) => {
       if (
-        event.target.closest("a, button, input, textarea, select, summary, label")
+        event.target.closest(
+          "a, button, input, textarea, select, summary, label",
+        )
       )
         return;
-      const title = event.target.closest(".plan-slide-title");
-      if (title === null || !header.contains(title)) return;
+      const name = event.target.closest("[data-collapse-name]");
+      if (name === null || !header.contains(name)) return;
+      // A drag that selects text inside the name ends with a click on it. The
+      // reader asked for the words, not for the region to close under them.
+      const selection = window.getSelection();
+      if (
+        selection !== null &&
+        !selection.isCollapsed &&
+        selection.toString().trim() !== ""
+      ) {
+        return;
+      }
       event.preventDefault();
       toggle();
     });

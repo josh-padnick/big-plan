@@ -81,7 +81,12 @@ stability follow from the layout instead of from hand-tuned insets.
   article .plan-collapse-chrome > :last-child {
     margin-bottom: 0;
   }
-  article [data-collapsible] > [data-collapse-header] .plan-slide-title {
+  /* A region's name is a pointer target once the viewer script has wired the
+     header, and only then; deck-collapse.ts owns which element is the name. */
+  article
+    [data-collapsible]
+    > [data-collapse-header][data-shown]
+    [data-collapse-name] {
     cursor: pointer;
   }
 
