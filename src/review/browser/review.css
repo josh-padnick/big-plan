@@ -185,9 +185,15 @@ here; all values use the document theme's closed token vocabulary.
     text-underline-offset: 0.16em;
   }
 
+  /* The feedback rail is fixed to the viewport edge, so the reading layout
+     has to reserve that space itself. It reserves more than the rail's own
+     22rem because the slide comment affordance hangs 0.75rem past the card
+     and is 1.4rem wide: wide screens normally leave that gutter as centring
+     slack beside the reading column, and reserving only the rail width makes
+     the column absorb the slack and push the affordance under the rail. */
   @media (min-width: 80rem) {
     html[data-review-kernel-open] [data-reading-layout] {
-      margin-right: 22rem;
+      margin-right: 25rem;
       transition: margin-right 180ms ease;
     }
   }

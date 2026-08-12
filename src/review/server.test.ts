@@ -947,7 +947,10 @@ src/
     expect(fileTreeDiff?.newHtml).toContain("Coordinates plan review");
     expect(mermaid?.oldHtml).toContain(`review-diff-was-${from}`);
     expect(mermaid?.newHtml).toContain(`review-diff-now-${to}`);
-  });
+    // This case compiles both snapshots through every first-class component,
+    // including the Mermaid renderer, so it needs the same headroom the
+    // renderer's own suites take rather than the default per-test timeout.
+  }, 15000);
 
   it("should reject malformed snapshot names at the diff boundary", async () => {
     expect(

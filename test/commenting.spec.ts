@@ -1293,13 +1293,15 @@ test("should treat QuickSummary as one target without adding table scroll", asyn
     name: "Comment on quick summary",
   });
   await expect(quickSummaryComment).toBeVisible();
+  // The quick summary keeps the same upper-right comment gutter every other
+  // card uses: one closed spacing step outside its own right edge.
   await expect
     .poll(async () => {
       const summaryRect = await quickSummary.boundingBox();
       const buttonRect = await quickSummaryComment.boundingBox();
       return Math.round(
-        (summaryRect?.x ?? 0) -
-          ((buttonRect?.x ?? 0) + (buttonRect?.width ?? 0)),
+        (buttonRect?.x ?? 0) -
+          ((summaryRect?.x ?? 0) + (summaryRect?.width ?? 0)),
       );
     })
     .toBe(11);

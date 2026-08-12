@@ -1193,6 +1193,11 @@ const useThreadHosts = (
       const threadTopInset = 12;
       const threadWidth = 17 * 16;
       const diffThreadGap = 12;
+      // A slide thread keeps its base overlap onto the card's right edge so it
+      // still reads as attached to that card. It only needs the vertical
+      // clearance below to stay clear of the comment control that now shares
+      // that gutter; pushing it sideways as well would detach it from the card.
+      const slideThreadOverlap = -12;
       const slideCommentControlClearance = 44;
       const positionItems: Array<{
         readonly id: string;
@@ -1250,7 +1255,7 @@ const useThreadHosts = (
         anchorRects.set(comment.id, anchorRect);
         rightThreadOffsets.set(
           comment.id,
-          isSlideAnchor ? slideCommentControlClearance : diffThreadGap,
+          isSlideAnchor ? slideThreadOverlap : diffThreadGap,
         );
       }
       for (const { id, top } of stackThreadPositions({
@@ -4375,7 +4380,11 @@ export const ReviewController = () => {
             <Icon icon={MESSAGE_SQUARE_ICON} />
             <span
               role="tooltip"
-              className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] left-0 z-50 w-max max-w-48 rounded-md bg-[var(--ink-c)] px-2 py-1 text-2xs leading-normal text-[var(--bg)] opacity-0 shadow-raised delay-1000 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100 max-sm:right-0 max-sm:left-auto"
+              // The control sits in the reading column's right gutter, so the
+              // tooltip grows inward from the button's right edge. Growing
+              // rightwards would push the label past the page and give the
+              // whole document a horizontal scrollbar.
+              className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] right-0 z-50 w-max max-w-48 rounded-md bg-[var(--ink-c)] px-2 py-1 text-2xs leading-normal text-[var(--bg)] opacity-0 shadow-raised delay-1000 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
             >
               {label}
             </span>
