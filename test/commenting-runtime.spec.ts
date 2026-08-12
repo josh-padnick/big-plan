@@ -1129,6 +1129,9 @@ test("should preview stale, historical, and multi-place causal diffs through the
     const markdownTableComment = markdownTable.locator(".review-table-comment");
     await markdownTable.locator("th, td").first().hover();
     await expect(markdownTableComment).toBeVisible();
+    // The floating table comment stands alone, so it rests at the quieter
+    // comment-rest colour rather than the control-bar muted colour.
+    await expect(markdownTableComment).toHaveCSS("color", "rgb(164, 156, 139)");
     const tableCommentGeometry = await markdownTable.evaluate((table) => {
       const button = table.querySelector<HTMLElement>(".review-table-comment");
       if (button === null)
@@ -1522,6 +1525,110 @@ test("should keep component replacements inside their slide and preserve Callout
     );
     await page.screenshot({
       path: testInfo.outputPath("callout-diff-in-slide.png"),
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should replay each side's callout kind and list ordering from its own snapshot", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-presentation-diff-"),
+  );
+  const planPath = join(directory, "risks.mdx");
+  const after = `# Rollout stakes
+
+The rollout plan keeps its risk presentation honest across revisions.
+
+## Risks and rollback
+
+<Callout type="danger" title="Rollback risk">
+
+Data loss stays possible until the backfill completes and the verification pass signs off.
+
+</Callout>
+
+## Runbook
+
+The runbook now lives with the operations team.
+`;
+  // The before snapshot names the risk section differently, so no Was-side
+  // block of that section still exists in the live document, and its runbook
+  // section carries an ordered list the revision removes entirely. Sniffing
+  // the live document for either side's facts can only guess.
+  const before = `# Rollout stakes
+
+The rollout plan keeps its risk presentation honest across revisions.
+
+## Risks
+
+<Callout type="danger" title="Rollback risk">
+
+Data loss stays possible until the backfill completes.
+
+</Callout>
+
+## Runbook
+
+The runbook stays inline for the first rollout.
+
+1. Freeze writes to the legacy table.
+2. Run the backfill twice.
+`;
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    const stepper = page.locator("[data-review-diff-stepper]");
+    const total = Number.parseInt(
+      (await stepper.textContent())?.match(/of (\d+)/u)?.[1] ?? "1",
+      10,
+    );
+    const stepTo = async (text: string): Promise<void> => {
+      for (let index = 1; index < total; index += 1) {
+        if ((await lens.textContent())?.includes(text)) break;
+        await page.getByRole("button", { name: "Next change" }).click();
+      }
+      await expect(lens).toContainText(text);
+    };
+
+    await test.step("the changed danger callout is danger on both sides", async () => {
+      await stepTo("Rollback risk");
+      const callouts = lens.locator("[data-review-diff-callout]");
+      await expect(callouts).toHaveCount(2);
+      // The Was side must replay the recorded danger kind even though its
+      // block no longer exists in the live document; a "note" misstates risk.
+      await expect(callouts.nth(0)).toHaveAttribute("data-callout", "danger");
+      await expect(callouts.nth(1)).toHaveAttribute("data-callout", "danger");
+    });
+
+    await test.step("the removed runbook stays an ordered list", async () => {
+      await stepTo("Freeze writes");
+      const ordered = lens.locator("ol");
+      await expect(ordered).toHaveCount(1);
+      await expect(ordered.locator("li")).toHaveCount(2);
+    });
+    await page.screenshot({
+      path: testInfo.outputPath("per-side-presentation.png"),
     });
   } finally {
     await runtime.close();

@@ -8,6 +8,7 @@ import {
   diffSnapshots,
   diffWords,
   usesRenderedSnapshot,
+  type BlockPresentation,
 } from "./snapshot-diff.js";
 
 const block = ({
@@ -17,6 +18,7 @@ const block = ({
   label,
   isComponentRoot = false,
   ownerId,
+  presentation,
 }: {
   readonly id: string;
   readonly text: string;
@@ -24,6 +26,7 @@ const block = ({
   readonly label?: string;
   readonly isComponentRoot?: boolean;
   readonly ownerId?: string;
+  readonly presentation?: BlockPresentation;
 }) => ({
   id,
   kind,
@@ -32,6 +35,7 @@ const block = ({
   text,
   isComponentRoot,
   ...(ownerId === undefined ? {} : { ownerId }),
+  ...(presentation === undefined ? {} : { presentation }),
 });
 
 describe("snapshot word diff", () => {
@@ -124,6 +128,66 @@ describe("snapshot block alignment", () => {
     expect(locations[1]).toMatchObject({
       beforeBlockId: "section/approach/code-1",
     });
+  });
+
+  it("should carry each side's own presentation facts through a change, removal, and addition", () => {
+    const before = [
+      block({
+        id: "section/approach/callout-1",
+        kind: "callout",
+        text: "Rollback risk\nData loss stays possible until the backfill completes.",
+        label: "Rollback risk",
+        isComponentRoot: true,
+        presentation: { aspect: "callout", calloutType: "danger" },
+      }),
+      block({
+        id: "section/approach/list-1",
+        kind: "list",
+        text: "Freeze writes.\nBackfill twice.",
+        presentation: { aspect: "list", isOrdered: true },
+      }),
+    ];
+    const after = [
+      block({
+        id: "section/approach/callout-1",
+        kind: "callout",
+        text: "Rollback risk\nData loss stays possible until the backfill is verified.",
+        label: "Rollback risk",
+        isComponentRoot: true,
+        presentation: { aspect: "callout", calloutType: "warning" },
+      }),
+      block({
+        id: "section/approach/list-2",
+        kind: "list",
+        text: "Watch the error budget.\nPage the on-call.",
+        presentation: { aspect: "list", isOrdered: false },
+      }),
+    ];
+
+    const locations = diffSnapshots({ before, after });
+    expect(
+      locations.map((location) => ({
+        status: location.status,
+        oldPresentation: location.oldPresentation,
+        newPresentation: location.newPresentation,
+      })),
+    ).toEqual([
+      {
+        status: "changed",
+        oldPresentation: { aspect: "callout", calloutType: "danger" },
+        newPresentation: { aspect: "callout", calloutType: "warning" },
+      },
+      {
+        status: "removed",
+        oldPresentation: { aspect: "list", isOrdered: true },
+        newPresentation: undefined,
+      },
+      {
+        status: "added",
+        oldPresentation: undefined,
+        newPresentation: { aspect: "list", isOrdered: false },
+      },
+    ]);
   });
 
   it("should keep each revision pair independent when the same block changes twice", () => {

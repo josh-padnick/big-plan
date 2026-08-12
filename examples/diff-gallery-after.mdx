@@ -2,6 +2,41 @@
 
 Make every meaningful agent change reviewable at its original place and long after later edits.
 
+<QuickSummary>
+
+<Why>
+
+- Review comments and decisions must survive browser reloads without moving
+  plan authority away from the source file.
+
+</Why>
+
+<What>
+
+- Add a local review service, a durable event table, and one operator-facing
+  review queue.
+
+</What>
+
+<How>
+
+- Land persistence first, expose narrow service contracts, then enable the
+  review workspace behind a rollout flag.
+
+</How>
+
+</QuickSummary>
+
+<TableOfContents>
+<Entry section="What this experience does" gist="Explain the causal review promise" />
+<Entry section="Delivery contract" gist="Define snapshots, outcomes, and review locations" />
+<Entry section="Rollout" gist="Sequence the first release" />
+<Entry section="Review decisions" gist="Settle ownership, storage, and rollout boundaries" />
+<Entry section="System shape" gist="Show the service flow and planned file changes" />
+<Entry section="Service contracts" gist="Review code, data, table, HTTP, GraphQL, and gRPC contracts" />
+<Entry section="Desired experience" gist="Preview the queue used to resolve review threads" />
+</TableOfContents>
+
 ## What this experience does
 
 This is a causal diff review experience: it shows reviewers the exact Was and Now content beside each place an agent changed, and ties each change back to the feedback that caused it.
@@ -54,50 +89,14 @@ type SnapshotExchange = {
 };
 ```
 
-## Weighin' Anchor
+## Rollout
 
-The first release be throwin' open the whole experience to every local reviewer aboard.
+The first release enables the full experience for every local reviewer.
 
-1. Freeze the baseline when the agent lays claim to the request.
-2. Capture the premise when the feedback be written.
-3. Lash the result snapshot to the answer.
-4. Sail through the grouped changed places in the livin' document.
-
-<QuickSummary>
-
-<Why>
-
-- Review comments and decisions must survive browser reloads without moving
-  plan authority away from the source file.
-
-</Why>
-
-<What>
-
-- Add a local review service, a durable event table, and one operator-facing
-  review queue.
-
-</What>
-
-<How>
-
-- Land persistence first.
-- Expose narrow service contracts.
-- Enable the review workspace behind a rollout flag.
-
-</How>
-
-</QuickSummary>
-
-<TableOfContents>
-<Entry section="What this experience does" gist="Explain the causal review promise" />
-<Entry section="Delivery contract" gist="Define snapshots, outcomes, and review locations" />
-<Entry section="Weighin' Anchor" gist="Chart the order of the first voyage" />
-<Entry section="Review decisions" gist="Settle ownership, storage, and rollout boundaries" />
-<Entry section="System shape" gist="Show the service flow and planned file changes" />
-<Entry section="Service contracts" gist="Review code, data, table, HTTP, GraphQL, and gRPC contracts" />
-<Entry section="Desired experience" gist="Preview the queue used to resolve review threads" />
-</TableOfContents>
+1. Freeze the baseline when the agent claims the request.
+2. Capture the premise when feedback is authored.
+3. Attach the result snapshot to the answer.
+4. Tour grouped changed places in the live document.
 
 <Part title="Context and choices" />
 

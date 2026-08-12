@@ -17,3 +17,7 @@ bun.lock
 # (one sentence per line); Prettier only speaks legacy MDX v1 anyway.
 *.mdx
 .claude/
+
+# Review runtime stores are machine-written session state beside a plan,
+# not authored source; a live agent rewrites them mid-session.
+**/.big-plan/review/

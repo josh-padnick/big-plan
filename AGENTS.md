@@ -92,6 +92,18 @@ server-rendered plan content, which remains fully readable when scripts are
 disabled. Big Plan ships no separate script-free HTML variant.
 Plan content never contributes executable code, and a document stays fully readable with scripts disabled.
 
+Two runtime contracts hold that browser layer together, and both exist because
+breaking them fails silently rather than loudly.
+The review island may replace plan DOM in exactly one place, which announces the
+swap as `bigplan:article-replaced`; every shell script and every island effect
+that holds a node re-resolves on that event, because a replaced article detaches
+everything wired at load and a dead handler throws nothing.
+Plan identity is resolved in exactly one module, `src/review/browser/live-target.browser.ts`,
+which scopes lookups to the live article, excludes copies rendered inside a diff
+lens, and answers with an element or a reason it is missing; a lint rule keeps it
+the only such place, because a raw selector silently returns a plausible wrong
+node instead of failing.
+
 Dependencies follow ownership inward: the CLI owns public command I/O, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
 The exact dependency allow-list and completeness guard live in `eslint.config.mjs`.
 

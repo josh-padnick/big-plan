@@ -17,7 +17,22 @@
 // comment can name a line range the way an authored Annotation does.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
+import {
+  CALLOUT_TYPES,
+  type CalloutType,
+} from "../../components/callout/compile.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-pipeline/component-name.js";
+
+// The meaning-bearing presentation facts a snapshot must record so a diff can
+// replay a block without consulting the live document. Only a fact that
+// changes what the plan asserts belongs here: a callout's type, because danger
+// replayed as note misstates risk, and a list's ordering, because numbers
+// replayed as bullets misstate whether sequence matters. Styling and layout
+// stay out - they are reproducible presentation, and carrying them would grow
+// this into a second rendering contract.
+export type BlockPresentation =
+  | { readonly aspect: "callout"; readonly calloutType: CalloutType }
+  | { readonly aspect: "list"; readonly isOrdered: boolean };
 
 /** The document-order block descriptors one compile produced. */
 export type BlockDescriptor = {
@@ -36,6 +51,10 @@ export type BlockDescriptor = {
   // its rows, columns, and cells, or the component root for its declared
   // internals. Absent on every top-level block.
   readonly ownerId?: string;
+  // The block's meaning-bearing presentation facts. Absent when the block
+  // carries none, and absence downstream renders neutrally rather than as a
+  // guessed default.
+  readonly presentation?: BlockPresentation;
 };
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -360,6 +379,31 @@ const stampCodeLines = (node: Element): void => {
   });
 };
 
+// Reads the meaning-bearing presentation facts off the stamped element. The
+// callout view's data-callout attribute is its authored type contract, and a
+// value outside that contract records nothing: an unknown fact must replay
+// neutrally, never as a guessed "note". A dl also carries no fact, because a
+// definition list makes neither an ordered nor an unordered claim.
+const presentationOf = ({
+  node,
+  kind,
+}: {
+  readonly node: Element;
+  readonly kind: string;
+}): BlockPresentation | undefined => {
+  if (kind === "callout") {
+    const type = node.properties["data-callout"];
+    const calloutType = CALLOUT_TYPES.find((candidate) => candidate === type);
+    return calloutType === undefined
+      ? undefined
+      : { aspect: "callout", calloutType };
+  }
+  if (kind === "list" && (node.tagName === "ol" || node.tagName === "ul")) {
+    return { aspect: "list", isOrdered: node.tagName === "ol" };
+  }
+  return undefined;
+};
+
 // Allocates one id inside a scope, numbering repeats of a kind in document
 // order so "the third paragraph of this slide" is addressable and stable.
 type ScopeCounter = Map<string, number>;
@@ -405,6 +449,7 @@ const stampBlock = ({
   node.properties["data-block-kind"] = kind;
   node.properties["data-block-label"] = label;
   node.properties["data-block-section"] = section;
+  const presentation = presentationOf({ node, kind });
   blocks.push({
     id,
     kind,
@@ -413,6 +458,7 @@ const stampBlock = ({
     text: textOf(node),
     isComponentRoot,
     ...(ownerId === undefined ? {} : { ownerId }),
+    ...(presentation === undefined ? {} : { presentation }),
   });
   return id;
 };

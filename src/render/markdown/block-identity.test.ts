@@ -437,6 +437,24 @@ describe("block identity boundaries", () => {
     expect(schema?.text).toContain("code");
   });
 
+  it("should record a callout's authored type and a list's ordering as presentation facts", () => {
+    const { blocks } = compile(
+      '## Risks\n\n<Callout type="danger" title="Rollback risk">\n\nData loss until verified.\n\n</Callout>\n\n1. Freeze writes.\n2. Backfill twice.\n\n- Alpha\n- Beta\n\nPlain paragraph.\n',
+    );
+    const callout = blocks.find((block) => block.kind === "callout");
+    expect(callout?.presentation).toEqual({
+      aspect: "callout",
+      calloutType: "danger",
+    });
+    const lists = blocks.filter((block) => block.kind === "list");
+    expect(lists.map((block) => block.presentation)).toEqual([
+      { aspect: "list", isOrdered: true },
+      { aspect: "list", isOrdered: false },
+    ]);
+    const paragraph = blocks.find((block) => block.kind === "paragraph");
+    expect(paragraph?.presentation).toBeUndefined();
+  });
+
   it("should keep block boundaries apart when component text is flattened", () => {
     const { blocks } = compile(
       "## Summary\n\n<QuickSummary>\n\n<Why>\n\n- Value.\n\n</Why>\n\n<What>\n\n- Build it.\n\n</What>\n\n<How>\n\n- Move retries out.\n- Record every attempt.\n\n</How>\n\n</QuickSummary>\n",

@@ -5,6 +5,17 @@
 import { createHash } from "node:crypto";
 import { normalizedText } from "./shared/normalized-text.js";
 
+// Stamped by block identity: the meaning-bearing presentation facts a diff
+// must replay without the live document - a callout's type and a list's
+// ordering. Only a fact that changes what the plan asserts rides here; the
+// renderer owns the vocabulary, and styling never enters it.
+export type BlockPresentation =
+  | {
+      readonly aspect: "callout";
+      readonly calloutType: "note" | "tip" | "warning" | "danger";
+    }
+  | { readonly aspect: "list"; readonly isOrdered: boolean };
+
 export type SnapshotBlock = {
   readonly id: string;
   readonly kind: string;
@@ -17,6 +28,7 @@ export type SnapshotBlock = {
   // this module never re-derives them from kind strings.
   readonly isComponentRoot: boolean;
   readonly ownerId?: string;
+  readonly presentation?: BlockPresentation;
 };
 
 export type DiffRun = {
@@ -35,6 +47,10 @@ export type SnapshotDiffLocation = {
   readonly section: string;
   readonly oldText: string;
   readonly newText: string;
+  // Each side carries the presentation facts its own snapshot recorded: the
+  // Was side must never borrow them from the block that replaced it.
+  readonly oldPresentation?: BlockPresentation;
+  readonly newPresentation?: BlockPresentation;
   readonly runs: ReadonlyArray<DiffRun>;
   readonly oldHtml?: string;
   readonly newHtml?: string;
@@ -368,6 +384,12 @@ export const diffSnapshots = ({
       section: newBlock.section,
       oldText: oldBlock.text,
       newText: newBlock.text,
+      ...(oldBlock.presentation === undefined
+        ? {}
+        : { oldPresentation: oldBlock.presentation }),
+      ...(newBlock.presentation === undefined
+        ? {}
+        : { newPresentation: newBlock.presentation }),
       runs: runsFor({
         kind: newBlock.kind,
         isComponentRoot: newBlock.isComponentRoot,
@@ -406,6 +428,9 @@ export const diffSnapshots = ({
       section: oldBlock.section,
       oldText: oldBlock.text,
       newText: "",
+      ...(oldBlock.presentation === undefined
+        ? {}
+        : { oldPresentation: oldBlock.presentation }),
       runs: [{ op: "del", text: oldBlock.text }],
       ...(afterBlockId === undefined ? {} : { afterBlockId }),
       ...(beforeBlockId === undefined ? {} : { beforeBlockId }),
@@ -425,6 +450,9 @@ export const diffSnapshots = ({
       section: newBlock.section,
       oldText: "",
       newText: newBlock.text,
+      ...(newBlock.presentation === undefined
+        ? {}
+        : { newPresentation: newBlock.presentation }),
       runs: [{ op: "ins", text: newBlock.text }],
       ...(previous === undefined ? {} : { afterBlockId: previous.id }),
       ...(next === undefined ? {} : { beforeBlockId: next.id }),

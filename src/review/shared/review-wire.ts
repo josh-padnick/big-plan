@@ -83,6 +83,18 @@ export type DiffRun = {
   readonly text: string;
 };
 
+// The meaning-bearing presentation facts the renderer stamped for one block,
+// carried per diff side so the lens replays each side from its own snapshot
+// instead of sniffing the live document. Only a fact that changes what the
+// plan asserts belongs here - a callout's type and a list's ordering; styling
+// and other reproducible presentation must never join this contract.
+export type BlockPresentation =
+  | {
+      readonly aspect: "callout";
+      readonly calloutType: "note" | "tip" | "warning" | "danger";
+    }
+  | { readonly aspect: "list"; readonly isOrdered: boolean };
+
 export type DiffLocation = {
   readonly status: "changed" | "added" | "removed";
   readonly scope: string;
@@ -95,6 +107,8 @@ export type DiffLocation = {
   readonly section: string;
   readonly oldText: string;
   readonly newText: string;
+  readonly oldPresentation?: BlockPresentation;
+  readonly newPresentation?: BlockPresentation;
   readonly runs: ReadonlyArray<DiffRun>;
   readonly oldHtml?: string;
   readonly newHtml?: string;
@@ -448,6 +462,29 @@ export const decodeRuntimeSession = ({
 /** Encodes one complete snapshot diff for browser change surfaces. */
 export const encodeSnapshotDiff = (value: SnapshotDiff): SnapshotDiff => value;
 
+// Normalizes one per-side presentation fact. An unknown aspect or an
+// out-of-vocabulary value decodes to undefined so the browser renders its
+// neutral fallback; coercing to "note" or "unordered" here would reintroduce
+// the silent downgrade this fact exists to remove.
+const decodeBlockPresentation = (
+  value: unknown,
+): BlockPresentation | undefined => {
+  if (!isReviewWireRecord(value)) return undefined;
+  if (
+    value.aspect === "callout" &&
+    (value.calloutType === "note" ||
+      value.calloutType === "tip" ||
+      value.calloutType === "warning" ||
+      value.calloutType === "danger")
+  ) {
+    return { aspect: "callout", calloutType: value.calloutType };
+  }
+  if (value.aspect === "list" && typeof value.isOrdered === "boolean") {
+    return { aspect: "list", isOrdered: value.isOrdered };
+  }
+  return undefined;
+};
+
 /** Decodes the bounded snapshot-diff vocabulary used by the browser. */
 export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
   if (
@@ -486,6 +523,8 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
         }
         return [{ op: run.op, text: run.text }];
       });
+      const oldPresentation = decodeBlockPresentation(location.oldPresentation);
+      const newPresentation = decodeBlockPresentation(location.newPresentation);
       return [
         {
           status: location.status,
@@ -495,6 +534,8 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
           section: location.section,
           oldText: location.oldText,
           newText: location.newText,
+          ...(oldPresentation === undefined ? {} : { oldPresentation }),
+          ...(newPresentation === undefined ? {} : { newPresentation }),
           ...(typeof location.oldBlockId === "string"
             ? { oldBlockId: location.oldBlockId }
             : {}),

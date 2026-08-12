@@ -23,6 +23,7 @@ import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import type {
+  BlockPresentation,
   DiffLocation,
   DiffPlace,
   DiffRun,
@@ -135,6 +136,16 @@ const runsWithChanges = (runs: ReadonlyArray<DiffRun>): ReactNode =>
 
 const sideText = (location: DiffLocation, side: "old" | "new"): string =>
   side === "old" ? location.oldText : location.newText;
+
+// Each side replays the meaning-bearing presentation facts its own snapshot
+// recorded on the wire. The live document can answer only for a block it still
+// contains - and then only with the current side's facts - so the lens never
+// asks it; an absent fact renders neutrally instead of as a guessed default.
+const sidePresentation = (
+  location: DiffLocation,
+  side: "old" | "new",
+): BlockPresentation | undefined =>
+  side === "old" ? location.oldPresentation : location.newPresentation;
 
 // The field-bearing components: each declares its reviewable fields as
 // sub-targets of this kind, and when a field changed the fields own the
@@ -250,29 +261,57 @@ const runsByLine = (
   return lines.filter((line) => line.some((run) => run.text.trim() !== ""));
 };
 
+// The list container for diffed list content. Ordering is a meaning-bearing
+// authored fact carried per side on the wire: an unknown fact renders a
+// marker-free list, because bullets and numbers each assert a claim about
+// sequence that nothing recorded.
+const DiffList = ({
+  presentation,
+  children,
+}: {
+  readonly presentation: BlockPresentation | undefined;
+  readonly children: ReactNode;
+}) => {
+  if (presentation?.aspect === "list") {
+    const List = presentation.isOrdered ? "ol" : "ul";
+    return (
+      <List data-authored-prose="" data-review-diff-content="">
+        {children}
+      </List>
+    );
+  }
+  return (
+    <ul
+      className="list-none"
+      data-authored-prose=""
+      data-review-diff-content=""
+    >
+      {children}
+    </ul>
+  );
+};
+
 const ListRunContent = ({
   runs,
   location,
 }: {
   readonly runs: ReadonlyArray<DiffRun>;
   readonly location: DiffLocation;
-}) => {
-  const current =
-    currentBlockFor(location, "new") ?? currentBlockFor(location, "old");
-  const List = current?.tagName === "OL" ? "ol" : "ul";
-  return (
-    <List data-authored-prose="" data-review-diff-content="">
-      {runsByLine(runs).map((line, index) => (
-        <li
-          key={`${index}-${line.map((run) => run.text).join("")}`}
-          data-authored-prose=""
-        >
-          {runsWithChanges(line)}
-        </li>
-      ))}
-    </List>
-  );
-};
+}) => (
+  // The merged word-run view shows one list for both sides, so it carries the
+  // Now side's ordering - the plan the reader is accepting - and falls back to
+  // the Was side's only when the new fact is absent.
+  <DiffList presentation={location.newPresentation ?? location.oldPresentation}>
+    {runsByLine(runs).map((line, index) => (
+      <li
+        key={`${index}-${line.map((run) => run.text).join("")}`}
+        data-authored-prose=""
+      >
+        {runsWithChanges(line)}
+      </li>
+    ))}
+  </DiffList>
+);
 
 const SnapshotTable = ({
   rows,
@@ -325,20 +364,6 @@ const SNAPSHOT_CALLOUT_ICONS = {
   danger: OCTAGON_ALERT_ICON,
 } satisfies Readonly<Record<SnapshotCalloutType, LucideIcon>>;
 
-// Two authored facts a snapshot never recorded - a callout's type and whether
-// a list is ordered - are readable only from the block still in the plan, so
-// the presentation asks the live document for them. The block legitimately
-// has no live copy for a removed side, and then the presentation falls back to
-// its plainest form; a diff that carried these facts on the wire would retire
-// that fallback.
-const currentBlockFor = (
-  location: DiffLocation,
-  side: "old" | "new",
-): HTMLElement | null => {
-  const blockId = side === "old" ? location.oldBlockId : location.newBlockId;
-  return blockId === undefined ? null : foundElement(liveBlock(blockId));
-};
-
 const SnapshotCallout = ({
   location,
   side,
@@ -346,25 +371,27 @@ const SnapshotCallout = ({
   readonly location: DiffLocation;
   readonly side: "old" | "new";
 }) => {
-  const current = currentBlockFor(location, side);
-  const authoredType = current?.dataset.callout;
-  const type: SnapshotCalloutType =
-    authoredType === "tip" ||
-    authoredType === "warning" ||
-    authoredType === "danger"
-      ? authoredType
-      : "note";
-  const title = location.label.trim() || "Note";
+  const presentation = sidePresentation(location, side);
+  const type: SnapshotCalloutType | undefined =
+    presentation?.aspect === "callout" ? presentation.calloutType : undefined;
+  const title = location.label.trim() || "Callout";
   const text = sideText(location, side).trim();
   const body = text.startsWith(title) ? text.slice(title.length).trim() : text;
   return (
+    // An unknown kind renders neutrally - no kind attribute, no kind icon,
+    // edge-toned accents - because asserting "note" would misstate the risk
+    // the authored callout may have claimed.
     <aside
-      className="callout mb-0 max-w-[var(--measure)] rounded-r-md border-l-4 px-4 py-3"
-      data-callout={type}
+      className={`callout mb-0 max-w-[var(--measure)] rounded-r-md border-l-4 px-4 py-3 ${
+        type === undefined ? "border-edge bg-surface text-ink" : ""
+      }`}
+      {...(type === undefined ? {} : { "data-callout": type })}
       data-review-diff-callout=""
     >
       <header className="callout-header mb-2 flex items-center gap-2 font-semibold text-[var(--callout-accent)] [&_svg]:size-4 [&_svg]:shrink-0">
-        <Icon icon={SNAPSHOT_CALLOUT_ICONS[type]} />
+        {type === undefined ? null : (
+          <Icon icon={SNAPSHOT_CALLOUT_ICONS[type]} />
+        )}
         <span className="callout-title text-sm leading-5">{title}</span>
       </header>
       <div className="callout-body text-[var(--callout-ink)]">
@@ -505,22 +532,18 @@ const SnapshotBlock = ({
     );
   }
   if (location.kind === "list") {
-    const current =
-      currentBlockFor(location, side) ??
-      currentBlockFor(location, side === "old" ? "new" : "old");
-    const List = current?.tagName === "OL" ? "ol" : "ul";
     const items = text
       .split("\n")
       .map((item) => item.trim())
       .filter((item) => item !== "");
     return (
-      <List data-authored-prose="" data-review-diff-content="">
+      <DiffList presentation={sidePresentation(location, side)}>
         {items.map((item, index) => (
           <li key={`${index}-${item}`} data-authored-prose="">
             {item}
           </li>
         ))}
-      </List>
+      </DiffList>
     );
   }
   return (
