@@ -172,6 +172,11 @@ Guidance is demand-driven: add a document, rule, or map entry only after an agen
 Read and follow [ENGINEERING_PRACTICES.md](ENGINEERING_PRACTICES.md) for the authoritative coding, comments, error-handling, logging, testing, browser-runtime, styling, and tooling practices.
 Mechanically enforced facts remain owned by their checks.
 
+## Testing
+
+Before adding a feature, fixing a bug, or adding or changing tests, read [TESTING.md](TESTING.md).
+It owns the judgment framework for which tests earn their place and which test layer to use.
+
 ## Design
 
 Read and follow [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) before changing anything a reader sees.
