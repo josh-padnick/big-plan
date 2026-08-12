@@ -1,8 +1,6 @@
-// Collapses whitespace and case so two records of the same authored text
-// compare equal. Snapshot alignment on the server and lens anchor
-// verification in the browser must agree on what counts as "the same text",
-// so the one normalization lives here where both sides can import it.
+// Owns the deliberately lossy text key used only to align likely counterparts
+// between snapshots before exact authored changes are reported.
 
-/** Normalizes text for identity comparison across snapshots and renderings. */
-export const normalizedText = (value: string): string =>
+/** Normalizes text only for candidate alignment across snapshots. */
+export const normalizedAlignmentText = (value: string): string =>
   value.replace(/\s+/g, " ").trim().toLowerCase();

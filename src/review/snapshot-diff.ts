@@ -4,7 +4,7 @@
 
 import { createHash } from "node:crypto";
 import type { BlockDescriptor } from "../render/render-document.js";
-import { normalizedText } from "./shared/normalized-text.js";
+import { normalizedAlignmentText } from "./shared/normalized-text.js";
 import type {
   DiffLocation,
   DiffPlace,
@@ -240,7 +240,7 @@ export const diffRunSimilarity = (runs: ReadonlyArray<DiffRun>): number => {
 
 const meaningfulTokens = (value: string): ReadonlySet<string> =>
   new Set(
-    normalizedText(value)
+    normalizedAlignmentText(value)
       .split(/[^\p{L}\p{N}_]+/u)
       .filter((token) => token.length > 1),
   );
@@ -284,11 +284,18 @@ const pairScore = ({
   if (oldBlock.kind !== newBlock.kind) return -1;
   const sameIdentity = oldBlock.id === newBlock.id ? 0.55 : 0;
   const sameText =
-    normalizedText(oldBlock.text) === normalizedText(newBlock.text) ? 0.7 : 0;
+    normalizedAlignmentText(oldBlock.text) ===
+    normalizedAlignmentText(newBlock.text)
+      ? 0.7
+      : 0;
   const sameLabel =
-    normalizedText(oldBlock.label) === normalizedText(newBlock.label) ? 0.2 : 0;
+    normalizedAlignmentText(oldBlock.label) ===
+    normalizedAlignmentText(newBlock.label)
+      ? 0.2
+      : 0;
   const sameSection =
-    normalizedText(oldBlock.section) === normalizedText(newBlock.section)
+    normalizedAlignmentText(oldBlock.section) ===
+    normalizedAlignmentText(newBlock.section)
       ? 0.12
       : 0;
   const proximity = 0.08 / (1 + Math.abs(oldIndex - newIndex));
@@ -304,6 +311,10 @@ const pairScore = ({
 
 const locationAnchor = (location: SnapshotDiffLocation): string | undefined =>
   location.newBlockId ?? location.beforeBlockId ?? location.afterBlockId;
+
+/** Groups globally exact kind/text counterparts before bounded fuzzy scoring. */
+const exactAlignmentKey = (block: SnapshotBlock): string =>
+  JSON.stringify([block.kind, normalizedAlignmentText(block.text)]);
 
 /** Aligns blocks by stable identity, exact content, then guarded similarity. */
 export const diffSnapshots = ({
@@ -322,6 +333,22 @@ export const diffSnapshots = ({
   const pairs: Array<readonly [number, number]> = [];
   const usedOld = new Set<number>();
   const usedNew = new Set<number>();
+  const exactNewIndexes = new Map<string, ReadonlyArray<number>>();
+  for (const [newIndex, newBlock] of after.entries()) {
+    const key = exactAlignmentKey(newBlock);
+    exactNewIndexes.set(key, [...(exactNewIndexes.get(key) ?? []), newIndex]);
+  }
+  const exactCursors = new Map<string, number>();
+  for (const [oldIndex, oldBlock] of before.entries()) {
+    const key = exactAlignmentKey(oldBlock);
+    const cursor = exactCursors.get(key) ?? 0;
+    const newIndex = exactNewIndexes.get(key)?.at(cursor);
+    if (newIndex === undefined) continue;
+    exactCursors.set(key, cursor + 1);
+    usedOld.add(oldIndex);
+    usedNew.add(newIndex);
+    pairs.push([oldIndex, newIndex]);
+  }
   const candidates: Array<{
     readonly oldIndex: number;
     readonly newIndex: number;
@@ -376,7 +403,7 @@ export const diffSnapshots = ({
     const newBlock = after.at(newIndex);
     if (oldBlock === undefined || newBlock === undefined) continue;
     if (
-      normalizedText(oldBlock.text) === normalizedText(newBlock.text) &&
+      oldBlock.text === newBlock.text &&
       samePresentation(oldBlock.presentation, newBlock.presentation)
     )
       continue;

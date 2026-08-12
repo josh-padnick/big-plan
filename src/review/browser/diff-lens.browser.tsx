@@ -74,6 +74,11 @@ const sidePresentation = (
 ): BlockPresentation | undefined =>
   side === "old" ? location.oldPresentation : location.newPresentation;
 
+const listPresentationChanged = (location: DiffLocation): boolean =>
+  location.oldPresentation?.aspect === "list" &&
+  location.newPresentation?.aspect === "list" &&
+  location.oldPresentation.isOrdered !== location.newPresentation.isOrdered;
+
 // The field-bearing components: each declares its reviewable fields as
 // sub-targets of this kind, and when a field changed the fields own the
 // presentation, so the owning root kind on the right is suppressed instead of
@@ -616,6 +621,7 @@ export const DiffLensContent = ({
   const canUseWordRuns =
     only?.status === "changed" &&
     place.note === "reworded" &&
+    !listPresentationChanged(only) &&
     (only.kind === "paragraph" ||
       only.kind === "heading" ||
       only.kind === "quote" ||
@@ -691,6 +697,12 @@ type LensAnchor = {
   readonly element: HTMLElement;
   readonly placement: LensPlacement;
 };
+
+/** Uses instant scrolling when the reader asks the viewer to reduce motion. */
+const lensScrollBehavior = (): ScrollBehavior =>
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
 
 /**
  * Finds the first of a place's locations that still has somewhere to land. A
@@ -771,7 +783,10 @@ export const DiffLensPortal = ({
       archive.append(container);
       setHost(container);
       requestAnimationFrame(() =>
-        container.scrollIntoView({ behavior: "smooth", block: "center" }),
+        container.scrollIntoView({
+          behavior: lensScrollBehavior(),
+          block: "center",
+        }),
       );
       return () => {
         container.remove();
@@ -824,7 +839,10 @@ export const DiffLensPortal = ({
     }
     setHost(container);
     requestAnimationFrame(() =>
-      container.scrollIntoView({ behavior: "smooth", block: "center" }),
+      container.scrollIntoView({
+        behavior: lensScrollBehavior(),
+        block: "center",
+      }),
     );
     return () => {
       direct.forEach((element, index) => {

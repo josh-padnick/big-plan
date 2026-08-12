@@ -162,6 +162,7 @@ export const DiffTourProvider = ({
       const escapeEvent = event as EscapeKeyboardEvent;
       if (
         event.key !== "Escape" ||
+        event.defaultPrevented ||
         tour === null ||
         escapeEvent.bigPlanEscapeHandled === true
       )

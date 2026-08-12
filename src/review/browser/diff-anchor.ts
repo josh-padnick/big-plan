@@ -65,16 +65,15 @@ export const lensAnchorCandidates = (
 };
 
 /**
- * Compares two renderings of the same content for identity alone. All spacing
- * is removed rather than collapsed, because the recorded side is extracted
- * from the compiled tree, which separates block-level children, while the live
- * side is read from the DOM, which does not: one says "Quick summary Why" and
- * the other "Quick summaryWhy" for the same block. Both agree on the letters,
- * and drifted content differs in far more than spacing, so the letters are the
- * honest comparison and the two extractions cannot fall out of step.
+ * Compares two renderings without erasing case or ordinary token boundaries.
+ * The compiler alone inserts newlines around block-level children, so a second
+ * comparison may remove only those separators when the live DOM joins them.
  */
 const identityText = (value: string): string =>
-  value.replace(/\s+/gu, "").toLocaleLowerCase();
+  value.replace(/\s+/gu, " ").trim();
+
+const withoutCompilerSeparators = (value: string): string =>
+  value.replace(/\s*[\r\n]+\s*/gu, "").trim();
 
 /**
  * Whether a live block still holds the content its candidate's id promised.
@@ -91,7 +90,9 @@ export const candidateMatchesLiveText = ({
   readonly liveText: string;
 }): boolean =>
   candidate.expectedText === undefined ||
-  identityText(candidate.expectedText) === identityText(liveText);
+  identityText(candidate.expectedText) === identityText(liveText) ||
+  withoutCompilerSeparators(candidate.expectedText) ===
+    withoutCompilerSeparators(liveText);
 
 /**
  * Resolves the place a tour should open on. The stepper walks the diff's own

@@ -169,6 +169,7 @@ type BigPlanFeedbackWindow = Window & {
 
 type ComposeState = {
   readonly target: CommentTarget;
+  readonly premiseSnapshot: string;
   readonly top: number;
   readonly left: number;
 };
@@ -2344,11 +2345,7 @@ const StalePremiseNotice = ({
     [comment.target],
   );
   useEffect(() => {
-    if (
-      identity === null ||
-      blockIds.length === 0 ||
-      comment.premiseSnapshot === currentSnapshot
-    ) {
+    if (identity === null || comment.premiseSnapshot === currentSnapshot) {
       setDiff(null);
       return;
     }
@@ -2369,36 +2366,38 @@ const StalePremiseNotice = ({
     };
   }, [blockIds, comment.premiseSnapshot, currentSnapshot, identity, onStatus]);
   if (diff === null) return null;
-  const attributed = attributeDiffPlaces({ diff, changeTargets: blockIds });
-  if (attributed.placeIds.length === 0) return null;
-  const attributedPlaces = diff.places.filter((place) =>
-    attributed.placeIds.includes(place.placeId),
-  );
-  const currentTargetExists = attributedPlaces.some((place) =>
-    place.locationIndexes.some((index) => {
-      const blockId = diff.locations.at(index)?.newBlockId;
-      return blockId !== undefined && "found" in liveBlock(blockId);
-    }),
-  );
+  const attributed =
+    blockIds.length === 0
+      ? {
+          placeIds: diff.places.map((place) => place.placeId),
+          spilloverCount: 0,
+        }
+      : attributeDiffPlaces({ diff, changeTargets: blockIds });
+  const changedOutsideTarget =
+    blockIds.length > 0 && attributed.placeIds.length === 0;
+  const placeIds = changedOutsideTarget
+    ? diff.places.map((place) => place.placeId)
+    : attributed.placeIds;
   return (
     <div className="mt-2 rounded-md bg-[var(--callout-warning-bg)] p-2 text-[var(--callout-warning-ink)]">
       <Badge
         tone="secondary"
         className="bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
       >
-        {currentTargetExists
-          ? "Current diff available"
-          : "No current diff available"}
+        Plan changed since this comment
       </Badge>
       <p className="mt-1 mb-0 text-2xs">
-        {currentTargetExists
-          ? "This compares the plan when you commented with the current plan."
-          : "The commented target was removed or superseded, so Big Plan did not guess a replacement."}
+        {changedOutsideTarget
+          ? "The plan changed outside this comment's target. Review the premise-to-current changes before sending it."
+          : "This compares the plan when you commented with the current plan."}
       </p>
-      {currentTargetExists ? (
+      {placeIds.length > 0 ? (
         <AgentChangeDigest
           diff={diff}
-          placeIds={attributed.placeIds}
+          placeIds={placeIds}
+          spilloverCount={
+            changedOutsideTarget ? undefined : attributed.spilloverCount
+          }
           isSuperseded
           isLoading={false}
           onLoad={() => undefined}
@@ -3833,6 +3832,7 @@ export const ReviewController = () => {
       const viewportWidth = document.documentElement.clientWidth;
       const next = {
         target,
+        premiseSnapshot: displayedSnapshot,
         top:
           window.scrollY +
           Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
@@ -3851,7 +3851,7 @@ export const ReviewController = () => {
       }
       setPendingCompose(next);
     },
-    [compose, composeBody, runtimeSession?.authoritative],
+    [compose, composeBody, displayedSnapshot, runtimeSession?.authoritative],
   );
 
   useEffect(() => {
@@ -3951,7 +3951,7 @@ export const ReviewController = () => {
           id: randomId(),
           body: `${subject}:\n\n${lines.join("\n")}`,
           createdAt: new Date().toISOString(),
-          premiseSnapshot: currentSnapshot,
+          premiseSnapshot: displayedSnapshot,
           target: block === null ? { type: "document" } : targetForBlock(block),
         };
         setDrafts((current) => [...current, comment]);
@@ -3977,7 +3977,7 @@ export const ReviewController = () => {
       };
       if (previous === undefined) delete feedbackWindow.bigPlan.feedback;
     };
-  }, [currentSnapshot, isHydrated, sendComments]);
+  }, [displayedSnapshot, isHydrated, sendComments]);
 
   const saveComment = (body: string, submitRightAway: boolean) => {
     if (compose === null) return;
@@ -3985,7 +3985,7 @@ export const ReviewController = () => {
       id: randomId(),
       body,
       createdAt: new Date().toISOString(),
-      premiseSnapshot: currentSnapshot,
+      premiseSnapshot: compose.premiseSnapshot,
       target: compose.target,
     };
     setDrafts((current) => [...current, comment]);

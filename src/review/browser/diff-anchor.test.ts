@@ -129,7 +129,7 @@ describe("candidateMatchesLiveText", () => {
     ).toBe(false);
   });
 
-  it("should trust a cross-snapshot block when only whitespace and case differ", () => {
+  it("should trust a cross-snapshot block when only whitespace differs", () => {
     expect(
       candidateMatchesLiveText({
         candidate: {
@@ -137,9 +137,33 @@ describe("candidateMatchesLiveText", () => {
           placement: "replace",
           expectedText: "The delivery gate runs automated checks.",
         },
-        liveText: "  The delivery\n  gate runs AUTOMATED checks.  ",
+        liveText: "  The delivery\n  gate runs automated checks.  ",
       }),
     ).toBe(true);
+  });
+
+  it("should report drift when case or token boundaries differ", () => {
+    const candidate = {
+      blockId: "approach/paragraph-1",
+      placement: "replace" as const,
+      expectedText: "The rollback requires API approval.",
+    };
+
+    expect(
+      candidateMatchesLiveText({
+        candidate,
+        liveText: "The rollback requires api approval.",
+      }),
+    ).toBe(false);
+    expect(
+      candidateMatchesLiveText({
+        candidate: {
+          ...candidate,
+          expectedText: "The roll back requires API approval.",
+        },
+        liveText: "The rollback requires API approval.",
+      }),
+    ).toBe(false);
   });
 
   it("should trust a same-snapshot candidate even when the block was reworded", () => {

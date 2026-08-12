@@ -74,6 +74,62 @@ describe("snapshot word diff", () => {
 });
 
 describe("snapshot block alignment", () => {
+  it("should preserve exact counterparts after an insertion larger than the fuzzy window", () => {
+    const before = Array.from({ length: 5 }, (_, index) =>
+      block({
+        id: `section/approach/paragraph-${index + 1}`,
+        text: `Stable paragraph ${index + 1}.`,
+      }),
+    );
+    const inserted = Array.from({ length: 81 }, (_, index) =>
+      block({
+        id: `section/approach/paragraph-${index + 1}`,
+        text: `Inserted paragraph ${index + 1}.`,
+      }),
+    );
+    const after = [
+      ...inserted,
+      ...before.map((entry, index) => ({
+        ...entry,
+        id: `section/approach/paragraph-${inserted.length + index + 1}`,
+      })),
+    ];
+
+    const locations = diffSnapshots({ before, after });
+    expect(locations).toHaveLength(inserted.length);
+    expect(locations.every((location) => location.status === "added")).toBe(
+      true,
+    );
+    expect(locations.map((location) => location.newText)).toEqual(
+      inserted.map((entry) => entry.text),
+    );
+  });
+
+  it("should report a capitalization-only edit", () => {
+    expect(
+      diffSnapshots({
+        before: [
+          block({
+            id: "section/approach/paragraph-1",
+            text: "Use the api contract.",
+          }),
+        ],
+        after: [
+          block({
+            id: "section/approach/paragraph-1",
+            text: "Use the API contract.",
+          }),
+        ],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        status: "changed",
+        oldText: "Use the api contract.",
+        newText: "Use the API contract.",
+      }),
+    ]);
+  });
+
   it("should treat an inserted sibling as added without shifting later identities", () => {
     const before = [
       block({ id: "section/approach/paragraph-1", text: "First." }),

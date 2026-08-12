@@ -848,6 +848,17 @@ test("should restore and submit staged comments through the local review runtime
   await expect(
     changeSetDock.getByRole("group", { name: "Change display" }),
   ).toHaveCount(0);
+  await sentThread
+    .getByRole("button", { name: "Revert response" })
+    .last()
+    .click();
+  const layeredRevertDialog = page.getByRole("alertdialog", {
+    name: "Revert response?",
+  });
+  await expect(layeredRevertDialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(layeredRevertDialog).toHaveCount(0);
+  await expect(page.locator("[data-review-diff-stepper]")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
   const resolve = sentThread
@@ -1131,7 +1142,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await expect(markdownTableComment).toBeVisible();
     // The floating table comment stands alone, so it rests at the quieter
     // comment-rest colour rather than the control-bar muted colour.
-    await expect(markdownTableComment).toHaveCSS("color", "rgb(164, 156, 139)");
+    await expect(markdownTableComment).toHaveCSS("color", "rgb(138, 130, 116)");
     const tableCommentGeometry = await markdownTable.evaluate((table) => {
       const button = table.querySelector<HTMLElement>(".review-table-comment");
       if (button === null)
@@ -1202,7 +1213,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
       .getByRole("button", { name: /Expand staged comment:/u })
       .first()
       .click();
-    await expect(rail).toContainText("Current diff available");
+    await expect(rail).toContainText("Plan changed since this comment");
     await expect(rail).toContainText(
       "This compares the plan when you commented with the current plan.",
     );
@@ -1222,7 +1233,29 @@ test("should preview stale, historical, and multi-place causal diffs through the
       .locator("[data-review-thread-side] [data-review-sent-thread]")
       .first();
     await expect(anchoredThread).toBeVisible();
-    await page.waitForTimeout(250);
+    let previousThreadPosition:
+      { readonly left: number; readonly top: number } | undefined;
+    let stableThreadPositionSamples = 0;
+    await expect
+      .poll(async () => {
+        const current = await anchoredThread.evaluate((thread) => {
+          const rect = thread.parentElement?.getBoundingClientRect();
+          if (rect === undefined)
+            throw new Error("The side thread host is missing");
+          return { left: Math.round(rect.left), top: Math.round(rect.top) };
+        });
+        if (
+          previousThreadPosition?.left === current.left &&
+          previousThreadPosition.top === current.top
+        ) {
+          stableThreadPositionSamples += 1;
+        } else {
+          stableThreadPositionSamples = 0;
+        }
+        previousThreadPosition = current;
+        return stableThreadPositionSamples;
+      })
+      .toBeGreaterThanOrEqual(2);
     const threadPositionBeforeDiff = await anchoredThread.evaluate((thread) => {
       const rect = thread.parentElement?.getBoundingClientRect();
       if (rect === undefined)
@@ -1443,7 +1476,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
     });
     expect(tableDiffStructure.height).toBeLessThan(1_000);
     expect(tableDiffStructure.headerCount).toBe(1);
-    expect(tableDiffStructure.rowCounts).toEqual([4, 5]);
+    expect(tableDiffStructure.rowCounts).toEqual([3, 4]);
     expect(tableDiffStructure.overflowingTables).toBe(0);
     await expect(tableDiffLens).toContainText("Baseline to result");
     await expect(tableDiffLens).toContainText("Premise to current");
@@ -1529,10 +1562,27 @@ test("should keep component replacements inside their slide and preserve Callout
   }
 });
 
-test("should replay each side's callout kind and list ordering from its own snapshot", async ({
+test("should replay each side's callout kind and changed list ordering from its own snapshot", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Object.assign(window, { __bigPlanScrollBehaviors: [] });
+    Element.prototype.scrollIntoView = function scrollIntoView(
+      options?: boolean | ScrollIntoViewOptions,
+    ): void {
+      const behavior =
+        typeof options === "object" && options !== null
+          ? (options.behavior ?? "auto")
+          : "auto";
+      (
+        window as unknown as { __bigPlanScrollBehaviors: Array<string> }
+      ).__bigPlanScrollBehaviors.push(behavior);
+      originalScrollIntoView.call(this, options);
+    };
+  });
   const directory = await mkdtemp(
     join(tmpdir(), "big-plan-presentation-diff-"),
   );
@@ -1551,7 +1601,8 @@ Data loss stays possible until the backfill completes and the verification pass 
 
 ## Runbook
 
-The runbook now lives with the operations team.
+- Freeze writes to the legacy table.
+- Run the backfill twice.
 `;
   // The before snapshot names the risk section differently, so no Was-side
   // block of that section still exists in the live document, and its runbook
@@ -1593,7 +1644,34 @@ The runbook stays inline for the first rollout.
       .getByRole("button", { name: /Expand thread:/u })
       .first()
       .click();
+    await page.evaluate(() => {
+      (
+        window as unknown as { __bigPlanScrollBehaviors: Array<string> }
+      ).__bigPlanScrollBehaviors = [];
+    });
     await rail.getByRole("button", { name: "Review change" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as {
+                __bigPlanScrollBehaviors: ReadonlyArray<string>;
+              }
+            ).__bigPlanScrollBehaviors,
+        ),
+      )
+      .toEqual(expect.arrayContaining(["auto"]));
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __bigPlanScrollBehaviors: ReadonlyArray<string>;
+            }
+          ).__bigPlanScrollBehaviors,
+      ),
+    ).not.toContain("smooth");
     const lens = page.locator("[data-review-diff-lens]");
     const stepper = page.locator("[data-review-diff-stepper]");
     const total = Number.parseInt(
@@ -1618,11 +1696,14 @@ The runbook stays inline for the first rollout.
       await expect(callouts.nth(1)).toHaveAttribute("data-callout", "danger");
     });
 
-    await test.step("the removed runbook stays an ordered list", async () => {
+    await test.step("the list order change shows both recorded presentations", async () => {
       await stepTo("Freeze writes");
       const ordered = lens.locator("ol");
+      const unordered = lens.locator("ul");
       await expect(ordered).toHaveCount(1);
       await expect(ordered.locator("li")).toHaveCount(2);
+      await expect(unordered).toHaveCount(1);
+      await expect(unordered.locator("li")).toHaveCount(2);
     });
     await page.screenshot({
       path: testInfo.outputPath("per-side-presentation.png"),
@@ -2543,6 +2624,155 @@ const liveReviewSession = async (
     plan: session.plan,
   };
 };
+
+test("should keep a composing comment on its displayed premise through a plan refresh", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-compose-refresh-"));
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = `# Compose refresh
+
+## Delivery
+
+The delivery gate runs manual checks before merge.
+
+## Rollout
+
+The rollout waits for a green build.
+`;
+  const revisedSource = initialSource.replace(
+    "The rollout waits for a green build.",
+    "The rollout waits for a green build and a signed release.",
+  );
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  let releaseRefresh = (): void => undefined;
+  try {
+    await page.goto(runtime.url);
+    const session = await liveReviewSession(page);
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const premiseSnapshot = deriveSnapshotDigest(initialSource);
+    const revisedSnapshot = deriveSnapshotDigest(revisedSource);
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: randomBytes(8).toString("hex"),
+      sessionId: session.sessionId,
+      planId: session.planId,
+      premiseSnapshot,
+      createdAt: new Date().toISOString(),
+      body: "Require a signed release before rollout.",
+    });
+    await writeAgentRequest({ store, request });
+
+    await page
+      .getByRole("button", { name: "Comment on slide" })
+      .first()
+      .click();
+    const composer = page.getByRole("dialog", { name: /Comment on/u });
+    const submitRightAway = composer.getByRole("switch", {
+      name: "Submit right away",
+    });
+    if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+      await submitRightAway.click();
+    }
+    const commentBody = "Keep the delivery premise visible.";
+    await composer.getByLabel("Add a comment").fill(commentBody);
+
+    let markRefreshStarted = (): void => undefined;
+    const refreshStarted = new Promise<void>((resolve) => {
+      markRefreshStarted = resolve;
+    });
+    const refreshReleased = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    let hasBlockedRefresh = false;
+    await page.route("**/*", async (route) => {
+      const response = await route.fetch();
+      const body = await response.body();
+      const isRevisedArticle =
+        !hasBlockedRefresh &&
+        body.includes(Buffer.from("signed release")) &&
+        body.includes(Buffer.from("<article"));
+      if (isRevisedArticle) {
+        hasBlockedRefresh = true;
+        markRefreshStarted();
+        await refreshReleased;
+      }
+      await route.fulfill({ response, body });
+    });
+
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: revisedSource,
+    });
+    await writeFile(session.plan, revisedSource, "utf8");
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          message: "The rollout now waits for a signed release.",
+        },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: revisedSnapshot,
+        now: new Date().toISOString(),
+      }),
+    });
+
+    await refreshStarted;
+    const persistedDraft = page.waitForRequest(
+      (candidate) =>
+        candidate.url().endsWith("/api/drafts") &&
+        candidate.method() === "PUT" &&
+        candidate.postData()?.includes(commentBody) === true,
+    );
+    await composer.getByRole("button", { name: "Add Comment" }).click();
+    const draftPayload: unknown = (await persistedDraft).postDataJSON();
+    releaseRefresh();
+    await expect(page.locator("article")).toContainText("signed release", {
+      timeout: 15_000,
+    });
+    expect(draftPayload).toMatchObject({
+      drafts: [
+        expect.objectContaining({
+          body: commentBody,
+          premiseSnapshot,
+        }),
+      ],
+    });
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await page
+      .getByRole("button", {
+        name: `Expand staged comment: ${commentBody}`,
+      })
+      .click();
+    const stagedComment = page
+      .locator(".review-staged-card")
+      .filter({ hasText: commentBody });
+    await expect(stagedComment).toContainText(
+      "Plan changed since this comment",
+    );
+  } finally {
+    releaseRefresh();
+    await page.unroute("**/*");
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 /**
  * Counts the persistent selection highlights and how many of them still cover
