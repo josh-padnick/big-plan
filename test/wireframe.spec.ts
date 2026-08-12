@@ -265,6 +265,13 @@ test("should align a long caption with a height-fitted desktop frame", async ({
   const wireframe = page.locator('[data-wireframe="long-caption-desktop"]');
   await wireframe.locator("[data-figure-maximize]").click();
   await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
+  await expect
+    .poll(() =>
+      wireframe
+        .locator(".wireframe-screen")
+        .evaluate((node) => node.scrollWidth - node.clientWidth),
+    )
+    .toBe(0);
 
   const geometry = await wireframe.evaluate((node) => {
     const caption = node.querySelector<HTMLElement>(
