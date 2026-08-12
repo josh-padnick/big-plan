@@ -1,15 +1,18 @@
 // Critical browser journey for the local review runtime behind the React
 // commenting chrome: server-backed restoration and one real feedback handoff.
 
+import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   commentsFromExchange,
   deriveSnapshotDigest,
+  messageAgentRequest,
   nextPendingAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
+  writeAgentRequest,
 } from "../src/review/agent-exchange.js";
 import {
   appendProgressEvent,
@@ -2084,6 +2087,235 @@ test("should mark a superseded review as read-only and link to its replacement",
     expect(draftWrites).toBe(0);
   } finally {
     await replacement.close();
+  }
+});
+
+// Block ids are structural paths, so an id minted for a superseded revision
+// can still resolve in the current document while naming different content.
+// The lens must detect that drift and fall back to the historical archive
+// instead of rendering the change beside the wrong block.
+test("should archive a superseded change whose block id now names different content", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-drifted-id-"));
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = `# Drift plan
+
+## Delivery
+
+The delivery gate runs manual checks before merge.
+
+## Verification
+
+Reviewers confirm the output by hand.
+`;
+  const revisedSource = initialSource.replace(
+    "The delivery gate runs manual checks before merge.",
+    "The delivery gate runs automated checks before merge.",
+  );
+  const latestSource = initialSource.replace(
+    "The delivery gate runs manual checks before merge.",
+    "A canary rollout now guards every deploy instead of a gate.",
+  );
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await stageComment(page, "Automate the delivery gate.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+    await rail.getByRole("button", { name: "Close feedback" }).click();
+
+    const session: unknown = await page.evaluate(async () => {
+      const root = document.documentElement;
+      const response = await fetch("/api/session", {
+        headers: {
+          "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+        },
+      });
+      return response.json();
+    });
+    if (
+      typeof session !== "object" ||
+      session === null ||
+      !("sessionId" in session) ||
+      !("planId" in session) ||
+      !("plan" in session) ||
+      typeof session.sessionId !== "string" ||
+      typeof session.planId !== "string" ||
+      typeof session.plan !== "string"
+    ) {
+      throw new Error("The drifted-id journey requires a live review session");
+    }
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+
+    const fallbackTitle = "Drift plan";
+    const initialBlocks = renderDocument({
+      markdown: initialSource,
+      fallbackTitle,
+      identity: {},
+    }).blocks;
+    const revisedBlocks = renderDocument({
+      markdown: revisedSource,
+      fallbackTitle,
+      identity: {},
+    }).blocks;
+    const driftedBlockId = diffSnapshots({
+      before: initialBlocks,
+      after: revisedBlocks,
+    }).find((location) => location.status === "changed")?.newBlockId;
+    if (driftedBlockId === undefined) {
+      throw new Error("The simulated revision produced no changed block");
+    }
+    const revisedSnapshot = deriveSnapshotDigest(revisedSource);
+    const latestSnapshot = deriveSnapshotDigest(latestSource);
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: revisedSource,
+    });
+    await writeSnapshot({
+      store,
+      snapshot: latestSnapshot,
+      source: latestSource,
+    });
+
+    await test.step("the agent answers the feedback, then revises the same block again", async () => {
+      const answeredAt = new Date().toISOString();
+      const claimed = await claimAgentRequest({
+        store,
+        requestId: request.requestId,
+        baselineSnapshot: request.premiseSnapshot,
+        now: answeredAt,
+      });
+      await publishAgentResponse({
+        store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: request.requestId,
+            outcomes: request.comments.map((comment) => ({
+              commentId: comment.id,
+              state: "changed",
+              message: "Automated the delivery gate.",
+              changeTargets: [driftedBlockId],
+            })),
+          },
+          request: claimed,
+          commentsById: commentsFromExchange(exchange),
+          changedBlocks: new Set([driftedBlockId]),
+          currentSnapshot: revisedSnapshot,
+          now: answeredAt,
+        }),
+      });
+      await writeFile(session.plan, latestSource, "utf8");
+      const revisedAgainAt = new Date(Date.parse(answeredAt) + 1).toISOString();
+      const followUp = messageAgentRequest({
+        kind: "chat",
+        requestId: randomBytes(8).toString("hex"),
+        sessionId: session.sessionId,
+        planId: session.planId,
+        premiseSnapshot: revisedSnapshot,
+        createdAt: revisedAgainAt,
+        body: "Replace the gate with a canary rollout.",
+      });
+      await writeAgentRequest({ store, request: followUp });
+      const claimedFollowUp = await claimAgentRequest({
+        store,
+        requestId: followUp.requestId,
+        baselineSnapshot: revisedSnapshot,
+        now: revisedAgainAt,
+      });
+      await publishAgentResponse({
+        store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: followUp.requestId,
+            message: "The canary rollout replaces the delivery gate.",
+          },
+          request: claimedFollowUp,
+          commentsById: new Map(),
+          changedBlocks: new Set(),
+          currentSnapshot: latestSnapshot,
+          now: revisedAgainAt,
+        }),
+      });
+    });
+
+    const drifted = page.locator(`[data-block-id="${driftedBlockId}"]`);
+    await test.step("the displayed plan keeps the id with different content", async () => {
+      await expect(page.locator("article")).toContainText(
+        "A canary rollout now guards every deploy",
+        { timeout: 15_000 },
+      );
+      await expect(drifted).toContainText("A canary rollout now guards");
+    });
+
+    await test.step("reviewing the superseded change lands in the archive, not beside the drifted block", async () => {
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      await rail
+        .getByRole("button", { name: /Expand thread:/u })
+        .first()
+        .click();
+      await rail.getByRole("button", { name: "Review change" }).click();
+      const archive = page.locator("[data-review-historical-changes]");
+      await expect(archive).toHaveCount(1);
+      const lens = archive.locator("[data-review-diff-lens]");
+      await expect(lens).toContainText("Historical change");
+      await expect(lens).toContainText("checks before merge");
+      await expect(lens.locator("ins")).toContainText("automated");
+      // Every lens host must be the archive's own; none may sit beside the
+      // block whose id the superseded diff can still resolve.
+      await expect(
+        page.locator(
+          "[data-review-diff-lens-host]:not([data-review-historical-diff])",
+        ),
+      ).toHaveCount(0);
+      await expect(drifted).toBeVisible();
+      const placement = await page.evaluate(() => {
+        const archiveElement = document.querySelector(
+          "[data-review-historical-changes]",
+        );
+        const slides = document.querySelectorAll("[data-slide]");
+        const lastSlide = slides.item(slides.length - 1);
+        if (archiveElement === null || lastSlide === null) return null;
+        return {
+          isAfterLastSlide:
+            (lastSlide.compareDocumentPosition(archiveElement) &
+              Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0,
+          isOutsideSlides: archiveElement.closest("[data-slide]") === null,
+        };
+      });
+      expect(placement).toEqual({
+        isAfterLastSlide: true,
+        isOutsideSlides: true,
+      });
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

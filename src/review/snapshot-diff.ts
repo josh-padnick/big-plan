@@ -3,6 +3,7 @@
 // server, attribution validator, and browser share one answer.
 
 import { createHash } from "node:crypto";
+import { normalizedText } from "./shared/normalized-text.js";
 
 export type SnapshotBlock = {
   readonly id: string;
@@ -118,9 +119,6 @@ const runsFor = ({
         ...(after === "" ? [] : [{ op: "ins" as const, text: after }]),
       ]
     : diffWords({ before, after });
-
-const normalized = (value: string): string =>
-  value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
 const scopeOf = (block: SnapshotBlock): string => {
   const slash = block.id.lastIndexOf("/");
@@ -254,7 +252,7 @@ export const diffRunSimilarity = (runs: ReadonlyArray<DiffRun>): number => {
 
 const meaningfulTokens = (value: string): ReadonlySet<string> =>
   new Set(
-    normalized(value)
+    normalizedText(value)
       .split(/[^\p{L}\p{N}_]+/u)
       .filter((token) => token.length > 1),
   );
@@ -284,11 +282,13 @@ const pairScore = ({
   if (oldBlock.kind !== newBlock.kind) return -1;
   const sameIdentity = oldBlock.id === newBlock.id ? 0.55 : 0;
   const sameText =
-    normalized(oldBlock.text) === normalized(newBlock.text) ? 0.7 : 0;
+    normalizedText(oldBlock.text) === normalizedText(newBlock.text) ? 0.7 : 0;
   const sameLabel =
-    normalized(oldBlock.label) === normalized(newBlock.label) ? 0.2 : 0;
+    normalizedText(oldBlock.label) === normalizedText(newBlock.label) ? 0.2 : 0;
   const sameSection =
-    normalized(oldBlock.section) === normalized(newBlock.section) ? 0.12 : 0;
+    normalizedText(oldBlock.section) === normalizedText(newBlock.section)
+      ? 0.12
+      : 0;
   const proximity = 0.08 / (1 + Math.abs(oldIndex - newIndex));
   return (
     sameIdentity +
@@ -353,7 +353,8 @@ export const diffSnapshots = ({
     const oldBlock = before.at(oldIndex);
     const newBlock = after.at(newIndex);
     if (oldBlock === undefined || newBlock === undefined) continue;
-    if (normalized(oldBlock.text) === normalized(newBlock.text)) continue;
+    if (normalizedText(oldBlock.text) === normalizedText(newBlock.text))
+      continue;
     locations.push({
       status: "changed",
       scope: scopeOf(newBlock),

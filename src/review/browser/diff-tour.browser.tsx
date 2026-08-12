@@ -29,6 +29,7 @@ import type {
   SnapshotDiff,
 } from "../shared/review-wire.js";
 import {
+  candidateMatchesLiveText,
   lensAnchorCandidates,
   tourStartIndex,
   type LensPlacement,
@@ -707,15 +708,41 @@ const documentBlock = (blockId: string): HTMLElement | null => {
   return null;
 };
 
+/**
+ * Reads the text a live block presents to the reader, mirroring what
+ * compile-time extraction recorded: screen-reader-only scaffolding never
+ * enters a snapshot's text, and review chrome injected after load did not
+ * exist at compile time, so both are stripped before this text is compared
+ * with a snapshot's record of the block.
+ */
+const liveBlockText = (element: HTMLElement): string => {
+  const clone = element.cloneNode(true);
+  if (!(clone instanceof HTMLElement)) return element.textContent ?? "";
+  for (const injected of clone.querySelectorAll(
+    ".sr-only, [data-review-anchor-host], [data-review-toolbar-host], [data-flow-comment-marker]",
+  )) {
+    injected.remove();
+  }
+  return clone.textContent ?? "";
+};
+
 const anchorFor = (
   location: DiffLocation,
   isSuperseded: boolean,
 ): LensAnchor | null => {
-  for (const { blockId, placement } of lensAnchorCandidates(location, {
-    isSuperseded,
-  })) {
-    const element = documentBlock(blockId);
-    if (element !== null) return { element, placement };
+  for (const candidate of lensAnchorCandidates(location, { isSuperseded })) {
+    const element = documentBlock(candidate.blockId);
+    if (element === null) continue;
+    // A block id resolved across a snapshot boundary can name different
+    // content than the diff recorded. Such a drifted candidate is treated as
+    // missing, so the change falls back to the honest historical archive
+    // instead of rendering beside the wrong block.
+    if (
+      !candidateMatchesLiveText({ candidate, liveText: liveBlockText(element) })
+    ) {
+      continue;
+    }
+    return { element, placement: candidate.placement };
   }
   return null;
 };

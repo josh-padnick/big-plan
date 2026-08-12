@@ -1,8 +1,10 @@
 // Decides where a What-changed lens belongs relative to the blocks that
 // survive in the current plan. The choice is pure: it turns a diff location
 // into an ordered list of candidate block ids, each carrying how the lens sits
-// against that block. Resolving those ids against the live document, and the
-// portal that renders there, stay with the browser island.
+// against that block and, when the id comes from an older revision, the text
+// the live block must still hold to be trusted. Resolving those ids against
+// the live document, and the portal that renders there, stay with the browser
+// island.
 
 import type {
   DiffLocation,
@@ -20,30 +22,76 @@ export type LensPlacement = "replace" | "before" | "after";
 export type LensAnchorCandidate = {
   readonly blockId: string;
   readonly placement: LensPlacement;
+  // The text the id's own snapshot recorded for this block. Present only when
+  // the id crossed a snapshot boundary: block ids are structural paths, so an
+  // id minted for an older revision can still resolve in a later document
+  // while naming different content, and only the recorded text can expose
+  // that. Absent when the id and the displayed document share a snapshot.
+  readonly expectedText?: string;
 };
 
 /**
  * Orders the block ids a location can anchor to, best first. A superseded diff
  * only ever anchors to its own new block: its neighbours describe a plan
  * revision the reader has already moved past, so following them would show the
- * change against unrelated content.
+ * change against unrelated content. That one candidate also carries the
+ * result snapshot's text for the block, because the displayed document was
+ * rendered from a later snapshot and the id alone cannot prove the block
+ * still holds the content the diff is about.
  */
 export const lensAnchorCandidates = (
   location: DiffLocation,
   { isSuperseded }: { readonly isSuperseded: boolean },
 ): ReadonlyArray<LensAnchorCandidate> => {
-  const ordered: ReadonlyArray<readonly [string | undefined, LensPlacement]> =
-    isSuperseded
-      ? [[location.newBlockId, "replace"]]
+  if (isSuperseded) {
+    return location.newBlockId === undefined
+      ? []
       : [
-          [location.newBlockId, "replace"],
-          [location.beforeBlockId, "before"],
-          [location.afterBlockId, "after"],
+          {
+            blockId: location.newBlockId,
+            placement: "replace",
+            expectedText: location.newText,
+          },
         ];
+  }
+  const ordered: ReadonlyArray<readonly [string | undefined, LensPlacement]> = [
+    [location.newBlockId, "replace"],
+    [location.beforeBlockId, "before"],
+    [location.afterBlockId, "after"],
+  ];
   return ordered.flatMap(([blockId, placement]) =>
     blockId === undefined ? [] : [{ blockId, placement }],
   );
 };
+
+/**
+ * Compares two renderings of the same content for identity alone. All spacing
+ * is removed rather than collapsed, because the recorded side is extracted
+ * from the compiled tree, which separates block-level children, while the live
+ * side is read from the DOM, which does not: one says "Quick summary Why" and
+ * the other "Quick summaryWhy" for the same block. Both agree on the letters,
+ * and drifted content differs in far more than spacing, so the letters are the
+ * honest comparison and the two extractions cannot fall out of step.
+ */
+const identityText = (value: string): string =>
+  value.replace(/\s+/gu, "").toLocaleLowerCase();
+
+/**
+ * Whether a live block still holds the content its candidate's id promised.
+ * A candidate without an expectation resolved against the displayed
+ * document's own snapshot, so the id is proof enough and any live text is
+ * accepted; that keeps a legitimately reworded current block anchorable even
+ * though its text changed.
+ */
+export const candidateMatchesLiveText = ({
+  candidate,
+  liveText,
+}: {
+  readonly candidate: LensAnchorCandidate;
+  readonly liveText: string;
+}): boolean =>
+  candidate.expectedText === undefined ||
+  identityText(candidate.expectedText) === identityText(liveText);
 
 /**
  * Resolves the place a tour should open on. The stepper walks the diff's own
