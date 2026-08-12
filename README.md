@@ -18,7 +18,7 @@ Everything runs locally, and the MDX file on your disk is the source of truth.
 
 ## Usage
 
-Read the plan-writing guidance, print or install the agent skill shell, validate a plan without writing anything, render it as self-contained themed HTML, or compile its validated contents as machine-readable JSON:
+Read the plan-writing guidance, print or install the agent skill shell, validate a plan without writing anything, render it as self-contained themed HTML, compile its validated contents as machine-readable JSON, or serve it for interactive review:
 
 ```sh
 npx big-plan guidance
@@ -27,9 +27,10 @@ npx big-plan skill write <path/to/SKILL.md>
 npx big-plan validate <file.mdx>
 npx big-plan render <file.mdx> [output.html]
 npx big-plan compile <file.mdx> [output.json]
+npx big-plan review <file.mdx>
 ```
 
-`guidance` prints the principles for writing a plan a human loves to review; reading it recently is required before `validate` and `render` will run.
+`guidance` prints the principles for writing a plan a human loves to review; reading it recently is required before `validate`, `render`, and `review` will run.
 `skill` prints the thin agent skill shell shipped with the package; `skill write <path>` installs that shell only when you ask (no silent overwrites).
 Validation checks that the plan can be compiled and rendered, then applies linting rules to the authored plan without writing an output file.
 Rendering applies the same linting rules, so a plan that fails lint never reaches a reviewer.
@@ -77,7 +78,7 @@ The full authoring contract lives in the documentation:
 - [Linting rules](docs/src/content/docs/reference/lint-rules.md) - every authoring rule and its conservative matching boundaries.
 - [Components](docs/src/content/docs/components/index.md) - the complete built-in component reference.
 - [Features](docs/src/content/docs/intro/features.md) - the reader-facing viewer capabilities.
-- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `skill`, `validate`, `render`, and `compile` in detail.
+- [CLI reference](docs/src/content/docs/reference/cli.md) - `big-plan guidance`, `skill`, `validate`, `render`, `compile`, and `review` in detail.
 
 To preview components locally from a source checkout, run `bun run build` first. Then run `node bin/big-plan.mjs guidance` once and render [the MDX components plan](examples/mdx-components.mdx) with `node bin/big-plan.mjs render examples/mdx-components.mdx`. The local executable reads the compiled files in `dist/`.
 To inspect supported fences in both light and dark appearances, render the [syntax-highlighting source](examples/syntax-highlighting.mdx) the same way.

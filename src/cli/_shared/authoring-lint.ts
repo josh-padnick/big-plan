@@ -1,5 +1,5 @@
 // Owns the shared translation from authoring-lint diagnostics to the CLI's
-// structured error, so validate and render fail identically on lint.
+// structured error, so validate, render, and review fail identically on lint.
 
 import { AxiError } from "axi-sdk-js";
 import { lintPlan } from "../../lint/lint-plan.js";

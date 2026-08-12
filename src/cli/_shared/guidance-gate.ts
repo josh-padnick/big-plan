@@ -1,7 +1,7 @@
-// Owns the guidance gate shared by three commands: running `big-plan
-// guidance` records
-// that the current guidance version was read for a working directory, and
-// validate and render refuse to run for that directory until it has been.
+// Owns the guidance gate shared by three commands: running `big-plan guidance`
+// records that the current guidance version was read for a working directory,
+// and validate, render, and review refuse to run for that directory until
+// guidance has been acknowledged.
 // Environments with no writable state location degrade to a warning, so a
 // sandboxed agent is reminded rather than locked out.
 // The gate owns the policy (per-directory markers, TTL, version matching,
