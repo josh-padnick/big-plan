@@ -64,6 +64,10 @@ export type CommentsSurfaceModel = {
   readonly workingBatch?: {
     readonly count: number;
     readonly content: ReactNode;
+    // A batch the agent has not picked up yet is still waiting, so the section
+    // it heads says so rather than claiming work is underway.
+    readonly label: string;
+    readonly tone: "working" | "queued";
   };
   readonly resolved: ReadonlyArray<ReviewComment>;
   readonly resolvedDrafts: ReadonlyArray<ReviewComment>;
@@ -150,9 +154,9 @@ export const CommentsSurface = ({
 
           {(model.workingBatch?.count ?? working.length) === 0 ? null : (
             <LifecycleSection
-              label="Working"
+              label={model.workingBatch?.label ?? "Working"}
               count={model.workingBatch?.count ?? working.length}
-              tone="working"
+              tone={model.workingBatch?.tone ?? "working"}
               first={first()}
             >
               {model.workingBatch?.content}

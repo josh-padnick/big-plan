@@ -4631,6 +4631,13 @@ export const ReviewController = () => {
                     ? undefined
                     : {
                         count: activeBatchCommentIds.length,
+                        label: statusForRequest(activeBatchRequest, "thread")
+                          .label,
+                        tone:
+                          statusForRequest(activeBatchRequest, "thread")
+                            .stage === "waiting"
+                            ? ("queued" as const)
+                            : ("working" as const),
                         content: (
                           <Card
                             className="m-0 w-full max-w-none border border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-ink)] shadow-none"

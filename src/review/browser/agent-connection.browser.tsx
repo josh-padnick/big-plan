@@ -174,6 +174,20 @@ const CurrentActivityCard = ({
   }, [attentionKey]);
   const body =
     activity.state === "working" ? activity.latestStep : activity.supporting;
+  // A live connection is the fact a reviewer checks this card for; what the
+  // agent happens to be doing is the detail underneath it. Only the working
+  // state buries the connection behind the activity, so only it is retitled,
+  // and its activity joins the request it is working on one line down.
+  const title =
+    activity.state === "working" ? "Agent connected" : activity.headline;
+  const targetLabel =
+    activity.state !== "disconnected" && "targetLabel" in activity
+      ? activity.targetLabel
+      : undefined;
+  const secondary =
+    activity.state === "working"
+      ? [activity.headline, targetLabel].filter(Boolean).join(" · ")
+      : (targetLabel ?? "");
   const footerLabel =
     "updatedAtMs" in activity
       ? `Updated ${relativeSignalLabel({ now: nowMs, at: activity.updatedAtMs })}`
@@ -197,9 +211,7 @@ const CurrentActivityCard = ({
             aria-hidden="true"
           />
         )}
-        <strong className="min-w-0 flex-1 text-sm text-ink">
-          {activity.headline}
-        </strong>
+        <strong className="min-w-0 flex-1 text-sm text-ink">{title}</strong>
         <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
           {activity.state === "stalled"
             ? "warning"
@@ -208,13 +220,11 @@ const CurrentActivityCard = ({
               : activity.state}
         </span>
       </div>
-      {activity.state !== "disconnected" &&
-      "targetLabel" in activity &&
-      activity.targetLabel !== undefined ? (
+      {secondary === "" ? null : (
         <strong className="text-2xs uppercase tracking-caps text-ink">
-          {activity.targetLabel}
+          {secondary}
         </strong>
-      ) : null}
+      )}
       <p className="m-0 text-ink [overflow-wrap:anywhere]">{body}</p>
       {footerLabel !== null || "requestId" in activity ? (
         <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-2 text-2xs">
