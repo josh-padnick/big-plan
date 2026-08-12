@@ -5,6 +5,13 @@ node_modules/
 *.generated.css
 examples/*.html
 .big-plan/*.html
+
+# Review and feedback state the running product writes beside a plan. Git
+# ignores it as never-shared local state, so formatting it only fails lint for
+# whoever has run the product here.
+**/.big-plan/feedback/
+**/.big-plan/review/
+
 data/**/*.html
 docs/public/demo/
 playwright-report/

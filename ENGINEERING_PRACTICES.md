@@ -267,12 +267,27 @@ Runtime state is not by itself a reason to use CSS.
 Style native or accessible state with the corresponding native or `aria-*` selector when it represents that state, and use `data-*` only for presentation or script state that has no native or ARIA contract.
 Keep every complete candidate static.
 
-CSS is the escape hatch for externally owned or generated markup, document-wide behavior, token or keyframe definitions, a selector relationship that is clearer as a selector, a shared visual primitive with no authored element of its own, or a case where utilities make local markup materially less legible.
-Component CSS requires a concrete ownership, selector, primitive-definition, document-wide, or readability reason - not merely state, a pseudo-element, `:has()`, print, motion, or a container query.
+CSS is the escape hatch for externally owned or generated markup, document-wide behavior, token or keyframe definitions, a selector relationship that is clearer as a selector, or a shared visual primitive with no authored element of its own.
+Component CSS requires a concrete ownership, selector, primitive-definition, or document-wide reason - not merely state, a pseudo-element, `:has()`, print, motion, a container query, or local readability.
+
+The escape-hatch comment licenses the rules that match the reason it states, never the file that carries it.
+A stylesheet whose header names one legitimate category and then styles dozens of elements its own view renders fails the contract even though the header parses, and a stylesheet grows only for a reason its header already covers.
+
+A rule that selects nothing but classes fails the ownership test by construction: a class a view puts on its own element is a utility candidate with an extra name.
+Write those declarations as utilities on that markup instead of minting a semantic class such as `.review-staged-card` and styling it from a stylesheet, which forks the design system into a private dialect.
+Two exceptions exist and both are explicit.
+A component whose whole purpose is a hand-authored visual language is a declared drawing system named in the contract check's allowlist.
+A single rule whose utility form is genuinely unreadable carries an adjacent `Utility form:` comment spelling out the utility string it replaces, so the legibility claim is a checkable statement about one rule rather than a blanket over a file.
+
+An interaction island styles the markup it renders with utilities, exactly as server-rendered chrome does.
+Island CSS may target only markup the island does not render, such as chrome attached to server-owned plan blocks, and it lives in the island's own slice beside the view.
+`src/render/shell/` owns viewer chrome and holds no stylesheet at all; `src/render/` holds only the document-wide stylesheets the contract check names.
+
+When a declaration cluster really is a primitive the framework lacks, define it once with `@utility` in the theme entrypoint rather than minting a semantic class for it.
 
 State the reason in the stylesheet's file-level `CSS escape hatch:` comment.
 Ordinary escape-hatch rules belong to `components` and yield to utilities; only a state invariant that must beat resting utilities belongs to `bp-state`, with an adjacent `Override invariant:` comment naming what it must override.
-The stylesheet-contract check owns the exact enforced syntax and allowed layer exceptions.
+The stylesheet-contract check owns the exact enforced syntax, the allowed layer exceptions, the per-file declaration budgets, and the named exception lists.
 
 Keep design tokens, shared keyframes, and true document-wide resets in their global owner.
 Keep layout, spacing, typography, cursor, hover, focus, and component state visible with the owned markup whenever the three tests pass.

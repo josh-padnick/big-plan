@@ -79,6 +79,7 @@ test("should review a static Mermaid SVG through the diagram canvas", async ({
     .getAttribute("points");
   expect(removedPoints).toMatch(/^2\.55,0 /u);
   expect(removedPoints).toContain("0,2.55");
+  await expect(removedMarker).toBeVisible();
   const sourceBox = await source.boundingBox();
   const removedBox = await removedMarker.boundingBox();
   expect(removedBox?.width).toBeCloseTo((sourceBox?.width ?? 0) * 0.46, 0);

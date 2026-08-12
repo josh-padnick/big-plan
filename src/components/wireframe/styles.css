@@ -1,6 +1,7 @@
 /*
 CSS escape hatch: selector relationships isolate the drawing from generated
-prose markup, while local readability keeps its sketch primitives together.
+prose markup, and the sketch primitives are a declared drawing system named in
+scripts/style-contract/allowlist.mjs.
 
 Wireframe's hand-drawn visual language.
 
