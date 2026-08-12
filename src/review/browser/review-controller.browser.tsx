@@ -3886,6 +3886,12 @@ export const ReviewController = () => {
   };
   const deleteSentComment = async (commentId: string) => {
     if (identity === null) return;
+    // Close the confirmation and say what is happening before the round-trip.
+    // Leaving the dialog up until the runtime answers reads as a dead button,
+    // and a reviewer who clicks again deletes twice.
+    const kind = pendingDelete?.kind;
+    setPendingDelete(null);
+    setStatus("Deleting the comment…");
     try {
       await serializeRuntimeWrite(() =>
         requestJson({
@@ -3914,33 +3920,35 @@ export const ReviewController = () => {
         }),
       );
       if (selectedCommentId === commentId) setSelectedCommentId(null);
-      setPendingDelete(null);
       setStatus(
-        pendingDelete?.kind === "canceled"
+        kind === "canceled"
           ? "Canceled comment deleted."
-          : pendingDelete?.kind === "reverted"
+          : kind === "reverted"
             ? "Comment deleted."
             : "Queued comment deleted.",
       );
     } catch (error) {
-      setPendingDelete(null);
       setStatus(errorMessage(error));
     }
   };
   const revertAgentChanges = async () => {
     if (identity === null || pendingRevert === null) return;
+    const revert = pendingRevert;
+    // Same reason as deletion: acknowledge the confirmed action immediately,
+    // then let the reload or the error message report how it went.
+    setPendingRevert(null);
+    setStatus("Reverting the agent's changes…");
     try {
       await serializeRuntimeWrite(() =>
         requestJson({
           path: "/api/revert-agent-changes",
           identity,
           method: "POST",
-          body: pendingRevert,
+          body: revert,
         }),
       );
       window.location.reload();
     } catch (error) {
-      setPendingRevert(null);
       setStatus(errorMessage(error));
     }
   };
