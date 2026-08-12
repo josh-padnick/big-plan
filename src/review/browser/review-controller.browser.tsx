@@ -118,6 +118,10 @@ const TABLE_PRECISION_KINDS = new Set([
   "table-column",
   "table-row",
 ]);
+// Chrome the renderer derives from the plan's own structure rather than from
+// anything an author wrote. There is no text here to change, so a comment on
+// it could never be acted on; feedback belongs on the section it points to.
+const DERIVED_KINDS = new Set(["table-of-contents"]);
 
 type PendingDelete =
   | { readonly kind: "comment"; readonly comment: ReviewComment }
@@ -990,6 +994,7 @@ const useBlockHosts = () => {
           (block) =>
             !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
             !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
+            !DERIVED_KINDS.has(block.dataset.blockKind ?? "") &&
             block.closest("[data-quick-summary]") === null &&
             // A figure that already offers its own whole-figure comment owns
             // that affordance, and its notes join the batch the reader submits
