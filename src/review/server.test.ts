@@ -2,6 +2,7 @@
 // is covered here as behavior rather than as intent: each test is one refusal
 // the design promises, exercised against a real listening runtime.
 
+import { spawn } from "node:child_process";
 import {
   mkdir,
   mkdtemp,
@@ -13,6 +14,7 @@ import {
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   commentsFromExchange,
@@ -28,7 +30,13 @@ import { claimAgentRequest, publishAgentResponse } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
-import { writeRevisionSnapshot } from "./store.js";
+import {
+  deriveReviewPlanId,
+  prepareStore,
+  reviewStoreFor,
+  writeRevisionSnapshot,
+  writeSessionDescriptorValue,
+} from "./store.js";
 
 const PLAN = `# Review runtime plan
 
@@ -38,6 +46,81 @@ The runtime serves this document and nothing else.
 
 Today's reality is that feedback does not reach the agent.
 `;
+
+const errorIdentity = (error: unknown): string => {
+  const code =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+      ? error.code
+      : "";
+  return `${error instanceof Error ? error.name : "Error"}:${code}`;
+};
+
+/** Runs startup in a process whose exit proves no listener survived failure. */
+const observeFailedStartup = ({
+  planPath,
+}: {
+  readonly planPath: string;
+}): Promise<{
+  readonly error: string;
+  readonly timedOut: boolean;
+}> =>
+  new Promise((settle, fail) => {
+    const serverModule = fileURLToPath(new URL("./server.ts", import.meta.url));
+    const childSource = `
+      import { startReviewRuntime } from ${JSON.stringify(serverModule)};
+      const planPath = process.env.BIG_PLAN_FAILED_STARTUP_PLAN;
+      if (planPath === undefined) throw new Error("Missing startup test plan");
+      try {
+        await startReviewRuntime({ planPath });
+        process.stdout.write("startup unexpectedly succeeded");
+      } catch (error) {
+        const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : "";
+        process.stdout.write(\`\${error instanceof Error ? error.name : "Error"}:\${code}\`);
+      }
+    `;
+    const child = spawn(
+      process.env.npm_execpath ?? "bun",
+      ["-e", childSource],
+      {
+        env: { ...process.env, BIG_PLAN_FAILED_STARTUP_PLAN: planPath },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, 3_000);
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      fail(error);
+    });
+    child.once("close", (code, signal) => {
+      clearTimeout(timer);
+      if (!timedOut && code !== 0) {
+        fail(
+          new Error(
+            `Startup probe stopped with code ${String(code)} and signal ${String(signal)}: ${stderr}`,
+          ),
+        );
+        return;
+      }
+      settle({ error: stdout, timedOut });
+    });
+  });
 
 let runtime: ReviewRuntime;
 let token: string;
@@ -1186,6 +1269,33 @@ describe("review runtime feedback", () => {
 });
 
 describe("review runtime shutdown", () => {
+  it("should close its listener without replacing a startup failure", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-server-startup-failure-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const planId = deriveReviewPlanId({ planPath });
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    await mkdir(store.sessionPath);
+    let expectedError = "";
+    try {
+      await writeSessionDescriptorValue({ store, value: {} });
+    } catch (error: unknown) {
+      expectedError = errorIdentity(error);
+    }
+    expect(expectedError).not.toBe("");
+
+    try {
+      const observed = await observeFailedStartup({ planPath });
+      expect(observed.timedOut).toBe(false);
+      expect(observed.error).toBe(expectedError);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should restart from the rendered source before accepting new responses", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "big-plan-server-revision-"),

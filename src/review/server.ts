@@ -1160,22 +1160,29 @@ export const startReviewRuntime = async ({
     typeof address === "object" && address !== null ? address.port : 0;
   const url = `http://127.0.0.1:${port}/`;
 
-  await activateReviewSession({
-    store,
-    descriptor: {
-      version: 1,
-      sessionId,
-      planId,
-      plan: resolvedPlanPath,
-      url,
-      port,
-      pid: process.pid,
-      startedAt: new Date().toISOString(),
-      // The token is here so the reviewer's own tools can reach the runtime;
-      // the file is owner-only, which is what keeps that safe.
-      token,
-    },
-  });
+  try {
+    await activateReviewSession({
+      store,
+      descriptor: {
+        version: 1,
+        sessionId,
+        planId,
+        plan: resolvedPlanPath,
+        url,
+        port,
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        // The token is here so the reviewer's own tools can reach the runtime;
+        // the file is owner-only, which is what keeps that safe.
+        token,
+      },
+    });
+  } catch (error: unknown) {
+    await new Promise<void>((settle) => {
+      server.close(() => settle());
+    }).catch(() => undefined);
+    throw error;
+  }
   let heartbeatWrite = Promise.resolve();
   let heartbeatFailureReported = false;
   const queueHeartbeat = (running: boolean): Promise<void> => {
