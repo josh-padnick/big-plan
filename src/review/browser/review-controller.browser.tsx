@@ -2705,11 +2705,10 @@ export const ReviewController = () => {
         }
       } catch (error) {
         if (!current) return;
-        const retryDelay = HYDRATION_RETRY_DELAYS_MS[attempt];
-        if (retryDelay === undefined) {
-          setStatus(errorMessage(error));
-          return;
-        }
+        const retryDelay =
+          HYDRATION_RETRY_DELAYS_MS[
+            Math.min(attempt, HYDRATION_RETRY_DELAYS_MS.length - 1)
+          ];
         setStatus(`${errorMessage(error)} Retrying review state…`);
         retryTimer = window.setTimeout(() => {
           retryTimer = undefined;

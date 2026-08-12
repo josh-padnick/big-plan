@@ -294,6 +294,70 @@ test("should persist edits after transient hydration failure", async ({
   ).toHaveValue(activeDraft);
 });
 
+test("should persist edits after the hydration retry ramp", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  const initialPersistence = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+  );
+  await page.goto(reviewRuntimeUrl);
+  await initialPersistence;
+
+  let draftReads = 0;
+  let markRetryRampExhausted = (): void => undefined;
+  const retryRampExhausted = new Promise<void>((settle) => {
+    markRetryRampExhausted = settle;
+  });
+  await page.route("**/api/drafts", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    draftReads += 1;
+    if (draftReads <= 4) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "not-json",
+      });
+      if (draftReads === 4) markRetryRampExhausted();
+      return;
+    }
+    await route.continue();
+  });
+  await page.reload();
+  await retryRampExhausted;
+
+  const stagedBody = "Persist this comment after the retry ramp.";
+  const activeDraft = "Persist this plan-wide draft after the retry ramp.";
+  await stageComment(page, stagedBody);
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await rail.getByRole("textbox", { name: "Plan-wide chat" }).fill(activeDraft);
+
+  const persisted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT",
+    { timeout: 4_500 },
+  );
+  await persisted;
+  await page.unroute("**/api/drafts");
+  await page.reload();
+
+  await page.getByRole("button", { name: /Feedback/u }).click();
+  const restoredRail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(restoredRail).toContainText(stagedBody);
+  await restoredRail.getByRole("tab", { name: "Chat" }).click();
+  await expect(
+    restoredRail.getByRole("textbox", { name: "Plan-wide chat" }),
+  ).toHaveValue(activeDraft);
+});
+
 test("should round-trip the active plan-wide draft through hydration", async ({
   page,
   reviewRuntimeUrl,
