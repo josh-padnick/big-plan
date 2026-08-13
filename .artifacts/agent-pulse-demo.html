@@ -162,32 +162,44 @@
       .orbit-ring::before {
         content: "";
         position: absolute;
-        inset: var(--orbit-gap);
+        inset: var(--orbit-padding);
         width: auto;
         height: auto;
         aspect-ratio: 1;
-        border: var(--orbit-stroke) solid var(--green);
-        border-right-color: transparent;
+        background: conic-gradient(
+          var(--green) 0deg calc(360deg - var(--orbit-opening)),
+          transparent calc(360deg - var(--orbit-opening)) 360deg
+        );
         border-radius: 50%;
+        -webkit-mask: radial-gradient(
+          circle,
+          transparent calc(50% - var(--orbit-stroke)),
+          #000 calc(50% - var(--orbit-stroke) + 0.5px)
+        );
+        mask: radial-gradient(
+          circle,
+          transparent calc(50% - var(--orbit-stroke)),
+          #000 calc(50% - var(--orbit-stroke) + 0.5px)
+        );
         animation: orbit-ring-spin var(--orbit-speed) linear infinite;
       }
       .orbit-a {
-        --orbit-gap: -4px;
+        --orbit-padding: -4px;
+        --orbit-opening: 70deg;
         --orbit-stroke: 1.5px;
         --orbit-speed: 1.1s;
       }
       .orbit-b {
-        --orbit-gap: -3px;
+        --orbit-padding: -3px;
+        --orbit-opening: 70deg;
         --orbit-stroke: 2px;
         --orbit-speed: 1.1s;
       }
       .orbit-c {
-        --orbit-gap: -4px;
+        --orbit-padding: -4px;
+        --orbit-opening: 70deg;
         --orbit-stroke: 1.5px;
         --orbit-speed: 0.7s;
-      }
-      .orbit-ring {
-        animation: review-agent-active-indicator-pulse 1.8s ease-in-out infinite;
       }
       .orbit-ring::before {
         box-sizing: border-box;
@@ -202,17 +214,6 @@
         animation: none;
       }
       @media (prefers-reduced-motion: no-preference) {
-        @keyframes review-agent-active-indicator-pulse {
-          0%,
-          100% {
-            opacity: 0.82;
-            transform: scale(0.96);
-          }
-          50% {
-            opacity: 1;
-            transform: scale(1.08);
-          }
-        }
         @keyframes orbit-ring-spin {
           to {
             transform: rotate(360deg);
@@ -269,7 +270,7 @@
                 aria-hidden="true"
               ></span
               >Agent is working</span
-            ><code id="summary">4px · 1.5px · 1.1s</code>
+            ><code id="summary">4px · 70° · 1.5px · 1.1s</code>
           </div>
         </div>
       </div>
@@ -278,15 +279,26 @@
           Working-state tuning controls
         </h2>
         <div class="control">
-          <label for="gap">Ring gap</label
+          <label for="padding">Ring padding</label
           ><input
-            id="gap"
+            id="padding"
             type="range"
             min="1"
             max="7"
             step="0.5"
             value="4"
-          /><output id="gap-value" for="gap">4px</output>
+          /><output id="padding-value" for="padding">4px</output>
+        </div>
+        <div class="control">
+          <label for="opening">Ring opening</label
+          ><input
+            id="opening"
+            type="range"
+            min="20"
+            max="160"
+            step="5"
+            value="70"
+          /><output id="opening-value" for="opening">70°</output>
         </div>
         <div class="control">
           <label for="speed">Rotation speed</label
@@ -317,7 +329,14 @@
       const indicator = document.querySelector("#working-indicator");
       const summary = document.querySelector("#summary");
       const controls = {
-        gap: { suffix: "px", output: document.querySelector("#gap-value") },
+        padding: {
+          suffix: "px",
+          output: document.querySelector("#padding-value"),
+        },
+        opening: {
+          suffix: "°",
+          output: document.querySelector("#opening-value"),
+        },
         speed: { suffix: "s", output: document.querySelector("#speed-value") },
         stroke: {
           suffix: "px",
@@ -331,13 +350,14 @@
             document.querySelector(`#${key}`).value,
           ]),
         );
-        indicator.style.setProperty("--orbit-gap", `-${values.gap}px`);
+        indicator.style.setProperty("--orbit-padding", `-${values.padding}px`);
+        indicator.style.setProperty("--orbit-opening", `${values.opening}deg`);
         indicator.style.setProperty("--orbit-speed", `${values.speed}s`);
         indicator.style.setProperty("--orbit-stroke", `${values.stroke}px`);
         Object.entries(controls).forEach(([key, control]) => {
           control.output.textContent = `${values[key]}${control.suffix}`;
         });
-        summary.textContent = `${values.gap}px · ${values.stroke}px · ${values.speed}s`;
+        summary.textContent = `${values.padding}px · ${values.opening}° · ${values.stroke}px · ${values.speed}s`;
       };
       Object.keys(controls).forEach((key) =>
         document
