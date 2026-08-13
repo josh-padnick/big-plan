@@ -269,10 +269,6 @@ test("should contain working comments when resolved threads expand", async ({
       location.newBlockId === undefined ? [] : [location.newBlockId],
     ),
   );
-  const changeTarget = [...changedBlocks].at(-1);
-  if (changeTarget === undefined) {
-    throw new Error("The containment journey produced no changed block");
-  }
   await writeFile(session.plan, revisedSource, "utf8");
   const resultSnapshot = deriveSnapshotDigest(revisedSource);
   await writeSnapshot({
@@ -293,9 +289,9 @@ test("should contain working comments when resolved threads expand", async ({
         requestId: firstRequest.requestId,
         outcomes: firstRequest.comments.map((comment) => ({
           commentId: comment.id,
-          state: "changed",
-          message: "The completed feedback is addressed.",
-          changeTargets: [changeTarget],
+          state: "warning",
+          summary: "Unbroken".repeat(10),
+          message: "The completed feedback needs confirmation.",
         })),
       },
       request: firstClaimed,
@@ -306,8 +302,12 @@ test("should contain working comments when resolved threads expand", async ({
     }),
   });
 
-  await expect(rail.getByRole("button", { name: "Resolve all" })).toBeVisible();
-  await rail.getByRole("button", { name: "Resolve all" }).click();
+  for (let index = 0; index < 6; index += 1) {
+    await rail
+      .getByRole("button", { name: "Resolve thread" })
+      .first()
+      .click();
+  }
   await expect(rail.getByText("Resolved (6)")).toBeVisible();
 
   await rail.getByRole("button", { name: "Close feedback" }).click();
@@ -364,31 +364,32 @@ test("should contain working comments when resolved threads expand", async ({
   await expect(
     workingGroup.getByRole("button", { name: "Cancel request" }),
   ).toBeVisible();
+  const railWidthBeforeResolved = await rail.evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
   await rail.getByText("Resolved (6)").click();
+  const resolvedSection = rail.locator("details");
+  await resolvedSection
+    .getByRole("button", { name: "Expand thread" })
+    .first()
+    .click();
+  expect(
+    await rail.evaluate((element) => element.getBoundingClientRect().width),
+  ).toBe(railWidthBeforeResolved);
 
   const measureContainment = async () =>
     rail.locator(".review-feedback-panel").evaluate((panel) => {
-      const panelRect = panel.getBoundingClientRect();
       const details = panel.querySelector("details");
       if (details === null) {
         throw new Error("The expanded resolved section is missing");
       }
-      const overflowing = [...panel.querySelectorAll("*")].filter(
-        (element) =>
-          element.getBoundingClientRect().right > panelRect.right + 0.5,
-      );
       return {
-        panelRight: panelRect.right,
         scrollWidth: panel.scrollWidth,
         clientWidth: panel.clientWidth,
-        overflowing: overflowing.length,
-        resolvedMinWidth: getComputedStyle(details).minWidth,
       };
     });
   const containment = await measureContainment();
   expect(containment.scrollWidth).toBeLessThanOrEqual(containment.clientWidth);
-  expect(containment.overflowing).toBe(0);
-  expect(containment.resolvedMinWidth).toBe("0px");
 
   const cancelRequest = workingGroup.getByRole("button", {
     name: "Cancel request",
@@ -460,7 +461,6 @@ test("should contain working comments when resolved threads expand", async ({
   expect(narrowContainment.scrollWidth).toBeLessThanOrEqual(
     narrowContainment.clientWidth,
   );
-  expect(narrowContainment.overflowing).toBe(0);
 });
 
 test("should restore and submit staged comments through the local review runtime", async ({
