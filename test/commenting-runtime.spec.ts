@@ -390,6 +390,71 @@ test("should contain working comments when resolved threads expand", async ({
   expect(containment.overflowing).toBe(0);
   expect(containment.resolvedMinWidth).toBe("0px");
 
+  const cancelRequest = workingGroup.getByRole("button", {
+    name: "Cancel request",
+  });
+  await expect(cancelRequest).toBeVisible();
+  await expect(cancelRequest).toBeEnabled();
+  await cancelRequest.click({ trial: true });
+
+  const workingThread = workingGroup.locator(
+    "[data-review-sent-thread='working']",
+  );
+  const workingMessage = workingThread
+    .locator('[data-review-message="user"] p')
+    .first();
+  await expect(workingMessage).toBeVisible();
+  const messageLayout = await workingMessage.evaluate((message) => {
+    const panel = message.closest(".review-feedback-panel");
+    if (panel === null) {
+      throw new Error("The working message is outside the feedback panel");
+    }
+    const panelRect = panel.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(message);
+    const textRects = [...range.getClientRects()].filter(
+      (rect) => rect.width > 0 && rect.height > 0,
+    );
+    return {
+      lineCount: new Set(textRects.map((rect) => Math.round(rect.top))).size,
+      textRight: Math.max(...textRects.map((rect) => rect.right)),
+      panelRight: panelRect.right,
+    };
+  });
+  expect(messageLayout.lineCount).toBeGreaterThan(1);
+  expect(messageLayout.textRight).toBeLessThanOrEqual(
+    messageLayout.panelRight + 0.5,
+  );
+
+  const replyComposer = workingThread.getByPlaceholder("Reply to the agent…");
+  await replyComposer.click();
+  await expect(replyComposer).toBeFocused();
+  const composerContainment = await replyComposer.evaluate((composer) => {
+    const panel = composer.closest(".review-feedback-panel");
+    if (panel === null) {
+      throw new Error("The reply composer is outside the feedback panel");
+    }
+    const composerRect = composer.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    return {
+      left: composerRect.left >= panelRect.left - 0.5,
+      right: composerRect.right <= panelRect.right + 0.5,
+      top: composerRect.top >= panelRect.top - 0.5,
+      bottom: composerRect.bottom <= panelRect.bottom + 0.5,
+    };
+  });
+  expect(composerContainment).toEqual({
+    left: true,
+    right: true,
+    top: true,
+    bottom: true,
+  });
+  await replyComposer.fill("Keep this working thread actionable.");
+  const replyButton = workingThread.getByRole("button", { name: "Reply" });
+  await expect(replyButton).toBeVisible();
+  await expect(replyButton).toBeEnabled();
+  await replyButton.click({ trial: true });
+
   await page.setViewportSize({ width: 320, height: 900 });
   const narrowContainment = await measureContainment();
   expect(narrowContainment.scrollWidth).toBeLessThanOrEqual(
