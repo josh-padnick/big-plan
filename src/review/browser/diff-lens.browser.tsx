@@ -3,7 +3,7 @@
 // ownership of plan content.
 
 import { createPortal } from "react-dom";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
@@ -541,8 +541,36 @@ const ComponentSnapshotComparison = ({
 }) => {
   const initialSide = location.newHtml === undefined ? "old" : "new";
   const [side, setSide] = useState<"old" | "new">(initialSide);
+  const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => setSide(initialSide), [initialSide, location]);
   const html = side === "old" ? location.oldHtml : location.newHtml;
+  useEffect(() => {
+    const content = contentRef.current;
+    if (content === null) return;
+    const fitWireframes = (): void => {
+      for (const card of content.querySelectorAll<HTMLElement>(
+        ".wireframe-frame-card",
+      )) {
+        const frame = card.querySelector<HTMLElement>(
+          ":scope > .wireframe-frame",
+        );
+        if (frame === null || card.clientWidth === 0) continue;
+        frame.style.zoom = "1";
+        const cardStyle = getComputedStyle(card);
+        const availableWidth =
+          card.clientWidth -
+          Number.parseFloat(cardStyle.paddingLeft) -
+          Number.parseFloat(cardStyle.paddingRight);
+        frame.style.zoom = String(
+          Math.min(1, availableWidth / frame.offsetWidth),
+        );
+      }
+    };
+    fitWireframes();
+    const observer = new ResizeObserver(fitWireframes);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [html]);
   return (
     <div className="grid min-w-0 gap-2" data-review-component-diff="">
       {/* A component snapshot is a diff, not a pair of ordinary tabs, so the
@@ -576,14 +604,15 @@ const ComponentSnapshotComparison = ({
         )}
       </div>
       <div
-        className={`min-w-0 overflow-hidden rounded-lg border-2 bg-surface p-3 text-ink inset-shadow-well ${
+        className={`min-w-0 overflow-hidden rounded-lg border-4 bg-surface p-3 text-ink inset-shadow-well ${
           side === "old"
-            ? "border-[var(--diff-remove-c)]"
-            : "border-[var(--diff-add-c)]"
+            ? "[border-color:color-mix(in_srgb,var(--diff-remove-c)_55%,var(--diff-remove-bg))]"
+            : "[border-color:color-mix(in_srgb,var(--diff-add-c)_55%,var(--diff-add-bg))]"
         }`}
         data-review-component-snapshot={side}
       >
         <div
+          ref={contentRef}
           className="pointer-events-none min-w-0 [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_[data-flow-controls]]:hidden"
           inert
           dangerouslySetInnerHTML={{ __html: html ?? "" }}

@@ -2185,7 +2185,10 @@ test("should colour a component snapshot switch as a diff", async ({
       background: getComputedStyle(node).backgroundColor,
       color: getComputedStyle(node).color,
     }));
-    await expect(snapshot).toHaveCSS("border-top-color", added.color);
+    const addedBorder = await snapshot.evaluate(
+      (node) => getComputedStyle(node).borderTopColor,
+    );
+    expect(addedBorder).not.toBe(added.color);
 
     await was.click();
     await expect(snapshot).toHaveAttribute(
@@ -2196,12 +2199,109 @@ test("should colour a component snapshot switch as a diff", async ({
       background: getComputedStyle(node).backgroundColor,
       color: getComputedStyle(node).color,
     }));
-    await expect(snapshot).toHaveCSS("border-top-color", removed.color);
+    const removedBorder = await snapshot.evaluate(
+      (node) => getComputedStyle(node).borderTopColor,
+    );
+    expect(removedBorder).not.toBe(removed.color);
 
     // The two sides must not merely differ from the resting chrome; they must
     // differ from each other, which is what makes the switch read as a diff.
     expect(removed.color).not.toBe(added.color);
     expect(removed.background).not.toBe(added.background);
+    expect(removedBorder).not.toBe(addedBorder);
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should fit a wireframe component snapshot and keep its pastel diff edge", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-wireframe-diff-"));
+  const planPath = join(directory, "wireframe.mdx");
+  const before = `# Wireframe diff preview
+
+Review the queue change in context.
+
+## Workspace
+
+<Wireframe id="queue-diff" title="Review queue">
+<Screen id="queue" name="Queue" device="desktop">
+<AppShell>
+<Sidebar brand="Big Plan" mode="Review" />
+<AppContent>
+<PageHeader title="Plan review" />
+<Panel title="Threads">
+<List>
+<ListItem label="Keep the retry budget visible" selected />
+</List>
+</Panel>
+</AppContent>
+</AppShell>
+</Screen>
+</Wireframe>
+`;
+  const after = before.replace(
+    "Keep the retry budget visible",
+    "Keep the rollback owner explicit",
+  );
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const snapshot = page.locator("[data-review-component-snapshot]");
+    await expect(snapshot).toHaveAttribute(
+      "data-review-component-snapshot",
+      "new",
+    );
+    await expect(snapshot).toHaveCSS("border-top-width", "4px");
+    const geometry = await snapshot.evaluate((node) => {
+      const frame = node.querySelector<HTMLElement>(".wireframe-frame");
+      const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
+      if (frame === null || card === null) return null;
+      return {
+        frameRight: frame.getBoundingClientRect().right,
+        cardRight: card.getBoundingClientRect().right,
+        scrollWidth: node.scrollWidth,
+        clientWidth: node.clientWidth,
+      };
+    });
+    expect(geometry).not.toBeNull();
+    expect(geometry?.frameRight).toBeLessThanOrEqual(
+      (geometry?.cardRight ?? 0) + 0.5,
+    );
+    expect(geometry?.scrollWidth).toBe(geometry?.clientWidth);
+
+    await page
+      .locator("[data-review-component-diff]")
+      .getByRole("button", { name: "Was" })
+      .click();
+    await expect(snapshot).toHaveAttribute(
+      "data-review-component-snapshot",
+      "old",
+    );
+    await expect(snapshot).toHaveCSS("border-top-width", "4px");
+    await page.evaluate(() => {
+      document.documentElement.setAttribute("data-theme", "dark");
+    });
+    await expect(snapshot).toHaveCSS("border-top-width", "4px");
+    expect(
+      await snapshot.evaluate((node) => node.scrollWidth === node.clientWidth),
+    ).toBe(true);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
