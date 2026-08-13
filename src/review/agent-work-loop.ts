@@ -124,6 +124,39 @@ const wait = (milliseconds: number): Promise<void> =>
     setTimeout(settle, milliseconds);
   });
 
+const HEARTBEAT_FAILURE_BACKOFF_MS = [100, 250, 500, 1_000, 1_500] as const;
+
+/** Keeps one unlucky heartbeat sample from ending a long-running agent loop. */
+const reviewSessionIsAvailable = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: Parameters<typeof reviewSessionIsRunning>[0]["store"];
+  readonly sessionId: string;
+}): Promise<boolean> => {
+  let failedChecks = 0;
+  while (true) {
+    if (await reviewSessionIsRunning({ store, sessionId })) {
+      if (failedChecks > 0) {
+        console.error(
+          `Review session heartbeat recovered after ${failedChecks} failed check${
+            failedChecks === 1 ? "" : "s"
+          }`,
+        );
+      }
+      return true;
+    }
+    if ((await reviewSessionStopReason({ store, sessionId })) !== undefined) {
+      return false;
+    }
+    if (failedChecks >= HEARTBEAT_FAILURE_BACKOFF_MS.length) return false;
+    const backoff = HEARTBEAT_FAILURE_BACKOFF_MS[failedChecks];
+    if (backoff === undefined) return false;
+    await wait(backoff);
+    failedChecks += 1;
+  }
+};
+
 const readPlanSession = async (planArgument: string) => {
   const planPath = resolve(planArgument);
   const planId = deriveReviewPlanId({ planPath });
@@ -241,7 +274,7 @@ const nextWork = async ({
       state: "waiting",
     });
     if (
-      !(await reviewSessionIsRunning({
+      !(await reviewSessionIsAvailable({
         store: session.store,
         sessionId: session.sessionId,
       }))

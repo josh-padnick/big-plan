@@ -209,6 +209,68 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should recover from a transient heartbeat failure while waiting", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-heartbeat-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n");
+    const review = await startReviewRuntime({ planPath });
+    const heartbeat = vi
+      .spyOn(reviewStore, "readSessionHeartbeatValue")
+      .mockResolvedValueOnce({
+        sessionId: review.sessionId,
+        running: true,
+        updatedAtMs: Date.now(),
+      })
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        sessionId: review.sessionId,
+        running: true,
+        updatedAtMs: Date.now(),
+      });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest("# Plan\n"),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Is the plan ready?",
+    });
+    setTimeout(() => {
+      void writeAgentRequest({ store: review.store, request });
+    }, 50);
+    const recoveryLog = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: true,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+      });
+      expect(recoveryLog).toHaveBeenCalledWith(
+        expect.stringContaining("Review session heartbeat recovered"),
+      );
+    } finally {
+      heartbeat.mockRestore();
+      recoveryLog.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should explain a normal idle timeout to a waiting agent", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
     const planPath = join(directory, "plan.mdx");
