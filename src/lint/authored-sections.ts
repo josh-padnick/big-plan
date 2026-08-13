@@ -17,6 +17,8 @@ export type AuthoredSection = {
   readonly title: string;
   /** Title of the nearest preceding top-level Part marker, when the plan uses Parts. */
   readonly partTitle?: string;
+  readonly partOrdinal?: number;
+  readonly isTopLevel: boolean;
   readonly components: ReadonlyArray<string>;
   readonly content: ReadonlyArray<Node>;
   readonly line: number;
@@ -63,12 +65,22 @@ export const collectAuthoredSections = (
   tree: Node,
 ): ReadonlyArray<AuthoredSection> => {
   const sections: Array<AuthoredSection> = [];
+  let nextPartOrdinal = 0;
 
-  const visit = (parent: Node): void => {
+  const visit = ({
+    parent,
+    inheritedPartTitle,
+    inheritedPartOrdinal,
+  }: {
+    readonly parent: Node;
+    readonly inheritedPartTitle?: string;
+    readonly inheritedPartOrdinal?: number;
+  }): void => {
     if (!isParent(parent)) {
       return;
     }
-    let partTitle: string | undefined;
+    let partTitle = inheritedPartTitle;
+    let partOrdinal = inheritedPartOrdinal;
     for (let index = 0; index < parent.children.length; index += 1) {
       const child = parent.children[index];
       if (child === undefined) {
@@ -76,6 +88,8 @@ export const collectAuthoredSections = (
       }
       if (parent.type === "root" && isNamedFlowElement(child, "Part")) {
         partTitle = stringAttribute({ node: child, name: "title" });
+        nextPartOrdinal += 1;
+        partOrdinal = nextPartOrdinal;
       }
       if (
         isHeading(child) &&
@@ -120,6 +134,8 @@ export const collectAuthoredSections = (
             ...(journeyToc === undefined ? {} : { toc: journeyToc }),
             ...(wireframeReason === undefined ? {} : { wireframeReason }),
             ...(partTitle === undefined ? {} : { partTitle }),
+            ...(partOrdinal === undefined ? {} : { partOrdinal }),
+            isTopLevel: parent.type === "root",
             title,
             components,
             content: parent.children.slice(index + 1, sectionEnd),
@@ -137,6 +153,8 @@ export const collectAuthoredSections = (
           sections.push({
             name: title,
             ...(partTitle === undefined ? {} : { partTitle }),
+            ...(partOrdinal === undefined ? {} : { partOrdinal }),
+            isTopLevel: parent.type === "root",
             title,
             components,
             content: parent.children.slice(index + 1, sectionEnd),
@@ -145,10 +163,14 @@ export const collectAuthoredSections = (
           });
         }
       }
-      visit(child);
+      visit({
+        parent: child,
+        inheritedPartTitle: partTitle,
+        inheritedPartOrdinal: partOrdinal,
+      });
     }
   };
 
-  visit(tree);
+  visit({ parent: tree });
   return sections;
 };

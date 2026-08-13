@@ -120,7 +120,7 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
   let container: AuthoredSection | undefined;
   for (const section of sections) {
     if (section.type === undefined) {
-      if (namesJourneyContainer(section.title)) {
+      if (section.isTopLevel && namesJourneyContainer(section.title)) {
         container = section;
       }
       continue;
@@ -128,7 +128,10 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
     if (section.type !== "user-journey") {
       continue;
     }
-    if (container !== undefined && container.partTitle === section.partTitle) {
+    if (
+      container !== undefined &&
+      container.partOrdinal === section.partOrdinal
+    ) {
       containerSlides.add(container);
       continue;
     }

@@ -108,6 +108,32 @@ describe("lintPlan slide-type-structure", () => {
     ]);
   });
 
+  it("should distinguish separate journey Parts with the same title", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Part title="User journeys" />\n\n## User journeys\n\n### A reviewer reads the plan\n\nA.\n\n<Part title="User journeys" />\n\n<Slide type="user-journey" name="Opening the plan" toc="Open" />\n\n## A reviewer opens the plan\n\nA.\n\n<Wireframe id="open"><Screen id="plan" name="Plan" device="desktop" /></Wireframe>\n',
+      }),
+    ).toEqual([]);
+  });
+
+  it("should ignore a journey heading nested inside a component", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Callout>\n\n## User journeys\n\nContext only.\n\n</Callout>\n\n<Slide type="user-journey" name="Opening the plan" toc="Open" />\n\n## A reviewer opens the plan\n\nA.\n\n<Wireframe id="open"><Screen id="plan" name="Plan" device="desktop" /></Wireframe>\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-type-structure",
+        line: 9,
+        column: 1,
+        message:
+          'Put User journeys slide "Opening the plan" inside a Part titled "User journeys" so every journey nests under its container',
+      },
+    ]);
+  });
+
   it("should reject a journey slide that has no container at all", () => {
     expect(
       lintPlan({
