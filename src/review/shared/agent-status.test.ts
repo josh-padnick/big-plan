@@ -69,7 +69,7 @@ describe("current agent activity", () => {
     ).toMatchObject({
       state: "disconnected",
       headline: "The agent is disconnected",
-      supporting: expect.stringContaining("No agent signal for 1m 30s"),
+      supporting: expect.stringContaining("disconnect threshold: 75 seconds"),
     });
   });
 
@@ -222,7 +222,7 @@ describe("agent request status", () => {
       lastAgentSignalAtMs: NOW - AGENT_STALL_MS - 1,
     });
     expect(stalled.stage).toBe("stalled");
-    expect(stalled.headline).toBe("No progress for 2m");
+    expect(stalled.headline).toBe("No progress for 1m");
     expect(stalled.detail).toContain("agent session is still connected");
     expect(
       deriveAgentStatus({

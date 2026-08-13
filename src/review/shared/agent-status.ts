@@ -5,7 +5,11 @@
 import type { ProgressStepCode } from "./progress-code.js";
 import { compactDurationLabel } from "./time-label.js";
 
-export const AGENT_STALL_MS = 90_000;
+// Agents are expected to send a progress note at least once per minute while
+// working. The extra 15 seconds absorbs scheduling and filesystem jitter, but
+// still marks a killed agent disconnected well before a two-minute wait.
+export const AGENT_STALL_MS = 75_000;
+export const AGENT_STALL_WINDOW_LABEL = "75 seconds";
 
 export type AgentActivityRequest = {
   readonly requestId: string;
@@ -154,7 +158,7 @@ const disconnectedSupporting = ({
   });
   return quietFor === null
     ? "Reconnect the coding agent to continue. All comments are safe."
-    : `No agent signal for ${quietFor}; the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
+    : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
 };
 
 /** Derives the single current-work card from immutable runtime facts. */

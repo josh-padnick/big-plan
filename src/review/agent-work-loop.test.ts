@@ -271,6 +271,39 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should end waiting after sustained heartbeat failures", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-timeout-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n");
+    const review = await startReviewRuntime({ planPath });
+    const heartbeat = vi
+      .spyOn(reviewStore, "readSessionHeartbeatValue")
+      .mockResolvedValueOnce({
+        sessionId: review.sessionId,
+        running: true,
+        updatedAtMs: Date.now(),
+      })
+      .mockResolvedValue(undefined);
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: true,
+        }),
+      ).resolves.toMatchObject({
+        pending: false,
+        ended: true,
+        reason: "The review server stopped while the agent was waiting.",
+      });
+    } finally {
+      heartbeat.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should explain a normal idle timeout to a waiting agent", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
     const planPath = join(directory, "plan.mdx");
