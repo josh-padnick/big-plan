@@ -48,6 +48,16 @@ classes.
     color: var(--callout-note-c);
   }
 
+  /* Keep content-sized cards compact until a label actually needs more room.
+     The cap preserves the intrinsic width of short labels while giving longer
+     labels a readable measure instead of letting one card stretch the whole
+     diagram. Anywhere-wrapping also contains long identifiers and URLs in the
+     optional code and body fields. */
+  .flow-diagram-node {
+    max-inline-size: 28ch;
+    overflow-wrap: anywhere;
+  }
+
   .flow-diagram {
     /* One name for the connector paint and one for its weight, so a ghosted
        edge can fade every line, rail, and arrowhead by overriding a single
