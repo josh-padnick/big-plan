@@ -652,6 +652,24 @@ const ComponentSnapshotComparison = ({
   useEffect(() => {
     const content = contentRef.current;
     if (content === null) return;
+    const diffWireframeIds = new Set(
+      Array.from(content.querySelectorAll<HTMLElement>("[data-wireframe]"))
+        .map((element) => element.dataset.wireframe)
+        .filter((id): id is string => id !== undefined),
+    );
+    const originalWireframes = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-wireframe]"),
+    ).filter(
+      (element) =>
+        !content.contains(element) &&
+        diffWireframeIds.has(element.dataset.wireframe ?? ""),
+    );
+    const originalDisplayValues = originalWireframes.map(
+      (element) => element.style.display,
+    );
+    originalWireframes.forEach((element) => {
+      element.style.display = "none";
+    });
     const fitWireframes = (): void => {
       for (const card of content.querySelectorAll<HTMLElement>(
         ".wireframe-frame-card",
@@ -680,10 +698,10 @@ const ComponentSnapshotComparison = ({
         );
         screen.style.border =
           selected && diff !== undefined
-            ? `2px solid ${screenStatusBorder(diff.status)}`
+            ? `4px solid ${screenStatusBorder(diff.status)}`
             : "";
         screen.style.borderRadius = selected ? "0.75rem" : "";
-        screen.style.padding = selected ? "0.75rem" : "";
+        screen.style.padding = selected ? "1rem" : "";
         const name = screen.querySelector<HTMLElement>(
           ".wireframe-screen-name",
         );
@@ -697,7 +715,12 @@ const ComponentSnapshotComparison = ({
     fitWireframes();
     const observer = new ResizeObserver(fitWireframes);
     observer.observe(content);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      originalWireframes.forEach((element, index) => {
+        element.style.display = originalDisplayValues[index] ?? "";
+      });
+    };
   }, [renderedHtml, screenDiffs, selectedScreenId]);
   return (
     <div className="grid min-w-0 gap-2" data-review-component-diff="">
@@ -706,43 +729,30 @@ const ComponentSnapshotComparison = ({
           colours the word-level lens uses. The border repeats the colour at
           the edge of the content, where the reader is actually looking. */}
       {screenDiffs.length > 0 ? (
-        <div className="grid min-w-0 gap-2" aria-label="Wireframe screens">
-          <div className="flex min-w-0 flex-wrap gap-2" role="list">
-            {screenDiffs.map((screen) => (
-              <button
-                key={screen.id}
-                type="button"
-                className={`flex min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold ${
-                  selectedScreenId === screen.id
-                    ? "bg-surface shadow-raised"
-                    : "border-edge bg-surface"
-                }`}
-                style={
-                  selectedScreenId === screen.id
-                    ? { borderColor: screenStatusBorder(screen.status) }
-                    : undefined
+        <nav className="wireframe-switcher" aria-label="Prototype screens">
+          {screenDiffs.map((screen) => (
+            <button
+              key={screen.id}
+              type="button"
+              className="wireframe-switch"
+              aria-current={selectedScreenId === screen.id ? "true" : undefined}
+              onClick={() => setSelectedScreenId(screen.id)}
+            >
+              <span
+                className={
+                  screen.status === "removed" ? "line-through decoration-2" : ""
                 }
-                aria-pressed={selectedScreenId === screen.id}
-                onClick={() => setSelectedScreenId(screen.id)}
               >
-                <span
-                  className={
-                    screen.status === "removed"
-                      ? "line-through decoration-2"
-                      : ""
-                  }
-                >
-                  {screen.name}
-                </span>
-                <span
-                  className={`rounded-md px-2 py-1 text-2xs font-bold ${screenStatusClasses(screen.status)}`}
-                >
-                  {screenStatusLabel(screen.status)}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
+                {screen.name}
+              </span>
+              <span
+                className={`rounded-md px-2 py-1 text-2xs font-bold ${screenStatusClasses(screen.status)}`}
+              >
+                {screenStatusLabel(screen.status)}
+              </span>
+            </button>
+          ))}
+        </nav>
       ) : null}
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         {selectedScreen === undefined ? null : (
@@ -850,7 +860,7 @@ export const DiffLensContent = ({
       location.oldHtml !== undefined || location.newHtml !== undefined,
   );
   const title = isHistorical
-    ? "Historical change"
+    ? "Updated"
     : isSuperseded
       ? "What changed - plan revised again"
       : "What changed";
@@ -862,7 +872,13 @@ export const DiffLensContent = ({
       data-review-diff-note={place.note}
     >
       <div className="flex min-w-0 items-baseline gap-2">
-        <strong className="rounded-full bg-accent-soft px-2 py-0.5 text-2xs font-bold text-accent uppercase tracking-caps">
+        <strong
+          className={`rounded-full px-2 py-0.5 text-2xs font-bold uppercase tracking-caps ${
+            isHistorical
+              ? "bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
+              : "bg-accent-soft text-accent"
+          }`}
+        >
           {title}
         </strong>
         <em className="text-2xs text-muted">{place.note}</em>
@@ -1019,8 +1035,47 @@ export const DiffLensPortal = ({
           entry.element !== null,
       );
     const direct = replaced.map((entry) => entry.element);
-    const displayValues = direct.map((element) => element.style.display);
-    direct.forEach((element) => {
+    const wireframeTarget =
+      anchor.element.closest<HTMLElement>("[data-wireframe]");
+    const wireframeBlockIds = new Set(
+      locations.flatMap((location) =>
+        [location.oldBlockId, location.newBlockId].filter(
+          (blockId): blockId is string => blockId !== undefined,
+        ),
+      ),
+    );
+    const wireframeIds = new Set(
+      locations.flatMap((location) =>
+        [location.oldHtml, location.newHtml].flatMap((html) => {
+          if (html === undefined) return [];
+          const document = new DOMParser().parseFromString(html, "text/html");
+          return Array.from(
+            document.querySelectorAll<HTMLElement>("[data-wireframe]"),
+          )
+            .map((element) => element.dataset.wireframe)
+            .filter((id): id is string => id !== undefined);
+        }),
+      ),
+    );
+    const originalWireframes = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-wireframe]"),
+    ).filter(
+      (element) =>
+        element.closest("[data-review-diff-lens-host]") === null &&
+        (wireframeBlockIds.has(element.dataset.blockId ?? "") ||
+          wireframeIds.has(element.dataset.wireframe ?? "")),
+    );
+    const hiddenElements = [
+      ...new Set(
+        wireframeTarget === null
+          ? [...direct, ...originalWireframes]
+          : [...direct, wireframeTarget, ...originalWireframes],
+      ),
+    ];
+    const displayValues = hiddenElements.map(
+      (element) => element.style.display,
+    );
+    hiddenElements.forEach((element) => {
       element.style.display = "none";
     });
     const container = document.createElement("div");
@@ -1057,7 +1112,7 @@ export const DiffLensPortal = ({
       }),
     );
     return () => {
-      direct.forEach((element, index) => {
+      hiddenElements.forEach((element, index) => {
         element.style.display = displayValues[index] ?? "";
       });
       removalNode.remove();
