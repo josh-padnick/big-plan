@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Big Plan - Agent working indicator preview</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8f7f4;
+        --surface: #fff;
+        --ink: #292724;
+        --muted: #6e6962;
+        --edge: #d9d5cd;
+        --green: #37824e;
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #1f1e1b;
+        --surface: #2b2925;
+        --ink: #f1eee8;
+        --muted: #b9b3a9;
+        --edge: #49453e;
+        --green: #82d59a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          16px/1.5 ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      main {
+        width: min(100%, 620px);
+        padding: 32px;
+        border: 1px solid var(--edge);
+        border-radius: 16px;
+        background: var(--surface);
+        box-shadow: 0 12px 36px #0002;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.5rem;
+      }
+      p {
+        margin: 0 0 24px;
+        color: var(--muted);
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 28px;
+      }
+      button {
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 8px 12px;
+        background: var(--surface);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      button[aria-pressed="true"] {
+        border-color: var(--green);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 20%, transparent);
+      }
+      .comparison {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .state-card {
+        min-width: 0;
+      }
+      .state-caption {
+        display: block;
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+      }
+      .viewer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 76px;
+        padding: 18px;
+        border: 1px solid var(--edge);
+        border-radius: 10px;
+      }
+      .label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .indicator {
+        position: relative;
+        width: 10px;
+        height: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: color-mix(in srgb, var(--green) 34%, transparent);
+      }
+      .indicator::after {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--green);
+      }
+      .review-agent-active-indicator--working {
+        animation: review-agent-active-indicator-pulse 1.8s ease-in-out infinite;
+      }
+      .review-agent-active-indicator--working::before {
+        content: "";
+        position: absolute;
+        inset: -4px;
+        border: 1.5px solid var(--green);
+        border-right-color: transparent;
+        border-radius: 9999px;
+        animation: review-agent-active-indicator-spin 1.1s linear infinite;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        @keyframes review-agent-active-indicator-pulse {
+          0%,
+          100% {
+            opacity: 0.82;
+            transform: scale(0.96);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1.08);
+          }
+        }
+        @keyframes review-agent-active-indicator-spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+      code {
+        font-size: 0.9em;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Agent-active indicator</h1>
+      <p>
+        Live preview of PR 114. Compare the static idle state with the visibly
+        active working state.
+      </p>
+      <div class="toolbar" aria-label="Preview controls">
+        <button id="light" aria-pressed="true">Light theme</button>
+        <button id="dark" aria-pressed="false">Dark theme</button>
+      </div>
+      <div class="comparison">
+        <div class="state-card">
+          <span class="state-caption">IDLE</span>
+          <div class="viewer">
+            <span class="label"
+              ><span class="indicator" aria-hidden="true"></span>Agent is
+              idle</span
+            ><code>static</code>
+          </div>
+        </div>
+        <div class="state-card">
+          <span class="state-caption">WORKING</span>
+          <div class="viewer">
+            <span class="label"
+              ><span
+                class="indicator review-agent-active-indicator--working"
+                aria-hidden="true"
+              ></span
+              >Agent is working</span
+            ><code>ring + pulse</code>
+          </div>
+        </div>
+      </div>
+    </main>
+    <script>
+      const root = document.documentElement;
+      const setPressed = (id, value) =>
+        document
+          .querySelector(`#${id}`)
+          .setAttribute("aria-pressed", String(value));
+      document.querySelector("#light").onclick = () => {
+        root.dataset.theme = "light";
+        setPressed("light", true);
+        setPressed("dark", false);
+      };
+      document.querySelector("#dark").onclick = () => {
+        root.dataset.theme = "dark";
+        setPressed("light", false);
+        setPressed("dark", true);
+      };
+    </script>
+  </body>
+</html>
