@@ -79,7 +79,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
     )
     .toBe(1);
 
-  const tooltip = comment.getByRole("tooltip");
+  const tooltip = page.getByRole("tooltip", { name: "Comment on slide" });
   await expect(tooltip).not.toBeVisible();
   await comment.hover();
   await expect(tooltip).toBeVisible();
@@ -136,7 +136,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "Keep `leaseOwner` explicit. <strong>Literal reviewer text</strong>",
   );
   await expect(submit).toBeEnabled();
-  const shortcutTooltip = dialog.getByRole("tooltip");
+  const shortcutTooltip = page.getByRole("tooltip").last();
   await expect(shortcutTooltip).not.toBeVisible();
   await submit.hover();
   await expect(shortcutTooltip).toBeVisible();
@@ -428,7 +428,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await reopenedEdit.fill("Keep `leaseOwner` explicit in this card.");
   const editSave = thread.getByRole("button", { name: "Save" });
   await editSave.hover();
-  await expect(thread.getByRole("tooltip")).toBeVisible();
+  await expect(page.getByRole("tooltip").last()).toBeVisible();
   const editShortcut = await page.evaluate(() =>
     /Mac|iPhone|iPad/u.test(navigator.platform) ? "Meta" : "Control",
   );
@@ -1051,6 +1051,11 @@ test("should comment image-only and mixed image selections", async ({
   await expect(imageComment).toBeVisible();
   await expect(imageComment).toHaveCSS("opacity", "1");
   await expect(imageComment).toHaveCSS("pointer-events", "auto");
+  const imageTooltip = page.getByRole("tooltip", { name: "Comment on image" });
+  await expect(imageTooltip).not.toBeVisible();
+  await imageComment.hover();
+  await expect(imageTooltip).not.toBeVisible({ timeout: 250 });
+  await expect(imageTooltip).toBeVisible({ timeout: 1_500 });
 
   await image.evaluate((element) => {
     const range = document.createRange();

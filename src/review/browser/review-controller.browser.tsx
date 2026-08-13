@@ -1758,7 +1758,7 @@ const CommentComposer = ({
             <Button variant="outline" size="compact" onClick={onCancel}>
               Cancel
             </Button>
-            <span className="group relative inline-flex">
+            <Tooltip label={MODIFIER_SHORTCUT} placement="below">
               <Button
                 size="micro"
                 disabled={
@@ -1768,13 +1768,7 @@ const CommentComposer = ({
               >
                 {submitRightAway ? "Submit Now" : "Add Comment"}
               </Button>
-              <span
-                role="tooltip"
-                className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
-              >
-                {MODIFIER_SHORTCUT}
-              </span>
-            </span>
+            </Tooltip>
           </div>
           {submitRightAway && !canSubmitRightAway ? (
             <button
@@ -2381,7 +2375,7 @@ const StagedCard = ({
             >
               Cancel
             </Button>
-            <span className="group relative inline-flex">
+            <Tooltip label={MODIFIER_SHORTCUT} placement="below">
               <Button
                 size="micro"
                 disabled={editBody.trim() === ""}
@@ -2389,13 +2383,7 @@ const StagedCard = ({
               >
                 Save
               </Button>
-              <span
-                role="tooltip"
-                className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
-              >
-                {MODIFIER_SHORTCUT}
-              </span>
-            </span>
+            </Tooltip>
           </div>
         </>
       ) : (
@@ -4754,30 +4742,22 @@ export const ReviewController = () => {
           ? "Comment on quick summary"
           : "Comment on slide";
         return createPortal(
-          <button
-            type="button"
-            // The control stands alone in a gutter, so it rests as ink only:
-            // a ground at rest would read as a chip competing with the card
-            // beside it. Hover, focus, and pressed still raise the ground.
-            className="group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent p-0 text-comment-rest hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:bg-surface aria-pressed:text-ink [&>svg]:size-3.5"
-            aria-label={label}
-            aria-pressed={pressed}
-            onClick={() =>
-              beginTarget(target, container.getBoundingClientRect())
-            }
-          >
-            <Icon icon={MESSAGE_SQUARE_ICON} />
-            <span
-              role="tooltip"
-              // The control sits in the reading column's right gutter, so the
-              // tooltip grows inward from the button's right edge. Growing
-              // rightwards would push the label past the page and give the
-              // whole document a horizontal scrollbar.
-              className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] right-0 z-50 w-max max-w-48 rounded-md bg-[var(--ink-c)] px-2 py-1 text-2xs leading-normal text-[var(--bg)] opacity-0 shadow-raised delay-1000 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
+          <Tooltip label={label} placement="below">
+            <button
+              type="button"
+              // The control stands alone in a gutter, so it rests as ink only:
+              // a ground at rest would read as a chip competing with the card
+              // beside it. Hover, focus, and pressed still raise the ground.
+              className="group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent p-0 text-comment-rest hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:bg-surface aria-pressed:text-ink [&>svg]:size-3.5"
+              aria-label={label}
+              aria-pressed={pressed}
+              onClick={() =>
+                beginTarget(target, container.getBoundingClientRect())
+              }
             >
-              {label}
-            </span>
-          </button>,
+              <Icon icon={MESSAGE_SQUARE_ICON} />
+            </button>
+          </Tooltip>,
           host,
           target.blockId,
         );
@@ -4786,29 +4766,25 @@ export const ReviewController = () => {
         createPortal(
           block.dataset.blockKind === "data-table" ||
             block.dataset.blockKind === "table" ? (
-            <button
-              type="button"
-              className={`review-table-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 ${isStandaloneCommentHost(host) ? "text-comment-rest" : "text-muted"} hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5`}
-              aria-label="Comment on this table"
-              aria-pressed={
-                compose?.target.type === "block" &&
-                targetElement(compose.target) === block
-              }
-              onClick={() =>
-                beginTarget(
-                  targetForBlock(block),
-                  block.getBoundingClientRect(),
-                )
-              }
-            >
-              <Icon icon={MESSAGE_SQUARE_ICON} />
-              <span
-                role="tooltip"
-                className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] right-0 z-50 w-max rounded-md bg-[var(--ink-c)] px-2 py-1 text-xs text-[var(--bg)] opacity-0 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
+            <Tooltip label="Comment on this table" placement="below">
+              <button
+                type="button"
+                className={`review-table-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 ${isStandaloneCommentHost(host) ? "text-comment-rest" : "text-muted"} hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5`}
+                aria-label="Comment on this table"
+                aria-pressed={
+                  compose?.target.type === "block" &&
+                  targetElement(compose.target) === block
+                }
+                onClick={() =>
+                  beginTarget(
+                    targetForBlock(block),
+                    block.getBoundingClientRect(),
+                  )
+                }
               >
-                Comment on table
-              </span>
-            </button>
+                <Icon icon={MESSAGE_SQUARE_ICON} />
+              </button>
+            </Tooltip>
           ) : host.dataset.reviewToolbarHost !== undefined ? (
             <button
               type="button"
@@ -4852,55 +4828,55 @@ export const ReviewController = () => {
       )}
       {imageHosts.map(({ block, host }) =>
         createPortal(
-          <button
-            type="button"
-            className="review-image-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-comment-rest hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
-            aria-label={`Comment on ${block.dataset.blockLabel ?? "this image"}`}
-            aria-pressed={
-              compose?.target.type === "block" &&
-              targetElement(compose.target) === block
-            }
-            onClick={() =>
-              beginTarget(targetForBlock(block), block.getBoundingClientRect())
-            }
-          >
-            <Icon icon={MESSAGE_SQUARE_ICON} />
-            <span
-              role="tooltip"
-              className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] right-0 z-50 w-max rounded-md bg-[var(--ink-c)] px-2 py-1 text-xs text-[var(--bg)] opacity-0 shadow-raised group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
+          <Tooltip label="Comment on image" placement="below">
+            <button
+              type="button"
+              className="review-image-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-comment-rest hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
+              aria-label={`Comment on ${block.dataset.blockLabel ?? "this image"}`}
+              aria-pressed={
+                compose?.target.type === "block" &&
+                targetElement(compose.target) === block
+              }
+              onClick={() =>
+                beginTarget(
+                  targetForBlock(block),
+                  block.getBoundingClientRect(),
+                )
+              }
             >
-              Comment on image
-            </span>
-          </button>,
+              <Icon icon={MESSAGE_SQUARE_ICON} />
+            </button>
+          </Tooltip>,
           host,
           block.dataset.blockId,
         ),
       )}
       {selectionControl === null ? null : (
-        <button
-          type="button"
-          className="group fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-accent bg-accent-soft px-2 py-1 text-xs text-accent shadow-raised hover:shadow-lifted focus-visible:shadow-lifted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed [&_svg]:size-3.5"
-          style={{
-            top: `${selectionControl.top}px`,
-            left: `${selectionControl.left}px`,
-          }}
-          aria-label={selectionCommentLabel(selectionControl.target)}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            beginTarget(selectionControl.target, { top: selectionControl.top });
-            setSelectionControl(null);
-          }}
+        <Tooltip
+          label={`New comment · ${NEW_COMMENT_SHORTCUT}`}
+          placement="below"
+          tooltipProps={{ "data-selection-comment-tooltip": "" }}
         >
-          <Icon icon={MESSAGE_SQUARE_ICON} />
-          Comment
-          <span
-            role="tooltip"
-            data-selection-comment-tooltip=""
-            className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] left-1/2 z-50 w-max -translate-x-1/2 rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-visible:visible group-focus-visible:opacity-100 group-focus-visible:delay-1000"
+          <button
+            type="button"
+            className="group fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-accent bg-accent-soft px-2 py-1 text-xs text-accent shadow-raised hover:shadow-lifted focus-visible:shadow-lifted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed [&_svg]:size-3.5"
+            style={{
+              top: `${selectionControl.top}px`,
+              left: `${selectionControl.left}px`,
+            }}
+            aria-label={selectionCommentLabel(selectionControl.target)}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              beginTarget(selectionControl.target, {
+                top: selectionControl.top,
+              });
+              setSelectionControl(null);
+            }}
           >
-            New comment · {NEW_COMMENT_SHORTCUT}
-          </span>
-        </button>
+            <Icon icon={MESSAGE_SQUARE_ICON} />
+            Comment
+          </button>
+        </Tooltip>
       )}
       {feedbackHost === null
         ? null

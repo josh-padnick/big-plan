@@ -26,7 +26,7 @@ import {
   runtimeReviewImageIdentity,
 } from "./review-image.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
-import { Badge, Button } from "./ui.browser.js";
+import { Badge, Button, Tooltip } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
 
@@ -401,24 +401,26 @@ export const RequestStatusStrip = ({
         </p>
       ) : null}
       {isWorking ? (
-        <p
-          className="group relative mt-1.5 mb-0 min-w-0 text-xs text-ink [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          data-review-status-current-activity=""
-          aria-live="polite"
-          tabIndex={hasCurrentTooltip ? 0 : undefined}
-        >
-          <span className={hasCurrentTooltip ? "line-clamp-3" : undefined}>
-            {currentText}
-          </span>
-          {hasCurrentTooltip ? (
-            <span
-              role="tooltip"
-              className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] left-0 z-50 w-64 max-w-[min(16rem,calc(100vw_-_2rem))] rounded-md bg-[var(--ink-c)] px-2 py-1.5 text-2xs leading-normal text-[var(--bg)] opacity-0 shadow-raised transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-visible:visible group-focus-visible:opacity-100 group-focus-visible:delay-1000"
+        hasCurrentTooltip ? (
+          <Tooltip label={currentText} className="block" placement="below">
+            <p
+              className="mt-1.5 mb-0 min-w-0 text-xs text-ink [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              data-review-status-current-activity=""
+              aria-live="polite"
+              tabIndex={0}
             >
-              {currentText}
-            </span>
-          ) : null}
-        </p>
+              <span className="line-clamp-3">{currentText}</span>
+            </p>
+          </Tooltip>
+        ) : (
+          <p
+            className="mt-1.5 mb-0 min-w-0 text-xs text-ink [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            data-review-status-current-activity=""
+            aria-live="polite"
+          >
+            {currentText}
+          </p>
+        )
       ) : null}
       {isWorking && earlier.length > 0 ? (
         <button
