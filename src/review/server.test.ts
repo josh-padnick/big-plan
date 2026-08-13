@@ -39,6 +39,40 @@ import {
   writeSnapshot,
 } from "./store.js";
 
+const runtimeToken = async (target: ReviewRuntime): Promise<string> => {
+  const descriptor: unknown = JSON.parse(
+    await readFile(target.store.sessionPath, "utf8"),
+  );
+  return typeof descriptor === "object" &&
+    descriptor !== null &&
+    "token" in descriptor &&
+    typeof descriptor.token === "string"
+    ? descriptor.token
+    : "";
+};
+
+const callRuntime = ({
+  target,
+  sessionToken,
+  path,
+  method = "GET",
+  body,
+}: {
+  readonly target: ReviewRuntime;
+  readonly sessionToken: string;
+  readonly path: string;
+  readonly method?: "GET" | "POST";
+  readonly body?: unknown;
+}): Promise<Response> =>
+  fetch(`${target.url.replace(/\/$/u, "")}${path}`, {
+    method,
+    headers: {
+      "x-big-plan-review-token": sessionToken,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+
 const PLAN = `# Review runtime plan
 
 The runtime serves this document and nothing else.
@@ -254,6 +288,119 @@ describe("review runtime transport", () => {
     expect(policy).toContain("frame-ancestors 'none'");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
+});
+
+describe("review runtime staged decision answers", () => {
+  it("should stage, replace, retract, and read back one answer per decision", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-inputs-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const target = await startReviewRuntime({ planPath });
+    try {
+      const sessionToken = await runtimeToken(target);
+      const decisionId = "decision-release-path";
+      const answer = {
+        decisionId,
+        optionId: "decision-release-path-option-gradual",
+        optionTitle: "Gradual",
+        prompt: "Which release path?",
+        premiseSnapshot: deriveSnapshotDigest(PLAN),
+      };
+
+      expect(
+        (
+          await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/inputs",
+            method: "POST",
+            body: { op: "stage", answer },
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/inputs",
+            method: "POST",
+            body: {
+              op: "stage",
+              answer: {
+                ...answer,
+                optionId: "decision-release-path-option-immediate",
+                optionTitle: "Immediate",
+              },
+            },
+          })
+        ).status,
+      ).toBe(200);
+
+      const staged = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/review-state",
+      });
+      await expect(staged.json()).resolves.toMatchObject({
+        answers: [
+          {
+            decisionId,
+            optionId: "decision-release-path-option-immediate",
+            optionTitle: "Immediate",
+          },
+        ],
+      });
+
+      expect(
+        (
+          await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/inputs",
+            method: "POST",
+            body: { op: "retract", decisionId },
+          })
+        ).status,
+      ).toBe(200);
+      const retracted = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/review-state",
+      });
+      await expect(retracted.json()).resolves.toEqual({ answers: [] });
+    } finally {
+      await target.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse answer writes from a replaced read-only session", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-inputs-readonly-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const first = await startReviewRuntime({ planPath });
+    const firstToken = await runtimeToken(first);
+    const replacement = await startReviewRuntime({ planPath });
+    try {
+      const response = await callRuntime({
+        target: first,
+        sessionToken: firstToken,
+        path: "/api/inputs",
+        method: "POST",
+        body: {
+          op: "retract",
+          decisionId: "decision-release-path",
+        },
+      });
+      expect(response.status).toBe(409);
+    } finally {
+      await Promise.all([first.close(), replacement.close()]);
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

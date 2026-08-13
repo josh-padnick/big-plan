@@ -19,6 +19,7 @@ import type {
 } from "../../_model/decision-card.js";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
 import { PLUS_ICON } from "../../../icons/lucide/plus.js";
+import { TRIANGLE_ALERT_ICON } from "../../../icons/lucide/triangle-alert.js";
 import { type MatrixToneParity } from "../comparison-matrix/comparison-matrix.js";
 import { BriefLayout, MatrixLayout, RowsLayout } from "./view-layouts.js";
 import { hastContentToReact } from "../hast-content/hast-content.js";
@@ -178,23 +179,31 @@ const AnswerControls = () => (
       </button>
     </div>
     <div
-      className="decision-answer gap-3 px-6 py-4"
+      className="decision-answer group gap-3 px-6 py-4 data-[decision-persistence-failed]:bg-[var(--callout-danger-bg)]!"
       data-decision-answer=""
       role="status"
       hidden
     >
       <span
-        className="decision-answer-mark mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--decision-pro-c)] text-paper [&_svg]:size-3"
+        className="decision-answer-mark mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--decision-pro-c)] text-paper group-data-[decision-persistence-failed]:bg-danger group-data-[decision-persistence-failed]:text-danger-ink [&_svg]:size-3"
         aria-hidden="true"
       >
-        {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+        <span className="inline-flex group-data-[decision-persistence-failed]:hidden">
+          {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+        </span>
+        <span className="hidden group-data-[decision-persistence-failed]:inline-flex">
+          {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
+        </span>
       </span>
       <div className="min-w-0 flex-1">
-        <p className="m-0 text-base font-semibold text-[var(--decision-pro-ink)]">
+        <p className="m-0 text-base font-semibold text-[var(--decision-pro-ink)] group-data-[decision-persistence-failed]:text-[var(--callout-danger-c)]">
           <span data-decision-answer-lead="">{"Answer recorded"}</span>
           <span className="sr-only" data-decision-answer-title="" />
         </p>
-        <p className="m-0 mt-0.5 text-xs text-[var(--decision-pro-c)]">
+        <p
+          className="m-0 mt-0.5 text-xs text-[var(--decision-pro-c)] group-data-[decision-persistence-failed]:text-[var(--callout-danger-c)]"
+          data-decision-answer-caption=""
+        >
           {"Noted for this reading session."}
         </p>
       </div>
@@ -206,6 +215,15 @@ const AnswerControls = () => (
         {"Change"}
       </button>
     </div>
+    <p
+      className="m-0 bg-[var(--callout-danger-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-danger-c)]"
+      data-decision-persistence-status=""
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      {"Not saved yet. Big Plan is retrying automatically."}
+    </p>
   </>
 );
 

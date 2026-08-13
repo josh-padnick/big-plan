@@ -79,6 +79,7 @@ import {
   readReviewImage,
   readFeedbackSubmissionValue,
   readResolvedCommentIds,
+  readStagedInputs,
   readSnapshot,
   reviewStoreFor,
   writeActiveDraft,
@@ -87,6 +88,7 @@ import {
   writeFeedbackSubmissionValue,
   writeResolvedCommentIds,
   writeSnapshot,
+  writeStagedInputs,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import { reviewPlanAssetName } from "./plan-assets.js";
@@ -105,9 +107,16 @@ import {
   encodeAgentSnapshot,
   encodeSnapshotDiff,
   encodeProgress,
+  encodeReviewState,
   encodeReviewSnapshot,
   encodeRuntimeSession,
 } from "./shared/review-wire.js";
+import {
+  applyStagedInputMutation,
+  PlanInputsRejected,
+  validateStagedInputMutation,
+  validateStagedInputs,
+} from "./plan-inputs-store.js";
 import {
   activateReviewSession,
   REVIEW_HEARTBEAT_INTERVAL_MS,
@@ -238,6 +247,8 @@ const DOCUMENT_ROUTE: Route = { method: "GET", path: "/" };
 // is refused before anything else looks at it.
 const API_ROUTES: ReadonlyArray<Route> = [
   { method: "GET", path: "/api/session" },
+  { method: "GET", path: "/api/review-state" },
+  { method: "POST", path: "/api/inputs" },
   { method: "GET", path: "/api/drafts" },
   { method: "PUT", path: "/api/drafts" },
   { method: "POST", path: "/api/feedback" },
@@ -1018,6 +1029,38 @@ export const startReviewRuntime = async ({
         response,
         status: 200,
         value: encodeRuntimeSession(sessionView),
+      });
+      return;
+    }
+    if (route.path === "/api/review-state") {
+      const inputs = await readStagedInputs({
+        store,
+        validate: validateStagedInputs,
+      });
+      sendJson({
+        response,
+        status: 200,
+        value: encodeReviewState({ answers: inputs.answers }),
+      });
+      return;
+    }
+    if (route.path === "/api/inputs") {
+      const mutation = validateStagedInputMutation({
+        value: body,
+        now: new Date().toISOString(),
+      });
+      const inputs = applyStagedInputMutation({
+        inputs: await readStagedInputs({
+          store,
+          validate: validateStagedInputs,
+        }),
+        mutation,
+      });
+      await writeStagedInputs({ store, inputs });
+      sendJson({
+        response,
+        status: 200,
+        value: { answers: inputs.answers.length },
       });
       return;
     }
@@ -1886,7 +1929,10 @@ export const startReviewRuntime = async ({
         });
       }
     } catch (error: unknown) {
-      if (error instanceof CommentRejected) {
+      if (
+        error instanceof CommentRejected ||
+        error instanceof PlanInputsRejected
+      ) {
         refuse({ response, status: 400, reason: error.message });
         return;
       }

@@ -70,6 +70,7 @@ import {
   decodeAgentSnapshot as parseAgentSnapshot,
   decodeSnapshotDiff as parseSnapshotDiff,
   decodeProgress as parseProgress,
+  decodeReviewState as parseReviewState,
   decodeReviewSnapshot as parseSnapshot,
   decodeRuntimeSession as parseRuntimeSession,
   emptyAgentSnapshot,
@@ -81,6 +82,7 @@ import {
   type SnapshotDiff,
   type ProgressEvent,
   type RuntimeSession,
+  type StagedDecisionAnswer,
 } from "../shared/review-wire.js";
 import { AgentHealthAlert } from "./agent-connection.browser.js";
 import { AgentSurface } from "./agent-surface.browser.js";
@@ -110,6 +112,7 @@ import {
   displayedStandIn,
   foundElement,
   liveBlock,
+  liveDecisionFigure,
   liveFlowAnchor,
 } from "./live-target.browser.js";
 import {
@@ -133,7 +136,9 @@ import {
   Button,
   Card,
   Textarea,
+  Toaster,
   Tooltip,
+  toast,
 } from "./ui.browser.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
@@ -168,6 +173,32 @@ type RuntimeIdentity = {
   readonly sessionId: string;
   readonly token: string;
 };
+
+type DecisionInputMutation =
+  | {
+      readonly op: "stage";
+      readonly answer: Omit<StagedDecisionAnswer, "answeredAt">;
+    }
+  | { readonly op: "retract"; readonly decisionId: string };
+
+type PendingDecisionInput = {
+  readonly mutation: DecisionInputMutation;
+  readonly failures: number;
+};
+
+type DecisionAnsweredDetail = {
+  readonly decision: string;
+  readonly question: string;
+  readonly optionId: string;
+  readonly option: string;
+  readonly proposal: string;
+};
+
+const decisionInputId = (mutation: DecisionInputMutation): string =>
+  mutation.op === "stage" ? mutation.answer.decisionId : mutation.decisionId;
+
+const decisionToastId = (decisionId: string): string =>
+  `decision-persistence-${decisionId}`;
 
 type ExternalFeedbackItem = {
   readonly kind?: string;
@@ -1181,6 +1212,24 @@ const setSelectionHighlights = (
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "Something went wrong.";
+
+const parseDecisionAnsweredDetail = (
+  value: unknown,
+): DecisionAnsweredDetail | null =>
+  isRecord(value) &&
+  typeof value.decision === "string" &&
+  typeof value.question === "string" &&
+  typeof value.optionId === "string" &&
+  typeof value.option === "string" &&
+  typeof value.proposal === "string"
+    ? {
+        decision: value.decision,
+        question: value.question,
+        optionId: value.optionId,
+        option: value.option,
+        proposal: value.proposal,
+      }
+    : null;
 
 // The only place plan DOM is replaced. Swapping the article detaches every
 // node the shell scripts wired at load, so the swap and its announcement stay
@@ -3766,6 +3815,12 @@ export const ReviewController = () => {
     composeBody === "" &&
     chatBody === "" &&
     unsavedInputKeys.size === 0;
+  const pendingDecisionInputs = useRef<Map<string, PendingDecisionInput>>(
+    new Map(),
+  );
+  const isFlushingDecisionInputs = useRef(false);
+  const isAuthoritativeReview = useRef(true);
+  const displayedSnapshotRef = useRef(displayedSnapshot);
   const justSubmittedCommentIds = useRef<ReadonlySet<string>>(new Set());
   const onUnsavedInputChange = useCallback<UnsavedInputChange>(
     (key, hasUnsavedInput) => {
@@ -3800,12 +3855,203 @@ export const ReviewController = () => {
     },
     [],
   );
+  useEffect(() => {
+    isAuthoritativeReview.current = runtimeSession?.authoritative !== false;
+  }, [runtimeSession?.authoritative]);
+  useEffect(() => {
+    displayedSnapshotRef.current = displayedSnapshot;
+  }, [displayedSnapshot]);
   const inlineComposeHost = useInlineComposeHost(compose, isOpen);
   const threadHosts = useThreadHosts(reviewComments, isOpen);
   // An in-place refresh replaces exactly the nodes an effect captured, so
   // every effect below that resolves plan elements, ranges, or listeners once
   // and holds them names this and resolves them again.
   const articleVersion = useArticleVersion();
+  const dispatchDecisionPersistenceState = useCallback(
+    (decisionId: string, state: "pending" | "saved" | "failed"): void => {
+      const decision = liveDecisionFigure(decisionId);
+      if ("missing" in decision) return;
+      decision.found.dispatchEvent(
+        new CustomEvent(`bigplan:decision-persistence-${state}`),
+      );
+    },
+    [],
+  );
+  const flushPendingDecisionInputs = useCallback(async (): Promise<void> => {
+    if (
+      identity === null ||
+      !isAuthoritativeReview.current ||
+      isFlushingDecisionInputs.current
+    ) {
+      return;
+    }
+    isFlushingDecisionInputs.current = true;
+    const attemptedMutations = new Map<string, DecisionInputMutation>();
+    try {
+      while (true) {
+        const pending = Array.from(
+          pendingDecisionInputs.current.entries(),
+        ).filter(
+          ([decisionId, entry]) =>
+            attemptedMutations.get(decisionId) !== entry.mutation,
+        );
+        if (pending.length === 0) break;
+        for (const [decisionId, entry] of pending) {
+          if (pendingDecisionInputs.current.get(decisionId) !== entry) {
+            continue;
+          }
+          attemptedMutations.set(decisionId, entry.mutation);
+          try {
+            await serializeRuntimeWrite(() =>
+              requestJson({
+                path: "/api/inputs",
+                identity,
+                method: "POST",
+                body: entry.mutation,
+              }),
+            );
+            if (pendingDecisionInputs.current.get(decisionId) !== entry) {
+              continue;
+            }
+            pendingDecisionInputs.current.delete(decisionId);
+            toast.dismiss(decisionToastId(decisionId));
+            dispatchDecisionPersistenceState(decisionId, "saved");
+          } catch {
+            if (pendingDecisionInputs.current.get(decisionId) !== entry) {
+              continue;
+            }
+            const failed = { ...entry, failures: entry.failures + 1 };
+            pendingDecisionInputs.current.set(decisionId, failed);
+            if (failed.failures !== 2) continue;
+            dispatchDecisionPersistenceState(decisionId, "failed");
+            toast.error("Decision answer not saved", {
+              id: decisionToastId(decisionId),
+              description:
+                "Big Plan will keep retrying. Keep this review open until the decision card says the answer is saved.",
+              duration: Infinity,
+            });
+          }
+        }
+      }
+    } finally {
+      isFlushingDecisionInputs.current = false;
+    }
+  }, [dispatchDecisionPersistenceState, identity, serializeRuntimeWrite]);
+  const queueDecisionInput = useCallback(
+    (mutation: DecisionInputMutation): void => {
+      const decisionId = decisionInputId(mutation);
+      pendingDecisionInputs.current.set(decisionId, {
+        mutation,
+        failures: 0,
+      });
+      toast.dismiss(decisionToastId(decisionId));
+      dispatchDecisionPersistenceState(decisionId, "pending");
+      void flushPendingDecisionInputs();
+    },
+    [dispatchDecisionPersistenceState, flushPendingDecisionInputs],
+  );
+
+  useEffect(() => {
+    if (identity === null) return;
+    const answered = (event: Event) => {
+      if (!isAuthoritativeReview.current || !(event instanceof CustomEvent)) {
+        return;
+      }
+      const detail = parseDecisionAnsweredDetail(event.detail);
+      if (detail === null || detail.proposal.trim() !== "") return;
+      const decision = liveDecisionFigure(detail.decision);
+      if ("missing" in decision) return;
+      if (
+        !(event.target instanceof Element) ||
+        event.target.closest("[data-decision]") !== decision.found
+      ) {
+        return;
+      }
+      const option = decision.found.querySelector<HTMLInputElement>(
+        `#${CSS.escape(detail.optionId)}[data-decision-choice]`,
+      );
+      if (option === null) return;
+      queueDecisionInput({
+        op: "stage",
+        answer: {
+          decisionId: detail.decision,
+          optionId: detail.optionId,
+          optionTitle: detail.option,
+          prompt: detail.question,
+          premiseSnapshot: displayedSnapshotRef.current,
+        },
+      });
+    };
+    const retracted = (event: Event) => {
+      if (!isAuthoritativeReview.current || !(event instanceof CustomEvent)) {
+        return;
+      }
+      const decisionId = isRecord(event.detail)
+        ? event.detail.decision
+        : undefined;
+      if (typeof decisionId !== "string") return;
+      const decision = liveDecisionFigure(decisionId);
+      if (
+        "missing" in decision ||
+        !(event.target instanceof Element) ||
+        event.target.closest("[data-decision]") !== decision.found
+      ) {
+        return;
+      }
+      queueDecisionInput({ op: "retract", decisionId });
+    };
+    document.addEventListener("bigplan:decision-answered", answered);
+    document.addEventListener("bigplan:decision-retracted", retracted);
+    return () => {
+      document.removeEventListener("bigplan:decision-answered", answered);
+      document.removeEventListener("bigplan:decision-retracted", retracted);
+    };
+  }, [identity, queueDecisionInput]);
+
+  useEffect(() => {
+    if (identity === null) return;
+    void requestJson({ path: "/api/review-state", identity })
+      .then((value) => {
+        const answers = new Map(
+          parseReviewState(value).answers.map((answer) => [
+            answer.decisionId,
+            answer,
+          ]),
+        );
+        for (const [decisionId, pending] of pendingDecisionInputs.current) {
+          if (pending.mutation.op === "stage") {
+            answers.set(decisionId, {
+              ...pending.mutation.answer,
+              answeredAt: "",
+            });
+          } else {
+            answers.delete(decisionId);
+          }
+        }
+        // Decision and option ids own liveness. A whole-plan snapshot mismatch
+        // may be an unrelated edit and must not invalidate a stable decision.
+        for (const answer of answers.values()) {
+          const decision = liveDecisionFigure(answer.decisionId);
+          if ("missing" in decision) continue;
+          const option = decision.found.querySelector<HTMLInputElement>(
+            `#${CSS.escape(answer.optionId)}[data-decision-choice]`,
+          );
+          if (option === null) continue;
+          decision.found.dispatchEvent(
+            new CustomEvent("bigplan:decision-apply", {
+              detail: { optionId: answer.optionId },
+            }),
+          );
+        }
+        for (const [decisionId, pending] of pendingDecisionInputs.current) {
+          dispatchDecisionPersistenceState(
+            decisionId,
+            pending.failures >= 2 ? "failed" : "pending",
+          );
+        }
+      })
+      .catch(() => undefined);
+  }, [articleVersion, dispatchDecisionPersistenceState, identity]);
   const componentBatchNotes = useComponentBatchNotes(
     isOpen && tab === "comments",
   );
@@ -4301,6 +4547,7 @@ export const ReviewController = () => {
         }
       } finally {
         pending = false;
+        void flushPendingDecisionInputs();
       }
     };
     void refresh();
@@ -4309,7 +4556,7 @@ export const ReviewController = () => {
       current = false;
       window.clearInterval(timer);
     };
-  }, [acceptAgentSnapshot, identity]);
+  }, [acceptAgentSnapshot, flushPendingDecisionInputs, identity]);
 
   useEffect(() => {
     if (identity === null) return;
@@ -5097,6 +5344,7 @@ export const ReviewController = () => {
 
   return (
     <>
+      <Toaster />
       {serverGone ? (
         <ServerGoneBanner
           canRefresh={canRefreshReview}

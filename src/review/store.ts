@@ -29,6 +29,7 @@ import {
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
+import type { StagedInputs } from "./plan-inputs-store.js";
 import {
   isReviewImageId,
   isReviewImageWithinLimits,
@@ -91,6 +92,7 @@ export type ReviewStore = {
   readonly snapshotDirectory: string;
   readonly draftsPath: string;
   readonly activeDraftPath: string;
+  readonly inputsPath: string;
   readonly sentPath: string;
   readonly progressPath: string;
   readonly agentConnectionDirectory: string;
@@ -182,6 +184,7 @@ export const reviewStoreFor = ({
       base: reviewDirectory,
       leaf: "active-draft.json",
     }),
+    inputsPath: inside({ base: reviewDirectory, leaf: "inputs.json" }),
     sentPath: inside({ base: reviewDirectory, leaf: "sent.json" }),
     progressPath: inside({ base: reviewDirectory, leaf: "progress.jsonl" }),
     agentConnectionDirectory: inside({
@@ -804,6 +807,33 @@ export const writeActiveDraft = async ({
   readonly value: string;
 }): Promise<void> => {
   await writeJson({ path, value });
+};
+
+/** Reads staged decision answers back through their owned validator. */
+export const readStagedInputs = async ({
+  store,
+  validate,
+}: {
+  readonly store: ReviewStore;
+  readonly validate: (value: unknown) => StagedInputs;
+}): Promise<StagedInputs> => {
+  const stored = await readJson(store.inputsPath);
+  try {
+    return validate(stored);
+  } catch {
+    return validate(undefined);
+  }
+};
+
+/** Atomically replaces the staged decision-answer record. */
+export const writeStagedInputs = async ({
+  store,
+  inputs,
+}: {
+  readonly store: ReviewStore;
+  readonly inputs: StagedInputs;
+}): Promise<void> => {
+  await writeJson({ path: store.inputsPath, value: inputs });
 };
 
 const snapshotPath = ({

@@ -11,6 +11,19 @@ export type ReviewSnapshot = {
   readonly resolvedCommentIds: ReadonlyArray<string>;
 };
 
+export type StagedDecisionAnswer = {
+  readonly decisionId: string;
+  readonly optionId: string;
+  readonly optionTitle: string;
+  readonly prompt: string;
+  readonly answeredAt: string;
+  readonly premiseSnapshot: string;
+};
+
+export type ReviewState = {
+  readonly answers: ReadonlyArray<StagedDecisionAnswer>;
+};
+
 export type AgentOutcome = {
   readonly commentId: string;
   readonly state:
@@ -151,6 +164,8 @@ export type RuntimeSession = {
 
 export type ReviewSnapshotSource = ReviewSnapshot;
 
+export type ReviewStateSource = ReviewState;
+
 export type AgentSnapshotSource = {
   readonly currentSnapshot: string;
   readonly presence: unknown;
@@ -213,6 +228,41 @@ export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
           (id): id is string => typeof id === "string",
         )
       : [],
+  };
+};
+
+/** Encodes the durable browser-safe facts gathered during plan review. */
+export const encodeReviewState = (
+  value: ReviewStateSource,
+): ReviewStateSource => value;
+
+/** Decodes staged answers while dropping malformed transport entries. */
+export const decodeReviewState = (value: unknown): ReviewState => {
+  if (!isReviewWireRecord(value) || !Array.isArray(value.answers)) {
+    return { answers: [] };
+  }
+  return {
+    answers: value.answers.flatMap(
+      (answer): ReadonlyArray<StagedDecisionAnswer> =>
+        isReviewWireRecord(answer) &&
+        typeof answer.decisionId === "string" &&
+        typeof answer.optionId === "string" &&
+        typeof answer.optionTitle === "string" &&
+        typeof answer.prompt === "string" &&
+        typeof answer.answeredAt === "string" &&
+        typeof answer.premiseSnapshot === "string"
+          ? [
+              {
+                decisionId: answer.decisionId,
+                optionId: answer.optionId,
+                optionTitle: answer.optionTitle,
+                prompt: answer.prompt,
+                answeredAt: answer.answeredAt,
+                premiseSnapshot: answer.premiseSnapshot,
+              },
+            ]
+          : [],
+    ),
   };
 };
 

@@ -2535,6 +2535,7 @@ const wireDecisions = () => {
     const answer = own("[data-decision-answer]");
     const answerTitle = own("[data-decision-answer-title]");
     const answerLead = own("[data-decision-answer-lead]");
+    const answerCaption = own("[data-decision-answer-caption]");
     const summary = own("[data-decision-selection-summary]");
     const rationale = own("[data-decision-rationale]");
     const question = own("[data-decision-question]");
@@ -2548,6 +2549,7 @@ const wireDecisions = () => {
     const compareZones = ownAll("[data-decision-compare]");
     const explainZone = own("[data-decision-explain]");
     const weighting = own("[data-decision-weighting]");
+    const persistenceStatus = own("[data-decision-persistence-status]");
     const picked = () => choices.find((choice) => choice.checked) || null;
     const proposes = (choice) =>
       choice instanceof Element &&
@@ -2924,9 +2926,47 @@ const wireDecisions = () => {
       paintColumn(proposing ? null : index, answered);
     };
 
-    confirm.addEventListener("click", () => {
+    const showPersistenceFailure = () => {
+      if (answerLead !== null) answerLead.textContent = "Answer not saved";
+      if (answerCaption !== null) {
+        answerCaption.textContent =
+          "Not saved yet. Big Plan is retrying automatically.";
+      }
+      answer.setAttribute("data-decision-persistence-failed", "");
+      if (persistenceStatus !== null) {
+        persistenceStatus.hidden = decision.hasAttribute(
+          "data-decision-answered",
+        );
+      }
+      decision.setAttribute("data-decision-persistence-failed", "");
+    };
+    const showPersistenceState = (caption) => {
       const choice = picked();
-      if (choice === null || confirm.disabled) return;
+      if (answerLead !== null) {
+        answerLead.textContent = proposes(choice)
+          ? "Proposal recorded"
+          : "Answer recorded";
+      }
+      if (
+        answerCaption !== null &&
+        document.documentElement.hasAttribute("data-review-session")
+      ) {
+        answerCaption.textContent = caption;
+      }
+      if (persistenceStatus !== null) persistenceStatus.hidden = true;
+      answer.removeAttribute("data-decision-persistence-failed");
+      decision.removeAttribute("data-decision-persistence-failed");
+    };
+    const showPersistencePending = () => {
+      showPersistenceState("Saving with this review...");
+    };
+    const showPersistenceSaved = () => {
+      showPersistenceState("Saved with this review.");
+    };
+    const showReadingSession = () => {
+      showPersistenceState("Noted for this reading session.");
+    };
+    const recordAnswer = (choice, replay) => {
       const proposing = proposes(choice);
       if (answerLead !== null) {
         answerLead.textContent = proposing
@@ -2940,20 +2980,57 @@ const wireDecisions = () => {
       if (proposalText !== null) proposalText.readOnly = proposing;
       decision.setAttribute("data-decision-answered", "");
       compress(true);
-       // Announce and queue the reading-session answer for an embedding host.
+      if (replay) showPersistenceSaved();
+      else if (proposing) showReadingSession();
+      else showPersistencePending();
+      if (replay) return;
+      // Announce and queue the reading-session answer for an embedding host.
       const record = {
         decision: decision.id,
         question: question === null ? "" : question.textContent,
+        optionId: choice.id,
         option: choice.value,
         proposal: proposing ? proposalValue() : "",
       };
       window.bigPlanDecisionAnswers = window.bigPlanDecisionAnswers || [];
       window.bigPlanDecisionAnswers.push(record);
-      document.dispatchEvent(
-        new CustomEvent("bigplan:decision-answered", { detail: record }),
+      decision.dispatchEvent(
+        new CustomEvent("bigplan:decision-answered", {
+          bubbles: true,
+          detail: record,
+        }),
       );
+    };
+    confirm.addEventListener("click", () => {
+      const choice = picked();
+      if (choice === null || confirm.disabled) return;
+      recordAnswer(choice, false);
       change.focus();
     });
+    decision.addEventListener("bigplan:decision-apply", (event) => {
+      const optionId = event.detail?.optionId;
+      if (typeof optionId !== "string") return;
+      const choice = choices.find(
+        (candidate) => candidate.id === optionId && !proposes(candidate),
+      );
+      if (choice === undefined) return;
+      choice.checked = true;
+      previousOptionChoice = choice;
+      sync();
+      recordAnswer(choice, true);
+    });
+    decision.addEventListener(
+      "bigplan:decision-persistence-failed",
+      showPersistenceFailure,
+    );
+    decision.addEventListener(
+      "bigplan:decision-persistence-pending",
+      showPersistencePending,
+    );
+    decision.addEventListener(
+      "bigplan:decision-persistence-saved",
+      showPersistenceSaved,
+    );
     change.addEventListener("click", () => {
       decision.removeAttribute("data-decision-answered");
       for (const header of columnHeaders) {
@@ -2961,9 +3038,16 @@ const wireDecisions = () => {
       }
       compress(false);
       if (proposalText !== null) proposalText.readOnly = false;
+      showReadingSession();
       sync();
       const choice = picked();
       if (choice !== null) choice.focus();
+      decision.dispatchEvent(
+        new CustomEvent("bigplan:decision-retracted", {
+          bubbles: true,
+          detail: { decision: decision.id },
+        }),
+      );
     });
     sync();
   }
