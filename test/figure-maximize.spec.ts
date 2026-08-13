@@ -431,7 +431,9 @@ test("should expose dedicated copy controls beside CodeDiff and CodeSnippet maxi
           buttons.map((button) => button.getAttribute("aria-label")),
         ),
     ).toEqual([figureCase.label, figureCase.maximizeLabel]);
+    await figure.scrollIntoViewIfNeeded();
     const before = await toolbar.boundingBox();
+    const beforeScrollY = await page.evaluate(() => window.scrollY);
 
     await copy.focus();
     await page.keyboard.press("Enter");
@@ -456,9 +458,11 @@ test("should expose dedicated copy controls beside CodeDiff and CodeSnippet maxi
       "animation-name",
       "boost-pop",
     );
+    await figure.scrollIntoViewIfNeeded();
     const after = await toolbar.boundingBox();
     expect(after).not.toBeNull();
-    expect(after?.y).toBe(before?.y);
+    const afterScrollY = await page.evaluate(() => window.scrollY);
+    expect(after!.y + afterScrollY).toBe(before!.y + beforeScrollY);
     expect(after?.x).toBe(before?.x);
     expect(after?.width).toBe(before?.width);
     expect(after?.height).toBe(before?.height);
@@ -498,7 +502,9 @@ test("should morph every figure copy control without shifting its toolbar", asyn
       const toolbar = figure
         .locator(".figure-action-group, .figure-control-bar")
         .first();
+      await figure.scrollIntoViewIfNeeded();
       const before = await toolbar.boundingBox();
+      const beforeScrollY = await page.evaluate(() => window.scrollY);
 
       await figure.hover({ position: { x: 24, y: 24 } });
       await copy.hover();
@@ -512,9 +518,11 @@ test("should morph every figure copy control without shifting its toolbar", asyn
         "animation-name",
         "boost-pop",
       );
+      await figure.scrollIntoViewIfNeeded();
       const after = await toolbar.boundingBox();
       expect(after).not.toBeNull();
-      expect(after?.y).toBe(before?.y);
+      const afterScrollY = await page.evaluate(() => window.scrollY);
+      expect(after!.y + afterScrollY).toBe(before!.y + beforeScrollY);
       expect(after?.x).toBe(before?.x);
       expect(after?.width).toBe(before?.width);
       expect(after?.height).toBe(before?.height);
