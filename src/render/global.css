@@ -625,13 +625,20 @@ are declared, so a role or a scale step is the only thing a utility can name.
     /* Utility form: review-agent-active-indicator--working */
     .review-agent-active-indicator--working {
       animation: review-agent-active-indicator-pulse 1.8s ease-in-out infinite;
+      aspect-ratio: 1;
+      flex: 0 0 0.625rem;
+      width: 0.625rem;
+      height: 0.625rem;
       position: relative;
     }
 
     .review-agent-active-indicator--working::before {
       content: "";
       position: absolute;
+      aspect-ratio: 1;
       inset: -4px;
+      width: auto;
+      height: auto;
       border: 1.5px solid var(--diff-add-c);
       border-right-color: transparent;
       border-radius: 9999px;

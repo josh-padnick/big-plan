@@ -109,6 +109,8 @@
         position: relative;
         width: 10px;
         height: 10px;
+        flex: 0 0 10px;
+        aspect-ratio: 1;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -122,36 +124,47 @@
         border-radius: 50%;
         background: var(--green);
       }
-      .review-agent-active-indicator--working {
+      .orbit-ring::before {
+        content: "";
+        position: absolute;
+        inset: var(--orbit-gap);
+        width: auto;
+        height: auto;
+        aspect-ratio: 1;
+        border: var(--orbit-stroke) solid var(--green);
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: orbit-ring-spin var(--orbit-speed) linear infinite;
+      }
+      .orbit-a {
+        --orbit-gap: -4px;
+        --orbit-stroke: 1.5px;
+        --orbit-speed: 1.1s;
+      }
+      .orbit-b {
+        --orbit-gap: -3px;
+        --orbit-stroke: 2px;
+        --orbit-speed: 1.1s;
+      }
+      .orbit-c {
+        --orbit-gap: -4px;
+        --orbit-stroke: 1.5px;
+        --orbit-speed: 0.7s;
+      }
+      .orbit-ring {
         animation: review-agent-active-indicator-pulse 1.8s ease-in-out infinite;
       }
-      .indicator--orbit::before {
-        content: "";
-        position: absolute;
-        inset: -4px;
-        border: 1.5px solid var(--green);
-        border-right-color: transparent;
-        border-radius: 9999px;
-        animation: review-agent-active-indicator-spin 1.1s linear infinite;
+      .orbit-ring::before {
+        box-sizing: border-box;
       }
-      .indicator--halo::before {
-        content: "";
-        position: absolute;
-        inset: -5px;
-        border: 2px solid color-mix(in srgb, var(--green) 75%, transparent);
-        border-radius: 50%;
-        animation: review-agent-active-indicator-halo 1.5s ease-out infinite;
+      .review-agent-active-indicator--working {
+        aspect-ratio: 1;
       }
-      .indicator--sweep {
-        background: conic-gradient(
-          var(--green) 0deg 110deg,
-          color-mix(in srgb, var(--green) 18%, transparent) 110deg 360deg
-        );
-        animation: review-agent-active-indicator-sweep 1.25s linear infinite;
+      .review-agent-active-indicator--working::before {
+        aspect-ratio: 1;
       }
-      .indicator--sweep::after {
-        width: 6px;
-        height: 6px;
+      .indicator--idle {
+        animation: none;
       }
       @media (prefers-reduced-motion: no-preference) {
         @keyframes review-agent-active-indicator-pulse {
@@ -165,23 +178,7 @@
             transform: scale(1.08);
           }
         }
-        @keyframes review-agent-active-indicator-spin {
-          to {
-            transform: rotate(360deg);
-          }
-        }
-        @keyframes review-agent-active-indicator-halo {
-          0% {
-            opacity: 0.9;
-            transform: scale(0.8);
-          }
-          70%,
-          100% {
-            opacity: 0;
-            transform: scale(1.8);
-          }
-        }
-        @keyframes review-agent-active-indicator-sweep {
+        @keyframes orbit-ring-spin {
           to {
             transform: rotate(360deg);
           }
@@ -210,8 +207,8 @@
     <main>
       <h1>Agent-active indicator</h1>
       <p>
-        Live preview of PR 114. Compare three distinct green working signals
-        against the static idle state, then choose a direction.
+        Live preview of PR 114. Compare three true-circle orbit rings against
+        the static idle state, varying gap, stroke, and speed.
       </p>
       <div class="toolbar" aria-label="Preview controls">
         <button id="light" aria-pressed="true">Light theme</button>
@@ -228,39 +225,39 @@
           </div>
         </div>
         <div class="state-card">
-          <span class="state-caption">A · ORBIT RING</span>
+          <span class="state-caption">A · STANDARD GAP</span>
           <div class="viewer">
             <span class="label"
               ><span
-                class="indicator indicator--orbit review-agent-active-indicator--working"
+                class="indicator orbit-ring orbit-a"
                 aria-hidden="true"
               ></span
               >Agent is working</span
-            ><code>rotating ring</code>
+            ><code>4px gap · 1.5px · 1.1s</code>
           </div>
         </div>
         <div class="state-card">
-          <span class="state-caption">B · EXPANDING HALO</span>
+          <span class="state-caption">B · TIGHT GAP</span>
           <div class="viewer">
             <span class="label"
               ><span
-                class="indicator indicator--halo review-agent-active-indicator--working"
+                class="indicator orbit-ring orbit-b"
                 aria-hidden="true"
               ></span
               >Agent is working</span
-            ><code>radiating halo</code>
+            ><code>3px gap · 2px · 1.1s</code>
           </div>
         </div>
         <div class="state-card">
-          <span class="state-caption">C · SWEEP DOT</span>
+          <span class="state-caption">C · QUICK ORBIT</span>
           <div class="viewer">
             <span class="label"
               ><span
-                class="indicator indicator--sweep"
+                class="indicator orbit-ring orbit-c"
                 aria-hidden="true"
               ></span
               >Agent is working</span
-            ><code>moving sweep</code>
+            ><code>4px gap · 1.5px · 0.7s</code>
           </div>
         </div>
       </div>
