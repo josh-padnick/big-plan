@@ -29,6 +29,15 @@ const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
       section: "Status quo",
     },
   ],
+  [
+    "section/status-quo/image-1",
+    {
+      id: "section/status-quo/image-1",
+      kind: "image",
+      label: "Deployment screenshot",
+      section: "Status quo",
+    },
+  ],
 ]);
 
 const NOW = "2026-07-31T00:00:00.000Z";
@@ -109,6 +118,23 @@ describe("validateComments acceptance", () => {
       end: 4,
       quote: "reality\nWhat",
       isQuoteExcerpt: false,
+    });
+  });
+
+  it("should preserve image blocks included in a text selection", () => {
+    const [comment] = validate(
+      commentOn({
+        type: "selection",
+        blockId: "section/status-quo/paragraph-1",
+        start: 12,
+        end: 12,
+        quote: "A claim.\n[Image: Deployment screenshot]",
+        imageBlockIds: ["section/status-quo/image-1"],
+      }),
+    );
+    expect(comment?.target).toMatchObject({
+      type: "selection",
+      imageBlockIds: ["section/status-quo/image-1"],
     });
   });
 

@@ -219,6 +219,17 @@ const target = (value: unknown): CommentTarget => {
     value.type === "selection" && typeof value.endBlockId === "string"
       ? value.endBlockId
       : undefined;
+  const imageBlockIds =
+    value.type === "selection" && Array.isArray(value.imageBlockIds)
+      ? value.imageBlockIds.map((imageId, index) => {
+          if (typeof imageId !== "string" || !BLOCK_ID.test(imageId)) {
+            throw new AgentExchangeRejected(
+              `"imageBlockIds[${index}]" must name a valid block`,
+            );
+          }
+          return imageId;
+        })
+      : undefined;
   if (
     typeof value.start !== "number" ||
     !Number.isInteger(value.start) ||
@@ -238,6 +249,9 @@ const target = (value: unknown): CommentTarget => {
     ...(endBlockId === undefined || endBlockId === value.blockId
       ? {}
       : { endBlockId }),
+    ...(imageBlockIds === undefined || imageBlockIds.length === 0
+      ? {}
+      : { imageBlockIds: [...new Set(imageBlockIds)] }),
     start: value.start,
     end: value.end,
     quote: value.quote,

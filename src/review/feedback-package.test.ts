@@ -109,6 +109,27 @@ describe("agent brief containment", () => {
     expect(brief).toContain("lines 13-18");
   });
 
+  it("should tell the agent when a selection includes an image", () => {
+    const brief = briefFor([
+      {
+        ...NOTE,
+        target: {
+          type: "selection",
+          blockId: "section/one/paragraph-1",
+          kind: "paragraph",
+          label: "A claim",
+          start: 0,
+          end: 12,
+          quote: "A claim.\n[Image: Deployment screenshot]",
+          imageBlockIds: ["section/one/image-1"],
+          isQuoteExcerpt: false,
+        },
+      },
+    ]);
+    expect(brief).toContain("selected text and image");
+    expect(brief).toContain("[Image: Deployment screenshot]");
+  });
+
   it("should say a quote is only the first part when the highlight was trimmed", () => {
     const brief = briefFor([
       {

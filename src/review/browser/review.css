@@ -71,15 +71,14 @@ here; all values use the document theme's closed token vocabulary.
     display: inline-flex;
     width: 1.5rem;
     height: 1.5rem;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  [data-block-kind="image"]:hover + [data-review-image-host],
-  [data-review-image-host]:hover,
-  [data-review-image-host]:focus-within {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  [data-review-selection-associated][data-block-kind="image"] {
+    outline: 3px solid color-mix(in srgb, var(--annotation-c) 55%, var(--bg));
+    outline-offset: 0.25rem;
+    box-shadow: 0 0 0 0.25rem var(--annotation-bg);
   }
 
   :root[data-figure-maximized-open] [data-review-anchor-host] {

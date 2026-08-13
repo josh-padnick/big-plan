@@ -70,7 +70,11 @@ export const describeTarget = (comment: ReviewComment): string => {
     return `${location} · ${kind} · ${range}`;
   }
   if (target.type === "selection") {
-    return `${location} · ${kind} · selected text`;
+    return `${location} · ${kind} · selected text${
+      target.imageBlockIds === undefined || target.imageBlockIds.length === 0
+        ? ""
+        : " and image"
+    }`;
   }
   return `${location} · ${kind}`;
 };

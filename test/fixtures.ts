@@ -42,6 +42,7 @@ const renderThroughCli = async ({
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly codeSnippetSyntaxMaximizeViewerUrl: string;
+  readonly imageSelectionViewerUrl: string;
   readonly allComponentsViewerUrl: string;
   readonly componentsViewerUrl: string;
   readonly apiEndpointsViewerUrl: string;
@@ -113,6 +114,17 @@ export const summarize = (title: string): string =>
 \`\`\`
 
 </CodeSnippet>
+`;
+
+const IMAGE_SELECTION_MDX = `# Image selection
+
+Reviewers should be able to comment on visual evidence alongside text.
+
+## Evidence
+
+Review the deployment result before approving the rollout.
+
+![Deployment screenshot](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=)
 `;
 
 const MERMAID_REVIEW_MDX = `# Mermaid diagram review
@@ -329,6 +341,20 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       const inputPath = join(outputDir, "code-snippet-syntax-maximize.mdx");
       const outputPath = join(outputDir, "code-snippet-syntax-maximize.html");
       await writeFile(inputPath, CODE_SNIPPET_SYNTAX_MAXIMIZE_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  imageSelectionViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-image-selection-"),
+      );
+      const inputPath = join(outputDir, "image-selection.mdx");
+      const outputPath = join(outputDir, "image-selection.html");
+      await writeFile(inputPath, IMAGE_SELECTION_MDX, "utf8");
       await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });

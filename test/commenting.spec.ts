@@ -1036,6 +1036,100 @@ test("should preserve a text selection while its compact composer is open", asyn
   await expect(rail.locator(".review-staged-card")).toHaveCount(0);
 });
 
+test("should comment image-only and mixed image selections", async ({
+  page,
+  imageSelectionViewerUrl,
+}) => {
+  await page.goto(imageSelectionViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const image = page.locator("[data-block-kind='image']").first();
+  const imageComment = image.locator(
+    "xpath=following-sibling::*[@data-review-image-host][1]//button",
+  );
+  await expect(imageComment).toBeVisible();
+  await expect(imageComment).toHaveCSS("opacity", "1");
+  await expect(imageComment).toHaveCSS("pointer-events", "auto");
+
+  await image.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNode(element);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  const imageSelectionState = await page.evaluate(() => ({
+    text: window.getSelection()?.toString() ?? "",
+    images: Array.from(
+      document.querySelectorAll(
+        "[data-block-kind='image'][data-authored-prose]",
+      ),
+    ).length,
+    imageButtons: document.querySelectorAll("[data-selection-comment-tooltip]")
+      .length,
+  }));
+  expect(
+    imageSelectionState,
+    JSON.stringify(imageSelectionState),
+  ).toMatchObject({
+    images: 1,
+    imageButtons: 1,
+  });
+  const imageChip = page.getByRole("button", {
+    name: "Comment on selected text and image",
+  });
+  await expect(imageChip).toBeVisible();
+  await imageChip.click();
+  const imageComposer = page.getByRole("dialog", {
+    name: /Comment on Selected text and image in/u,
+  });
+  await expect(imageComposer).toBeVisible();
+  await imageComposer.getByLabel("Add a comment").fill("Review this image.");
+  await imageComposer
+    .getByRole("switch", { name: "Submit right away" })
+    .click();
+  await imageComposer.getByRole("button", { name: "Add Comment" }).click();
+
+  await page.evaluate(() => {
+    window.getSelection()?.removeAllRanges();
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  const mixed = await image.evaluate((element) => {
+    const slide = element.closest("[data-slide]");
+    const paragraphs = Array.from(
+      slide?.querySelectorAll("p[data-authored-prose]") ?? [],
+    );
+    const imageParagraph = element.parentElement;
+    const startParagraph = paragraphs.find(
+      (paragraph) =>
+        paragraph !== imageParagraph &&
+        (paragraph.compareDocumentPosition(element) &
+          Node.DOCUMENT_POSITION_FOLLOWING) !==
+          0,
+    );
+    const start = startParagraph?.firstChild;
+    if (!(start instanceof Text)) return false;
+    const range = document.createRange();
+    range.setStart(start, 0);
+    range.setEndAfter(element);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return range.intersectsNode(element);
+  });
+  expect(mixed).toBe(true);
+  await expect(imageChip).toBeVisible();
+  await imageChip.click();
+  await expect(
+    page.getByRole("dialog", {
+      name: /Comment on Selected text and image in/u,
+    }),
+  ).toBeVisible();
+});
+
 test("should offer selection comments after double-clicking Markdown and component prose", async ({
   page,
   allComponentsViewerUrl,

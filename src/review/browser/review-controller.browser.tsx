@@ -604,7 +604,11 @@ const targetLabel = (
   let label: string;
   if (target.type === "document") label = "Whole plan";
   else if (target.type === "selection")
-    label = `Selected text in ${target.label}`;
+    label = `Selected text${
+      target.imageBlockIds === undefined || target.imageBlockIds.length === 0
+        ? ""
+        : " and image"
+    } in ${target.label}`;
   else if (target.kind === "table" || target.kind === "data-table")
     label = [target.section, "Table"].filter(Boolean).join(" · ");
   else label = target.label;
@@ -715,6 +719,34 @@ const selectionOffsetWithin = ({
   return before.toString().length;
 };
 
+const authoredImagesIntersecting = (range: Range): ReadonlyArray<HTMLElement> =>
+  Array.from(
+    document.querySelectorAll<HTMLElement>(
+      '[data-block-kind="image"][data-authored-prose]',
+    ),
+  ).filter((image) => {
+    try {
+      return range.intersectsNode(image);
+    } catch {
+      return false;
+    }
+  });
+
+const selectionRect = (
+  range: Range,
+  images: ReadonlyArray<HTMLElement>,
+): DOMRect => {
+  const rects = [
+    range.getBoundingClientRect(),
+    ...images.map((image) => image.getBoundingClientRect()),
+  ];
+  const left = Math.min(...rects.map((rect) => rect.left));
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const right = Math.max(...rects.map((rect) => rect.right));
+  const bottom = Math.max(...rects.map((rect) => rect.bottom));
+  return new DOMRect(left, top, right - left, bottom - top);
+};
+
 const selectionControlState = (): SelectionControlState | null => {
   const selection = window.getSelection();
   if (
@@ -751,7 +783,14 @@ const selectionControlState = (): SelectionControlState | null => {
   ) {
     return null;
   }
-  const selected = selection.toString();
+  const images = authoredImagesIntersecting(range);
+  const text = selection.toString();
+  const imageEvidence = images
+    .map((image) => `[Image: ${image.dataset.blockLabel ?? "Image"}]`)
+    .join("\n");
+  const selected = [text, imageEvidence]
+    .filter((part) => part.trim() !== "")
+    .join("\n");
   if (selected.trim() === "") return null;
   // Length never withdraws the affordance. The block and offsets below are the
   // address of the highlight; the quote is only the copy carried into the
@@ -770,7 +809,7 @@ const selectionControlState = (): SelectionControlState | null => {
     offset: range.endOffset,
     edge: "end",
   });
-  const rect = range.getBoundingClientRect();
+  const rect = selectionRect(range, images);
   if (rect.width === 0 && rect.height === 0) return null;
   return {
     target: {
@@ -779,6 +818,13 @@ const selectionControlState = (): SelectionControlState | null => {
       ...(startBlock === endBlock
         ? {}
         : { endBlockId: endBlock.dataset.blockId ?? "" }),
+      ...(images.length === 0
+        ? {}
+        : {
+            imageBlockIds: images
+              .map((image) => image.dataset.blockId)
+              .filter((id): id is string => id !== undefined),
+          }),
       start,
       end,
       quote,
@@ -794,6 +840,13 @@ const blockCommentLabel = (block: HTMLElement): string =>
   block.dataset.blockKind?.startsWith("code-") === true
     ? "Comment on this code snippet"
     : `Comment on ${block.dataset.blockLabel ?? "this component"}`;
+
+const selectionCommentLabel = (target: SelectionTarget): string =>
+  `Comment on selected text${
+    target.imageBlockIds === undefined || target.imageBlockIds.length === 0
+      ? ""
+      : " and image"
+  }`;
 
 // Decoration, geometry, and containment callers treat an absent target as a
 // no-op, so this keeps the nullable shape while the resolver owns the query.
@@ -833,6 +886,12 @@ const targetAssociationElements = (
     )
   ) {
     elements.add(element);
+  }
+  if (target.type === "selection") {
+    for (const imageId of target.imageBlockIds ?? []) {
+      const image = foundElement(liveBlock(imageId));
+      if (image !== null) elements.add(image);
+    }
   }
   if (owningContainer !== null) elements.add(owningContainer);
   return elements;
@@ -3728,6 +3787,15 @@ export const ReviewController = () => {
     const selection =
       compose?.target.type === "selection" ? compose.target : null;
     const block = selection === null ? null : targetElement(selection);
+    const images =
+      selection === null
+        ? []
+        : (selection.imageBlockIds ?? [])
+            .map((imageId) => foundElement(liveBlock(imageId)))
+            .filter((image): image is HTMLElement => image !== null);
+    for (const image of images) {
+      image.dataset.reviewSelectionAssociated = "";
+    }
     if (block !== null) {
       block.dataset.reviewSelectionAssociated = "";
       const enter = () => setAssociationActive(true);
@@ -3738,9 +3806,16 @@ export const ReviewController = () => {
         block.removeEventListener("pointerenter", enter);
         block.removeEventListener("pointerleave", leave);
         delete block.dataset.reviewSelectionAssociated;
+        for (const image of images) {
+          delete image.dataset.reviewSelectionAssociated;
+        }
       };
     }
-    return undefined;
+    return () => {
+      for (const image of images) {
+        delete image.dataset.reviewSelectionAssociated;
+      }
+    };
   }, [articleVersion, compose]);
 
   useEffect(() => {
@@ -4809,7 +4884,7 @@ export const ReviewController = () => {
             top: `${selectionControl.top}px`,
             left: `${selectionControl.left}px`,
           }}
-          aria-label="Comment on selected text"
+          aria-label={selectionCommentLabel(selectionControl.target)}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => {
             beginTarget(selectionControl.target, { top: selectionControl.top });
