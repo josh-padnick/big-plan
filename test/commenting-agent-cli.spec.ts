@@ -103,6 +103,11 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
     await expect(
       rail.getByRole("dialog", { name: "Screenshot" }),
     ).toBeVisible();
+    await expect(rail.getByRole("button", { name: "Zoom out" })).toBeVisible();
+    await expect(rail.getByRole("button", { name: "Fit image" })).toBeVisible();
+    await expect(rail.getByRole("button", { name: "Zoom in" })).toBeVisible();
+    await rail.getByRole("button", { name: "Zoom in" }).click();
+    await rail.getByRole("button", { name: "Fit image" }).click();
     await page.keyboard.press("Escape");
     await expect(
       rail.getByRole("dialog", { name: "Screenshot" }),

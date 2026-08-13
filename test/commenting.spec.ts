@@ -622,6 +622,16 @@ test("should replace an empty composer and protect a non-empty draft", async ({
   const composer = page.getByRole("dialog", { name: /Comment on/u });
   const input = composer.getByLabel("Add a comment");
   await input.fill("Keep this draft while I inspect another slide.");
+  await input.press("Escape");
+  const closeWarning = page.getByRole("alertdialog", {
+    name: "Close this comment?",
+  });
+  await expect(closeWarning).toContainText("Your text will be lost.");
+  await closeWarning.getByRole("button", { name: "Keep editing" }).click();
+  await expect(input).toHaveValue(
+    "Keep this draft while I inspect another slide.",
+  );
+  await expect(input).toBeFocused();
   await first.getByRole("button", { name: "Comment on slide" }).click();
   const warning = page.getByRole("alertdialog", {
     name: "Finish your draft comment?",

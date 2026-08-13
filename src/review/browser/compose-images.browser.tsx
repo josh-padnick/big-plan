@@ -5,7 +5,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type ChangeEvent,
   type ClipboardEvent,
   type DragEvent,
   type KeyboardEvent,
@@ -21,7 +20,7 @@ import {
   ReviewImage,
   type ReviewImageIdentity,
 } from "./review-image.browser.js";
-import { Button, Textarea } from "./ui.browser.js";
+import { Textarea } from "./ui.browser.js";
 
 export const ComposeImages = ({
   body,
@@ -44,7 +43,6 @@ export const ComposeImages = ({
   readonly autoFocus?: boolean;
   readonly id?: string;
 }) => {
-  const input = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const [pending, setPending] = useState(0);
   const [error, setError] = useState("");
@@ -125,10 +123,6 @@ export const ComposeImages = ({
     event.preventDefault();
     capture(Array.from(event.dataTransfer.files));
   };
-  const pick = (event: ChangeEvent<HTMLInputElement>) => {
-    capture(Array.from(event.target.files ?? []));
-    event.target.value = "";
-  };
   return (
     <div onDragOver={(event) => event.preventDefault()} onDrop={drop}>
       <Textarea
@@ -154,25 +148,10 @@ export const ComposeImages = ({
           ))}
         </div>
       ) : null}
-      <div className="mt-2 flex items-center gap-2">
-        <input
-          ref={input}
-          data-review-image-picker=""
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          multiple
-          className="sr-only"
-          onChange={pick}
-        />
-        <Button
-          variant="outline"
-          size="micro"
-          type="button"
-          disabled={identity === null || pending > 0}
-          onClick={() => input.current?.click()}
-        >
-          Choose image
-        </Button>
+      <p className="mt-1 mb-0 text-2xs text-muted">
+        Markdown and images supported
+      </p>
+      <div className="mt-1 flex items-center gap-2">
         {pending > 0 ? (
           <span className="text-2xs text-muted">Uploading…</span>
         ) : null}

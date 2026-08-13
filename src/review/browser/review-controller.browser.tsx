@@ -1488,6 +1488,7 @@ const CommentComposer = ({
     top: compose.top,
     left: compose.left,
   });
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const composerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (inline) return;
@@ -1523,7 +1524,8 @@ const CommentComposer = ({
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      onCancel();
+      if (body.trim() === "") onCancel();
+      else setCloseConfirmOpen(true);
     } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       save();
@@ -1538,94 +1540,108 @@ const CommentComposer = ({
         }),
   };
   return (
-    <Card
-      ref={composerRef}
-      className={
-        inline
-          ? `review-comment-composer-inline relative z-auto mb-6 w-full max-w-lg border border-edge bg-paper! p-3 text-ink shadow-floating ${compose.target.type === "block" && compose.target.kind === "slide" ? "-mt-4" : "mt-2"}`
-          : "review-comment-composer-floating absolute z-30 w-[min(17rem,calc(100vw-2rem))] border border-edge bg-paper! p-3 text-ink shadow-floating"
-      }
-      style={style}
-      role="dialog"
-      aria-label={`Comment on ${targetLabel(compose.target)}`}
-      data-review-associated={
-        compose.target.type === "selection" ? "true" : undefined
-      }
-    >
-      <p className="review-compose-title m-0 mb-2 text-xs font-semibold text-muted">
-        Add a comment
-      </p>
-      <ComposeImages
-        identity={identity}
-        autoFocus
-        label="Add a comment"
-        placeholder="What should the agent change here?"
-        body={body}
-        maxLength={BODY_LIMIT}
-        onBodyChange={onBodyChange}
-        onKeyDown={handleKeyDown}
-      />
-      {(compose.target.type === "selection" ||
-        compose.target.type === "lines") &&
-      compose.target.isQuoteExcerpt ? (
-        // The whole highlight stays the comment's target; only the copy sent
-        // with it is trimmed, and the reviewer is told so rather than
-        // discovering it in the agent's reply.
-        <p className="review-compose-excerpt mt-1 mb-0 text-2xs text-subtle">
-          The agent gets the first {QUOTE_LIMIT.toLocaleString()} characters of
-          this highlight as a quote, and the whole highlight as the target.
+    <>
+      <Card
+        ref={composerRef}
+        className={
+          inline
+            ? `review-comment-composer-inline relative z-auto mb-6 w-full max-w-lg border border-edge bg-paper! p-3 text-ink shadow-floating ${compose.target.type === "block" && compose.target.kind === "slide" ? "-mt-4" : "mt-2"}`
+            : "review-comment-composer-floating absolute z-30 w-[min(17rem,calc(100vw-2rem))] border border-edge bg-paper! p-3 text-ink shadow-floating"
+        }
+        style={style}
+        role="dialog"
+        aria-label={`Comment on ${targetLabel(compose.target)}`}
+        data-review-associated={
+          compose.target.type === "selection" ? "true" : undefined
+        }
+      >
+        <p className="review-compose-title m-0 mb-2 text-xs font-semibold text-muted">
+          Add a comment
         </p>
-      ) : null}
-      <p className="review-compose-hint mt-1 mb-0 text-2xs text-subtle">
-        Escape cancels · {MODIFIER_SHORTCUT} adds
-      </p>
-      <div className="mt-2 block">
-        <button
-          type="button"
-          className="group inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-xs text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          role="switch"
-          aria-checked={submitRightAway}
-          onClick={() => onSubmitRightAwayChange(!submitRightAway)}
-        >
-          <span
-            className="relative h-5 w-8 rounded-full border border-edge bg-surface inset-shadow-well after:absolute after:top-1/2 after:left-1 after:size-3 after:-translate-y-1/2 after:rounded-full after:bg-muted after:transition-transform group-aria-checked:border-accent group-aria-checked:bg-accent-soft group-aria-checked:after:translate-x-3 group-aria-checked:after:bg-accent"
-            aria-hidden="true"
-          />
-          Submit right away
-        </button>
-        <div className="mt-2 flex items-center justify-end gap-1">
-          <Button variant="outline" size="compact" onClick={onCancel}>
-            Cancel
-          </Button>
-          <span className="group relative inline-flex">
-            <Button
-              size="micro"
-              disabled={
-                body.trim() === "" || (submitRightAway && !canSubmitRightAway)
-              }
-              onClick={save}
-            >
-              {submitRightAway ? "Submit Now" : "Add Comment"}
-            </Button>
-            <span
-              role="tooltip"
-              className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
-            >
-              {MODIFIER_SHORTCUT}
-            </span>
-          </span>
-        </div>
-        {submitRightAway && !canSubmitRightAway ? (
+        <ComposeImages
+          identity={identity}
+          autoFocus
+          label="Add a comment"
+          placeholder="What should the agent change here?"
+          body={body}
+          maxLength={BODY_LIMIT}
+          onBodyChange={onBodyChange}
+          onKeyDown={handleKeyDown}
+        />
+        {(compose.target.type === "selection" ||
+          compose.target.type === "lines") &&
+        compose.target.isQuoteExcerpt ? (
+          // The whole highlight stays the comment's target; only the copy sent
+          // with it is trimmed, and the reviewer is told so rather than
+          // discovering it in the agent's reply.
+          <p className="review-compose-excerpt mt-1 mb-0 text-2xs text-subtle">
+            The agent gets the first {QUOTE_LIMIT.toLocaleString()} characters
+            of this highlight as a quote, and the whole highlight as the target.
+          </p>
+        ) : null}
+        <p className="review-compose-hint mt-1 mb-0 text-2xs text-subtle">
+          Escape cancels · {MODIFIER_SHORTCUT} adds
+        </p>
+        <div className="mt-2 block">
           <button
             type="button"
-            className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-            onClick={onShowAgent}
+            className="group inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-xs text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            role="switch"
+            aria-checked={submitRightAway}
+            onClick={() => onSubmitRightAwayChange(!submitRightAway)}
           >
-            Agent disconnected
+            <span
+              className="relative h-5 w-8 rounded-full border border-edge bg-surface inset-shadow-well after:absolute after:top-1/2 after:left-1 after:size-3 after:-translate-y-1/2 after:rounded-full after:bg-muted after:transition-transform group-aria-checked:border-accent group-aria-checked:bg-accent-soft group-aria-checked:after:translate-x-3 group-aria-checked:after:bg-accent"
+              aria-hidden="true"
+            />
+            Submit right away
           </button>
-        ) : null}
-      </div>
-    </Card>
+          <div className="mt-2 flex items-center justify-end gap-1">
+            <Button variant="outline" size="compact" onClick={onCancel}>
+              Cancel
+            </Button>
+            <span className="group relative inline-flex">
+              <Button
+                size="micro"
+                disabled={
+                  body.trim() === "" || (submitRightAway && !canSubmitRightAway)
+                }
+                onClick={save}
+              >
+                {submitRightAway ? "Submit Now" : "Add Comment"}
+              </Button>
+              <span
+                role="tooltip"
+                className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
+              >
+                {MODIFIER_SHORTCUT}
+              </span>
+            </span>
+          </div>
+          {submitRightAway && !canSubmitRightAway ? (
+            <button
+              type="button"
+              className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+              onClick={onShowAgent}
+            >
+              Agent disconnected
+            </button>
+          ) : null}
+        </div>
+      </Card>
+      <AlertDialog
+        open={closeConfirmOpen}
+        title="Close this comment?"
+        description="Your text will be lost."
+        cancelLabel="Keep editing"
+        actionLabel="Close comment"
+        onCancel={() => setCloseConfirmOpen(false)}
+        onAction={() => {
+          setCloseConfirmOpen(false);
+          onCancel();
+        }}
+      />
+    </>
   );
 };
 

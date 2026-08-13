@@ -25,10 +25,12 @@ export const ReviewImage = ({
 }) => {
   const [url, setUrl] = useState<string>();
   const [open, setOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const trigger = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const close = () => {
     setOpen(false);
+    setZoom(1);
     requestAnimationFrame(() => trigger.current?.focus());
   };
   useEffect(() => {
@@ -50,7 +52,10 @@ export const ReviewImage = ({
     };
   }, [id, identity]);
   useEffect(() => {
-    if (open) closeButton.current?.focus();
+    if (open) {
+      setZoom(1);
+      closeButton.current?.focus();
+    }
   }, [open]);
   if (url === undefined)
     return <span className="text-xs text-subtle">Image unavailable</span>;
@@ -72,32 +77,72 @@ export const ReviewImage = ({
           aria-modal="true"
           aria-label={alt}
           onKeyDown={(event) => {
-            if (event.key === "Escape") close();
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              close();
+              return;
+            }
             if (event.key === "Tab") {
+              event.stopPropagation();
               event.preventDefault();
               closeButton.current?.focus();
             }
           }}
         >
-          <div className="relative max-h-full max-w-full rounded border border-edge bg-paper p-3 shadow-floating">
-            <Button
-              ref={closeButton}
-              variant="ghost"
-              size="compactIcon"
-              className="absolute top-1 right-1"
-              aria-label="Close image"
-              onClick={close}
-            >
-              <Icon icon={X_ICON} />
-            </Button>
-            <img
-              src={url}
-              alt={alt}
-              className="max-h-[80vh] max-w-[min(90vw,64rem)] object-contain"
-            />
-            <p className="m-0 mt-2 max-w-[min(90vw,64rem)] text-xs text-muted">
-              {alt}
-            </p>
+          <div className="flex max-h-full max-w-full flex-col items-end gap-2">
+            <div className="flex w-full justify-end">
+              <Button
+                ref={closeButton}
+                variant="secondary"
+                size="compactIcon"
+                className="border border-white/50 bg-paper! text-ink shadow-floating"
+                aria-label="Close image"
+                onClick={close}
+              >
+                <Icon icon={X_ICON} />
+              </Button>
+            </div>
+            <div className="max-h-[calc(100vh-8rem)] max-w-full overflow-auto rounded-sm bg-black/20 p-1 shadow-floating">
+              <img
+                src={url}
+                alt={alt}
+                className="max-h-[calc(100vh-8.5rem)] max-w-[min(92vw,72rem)] rounded-sm object-contain motion-reduce:transition-none"
+                style={{
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "center",
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-1 rounded-md border border-white/30 bg-black/60 p-1 text-white">
+              <Button
+                variant="ghost"
+                size="compactIcon"
+                className="text-white hover:bg-white/20 hover:text-white"
+                aria-label="Zoom out"
+                onClick={() => setZoom((value) => Math.max(0.5, value - 0.25))}
+              >
+                −
+              </Button>
+              <Button
+                variant="ghost"
+                size="compact"
+                className="min-w-16 text-white hover:bg-white/20 hover:text-white"
+                aria-label="Fit image"
+                onClick={() => setZoom(1)}
+              >
+                Fit image
+              </Button>
+              <Button
+                variant="ghost"
+                size="compactIcon"
+                className="text-white hover:bg-white/20 hover:text-white"
+                aria-label="Zoom in"
+                onClick={() => setZoom((value) => Math.min(4, value + 0.25))}
+              >
+                +
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}
