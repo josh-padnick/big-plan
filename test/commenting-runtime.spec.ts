@@ -188,6 +188,216 @@ test("should pause a nonstandard request behind an explicit warning", async ({
   expect((await override).ok()).toBe(true);
 });
 
+test("should contain working comments when resolved threads expand", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.setViewportSize({ width: 1_200, height: 900 });
+  await page.goto(reviewRuntimeUrl);
+  for (let index = 0; index < 6; index += 1) {
+    await stageComment(
+      page,
+      `Resolve this completed feedback thread ${index + 1} ${"unbroken-".repeat(40)}`,
+    );
+  }
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const firstSubmission = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await firstSubmission).ok()).toBe(true);
+
+  const session: unknown = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The containment journey requires a live review session");
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const source = await readFile(session.plan, "utf8");
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const firstRequest = nextPendingAgentRequest(exchange);
+  if (firstRequest === undefined || firstRequest.kind !== "feedback") {
+    throw new Error("The containment journey did not create its first request");
+  }
+  const revisedSource = source.replace(
+    "Keep every reviewer note safe while the plan is discussed.",
+    "Keep every reviewer note safe and complete while the plan is discussed.",
+  );
+  const beforeDocument = renderDocument({
+    markdown: source,
+    fallbackTitle: "Review persistence",
+    identity: {},
+  });
+  const afterDocument = renderDocument({
+    markdown: revisedSource,
+    fallbackTitle: "Review persistence",
+    identity: {},
+  });
+  const changedBlocks = new Set(
+    diffSnapshots({
+      before: beforeDocument.blocks,
+      after: afterDocument.blocks,
+    }).flatMap((location) =>
+      location.newBlockId === undefined ? [] : [location.newBlockId],
+    ),
+  );
+  const changeTarget = [...changedBlocks].at(-1);
+  if (changeTarget === undefined) {
+    throw new Error("The containment journey produced no changed block");
+  }
+  await writeFile(session.plan, revisedSource, "utf8");
+  const resultSnapshot = deriveSnapshotDigest(revisedSource);
+  await writeSnapshot({
+    store,
+    snapshot: resultSnapshot,
+    source: revisedSource,
+  });
+  const firstClaimed = await claimAgentRequest({
+    store,
+    requestId: firstRequest.requestId,
+    baselineSnapshot: firstRequest.premiseSnapshot,
+    now: new Date().toISOString(),
+  });
+  await publishAgentResponse({
+    store,
+    response: validateAgentResponseDraft({
+      value: {
+        requestId: firstRequest.requestId,
+        outcomes: firstRequest.comments.map((comment) => ({
+          commentId: comment.id,
+          state: "changed",
+          message: "The completed feedback is addressed.",
+          changeTargets: [changeTarget],
+        })),
+      },
+      request: firstClaimed,
+      commentsById: commentsFromExchange(exchange),
+      changedBlocks,
+      currentSnapshot: resultSnapshot,
+      now: new Date().toISOString(),
+    }),
+  });
+
+  await expect(rail.getByRole("button", { name: "Resolve all" })).toBeVisible();
+  await rail.getByRole("button", { name: "Resolve all" }).click();
+  await expect(rail.getByText("Resolved (6)")).toBeVisible();
+
+  await rail.getByRole("button", { name: "Close feedback" }).click();
+  await stageComment(
+    page,
+    `Keep the active feedback thread usable ${"unbroken-".repeat(40)}`,
+  );
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const secondSubmission = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await secondSubmission).ok()).toBe(true);
+  const secondExchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const secondRequest = nextPendingAgentRequest(secondExchange);
+  if (secondRequest === undefined || secondRequest.kind !== "feedback") {
+    throw new Error(
+      "The containment journey did not create its working request",
+    );
+  }
+  const secondClaimed = await claimAgentRequest({
+    store,
+    requestId: secondRequest.requestId,
+    baselineSnapshot: secondRequest.premiseSnapshot,
+    now: new Date().toISOString(),
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "working",
+    requestId: secondClaimed.requestId,
+  });
+  await appendProgressEvent({
+    store,
+    event: {
+      sessionId: session.sessionId,
+      requestId: secondClaimed.requestId,
+      atMs: Date.now(),
+      stepCode: "agent-note",
+      step: "Reviewing the shared feedback batch",
+      state: "live",
+    },
+  });
+  const workingGroup = rail.locator("[data-review-thread-group='working']");
+  await expect(workingGroup).toBeVisible();
+  await expect(
+    workingGroup.getByRole("button", { name: "Cancel request" }),
+  ).toBeVisible();
+  await rail.getByText("Resolved (6)").click();
+
+  const measureContainment = async () =>
+    rail.locator(".review-feedback-panel").evaluate((panel) => {
+      const panelRect = panel.getBoundingClientRect();
+      const details = panel.querySelector("details");
+      if (details === null) {
+        throw new Error("The expanded resolved section is missing");
+      }
+      const overflowing = [...panel.querySelectorAll("*")].filter(
+        (element) =>
+          element.getBoundingClientRect().right > panelRect.right + 0.5,
+      );
+      return {
+        panelRight: panelRect.right,
+        scrollWidth: panel.scrollWidth,
+        clientWidth: panel.clientWidth,
+        overflowing: overflowing.length,
+        resolvedMinWidth: getComputedStyle(details).minWidth,
+      };
+    });
+  const containment = await measureContainment();
+  expect(containment.scrollWidth).toBeLessThanOrEqual(containment.clientWidth);
+  expect(containment.overflowing).toBe(0);
+  expect(containment.resolvedMinWidth).toBe("0px");
+
+  await page.setViewportSize({ width: 320, height: 900 });
+  const narrowContainment = await measureContainment();
+  expect(narrowContainment.scrollWidth).toBeLessThanOrEqual(
+    narrowContainment.clientWidth,
+  );
+  expect(narrowContainment.overflowing).toBe(0);
+});
+
 test("should restore and submit staged comments through the local review runtime", async ({
   page,
   reviewRuntimeUrl,
