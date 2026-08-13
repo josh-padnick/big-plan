@@ -27,7 +27,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import { basename, extname, resolve } from "node:path";
+import { basename, dirname, extname, resolve } from "node:path";
 import { fromHtml } from "hast-util-from-html";
 import { toHtml } from "hast-util-to-html";
 import type { Element, Root, RootContent, ElementContent } from "hast";
@@ -89,6 +89,7 @@ import {
   writeSnapshot,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
+import { reviewPlanAssetName } from "./plan-assets.js";
 import {
   extractReviewImageReferences,
   MAX_IMAGES_PER_MESSAGE,
@@ -110,6 +111,7 @@ import {
 import {
   activateReviewSession,
   REVIEW_HEARTBEAT_INTERVAL_MS,
+  readCurrentReviewSession,
   refreshReviewSessionHeartbeat,
   reviewSessionView,
   withReviewSessionAuthority,
@@ -216,7 +218,7 @@ const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   "style-src 'unsafe-inline'",
   "script-src 'unsafe-inline'",
-  "img-src data: blob:",
+  "img-src 'self' data: blob:",
   "font-src data:",
   "connect-src 'self'",
   "form-action 'none'",
@@ -567,9 +569,13 @@ export const startReviewRuntime = async ({
   });
   const planId = deriveReviewPlanId({ planPath: resolvedPlanPath });
   const sessionId = randomId(8);
-  const token = randomBytes(32).toString("base64url");
   const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
   await prepareStore(store);
+  const previousSession = await readCurrentReviewSession({ store });
+  // The token protects the durable image store as well as the live mailbox.
+  // Reuse it for this plan so a browser page can reconnect after a runtime
+  // restart without turning already-sent images into missing references.
+  const token = previousSession?.token ?? randomBytes(32).toString("base64url");
   const initialSource = await readFile(resolvedPlanPath, "utf8");
   renderDocument({
     markdown: initialSource,
@@ -908,6 +914,39 @@ export const startReviewRuntime = async ({
         body: `The plan could not be rendered.\n\n${detail}\n`,
       });
     }
+  };
+
+  const handlePlanAsset = async ({
+    response,
+    pathname,
+  }: {
+    readonly response: ServerResponse;
+    readonly pathname: string;
+  }): Promise<boolean> => {
+    const match =
+      /^\/assets\/(review-image-[a-f0-9]{64}\.(?:png|jpg|webp))$/u.exec(
+        pathname,
+      );
+    const name = match?.[1];
+    if (name === undefined || !reviewPlanAssetName(name)) return false;
+    try {
+      const bytes = await readFile(
+        resolve(dirname(resolvedPlanPath), "assets", name),
+      );
+      sendBinary({
+        response,
+        status: 200,
+        contentType: name.endsWith(".jpg")
+          ? "image/jpeg"
+          : name.endsWith(".webp")
+            ? "image/webp"
+            : "image/png",
+        body: Uint8Array.from(bytes),
+      });
+    } catch {
+      refuse({ response, status: 404, reason: "Plan asset unavailable" });
+    }
+    return true;
   };
 
   const handleApi = async ({
@@ -1759,6 +1798,12 @@ export const startReviewRuntime = async ({
       if (method === DOCUMENT_ROUTE.method && target.pathname === "/") {
         lastReviewActivityAt = Date.now();
         await handleDocument(response);
+        return;
+      }
+      if (
+        method === DOCUMENT_ROUTE.method &&
+        (await handlePlanAsset({ response, pathname: target.pathname }))
+      ) {
         return;
       }
 

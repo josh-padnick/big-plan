@@ -48,6 +48,7 @@ import {
 } from "./shared/agent-command.js";
 import { projectConversationHistory } from "./shared/thread-projection.js";
 import { sniffReviewImage } from "./shared/review-image.js";
+import { materializeReviewImages, replacePlanSource } from "./plan-assets.js";
 
 export type AgentWorkLoopAction =
   | {
@@ -202,7 +203,7 @@ For each returned work item:
 6. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
 7. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
 
-Never edit rendered HTML. Never invent a Changed outcome without changing the plan source.`;
+Reviewer image references included in a changed plan are materialized into source-owned ./assets files during response validation. Never edit rendered HTML. Never invent a Changed outcome without changing the plan source.`;
   await writeAgentPrompt({ store: session.store, prompt });
   const promptArgument = `"$(cat ${quoteShellArgument(session.store.agentPromptPath)})"`;
   return {
@@ -420,6 +421,21 @@ const respond = async ({
     markdown = await readFile(session.planPath, "utf8");
   } catch (error: unknown) {
     return fail(`Cannot read the plan source: ${String(error)}`);
+  }
+  try {
+    const materialized = await materializeReviewImages({
+      markdown,
+      planPath: session.planPath,
+      store: session.store,
+    });
+    if (materialized !== markdown) {
+      await replacePlanSource({ path: session.planPath, source: materialized });
+      markdown = materialized;
+    }
+  } catch (error: unknown) {
+    return fail(
+      `Cannot materialize reviewer images into plan assets: ${String(error)}`,
+    );
   }
   let rendered: ReturnType<typeof renderDocument>;
   try {

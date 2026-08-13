@@ -25,6 +25,7 @@ import {
   writeAgentRequest,
 } from "./agent-exchange.js";
 import { claimAgentRequest, publishAgentResponse } from "./request-mailbox.js";
+import { materializeReviewImages } from "./plan-assets.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
@@ -32,6 +33,7 @@ import type { ReviewComment } from "./shared/comment.js";
 import {
   readComments,
   readResolvedCommentIds,
+  publishReviewImage,
   writeComments,
   writeResolvedCommentIds,
   writeSnapshot,
@@ -309,6 +311,84 @@ describe("review runtime images", () => {
       },
     );
     expect(response.status).toBe(401);
+  });
+
+  it("should keep published images readable after the runtime restarts", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-image-restart-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const first = await startReviewRuntime({ planPath });
+    const firstDescriptor: unknown = JSON.parse(
+      await readFile(first.store.sessionPath, "utf8"),
+    );
+    const firstToken =
+      typeof firstDescriptor === "object" &&
+      firstDescriptor !== null &&
+      "token" in firstDescriptor &&
+      typeof firstDescriptor.token === "string"
+        ? firstDescriptor.token
+        : "";
+    const upload = await fetch(`${first.url}api/review-images`, {
+      method: "POST",
+      headers: {
+        "x-big-plan-review-token": firstToken,
+        "sec-fetch-site": "same-origin",
+        origin: first.url.replace(/\/$/u, ""),
+        "content-type": "image/png",
+      },
+      body: TINY_PNG,
+    });
+    const descriptor = (await upload.json()) as { readonly id: string };
+    await first.close();
+
+    const restarted = await startReviewRuntime({ planPath });
+    try {
+      const image = await fetch(
+        `${restarted.url}api/review-images?id=${descriptor.id}`,
+        {
+          headers: {
+            "x-big-plan-review-token": firstToken,
+            "sec-fetch-site": "same-origin",
+            origin: restarted.url.replace(/\/$/u, ""),
+          },
+        },
+      );
+      expect(image.status).toBe(200);
+      expect(new Uint8Array(await image.arrayBuffer())).toEqual(TINY_PNG);
+    } finally {
+      await restarted.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should serve materialized plan assets from their relative source path", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-plan-asset-route-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const review = await startReviewRuntime({ planPath });
+    try {
+      const descriptor = await publishReviewImage({
+        store: review.store,
+        bytes: TINY_PNG,
+        alt: "Capture",
+      });
+      const source = await materializeReviewImages({
+        markdown: `# Plan\n\n![Capture](review-image:${descriptor.id})\n`,
+        planPath,
+        store: review.store,
+      });
+      await writeFile(planPath, source);
+      const asset = await fetch(
+        `${review.url}assets/review-image-${descriptor.id}.png`,
+      );
+      expect(asset.status).toBe(200);
+      expect(new Uint8Array(await asset.arrayBuffer())).toEqual(TINY_PNG);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

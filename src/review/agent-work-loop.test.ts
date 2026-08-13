@@ -209,6 +209,71 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should materialize reviewer images before publishing a changed plan", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-assets-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nThe reviewer supplied a capture.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes: Uint8Array.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+        0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+      ]),
+      alt: "Capture",
+    });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please include the capture in the plan.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    await claimAgentRequest({
+      store: review.store,
+      requestId: request.requestId,
+      baselineSnapshot: deriveSnapshotDigest(source),
+      now: "2026-08-12T12:00:01.000Z",
+    });
+    await writeFile(
+      planPath,
+      `${source}\n![Capture](review-image:${descriptor.id})\n`,
+    );
+    const responsePath = join(directory, "response.json");
+    await writeFile(
+      responsePath,
+      JSON.stringify({
+        requestId: request.requestId,
+        message: "The capture is now part of the plan.",
+      }),
+    );
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath,
+          executablePath,
+        }),
+      ).resolves.toMatchObject({ responded: request.requestId });
+      await expect(readFile(planPath, "utf8")).resolves.toContain(
+        `![Capture](./assets/review-image-${descriptor.id}.png)`,
+      );
+      await expect(
+        readFile(
+          join(directory, "assets", `review-image-${descriptor.id}.png`),
+        ),
+      ).resolves.toEqual(expect.any(Buffer));
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should explain a normal idle timeout to a waiting agent", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
     const planPath = join(directory, "plan.mdx");
