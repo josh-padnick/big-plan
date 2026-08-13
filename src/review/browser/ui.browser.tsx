@@ -4,9 +4,12 @@
 
 import type {
   ComponentPropsWithRef,
+  FocusEventHandler,
   HTMLAttributes,
   KeyboardEvent,
+  MouseEventHandler,
   ReactElement,
+  Ref,
 } from "react";
 import {
   cloneElement,
@@ -207,13 +210,23 @@ export const Badge = ({
   />
 );
 
+type TooltipChildProps = {
+  readonly "aria-describedby"?: string;
+  readonly ref?: Ref<HTMLElement>;
+  readonly onMouseEnter?: MouseEventHandler<HTMLElement>;
+  readonly onMouseLeave?: MouseEventHandler<HTMLElement>;
+  readonly onFocusCapture?: FocusEventHandler<HTMLElement>;
+  readonly onBlurCapture?: FocusEventHandler<HTMLElement>;
+};
+
 type TooltipProps = {
   readonly label: string;
-  readonly children: ReactElement<{ "aria-describedby"?: string }>;
+  readonly children: ReactElement<TooltipChildProps>;
   readonly className?: string;
   readonly tooltipProps?: HTMLAttributes<HTMLSpanElement> &
     Record<`data-${string}`, string>;
   readonly placement?: "above" | "below";
+  readonly asChild?: boolean;
   readonly isInstant?: boolean;
 };
 
@@ -224,10 +237,11 @@ export const Tooltip = ({
   className,
   tooltipProps,
   placement = "above",
+  asChild = false,
   isInstant = false,
 }: TooltipProps) => {
   const tooltipId = useId();
-  const anchorRef = useRef<HTMLSpanElement>(null);
+  const anchorRef = useRef<HTMLElement>(null);
   const timerRef = useRef<number | null>(null);
   const [position, setPosition] = useState<{
     readonly top: number;
@@ -285,6 +299,36 @@ export const Tooltip = ({
       window.removeEventListener("scroll", reposition, true);
     };
   }, [position]);
+  const tooltip =
+    position === null
+      ? null
+      : createPortal(
+          <span
+            id={tooltipId}
+            role="tooltip"
+            className={`pointer-events-none fixed z-[2147483647] w-max max-w-44 -translate-x-1/2 rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs font-semibold leading-[1.35] text-[var(--bg)] shadow-floating ${placement === "above" ? "-translate-y-full" : ""}`}
+            style={{ top: position.top, left: position.left }}
+            {...tooltipProps}
+          >
+            {label}
+          </span>,
+          document.body,
+        );
+  if (asChild) {
+    return (
+      <>
+        {cloneElement(children, {
+          "aria-describedby": tooltipId,
+          ref: anchorRef,
+          onMouseEnter: show,
+          onMouseLeave: hide,
+          onFocusCapture: show,
+          onBlurCapture: hide,
+        })}
+        {tooltip}
+      </>
+    );
+  }
   return (
     <span
       ref={anchorRef}
@@ -295,20 +339,7 @@ export const Tooltip = ({
       onBlurCapture={hide}
     >
       {cloneElement(children, { "aria-describedby": tooltipId })}
-      {position === null
-        ? null
-        : createPortal(
-            <span
-              id={tooltipId}
-              role="tooltip"
-              className={`pointer-events-none fixed z-[2147483647] w-max max-w-44 -translate-x-1/2 rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs font-semibold leading-[1.35] text-[var(--bg)] shadow-floating ${placement === "above" ? "-translate-y-full" : ""}`}
-              style={{ top: position.top, left: position.left }}
-              {...tooltipProps}
-            >
-              {label}
-            </span>,
-            document.body,
-          )}
+      {tooltip}
     </span>
   );
 };

@@ -402,7 +402,12 @@ export const RequestStatusStrip = ({
       ) : null}
       {isWorking ? (
         hasCurrentTooltip ? (
-          <Tooltip label={currentText} className="block" placement="below">
+          <Tooltip
+            label={currentText}
+            className="block"
+            placement="below"
+            asChild
+          >
             <p
               className="mt-1.5 mb-0 min-w-0 text-xs text-ink [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               data-review-status-current-activity=""

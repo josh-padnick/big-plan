@@ -1758,7 +1758,7 @@ const CommentComposer = ({
             <Button variant="outline" size="compact" onClick={onCancel}>
               Cancel
             </Button>
-            <Tooltip label={MODIFIER_SHORTCUT} placement="below">
+            <Tooltip label={MODIFIER_SHORTCUT} placement="below" asChild>
               <Button
                 size="micro"
                 disabled={
@@ -2375,7 +2375,7 @@ const StagedCard = ({
             >
               Cancel
             </Button>
-            <Tooltip label={MODIFIER_SHORTCUT} placement="below">
+            <Tooltip label={MODIFIER_SHORTCUT} placement="below" asChild>
               <Button
                 size="micro"
                 disabled={editBody.trim() === ""}
@@ -4742,7 +4742,7 @@ export const ReviewController = () => {
           ? "Comment on quick summary"
           : "Comment on slide";
         return createPortal(
-          <Tooltip label={label} placement="below">
+          <Tooltip label={label} placement="below" asChild>
             <button
               type="button"
               // The control stands alone in a gutter, so it rests as ink only:
@@ -4766,7 +4766,7 @@ export const ReviewController = () => {
         createPortal(
           block.dataset.blockKind === "data-table" ||
             block.dataset.blockKind === "table" ? (
-            <Tooltip label="Comment on this table" placement="below">
+            <Tooltip label="Comment on this table" placement="below" asChild>
               <button
                 type="button"
                 className={`review-table-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 ${isStandaloneCommentHost(host) ? "text-comment-rest" : "text-muted"} hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5`}
@@ -4828,7 +4828,7 @@ export const ReviewController = () => {
       )}
       {imageHosts.map(({ block, host }) =>
         createPortal(
-          <Tooltip label="Comment on image" placement="below">
+          <Tooltip label="Comment on image" placement="below" asChild>
             <button
               type="button"
               className="review-image-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-comment-rest hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
@@ -4855,6 +4855,7 @@ export const ReviewController = () => {
         <Tooltip
           label={`New comment · ${NEW_COMMENT_SHORTCUT}`}
           placement="below"
+          asChild
           tooltipProps={{ "data-selection-comment-tooltip": "" }}
         >
           <button
