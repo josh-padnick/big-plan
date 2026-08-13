@@ -496,11 +496,55 @@ const requestJson = async ({
     if (controller.signal.aborted) {
       throw new Error("Review runtime request timed out.", { cause: error });
     }
+    if (error instanceof TypeError) {
+      throw new ReviewRuntimeUnavailableError({ cause: error });
+    }
     throw error;
   } finally {
     window.clearTimeout(timeout);
   }
 };
+
+class ReviewRuntimeUnavailableError extends Error {
+  constructor({ cause }: { readonly cause: unknown }) {
+    super("The local review runtime is unavailable.", { cause });
+    this.name = "ReviewRuntimeUnavailableError";
+  }
+}
+
+const isReviewRuntimeUnavailable = (error: unknown): boolean =>
+  error instanceof ReviewRuntimeUnavailableError;
+
+const ServerGoneBanner = ({
+  onRefresh,
+}: {
+  readonly onRefresh: () => void;
+}) => (
+  <div
+    className="fixed top-14 right-3 left-3 z-50 mx-auto flex max-w-2xl min-w-0 items-start gap-3 rounded-lg border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-sm text-[var(--callout-danger-c)] shadow-floating"
+    role="alert"
+    aria-live="assertive"
+    data-review-server-gone=""
+  >
+    <Icon icon={CIRCLE_X_ICON} />
+    <div className="min-w-0 flex-1">
+      <strong className="block text-ink">
+        This review session is no longer online
+      </strong>
+      <p className="m-0 mt-1 text-xs text-ink [overflow-wrap:anywhere]">
+        The local review server stopped responding. Refresh when it is running
+        again to continue reviewing. This is separate from the agent connection.
+      </p>
+    </div>
+    <button
+      type="button"
+      className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      onClick={onRefresh}
+    >
+      Refresh
+    </button>
+  </div>
+);
 
 type CachedSnapshotDiff =
   | { readonly state: "pending"; readonly value: Promise<SnapshotDiff> }
@@ -3463,6 +3507,7 @@ export const ReviewController = () => {
     null,
   );
   const [pollFailures, setPollFailures] = useState(0);
+  const [serverGoneFailures, setServerGoneFailures] = useState(0);
   const [statusNowMs, setStatusNowMs] = useState(Date.now());
   const [threadOpenState, setThreadOpenState] = useState<ThreadOpenState>(
     new Map(),
@@ -3939,11 +3984,15 @@ export const ReviewController = () => {
           acceptAgentSnapshot(parseAgentSnapshot(agentValue));
           setProgress(parseProgress(progressValue));
           setPollFailures(0);
+          setServerGoneFailures(0);
           setStatusNowMs(Date.now());
         }
-      } catch {
+      } catch (error) {
         if (current) {
           setPollFailures((failures) => Math.min(2, failures + 1));
+          if (isReviewRuntimeUnavailable(error)) {
+            setServerGoneFailures((failures) => Math.min(2, failures + 1));
+          }
           setStatusNowMs(Date.now());
         }
       } finally {
@@ -4593,6 +4642,7 @@ export const ReviewController = () => {
   const agentSessionLabel = isAgentWorking
     ? "Agent working"
     : "Agent session active";
+  const serverGone = serverGoneFailures >= 2;
   const threadIsOpen = ({
     commentId,
     kind,
@@ -4738,6 +4788,9 @@ export const ReviewController = () => {
 
   return (
     <>
+      {serverGone ? (
+        <ServerGoneBanner onRefresh={() => window.location.reload()} />
+      ) : null}
       {reviewContainerHosts.map(({ container, host }) => {
         const target = targetForReviewContainer(container);
         if (target === null) return null;
