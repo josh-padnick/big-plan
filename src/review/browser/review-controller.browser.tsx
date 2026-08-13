@@ -1496,7 +1496,9 @@ const CommentComposer = ({
       const rect = composerRef.current?.getBoundingClientRect();
       if (rect === undefined) return;
       const obstacles = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-review-thread-side]"),
+        document.querySelectorAll<HTMLElement>(
+          '[data-review-thread-side], button[aria-label^="Comment on"]',
+        ),
         (node) => node.getBoundingClientRect(),
       ).filter((obstacle) => obstacle.width > 0 && obstacle.height > 0);
       const next = floatingComposerPosition({
@@ -1580,7 +1582,7 @@ const CommentComposer = ({
           </p>
         ) : null}
         <p className="review-compose-hint mt-1 mb-0 text-2xs text-subtle">
-          Escape cancels · {MODIFIER_SHORTCUT} adds
+          Escape closes · {MODIFIER_SHORTCUT} adds
         </p>
         <div className="mt-2 block">
           <button

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseReviewerMarkdown } from "./reviewer-markdown.js";
+import {
+  parseReviewerMarkdown,
+  reviewerMessageLabel,
+} from "./reviewer-markdown.js";
 
 const id = "a".repeat(64);
 
@@ -19,6 +22,18 @@ describe("reviewer Markdown", () => {
     expect(parseReviewerMarkdown("![shot](review-image:not-a-digest)")).toEqual(
       [{ type: "paragraph", children: [{ type: "text", value: "shot" }] }],
     );
+  });
+
+  it("should collapse image references into a human comment label", () => {
+    expect(
+      reviewerMessageLabel(
+        `Please compare this ![checkout screenshot](review-image:${id}) with the current flow.`,
+      ),
+    ).toBe("Please compare this checkout screenshot with the current flow.");
+    expect(reviewerMessageLabel(`![screenshot](review-image:${id})`)).toBe(
+      "screenshot",
+    );
+    expect(reviewerMessageLabel("\n\n")).toBe("Image attachment");
   });
 
   it("should keep authored HTML inert and preserve basic structure", () => {

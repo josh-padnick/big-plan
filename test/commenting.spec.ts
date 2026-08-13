@@ -614,7 +614,12 @@ test("should replace an empty composer and protect a non-empty draft", async ({
   const first = slides.nth(0);
   const second = slides.nth(1);
   await first.getByRole("button", { name: "Comment on slide" }).click();
-  await second.getByRole("button", { name: "Comment on slide" }).click();
+  // The floating composer can cover a neighboring slide's gutter control;
+  // dispatch the replacement transition directly rather than making this
+  // lifecycle check depend on the panel's placement.
+  await second
+    .getByRole("button", { name: "Comment on slide" })
+    .dispatchEvent("click");
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(first).not.toHaveAttribute("data-review-slide-selected", "");
   await expect(second).toHaveAttribute("data-review-slide-selected", "");

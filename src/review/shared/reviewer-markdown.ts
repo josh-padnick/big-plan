@@ -143,3 +143,34 @@ export const parseReviewerMarkdown = (
     return [{ type: "text", value }];
   }
 };
+
+const reviewerMarkdownLabel = (node: ReviewerMarkdownNode): string => {
+  switch (node.type) {
+    case "text":
+    case "inlineCode":
+    case "code":
+      return node.value;
+    case "image":
+      return node.alt || "Image";
+    case "paragraph":
+    case "strong":
+    case "emphasis":
+    case "blockquote":
+    case "link":
+    case "listItem":
+      return node.children.map(reviewerMarkdownLabel).join(" ");
+    case "list":
+      return node.children.map(reviewerMarkdownLabel).join(" ");
+  }
+};
+
+/** Returns a short human label without exposing raw reviewer image references. */
+export const reviewerMessageLabel = (value: string): string => {
+  const label = parseReviewerMarkdown(value)
+    .map(reviewerMarkdownLabel)
+    .join(" ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (label === "") return "Image attachment";
+  return label.length > 160 ? `${label.slice(0, 157).trimEnd()}…` : label;
+};
