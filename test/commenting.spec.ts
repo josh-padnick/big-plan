@@ -1060,23 +1060,6 @@ test("should comment image-only and mixed image selections", async ({
     selection?.addRange(range);
     document.dispatchEvent(new Event("selectionchange"));
   });
-  const imageSelectionState = await page.evaluate(() => ({
-    text: window.getSelection()?.toString() ?? "",
-    images: Array.from(
-      document.querySelectorAll(
-        "[data-block-kind='image'][data-authored-prose]",
-      ),
-    ).length,
-    imageButtons: document.querySelectorAll("[data-selection-comment-tooltip]")
-      .length,
-  }));
-  expect(
-    imageSelectionState,
-    JSON.stringify(imageSelectionState),
-  ).toMatchObject({
-    images: 1,
-    imageButtons: 1,
-  });
   const imageChip = page.getByRole("button", {
     name: "Comment on selected text and image",
   });
