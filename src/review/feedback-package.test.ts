@@ -25,7 +25,7 @@ const NOTE: ReviewComment = {
 describe("feedback package", () => {
   it("should carry a random package id so a resubmit is detectable", () => {
     expect(packageOf([NOTE]).packageId).toBe("9a2f4b81");
-    expect(packageOf([NOTE]).version).toBe(1);
+    expect(packageOf([NOTE]).version).toBe(2);
   });
 
   it("should resolve the plan path from the runtime rather than from a comment", () => {

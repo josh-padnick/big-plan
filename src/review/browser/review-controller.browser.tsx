@@ -39,7 +39,10 @@ import {
 } from "../shared/agent-status.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
-import { parseCommentMarkdownLine } from "../shared/comment-markdown.js";
+import {
+  parseReviewerMarkdown,
+  type ReviewerMarkdownNode,
+} from "../shared/reviewer-markdown.js";
 import {
   reconcilePendingCancellations,
   requestIsCanceled,
@@ -92,6 +95,11 @@ import {
   type MessageSurface,
 } from "./agent-message.browser.js";
 import { Icon } from "./icon.browser.js";
+import { ComposeImages } from "./compose-images.browser.js";
+import {
+  ReviewImage,
+  runtimeReviewImageIdentity,
+} from "./review-image.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
@@ -936,15 +944,52 @@ const replacePlanArticle = (nextDocument: Document): void => {
   document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
 };
 
-const inlineMarkdown = (source: string): ReadonlyArray<ReactNode> =>
-  parseCommentMarkdownLine(source).map((token, index) => {
-    const key = `${index}-${token.value}`;
-    if (token.type === "code") return <code key={key}>{token.value}</code>;
-    if (token.type === "strong")
-      return <strong key={key}>{token.value}</strong>;
-    if (token.type === "emphasis") return <em key={key}>{token.value}</em>;
-    return token.value;
-  });
+const renderReviewerNode = (
+  node: ReviewerMarkdownNode,
+  key: string,
+): ReactNode => {
+  if (node.type === "text") return node.value;
+  if (node.type === "inlineCode") return <code key={key}>{node.value}</code>;
+  if (node.type === "code") {
+    return (
+      <pre key={key}>
+        <code>{node.value}</code>
+      </pre>
+    );
+  }
+  if (node.type === "image") {
+    return (
+      <ReviewImage
+        key={key}
+        id={node.id}
+        alt={node.alt}
+        identity={runtimeReviewImageIdentity()}
+      />
+    );
+  }
+  const children = node.children.map((child, index) =>
+    renderReviewerNode(child, `${key}-${index}`),
+  );
+  if (node.type === "paragraph") return <p key={key}>{children}</p>;
+  if (node.type === "strong") return <strong key={key}>{children}</strong>;
+  if (node.type === "emphasis") return <em key={key}>{children}</em>;
+  if (node.type === "blockquote")
+    return <blockquote key={key}>{children}</blockquote>;
+  if (node.type === "listItem") return <li key={key}>{children}</li>;
+  if (node.type === "list") {
+    return node.ordered ? (
+      <ol key={key}>{children}</ol>
+    ) : (
+      <ul key={key}>{children}</ul>
+    );
+  }
+  if (node.type !== "link") return null;
+  return (
+    <a key={key} href={node.url} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  );
+};
 
 const MarkdownBody = ({
   body,
@@ -954,16 +999,9 @@ const MarkdownBody = ({
   readonly className?: string;
 }) => (
   <div className={className}>
-    {body.split(/\n{2,}/u).map((paragraph, index) => (
-      <p key={`${index}-${paragraph}`}>
-        {paragraph
-          .split("\n")
-          .flatMap((line, lineIndex) => [
-            ...(lineIndex === 0 ? [] : [<br key={`break-${lineIndex}`} />]),
-            ...inlineMarkdown(line),
-          ])}
-      </p>
-    ))}
+    {parseReviewerMarkdown(body).map((node, index) =>
+      renderReviewerNode(node, String(index)),
+    )}
   </div>
 );
 
@@ -1426,6 +1464,7 @@ const CommentComposer = ({
   body,
   inline,
   submitRightAway,
+  identity,
   canSubmitRightAway,
   onCancel,
   onBodyChange,
@@ -1437,6 +1476,7 @@ const CommentComposer = ({
   readonly body: string;
   readonly inline: boolean;
   readonly submitRightAway: boolean;
+  readonly identity: RuntimeIdentity | null;
   readonly canSubmitRightAway: boolean;
   readonly onCancel: () => void;
   readonly onBodyChange: (body: string) => void;
@@ -1449,8 +1489,6 @@ const CommentComposer = ({
     left: compose.left,
   });
   const composerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => inputRef.current?.focus(), []);
   useEffect(() => {
     if (inline) return;
     const frame = requestAnimationFrame(() => {
@@ -1517,14 +1555,14 @@ const CommentComposer = ({
       <p className="review-compose-title m-0 mb-2 text-xs font-semibold text-muted">
         Add a comment
       </p>
-      <Textarea
-        ref={inputRef}
-        aria-label="Add a comment"
-        className="bg-input!"
-        value={body}
-        maxLength={BODY_LIMIT}
+      <ComposeImages
+        identity={identity}
+        autoFocus
+        label="Add a comment"
         placeholder="What should the agent change here?"
-        onChange={(event) => onBodyChange(event.target.value)}
+        body={body}
+        maxLength={BODY_LIMIT}
+        onBodyChange={onBodyChange}
         onKeyDown={handleKeyDown}
       />
       {(compose.target.type === "selection" ||
@@ -3108,13 +3146,14 @@ const SentThread = ({
                 </div>
               </section>
             )}
-            <Textarea
+            <ComposeImages
               id={`reply-${comment.id}`}
-              className="mt-1 min-h-20"
-              value={reply}
+              identity={identity}
+              label="Reply to the agent"
+              body={reply}
               maxLength={BODY_LIMIT}
               placeholder="Reply to the agent…"
-              onChange={(event) => setReply(event.target.value)}
+              onBodyChange={setReply}
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                   event.preventDefault();
@@ -5002,6 +5041,7 @@ export const ReviewController = () => {
             <ChatSurface
               model={{
                 hasRuntime: identity !== null,
+                identity,
                 status: agentStatus,
                 body: chatBody,
                 bodyLimit: BODY_LIMIT,
@@ -5215,6 +5255,7 @@ export const ReviewController = () => {
           inline={false}
           body={composeBody}
           submitRightAway={submitRightAway}
+          identity={identity}
           canSubmitRightAway={identity === null || canSendToAgent}
           onCancel={() => {
             setCompose(null);
@@ -5237,6 +5278,7 @@ export const ReviewController = () => {
             inline
             body={composeBody}
             submitRightAway={submitRightAway}
+            identity={identity}
             canSubmitRightAway={identity === null || canSendToAgent}
             onCancel={() => {
               setCompose(null);

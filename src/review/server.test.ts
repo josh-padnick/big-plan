@@ -47,6 +47,11 @@ Today's reality is that feedback does not reach the agent.
 `;
 const PLAN_SNAPSHOT = deriveSnapshotDigest(PLAN);
 
+const TINY_PNG = Uint8Array.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44,
+  0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+]);
+
 let runtime: ReviewRuntime;
 let token: string;
 let planDirectory: string;
@@ -94,6 +99,19 @@ const call = ({
       ...headers,
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+
+const uploadImage = (bytes: Uint8Array = TINY_PNG) =>
+  fetch(`${runtime.url.replace(/\/$/u, "")}/api/review-images`, {
+    method: "POST",
+    headers: {
+      "x-big-plan-review-token": token,
+      "sec-fetch-site": "same-origin",
+      origin: runtime.url.replace(/\/$/u, ""),
+      "content-type": "image/png",
+      "x-big-plan-image-alt": "Test capture",
+    },
+    body: bytes,
   });
 
 // Speaks HTTP directly so a test can set headers fetch() reserves for itself.
@@ -251,6 +269,46 @@ describe("review runtime document", () => {
       sessionId: runtime.sessionId,
       planId: runtime.planId,
     });
+  });
+});
+
+describe("review runtime images", () => {
+  it("should publish a deduplicated image and return identical bytes", async () => {
+    const first = await uploadImage();
+    expect(first.status).toBe(200);
+    const descriptor = (await first.json()) as {
+      readonly id: string;
+      readonly mimeType: string;
+    };
+    expect(descriptor.mimeType).toBe("image/png");
+    const duplicate = await uploadImage();
+    await expect(duplicate.json()).resolves.toMatchObject({
+      id: descriptor.id,
+    });
+    const image = await fetch(
+      `${runtime.url.replace(/\/$/u, "")}/api/review-images?id=${descriptor.id}`,
+      {
+        headers: {
+          "x-big-plan-review-token": token,
+          "sec-fetch-site": "same-origin",
+          origin: runtime.url.replace(/\/$/u, ""),
+        },
+      },
+    );
+    expect(image.status).toBe(200);
+    expect(new Uint8Array(await image.arrayBuffer())).toEqual(TINY_PNG);
+  });
+
+  it("should reject image publication without the review token", async () => {
+    const response = await fetch(
+      `${runtime.url.replace(/\/$/u, "")}/api/review-images`,
+      {
+        method: "POST",
+        headers: { "content-type": "image/png" },
+        body: TINY_PNG,
+      },
+    );
+    expect(response.status).toBe(401);
   });
 });
 

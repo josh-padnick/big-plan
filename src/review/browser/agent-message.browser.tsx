@@ -11,12 +11,20 @@ import {
   parseMessageMarkdown,
   type MessageNode,
 } from "../shared/message-markdown.js";
+import {
+  parseReviewerMarkdown,
+  type ReviewerMarkdownNode,
+} from "../shared/reviewer-markdown.js";
 import { messageTimeLabel } from "../shared/time-label.js";
 import type { AgentStatus } from "../shared/agent-status.js";
 import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import { Icon } from "./icon.browser.js";
+import {
+  ReviewImage,
+  runtimeReviewImageIdentity,
+} from "./review-image.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
 import { Badge, Button } from "./ui.browser.js";
 
@@ -127,6 +135,52 @@ const renderMessageNode = (node: MessageNode, key: string): ReactNode => {
   );
 };
 
+/** Renders the same inert vocabulary for reviewer-authored user turns. */
+const renderReviewerNode = (
+  node: ReviewerMarkdownNode,
+  key: string,
+): ReactNode => {
+  if (node.type === "text") return node.value;
+  if (node.type === "inlineCode") return <code key={key}>{node.value}</code>;
+  if (node.type === "code")
+    return (
+      <pre key={key}>
+        <code>{node.value}</code>
+      </pre>
+    );
+  if (node.type === "image") {
+    return (
+      <ReviewImage
+        key={key}
+        id={node.id}
+        alt={node.alt}
+        identity={runtimeReviewImageIdentity()}
+      />
+    );
+  }
+  const children = node.children.map((child, index) =>
+    renderReviewerNode(child, `${key}-${index}`),
+  );
+  if (node.type === "paragraph") return <p key={key}>{children}</p>;
+  if (node.type === "strong") return <strong key={key}>{children}</strong>;
+  if (node.type === "emphasis") return <em key={key}>{children}</em>;
+  if (node.type === "blockquote")
+    return <blockquote key={key}>{children}</blockquote>;
+  if (node.type === "listItem") return <li key={key}>{children}</li>;
+  if (node.type === "list")
+    return node.ordered ? (
+      <ol key={key}>{children}</ol>
+    ) : (
+      <ul key={key}>{children}</ul>
+    );
+  if (node.type !== "link") return null;
+  return (
+    <a key={key} href={node.url} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  );
+};
+
 const MessageBody = ({
   body,
   isStructured,
@@ -144,9 +198,14 @@ const MessageBody = ({
       )}
     </div>
   ) : (
-    <p className="mt-1 mb-0 min-w-0 max-w-full text-xs text-ink [line-height:1.45] whitespace-pre-wrap [overflow-wrap:anywhere]">
-      {body}
-    </p>
+    <div
+      className="min-w-0 max-w-full text-xs text-ink [line-height:1.45] whitespace-pre-wrap [overflow-wrap:anywhere]"
+      data-review-message-body="reviewer"
+    >
+      {parseReviewerMarkdown(body).map((node, index) =>
+        renderReviewerNode(node, String(index)),
+      )}
+    </div>
   );
 
 /** Renders one exact legacy speaker turn on either feedback surface. */

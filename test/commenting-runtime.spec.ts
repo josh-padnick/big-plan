@@ -29,6 +29,9 @@ import {
 import { renderDocument } from "../src/render/render-document.js";
 import { expect, stageComment, test, type Page } from "./fixtures";
 
+const PASTED_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
 test("should expire a held connected snapshot when the reviewer returns", async ({
   page,
   reviewRuntimeUrl,
@@ -223,6 +226,27 @@ test("should restore and submit staged comments through the local review runtime
   await stageComment(page, "Name the operator recovery path.");
   await stageComment(page, "Remove this queued comment before pickup.");
 
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const imageComposer = page.getByRole("dialog", { name: /Comment on/ });
+  const imageTextarea = imageComposer.getByLabel("Add a comment");
+  await imageTextarea.evaluate((element, encoded) => {
+    const bytes = Uint8Array.from(atob(encoded), (character) =>
+      character.charCodeAt(0),
+    );
+    const file = new File([bytes], "clipboard.png", { type: "image/png" });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    element.dispatchEvent(
+      new ClipboardEvent("paste", { bubbles: true, clipboardData: transfer }),
+    );
+  }, PASTED_PNG_BASE64);
+  await expect(
+    imageComposer.getByRole("img", { name: "Screenshot" }),
+  ).toBeVisible();
+  await imageComposer.getByRole("button", { name: "Add Comment" }).click();
+
   const rail = page.getByRole("complementary", { name: "Feedback" });
   const kernel = page.locator("#big-plan-review-root");
   await expect(rail).toHaveCount(0);
@@ -230,13 +254,24 @@ test("should restore and submit staged comments through the local review runtime
   await expect(rail).toContainText("Clarify the failure boundary.");
   await expect(rail).toContainText("Name the operator recovery path.");
   await expect(rail).toContainText("Remove this queued comment before pickup.");
+  await rail
+    .getByRole("button", {
+      name: /Expand staged comment:.*review-image:/u,
+    })
+    .click();
+  await expect(rail.getByRole("img", { name: "Screenshot" })).toBeVisible();
   await expect(rail).toContainText("1 · Details");
   await page.reload();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(rail).toContainText("Clarify the failure boundary.");
   await expect(rail).toContainText("Name the operator recovery path.");
   await expect(rail).toContainText("Remove this queued comment before pickup.");
-
+  await rail
+    .getByRole("button", {
+      name: /Expand staged comment:.*review-image:/u,
+    })
+    .click();
+  await expect(rail.getByRole("img", { name: "Screenshot" })).toBeVisible();
   const responsePromise = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/feedback") &&
@@ -482,7 +517,7 @@ test("should restore and submit staged comments through the local review runtime
   if (request === undefined || request.kind !== "feedback") {
     throw new Error("Sending did not create a pending feedback request");
   }
-  expect(request.comments).toHaveLength(2);
+  expect(request.comments).toHaveLength(3);
   await writeAgentHeartbeat({
     store,
     sessionId: session.sessionId,
@@ -540,7 +575,7 @@ test("should restore and submit staged comments through the local review runtime
   const workingCards = workingGroup.locator(
     "[data-review-sent-thread='working']",
   );
-  await expect(workingCards).toHaveCount(2);
+  await expect(workingCards).toHaveCount(3);
   await expect(
     workingCards.locator("[data-review-thread-status='working']"),
   ).toHaveCount(0);
@@ -548,7 +583,7 @@ test("should restore and submit staged comments through the local review runtime
     "[data-review-thread-status='working']",
   );
   await expect(threadActivity).toHaveCount(1);
-  await expect(threadActivity).toContainText("Agent is working on 2 comments");
+  await expect(threadActivity).toContainText("Agent is working on 3 comments");
   await expect(threadActivity).toContainText(
     "Reviewing the shared feedback batch",
   );
@@ -575,8 +610,8 @@ test("should restore and submit staged comments through the local review runtime
   const compactWorkingThreads = page.locator(
     "[data-review-thread-side] [data-review-sent-thread='working']",
   );
-  await expect(compactWorkingThreads).toHaveCount(2);
-  await expect(compactWorkingThreads.getByLabel("Working")).toHaveCount(2);
+  await expect(compactWorkingThreads).toHaveCount(3);
+  await expect(compactWorkingThreads.getByLabel("Working")).toHaveCount(3);
   const firstWorkingThread = compactWorkingThreads.filter({
     hasText: "Clarify the failure boundary.",
   });
@@ -586,7 +621,7 @@ test("should restore and submit staged comments through the local review runtime
     })
     .click();
   await expect(firstWorkingThread).toContainText(
-    "Agent is working on 2 comments",
+    "Agent is working on 3 comments",
   );
   await expect(firstWorkingThread).toContainText(
     "Reviewing the shared feedback batch",
@@ -939,7 +974,7 @@ test("should restore and submit staged comments through the local review runtime
     .click();
   await expect(
     page.locator("[data-review-thread-side] [data-review-sent-thread]"),
-  ).toHaveCount(1);
+  ).toHaveCount(2);
 
   await page.reload();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();

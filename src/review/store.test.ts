@@ -30,6 +30,9 @@ import {
   writeSnapshot,
   writeSessionHeartbeatValue,
   withReviewStoreLock,
+  freezeRequestAttachments,
+  publishReviewImage,
+  readReviewImage,
 } from "./store.js";
 
 const created: Array<string> = [];
@@ -41,6 +44,11 @@ const temporaryPlan = async () => {
   await writeFile(planPath, "# Plan\n");
   return { directory, planPath };
 };
+
+const tinyPng = Uint8Array.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44,
+  0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+]);
 
 afterEach(async () => {
   await Promise.all(
@@ -98,6 +106,56 @@ describe("review store placement", () => {
     expect(() =>
       reviewStoreFor({ planPath, planId: "../../../../etc" }),
     ).toThrow(/outside/);
+  });
+});
+
+describe("review image store", () => {
+  it("should publish, deduplicate, read, and freeze an image atomically", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const first = await publishReviewImage({
+      store,
+      bytes: tinyPng,
+      alt: "Capture",
+    });
+    const second = await publishReviewImage({
+      store,
+      bytes: tinyPng,
+      alt: "Other alt",
+    });
+    expect(second.id).toBe(first.id);
+    await expect(
+      readReviewImage({ store, id: first.id }),
+    ).resolves.toMatchObject({
+      descriptor: { id: first.id, width: 2, height: 3 },
+      bytes: tinyPng,
+    });
+    const frozen = await freezeRequestAttachments({
+      store,
+      requestId: "1111111111111111",
+      references: [{ id: first.id, alt: "Frozen capture" }],
+    });
+    expect(frozen[0]).toMatchObject({ id: first.id, alt: "Frozen capture" });
+    await expect(readFile(frozen[0].path)).resolves.toEqual(
+      Buffer.from(tinyPng),
+    );
+  });
+
+  it("should refuse a foreign reference without creating request copies", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await expect(
+      freezeRequestAttachments({
+        store,
+        requestId: "2222222222222222",
+        references: [{ id: "a".repeat(64), alt: "Missing" }],
+      }),
+    ).rejects.toThrow(/Unknown or corrupt/);
+    await expect(
+      stat(join(store.requestAttachmentsDirectory, "2222222222222222")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 

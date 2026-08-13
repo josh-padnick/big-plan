@@ -14,6 +14,11 @@ import {
   writeAgentRequestValue,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
+import {
+  isReviewImageId,
+  isReviewImageWithinLimits,
+  type ReviewImageAttachment,
+} from "./shared/review-image.js";
 
 const TEXT_LIMIT = 4000;
 const MESSAGE_LIMIT = 200;
@@ -26,7 +31,7 @@ export type AgentOutcomeState =
   "answered" | "changed" | "warning" | "needs-input" | "declined";
 
 type AgentRequestBase = {
-  readonly version: 1;
+  readonly version: 2;
   readonly requestId: string;
   readonly sessionId: string;
   readonly planId: string;
@@ -35,6 +40,7 @@ type AgentRequestBase = {
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly canceledAt?: string;
+  readonly attachments: ReadonlyArray<ReviewImageAttachment>;
 };
 
 export type AgentFeedbackRequest = AgentRequestBase & {
@@ -67,7 +73,7 @@ export type AgentOutcome = {
 };
 
 type AgentResponseBase = {
-  readonly version: 1;
+  readonly version: 2;
   readonly requestId: string;
   readonly sessionId: string;
   readonly planId: string;
@@ -256,10 +262,67 @@ const comment = (value: unknown): ReviewComment => {
   };
 };
 
+const validateAttachments = (
+  value: unknown,
+): ReadonlyArray<ReviewImageAttachment> => {
+  if (!Array.isArray(value)) {
+    throw new AgentExchangeRejected('"attachments" must be an array');
+  }
+  return value.map((entry) => {
+    if (!isRecord(entry))
+      throw new AgentExchangeRejected("An attachment must be an object");
+    const { id, sha256, mimeType, byteLength, width, height, alt, path } =
+      entry;
+    if (!isReviewImageId(id) || !isReviewImageId(sha256) || id !== sha256) {
+      throw new AgentExchangeRejected("An attachment digest is invalid");
+    }
+    if (
+      mimeType !== "image/png" &&
+      mimeType !== "image/jpeg" &&
+      mimeType !== "image/webp"
+    ) {
+      throw new AgentExchangeRejected(
+        `Attachment ${id} has an unsupported type`,
+      );
+    }
+    if (
+      typeof byteLength !== "number" ||
+      typeof width !== "number" ||
+      typeof height !== "number" ||
+      !Number.isInteger(byteLength) ||
+      !Number.isInteger(width) ||
+      !Number.isInteger(height) ||
+      !isReviewImageWithinLimits({ byteLength, width, height })
+    ) {
+      throw new AgentExchangeRejected(
+        `Attachment ${id} has invalid dimensions or size`,
+      );
+    }
+    if (
+      typeof path !== "string" ||
+      !path.startsWith("/") ||
+      !path.includes("/.big-plan/review/") ||
+      !path.includes("/agent/attachments/")
+    ) {
+      throw new AgentExchangeRejected(`Attachment ${id} path must be absolute`);
+    }
+    return {
+      id,
+      sha256,
+      alt: typeof alt === "string" ? alt : "Screenshot",
+      mimeType,
+      byteLength,
+      width,
+      height,
+      path,
+    };
+  });
+};
+
 const requestBase = (
   value: Readonly<Record<string, unknown>>,
 ): AgentRequestBase => {
-  if (value.version !== 1) {
+  if (value.version !== 2) {
     throw new AgentExchangeRejected("Unsupported agent request version");
   }
   const rawBaselineSnapshot =
@@ -278,7 +341,7 @@ const requestBase = (
     );
   }
   return {
-    version: 1,
+    version: 2,
     requestId: id(value.requestId, "requestId"),
     sessionId: id(value.sessionId, "sessionId"),
     planId: id(value.planId, "planId"),
@@ -290,6 +353,7 @@ const requestBase = (
     createdAt: timestamp(value.createdAt),
     ...(baselineSnapshot === undefined ? {} : { baselineSnapshot, claimedAt }),
     ...(canceledAt === undefined ? {} : { canceledAt }),
+    attachments: validateAttachments(value.attachments),
   };
 };
 
@@ -314,6 +378,7 @@ export const validateAgentRequest = (value: unknown): AgentRequest => {
       kind: "feedback",
       packageId: id(value.packageId, "packageId"),
       comments: value.comments.map(comment),
+      attachments: base.attachments,
     };
   }
   if (value.kind === "reply") {
@@ -322,6 +387,7 @@ export const validateAgentRequest = (value: unknown): AgentRequest => {
       kind: "reply",
       commentId: exchangeCommentId(value.commentId, "commentId"),
       body: text({ value: value.body, field: "body" }),
+      attachments: base.attachments,
     };
   }
   if (value.kind === "chat") {
@@ -329,6 +395,7 @@ export const validateAgentRequest = (value: unknown): AgentRequest => {
       ...base,
       kind: "chat",
       body: text({ value: value.body, field: "body" }),
+      attachments: base.attachments,
     };
   }
   throw new AgentExchangeRejected("Unsupported agent request kind");
@@ -343,7 +410,7 @@ const responseBase = ({
   readonly currentSnapshot: string;
   readonly now: string;
 }): AgentResponseBase => ({
-  version: 1,
+  version: 2,
   requestId: request.requestId,
   sessionId: request.sessionId,
   planId: request.planId,
@@ -543,7 +610,7 @@ const validateStoredResponse = ({
       "A stored agent response cannot answer an unclaimed request",
     );
   }
-  if (!isRecord(value) || value.version !== 1) {
+  if (!isRecord(value) || value.version !== 2) {
     throw new AgentExchangeRejected("A stored agent response is invalid");
   }
   if (
@@ -557,7 +624,7 @@ const validateStoredResponse = ({
     );
   }
   const base: AgentResponseBase = {
-    version: 1,
+    version: 2,
     requestId: request.requestId,
     sessionId: request.sessionId,
     planId: request.planId,
@@ -731,7 +798,7 @@ export const feedbackAgentRequest = ({
   readonly feedback: FeedbackPackage;
   readonly premiseSnapshot: string;
 }): AgentFeedbackRequest => ({
-  version: 1,
+  version: 2,
   requestId: feedback.packageId,
   sessionId: feedback.sessionId,
   planId: feedback.planId,
@@ -740,6 +807,7 @@ export const feedbackAgentRequest = ({
   kind: "feedback",
   packageId: feedback.packageId,
   comments: feedback.comments,
+  attachments: feedback.attachments,
 });
 
 /** Creates a reviewer reply or plan-chat request for the same live session. */
@@ -752,6 +820,7 @@ export const messageAgentRequest = ({
   createdAt,
   body,
   commentId,
+  attachments,
 }: {
   readonly kind: "reply" | "chat";
   readonly requestId: string;
@@ -761,14 +830,16 @@ export const messageAgentRequest = ({
   readonly createdAt: string;
   readonly body: string;
   readonly commentId?: string;
+  readonly attachments?: ReadonlyArray<ReviewImageAttachment>;
 }): AgentReplyRequest | AgentChatRequest => {
   const base: AgentRequestBase = {
-    version: 1,
+    version: 2,
     requestId: id(requestId, "requestId"),
     sessionId: id(sessionId, "sessionId"),
     planId: id(planId, "planId"),
     premiseSnapshot: snapshotDigest(premiseSnapshot, "premiseSnapshot"),
     createdAt: timestamp(createdAt),
+    attachments: validateAttachments(attachments ?? []),
   };
   const checkedBody = text({ value: body, field: "body" });
   if (kind === "chat") {

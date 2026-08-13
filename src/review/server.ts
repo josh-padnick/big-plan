@@ -74,6 +74,9 @@ import {
   readAgentPresence,
   readComments,
   readProgress,
+  freezeRequestAttachments,
+  publishReviewImage,
+  readReviewImage,
   readFeedbackSubmissionValue,
   readResolvedCommentIds,
   readSnapshot,
@@ -86,6 +89,12 @@ import {
   writeSnapshot,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
+import {
+  extractReviewImageReferences,
+  MAX_IMAGES_PER_MESSAGE,
+  MAX_MESSAGE_IMAGE_BYTES,
+  RAW_IMAGE_BODY_LIMIT,
+} from "./shared/review-image.js";
 import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
 import {
   agentConnectCommand,
@@ -207,7 +216,7 @@ const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   "style-src 'unsafe-inline'",
   "script-src 'unsafe-inline'",
-  "img-src data:",
+  "img-src data: blob:",
   "font-src data:",
   "connect-src 'self'",
   "form-action 'none'",
@@ -218,6 +227,7 @@ const CONTENT_SECURITY_POLICY = [
 type Route = {
   readonly method: "GET" | "PUT" | "POST";
   readonly path: string;
+  readonly binary?: boolean;
 };
 
 const DOCUMENT_ROUTE: Route = { method: "GET", path: "/" };
@@ -236,6 +246,8 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "POST", path: "/api/agent-cancel" },
   { method: "GET", path: "/api/progress" },
   { method: "GET", path: "/api/snapshot-diff" },
+  { method: "POST", path: "/api/review-images", binary: true },
+  { method: "GET", path: "/api/review-images" },
 ];
 
 /** A running review runtime. */
@@ -294,6 +306,23 @@ const readBody = async (request: IncomingMessage): Promise<unknown> => {
   }
 };
 
+/** Streams one raw image body while enforcing its route-specific cap. */
+const readBinaryBody = async (
+  request: IncomingMessage,
+): Promise<Uint8Array> => {
+  const chunks: Array<Buffer> = [];
+  let size = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.from(chunk);
+    size += buffer.byteLength;
+    if (size > RAW_IMAGE_BODY_LIMIT) {
+      throw new CommentRejected("The image body is too large");
+    }
+    chunks.push(buffer);
+  }
+  return Uint8Array.from(Buffer.concat(chunks));
+};
+
 const send = ({
   response,
   status,
@@ -331,6 +360,27 @@ const sendJson = ({
     body: JSON.stringify(value),
   });
 
+const sendBinary = ({
+  response,
+  status,
+  contentType,
+  body,
+}: {
+  readonly response: ServerResponse;
+  readonly status: number;
+  readonly contentType: string;
+  readonly body: Uint8Array;
+}): void => {
+  response.writeHead(status, {
+    "content-type": contentType,
+    "content-security-policy": CONTENT_SECURITY_POLICY,
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+    "cache-control": "no-store",
+  });
+  response.end(body);
+};
+
 const refuse = ({
   response,
   status,
@@ -342,7 +392,7 @@ const refuse = ({
 }): void => sendJson({ response, status, value: { error: reason } });
 
 type FeedbackSubmission = {
-  readonly version: 1;
+  readonly version: 2;
   readonly submissionId: string;
   readonly feedback: FeedbackPackage;
   readonly source: string;
@@ -383,6 +433,17 @@ const feedbackSubmissionContent = (
     })),
   );
 
+const imageReferencesForBodies = (bodies: ReadonlyArray<string>) => {
+  const seen = new Set<string>();
+  return bodies
+    .flatMap((body) => extractReviewImageReferences(body))
+    .filter((reference) => {
+      if (seen.has(reference.id)) return false;
+      seen.add(reference.id);
+      return true;
+    });
+};
+
 const storedFeedbackSubmission = ({
   value,
   submissionId,
@@ -401,7 +462,7 @@ const storedFeedbackSubmission = ({
     value === null ||
     Array.isArray(value) ||
     !("version" in value) ||
-    value.version !== 1 ||
+    value.version !== 2 ||
     !("submissionId" in value) ||
     value.submissionId !== submissionId ||
     !("feedback" in value) ||
@@ -409,7 +470,7 @@ const storedFeedbackSubmission = ({
     value.feedback === null ||
     Array.isArray(value.feedback) ||
     !("version" in value.feedback) ||
-    value.feedback.version !== 1 ||
+    value.feedback.version !== 2 ||
     !("packageId" in value.feedback) ||
     value.feedback.packageId !== submissionId ||
     !("planId" in value.feedback) ||
@@ -447,6 +508,12 @@ const storedFeedbackSubmission = ({
     planPath,
     createdAt: value.feedback.createdAt,
     comments: storedComments,
+    attachments: Array.isArray(
+      (value.feedback as Record<string, unknown>).attachments,
+    )
+      ? ((value.feedback as Record<string, unknown>)
+          .attachments as FeedbackPackage["attachments"])
+      : [],
   });
   const request = validateAgentRequest(
     feedbackAgentRequest({
@@ -464,9 +531,10 @@ const storedFeedbackSubmission = ({
     planPath,
     createdAt: request.createdAt,
     comments: request.comments,
+    attachments: request.attachments,
   });
   return {
-    version: 1,
+    version: 2,
     submissionId,
     feedback,
     source: value.source,
@@ -847,12 +915,59 @@ export const startReviewRuntime = async ({
     response,
     query,
     body,
+    binaryBody,
   }: {
     readonly route: Route;
     readonly response: ServerResponse;
     readonly query: URLSearchParams;
     readonly body?: unknown;
+    readonly binaryBody?: Uint8Array;
   }): Promise<void> => {
+    if (route.path === "/api/review-images" && route.method === "POST") {
+      if (binaryBody === undefined || binaryBody.byteLength === 0) {
+        refuse({ response, status: 400, reason: "An image body is required" });
+        return;
+      }
+      const altHeader = response.req.headers["x-big-plan-image-alt"];
+      const alt =
+        typeof altHeader === "string" && altHeader.trim() !== ""
+          ? altHeader.trim().slice(0, 200)
+          : "Screenshot";
+      try {
+        sendJson({
+          response,
+          status: 200,
+          value: await publishReviewImage({ store, bytes: binaryBody, alt }),
+        });
+      } catch (error: unknown) {
+        refuse({
+          response,
+          status: 400,
+          reason:
+            error instanceof Error ? error.message : "The image is invalid",
+        });
+      }
+      return;
+    }
+    if (route.path === "/api/review-images" && route.method === "GET") {
+      const id = query.get("id");
+      if (id === null) {
+        refuse({ response, status: 400, reason: "An image id is required" });
+        return;
+      }
+      const image = await readReviewImage({ store, id });
+      if (image === undefined) {
+        refuse({ response, status: 404, reason: "Image unavailable" });
+        return;
+      }
+      sendBinary({
+        response,
+        status: 200,
+        contentType: image.descriptor.mimeType,
+        body: image.bytes,
+      });
+      return;
+    }
     if (route.path === "/api/session") {
       const sessionView = await reviewSessionView({
         store,
@@ -968,12 +1083,54 @@ export const startReviewRuntime = async ({
         planId,
         comments: newlySent,
       });
+      const imageReferences = imageReferencesForBodies(
+        newlySent.map((comment) => comment.body),
+      );
+      if (imageReferences.length > MAX_IMAGES_PER_MESSAGE) {
+        refuse({
+          response,
+          status: 400,
+          reason: `A message can contain at most ${MAX_IMAGES_PER_MESSAGE} images`,
+        });
+        return;
+      }
       const storedSubmission = await readFeedbackSubmissionValue({
         store,
         submissionId,
       });
       let submission: FeedbackSubmission;
       if (storedSubmission === undefined) {
+        let attachments;
+        try {
+          attachments = await freezeRequestAttachments({
+            store,
+            requestId: submissionId,
+            references: imageReferences,
+          });
+        } catch (error: unknown) {
+          refuse({
+            response,
+            status: 400,
+            reason:
+              error instanceof Error
+                ? error.message
+                : "An image could not be attached",
+          });
+          return;
+        }
+        if (
+          attachments.reduce(
+            (total, attachment) => total + attachment.byteLength,
+            0,
+          ) > MAX_MESSAGE_IMAGE_BYTES
+        ) {
+          refuse({
+            response,
+            status: 400,
+            reason: "Images in one message exceed the 20 MiB limit",
+          });
+          return;
+        }
         const source = await readFile(resolvedPlanPath, "utf8");
         const premiseSnapshot = deriveSnapshotDigest(source);
         const feedback = buildFeedbackPackage({
@@ -983,9 +1140,10 @@ export const startReviewRuntime = async ({
           planPath: resolvedPlanPath,
           createdAt: new Date().toISOString(),
           comments: newlySent,
+          attachments,
         });
         submission = {
-          version: 1,
+          version: 2,
           submissionId,
           feedback,
           source,
@@ -1342,14 +1500,56 @@ export const startReviewRuntime = async ({
       const source = await readFile(resolvedPlanPath, "utf8");
       const premiseSnapshot = deriveSnapshotDigest(source);
       await writeSnapshot({ store, snapshot: premiseSnapshot, source });
+      const requestId = randomId(8);
+      const imageReferences = imageReferencesForBodies([messageBody]);
+      if (imageReferences.length > MAX_IMAGES_PER_MESSAGE) {
+        refuse({
+          response,
+          status: 400,
+          reason: `A message can contain at most ${MAX_IMAGES_PER_MESSAGE} images`,
+        });
+        return;
+      }
+      let attachments;
+      try {
+        attachments = await freezeRequestAttachments({
+          store,
+          requestId,
+          references: imageReferences,
+        });
+      } catch (error: unknown) {
+        refuse({
+          response,
+          status: 400,
+          reason:
+            error instanceof Error
+              ? error.message
+              : "An image could not be attached",
+        });
+        return;
+      }
+      if (
+        attachments.reduce(
+          (total, attachment) => total + attachment.byteLength,
+          0,
+        ) > MAX_MESSAGE_IMAGE_BYTES
+      ) {
+        refuse({
+          response,
+          status: 400,
+          reason: "Images in one message exceed the 20 MiB limit",
+        });
+        return;
+      }
       const agentRequest = messageAgentRequest({
         kind,
-        requestId: randomId(8),
+        requestId,
         sessionId,
         planId,
         premiseSnapshot,
         createdAt: new Date().toISOString(),
         body: messageBody,
+        attachments,
         ...(kind === "reply" && typeof payload.commentId === "string"
           ? { commentId: payload.commentId }
           : {}),
@@ -1604,14 +1804,19 @@ export const startReviewRuntime = async ({
 
       // A slow client may occupy its own request, but it must not hold the
       // filesystem mutation gate while it is still streaming input.
+      const binaryBody =
+        matched.binary === true ? await readBinaryBody(request) : undefined;
       const body =
-        matched.method === "GET" ? undefined : await readBody(request);
+        matched.method === "GET" || matched.binary === true
+          ? undefined
+          : await readBody(request);
       const dispatch = () =>
         handleApi({
           route: matched,
           response,
           query: target.searchParams,
           body,
+          binaryBody,
         });
       if (matched.method === "GET") {
         await dispatch();
