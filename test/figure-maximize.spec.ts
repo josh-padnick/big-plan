@@ -458,6 +458,7 @@ test("should expose dedicated copy controls beside CodeDiff and CodeSnippet maxi
     );
     const after = await toolbar.boundingBox();
     expect(after).not.toBeNull();
+    expect(after?.y).toBe(before?.y);
     expect(after?.x).toBe(before?.x);
     expect(after?.width).toBe(before?.width);
     expect(after?.height).toBe(before?.height);
@@ -513,6 +514,7 @@ test("should morph every figure copy control without shifting its toolbar", asyn
       );
       const after = await toolbar.boundingBox();
       expect(after).not.toBeNull();
+      expect(after?.y).toBe(before?.y);
       expect(after?.x).toBe(before?.x);
       expect(after?.width).toBe(before?.width);
       expect(after?.height).toBe(before?.height);
