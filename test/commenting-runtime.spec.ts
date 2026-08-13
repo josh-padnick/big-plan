@@ -1825,10 +1825,10 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await rail.getByRole("button", { name: "Review change" }).click();
     const historicalChange = page
       .locator("main")
-      .getByRole("region", { name: "Historical change", exact: true });
+      .getByRole("region", { name: "Updated", exact: true });
     await expect(historicalChange).toContainText("Retired experiment");
     await expect(
-      rail.getByRole("region", { name: "Historical change", exact: true }),
+      rail.getByRole("region", { name: "Updated", exact: true }),
     ).toHaveCount(0);
     await page.screenshot({
       path: testInfo.outputPath("historical-change.png"),
@@ -3057,7 +3057,7 @@ Reviewers confirm the output by hand.
       const archive = page.locator("[data-review-historical-changes]");
       await expect(archive).toHaveCount(1);
       const lens = archive.locator("[data-review-diff-lens]");
-      await expect(lens).toContainText("Historical change");
+      await expect(lens).toContainText("Updated");
       await expect(lens).toContainText("checks before merge");
       await expect(lens.locator("ins")).toContainText("automated");
       // Every lens host must be the archive's own; none may sit beside the
