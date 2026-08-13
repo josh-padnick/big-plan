@@ -812,7 +812,12 @@ const targetAssociationElements = (
 ): ReadonlySet<HTMLElement> => {
   const element = targetElement(target);
   if (element === null) return new Set();
-  if (target.type === "block" && element.matches("[data-authored-prose]")) {
+  const isImageTarget = target.type === "block" && target.kind === "image";
+  if (
+    target.type === "block" &&
+    !isImageTarget &&
+    element.matches("[data-authored-prose]")
+  ) {
     return new Set();
   }
   const owningContainer = element.closest<HTMLElement>(
@@ -821,7 +826,11 @@ const targetAssociationElements = (
   const elements = new Set<HTMLElement>();
   if (
     target.type !== "selection" &&
-    !(element.matches("[data-authored-prose]") && owningContainer !== null)
+    !(
+      element.matches("[data-authored-prose]") &&
+      owningContainer !== null &&
+      !isImageTarget
+    )
   ) {
     elements.add(element);
   }
@@ -895,7 +904,11 @@ const targetHighlightRange = (target: CommentTarget): Range | null => {
     return null;
   }
   const range = document.createRange();
-  range.selectNodeContents(element);
+  if (target.kind === "image") {
+    range.selectNode(element);
+  } else {
+    range.selectNodeContents(element);
+  }
   return range;
 };
 
@@ -1039,6 +1052,7 @@ const useBlockHosts = () => {
       )
         .filter(
           (block) =>
+            block.dataset.blockKind !== "image" &&
             !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
             !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
             !DERIVED_KINDS.has(block.dataset.blockKind ?? "") &&
@@ -1143,6 +1157,88 @@ const useBlockHosts = () => {
     return () => {
       observer.disconnect();
       mounted.forEach(({ host }) => host.remove());
+    };
+  }, []);
+  return hosts;
+};
+
+const useImageHosts = () => {
+  const [hosts, setHosts] = useState<
+    ReadonlyArray<{
+      readonly block: HTMLElement;
+      readonly host: HTMLSpanElement;
+    }>
+  >([]);
+  useEffect(() => {
+    const mounted: Array<{
+      readonly block: HTMLElement;
+      readonly host: HTMLSpanElement;
+      readonly parent: HTMLElement;
+      readonly originalPosition: string;
+    }> = [];
+    const frameHandles: Array<number> = [];
+    const resize = new ResizeObserver(() => {
+      for (const { block, host, parent } of mounted) {
+        const parentRect = parent.getBoundingClientRect();
+        const imageRect = block.getBoundingClientRect();
+        host.style.left = `${imageRect.right - parentRect.left + 8}px`;
+        host.style.top = `${imageRect.top - parentRect.top}px`;
+      }
+    });
+    const mount = () => {
+      const next = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-block-kind="image"]:not([data-review-image-mounted])',
+        ),
+      );
+      for (const block of next) {
+        const parent = block.parentElement;
+        if (parent === null) continue;
+        const host = document.createElement("span");
+        host.dataset.reviewImageHost = "";
+        block.dataset.reviewImageMounted = "";
+        const originalPosition = parent.style.position;
+        if (getComputedStyle(parent).position === "static") {
+          parent.style.position = "relative";
+        }
+        block.after(host);
+        mounted.push({ block, host, parent, originalPosition });
+        resize.observe(block);
+        resize.observe(parent);
+        frameHandles.push(
+          requestAnimationFrame(() => {
+            const parentRect = parent.getBoundingClientRect();
+            const imageRect = block.getBoundingClientRect();
+            host.style.left = `${imageRect.right - parentRect.left + 8}px`;
+            host.style.top = `${imageRect.top - parentRect.top}px`;
+          }),
+        );
+      }
+      setHosts(mounted);
+    };
+    let article = document.querySelector("article");
+    mount();
+    const observer = new MutationObserver(() => {
+      const nextArticle = document.querySelector("article");
+      if (nextArticle === article) return;
+      mounted.splice(0).forEach(({ block, host, parent, originalPosition }) => {
+        host.remove();
+        delete block.dataset.reviewImageMounted;
+        parent.style.position = originalPosition;
+      });
+      article = nextArticle;
+      mount();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      resize.disconnect();
+      frameHandles.forEach((frame) => cancelAnimationFrame(frame));
+      mounted.forEach(({ block, host, parent, originalPosition }) => {
+        host.remove();
+        delete block.dataset.reviewImageMounted;
+        parent.style.position = originalPosition;
+      });
     };
   }, []);
   return hosts;
@@ -3283,6 +3379,7 @@ export const ReviewController = () => {
   const planId =
     identity?.planId ?? rootElement.getAttribute("data-plan-id") ?? "";
   const blockHosts = useBlockHosts();
+  const imageHosts = useImageHosts();
   const reviewContainerHosts = useReviewContainerHosts();
   const feedbackHost = useFeedbackHost();
   const [drafts, setDrafts] = useState<ReadonlyArray<ReviewComment>>([]);
@@ -4674,6 +4771,32 @@ export const ReviewController = () => {
               <Icon icon={MESSAGE_SQUARE_ICON} />
             </Button>
           ),
+          host,
+          block.dataset.blockId,
+        ),
+      )}
+      {imageHosts.map(({ block, host }) =>
+        createPortal(
+          <button
+            type="button"
+            className="review-image-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-comment-rest hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
+            aria-label={`Comment on ${block.dataset.blockLabel ?? "this image"}`}
+            aria-pressed={
+              compose?.target.type === "block" &&
+              targetElement(compose.target) === block
+            }
+            onClick={() =>
+              beginTarget(targetForBlock(block), block.getBoundingClientRect())
+            }
+          >
+            <Icon icon={MESSAGE_SQUARE_ICON} />
+            <span
+              role="tooltip"
+              className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] right-0 z-50 w-max rounded-md bg-[var(--ink-c)] px-2 py-1 text-xs text-[var(--bg)] opacity-0 shadow-raised group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
+            >
+              Comment on image
+            </span>
+          </button>,
           host,
           block.dataset.blockId,
         ),
