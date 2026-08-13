@@ -621,6 +621,24 @@ are declared, so a role or a scale step is the only thing a utility can name.
     html {
       scroll-behavior: smooth;
     }
+
+    /* Utility form: review-agent-active-indicator--working */
+    .review-agent-active-indicator--working {
+      animation: review-agent-active-indicator-pulse 2.4s ease-in-out infinite;
+    }
+
+    @keyframes review-agent-active-indicator-pulse {
+      0%,
+      100% {
+        opacity: 0.78;
+        transform: scale(0.94);
+      }
+
+      50% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
   }
 
   :target {

@@ -3406,7 +3406,7 @@ export const ReviewController = () => {
                       }}
                     >
                       <span
-                        className="inline-flex size-2.5 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--diff-add-c)_34%,transparent)]"
+                        className={`review-agent-active-indicator inline-flex size-2.5 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--diff-add-c)_34%,transparent)] ${currentAgentActivity.state === "working" ? "review-agent-active-indicator--working" : ""}`}
                         aria-hidden="true"
                       >
                         <span className="size-1.5 rounded-full bg-[var(--diff-add-c)]" />
