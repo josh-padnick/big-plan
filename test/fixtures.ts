@@ -68,6 +68,7 @@ type WorkerFixtures = {
   readonly weightedAuditDecisionAnalysisViewerUrl: string;
   readonly wireframeFormFactorsViewerUrl: string;
   readonly wireframeQualityViewerUrl: string;
+  readonly wireframeSparseAppShellViewerUrl: string;
   readonly wireframeShortContentViewerUrl: string;
   readonly wireframeViewerUrl: string;
 };
@@ -267,6 +268,38 @@ const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
     <Panel title="Ready">
       <Text text="The short state is complete." />
     </Panel>
+  </Screen>
+</Wireframe>
+`;
+
+const WIREFRAME_SPARSE_APP_SHELL_MDX = `# Sparse application shells
+
+<Wireframe id="sparse-app-shell-top-bar">
+  <Screen id="workspace" name="Workspace" device="desktop">
+    <AppShell>
+      <TopBar title="Workspace" />
+      <AppContent>
+        <Row>
+          <Panel title="Workspace">
+            <Text text="One focused task." />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+
+<Wireframe id="sparse-app-shell-no-top-bar">
+  <Screen id="full-workspace" name="Full workspace" device="desktop">
+    <AppShell>
+      <AppContent>
+        <Row>
+          <Panel title="Workspace">
+            <Text text="One focused task." />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
   </Screen>
 </Wireframe>
 `;
@@ -729,6 +762,20 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         outputPath,
         outputDir,
       });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeSparseAppShellViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-sparse-app-shell-"),
+      );
+      const inputPath = join(outputDir, "wireframe-sparse-app-shell.mdx");
+      const outputPath = join(outputDir, "wireframe-sparse-app-shell.html");
+      await writeFile(inputPath, WIREFRAME_SPARSE_APP_SHELL_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },

@@ -580,12 +580,32 @@ marks and a plan diff never jitters.
   }
   .wireframe-app-shell:has(> .wireframe-top-bar) {
     grid-template-areas: "bar bar" "side main";
+    /* Implicit grid rows stretch to share the fixed app viewport. Keep the
+       top bar content-sized so sparse shells cannot turn it into a band. */
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .wireframe-app-shell:not(:has(> .wireframe-sidebar)) {
+    grid-template-columns: 1fr;
+  }
+  .wireframe-app-shell:has(> .wireframe-top-bar):not(
+      :has(> .wireframe-sidebar)
+    ) {
+    grid-template-areas: "bar" "main";
   }
   .wireframe-app-shell > .wireframe-top-bar {
     grid-area: bar;
     border-radius: 0;
     border: 0;
+    min-height: 3rem;
+    padding: 0.5rem 0.85rem;
     border-bottom: 2px solid var(--wf-stroke);
+    background: var(--color-paper);
+  }
+  .wireframe-app-shell:has(> .wireframe-top-bar):not(:has(> .wireframe-sidebar))
+    > .wireframe-app-content {
+    /* Without a sidebar, auto-placement would put content in the empty side
+       area and leave the main column unused. */
+    grid-area: main;
   }
   /* One divider between panes rather than an outline around each. */
   .wireframe-sidebar {
@@ -785,6 +805,11 @@ marks and a plan diff never jitters.
     .wireframe-app-shell,
   .wireframe-artboard[data-wireframe-device="tablet"] .wireframe-app-shell {
     gap: 0.75rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-app-shell:has(> .wireframe-sidebar),
+  .wireframe-artboard[data-wireframe-device="tablet"]
+    .wireframe-app-shell:has(> .wireframe-sidebar) {
     grid-template-columns: minmax(7.5rem, 11rem) 1fr;
   }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]
