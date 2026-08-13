@@ -584,10 +584,12 @@ marks and a plan diff never jitters.
        top bar content-sized so sparse shells cannot turn it into a band. */
     grid-template-rows: auto minmax(0, 1fr);
   }
+  .wireframe-app-shell:not(:has(> .wireframe-sidebar)) {
+    grid-template-columns: 1fr;
+  }
   .wireframe-app-shell:has(> .wireframe-top-bar):not(
       :has(> .wireframe-sidebar)
     ) {
-    grid-template-columns: 1fr;
     grid-template-areas: "bar" "main";
   }
   .wireframe-app-shell > .wireframe-top-bar {
@@ -803,6 +805,11 @@ marks and a plan diff never jitters.
     .wireframe-app-shell,
   .wireframe-artboard[data-wireframe-device="tablet"] .wireframe-app-shell {
     gap: 0.75rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-app-shell:has(> .wireframe-sidebar),
+  .wireframe-artboard[data-wireframe-device="tablet"]
+    .wireframe-app-shell:has(> .wireframe-sidebar) {
     grid-template-columns: minmax(7.5rem, 11rem) 1fr;
   }
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]

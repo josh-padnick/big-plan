@@ -272,12 +272,26 @@ const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
 </Wireframe>
 `;
 
-const WIREFRAME_SPARSE_APP_SHELL_MDX = `# Sparse application shell
+const WIREFRAME_SPARSE_APP_SHELL_MDX = `# Sparse application shells
 
-<Wireframe id="sparse-app-shell">
+<Wireframe id="sparse-app-shell-top-bar">
   <Screen id="workspace" name="Workspace" device="desktop">
     <AppShell>
       <TopBar title="Workspace" />
+      <AppContent>
+        <Row>
+          <Panel title="Workspace">
+            <Text text="One focused task." />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+
+<Wireframe id="sparse-app-shell-no-top-bar">
+  <Screen id="full-workspace" name="Full workspace" device="desktop">
+    <AppShell>
       <AppContent>
         <Row>
           <Panel title="Workspace">
