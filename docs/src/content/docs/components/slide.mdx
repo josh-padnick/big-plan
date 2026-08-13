@@ -31,7 +31,7 @@ For each intended slide, use a type only when its matching rule fits; otherwise 
 | `status-quo`          | Status quo          | What is true today, including what already works                       |
 | `desired-experience`  | Desired experience  | The concrete lived experience introduced by a new feature              |
 | `desired-outcome`     | Desired outcome     | The concrete payoff of a bug fix, re-architecture, or tech-debt change |
-| `user-journey`        | User journeys       | A named container of individually named, complete human loops          |
+| `user-journey`        | User journeys       | One complete human loop nested under a journeys container              |
 | `acceptance-criteria` | Acceptance criteria | Independently checkable verification                                   |
 
 `desired-experience` and `desired-outcome` are mutually exclusive.
@@ -72,7 +72,7 @@ Authoring typed journey slides beside an untyped container slide is rejected by 
 </Wireframe>
 ```
 
-For each journey:
+For each typed journey:
 
 - `name` is a distinct, concrete journey name shown in the kicker and sidebar.
 - `toc` is an ultra-concise form shown in the TableOfContents.

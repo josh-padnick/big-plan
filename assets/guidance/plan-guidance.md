@@ -38,7 +38,7 @@ By default make the container a `Part`, so each journey is a typed slide inside 
 That is the default because a `Slide` marker attaches only to an h2, so only the Part shape lets a nested journey keep its marker `name` in the kicker and sidebar, its `toc` form in the overview, and its wireframe contract.
 An untyped “User journeys” slide is still a valid container when the journeys are short: give each journey an h3 sub-slide so they number 2.3.1, 2.3.2 beneath it, and accept that a sub-slide carries no `Slide` marker.
 Under the Part shape, give every journey its own marker `name`, ultra-concise `toc` form, and full h2 claim.
-Every journey slide should contain a `Wireframe` with actual `Screen` mockups that show the interface states in the human loop; when no UI exists to show, add a non-empty `wireframeReason` attribute to the `Slide` marker and explain the opt-out. Prose may explain the screens but never replace them when a UI exists.
+Every typed journey slide should contain a `Wireframe` with actual `Screen` mockups that show the interface states in the human loop; when no UI exists to show, add a non-empty `wireframeReason` attribute to the `Slide` marker and explain the opt-out. Prose may explain the screens but never replace them when a UI exists.
 Typed coverage is not a quality target.
 Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.
 Part 1 canonically holds "Status quo" and then "Success looks like": what is true today, and the outcome-level success a sponsor would repeat.
