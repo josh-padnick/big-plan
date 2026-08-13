@@ -274,6 +274,29 @@ test("should render every proof at its native device geometry", async ({
   });
 });
 
+test("should keep a sparse app shell top bar content-sized", async ({
+  page,
+  wireframeSparseAppShellViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1200 });
+  await page.goto(wireframeSparseAppShellViewerUrl);
+
+  const artboard = page.locator(".wireframe-artboard");
+  const topBar = page.locator(".wireframe-top-bar");
+  const appContent = page.locator(".wireframe-app-content");
+  const artboardHeight = await artboard.evaluate((node) => node.offsetHeight);
+  const topBarHeight = await topBar.evaluate((node) => node.clientHeight);
+
+  expect(artboardHeight).toBe(820);
+  expect(topBarHeight).toBeLessThan(artboardHeight * 0.2);
+  expect(
+    await appContent.evaluate((node) => node.clientHeight),
+  ).toBeGreaterThan(topBarHeight * 3);
+  expect(await appContent.evaluate((node) => node.clientWidth)).toBeGreaterThan(
+    800,
+  );
+});
+
 test("should keep shipped desktop panes readable and layout regions separate", async ({
   page,
   wireframeFormFactorsViewerUrl,

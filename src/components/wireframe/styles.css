@@ -580,12 +580,21 @@ marks and a plan diff never jitters.
   }
   .wireframe-app-shell:has(> .wireframe-top-bar) {
     grid-template-areas: "bar bar" "side main";
+    /* Implicit grid rows stretch to share the fixed app viewport. Keep the
+       top bar content-sized so sparse shells cannot turn it into a band. */
+    grid-template-rows: auto minmax(0, 1fr);
   }
   .wireframe-app-shell > .wireframe-top-bar {
     grid-area: bar;
     border-radius: 0;
     border: 0;
     border-bottom: 2px solid var(--wf-stroke);
+  }
+  .wireframe-app-shell:has(> .wireframe-top-bar):not(:has(> .wireframe-sidebar))
+    > .wireframe-app-content {
+    /* Without a sidebar, auto-placement would put content in the empty side
+       area and leave the main column unused. */
+    grid-area: main;
   }
   /* One divider between panes rather than an outline around each. */
   .wireframe-sidebar {
