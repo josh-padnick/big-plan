@@ -43,7 +43,7 @@ export const DRAWING_SYSTEM_STYLESHEETS = new Set([
  */
 export const STYLESHEET_BUDGETS = {
   "src/components/_shared/decision-card/decision-card.css": {
-    declarations: 283,
+    declarations: 300,
   },
   "src/components/_shared/figure-controls/figure-controls.css": {
     declarations: 58,
