@@ -72,7 +72,7 @@ export const ReviewImage = ({
       </button>
       {open ? (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+          className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_srgb,var(--ink-c)_60%,transparent)] p-4"
           role="dialog"
           aria-modal="true"
           aria-label={alt}
@@ -103,7 +103,7 @@ export const ReviewImage = ({
                 <Icon icon={X_ICON} />
               </Button>
             </div>
-            <div className="max-h-[calc(100vh-8rem)] max-w-full overflow-auto rounded-sm bg-black/20 p-1 shadow-floating">
+            <div className="max-h-[calc(100vh-8rem)] max-w-full overflow-auto rounded-sm bg-[color-mix(in_srgb,var(--ink-c)_20%,transparent)] p-1 shadow-floating">
               <img
                 src={url}
                 alt={alt}
@@ -114,7 +114,7 @@ export const ReviewImage = ({
                 }}
               />
             </div>
-            <div className="flex items-center gap-1 rounded-md border border-white/30 bg-black/60 p-1 text-white">
+            <div className="flex items-center gap-1 rounded-md border border-white/30 bg-[color-mix(in_srgb,var(--ink-c)_60%,transparent)] p-1 text-white">
               <Button
                 variant="ghost"
                 size="compactIcon"
