@@ -5,14 +5,17 @@ import { describe, expect, it } from "vitest";
 import {
   decodeAgentSnapshot,
   decodeProgress,
+  decodeSnapshotDiff,
   encodeAgentSnapshot,
   encodeProgress,
+  encodeSnapshotDiff,
+  type SnapshotDiff,
 } from "./review-wire.js";
 
 describe("review wire contract", () => {
   it("should round-trip a server agent snapshot into the browser projection", () => {
     const encoded = encodeAgentSnapshot({
-      sourceRevision: "a".repeat(16),
+      currentSnapshot: "a".repeat(16),
       presence: {
         connected: true,
         state: "working",
@@ -22,7 +25,7 @@ describe("review wire contract", () => {
       requests: [
         {
           requestId: "1".repeat(16),
-          sourceRevision: "a".repeat(16),
+          premiseSnapshot: "a".repeat(16),
           createdAt: "2026-08-10T12:00:00.000Z",
           kind: "feedback",
           comments: [
@@ -30,6 +33,7 @@ describe("review wire contract", () => {
               id: "comment-1",
               body: "Clarify this section",
               createdAt: "2026-08-10T12:00:00.000Z",
+              premiseSnapshot: "a".repeat(16),
               target: {
                 type: "block",
                 blockId: "slide-2",
@@ -56,7 +60,7 @@ describe("review wire contract", () => {
     });
 
     expect(decodeAgentSnapshot(encoded)).toMatchObject({
-      sourceRevision: "a".repeat(16),
+      currentSnapshot: "a".repeat(16),
       presence: { connected: true, state: "working" },
       requests: [
         {
@@ -68,6 +72,63 @@ describe("review wire contract", () => {
       connectionLog: [{ eventId: "event-1", connected: true }],
       plan: "/tmp/plan.mdx",
     });
+  });
+
+  it("should round-trip per-side presentation facts through a snapshot diff", () => {
+    const diff: SnapshotDiff = {
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      locations: [
+        {
+          status: "changed",
+          scope: "section/risks",
+          kind: "callout",
+          label: "Rollback risk",
+          section: "Risks",
+          oldText: "Old body.",
+          newText: "New body.",
+          oldPresentation: { aspect: "callout", calloutType: "danger" },
+          newPresentation: { aspect: "callout", calloutType: "warning" },
+          runs: [],
+        },
+      ],
+      places: [],
+    };
+
+    const decoded = decodeSnapshotDiff(encodeSnapshotDiff(diff));
+    expect(decoded?.locations[0]).toMatchObject({
+      oldPresentation: { aspect: "callout", calloutType: "danger" },
+      newPresentation: { aspect: "callout", calloutType: "warning" },
+    });
+  });
+
+  it("should drop a malformed presentation fact instead of trusting it through", () => {
+    const decoded = decodeSnapshotDiff({
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      locations: [
+        {
+          status: "removed",
+          scope: "section/risks",
+          kind: "list",
+          label: "Runbook",
+          section: "Risks",
+          oldText: "Freeze writes.",
+          newText: "",
+          // Neither fact is in the wire vocabulary: an out-of-range callout
+          // type and a non-boolean ordering must decode to absence, so the
+          // browser renders its neutral fallback rather than a guessed kind.
+          oldPresentation: { aspect: "list", isOrdered: "yes" },
+          newPresentation: { aspect: "callout", calloutType: "sparkly" },
+          runs: [],
+        },
+      ],
+      places: [],
+    });
+
+    expect(decoded?.locations[0]?.oldPresentation).toBeUndefined();
+    expect(decoded?.locations[0]?.newPresentation).toBeUndefined();
+    expect(decoded?.locations[0]).toMatchObject({ oldText: "Freeze writes." });
   });
 
   it("should preserve stable progress semantics and reject unknown codes", () => {

@@ -16,8 +16,11 @@ export type ChatSurfaceModel = {
   readonly isSending: boolean;
   readonly exchanges: ReactNode;
   readonly hasExchanges: boolean;
+  readonly archivedExchanges: ReactNode;
+  readonly archivedCount: number;
   readonly onBodyChange: (body: string) => void;
   readonly onSend: () => void;
+  readonly onArchive: () => void;
 };
 
 export const ChatSurface = ({
@@ -85,11 +88,32 @@ export const ChatSurface = ({
             </div>
           </div>
           {model.hasExchanges ? (
-            <ol className="m-0 grid list-none gap-3 p-0">{model.exchanges}</ol>
+            <>
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" onClick={model.onArchive}>
+                  Archive
+                </Button>
+              </div>
+              <ol className="m-0 grid list-none gap-3 p-0">
+                {model.exchanges}
+              </ol>
+            </>
           ) : (
             <p className="m-0 text-xs text-subtle">
-              No plan-wide questions yet.
+              {model.archivedCount === 0
+                ? "No plan-wide questions yet."
+                : "No active plan-wide questions."}
             </p>
+          )}
+          {model.archivedCount === 0 ? null : (
+            <details className="group border-t border-edge pt-3">
+              <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                Archived ({model.archivedCount})
+              </summary>
+              <ol className="mt-3 mb-0 grid list-none gap-3 p-0">
+                {model.archivedExchanges}
+              </ol>
+            </details>
           )}
         </>
       )}

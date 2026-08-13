@@ -104,14 +104,14 @@ const DiffHeader = ({
   readonly title: string | undefined;
   readonly entries: ReadonlyArray<TreeEntry>;
 }) => (
-  <figcaption className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-3 bg-[var(--diff-header-bg)] px-3 py-1.5 font-sans text-sm font-semibold text-ink">
+  <figcaption className="file-tree-header file-tree-diff-header flex min-w-0 items-center justify-between gap-1 bg-[var(--diff-header-bg)] px-3 py-1.5 font-sans text-sm font-semibold text-ink">
     {title === undefined ? null : (
       <span className="file-tree-diff-title truncate">{title}</span>
     )}
     <ChangeSummary entries={entries} />
-    <span className="file-tree-diff-controls flex shrink-0 items-center gap-2">
+    <span className="file-tree-diff-controls flex shrink-0 items-center gap-1">
       <ViewToggleGroup />
-      <span className="figure-action-group inline-flex items-center gap-0.5">
+      <span className="figure-action-group ml-1 inline-flex items-center gap-1 border-l border-edge pl-1">
         <MaximizeButton subject="tree" />
       </span>
     </span>

@@ -10,8 +10,9 @@ export const FileTree = ({ model }: { readonly model: CompiledFileTree }) => (
     data-file-tree=""
   >
     {model.title === undefined ? null : (
-      <figcaption className="file-tree-header flex min-w-0 items-center justify-between gap-3 bg-[var(--diff-header-bg)] px-3 py-1.5 font-sans text-sm font-semibold text-ink">
+      <figcaption className="file-tree-header flex min-w-0 items-center justify-between gap-1 bg-[var(--diff-header-bg)] px-3 py-1.5 font-sans text-sm font-semibold text-ink">
         <span className="file-tree-title truncate">{model.title}</span>
+        <span className="figure-action-group inline-flex items-center gap-1" />
       </figcaption>
     )}
     <div className="file-tree-body overflow-x-auto px-3 py-3">

@@ -214,6 +214,22 @@ describe("renderCodeSnippet fence contract", () => {
 });
 
 describe("renderCodeSnippet annotations", () => {
+  it("should distinguish agent-authored annotations from reviewer comments", () => {
+    const { element } = render({
+      attributes: {
+        file: "src/example.ts",
+        showLineNumbers: true,
+        startLine: "42",
+      },
+      annotations: [annotation()],
+    });
+
+    expect(JSON.stringify(element)).toContain('"data-lucide":"info"');
+    expect(JSON.stringify(element)).not.toContain(
+      '"data-lucide":"message-square"',
+    );
+  });
+
   it("should diagnose a missing lines attribute and empty body at the annotation position", () => {
     expect(
       render({

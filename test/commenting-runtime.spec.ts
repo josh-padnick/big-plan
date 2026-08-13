@@ -1,416 +1,191 @@
 // Critical browser journey for the local review runtime behind the React
 // commenting chrome: server-backed restoration and one real feedback handoff.
 
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   commentsFromExchange,
-  deriveSourceRevision,
+  deriveSnapshotDigest,
+  messageAgentRequest,
   nextPendingAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
+  writeAgentRequest,
 } from "../src/review/agent-exchange.js";
-import { diffRevisions } from "../src/review/revision-diff.js";
 import {
   appendProgressEvent,
   claimAgentRequest,
   publishAgentResponse,
 } from "../src/review/request-mailbox.js";
+import { diffSnapshots } from "../src/review/snapshot-diff.js";
 import { startReviewRuntime } from "../src/review/server.js";
 import {
   reviewStoreFor,
   writeAgentHeartbeat,
-  writeRevisionSnapshot,
+  writeSnapshot,
 } from "../src/review/store.js";
 import { renderDocument } from "../src/render/render-document.js";
-import { expect, stageComment, test } from "./fixtures";
+import { expect, stageComment, test, type Page } from "./fixtures";
 
-test("should preserve durable review state when draft hydration fails", async ({
+test("should expire a held connected snapshot when the reviewer returns", async ({
   page,
-  isolatedReviewRuntimeUrl,
+  reviewRuntimeUrl,
 }) => {
-  const initialPersistence = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-  );
-  await page.goto(isolatedReviewRuntimeUrl);
-  await initialPersistence;
-  const durableState = {
-    drafts: [
-      {
-        id: "aabbccdd",
-        body: "Keep this durable draft.",
-        target: { type: "document" },
-      },
-    ],
-    activeDraft: "Keep this unfinished document note.",
-    resolvedCommentIds: ["1122aabb"],
-  };
-  await page.evaluate(async (state) => {
+  const now = Date.now();
+  await page.clock.install({ time: now });
+  await page.goto(reviewRuntimeUrl);
+  const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
-    const response = await fetch("/api/drafts", {
-      method: "PUT",
-      headers: {
-        "content-type": "application/json",
-        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
-      },
-      body: JSON.stringify(state),
-    });
-    if (!response.ok) throw new Error("Could not seed durable review state");
-  }, durableState);
-
-  await page.route("**/api/drafts", (route) => {
-    if (route.request().method() === "GET") {
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: "not-json",
-      });
-    }
-    return route.continue();
-  });
-  await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Feedback", exact: true }),
-  ).toBeVisible();
-  await page.evaluate(
-    () =>
-      new Promise<void>((settle) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => settle())),
-      ),
-  );
-  await page.unroute("**/api/drafts");
-
-  const persisted = await page.evaluate(async () => {
-    const root = document.documentElement;
-    const response = await fetch("/api/drafts", {
+    const response = await fetch("/api/session", {
       headers: {
         "x-big-plan-review-token": root.dataset.reviewToken ?? "",
       },
     });
     return response.json();
   });
-  expect(persisted).toMatchObject(durableState);
-});
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The review runtime did not describe its live session");
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+    now,
+  });
+  await page.clock.runFor(1_600);
+  await expect(
+    page.getByRole("button", { name: "Agent session active" }),
+  ).toBeVisible();
 
-test("should merge a staged comment when hydration finishes late", async ({
-  page,
-  isolatedReviewRuntimeUrl,
-}) => {
-  const initialPersistence = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-  );
-  await page.goto(isolatedReviewRuntimeUrl);
-  await initialPersistence;
-  await page.evaluate(async () => {
-    const root = document.documentElement;
-    const response = await fetch("/api/drafts", {
-      method: "PUT",
-      headers: {
-        "content-type": "application/json",
-        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
-      },
-      body: JSON.stringify({
-        drafts: [
-          {
-            id: "aabbccdd",
-            body: "Keep the durable server draft.",
-            target: { type: "document" },
-          },
-        ],
-        activeDraft: "",
-        resolvedCommentIds: [],
-      }),
-    });
-    if (!response.ok) throw new Error("Could not seed the server draft");
+  await page.clock.setSystemTime(now + 6 * 60 * 60_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  const connectionLost = page.getByRole("button", {
+    name: /Agent disconnected/u,
   });
-
-  let releaseHydration = (): void => undefined;
-  const hydrationGate = new Promise<void>((settle) => {
-    releaseHydration = settle;
-  });
-  let markHydrationRequested = (): void => undefined;
-  const hydrationRequested = new Promise<void>((settle) => {
-    markHydrationRequested = settle;
-  });
-  await page.route("**/api/drafts", async (route) => {
-    if (route.request().method() !== "GET") {
-      await route.continue();
-      return;
-    }
-    markHydrationRequested();
-    await hydrationGate;
-    await route.continue();
-  });
-  await page.reload();
-  await hydrationRequested;
-  await stageComment(page, "Keep the comment staged during hydration.");
-  const persisted = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-  );
-  releaseHydration();
-  await persisted;
-
-  await page.getByRole("button", { name: /Feedback/u }).click();
+  await expect(connectionLost).toBeVisible();
+  await connectionLost.click();
   const rail = page.getByRole("complementary", { name: "Feedback" });
-  await expect(rail).toContainText("Keep the durable server draft.");
-  await expect(rail).toContainText("Keep the comment staged during hydration.");
+  await expect(rail).toContainText("No agent signal for 6h 00m");
 });
 
-test("should keep a submitted comment when hydration finishes late", async ({
+test("should pause a nonstandard request behind an explicit warning", async ({
   page,
-  isolatedReviewRuntimeUrl,
+  reviewRuntimeUrl,
 }) => {
-  const initialPersistence = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
+  await page.goto(reviewRuntimeUrl);
+  await stageComment(
+    page,
+    "Add slides that depart from the standard template.",
   );
-  await page.goto(isolatedReviewRuntimeUrl);
-  await initialPersistence;
-
-  let releaseHydration = (): void => undefined;
-  const hydrationGate = new Promise<void>((settle) => {
-    releaseHydration = settle;
-  });
-  let markHydrationRequested = (): void => undefined;
-  const hydrationRequested = new Promise<void>((settle) => {
-    markHydrationRequested = settle;
-  });
-  await page.route("**/api/drafts", async (route) => {
-    if (route.request().method() !== "GET") {
-      await route.continue();
-      return;
-    }
-    const response = await route.fetch();
-    markHydrationRequested();
-    await hydrationGate;
-    await route.fulfill({ response });
-  });
-  await page.reload();
-  await hydrationRequested;
-
-  const body = "Keep the comment submitted during hydration.";
-  const feedbackSubmitted = page.waitForResponse(
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const submitted = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/feedback") &&
       response.request().method() === "POST",
   );
-  const slide = page.locator("[data-slide]").first();
-  await slide.hover();
-  await slide.getByRole("button", { name: "Comment on slide" }).click();
-  const composer = page.getByRole("dialog", { name: /Comment on/u });
-  await composer.getByLabel("Add a comment").fill(body);
-  await composer.getByRole("button", { name: "Submit Now" }).click();
-  await feedbackSubmitted;
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submitted).ok()).toBe(true);
 
-  const persisted = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-  );
-  releaseHydration();
-  await persisted;
-  await page.getByRole("button", { name: /Feedback/u }).click();
-  await expect(
-    page.getByRole("complementary", { name: "Feedback" }),
-  ).toContainText(body);
-});
-
-test("should persist edits after transient hydration failure", async ({
-  page,
-  isolatedReviewRuntimeUrl,
-}) => {
-  const initialPersistence = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-  );
-  await page.goto(isolatedReviewRuntimeUrl);
-  await initialPersistence;
-
-  let draftReads = 0;
-  let markHydrationFailed = (): void => undefined;
-  const hydrationFailed = new Promise<void>((settle) => {
-    markHydrationFailed = settle;
-  });
-  let releaseRetry = (): void => undefined;
-  const retryGate = new Promise<void>((settle) => {
-    releaseRetry = settle;
-  });
-  await page.route("**/api/drafts", async (route) => {
-    if (route.request().method() !== "GET") {
-      await route.continue();
-      return;
-    }
-    draftReads += 1;
-    if (draftReads === 1) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: "not-json",
-      });
-      markHydrationFailed();
-      return;
-    }
-    const response = await route.fetch();
-    await retryGate;
-    await route.fulfill({ response });
-  });
-  await page.reload();
-  await hydrationFailed;
-
-  const stagedBody = "Persist this comment after hydration recovers.";
-  const activeDraft = "Persist this plan-wide draft after recovery.";
-  await stageComment(page, stagedBody);
-  await page.getByRole("button", { name: /Feedback/u }).click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
-  await rail.getByRole("tab", { name: "Chat" }).click();
-  await rail.getByRole("textbox", { name: "Plan-wide chat" }).fill(activeDraft);
-  await expect
-    .poll(() => draftReads, { timeout: 1_500 })
-    .toBeGreaterThanOrEqual(2);
-
-  const persisted = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-  );
-  releaseRetry();
-  await persisted;
-  await page.unroute("**/api/drafts");
-  await page.reload();
-
-  await page.getByRole("button", { name: /Feedback/u }).click();
-  const restoredRail = page.getByRole("complementary", { name: "Feedback" });
-  await expect(restoredRail).toContainText(stagedBody);
-  await restoredRail.getByRole("tab", { name: "Chat" }).click();
-  await expect(
-    restoredRail.getByRole("textbox", { name: "Plan-wide chat" }),
-  ).toHaveValue(activeDraft);
-});
-
-test("should persist edits after the hydration retry ramp", async ({
-  page,
-  isolatedReviewRuntimeUrl,
-}) => {
-  const initialPersistence = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-  );
-  await page.goto(isolatedReviewRuntimeUrl);
-  await initialPersistence;
-
-  let draftReads = 0;
-  let markRetryRampExhausted = (): void => undefined;
-  const retryRampExhausted = new Promise<void>((settle) => {
-    markRetryRampExhausted = settle;
-  });
-  await page.route("**/api/drafts", async (route) => {
-    if (route.request().method() !== "GET") {
-      await route.continue();
-      return;
-    }
-    draftReads += 1;
-    if (draftReads <= 4) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: "not-json",
-      });
-      if (draftReads === 4) markRetryRampExhausted();
-      return;
-    }
-    await route.continue();
-  });
-  await page.reload();
-  await retryRampExhausted;
-
-  const stagedBody = "Persist this comment after the retry ramp.";
-  const activeDraft = "Persist this plan-wide draft after the retry ramp.";
-  await stageComment(page, stagedBody);
-  await page.getByRole("button", { name: /Feedback/u }).click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
-  await rail.getByRole("tab", { name: "Chat" }).click();
-  await rail.getByRole("textbox", { name: "Plan-wide chat" }).fill(activeDraft);
-
-  const persisted = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-    { timeout: 4_500 },
-  );
-  await persisted;
-  await page.unroute("**/api/drafts");
-  await page.reload();
-
-  await page.getByRole("button", { name: /Feedback/u }).click();
-  const restoredRail = page.getByRole("complementary", { name: "Feedback" });
-  await expect(restoredRail).toContainText(stagedBody);
-  await restoredRail.getByRole("tab", { name: "Chat" }).click();
-  await expect(
-    restoredRail.getByRole("textbox", { name: "Plan-wide chat" }),
-  ).toHaveValue(activeDraft);
-});
-
-test("should round-trip the active plan-wide draft through hydration", async ({
-  page,
-  isolatedReviewRuntimeUrl,
-}) => {
-  const initialPersistence = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-  );
-  await page.goto(isolatedReviewRuntimeUrl);
-  await initialPersistence;
-  const activeDraft = "Keep this unfinished plan-wide question.";
-  await page.evaluate(async (body) => {
+  const session: unknown = await page.evaluate(async () => {
     const root = document.documentElement;
-    const response = await fetch("/api/drafts", {
-      method: "PUT",
-      headers: {
-        "content-type": "application/json",
-        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
-      },
-      body: JSON.stringify({
-        drafts: [],
-        activeDraft: body,
-        resolvedCommentIds: [],
-      }),
-    });
-    if (!response.ok) throw new Error("Could not seed the active draft");
-  }, activeDraft);
-
-  const persisted = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-  );
-  await page.reload();
-  await persisted;
-  await page.getByRole("button", { name: "Feedback", exact: true }).click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
-  await rail.getByRole("tab", { name: "Chat" }).click();
-  await expect(
-    rail.getByRole("textbox", { name: "Plan-wide chat" }),
-  ).toHaveValue(activeDraft);
-
-  const snapshot = await page.evaluate(async () => {
-    const root = document.documentElement;
-    const response = await fetch("/api/drafts", {
+    const response = await fetch("/api/session", {
       headers: {
         "x-big-plan-review-token": root.dataset.reviewToken ?? "",
       },
     });
     return response.json();
   });
-  expect(snapshot).toMatchObject({ activeDraft });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The warning journey requires a live review session");
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = nextPendingAgentRequest(exchange);
+  if (request === undefined || request.kind !== "feedback") {
+    throw new Error("The warning journey did not create feedback work");
+  }
+  const source = await readFile(session.plan, "utf8");
+  const claimed = await claimAgentRequest({
+    store,
+    requestId: request.requestId,
+    baselineSnapshot: deriveSnapshotDigest(source),
+    now: new Date().toISOString(),
+  });
+  const response = validateAgentResponseDraft({
+    value: {
+      requestId: request.requestId,
+      outcomes: request.comments.map((comment) => ({
+        commentId: comment.id,
+        state: "warning",
+        summary: "Would depart from the standard template",
+        message:
+          "Fulfilling this request would deviate from the standard template.",
+      })),
+    },
+    request: claimed,
+    commentsById: commentsFromExchange({
+      requests: [claimed],
+      responses: [],
+    }),
+    changedBlocks: new Set(),
+    currentSnapshot: deriveSnapshotDigest(source),
+    now: new Date().toISOString(),
+  });
+  await publishAgentResponse({ store, response });
+
+  await rail
+    .getByRole("button", { name: "Expand thread", exact: true })
+    .click();
+  await expect(rail).toContainText(
+    "Fulfilling this request would deviate from the standard template.",
+  );
+  const warningSummary = rail.locator("em", {
+    hasText: "Would depart from the standard template",
+  });
+  await expect(warningSummary).toBeVisible();
+  const doItAnyway = rail.getByRole("button", { name: "Do it anyway" });
+  await expect(doItAnyway).toBeVisible();
+  const override = page.waitForResponse(
+    (candidate) =>
+      candidate.url().endsWith("/api/agent-requests") &&
+      candidate.request().method() === "POST",
+  );
+  await doItAnyway.click();
+  expect((await override).ok()).toBe(true);
 });
 
 test("should restore and submit staged comments through the local review runtime", async ({
@@ -420,7 +195,7 @@ test("should restore and submit staged comments through the local review runtime
   await page.goto(reviewRuntimeUrl);
 
   const agentStatus = page.getByRole("button", {
-    name: /open agent connection status/u,
+    name: /Agent session active|open agent connection status/u,
   });
   const feedbackAction = page.getByRole("button", {
     name: "Feedback",
@@ -442,7 +217,7 @@ test("should restore and submit staged comments through the local review runtime
       settings.x - feedback.x - feedback.width,
     ];
   });
-  expect(toolbarGaps).toEqual([12, 12]);
+  expect(toolbarGaps).toEqual([4, 4]);
 
   await stageComment(page, "Clarify the failure boundary.");
   await stageComment(page, "Name the operator recovery path.");
@@ -451,15 +226,13 @@ test("should restore and submit staged comments through the local review runtime
   const rail = page.getByRole("complementary", { name: "Feedback" });
   const kernel = page.locator("#big-plan-review-root");
   await expect(rail).toHaveCount(0);
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(rail).toContainText("Clarify the failure boundary.");
   await expect(rail).toContainText("Name the operator recovery path.");
   await expect(rail).toContainText("Remove this queued comment before pickup.");
   await expect(rail).toContainText("1 · Details");
-  await expect(rail).toContainText("The agent is disconnected");
-
   await page.reload();
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(rail).toContainText("Clarify the failure boundary.");
   await expect(rail).toContainText("Name the operator recovery path.");
   await expect(rail).toContainText("Remove this queued comment before pickup.");
@@ -492,13 +265,19 @@ test("should restore and submit staged comments through the local review runtime
     "Clarify the failure boundary.",
   );
 
-  await expect(rail).toContainText("3 comments sent to the agent");
+  await expect(rail.getByPlaceholder("Search comments")).toBeVisible();
+  await expect(rail).not.toContainText("comments sent to the agent");
   await expect(
     rail.getByRole("button", { name: "Send all comments to agent" }),
   ).toBeDisabled();
   const queuedForDeletion = rail
     .locator("[data-review-sent-thread='queued']")
     .filter({ hasText: "Remove this queued comment before pickup." });
+  await queuedForDeletion
+    .getByRole("button", {
+      name: "Expand queued comment: Remove this queued comment before pickup.",
+    })
+    .click();
   await queuedForDeletion
     .getByRole("button", { name: "Delete queued comment" })
     .click();
@@ -512,7 +291,36 @@ test("should restore and submit staged comments through the local review runtime
   await expect(rail).not.toContainText(
     "Remove this queued comment before pickup.",
   );
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  const session: unknown = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const sessionResponse = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return sessionResponse.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The review runtime did not describe its live session");
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  await rm(store.agentHeartbeatPath, { force: true });
+  await expect(
+    page.getByRole("button", { name: /Agent disconnected/u }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   const blockedSummary = page.locator(
     ".review-contextual-summary[data-review-sent-thread='queued']",
   );
@@ -523,7 +331,7 @@ test("should restore and submit staged comments through the local review runtime
       })
       .first(),
   ).toBeVisible();
-  await expect(blockedSummary.first()).toContainText("QUEUED");
+  await expect(blockedSummary.first()).toContainText("Queued");
   await expect(blockedSummary.first()).not.toContainText(
     "BLOCKED - NO AGENT CONNECTED",
   );
@@ -532,7 +340,7 @@ test("should restore and submit staged comments through the local review runtime
       name: "Expand comment: Clarify the failure boundary.",
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
 
   await rail.getByRole("tab", { name: "Agent" }).click();
   await expect(rail.getByText("Current status", { exact: true })).toBeVisible();
@@ -592,7 +400,7 @@ test("should restore and submit staged comments through the local review runtime
         ),
       { timeout: 3_500 },
     )
-    .toBeGreaterThanOrEqual(3);
+    .toBeGreaterThanOrEqual(2);
   const durationValues = await page.evaluate(() => {
     const runtime = window as unknown as {
       __bigPlanConnectionDurations: ReadonlyArray<string>;
@@ -618,7 +426,9 @@ test("should restore and submit staged comments through the local review runtime
     .locator("[data-review-comment-id]")
     .filter({ hasText: "Clarify the failure boundary." });
   await selectedThread
-    .getByRole("button", { name: /^Expand thread:/u })
+    .getByRole("button", {
+      name: /^(?:Expand thread:|Expand queued comment:)/u,
+    })
     .click();
   const reply = selectedThread.getByPlaceholder("Reply to the agent…");
   await expect(reply).toBeVisible();
@@ -641,11 +451,15 @@ test("should restore and submit staged comments through the local review runtime
   await expect(selectedTitle).toHaveCSS("text-decoration-line", "none");
   await rail
     .getByRole("button", {
-      name: "The agent is disconnected — view Agent tab",
+      name: /view Agent tab$/u,
     })
     .click();
   await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
     "aria-selected",
+    "true",
+  );
+  await expect(rail.locator("[data-review-current-activity]")).toHaveAttribute(
+    "data-review-attention",
     "true",
   );
   await rail.getByRole("tab", { name: "Comments" }).click();
@@ -655,35 +469,10 @@ test("should restore and submit staged comments through the local review runtime
   await selectedThread.getByRole("button", { name: "Minimize thread" }).click();
   await expect(
     selectedThread.getByRole("button", {
-      name: "Expand thread: Clarify the failure boundary.",
+      name: "Expand queued comment: Clarify the failure boundary.",
     }),
   ).toBeVisible();
 
-  const session: unknown = await page.evaluate(async () => {
-    const root = document.documentElement;
-    const sessionResponse = await fetch("/api/session", {
-      headers: {
-        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
-      },
-    });
-    return sessionResponse.json();
-  });
-  if (
-    typeof session !== "object" ||
-    session === null ||
-    !("sessionId" in session) ||
-    !("planId" in session) ||
-    !("plan" in session) ||
-    typeof session.sessionId !== "string" ||
-    typeof session.planId !== "string" ||
-    typeof session.plan !== "string"
-  ) {
-    throw new Error("The review runtime did not describe its live session");
-  }
-  const store = reviewStoreFor({
-    planPath: session.plan,
-    planId: session.planId,
-  });
   const exchange = await readAgentExchange({
     store,
     sessionId: session.sessionId,
@@ -714,12 +503,36 @@ test("should restore and submit staged comments through the local review runtime
   });
 
   await expect(
-    page.getByRole("button", { name: /Agent connection lost/u }),
+    page.getByRole("button", { name: /Agent disconnected/u }),
   ).toHaveCount(0);
   await rail.getByRole("tab", { name: "Agent" }).click();
   const activeWork = rail.locator("[data-review-current-activity='working']");
   await expect(activeWork).toContainText("Responding to a comment");
   await expect(activeWork).toContainText("Reviewing the shared feedback batch");
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await rail
+    .getByPlaceholder("Ask about the plan as a whole…")
+    .fill("How does this affect the rollout?");
+  await rail.getByRole("button", { name: "Send", exact: true }).click();
+  const waitingChat = rail
+    .locator("li")
+    .filter({ hasText: "How does this affect the rollout?" });
+  await expect(waitingChat).toContainText(
+    "Waiting - the agent is working on another request",
+  );
+  await waitingChat
+    .getByRole("button", { name: "View active comment →" })
+    .click();
+  const linkedActiveComment = rail
+    .locator('[data-review-comment-id][data-review-selected="true"]')
+    .filter({ hasText: "Clarify the failure boundary." });
+  await expect(linkedActiveComment).toBeVisible();
+  await linkedActiveComment
+    .getByRole("button", { name: "Minimize thread" })
+    .click();
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await waitingChat.getByRole("button", { name: "Cancel request" }).click();
+  await expect(waitingChat).toContainText("Request canceled");
   await rail.getByRole("tab", { name: "Comments" }).click();
 
   const workingGroup = rail.locator("[data-review-thread-group='working']");
@@ -729,33 +542,16 @@ test("should restore and submit staged comments through the local review runtime
   );
   await expect(workingCards).toHaveCount(2);
   await expect(
-    workingGroup.locator("[data-review-thread-status='working']"),
+    workingCards.locator("[data-review-thread-status='working']"),
   ).toHaveCount(0);
-  await workingCards
-    .first()
-    .getByRole("button", { name: "Expand thread", exact: true })
-    .click();
-  const threadActivity = workingCards
-    .first()
-    .locator("[data-review-thread-status='working']");
+  const threadActivity = workingGroup.locator(
+    "[data-review-thread-status='working']",
+  );
   await expect(threadActivity).toHaveCount(1);
   await expect(threadActivity).toContainText("Agent is working on 2 comments");
   await expect(threadActivity).toContainText(
     "Reviewing the shared feedback batch",
   );
-  expect(
-    await workingCards
-      .first()
-      .evaluate((node) => getComputedStyle(node).borderTopColor),
-  ).toBe(
-    await threadActivity.evaluate(
-      (node) => getComputedStyle(node).borderTopColor,
-    ),
-  );
-  await workingCards
-    .first()
-    .getByRole("button", { name: "Minimize thread" })
-    .click();
   await rail.getByRole("tab", { name: "Agent" }).click();
   await writeAgentHeartbeat({
     store,
@@ -795,10 +591,33 @@ test("should restore and submit staged comments through the local review runtime
   await expect(firstWorkingThread).toContainText(
     "Reviewing the shared feedback batch",
   );
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const cards = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            "[data-review-thread-side] > :first-child",
+          ),
+        ).filter((card) => card.getBoundingClientRect().height > 0);
+        return cards.flatMap((card, index) => {
+          const rect = card.getBoundingClientRect();
+          return cards.slice(index + 1).flatMap((other) => {
+            const otherRect = other.getBoundingClientRect();
+            const overlaps =
+              rect.left < otherRect.right &&
+              rect.right > otherRect.left &&
+              rect.top < otherRect.bottom &&
+              rect.bottom > otherRect.top;
+            return overlaps ? [`${index}`] : [];
+          });
+        });
+      }),
+    )
+    .toEqual([]);
   await firstWorkingThread
     .getByRole("button", { name: "Minimize thread" })
     .click();
-  await page.getByRole("button", { name: /Feedback/ }).click();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await firstWorkingThread
     .getByRole("button", {
       name: "Expand comment: Clarify the failure boundary.",
@@ -813,28 +632,1470 @@ test("should restore and submit staged comments through the local review runtime
     .click();
 
   const beforeSource = await readFile(session.plan, "utf8");
-  try {
-    const afterSource = beforeSource
-      .replace(
-        "Keep every reviewer note safe while the plan is discussed.\n\n",
-        "",
-      )
-      .replace(
-        "Sending writes one real feedback package beside this plan.",
-        "Sending atomically writes one real feedback package beside this plan.",
+  const afterSource = beforeSource
+    .replace(
+      "Keep every reviewer note safe while the plan is discussed.\n\n",
+      "",
+    )
+    .replace(
+      "Sending writes one real feedback package beside this plan.",
+      "Sending atomically writes one real feedback package beside this plan.",
+    );
+  await writeFile(session.plan, afterSource, "utf8");
+  const before = renderDocument({
+    markdown: beforeSource,
+    fallbackTitle: "Review persistence",
+    identity: {},
+  });
+  const after = renderDocument({
+    markdown: afterSource,
+    fallbackTitle: "Review persistence",
+    identity: {},
+  });
+  const locations = diffSnapshots({
+    before: before.blocks,
+    after: after.blocks,
+  });
+  const changedBlocks = new Set(
+    locations.flatMap((location) =>
+      location.newBlockId === undefined ? [] : [location.newBlockId],
+    ),
+  );
+  const changeTarget = [...changedBlocks].at(-1);
+  if (changeTarget === undefined) {
+    throw new Error("The simulated rewrite produced no changed target");
+  }
+  const resultSnapshot = deriveSnapshotDigest(afterSource);
+  await writeSnapshot({
+    store,
+    snapshot: resultSnapshot,
+    source: afterSource,
+  });
+  const claimed = await claimAgentRequest({
+    store,
+    requestId: request.requestId,
+    baselineSnapshot: request.premiseSnapshot,
+    now: new Date().toISOString(),
+  });
+  await publishAgentResponse({
+    store,
+    response: validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: request.comments.map((comment) => ({
+          commentId: comment.id,
+          state: "changed",
+          message: "Removed the ambiguous promise and tightened delivery.",
+          changeTargets: [changeTarget],
+        })),
+      },
+      request: claimed,
+      commentsById: commentsFromExchange(exchange),
+      changedBlocks,
+      currentSnapshot: resultSnapshot,
+      now: new Date().toISOString(),
+    }),
+  });
+
+  await expect(kernel).toContainText("Changed");
+  await expect
+    .poll(() => page.locator('article [aria-label="Comment on slide"]').count())
+    .toBeGreaterThan(0);
+  await expect
+    .poll(() =>
+      page
+        .locator("article [data-review-block-button]")
+        .evaluateAll((buttons) =>
+          buttons.every((button) => button.isConnected),
+        ),
+    )
+    .toBe(true);
+  const sentThread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: "Clarify the failure boundary." });
+  const commentSearch = rail.getByPlaceholder("Search comments");
+  await commentSearch.fill("Clarify the failure boundary");
+  await expect(sentThread).toBeVisible();
+  await expect(rail).not.toContainText("Name the operator recovery path.");
+  await commentSearch.fill("no thread contains these words");
+  await expect(rail).toContainText(
+    "No comments match “no thread contains these words”.",
+  );
+  await commentSearch.fill("");
+  await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
+    "font-size",
+    "12px",
+  );
+  await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
+    "padding-left",
+    "2px",
+  );
+  await expect(sentThread.locator(".review-sent-target")).toHaveText(
+    "1 · Details",
+  );
+  await expect(sentThread.locator(".review-sent-summary")).toHaveCSS(
+    "font-size",
+    "12px",
+  );
+  await expect(sentThread.locator(".review-sent-metadata")).toHaveCSS(
+    "border-top-width",
+    "1px",
+  );
+  await expect(sentThread.locator(".review-sent-time")).toHaveCSS(
+    "font-size",
+    "11px",
+  );
+  const compactReviewerStyle = await sentThread
+    .locator(".review-sent-summary")
+    .evaluate((node) => {
+      const style = getComputedStyle(node);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderRightColor: style.borderRightColor,
+      };
+    });
+  await expect(
+    sentThread.getByRole("button", { name: "Expand thread", exact: true }),
+  ).toBeVisible();
+  await expect(
+    sentThread.getByRole("button", { name: "Revert response" }),
+  ).toBeVisible();
+  await expect(
+    sentThread.getByRole("button", { name: "Resolve thread" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 800, height: 1000 });
+  await sentThread
+    .getByRole("button", { name: "Expand thread", exact: true })
+    .click();
+  await expect(sentThread.locator("[data-review-thread-scroll]")).toHaveCSS(
+    "max-height",
+    "480px",
+  );
+  await expect(sentThread.locator("[data-review-thread-scroll]")).toHaveCSS(
+    "overflow-y",
+    "auto",
+  );
+  expect(
+    await sentThread
+      .locator("[data-review-thread-scroll]")
+      .evaluate(
+        (node) => Math.ceil(node.scrollWidth) <= Math.ceil(node.clientWidth),
+      ),
+  ).toBe(true);
+  expect(
+    await sentThread.evaluate((thread) => {
+      const rail = thread.closest("#big-plan-feedback-rail");
+      if (rail === null) throw new Error("The feedback rail is missing");
+      return (
+        Math.ceil(thread.getBoundingClientRect().right) <=
+        Math.ceil(rail.getBoundingClientRect().right)
       );
+    }),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const agentResponseParagraph = sentThread
+    .locator(
+      '[data-review-message="agent"] [data-review-message-body="structured"] p',
+    )
+    .first();
+  await expect(agentResponseParagraph).toHaveCSS("line-height", "16px");
+  await expect(agentResponseParagraph).toHaveCSS("margin-bottom", "8px");
+  const expandedReviewer = sentThread
+    .locator('[data-review-message="user"]')
+    .first();
+  await expect(expandedReviewer.locator("p")).toHaveCSS("font-size", "12px");
+  expect(
+    await expandedReviewer.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderRightColor: style.borderRightColor,
+      };
+    }),
+  ).toEqual(compactReviewerStyle);
+  await expect(kernel).toContainText(
+    "Removed the ambiguous promise and tightened delivery.",
+  );
+  const changedNextStepLabels = await sentThread
+    .locator("[data-review-thread-next-steps] button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label")),
+    );
+  expect(changedNextStepLabels).toEqual([
+    "Minimize thread",
+    "Revert response",
+    "Resolve thread",
+  ]);
+  await kernel.getByRole("button", { name: /Review change/u }).click();
+  await expect(page.locator("[data-review-diff-lens]")).toContainText(
+    "What changed",
+  );
+  await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+    "1 of",
+  );
+  await expect(kernel).toContainText("atomically");
+  const closeReview = sentThread.getByRole("button", {
+    name: "Exit review",
+  });
+  await expect(closeReview).toBeVisible();
+  await closeReview.click();
+  await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+  await sentThread.getByRole("button", { name: "Review change" }).click();
+  await expect(page.locator("[data-review-diff-lens]")).toBeVisible();
+  const changeSetDock = page.locator("[data-review-diff-stepper]");
+  await expect(changeSetDock).toContainText("Reviewing change set");
+  await expect(changeSetDock).toContainText("Clarify the failure boundary.");
+  await expect(
+    changeSetDock.getByRole("group", { name: "Change display" }),
+  ).toHaveCount(0);
+  await sentThread
+    .getByRole("button", { name: "Revert response" })
+    .last()
+    .click();
+  const layeredRevertDialog = page.getByRole("alertdialog", {
+    name: "Revert response?",
+  });
+  await expect(layeredRevertDialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(layeredRevertDialog).toHaveCount(0);
+  await expect(page.locator("[data-review-diff-stepper]")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
+  const resolve = sentThread
+    .getByRole("button", { name: "Resolve thread" })
+    .first();
+  const restingResolveBackground = await resolve.evaluate(
+    (node) => getComputedStyle(node).backgroundColor,
+  );
+  await resolve.hover();
+  await expect
+    .poll(() =>
+      resolve.evaluate((node) => getComputedStyle(node).backgroundColor),
+    )
+    .not.toBe(restingResolveBackground);
+  await expect(resolve).toHaveCSS("color", "rgb(22, 101, 52)");
+  await sentThread
+    .getByRole("button", { name: "Minimize thread" })
+    .first()
+    .click();
+
+  await rail.getByRole("button", { name: "Close feedback" }).click();
+  const contextualThread = page
+    .locator("[data-review-thread-side] [data-review-sent-thread]")
+    .filter({ hasText: "Clarify the failure boundary." });
+  await expect(contextualThread).toContainText("Ready for review");
+  await expect(contextualThread).toContainText("Clarify the failure boundary.");
+  await expect(contextualThread.locator(".review-sent-target")).toHaveCount(0);
+  const contextualActions = contextualThread.locator(":scope > div");
+  await expect(contextualActions).toHaveCSS("opacity", "0");
+  await contextualThread.hover();
+  await expect(contextualThread).toHaveAttribute(
+    "data-review-associated",
+    "true",
+  );
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-review-selection-active",
+    "",
+  );
+  await expect(page.locator("[data-slide]").first()).not.toHaveAttribute(
+    "data-review-comment-associated",
+    "",
+  );
+  await expect(contextualActions).toHaveCSS("opacity", "1");
+  await contextualThread
+    .getByRole("button", {
+      name: "Expand comment: Clarify the failure boundary.",
+    })
+    .click();
+  await expect
+    .poll(() =>
+      contextualThread.evaluate((card) => {
+        const toolbar = card.querySelector(".review-thread-meta");
+        if (!(toolbar instanceof HTMLElement)) return null;
+        const cardRect = card.getBoundingClientRect();
+        const toolbarRect = toolbar.getBoundingClientRect();
+        return {
+          left: Math.round(toolbarRect.left - cardRect.left),
+          right: Math.round(cardRect.right - toolbarRect.right),
+          top: Math.round(toolbarRect.top - cardRect.top),
+        };
+      }),
+    )
+    .toEqual({ left: 1, right: 1, top: 1 });
+  await contextualThread
+    .getByRole("button", { name: "1 · Details", exact: true })
+    .evaluate((button) => button.click());
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-review-selection-active",
+    "",
+  );
+  await expect(page.locator("[data-slide]").first()).not.toHaveAttribute(
+    "data-review-comment-associated",
+    "",
+  );
+  await contextualThread
+    .getByRole("button", { name: "Resolve thread" })
+    .first()
+    .click();
+  await expect(
+    page.locator("[data-review-thread-side] [data-review-sent-thread]"),
+  ).toHaveCount(1);
+
+  await page.reload();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  await expect(rail).toContainText("1 · Details");
+  await expect(rail).not.toContainText(
+    "Original target unavailable in this revision.",
+  );
+
+  const continuedThread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: "Name the operator recovery path." });
+  await continuedThread
+    .getByRole("button", { name: "Expand thread", exact: true })
+    .click();
+  const continuedReply = continuedThread.getByPlaceholder(
+    "Reply to the agent…",
+  );
+  await continuedReply.fill("Keep the recovery steps concise.");
+  const replyButton = continuedThread.getByRole("button", { name: "Reply" });
+  await replyButton.hover();
+  await expect(
+    page.getByRole("tooltip").filter({ hasText: /Reply ·/u }),
+  ).toBeVisible();
+  await replyButton.click();
+  await continuedThread.getByRole("button", { name: "Cancel request" }).click();
+  await expect(continuedThread).toContainText("Request canceled");
+  await rail.getByRole("button", { name: "Close feedback" }).click();
+  const canceledInline = page
+    .locator("[data-review-thread-side] [data-review-sent-thread]")
+    .filter({ hasText: "Name the operator recovery path." });
+  await canceledInline
+    .getByRole("button", { name: "1 · Details", exact: true })
+    .click();
+  await expect(
+    canceledInline.getByRole("button", {
+      name: "Expand comment: Name the operator recovery path.",
+    }),
+  ).toBeVisible();
+  await canceledInline
+    .getByRole("button", {
+      name: "Expand comment: Name the operator recovery path.",
+    })
+    .click();
+  await expect(
+    canceledInline.getByRole("button", { name: "Delete canceled comment" }),
+  ).toHaveCount(0);
+  await expect(canceledInline).toContainText(
+    "Removed the ambiguous promise and tightened delivery.",
+  );
+  await stageComment(page, "Keep this draft while the runtime is offline.");
+  await page.route("**/api/agent", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "not-json",
+    }),
+  );
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  await expect(
+    rail.getByText("Agent is unreachable", { exact: true }),
+  ).toBeVisible({ timeout: 6_000 });
+  await expect(
+    rail.getByRole("button", { name: "Send all comments to agent" }),
+  ).toBeDisabled();
+  await expect(
+    rail.getByRole("img", { name: "Agent is unreachable" }),
+  ).toBeVisible();
+  await rail.getByRole("button", { name: "Delete staged comment" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Delete comment?" })
+    .getByRole("button", { name: "Delete" })
+    .click();
+  await page.getByRole("button", { name: "Comment on slide" }).first().click();
+  const offlineComposer = page.getByRole("dialog", { name: /Comment on/u });
+  await offlineComposer
+    .getByLabel("Add a comment")
+    .fill("Keep this staged until the agent reconnects.");
+  await offlineComposer
+    .getByRole("switch", { name: "Submit right away" })
+    .click();
+  await expect(
+    offlineComposer.getByRole("button", { name: "Submit Now" }),
+  ).toBeDisabled();
+  await expect(
+    offlineComposer.getByRole("button", { name: "Agent disconnected" }),
+  ).toBeVisible();
+  await offlineComposer.getByRole("button", { name: "Cancel" }).click();
+  await expect(rail).not.toContainText(
+    "Connected to the local review runtime.",
+  );
+  await page.unroute("**/api/agent");
+  const revertResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/revert-agent-changes") &&
+      response.request().method() === "POST",
+  );
+  await continuedThread
+    .getByRole("button", { name: "Revert response" })
+    .click();
+  const revertDialog = page.getByRole("alertdialog", {
+    name: "Revert response?",
+  });
+  await expect(revertDialog).toContainText(
+    "Earlier changes stay in place - this is not a reset to the original plan.",
+  );
+  await expect(revertDialog).toContainText(
+    "The comment and thread will remain until you delete them.",
+  );
+  await revertDialog.getByRole("button", { name: "Revert response" }).click();
+  expect((await revertResponse).status()).toBe(200);
+  expect(await readFile(session.plan, "utf8")).toBe(beforeSource);
+  // The revert refreshes the plan in place instead of reloading, so the
+  // thread it was confirmed from stays open with its controls reachable.
+  await expect(page.locator("article")).toContainText(
+    "Keep every reviewer note safe while the plan is discussed.",
+    { timeout: 15_000 },
+  );
+  await expect(
+    continuedThread.getByPlaceholder("Reply to the agent…"),
+  ).toBeVisible();
+  await expect(
+    continuedThread.getByRole("button", { name: "Response reverted" }).first(),
+  ).toBeVisible();
+  const revertedThread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: "Name the operator recovery path." });
+  await revertedThread
+    .getByRole("button", { name: "Delete comment" })
+    .first()
+    .click();
+  const revertedDeleteDialog = page.getByRole("alertdialog", {
+    name: "Delete comment?",
+  });
+  await expect(revertedDeleteDialog).toContainText(
+    "The reverted plan changes stay reverted.",
+  );
+  await revertedDeleteDialog.getByRole("button", { name: "Delete" }).click();
+  await expect(rail).not.toContainText("Name the operator recovery path.");
+});
+
+test("should preview stale, historical, and multi-place causal diffs through the real pipeline", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-diff-preview-"));
+  const planPath = join(directory, "gallery.mdx");
+  const before = await readFile(
+    new URL("../examples/diff-gallery-before.mdx", import.meta.url),
+    "utf8",
+  );
+  const after = (
+    await readFile(
+      new URL("./fixtures/causal-diff-gallery-after.mdx", import.meta.url),
+      "utf8",
+    )
+  )
+    .replace(
+      /\| Where reviewers see it[\s\S]*?\n\n```ts/u,
+      `| Where reviewers see it | Evidence shown | Snapshot that anchors it |
+| ---------------------- | -------------- | ------------------------ |
+| Feedback thread | Was/Now diff attributed to that feedback | Baseline to result |
+| Plan-wide chat | Grouped change digest and guided tour | Latest result |
+| Current plan | Current source plus historical diffs | Result to current |
+| Feedback on an older plan version | Stale badge and premise-to-current diff | Premise to current |
+
+\`\`\`ts`,
+    )
+    .replace(
+      '<Callout type="note" title="Review note">\n\nVerify the causal boundary, the in-place lens, and the historical state.\n\n</Callout>',
+      "> **Review note:** verify the causal boundary, the in-place lens, and the historical state.",
+    )
+    .split("\n<QuickSummary>")[0];
+  await writeFile(planPath, after);
+  const runtime = await startReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.waitForFunction(
+      () => typeof window.bigPlan?.feedback?.add === "function",
+    );
+    const codeFigure = page.locator(".code-figure").last();
+    await expect(
+      codeFigure.getByRole("button", { name: /Comment on/u }),
+    ).toBeVisible();
+    await expect(
+      codeFigure.getByRole("button", {
+        name: "Comment on this code snippet",
+      }),
+    ).toHaveAttribute("data-tooltip", "Comment on this code snippet");
+    await expect(codeFigure.locator("[data-review-toolbar-host]")).toHaveCSS(
+      "opacity",
+      "1",
+    );
+    const markdownTable = page.locator("[data-block-kind='table']").first();
+    const markdownTableComment = markdownTable.locator(".review-table-comment");
+    await markdownTable.locator("th, td").first().hover();
+    await expect(markdownTableComment).toBeVisible();
+    // The floating table comment stands alone, so it rests at the quieter
+    // comment-rest colour rather than the control-bar muted colour.
+    await expect(markdownTableComment).toHaveCSS("color", "rgb(138, 130, 116)");
+    const tableCommentGeometry = await markdownTable.evaluate((table) => {
+      const button = table.querySelector<HTMLElement>(".review-table-comment");
+      if (button === null)
+        throw new Error("The table comment control is missing");
+      const tableRect = table.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
+      return {
+        bottom: Math.round(buttonRect.bottom),
+        right: Math.round(buttonRect.right),
+        tableRight: Math.round(tableRect.right),
+        tableTop: Math.round(tableRect.top),
+      };
+    });
+    expect(tableCommentGeometry.bottom).toBeLessThanOrEqual(
+      tableCommentGeometry.tableTop,
+    );
+    expect(
+      Math.abs(tableCommentGeometry.right - tableCommentGeometry.tableRight),
+    ).toBeLessThanOrEqual(1);
+    await expect
+      .poll(() =>
+        markdownTable.evaluate(
+          (element) => element.scrollWidth - element.clientWidth,
+        ),
+      )
+      .toBeLessThanOrEqual(1);
+    const codeChrome = await codeFigure.evaluate((figure) => {
+      const body = figure.querySelector(":scope > pre");
+      const controls = Array.from(
+        figure.querySelectorAll<HTMLElement>(
+          ".figure-control, .review-toolbar-comment",
+        ),
+      );
+      if (!(body instanceof HTMLElement) || controls.length !== 3) {
+        throw new Error("The causal preview code chrome was not rendered");
+      }
+      const bodyRect = body.getBoundingClientRect();
+      const controlRects = controls.map((control) =>
+        control.getBoundingClientRect(),
+      );
+      return {
+        bodyRight: bodyRect.right,
+        controlsRight: Math.max(...controlRects.map((rect) => rect.right)),
+        controlRows: new Set(controlRects.map((rect) => Math.round(rect.top)))
+          .size,
+        labels: controls.map((control) => control.getAttribute("aria-label")),
+        gaps: controlRects
+          .slice(1)
+          .map((rect, index) =>
+            Math.round(rect.left - (controlRects[index]?.right ?? rect.left)),
+          ),
+      };
+    });
+    expect
+      .soft(codeChrome.controlsRight)
+      .toBeLessThanOrEqual(codeChrome.bodyRight);
+    expect.soft(codeChrome.controlRows).toBe(1);
+    expect(codeChrome.labels).toEqual([
+      "Copy code",
+      expect.stringMatching(/^Comment on /u),
+      "Maximize code",
+    ]);
+    expect(codeChrome.gaps).toEqual([4, 4]);
+    await expect(page.locator("[data-review-diff-preview]")).toHaveCount(0);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand staged comment:/u })
+      .first()
+      .click();
+    await expect(rail).toContainText("Plan changed since this comment");
+    await expect(rail).toContainText(
+      "This compares the plan when you commented with the current plan.",
+    );
+    const originalPresentation = await page
+      .locator("article > p[data-authored-prose]")
+      .first()
+      .evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          fontSize: style.fontSize,
+          lineHeight: style.lineHeight,
+          color: style.color,
+          borderBottomWidth: style.borderBottomWidth,
+        };
+      });
+    const anchoredThread = page
+      .locator("[data-review-thread-side] [data-review-sent-thread]")
+      .first();
+    await expect(anchoredThread).toBeVisible();
+    let previousThreadPosition:
+      { readonly left: number; readonly top: number } | undefined;
+    let stableThreadPositionSamples = 0;
+    await expect
+      .poll(async () => {
+        const current = await anchoredThread.evaluate((thread) => {
+          const rect = thread.parentElement?.getBoundingClientRect();
+          if (rect === undefined)
+            throw new Error("The side thread host is missing");
+          return { left: Math.round(rect.left), top: Math.round(rect.top) };
+        });
+        if (
+          previousThreadPosition?.left === current.left &&
+          previousThreadPosition.top === current.top
+        ) {
+          stableThreadPositionSamples += 1;
+        } else {
+          stableThreadPositionSamples = 0;
+        }
+        previousThreadPosition = current;
+        return stableThreadPositionSamples;
+      })
+      .toBeGreaterThanOrEqual(2);
+    const threadPositionBeforeDiff = await anchoredThread.evaluate((thread) => {
+      const rect = thread.parentElement?.getBoundingClientRect();
+      if (rect === undefined)
+        throw new Error("The side thread host is missing");
+      return { left: Math.round(rect.left), top: Math.round(rect.top) };
+    });
+    await rail
+      .getByRole("button", { name: "Review premise → current" })
+      .click();
+    await expect(page.locator("[data-review-diff-lens]")).toContainText(
+      "What changed",
+    );
+    const staleThreadLink = page.getByRole("button", {
+      name: "Open comment thread: Check this comment against its older premise.",
+    });
+    await expect(staleThreadLink).toHaveCount(1);
+    await staleThreadLink.click();
+    await expect(
+      rail.locator(".review-staged-card[data-review-associated=true]"),
+    ).toHaveCount(1);
+    const singletonStepper = page.locator("[data-review-diff-stepper]");
+    await expect(singletonStepper).toContainText("Reviewing change set");
+    await expect(singletonStepper).toContainText("1 of 1");
+    await expect(
+      singletonStepper.getByRole("button", { name: "Previous change" }),
+    ).toHaveCount(0);
+    await expect(
+      singletonStepper.getByRole("button", { name: "Next change" }),
+    ).toHaveCount(0);
+    await expect(
+      singletonStepper.getByRole("group", { name: "Change display" }),
+    ).toHaveCount(0);
+    await singletonStepper
+      .getByRole("button", { name: "Accept this change" })
+      .click();
+    const acceptedChange = rail.locator("[data-review-changes-accepted]");
+    await expect(acceptedChange).toContainText("Change set accepted");
+    await expect(
+      singletonStepper.getByRole("button", { name: "Resolve thread" }),
+    ).toBeVisible();
+    await singletonStepper
+      .getByRole("button", { name: "Back to review" })
+      .click();
+    await singletonStepper
+      .getByRole("button", { name: "Undo acceptance for this change" })
+      .click();
+    await expect(acceptedChange).toHaveCount(0);
+    await singletonStepper
+      .getByRole("button", { name: "Accept this change" })
+      .click();
+    const diffLens = page.locator("[data-review-diff-lens]");
+    await expect(diffLens.locator("ins")).toHaveCSS(
+      "background-color",
+      "rgb(222, 234, 215)",
+    );
+    const diffPresentation = diffLens.locator(
+      '[data-review-diff-presentation="lede"]',
+    );
+    await expect(diffPresentation).toHaveCSS(
+      "font-size",
+      originalPresentation.fontSize,
+    );
+    await expect(diffPresentation).toHaveCSS(
+      "line-height",
+      originalPresentation.lineHeight,
+    );
+    await expect(diffPresentation).toHaveCSS(
+      "color",
+      originalPresentation.color,
+    );
+    await expect(diffPresentation).toHaveCSS(
+      "border-bottom-width",
+      originalPresentation.borderBottomWidth,
+    );
+    const readingWidths = await page.evaluate(() => {
+      const lens = document.querySelector<HTMLElement>(
+        "[data-review-diff-lens]",
+      );
+      const prose = Array.from(
+        document.querySelectorAll<HTMLElement>("p[data-authored-prose]"),
+      ).find((paragraph) => getComputedStyle(paragraph).display !== "none");
+      if (lens === null || prose === undefined) {
+        throw new Error("The diff lens and standard prose must both render");
+      }
+      return {
+        lensWidth: Math.round(lens.getBoundingClientRect().width),
+        lensMaxWidth: Math.round(
+          Number.parseFloat(getComputedStyle(lens).maxWidth),
+        ),
+        proseMaxWidth: Math.round(
+          Number.parseFloat(getComputedStyle(prose).maxWidth),
+        ),
+      };
+    });
+    expect(readingWidths.lensWidth).toBeLessThanOrEqual(
+      readingWidths.lensMaxWidth,
+    );
+    expect(readingWidths.lensMaxWidth).toBe(readingWidths.proseMaxWidth);
+    await expect
+      .poll(() =>
+        anchoredThread.evaluate((thread) => {
+          const rect = thread.parentElement?.getBoundingClientRect();
+          if (rect === undefined)
+            throw new Error("The side thread host is missing");
+          return { left: Math.round(rect.left), top: Math.round(rect.top) };
+        }),
+      )
+      .toEqual(threadPositionBeforeDiff);
+    await expect
+      .poll(() =>
+        anchoredThread.evaluate((thread) => {
+          const threadRect = thread.parentElement?.getBoundingClientRect();
+          const slideRect = document
+            .querySelector<HTMLElement>("[data-slide]")
+            ?.getBoundingClientRect();
+          if (threadRect === undefined || slideRect === undefined) {
+            throw new Error("The thread and slide must both be measurable");
+          }
+          return threadRect.left >= slideRect.left + slideRect.width / 2;
+        }),
+      )
+      .toBe(true);
+    await singletonStepper
+      .getByRole("button", { name: "Resolve thread" })
+      .click();
+    await expect(page.locator("[data-review-diff-lens]")).toHaveCount(0);
+    await expect(page.locator("[data-review-diff-stepper]")).toHaveCount(0);
+    await rail.getByText("Resolved (1)").click();
+    await rail.getByRole("button", { name: "Unresolve", exact: true }).click();
+
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    const planWideDigest = rail.getByRole("button", {
+      name: /\d+ changes across \d+ slides/u,
+    });
+    await expect(planWideDigest).toBeVisible();
+    await planWideDigest.click();
+    const deliverySection = rail
+      .locator("[data-review-diff-section]")
+      .filter({ hasText: "2 / Delivery contract" });
+    await expect(deliverySection).toBeVisible();
+    await expect(deliverySection.locator("svg")).toHaveCount(0);
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const historicalChange = page
+      .locator("main")
+      .getByRole("region", { name: "Historical change", exact: true });
+    await expect(historicalChange).toContainText("Retired experiment");
+    await expect(
+      rail.getByRole("region", { name: "Historical change", exact: true }),
+    ).toHaveCount(0);
+    await page.screenshot({
+      path: testInfo.outputPath("historical-change.png"),
+    });
+    await page.keyboard.press("Escape");
+
+    const planWideChangeCount = Number.parseInt(
+      (await planWideDigest.textContent()) ?? "0",
+      10,
+    );
+    await rail
+      .getByRole("button", { name: /Review changes \(\d+\)|Continue review/u })
+      .click();
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      `1 of ${planWideChangeCount}`,
+    );
+    // The stepper floats clear of the viewport edge. This chat digest has no
+    // thread handler, so it must not advertise a dead thread control.
+    const stepperLayout = await page
+      .locator("[data-review-diff-stepper]")
+      .evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return Math.round(document.documentElement.clientHeight - rect.bottom);
+      });
+    expect(stepperLayout).toBe(44);
+    await expect(
+      page.locator(
+        '[data-review-diff-stepper] button[aria-label^="Open comment thread:"]',
+      ),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", {
+        name: "Undo acceptance for this change",
+      }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Next change" }).click();
+    await page.getByRole("button", { name: "Accept this change" }).click();
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      `3 of ${planWideChangeCount}`,
+    );
+    await page.getByRole("button", { name: "Previous change" }).click();
+    await expect(
+      page.getByRole("button", {
+        name: "Undo acceptance for this change",
+      }),
+    ).toBeVisible();
+    await deliverySection
+      .locator("..")
+      .getByRole("button", { name: /Whole section/u })
+      .click();
+    const tableDiffLens = page.locator("[data-review-diff-lens]");
+    await expect(tableDiffLens.locator("[data-review-diff-table]")).toHaveCount(
+      2,
+    );
+    const tableDiffStructure = await tableDiffLens.evaluate((lens) => {
+      const tables = Array.from(
+        lens.querySelectorAll<HTMLElement>("[data-review-diff-table]"),
+      );
+      return {
+        height: Math.round(lens.getBoundingClientRect().height),
+        headerCount: (lens.textContent?.match(/Where reviewers see it/gu) ?? [])
+          .length,
+        rowCounts: tables.map(
+          (table) => table.querySelectorAll("tbody > tr").length,
+        ),
+        overflowingTables: tables.filter(
+          (table) => table.scrollWidth > table.clientWidth,
+        ).length,
+      };
+    });
+    expect(tableDiffStructure.height).toBeLessThan(1_000);
+    expect(tableDiffStructure.headerCount).toBe(1);
+    expect(tableDiffStructure.rowCounts).toEqual([3, 4]);
+    expect(tableDiffStructure.overflowingTables).toBe(0);
+    await expect(tableDiffLens).toContainText("Baseline to result");
+    await expect(tableDiffLens).toContainText("Premise to current");
+    await page.keyboard.press("Escape");
+    await rail.getByRole("tab", { name: "Comments" }).click();
+    await rail.getByRole("button", { name: "Mark addressed" }).click();
+    await expect(rail.getByText("Resolved (1)")).toBeVisible();
+    await rail.getByText("Resolved (1)").click();
+    await expect(
+      rail.getByRole("button", { name: "Unresolve thread" }),
+    ).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await expect(rail.getByText("Resolved (1)")).toBeVisible();
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should keep component replacements inside their slide and preserve Callout presentation", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-callout-diff-"));
+  const planPath = join(directory, "gallery.mdx");
+  const after = (
+    await readFile(
+      new URL("./fixtures/causal-diff-gallery-after.mdx", import.meta.url),
+      "utf8",
+    )
+  ).split("\n## Delivery contract")[0];
+  const before = after.replace(
+    '<Callout type="note" title="Review note">\n\nVerify the causal boundary, the in-place lens, and the historical state.\n\n</Callout>',
+    "> **Review note:** verify the causal boundary, the in-place lens, and the historical state.",
+  );
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    const stepper = page.locator("[data-review-diff-stepper]");
+    const total = Number.parseInt(
+      (await stepper.textContent())?.match(/of (\d+)/u)?.[1] ?? "1",
+      10,
+    );
+    for (let index = 1; index < total; index += 1) {
+      if ((await lens.textContent())?.includes("Review note")) break;
+      await page.getByRole("button", { name: "Next change" }).click();
+    }
+    await expect(lens).toContainText("Review note");
+    expect(
+      await lens.evaluate(
+        (element) => element.closest("[data-slide]") !== null,
+      ),
+    ).toBe(true);
+    const callout = lens.locator("[data-review-diff-callout]");
+    await expect(callout).toHaveCount(1);
+    await expect(callout.locator(".callout-title")).toHaveText("Review note");
+    await expect(callout.locator(".callout-body")).toHaveText(
+      "Verify the causal boundary, the in-place lens, and the historical state.",
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("callout-diff-in-slide.png"),
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should replay each side's callout kind and changed list ordering from its own snapshot", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Object.assign(window, { __bigPlanScrollBehaviors: [] });
+    Element.prototype.scrollIntoView = function scrollIntoView(
+      options?: boolean | ScrollIntoViewOptions,
+    ): void {
+      const behavior =
+        typeof options === "object" && options !== null
+          ? (options.behavior ?? "auto")
+          : "auto";
+      (
+        window as unknown as { __bigPlanScrollBehaviors: Array<string> }
+      ).__bigPlanScrollBehaviors.push(behavior);
+      originalScrollIntoView.call(this, options);
+    };
+  });
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-presentation-diff-"),
+  );
+  const planPath = join(directory, "risks.mdx");
+  const after = `# Rollout stakes
+
+The rollout plan keeps its risk presentation honest across revisions.
+
+## Risks and rollback
+
+<Callout type="danger" title="Rollback risk">
+
+Data loss stays possible until the backfill completes and the verification pass signs off.
+
+</Callout>
+
+## Runbook
+
+- Freeze writes to the legacy table.
+- Run the backfill twice.
+`;
+  // The before snapshot names the risk section differently, so no Was-side
+  // block of that section still exists in the live document, and its runbook
+  // section carries an ordered list the revision removes entirely. Sniffing
+  // the live document for either side's facts can only guess.
+  const before = `# Rollout stakes
+
+The rollout plan keeps its risk presentation honest across revisions.
+
+## Risks
+
+<Callout type="danger" title="Rollback risk">
+
+Data loss stays possible until the backfill completes.
+
+</Callout>
+
+## Runbook
+
+The runbook stays inline for the first rollout.
+
+1. Freeze writes to the legacy table.
+2. Run the backfill twice.
+`;
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await page.evaluate(() => {
+      (
+        window as unknown as { __bigPlanScrollBehaviors: Array<string> }
+      ).__bigPlanScrollBehaviors = [];
+    });
+    await rail.getByRole("button", { name: "Review change" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as {
+                __bigPlanScrollBehaviors: ReadonlyArray<string>;
+              }
+            ).__bigPlanScrollBehaviors,
+        ),
+      )
+      .toEqual(expect.arrayContaining(["auto"]));
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __bigPlanScrollBehaviors: ReadonlyArray<string>;
+            }
+          ).__bigPlanScrollBehaviors,
+      ),
+    ).not.toContain("smooth");
+    const lens = page.locator("[data-review-diff-lens]");
+    const stepper = page.locator("[data-review-diff-stepper]");
+    const total = Number.parseInt(
+      (await stepper.textContent())?.match(/of (\d+)/u)?.[1] ?? "1",
+      10,
+    );
+    const stepTo = async (text: string): Promise<void> => {
+      for (let index = 1; index < total; index += 1) {
+        if ((await lens.textContent())?.includes(text)) break;
+        await page.getByRole("button", { name: "Next change" }).click();
+      }
+      await expect(lens).toContainText(text);
+    };
+
+    await test.step("the changed danger callout is danger on both sides", async () => {
+      await stepTo("Rollback risk");
+      const callouts = lens.locator("[data-review-diff-callout]");
+      await expect(callouts).toHaveCount(2);
+      // The Was side must replay the recorded danger kind even though its
+      // block no longer exists in the live document; a "note" misstates risk.
+      await expect(callouts.nth(0)).toHaveAttribute("data-callout", "danger");
+      await expect(callouts.nth(1)).toHaveAttribute("data-callout", "danger");
+    });
+
+    await test.step("the list order change shows both recorded presentations", async () => {
+      await stepTo("Freeze writes");
+      const ordered = lens.locator("ol");
+      const unordered = lens.locator("ul");
+      await expect(ordered).toHaveCount(1);
+      await expect(ordered.locator("li")).toHaveCount(2);
+      await expect(unordered).toHaveCount(1);
+      await expect(unordered.locator("li")).toHaveCount(2);
+    });
+    await page.screenshot({
+      path: testInfo.outputPath("per-side-presentation.png"),
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should colour a component snapshot switch as a diff", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-component-diff-"));
+  const planPath = join(directory, "decision.mdx");
+  const after = await readFile(
+    new URL("../examples/decision.mdx", import.meta.url),
+    "utf8",
+  );
+  const before = after.replace(
+    "The repository copy remains canonical either way.",
+    "The repository copy stays canonical no matter which channel wins.",
+  );
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const componentDiff = page.locator("[data-review-component-diff]");
+    await expect(componentDiff).toHaveCount(1);
+    const snapshot = componentDiff.locator("[data-review-component-snapshot]");
+    const now = componentDiff.getByRole("button", { name: "Now" });
+    const was = componentDiff.getByRole("button", { name: "Was" });
+
+    await expect(snapshot).toHaveAttribute(
+      "data-review-component-snapshot",
+      "new",
+    );
+    const added = await now.evaluate((node) => ({
+      background: getComputedStyle(node).backgroundColor,
+      color: getComputedStyle(node).color,
+    }));
+    await expect(snapshot).toHaveCSS("border-top-color", added.color);
+
+    await was.click();
+    await expect(snapshot).toHaveAttribute(
+      "data-review-component-snapshot",
+      "old",
+    );
+    const removed = await was.evaluate((node) => ({
+      background: getComputedStyle(node).backgroundColor,
+      color: getComputedStyle(node).color,
+    }));
+    await expect(snapshot).toHaveCSS("border-top-color", removed.color);
+
+    // The two sides must not merely differ from the resting chrome; they must
+    // differ from each other, which is what makes the switch read as a diff.
+    expect(removed.color).not.toBe(added.color);
+    expect(removed.background).not.toBe(added.background);
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should diff an HTTP endpoint at field level inside one rendering", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-endpoint-diff-"));
+  const planPath = join(directory, "api.mdx");
+  const after = await readFile(
+    new URL("../examples/api-endpoints.mdx", import.meta.url),
+    "utf8",
+  );
+  const before = after.replace(
+    "Queues a deduplicated refresh job per cache key and returns immediately; the worker pool performs the refreshes asynchronously.",
+    "Queues a refresh job per cache key and returns immediately.",
+  );
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    // The endpoint's changed Description is one review stop, marked in place
+    // within one field-level Was/Now comparison rather than two complete
+    // component cards.
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      "1 of 1",
+    );
+    const field = lens.locator("[data-review-diff-field]");
+    await expect(field).toHaveCount(2);
+    await expect(field.first()).toContainText("Description");
+    await expect(field.first()).toContainText(
+      "Queues a refresh job per cache key and returns immediately.",
+    );
+    await expect(field.last()).toContainText("Description");
+    await expect(field.last()).toContainText(
+      "Queues a deduplicated refresh job per cache key and returns immediately; the worker pool performs the refreshes asynchronously.",
+    );
+    await expect(lens.locator("[data-review-component-diff]")).toHaveCount(0);
+    // The untouched fields stay out of the lens instead of returning as the
+    // old flattened component wall.
+    await expect(lens).not.toContainText("X-Request-Id");
+    await expect(lens).not.toContainText("Refresh queued");
+    await page.screenshot({
+      path: testInfo.outputPath("http-endpoint-field-diff.png"),
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should diff a database schema at column level inside one rendering", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-schema-diff-"));
+  const planPath = join(directory, "schema.mdx");
+  const after = await readFile(
+    new URL("../examples/database-table-schema.mdx", import.meta.url),
+    "utf8",
+  );
+  const before = after.replace(
+    "seats        integer       [not null, default: 1, check: 'seats > 0']",
+    "seats        smallint      [not null, default: 1, check: 'seats > 0']",
+  );
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    // The retyped column is one review stop marked in place: the column's own
+    // label in a field-level Was/Now comparison, and no complete schema
+    // rendering to compare by eye.
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      "1 of 1",
+    );
+    const field = lens.locator("[data-review-diff-field]");
+    await expect(field).toHaveCount(2);
+    await expect(field.first()).toContainText("Column: seats");
+    await expect(field.first()).toContainText("smallint");
+    await expect(field.last()).toContainText("Column: seats");
+    await expect(field.last()).toContainText("integer");
+    await expect(lens.locator("[data-review-component-diff]")).toHaveCount(0);
+    // The other columns did not change, so the schema root never claims the
+    // change and their text stays out of the lens.
+    await expect(lens).not.toContainText("customer_id");
+    await page.screenshot({
+      path: testInfo.outputPath("database-table-schema-field-diff.png"),
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should diff a quick summary at facet level with word runs", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-summary-diff-"));
+  const planPath = join(directory, "summary.mdx");
+  const after = await readFile(
+    new URL("../examples/quick-summary.mdx", import.meta.url),
+    "utf8",
+  );
+  const before = after.replace(
+    "Record every attempt in the audit trail.",
+    "Record attempts in the audit trail.",
+  );
+  await writeFile(planPath, after);
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    // The component root and its changed facet are one review stop, and the
+    // lens shows only the facet that changed: its term as a header and the
+    // exact removed and inserted words in the body.
+    await expect(page.locator("[data-review-diff-stepper]")).toContainText(
+      "1 of 1",
+    );
+    const facet = lens.locator("[data-review-diff-field]");
+    await expect(facet).toHaveCount(1);
+    await expect(facet).toContainText("How");
+    await expect(facet.locator("del")).toContainText("attempts");
+    await expect(facet.locator("ins")).toContainText(["every", "attempt"]);
+    // The other facets did not change, so their text stays out of the lens
+    // instead of returning as the old flattened component wall.
+    await expect(lens).not.toContainText("checkout to stay fast");
+    await page.screenshot({
+      path: testInfo.outputPath("quick-summary-facet-diff.png"),
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// The refresh journey needs one plan carrying every shell surface it asserts:
+// a collapsible slide, a mermaid diagram, and a copyable code figure.
+const REFRESH_REWIRE_MDX = `# Refresh rewire
+
+## Flow
+
+The flow explains the runtime.
+
+<MermaidDiagram>
+
+\`\`\`mermaid
+flowchart LR
+  source[Source] -->|ships| result((Result))
+\`\`\`
+
+Static SVG content remains readable with scripts disabled.
+
+</MermaidDiagram>
+
+## Delivery
+
+\`\`\`ts
+export const deliver = (): string => "package";
+\`\`\`
+
+Sending writes one real feedback package beside this plan.
+`;
+
+test("should keep shell interactions wired after an agent revision refreshes the plan in place", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  // The copy assertion needs a deterministic clipboard in headless Chromium.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          (
+            window as typeof window & { __bigPlanCopiedCode?: string }
+          ).__bigPlanCopiedCode = text;
+        },
+      },
+    });
+  });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-refresh-rewire-"));
+  const planPath = join(directory, "plan.mdx");
+  const beforeSource = REFRESH_REWIRE_MDX;
+  await writeFile(planPath, beforeSource, "utf8");
+  // Use the built renderer here because Playwright's source transform wraps
+  // JSX values; the shipped runtime is the authoritative component path.
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const { renderDocument: renderCompiledDocument } =
+    await import("../dist/render/render-document.js");
+  const runtime = await startCompiledReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    const collapseToggle = page
+      .locator("[data-slide]")
+      .first()
+      .locator("[data-collapse-toggle]")
+      .first();
+    await test.step("the shell is wired at load", async () => {
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "true");
+      await collapseToggle.click();
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "false");
+      await collapseToggle.click();
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "true");
+    });
+
+    await stageComment(page, "Tighten the delivery wording.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+    await rail.getByRole("button", { name: "Close feedback" }).click();
+
+    const session: unknown = await page.evaluate(async () => {
+      const root = document.documentElement;
+      const response = await fetch("/api/session", {
+        headers: {
+          "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+        },
+      });
+      return response.json();
+    });
+    if (
+      typeof session !== "object" ||
+      session === null ||
+      !("sessionId" in session) ||
+      !("planId" in session) ||
+      !("plan" in session) ||
+      typeof session.sessionId !== "string" ||
+      typeof session.planId !== "string" ||
+      typeof session.plan !== "string"
+    ) {
+      throw new Error("The refresh journey requires a live review session");
+    }
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+
+    const afterSource = beforeSource.replace(
+      "Sending writes one real feedback package beside this plan.",
+      "Sending atomically writes one real feedback package beside this plan.",
+    );
     await writeFile(session.plan, afterSource, "utf8");
-    const before = renderDocument({
+    const before = renderCompiledDocument({
       markdown: beforeSource,
-      fallbackTitle: "Review persistence",
+      fallbackTitle: "Refresh rewire",
       identity: {},
     });
-    const after = renderDocument({
+    const after = renderCompiledDocument({
       markdown: afterSource,
-      fallbackTitle: "Review persistence",
+      fallbackTitle: "Refresh rewire",
       identity: {},
     });
-    const locations = diffRevisions({
+    const locations = diffSnapshots({
       before: before.blocks,
       after: after.blocks,
     });
@@ -845,18 +2106,18 @@ test("should restore and submit staged comments through the local review runtime
     );
     const changeTarget = [...changedBlocks].at(-1);
     if (changeTarget === undefined) {
-      throw new Error("The simulated rewrite produced no changed target");
+      throw new Error("The simulated revision produced no changed target");
     }
-    const revision = deriveSourceRevision(afterSource);
-    await writeRevisionSnapshot({
+    const resultSnapshot = deriveSnapshotDigest(afterSource);
+    await writeSnapshot({
       store,
-      revision,
+      snapshot: resultSnapshot,
       source: afterSource,
     });
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
-      sourceRevision: request.sourceRevision,
+      baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
     await publishAgentResponse({
@@ -867,226 +2128,179 @@ test("should restore and submit staged comments through the local review runtime
           outcomes: request.comments.map((comment) => ({
             commentId: comment.id,
             state: "changed",
-            message: "Removed the ambiguous promise and tightened delivery.",
+            message: "Tightened the delivery wording.",
             changeTargets: [changeTarget],
           })),
         },
         request: claimed,
         commentsById: commentsFromExchange(exchange),
         changedBlocks,
-        currentRevision: revision,
+        currentSnapshot: resultSnapshot,
         now: new Date().toISOString(),
       }),
     });
 
-    await expect(kernel).toContainText("Changed");
-    const sentThread = rail
-      .locator("[data-review-sent-thread]")
-      .filter({ hasText: "Clarify the failure boundary." });
-    await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
-      "font-size",
-      "12px",
-    );
-    await expect(sentThread.locator(".review-sent-target")).toHaveCSS(
-      "padding-left",
-      "2px",
-    );
-    await expect(sentThread.locator(".review-sent-summary")).toHaveCSS(
-      "font-size",
-      "14px",
-    );
-    await expect(
-      sentThread.getByRole("button", { name: "Expand thread", exact: true }),
-    ).toBeVisible();
-    await expect(
-      sentThread.getByRole("button", { name: "Revert agent changes" }),
-    ).toBeVisible();
-    await expect(
-      sentThread.getByRole("button", { name: "Resolve comment" }),
-    ).toBeVisible();
-    await sentThread
-      .getByRole("button", { name: "Expand thread", exact: true })
-      .click();
-    await expect(kernel).toContainText(
-      "Removed the ambiguous promise and tightened delivery.",
-    );
-    await expect(kernel).toContainText("A revised plan is ready.");
-    const changedNextStepLabels = await sentThread
-      .locator("[data-review-thread-next-steps] button")
-      .evaluateAll((buttons) =>
-        buttons.map((button) => button.getAttribute("aria-label")),
+    await test.step("the revision refreshes the article in place", async () => {
+      await expect(page.locator("article")).toContainText(
+        "Sending atomically writes",
+        { timeout: 15_000 },
       );
-    expect(changedNextStepLabels).toEqual([
-      "Minimize thread",
-      "Revert agent changes",
-      "Resolve comment",
-    ]);
-    await kernel.getByRole("button", { name: "See changes" }).click();
-    await expect(kernel).toContainText("atomically");
-    const resolve = sentThread
-      .getByRole("button", { name: "Resolve comment" })
-      .first();
-    const restingResolveBackground = await resolve.evaluate(
-      (node) => getComputedStyle(node).backgroundColor,
-    );
-    await resolve.hover();
-    await expect
-      .poll(() =>
-        resolve.evaluate((node) => getComputedStyle(node).backgroundColor),
-      )
-      .not.toBe(restingResolveBackground);
-    await expect(resolve).toHaveCSS("color", "rgb(22, 101, 52)");
-    await sentThread
-      .getByRole("button", { name: "Minimize thread" })
-      .first()
-      .click();
-
-    await rail.getByRole("button", { name: "Close feedback" }).click();
-    const contextualThread = page
-      .locator("[data-review-thread-side] [data-review-sent-thread]")
-      .filter({ hasText: "Clarify the failure boundary." });
-    await expect(contextualThread).toContainText("READY FOR REVIEW");
-    await expect(contextualThread).toContainText(
-      "Clarify the failure boundary.",
-    );
-    await expect(contextualThread.locator(".review-sent-target")).toHaveCount(
-      0,
-    );
-    const contextualActions = contextualThread.locator(":scope > div");
-    await expect(contextualActions).toHaveCSS("opacity", "0");
-    await contextualThread.hover();
-    await expect(contextualThread).toHaveAttribute(
-      "data-review-associated",
-      "true",
-    );
-    await expect(page.locator("[data-slide]").first()).toHaveAttribute(
-      "data-review-comment-associated",
-      "",
-    );
-    await expect(contextualActions).toHaveCSS("opacity", "1");
-    await contextualThread
-      .getByRole("button", {
-        name: "Expand comment: Clarify the failure boundary.",
-      })
-      .click();
-    await expect
-      .poll(() =>
-        contextualThread.evaluate((card) => {
-          const toolbar = card.querySelector(".review-thread-meta");
-          if (!(toolbar instanceof HTMLElement)) return null;
-          const cardRect = card.getBoundingClientRect();
-          const toolbarRect = toolbar.getBoundingClientRect();
-          return {
-            left: Math.round(toolbarRect.left - cardRect.left),
-            right: Math.round(cardRect.right - toolbarRect.right),
-            top: Math.round(toolbarRect.top - cardRect.top),
-          };
-        }),
-      )
-      .toEqual({ left: 1, right: 1, top: 1 });
-    await contextualThread
-      .getByRole("button", { name: "1 · Details", exact: true })
-      .evaluate((button) => button.click());
-    await expect(page.locator("[data-slide]").first()).toHaveAttribute(
-      "data-review-comment-associated",
-      "",
-    );
-    await contextualThread
-      .getByRole("button", { name: "Resolve comment" })
-      .first()
-      .click();
-    await expect(
-      page.locator("[data-review-thread-side] [data-review-sent-thread]"),
-    ).toHaveCount(1);
-
-    await page.reload();
-    await page.getByRole("button", { name: /Feedback/ }).click();
-    await expect(rail).toContainText("1 · Details");
-    await expect(rail).not.toContainText(
-      "Original target unavailable in this revision.",
-    );
-
-    const continuedThread = rail
-      .locator("[data-review-sent-thread]")
-      .filter({ hasText: "Name the operator recovery path." });
-    await continuedThread
-      .getByRole("button", { name: "Expand thread", exact: true })
-      .click();
-    const continuedReply = continuedThread.getByPlaceholder(
-      "Reply to the agent…",
-    );
-    await continuedReply.fill("Keep the recovery steps concise.");
-    const replyButton = continuedThread.getByRole("button", { name: "Reply" });
-    await replyButton.hover();
-    await expect(
-      page.getByRole("tooltip").filter({ hasText: /Reply ·/u }),
-    ).toBeVisible();
-    await replyButton.click();
-    await continuedThread
-      .getByRole("button", { name: "Cancel request" })
-      .click();
-    await expect(continuedThread).toContainText("Request canceled");
-    await rail.getByRole("button", { name: "Close feedback" }).click();
-    const canceledInline = page
-      .locator("[data-review-thread-side] [data-review-sent-thread]")
-      .filter({ hasText: "Name the operator recovery path." });
-    await canceledInline
-      .getByRole("button", { name: "1 · Details", exact: true })
-      .click();
-    await expect(
-      canceledInline.getByRole("button", {
-        name: "Expand comment: Name the operator recovery path.",
-      }),
-    ).toBeVisible();
-    await canceledInline
-      .getByRole("button", {
-        name: "Expand comment: Name the operator recovery path.",
-      })
-      .click();
-    await expect(
-      canceledInline.getByRole("button", { name: "Delete canceled comment" }),
-    ).toHaveCount(0);
-    await expect(canceledInline).toContainText(
-      "Removed the ambiguous promise and tightened delivery.",
-    );
-    await stageComment(page, "Keep this draft while the runtime is offline.");
-    await page.route("**/api/agent", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: "not-json",
-      }),
-    );
-    await page.getByRole("button", { name: /Feedback/ }).click();
-    await expect(
-      rail.getByText("The review server is unreachable", { exact: true }),
-    ).toBeVisible({ timeout: 6_000 });
-    await expect(
-      rail.getByRole("button", { name: "Send all comments to agent" }),
-    ).toBeDisabled();
-    await expect(
-      rail.getByRole("img", { name: "The review server is unreachable" }),
-    ).toBeVisible();
-    await expect(rail).not.toContainText(
-      "Connected to the local review runtime.",
-    );
-    await page.unroute("**/api/agent");
+    });
+    await test.step("a slide still collapses after the refresh", async () => {
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "true");
+      await collapseToggle.click();
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "false");
+      await collapseToggle.click();
+      await expect(collapseToggle).toHaveAttribute("aria-expanded", "true");
+    });
+    await test.step("a diagram node still selects and offers actions", async () => {
+      const diagram = page.locator("[data-flow-diagram]").first();
+      const node = diagram.locator('[data-flow-node="source"]:visible').first();
+      await node.click();
+      await expect(node).toHaveAttribute("data-flow-selected", "");
+      await expect(
+        diagram.locator('[data-flow-action="comment"]'),
+      ).toBeVisible();
+    });
+    await test.step("a copy control still responds", async () => {
+      const copy = page.locator(".code-figure [data-copy-code]").first();
+      await copy.click();
+      await expect(copy).toHaveAttribute("data-copy-state", "copied");
+      await expect(copy).toHaveAccessibleName("Copied code");
+    });
+    await test.step("a component comment reports its batch in the rail", async () => {
+      const diagram = page.locator("[data-flow-diagram]").first();
+      const node = diagram.locator('[data-flow-node="source"]:visible').first();
+      await node.click();
+      await diagram.locator('[data-flow-action="comment"]').click();
+      await diagram
+        .locator(".flow-diagram-compose textarea")
+        .fill("Rename this node to Input.");
+      await diagram
+        .locator('.flow-diagram-compose button[data-variant="primary"]')
+        .click();
+      // The note joined the diagram's own batch, so a reviewer hunting for it
+      // in the rail is told where it waits and where it is submitted from.
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      const batchNote = rail.locator("[data-review-component-batch-note]");
+      await expect(batchNote).toContainText(
+        "Comments on a diagram wait in that diagram's batch.",
+      );
+      await expect(batchNote).toContainText(
+        "Add them to this review from the diagram's toolbar.",
+      );
+      await diagram
+        .getByRole("button", { name: "Add 1 note to plan feedback" })
+        .click();
+      await expect(rail).toContainText("Diagram feedback:");
+      await expect(rail).toContainText("Rename this node to Input.");
+      await expect(batchNote).toHaveCount(0);
+    });
   } finally {
-    await writeFile(session.plan, beforeSource, "utf8");
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("should highlight only changed words inside a revised list", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-list-diff-"));
+  const planPath = join(directory, "list.mdx");
+  const before = `# List diff
+
+## Promise
+
+- Thread answers carry only the changes caused by that feedback.
+- Chat answers carry a grouped, plan-wide change digest.
+- Historical answers preserve their claim-time baseline and result snapshots.
+- A guided tour moves through every changed place without losing context.
+`;
+  const after = before.replace(
+    "Thread answers carry only the changes caused by that feedback.",
+    "Thread answers carry only the changes caused by their own feedback.",
+  );
+  await writeFile(planPath, after);
+  const runtime = await startReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await page
+      .getByRole("complementary", { name: "Feedback" })
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await page.getByRole("button", { name: "Review change" }).click();
+    const list = page
+      .locator("[data-review-diff-lens] [data-review-diff-content]")
+      .filter({ has: page.locator("li") });
+    await expect(list.locator("li")).toHaveCount(4);
+    await expect(list.locator("li").first().locator("del")).toBeVisible();
+    await expect(
+      list.locator("li").first().locator("ins").first(),
+    ).toBeVisible();
+    await expect(list.locator("li").nth(1).locator("del, ins")).toHaveCount(0);
+    await expect(list.locator("li").nth(2).locator("del, ins")).toHaveCount(0);
+    await expect(list.locator("li").nth(3).locator("del, ins")).toHaveCount(0);
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should turn diagram notes and decision proposals into review comments", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await page.waitForFunction(
+    () => typeof window.bigPlan?.feedback?.add === "function",
+  );
+  await page.evaluate(() =>
+    window.bigPlan?.feedback?.add({
+      source: "flow-diagram",
+      anchor: null,
+      items: [{ kind: "comment", body: "Keep this source label explicit." }],
+    }),
+  );
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).toContainText("Diagram feedback:");
+  await expect(rail).toContainText("Keep this source label explicit.");
+
+  const sent = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await page.evaluate(() =>
+    window.bigPlan?.feedback?.add({
+      source: "decision",
+      anchor: null,
+      submit: "now",
+      items: [
+        { kind: "comment", body: "Suggest another option: local journal." },
+      ],
+    }),
+  );
+  expect((await sent).ok()).toBe(true);
+  await expect(rail).toContainText("Suggested decision option:");
+  await expect(rail).toContainText("Suggest another option: local journal.");
 });
 
 test("should mark a superseded review as read-only and link to its replacement", async ({
   page,
   reviewRuntimeUrl,
 }) => {
-  const initialPersistence = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/drafts") &&
-      response.request().method() === "PUT",
-  );
+  let draftWrites = 0;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/drafts") && request.method() === "PUT") {
+      draftWrites += 1;
+    }
+  });
   await page.goto(reviewRuntimeUrl);
-  expect((await initialPersistence).status()).toBe(200);
   const session = await page.evaluate(async () => {
     const root = document.documentElement;
     const response = await fetch("/api/session", {
@@ -1120,7 +2334,1326 @@ test("should mark a superseded review as read-only and link to its replacement",
     await expect(
       rail.getByRole("link", { name: "Open latest review" }),
     ).toHaveAttribute("href", replacement.url);
+    expect(draftWrites).toBe(0);
   } finally {
     await replacement.close();
+  }
+});
+
+// Block ids are structural paths, so an id minted for a superseded revision
+// can still resolve in the current document while naming different content.
+// The lens must detect that drift and fall back to the historical archive
+// instead of rendering the change beside the wrong block.
+test("should archive a superseded change whose block id now names different content", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-drifted-id-"));
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = `# Drift plan
+
+## Delivery
+
+The delivery gate runs manual checks before merge.
+
+## Verification
+
+Reviewers confirm the output by hand.
+`;
+  const revisedSource = initialSource.replace(
+    "The delivery gate runs manual checks before merge.",
+    "The delivery gate runs automated checks before merge.",
+  );
+  const latestSource = initialSource.replace(
+    "The delivery gate runs manual checks before merge.",
+    "A canary rollout now guards every deploy instead of a gate.",
+  );
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await stageComment(page, "Automate the delivery gate.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+    await rail.getByRole("button", { name: "Close feedback" }).click();
+
+    const session: unknown = await page.evaluate(async () => {
+      const root = document.documentElement;
+      const response = await fetch("/api/session", {
+        headers: {
+          "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+        },
+      });
+      return response.json();
+    });
+    if (
+      typeof session !== "object" ||
+      session === null ||
+      !("sessionId" in session) ||
+      !("planId" in session) ||
+      !("plan" in session) ||
+      typeof session.sessionId !== "string" ||
+      typeof session.planId !== "string" ||
+      typeof session.plan !== "string"
+    ) {
+      throw new Error("The drifted-id journey requires a live review session");
+    }
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+
+    const fallbackTitle = "Drift plan";
+    const initialBlocks = renderDocument({
+      markdown: initialSource,
+      fallbackTitle,
+      identity: {},
+    }).blocks;
+    const revisedBlocks = renderDocument({
+      markdown: revisedSource,
+      fallbackTitle,
+      identity: {},
+    }).blocks;
+    const driftedBlockId = diffSnapshots({
+      before: initialBlocks,
+      after: revisedBlocks,
+    }).find((location) => location.status === "changed")?.newBlockId;
+    if (driftedBlockId === undefined) {
+      throw new Error("The simulated revision produced no changed block");
+    }
+    const revisedSnapshot = deriveSnapshotDigest(revisedSource);
+    const latestSnapshot = deriveSnapshotDigest(latestSource);
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: revisedSource,
+    });
+    await writeSnapshot({
+      store,
+      snapshot: latestSnapshot,
+      source: latestSource,
+    });
+
+    await test.step("the agent answers the feedback, then revises the same block again", async () => {
+      const answeredAt = new Date().toISOString();
+      const claimed = await claimAgentRequest({
+        store,
+        requestId: request.requestId,
+        baselineSnapshot: request.premiseSnapshot,
+        now: answeredAt,
+      });
+      await publishAgentResponse({
+        store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: request.requestId,
+            outcomes: request.comments.map((comment) => ({
+              commentId: comment.id,
+              state: "changed",
+              message: "Automated the delivery gate.",
+              changeTargets: [driftedBlockId],
+            })),
+          },
+          request: claimed,
+          commentsById: commentsFromExchange(exchange),
+          changedBlocks: new Set([driftedBlockId]),
+          currentSnapshot: revisedSnapshot,
+          now: answeredAt,
+        }),
+      });
+      await writeFile(session.plan, latestSource, "utf8");
+      const revisedAgainAt = new Date(Date.parse(answeredAt) + 1).toISOString();
+      const followUp = messageAgentRequest({
+        kind: "chat",
+        requestId: randomBytes(8).toString("hex"),
+        sessionId: session.sessionId,
+        planId: session.planId,
+        premiseSnapshot: revisedSnapshot,
+        createdAt: revisedAgainAt,
+        body: "Replace the gate with a canary rollout.",
+      });
+      await writeAgentRequest({ store, request: followUp });
+      const claimedFollowUp = await claimAgentRequest({
+        store,
+        requestId: followUp.requestId,
+        baselineSnapshot: revisedSnapshot,
+        now: revisedAgainAt,
+      });
+      await publishAgentResponse({
+        store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: followUp.requestId,
+            message: "The canary rollout replaces the delivery gate.",
+          },
+          request: claimedFollowUp,
+          commentsById: new Map(),
+          changedBlocks: new Set(),
+          currentSnapshot: latestSnapshot,
+          now: revisedAgainAt,
+        }),
+      });
+    });
+
+    const drifted = page.locator(`[data-block-id="${driftedBlockId}"]`);
+    await test.step("the displayed plan keeps the id with different content", async () => {
+      await expect(page.locator("article")).toContainText(
+        "A canary rollout now guards every deploy",
+        { timeout: 15_000 },
+      );
+      await expect(drifted).toContainText("A canary rollout now guards");
+    });
+
+    await test.step("reviewing the superseded change lands in the archive, not beside the drifted block", async () => {
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      await rail
+        .getByRole("button", { name: /Expand thread:/u })
+        .first()
+        .click();
+      await rail.getByRole("button", { name: "Review change" }).click();
+      const archive = page.locator("[data-review-historical-changes]");
+      await expect(archive).toHaveCount(1);
+      const lens = archive.locator("[data-review-diff-lens]");
+      await expect(lens).toContainText("Historical change");
+      await expect(lens).toContainText("checks before merge");
+      await expect(lens.locator("ins")).toContainText("automated");
+      // Every lens host must be the archive's own; none may sit beside the
+      // block whose id the superseded diff can still resolve.
+      await expect(
+        page.locator(
+          "[data-review-diff-lens-host]:not([data-review-historical-diff])",
+        ),
+      ).toHaveCount(0);
+      await expect(drifted).toBeVisible();
+      const placement = await page.evaluate(() => {
+        const archiveElement = document.querySelector(
+          "[data-review-historical-changes]",
+        );
+        const slides = document.querySelectorAll("[data-slide]");
+        const lastSlide = slides.item(slides.length - 1);
+        if (archiveElement === null || lastSlide === null) return null;
+        return {
+          isAfterLastSlide:
+            (lastSlide.compareDocumentPosition(archiveElement) &
+              Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0,
+          isOutsideSlides: archiveElement.closest("[data-slide]") === null,
+        };
+      });
+      expect(placement).toEqual({
+        isAfterLastSlide: true,
+        isOutsideSlides: true,
+      });
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should leave shell interactions wired exactly once after repeated re-wires", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.goto(deckViewerUrl);
+  const toggle = page
+    .locator('[data-collapsible="slide"]')
+    .first()
+    .locator(":scope > [data-collapse-header] > [data-collapse-toggle]");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+  // Re-wiring is announced, not counted, so the shell has to tolerate an
+  // announcement for an article it has already wired. A second listener on an
+  // already-wired node would handle one click twice and cancel itself out.
+  await page.evaluate(() => {
+    for (let index = 0; index < 4; index += 1) {
+      document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
+    }
+  });
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+});
+
+/** Reads the live session the runtime handed the page, or fails the journey. */
+const liveReviewSession = async (
+  page: Page,
+): Promise<{
+  readonly sessionId: string;
+  readonly planId: string;
+  readonly plan: string;
+}> => {
+  const session: unknown = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: { "x-big-plan-review-token": root.dataset.reviewToken ?? "" },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The journey requires a live review session");
+  }
+  return {
+    sessionId: session.sessionId,
+    planId: session.planId,
+    plan: session.plan,
+  };
+};
+
+test("should keep a composing comment on its displayed premise through a plan refresh", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-compose-refresh-"));
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = `# Compose refresh
+
+## Delivery
+
+The delivery gate runs manual checks before merge.
+
+## Rollout
+
+The rollout waits for a green build.
+`;
+  const revisedSource = initialSource.replace(
+    "The rollout waits for a green build.",
+    "The rollout waits for a green build and a signed release.",
+  );
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  let releaseRefresh = (): void => undefined;
+  try {
+    await page.goto(runtime.url);
+    const session = await liveReviewSession(page);
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const premiseSnapshot = deriveSnapshotDigest(initialSource);
+    const revisedSnapshot = deriveSnapshotDigest(revisedSource);
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: randomBytes(8).toString("hex"),
+      sessionId: session.sessionId,
+      planId: session.planId,
+      premiseSnapshot,
+      createdAt: new Date().toISOString(),
+      body: "Require a signed release before rollout.",
+    });
+    await writeAgentRequest({ store, request });
+
+    await page
+      .getByRole("button", { name: "Comment on slide" })
+      .first()
+      .click();
+    const composer = page.getByRole("dialog", { name: /Comment on/u });
+    const submitRightAway = composer.getByRole("switch", {
+      name: "Submit right away",
+    });
+    if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+      await submitRightAway.click();
+    }
+    const commentBody = "Keep the delivery premise visible.";
+    await composer.getByLabel("Add a comment").fill(commentBody);
+
+    let markRefreshStarted = (): void => undefined;
+    const refreshStarted = new Promise<void>((resolve) => {
+      markRefreshStarted = resolve;
+    });
+    const refreshReleased = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    let hasBlockedRefresh = false;
+    await page.route("**/*", async (route) => {
+      const response = await route.fetch();
+      const body = await response.body();
+      const isRevisedArticle =
+        !hasBlockedRefresh &&
+        body.includes(Buffer.from("signed release")) &&
+        body.includes(Buffer.from("<article"));
+      if (isRevisedArticle) {
+        hasBlockedRefresh = true;
+        markRefreshStarted();
+        await refreshReleased;
+      }
+      await route.fulfill({ response, body });
+    });
+
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: revisedSource,
+    });
+    await writeFile(session.plan, revisedSource, "utf8");
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          message: "The rollout now waits for a signed release.",
+        },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: revisedSnapshot,
+        now: new Date().toISOString(),
+      }),
+    });
+
+    await refreshStarted;
+    const persistedDraft = page.waitForRequest(
+      (candidate) =>
+        candidate.url().endsWith("/api/drafts") &&
+        candidate.method() === "PUT" &&
+        candidate.postData()?.includes(commentBody) === true,
+    );
+    await composer.getByRole("button", { name: "Add Comment" }).click();
+    const draftPayload: unknown = (await persistedDraft).postDataJSON();
+    releaseRefresh();
+    await expect(page.locator("article")).toContainText("signed release", {
+      timeout: 15_000,
+    });
+    expect(draftPayload).toMatchObject({
+      drafts: [
+        expect.objectContaining({
+          body: commentBody,
+          premiseSnapshot,
+        }),
+      ],
+    });
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await page
+      .getByRole("button", {
+        name: `Expand staged comment: ${commentBody}`,
+      })
+      .click();
+    const stagedComment = page
+      .locator(".review-staged-card")
+      .filter({ hasText: commentBody });
+    await expect(stagedComment).toContainText(
+      "Plan changed since this comment",
+    );
+  } finally {
+    releaseRefresh();
+    await page.unroute("**/*");
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Counts the persistent selection highlights and how many of them still cover
+ * text in the displayed plan. Removing a node collapses the ranges that held
+ * it onto its parent rather than dropping them, so a registry left over from a
+ * discarded article stays registered with empty ranges and paints nothing;
+ * only a range that still spans text inside the live article is a highlight
+ * the reader can see.
+ */
+const liveSelectionHighlights = async (
+  page: Page,
+): Promise<{ readonly total: number; readonly inLivePlan: number }> =>
+  page.evaluate(() => {
+    const registry = (
+      CSS as unknown as {
+        highlights?: { get(name: string): Iterable<Range> | undefined };
+      }
+    ).highlights;
+    const highlight = registry?.get("big-plan-review-selection");
+    const ranges = highlight === undefined ? [] : Array.from(highlight);
+    const article = document.querySelector("article");
+    return {
+      total: ranges.length,
+      inLivePlan: ranges.filter(
+        (range) =>
+          range.toString().trim() !== "" &&
+          article?.contains(range.startContainer) === true,
+      ).length,
+    };
+  });
+
+// A digest entry names the slide it will take the reader to, so "a lens is
+// visible" is not the promise being made: the lens must land in the slide the
+// entry's own header names. A resolver that anchors a plausible-looking
+// neighbour keeps every lens assertion green, so this journey compares the
+// header the digest rendered with the kicker of the slide the lens reached.
+const DIGEST_KICKER_MDX = `# Change digest
+
+## Delivery
+
+The delivery gate runs manual checks before merge.
+
+## Verification
+
+Reviewers confirm the output by hand.
+`;
+
+test("should open a digest entry in the slide its section header names", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-digest-kicker-"));
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = DIGEST_KICKER_MDX;
+  const revisedSource = initialSource
+    .replace(
+      "The delivery gate runs manual checks before merge.",
+      "The delivery gate runs automated checks before merge.",
+    )
+    .replace(
+      "Reviewers confirm the output by hand.",
+      "Reviewers confirm the output from the recorded run.",
+    );
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await stageComment(page, "Automate both checks.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    const session = await liveReviewSession(page);
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+    const fallbackTitle = "Change digest";
+    const changedBlockIds = diffSnapshots({
+      before: renderDocument({
+        markdown: initialSource,
+        fallbackTitle,
+        identity: {},
+      }).blocks,
+      after: renderDocument({
+        markdown: revisedSource,
+        fallbackTitle,
+        identity: {},
+      }).blocks,
+    }).flatMap((location) =>
+      location.status === "changed" && location.newBlockId !== undefined
+        ? [location.newBlockId]
+        : [],
+    );
+    expect(changedBlockIds.length).toBeGreaterThanOrEqual(2);
+    const revisedSnapshot = deriveSnapshotDigest(revisedSource);
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: revisedSource,
+    });
+    await writeFile(session.plan, revisedSource, "utf8");
+    const answeredAt = new Date().toISOString();
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: answeredAt,
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: request.comments.map((comment) => ({
+            commentId: comment.id,
+            state: "changed",
+            message: "Automated both checks.",
+            changeTargets: changedBlockIds,
+          })),
+        },
+        request: claimed,
+        commentsById: commentsFromExchange(exchange),
+        changedBlocks: new Set(changedBlockIds),
+        currentSnapshot: revisedSnapshot,
+        now: answeredAt,
+      }),
+    });
+
+    await expect(page.locator("article")).toContainText(
+      "from the recorded run",
+      { timeout: 15_000 },
+    );
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    const sections = rail.locator("[data-review-diff-section]");
+    await expect(sections).toHaveCount(2, { timeout: 15_000 });
+    const header = sections.nth(1);
+    const headerLabel = (
+      await header.locator("span").first().textContent()
+    )?.trim();
+    expect(headerLabel).not.toBe("");
+    const entry = header.locator("xpath=following-sibling::button[1]");
+    await entry.click();
+
+    const lens = page.locator(
+      "[data-review-diff-lens-host]:not([data-review-historical-diff]) [data-review-diff-lens]",
+    );
+    await expect(lens).toHaveCount(1);
+    // The slide the reader actually arrived in must be the slide the entry's
+    // header named, not merely some slide.
+    const arrivedKicker = await lens.evaluate(
+      (element) =>
+        element
+          .closest("[data-slide]")
+          ?.querySelector("[data-slide-kicker]")
+          ?.textContent?.trim() ?? null,
+    );
+    expect(arrivedKicker).toBe(headerLabel);
+    await expect(entry).toHaveAttribute("aria-current", "step");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should jump to the visible lens standing in for a hidden commented block", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-hidden-jump-"));
+  const planPath = join(directory, "plan.mdx");
+  const lowerContent = Array.from(
+    { length: 24 },
+    (_, index) => `Checkpoint ${index + 1} keeps the page below the lens.`,
+  ).join("\n\n");
+  const initialSource = `# Hidden jump
+
+## Delivery
+
+~~~ts
+const deliveryBoundary = "original";
+~~~
+
+## Verification
+
+The verification section keeps the page tall enough to scroll.
+
+## Rollout
+
+The rollout section gives the reader more content below the commented block.
+
+## Operations
+
+The operations section remains below the review lens.
+
+${lowerContent}
+`;
+  const revisedSource = initialSource.replace(
+    'const deliveryBoundary = "original";',
+    'const deliveryBoundary = "revised";',
+  );
+  const commentBody = "Keep the delivery boundary precise.";
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await page.waitForFunction(
+      () => typeof window.bigPlan?.feedback?.add === "function",
+    );
+    const target = page.locator(".code-figure").first();
+    await target
+      .getByRole("button", {
+        name: "Comment on this code snippet",
+      })
+      .click();
+    const composer = page.getByRole("dialog", { name: /Comment on/ });
+    const submitRightAway = composer.getByRole("switch", {
+      name: "Submit right away",
+    });
+    if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+      await submitRightAway.click();
+    }
+    await composer.getByLabel("Add a comment").fill(commentBody);
+    await composer.getByRole("button", { name: "Add Comment" }).click();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    const session = await liveReviewSession(page);
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+    const comment = request.comments.find(
+      (entry) => entry.body === commentBody,
+    );
+    if (comment === undefined || comment.target.type !== "block") {
+      throw new Error("The paragraph comment did not retain a block target");
+    }
+    const before = renderDocument({
+      markdown: initialSource,
+      fallbackTitle: "Hidden jump",
+      identity: {},
+    });
+    const after = renderDocument({
+      markdown: revisedSource,
+      fallbackTitle: "Hidden jump",
+      identity: {},
+    });
+    const locations = diffSnapshots({
+      before: before.blocks,
+      after: after.blocks,
+    });
+    const changedBlocks = new Set(
+      locations.flatMap((location) =>
+        location.newBlockId === undefined ? [] : [location.newBlockId],
+      ),
+    );
+    expect(changedBlocks).toContain(comment.target.blockId);
+    const resultSnapshot = deriveSnapshotDigest(revisedSource);
+    await writeSnapshot({
+      store,
+      snapshot: resultSnapshot,
+      source: revisedSource,
+    });
+    await writeFile(session.plan, revisedSource, "utf8");
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: request.comments.map((entry) => ({
+            commentId: entry.id,
+            state: "changed",
+            message: "Kept the delivery boundary precise.",
+            changeTargets: [comment.target.blockId],
+          })),
+        },
+        request: claimed,
+        commentsById: commentsFromExchange(exchange),
+        changedBlocks,
+        currentSnapshot: resultSnapshot,
+        now: new Date().toISOString(),
+      }),
+    });
+
+    await expect(page.locator("article")).toContainText(
+      'const deliveryBoundary = "revised";',
+      { timeout: 15_000 },
+    );
+    const sentThread = rail
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: commentBody });
+    await sentThread
+      .getByRole("button", { name: "Expand thread", exact: true })
+      .click();
+    await sentThread.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    await expect(lens).toBeVisible();
+    const targetBlock = page.locator(
+      `[data-block-id="${comment.target.blockId}"]`,
+    );
+    await expect(targetBlock).toBeHidden();
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(0);
+    const beforeJump = await page.evaluate(() => window.scrollY);
+    await sentThread.locator(".review-sent-target").click();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeLessThan(beforeJump);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const element = document.querySelector<HTMLElement>(
+            "[data-review-diff-lens]",
+          );
+          if (element === null) return false;
+          const rect = element.getBoundingClientRect();
+          return rect.top >= 0 && rect.bottom <= window.innerHeight;
+        }),
+      )
+      .toBe(true);
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should refresh a thread digest when a later reply changes another block", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-digest-refresh-"));
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = `# Digest refresh
+
+## Delivery
+
+~~~ts
+const delivery = "first";
+~~~
+
+## Verification
+
+~~~ts
+const verification = "first";
+~~~
+`;
+  const firstSource = initialSource.replace(
+    'const delivery = "first";',
+    'const delivery = "revised";',
+  );
+  const secondSource = firstSource.replace(
+    'const verification = "first";',
+    'const verification = "revised";',
+  );
+  const commentBody = "Review both delivery and verification.";
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await page.waitForFunction(
+      () => typeof window.bigPlan?.feedback?.add === "function",
+    );
+    const target = page.locator(".code-figure").first();
+    await target
+      .getByRole("button", {
+        name: "Comment on this code snippet",
+      })
+      .click();
+    const composer = page.getByRole("dialog", { name: /Comment on/ });
+    const submitRightAway = composer.getByRole("switch", {
+      name: "Submit right away",
+    });
+    if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+      await submitRightAway.click();
+    }
+    await composer.getByLabel("Add a comment").fill(commentBody);
+    await composer.getByRole("button", { name: "Add Comment" }).click();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    const session = await liveReviewSession(page);
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const firstExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const firstRequest = nextPendingAgentRequest(firstExchange);
+    if (firstRequest === undefined || firstRequest.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+    const comment = firstRequest.comments.find(
+      (entry) => entry.body === commentBody,
+    );
+    if (comment === undefined || comment.target.type !== "block") {
+      throw new Error("The code comment did not retain a block target");
+    }
+    const firstRender = renderDocument({
+      markdown: initialSource,
+      fallbackTitle: "Digest refresh",
+      identity: {},
+    });
+    const firstRevisionRender = renderDocument({
+      markdown: firstSource,
+      fallbackTitle: "Digest refresh",
+      identity: {},
+    });
+    const firstChangedBlocks = new Set(
+      diffSnapshots({
+        before: firstRender.blocks,
+        after: firstRevisionRender.blocks,
+      }).flatMap((location) =>
+        location.newBlockId === undefined ? [] : [location.newBlockId],
+      ),
+    );
+    const firstSnapshot = deriveSnapshotDigest(firstSource);
+    await writeSnapshot({
+      store,
+      snapshot: firstSnapshot,
+      source: firstSource,
+    });
+    await writeFile(session.plan, firstSource, "utf8");
+    const firstClaimed = await claimAgentRequest({
+      store,
+      requestId: firstRequest.requestId,
+      baselineSnapshot: firstRequest.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: firstRequest.requestId,
+          outcomes: [
+            {
+              commentId: comment.id,
+              state: "changed",
+              message: "Revised the delivery boundary.",
+              changeTargets: [comment.target.blockId],
+            },
+          ],
+        },
+        request: firstClaimed,
+        commentsById: commentsFromExchange(firstExchange),
+        changedBlocks: firstChangedBlocks,
+        currentSnapshot: firstSnapshot,
+        now: new Date().toISOString(),
+      }),
+    });
+    await expect(page.locator("article")).toContainText(
+      'const delivery = "revised";',
+      { timeout: 15_000 },
+    );
+
+    const sentThread = rail
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: commentBody });
+    await sentThread
+      .getByRole("button", { name: "Expand thread", exact: true })
+      .click();
+    const reply = sentThread.getByPlaceholder("Reply to the agent…");
+    await reply.fill("Now update verification too.");
+    const replyResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/agent-requests") &&
+        response.request().method() === "POST",
+    );
+    await sentThread.getByRole("button", { name: "Reply" }).click();
+    expect((await replyResponse).ok()).toBe(true);
+
+    const secondExchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const secondRequest = nextPendingAgentRequest(secondExchange);
+    if (secondRequest === undefined || secondRequest.kind !== "reply") {
+      throw new Error("The thread reply did not create pending work");
+    }
+    const secondRevisionRender = renderDocument({
+      markdown: secondSource,
+      fallbackTitle: "Digest refresh",
+      identity: {},
+    });
+    const secondChangedBlocks = new Set(
+      diffSnapshots({
+        before: firstRevisionRender.blocks,
+        after: secondRevisionRender.blocks,
+      }).flatMap((location) =>
+        location.newBlockId === undefined ? [] : [location.newBlockId],
+      ),
+    );
+    const secondSnapshot = deriveSnapshotDigest(secondSource);
+    await writeSnapshot({
+      store,
+      snapshot: secondSnapshot,
+      source: secondSource,
+    });
+    await writeFile(session.plan, secondSource, "utf8");
+    const secondClaimed = await claimAgentRequest({
+      store,
+      requestId: secondRequest.requestId,
+      baselineSnapshot: secondRequest.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: secondRequest.requestId,
+          outcomes: [
+            {
+              commentId: comment.id,
+              state: "changed",
+              message: "Revised the verification boundary.",
+              changeTargets: [...secondChangedBlocks],
+            },
+          ],
+        },
+        request: secondClaimed,
+        commentsById: commentsFromExchange(secondExchange),
+        changedBlocks: secondChangedBlocks,
+        currentSnapshot: secondSnapshot,
+        now: new Date().toISOString(),
+      }),
+    });
+    await expect(page.locator("article")).toContainText(
+      'const verification = "revised";',
+      { timeout: 15_000 },
+    );
+
+    await expect(
+      sentThread.getByRole("button", { name: "Review change" }).last(),
+    ).toBeVisible();
+    await sentThread
+      .getByRole("button", { name: "Review change" })
+      .last()
+      .click();
+    const lens = page.locator("[data-review-diff-lens]");
+    await expect(lens).toContainText('const verification = "revised";');
+    await expect(lens).not.toContainText('const delivery = "revised";');
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// The refresh's own status line promises that open threads and review state
+// were preserved. Every element the island resolved before the swap belongs to
+// the article that was thrown away, and each loss is silent: the hover cache
+// still holds entries, the highlight registry still holds ranges, and the lens
+// still renders - into nodes no reader can see. These assertions therefore
+// check that the state landed back in the live article, not that it exists.
+const REFRESH_STATE_MDX = `# Refresh state
+
+## Delivery
+
+The delivery gate runs manual checks before merge.
+
+## Verification
+
+Reviewers confirm the recorded output by hand.
+
+## Rollout
+
+The rollout waits for a green build.
+`;
+
+test("should re-anchor an open lens, its highlights, and hover association when a second revision refreshes the plan", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-refresh-state-"));
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = REFRESH_STATE_MDX;
+  const revisedSource = initialSource.replace(
+    "The delivery gate runs manual checks before merge.",
+    "The delivery gate runs automated checks before merge.",
+  );
+  const latestSource = revisedSource.replace(
+    "The rollout waits for a green build.",
+    "The rollout waits for a green build and a signed release.",
+  );
+  await writeFile(planPath, initialSource, "utf8");
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    const commentedSlide = page.locator("[data-slide]").first();
+    await stageComment(page, "Automate the delivery gate.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    await test.step("a selection comment stages its own persistent highlight", async () => {
+      const quoted = page
+        .locator("[data-block-kind='paragraph']")
+        .filter({ hasText: "Reviewers confirm the recorded output" })
+        .first();
+      await quoted.scrollIntoViewIfNeeded();
+      const selected = await quoted.evaluate((element) => {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        const text = walker.nextNode();
+        if (!(text instanceof Text)) return "";
+        const quote = text.data.slice(0, 18);
+        const range = document.createRange();
+        range.setStart(text, 0);
+        range.setEnd(text, quote.length);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        document.dispatchEvent(new Event("selectionchange"));
+        return quote;
+      });
+      expect(selected).not.toBe("");
+      await page
+        .getByRole("button", { name: "Comment on selected text" })
+        .click();
+      const dialog = page.getByRole("dialog", {
+        name: /Comment on Selected text in/u,
+      });
+      const submitRightAway = dialog.getByRole("switch", {
+        name: "Submit right away",
+      });
+      if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+        await submitRightAway.click();
+      }
+      await dialog.getByLabel("Add a comment").fill("Name the recorded run.");
+      await dialog.getByRole("button", { name: "Add Comment" }).click();
+      expect(await liveSelectionHighlights(page)).toEqual({
+        total: 1,
+        inLivePlan: 1,
+      });
+    });
+
+    const session = await liveReviewSession(page);
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create a pending feedback request");
+    }
+    const fallbackTitle = "Refresh state";
+    const changedBlockId = diffSnapshots({
+      before: renderDocument({
+        markdown: initialSource,
+        fallbackTitle,
+        identity: {},
+      }).blocks,
+      after: renderDocument({
+        markdown: revisedSource,
+        fallbackTitle,
+        identity: {},
+      }).blocks,
+    }).find((location) => location.status === "changed")?.newBlockId;
+    if (changedBlockId === undefined) {
+      throw new Error("The simulated revision produced no changed block");
+    }
+    const revisedSnapshot = deriveSnapshotDigest(revisedSource);
+    const latestSnapshot = deriveSnapshotDigest(latestSource);
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: revisedSource,
+    });
+    await writeSnapshot({
+      store,
+      snapshot: latestSnapshot,
+      source: latestSource,
+    });
+
+    const answeredAt = new Date().toISOString();
+    await test.step("the agent answers the feedback and the plan refreshes", async () => {
+      await writeFile(session.plan, revisedSource, "utf8");
+      const claimed = await claimAgentRequest({
+        store,
+        requestId: request.requestId,
+        baselineSnapshot: request.premiseSnapshot,
+        now: answeredAt,
+      });
+      await publishAgentResponse({
+        store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: request.requestId,
+            outcomes: request.comments.map((comment) => ({
+              commentId: comment.id,
+              state: "changed",
+              message: "Automated the delivery gate.",
+              changeTargets: [changedBlockId],
+            })),
+          },
+          request: claimed,
+          commentsById: commentsFromExchange(exchange),
+          changedBlocks: new Set([changedBlockId]),
+          currentSnapshot: revisedSnapshot,
+          now: answeredAt,
+        }),
+      });
+      await expect(page.locator("article")).toContainText("automated checks", {
+        timeout: 15_000,
+      });
+    });
+
+    const lensHost = page.locator(
+      "[data-review-diff-lens-host]:not([data-review-historical-diff])",
+    );
+    const anchorKicker = async (): Promise<string | null> =>
+      lensHost.evaluate(
+        (element) =>
+          element
+            .closest("[data-slide]")
+            ?.querySelector("[data-slide-kicker]")
+            ?.textContent?.trim() ?? null,
+      );
+    let openedKicker: string | null = null;
+    await test.step("the reviewer opens the change in its slide", async () => {
+      await rail
+        .getByRole("button", { name: /Expand thread:/u })
+        .first()
+        .click();
+      await rail.getByRole("button", { name: "Review change" }).click();
+      await expect(lensHost).toHaveCount(1);
+      openedKicker = await anchorKicker();
+      expect(openedKicker).not.toBeNull();
+    });
+
+    await test.step("the agent revises a different slide while the lens is open", async () => {
+      const revisedAgainAt = new Date(Date.parse(answeredAt) + 1).toISOString();
+      const followUp = messageAgentRequest({
+        kind: "chat",
+        requestId: randomBytes(8).toString("hex"),
+        sessionId: session.sessionId,
+        planId: session.planId,
+        premiseSnapshot: revisedSnapshot,
+        createdAt: revisedAgainAt,
+        body: "Require a signed release before rollout.",
+      });
+      await writeAgentRequest({ store, request: followUp });
+      await writeFile(session.plan, latestSource, "utf8");
+      const claimedFollowUp = await claimAgentRequest({
+        store,
+        requestId: followUp.requestId,
+        baselineSnapshot: revisedSnapshot,
+        now: revisedAgainAt,
+      });
+      await publishAgentResponse({
+        store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: followUp.requestId,
+            message: "The rollout now waits for a signed release.",
+          },
+          request: claimedFollowUp,
+          commentsById: new Map(),
+          changedBlocks: new Set(),
+          currentSnapshot: latestSnapshot,
+          now: revisedAgainAt,
+        }),
+      });
+      await expect(page.locator("article")).toContainText("signed release", {
+        timeout: 15_000,
+      });
+    });
+
+    await test.step("the open lens re-anchors in the live slide it named", async () => {
+      await expect(lensHost).toHaveCount(1);
+      expect(await anchorKicker()).toBe(openedKicker);
+      // The lens stands in for the block it replaces, so that block must be
+      // hidden in the live article, not in the one that was discarded.
+      await expect(
+        page
+          .locator("article p[data-block-kind='paragraph']")
+          .filter({ hasText: "runs automated checks" }),
+      ).toBeHidden();
+      await expect(
+        page
+          .locator("article p[data-block-kind='paragraph']")
+          .filter({ hasText: "signed release" }),
+      ).toBeVisible();
+    });
+
+    await test.step("the selection highlight is registered against live text", async () => {
+      await expect
+        .poll(() => liveSelectionHighlights(page))
+        .toEqual({ total: 1, inLivePlan: 1 });
+    });
+
+    await test.step("hovering the commented slide associates it again", async () => {
+      await expect(commentedSlide).toHaveAttribute(
+        "data-review-has-comment",
+        "",
+      );
+      // Hover association deliberately yields to a focused thread, so the
+      // reader turns back to the plan before a hover can mean anything.
+      await rail.getByRole("button", { name: "Close feedback" }).click();
+      await commentedSlide.locator("h2").first().hover();
+      await expect(commentedSlide).toHaveAttribute(
+        "data-review-comment-associated",
+        "",
+      );
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
   }
 });

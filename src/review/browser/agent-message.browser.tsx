@@ -1,8 +1,9 @@
 // Owns the shared legacy-compatible You/Agent turn, status-strip, activity,
 // Markdown, panel-pill, and change-digest presentation for the review island.
 
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
@@ -13,7 +14,11 @@ import {
 import { messageTimeLabel } from "../shared/time-label.js";
 import type { AgentStatus } from "../shared/agent-status.js";
 import type { ProgressStepCode } from "../shared/progress-code.js";
+import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
+import { useDiffTour } from "./diff-tour.browser.js";
 import { Icon } from "./icon.browser.js";
+import { foundElement, liveBlock } from "./live-target.browser.js";
+import { Badge, Button } from "./ui.browser.js";
 
 export type MessageSurface = "thread" | "chat";
 
@@ -26,16 +31,10 @@ export type MessageActivity = {
   readonly atMs?: number;
 };
 
-export type MessageChange = {
-  readonly status: "changed" | "added" | "removed";
-  readonly label: string;
-  readonly section: string;
-};
-
 const THREAD_BASE =
-  "mt-2 min-w-0 max-w-full w-[calc(100%_-_1rem)] rounded-lg border border-edge px-2 py-2";
+  "mt-2 box-border w-auto min-w-0 max-w-full overflow-hidden rounded-lg border border-edge px-2 py-2";
 const CHAT_BASE =
-  "min-w-0 w-[calc(100%_-_1.5rem)] rounded-lg border border-edge px-2 py-2";
+  "box-border w-auto min-w-0 max-w-full overflow-hidden rounded-lg border border-edge px-2 py-2";
 const ROLE_CLASSES = {
   user: "ml-4 border-r-2 border-r-[var(--annotation-c)] bg-[color-mix(in_srgb,var(--annotation-bg)_30%,var(--bg))]",
   agent:
@@ -83,7 +82,7 @@ const renderMessageNode = (node: MessageNode, key: string): ReactNode => {
   );
   if (node.type === "paragraph") {
     return (
-      <p key={key} className="mt-1 mb-0">
+      <p key={key} className="mt-0 mb-2">
         {children}
       </p>
     );
@@ -137,7 +136,7 @@ const MessageBody = ({
 }) =>
   isStructured ? (
     <div
-      className="min-w-0 max-w-full text-xs text-ink [line-height:1.45] whitespace-pre-wrap [overflow-wrap:anywhere]"
+      className="min-w-0 max-w-full text-xs leading-4 text-ink whitespace-pre-wrap [overflow-wrap:anywhere]"
       data-review-message-body="structured"
     >
       {parseMessageMarkdown(body).map((node, index) =>
@@ -192,6 +191,46 @@ export const MessageTurn = ({
   );
 };
 
+/** Keeps a collapsed reviewer message visually continuous with its full turn. */
+export const ReviewerMessagePreview = ({
+  body,
+  onExpand,
+}: {
+  readonly body: string;
+  readonly onExpand: () => void;
+}) => {
+  const previewRef = useRef<HTMLSpanElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+  useLayoutEffect(() => {
+    const preview = previewRef.current;
+    if (preview === null) return;
+    const update = () =>
+      setIsTruncated(preview.scrollHeight > preview.clientHeight + 1);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(preview);
+    return () => observer.disconnect();
+  }, [body]);
+  return (
+    <button
+      type="button"
+      className={`${THREAD_BASE} ${ROLE_CLASSES.user} review-sent-summary block cursor-pointer text-left text-xs text-ink [line-height:1.45] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+      aria-label={`Expand thread: ${body}`}
+      aria-expanded="false"
+      onClick={onExpand}
+    >
+      <span ref={previewRef} className="line-clamp-3 [overflow-wrap:anywhere]">
+        {body}
+      </span>
+      {isTruncated ? (
+        <span className="mt-1 block text-2xs font-semibold text-accent">
+          … more
+        </span>
+      ) : null}
+    </button>
+  );
+};
+
 const Spinner = () => (
   <span
     className="inline-block size-[0.72rem] shrink-0 animate-spin rounded-full border-[1.5px] border-current border-r-transparent [animation-duration:700ms] motion-reduce:[animation-duration:1.8s]"
@@ -218,6 +257,7 @@ export const RequestStatusStrip = ({
   commentCount = 1,
   onShowAgent,
   onCancelRequest,
+  activeRequestLink,
 }: {
   readonly status: AgentStatus;
   readonly activity: ReadonlyArray<MessageActivity>;
@@ -225,6 +265,10 @@ export const RequestStatusStrip = ({
   readonly commentCount?: number;
   readonly onShowAgent: () => void;
   readonly onCancelRequest?: () => void;
+  readonly activeRequestLink?: {
+    readonly label: string;
+    readonly onClick: () => void;
+  };
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const meaningful = activity
@@ -238,12 +282,17 @@ export const RequestStatusStrip = ({
     .filter(
       (event, index, events) =>
         index === 0 ||
-        events[index - 1]?.step.toLocaleLowerCase() !==
-          event.step.toLocaleLowerCase(),
+        events[index - 1]?.step.toLowerCase() !== event.step.toLowerCase(),
     )
     .slice(-8);
   const current = meaningful.at(-1);
   const earlier = meaningful.slice(0, -1).reverse();
+  const currentText =
+    current === undefined
+      ? "Starting work…"
+      : current.step +
+        (current.detail === undefined ? "" : ` — ${current.detail}`);
+  const hasCurrentTooltip = currentText.length > 96;
   const isWorking = status.stage === "working";
   const icon =
     status.stage === "waiting" ? (
@@ -278,6 +327,15 @@ export const RequestStatusStrip = ({
           Show setup instructions →
         </button>
       ) : null}
+      {status.stage === "waiting" && activeRequestLink !== undefined ? (
+        <button
+          type="button"
+          className="mt-1 w-fit cursor-pointer border-0 bg-transparent p-0 font-semibold text-current underline underline-offset-[0.16em] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onClick={activeRequestLink.onClick}
+        >
+          {activeRequestLink.label} →
+        </button>
+      ) : null}
       {isWorking && surface === "thread" ? (
         <p className="mt-0.5 mb-0 text-muted">
           Updating {commentCount} comment{commentCount === 1 ? "" : "s"}
@@ -285,16 +343,22 @@ export const RequestStatusStrip = ({
       ) : null}
       {isWorking ? (
         <p
-          className="mt-1.5 mb-0 min-w-0 text-xs text-ink [overflow-wrap:anywhere]"
+          className="group relative mt-1.5 mb-0 min-w-0 text-xs text-ink [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           data-review-status-current-activity=""
           aria-live="polite"
+          tabIndex={hasCurrentTooltip ? 0 : undefined}
         >
-          <span>
-            {current === undefined
-              ? "Starting work…"
-              : current.step +
-                (current.detail === undefined ? "" : ` — ${current.detail}`)}
+          <span className={hasCurrentTooltip ? "line-clamp-3" : undefined}>
+            {currentText}
           </span>
+          {hasCurrentTooltip ? (
+            <span
+              role="tooltip"
+              className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] left-0 z-50 w-64 max-w-[min(16rem,calc(100vw_-_2rem))] rounded-md bg-[var(--ink-c)] px-2 py-1.5 text-2xs leading-normal text-[var(--bg)] opacity-0 shadow-raised transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-visible:visible group-focus-visible:opacity-100 group-focus-visible:delay-1000"
+            >
+              {currentText}
+            </span>
+          ) : null}
         </p>
       ) : null}
       {isWorking && earlier.length > 0 ? (
@@ -368,7 +432,7 @@ export const AgentStatePill = ({
         : status.stage === "failed"
           ? ({ tone: "failed", label: "Agent needs attention" } as const)
           : status.stage === "offline"
-            ? ({ tone: "failed", label: "Review server offline" } as const)
+            ? ({ tone: "failed", label: "Agent disconnected" } as const)
             : status.stage === "blocked"
               ? ({ tone: "failed", label: "No agent connected" } as const)
               : status.stage === "stalled"
@@ -392,16 +456,52 @@ export const AgentStatePill = ({
 
 /** Attaches a quiet grouped revision digest to the answer that caused it. */
 export const AgentChangeDigest = ({
-  changes,
+  diff,
+  placeIds,
+  spilloverCount,
+  isSuperseded,
   isLoading,
   onLoad,
+  actionLabel,
+  onResolve,
+  onRevert,
+  canRevert,
+  thread,
+  onKeepChatting,
 }: {
-  readonly changes: ReadonlyArray<MessageChange> | null;
+  readonly diff: SnapshotDiff | null;
+  readonly placeIds?: ReadonlyArray<string>;
+  readonly spilloverCount?: number;
+  readonly isSuperseded?: boolean;
   readonly isLoading: boolean;
   readonly onLoad: () => void;
+  readonly actionLabel?: string;
+  readonly onResolve?: () => void;
+  readonly onRevert?: () => void;
+  readonly canRevert?: boolean;
+  readonly thread?: {
+    readonly label: string;
+    readonly onOpen: () => void;
+  };
+  readonly onKeepChatting?: () => void;
 }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
-  if (changes === null) {
+  const {
+    activeDiff,
+    activePlaceId,
+    isPlaceAccepted,
+    setPlacesAccepted,
+    closeTour,
+    openTour,
+  } = useDiffTour();
+  const available =
+    diff === null
+      ? []
+      : placeIds === undefined
+        ? diff.places
+        : diff.places.filter((place) => placeIds.includes(place.placeId));
+  const [expandedChoice, setExpandedChoice] = useState<boolean | null>(null);
+  const isExpanded = expandedChoice ?? available.length <= 3;
+  if (diff === null) {
     return (
       <button
         type="button"
@@ -413,54 +513,178 @@ export const AgentChangeDigest = ({
       </button>
     );
   }
-  const sections = new Map<string, Array<MessageChange>>();
-  for (const change of changes) {
+  if (available.length === 0) return null;
+  const acceptedCount = available.filter((place) =>
+    isPlaceAccepted(diff, place.placeId),
+  ).length;
+  const allAccepted = acceptedCount === available.length;
+  const ownsActiveTour =
+    activeDiff?.from === diff.from && activeDiff?.to === diff.to;
+  const isActive =
+    ownsActiveTour &&
+    available.some((place) => place.placeId === activePlaceId);
+  const sections = new Map<string, Array<DiffPlace>>();
+  for (const change of available) {
     const group = sections.get(change.section) ?? [];
     group.push(change);
     sections.set(change.section, group);
   }
+  const sectionKicker = (entries: ReadonlyArray<DiffPlace>): string | null => {
+    for (const entry of entries) {
+      for (const index of entry.locationIndexes) {
+        const location = diff.locations.at(index);
+        const blockId = location?.newBlockId ?? location?.oldBlockId;
+        if (blockId === undefined) continue;
+        const kicker = foundElement(liveBlock(blockId))
+          ?.closest<HTMLElement>("[data-slide]")
+          ?.querySelector<HTMLElement>("[data-slide-kicker]")
+          ?.textContent?.trim();
+        if (kicker !== undefined && kicker !== "") return kicker;
+      }
+    }
+    return null;
+  };
   return (
     <div className="mt-2 grid min-w-0 gap-2 border-t border-edge pt-2">
       <button
         type="button"
         className="flex w-full cursor-pointer items-center gap-1 rounded-sm bg-transparent px-1 py-0.5 text-left text-2xs font-bold text-muted hover:bg-surface hover:text-accent [&>svg]:size-3"
         aria-expanded={isExpanded}
-        onClick={() => setIsExpanded((value) => !value)}
+        onClick={() => setExpandedChoice(!isExpanded)}
       >
         <Icon icon={CHEVRON_RIGHT_ICON} />
-        {changes.length} change{changes.length === 1 ? "" : "s"} across{" "}
-        {sections.size} location{sections.size === 1 ? "" : "s"}
+        {available.length} change{available.length === 1 ? "" : "s"} across{" "}
+        {sections.size} slide{sections.size === 1 ? "" : "s"}
+        {acceptedCount === 0 ? null : allAccepted ? (
+          <Badge className="ml-auto" size="status" tone="statusAccent">
+            Accepted
+          </Badge>
+        ) : (
+          <span
+            className="ml-auto shrink-0 font-medium text-accent"
+            aria-label={`${acceptedCount} of ${available.length} changes accepted`}
+          >
+            {acceptedCount}/{available.length}
+          </span>
+        )}
       </button>
       {isExpanded ? (
         <div className="min-w-0 overflow-hidden rounded-md border border-edge bg-paper">
           {Array.from(sections).map(([section, entries]) => (
             <div key={section}>
-              <div className="flex min-w-0 items-center gap-1 border-t border-edge bg-surface px-2 py-1 text-2xs font-bold text-muted first:border-t-0">
-                <Icon icon={CHEVRON_RIGHT_ICON} />
-                <span className="min-w-0 flex-1 truncate">{section}</span>
+              <div
+                className="flex min-w-0 items-center gap-2 border-t border-edge bg-surface px-2 py-1.5 text-2xs font-semibold text-subtle first:border-t-0"
+                data-review-diff-section=""
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {sectionKicker(entries) ?? section}
+                </span>
                 <span className="rounded-full bg-paper px-1 text-2xs">
                   {entries.length}
                 </span>
               </div>
-              {entries.map((entry, index) => (
-                <div
-                  key={`${entry.status}-${entry.label}-${index}`}
-                  className="border-t border-edge/60 px-6 py-1 text-xs font-medium text-ink [overflow-wrap:anywhere]"
+              {entries.map((entry) => (
+                <button
+                  type="button"
+                  key={entry.placeId}
+                  className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-0.5 border-0 border-t border-edge bg-transparent px-6 py-2 text-left text-xs font-medium text-ink hover:bg-surface focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-accent aria-current:bg-accent-soft aria-current:text-accent"
+                  aria-current={
+                    activePlaceId === entry.placeId ? "step" : undefined
+                  }
+                  onClick={() =>
+                    openTour({
+                      diff,
+                      placeIds: available.map((place) => place.placeId),
+                      startPlaceId: entry.placeId,
+                      isSuperseded,
+                      onResolve,
+                      onRevert,
+                      canRevert,
+                      thread,
+                      onKeepChatting,
+                    })
+                  }
                 >
-                  {entry.label}
-                </div>
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                    {entry.label}
+                  </span>
+                  {isPlaceAccepted(diff, entry.placeId) ? (
+                    <span
+                      className="row-span-2 inline-flex shrink-0 items-center self-center text-accent [&>svg]:size-3.5"
+                      aria-label="Accepted"
+                    >
+                      <Icon icon={CHECK_ICON} />
+                    </span>
+                  ) : null}
+                  <em className="col-start-1 text-2xs font-normal text-muted capitalize">
+                    {entry.note}
+                  </em>
+                </button>
               ))}
             </div>
           ))}
         </div>
       ) : null}
-      <button
-        type="button"
-        className="w-fit rounded-md border border-edge bg-paper px-2 py-1 text-2xs font-semibold text-accent hover:border-accent hover:bg-surface"
-        onClick={() => setIsExpanded((value) => !value)}
-      >
-        {isExpanded ? "Hide changes" : "See changes"}
-      </button>
+      {spilloverCount === undefined || spilloverCount === 0 ? null : (
+        <p className="m-0 text-2xs text-muted">
+          {spilloverCount} other change{spilloverCount === 1 ? "" : "s"}{" "}
+          elsewhere in this snapshot
+        </p>
+      )}
+      {allAccepted ? (
+        <p
+          className="m-0 border-t border-edge pt-2 text-2xs font-semibold text-accent"
+          data-review-changes-accepted=""
+        >
+          Change set accepted
+        </p>
+      ) : null}
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="w-fit rounded-md border border-edge bg-paper px-2 py-1 text-2xs font-semibold text-accent hover:border-accent hover:bg-surface focus-visible:outline-2 focus-visible:outline-accent"
+          onClick={() => {
+            if (isActive) {
+              closeTour();
+              return;
+            }
+            openTour({
+              diff,
+              placeIds: available.map((place) => place.placeId),
+              isSuperseded,
+              onResolve,
+              onRevert,
+              canRevert,
+              thread,
+              onKeepChatting,
+            });
+          }}
+        >
+          {isActive
+            ? "Exit review"
+            : (actionLabel ??
+              (acceptedCount > 0 && !allAccepted
+                ? "Continue review"
+                : available.length === 1
+                  ? "Review change"
+                  : `Review changes (${available.length})`))}
+        </button>
+        {available.length <= 1 || allAccepted ? null : (
+          <Button
+            variant="accentOutline"
+            size="micro"
+            onClick={() =>
+              setPlacesAccepted(
+                diff,
+                available.map((place) => place.placeId),
+                true,
+              )
+            }
+          >
+            Accept all
+          </Button>
+        )}
+      </div>
     </div>
   );
 };

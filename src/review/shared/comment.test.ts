@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BlockMapEntry } from "./comment.js";
 import {
+  boundQuote,
   CommentRejected,
   QUOTE_LIMIT,
   validateActiveDraft,
@@ -31,9 +32,20 @@ const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
 ]);
 
 const NOW = "2026-07-31T00:00:00.000Z";
+const PREMISE = "1111111111111111";
 
 const validate = (value: unknown) =>
-  validateComments({ value, blocks: BLOCKS, now: NOW });
+  validateComments({
+    value: Array.isArray(value)
+      ? value.map((entry) =>
+          typeof entry === "object" && entry !== null && !Array.isArray(entry)
+            ? { premiseSnapshot: PREMISE, ...entry }
+            : entry,
+        )
+      : value,
+    blocks: BLOCKS,
+    now: NOW,
+  });
 
 const commentOn = (target: unknown) => [
   { id: "aabbccdd", body: "A note.", createdAt: NOW, target },
@@ -46,6 +58,7 @@ describe("validateComments acceptance", () => {
         id: "aabbccdd",
         body: "A note.",
         createdAt: NOW,
+        premiseSnapshot: PREMISE,
         target: { type: "document" },
       },
     ]);
@@ -70,6 +83,7 @@ describe("validateComments acceptance", () => {
       start: 12,
       end: 18,
       quote: "const a = 1;",
+      isQuoteExcerpt: false,
     });
   });
 
@@ -94,11 +108,38 @@ describe("validateComments acceptance", () => {
       start: 12,
       end: 4,
       quote: "reality\nWhat",
+      isQuoteExcerpt: false,
     });
   });
 
   it("should accept an empty batch when nothing is pending", () => {
     expect(validate([])).toEqual([]);
+  });
+});
+
+describe("boundQuote", () => {
+  // Regression: a highlight past the bound used to withdraw the comment
+  // control, so the reviewer's selection was dropped with nothing said.
+  it("should keep a highlight whole when it fits the bound", () => {
+    const selected = "x".repeat(QUOTE_LIMIT);
+    expect(boundQuote(selected)).toEqual({
+      quote: selected,
+      isQuoteExcerpt: false,
+    });
+  });
+
+  it("should mark and trim a highlight when it passes the bound", () => {
+    const result = boundQuote("y".repeat(QUOTE_LIMIT + 1));
+    expect(result.isQuoteExcerpt).toBe(true);
+    expect(result.quote).toHaveLength(QUOTE_LIMIT);
+  });
+
+  it("should leave a short highlight and an empty one unmarked", () => {
+    expect(boundQuote("A claim.")).toEqual({
+      quote: "A claim.",
+      isQuoteExcerpt: false,
+    });
+    expect(boundQuote("")).toEqual({ quote: "", isQuoteExcerpt: false });
   });
 });
 
@@ -182,6 +223,27 @@ describe("validateComments target resolution", () => {
         }),
       ),
     ).toThrow(CommentRejected);
+  });
+
+  it("should keep the excerpt mark when a long highlight was trimmed", () => {
+    const [comment] = validate(
+      commentOn({
+        type: "selection",
+        blockId: "section/status-quo/paragraph-1",
+        start: 0,
+        end: 9000,
+        quote: "x".repeat(QUOTE_LIMIT),
+        isQuoteExcerpt: true,
+      }),
+    );
+    // The offsets still address the whole highlight, so the mark is the only
+    // thing telling a reader the stored quote is not all of it.
+    expect(comment?.target).toMatchObject({
+      type: "selection",
+      start: 0,
+      end: 9000,
+      isQuoteExcerpt: true,
+    });
   });
 
   it("should refuse a quote beyond the highlight limit", () => {
@@ -282,6 +344,7 @@ describe("validateComments shape and bounds", () => {
       id: index.toString(16).padStart(4, "0"),
       body: `Comment ${index}`,
       createdAt: NOW,
+      premiseSnapshot: PREMISE,
       target: { type: "document" },
     }));
 

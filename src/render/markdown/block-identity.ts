@@ -17,7 +17,24 @@
 // comment can name a line range the way an authored Annotation does.
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
+import {
+  CALLOUT_TYPES,
+  type CalloutType,
+} from "../../components/callout/compile.js";
 import { COMPONENT_NAME_ATTRIBUTE } from "./component-pipeline/component-name.js";
+
+// The meaning-bearing presentation facts a snapshot must record so a diff can
+// replay a block without consulting the live document. Only a fact that
+// changes what the plan asserts belongs here: a callout's type, because danger
+// replayed as note misstates risk, and a list's ordering, because numbers
+// replayed as bullets misstate whether sequence matters. Styling and layout
+// stay out - they are reproducible presentation, and carrying them would grow
+// this into a second rendering contract.
+// Mirrored by hand across the reviewShared tier boundary; reviewShared may
+// import nothing - keep this in sync with src/review/shared/review-wire.ts.
+export type BlockPresentation =
+  | { readonly aspect: "callout"; readonly calloutType: CalloutType }
+  | { readonly aspect: "list"; readonly isOrdered: boolean };
 
 /** The document-order block descriptors one compile produced. */
 export type BlockDescriptor = {
@@ -28,6 +45,21 @@ export type BlockDescriptor = {
   // Plain authored presentation text is retained for revision alignment and
   // diffing. It never enters an id or path and is not exposed as markup.
   readonly text: string;
+  // Whether the block is a built-in component's root. Only this walk can
+  // answer that structurally, so it is recorded here instead of being
+  // re-derived downstream from kind strings.
+  readonly isComponentRoot: boolean;
+  // The id of the block that declared this one as a sub-target: the table for
+  // its rows, columns, and cells, or the component root for its declared
+  // internals. Absent on every top-level block.
+  readonly ownerId?: string;
+  /** Header labels carried by table rows so isolated row diffs keep semantics. */
+  readonly tableHeaders?: ReadonlyArray<string>;
+  readonly isTableHeader?: boolean;
+  // The block's meaning-bearing presentation facts. Absent when the block
+  // carries none, and absence downstream renders neutrally rather than as a
+  // guessed default.
+  readonly presentation?: BlockPresentation;
 };
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -53,17 +85,71 @@ const NEVER_A_BLOCK = new Set(["hr", "br", "script", "style"]);
 // short enough to sit in a narrow rail.
 const LABEL_LIMIT = 72;
 
+// Block-level tags whose boundaries must survive text extraction. Markdown
+// HAST separates siblings with whitespace text nodes, but component views
+// render through JSX, which has none - without an inserted boundary a
+// component's headings, labels, cells, and list items run together into one
+// unreadable string wherever the flattened text is shown or diffed.
+const TEXT_BOUNDARY_TAGS = new Set([
+  "p",
+  "div",
+  "section",
+  "article",
+  "aside",
+  "header",
+  "footer",
+  "figure",
+  "figcaption",
+  "ul",
+  "ol",
+  "li",
+  "dl",
+  "dt",
+  "dd",
+  "table",
+  "thead",
+  "tbody",
+  "tfoot",
+  "tr",
+  "td",
+  "th",
+  "blockquote",
+  "pre",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+]);
+
+// Flattens an element to plain text, keeping a newline at every block-level
+// boundary so downstream consumers can tell adjacent units apart.
 const textOf = (node: Element): string => {
   let text = "";
+  const markBoundary = (): void => {
+    if (text !== "" && !/\s$/.test(text)) {
+      text += "\n";
+    }
+  };
   for (const child of node.children) {
     if (child.type === "text") {
       text += child.value;
     } else if (isElement(child)) {
-      // Screen-reader-only prefixes are announcement scaffolding, not content.
+      // Screen-reader-only prefixes are announcement scaffolding, and markup
+      // shipped with the hidden attribute (dormant controls, collapsed menus,
+      // a component's hidden machine-readable source) is not presented to the
+      // reader, so neither belongs to a block's diffable text.
       const className = child.properties.className;
-      const hidden = Array.isArray(className) && className.includes("sr-only");
+      const hidden =
+        (Array.isArray(className) && className.includes("sr-only")) ||
+        (child.properties.hidden !== undefined &&
+          child.properties.hidden !== false);
       if (!hidden) {
+        const isBoundary = TEXT_BOUNDARY_TAGS.has(child.tagName);
+        if (isBoundary) markBoundary();
         text += textOf(child);
+        if (isBoundary) markBoundary();
       }
     }
   }
@@ -298,6 +384,31 @@ const stampCodeLines = (node: Element): void => {
   });
 };
 
+// Reads the meaning-bearing presentation facts off the stamped element. The
+// callout view's data-callout attribute is its authored type contract, and a
+// value outside that contract records nothing: an unknown fact must replay
+// neutrally, never as a guessed "note". A dl also carries no fact, because a
+// definition list makes neither an ordered nor an unordered claim.
+const presentationOf = ({
+  node,
+  kind,
+}: {
+  readonly node: Element;
+  readonly kind: string;
+}): BlockPresentation | undefined => {
+  if (kind === "callout") {
+    const type = node.properties["data-callout"];
+    const calloutType = CALLOUT_TYPES.find((candidate) => candidate === type);
+    return calloutType === undefined
+      ? undefined
+      : { aspect: "callout", calloutType };
+  }
+  if (kind === "list" && (node.tagName === "ol" || node.tagName === "ul")) {
+    return { aspect: "list", isOrdered: node.tagName === "ol" };
+  }
+  return undefined;
+};
+
 // Allocates one id inside a scope, numbering repeats of a kind in document
 // order so "the third paragraph of this slide" is addressable and stable.
 type ScopeCounter = Map<string, number>;
@@ -325,6 +436,10 @@ const stampBlock = ({
   section,
   blocks,
   counter,
+  isComponentRoot = false,
+  ownerId,
+  tableHeaders,
+  isTableHeader = false,
 }: {
   readonly node: Element;
   readonly kind: string;
@@ -333,13 +448,30 @@ const stampBlock = ({
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
   readonly counter: ScopeCounter;
-}): void => {
+  readonly isComponentRoot?: boolean;
+  readonly ownerId?: string;
+  readonly tableHeaders?: ReadonlyArray<string>;
+  readonly isTableHeader?: boolean;
+}): string => {
   const id = allocateId({ scope, kind, counter });
   node.properties["data-block-id"] = id;
   node.properties["data-block-kind"] = kind;
   node.properties["data-block-label"] = label;
   node.properties["data-block-section"] = section;
-  blocks.push({ id, kind, label, section, text: textOf(node) });
+  const presentation = presentationOf({ node, kind });
+  blocks.push({
+    id,
+    kind,
+    label,
+    section,
+    text: textOf(node),
+    isComponentRoot,
+    ...(ownerId === undefined ? {} : { ownerId }),
+    ...(tableHeaders === undefined ? {} : { tableHeaders }),
+    ...(isTableHeader ? { isTableHeader: true } : {}),
+    ...(presentation === undefined ? {} : { presentation }),
+  });
+  return id;
 };
 
 // A Markdown table exposes the whole table, each row, every body cell, and one
@@ -347,12 +479,14 @@ const stampBlock = ({
 // single anchor honestly serves both the header cell and the whole column.
 const stampTableTargets = ({
   table,
+  tableId,
   scope,
   section,
   blocks,
   counter,
 }: {
   readonly table: Element;
+  readonly tableId: string;
   readonly scope: string;
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
@@ -373,6 +507,13 @@ const stampTableTargets = ({
       const firstCell = cells[0];
       const label =
         firstCell === undefined ? "Table row" : summarize(textOf(firstCell));
+      const isHeader = cells.some((cell) => cell.tagName === "th");
+      if (isHeader) {
+        columnLabels = cells.map((cell, index) => {
+          const cellLabel = summarize(textOf(cell));
+          return cellLabel.length > 0 ? cellLabel : `Column ${index + 1}`;
+        });
+      }
       stampBlock({
         node: candidate,
         kind: "table-row",
@@ -381,11 +522,13 @@ const stampTableTargets = ({
         section,
         blocks,
         counter,
+        ownerId: tableId,
+        tableHeaders: columnLabels,
+        isTableHeader: isHeader,
       });
 
-      const isHeader = cells.some((cell) => cell.tagName === "th");
       if (isHeader) {
-        columnLabels = cells.map((cell, index) => {
+        cells.forEach((cell, index) => {
           const cellLabel = summarize(textOf(cell));
           const columnLabel =
             cellLabel.length > 0 ? cellLabel : `Column ${index + 1}`;
@@ -397,8 +540,8 @@ const stampTableTargets = ({
             section,
             blocks,
             counter,
+            ownerId: tableId,
           });
-          return columnLabel;
         });
         return;
       }
@@ -414,6 +557,7 @@ const stampTableTargets = ({
           section,
           blocks,
           counter,
+          ownerId: tableId,
         });
       });
     },
@@ -422,12 +566,14 @@ const stampTableTargets = ({
 
 const stampDeclaredTargets = ({
   component,
+  componentId,
   scope,
   section,
   blocks,
   counter,
 }: {
   readonly component: Element;
+  readonly componentId: string;
   readonly scope: string;
   readonly section: string;
   readonly blocks: Array<BlockDescriptor>;
@@ -456,6 +602,7 @@ const stampDeclaredTargets = ({
         section,
         blocks,
         counter,
+        ownerId: componentId,
       });
     },
   });
@@ -498,7 +645,7 @@ const stampScope = ({
       continue;
     }
     const label = labelOf({ node: child, kind });
-    stampBlock({
+    const id = stampBlock({
       node: child,
       kind,
       label,
@@ -506,15 +653,24 @@ const stampScope = ({
       section,
       blocks,
       counter,
+      isComponentRoot: componentName(child) !== undefined,
     });
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);
     } else if (kind === "table") {
-      stampTableTargets({ table: child, scope, section, blocks, counter });
+      stampTableTargets({
+        table: child,
+        tableId: id,
+        scope,
+        section,
+        blocks,
+        counter,
+      });
     }
     if (componentName(child) !== undefined) {
       stampDeclaredTargets({
         component: child,
+        componentId: id,
         scope,
         section,
         blocks,
