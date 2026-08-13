@@ -13,10 +13,11 @@ export const USER_JOURNEY_SLIDE_TYPE = {
   },
   cardinality: "many",
   guidance: [
-    "Name the container “User journeys”; use either a Part or an untyped introductory slide according to the plan's argument, because the catalog does not mandate one container presentation.",
+    "Name the container “User journeys” and nest every journey underneath it: make the container a `Part` so each journey is a typed slide inside it, because a `Slide` marker attaches only to an h2 and a typed journey authored beside an untyped container slide renders as its sibling instead of its child.",
+    "Use an untyped “User journeys” slide as the container only when each journey fits an h3 sub-slide of it; a sub-slide carries no marker, so it forfeits the journey name, table-of-contents form, and wireframe contract.",
     "Give every journey marker a distinct `name` for its kicker and sidebar plus an ultra-concise `toc` form for the overview; let the h2 carry the full plain-language claim.",
     "Treat a Wireframe with actual Screen mockups as the default on every journey slide so the reviewer sees the interface states and moves through the same shortest path as the user; when no UI exists to show, add a non-empty `wireframeReason` attribute that explains why, and never leave the omission silent.",
-    "Keep one complete human loop per typed slide and repeat the type for several journeys inside the container.",
+    "Keep one complete human loop per typed slide and repeat the type for several journeys inside the container Part.",
     "Include unhappy-path recovery when it is part of completing the goal, and keep system mechanics subordinate to the person's actions.",
   ],
   components: [

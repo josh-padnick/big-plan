@@ -47,8 +47,13 @@ Big Plan does not lint that judgment because broad language checks would create 
 ### User journeys
 
 User journeys add one deeper name/title layer.
-Name the container “User journeys,” but choose the container presentation that fits the plan: either a Part or an untyped introductory slide.
-Big Plan deliberately supports both.
+Name the container “User journeys,” and nest every journey underneath it rather than beside it.
+Make the container a Part by default: each journey is then a typed slide inside it, numbered 3.1, 3.2, 3.3 under Part 3.
+A `Slide` marker attaches only to an h2, so the Part is the only container that lets a nested journey keep its `name`, `toc`, and wireframe contract.
+
+An untyped “User journeys” slide remains a valid container when each journey is short enough to be an h3 sub-slide of it, numbered 2.3.1, 2.3.2.
+A sub-slide carries no marker, so that shape forfeits the journey name, TOC form, and wireframe check.
+Authoring typed journey slides beside an untyped container slide is rejected by the `slide-type-structure` lint rule, because they render as the container's siblings.
 
 ```mdx
 <Part title="User journeys" />
@@ -87,6 +92,7 @@ Apply the Wireframe component's CLEAR quality bar to every mockup.
 - The marker must be top-level and immediately followed by the h2 it describes.
 - `user-journey` additionally requires non-empty `name` and `toc` attributes and accepts an optional non-empty `wireframeReason`; other types reject all three.
 - Every `user-journey` section must contain a `Wireframe` with actual UI mockups, or a non-empty `wireframeReason` that explains why no UI was created. Carrying both is rejected, because the reason only explains an absent wireframe.
+- Every `user-journey` slide must sit inside a Part whose title names the journeys container, such as “User journeys” or “Reviewer journeys”.
 - Singleton types may appear at most once; `user-journey` may repeat.
 - A plan may use `desired-experience` or `desired-outcome`, never both.
 - An acceptance-criteria slide with more than seven criteria must group them by a useful dimension.

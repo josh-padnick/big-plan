@@ -423,7 +423,7 @@ describe("lintPlan table-of-contents-matches-sections", () => {
     expect(
       lintPlan({
         markdown:
-          '# T\n\nLede.\n\n<TableOfContents>\n<Entry section="Draft status" gist="One journey" />\n</TableOfContents>\n\n<Slide type="user-journey" name="Drafting a status slide" toc="Draft status" />\n\n## An agent turns evidence into a status slide\n\nA.\n\n<Wireframe id="draft"><Screen id="evidence" name="Evidence" device="desktop" /></Wireframe>\n',
+          '# T\n\nLede.\n\n<TableOfContents>\n<Entry section="Draft status" gist="One journey" />\n</TableOfContents>\n\n<Part title="User journeys" />\n\n<Slide type="user-journey" name="Drafting a status slide" toc="Draft status" />\n\n## An agent turns evidence into a status slide\n\nA.\n\n<Wireframe id="draft"><Screen id="evidence" name="Evidence" device="desktop" /></Wireframe>\n',
       }),
     ).toEqual([]);
   });

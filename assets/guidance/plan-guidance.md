@@ -33,7 +33,11 @@ A rendered plan reads as a deck: every section is one slide carrying one thought
 If a section needs a second screen, it holds a second thought; split it into h3 sub-slides, each of which renders as its own numbered frame.
 Before drafting, run `big-plan guidance Slide` once for the complete slide-type catalog.
 For each intended slide, ask whether its purpose matches a defined type; when one fits, use its `Slide` marker and type-specific guidance, and when none fits, author an untyped slide under these general principles rather than forcing a match.
-For user journeys, name the container “User journeys” as either a Part or an untyped introductory slide; give every journey its own marker `name`, ultra-concise `toc` form, and full h2 claim.
+For user journeys, name the container “User journeys” and nest every journey underneath it; a journey authored beside its container reads as a peer of the container rather than one of the loops it holds.
+By default make the container a `Part`, so each journey is a typed slide inside it and numbers as 3.1, 3.2, 3.3 under Part 3.
+That is the default because a `Slide` marker attaches only to an h2, so only the Part shape lets a nested journey keep its marker `name` in the kicker and sidebar, its `toc` form in the overview, and its wireframe contract.
+An untyped “User journeys” slide is still a valid container when the journeys are short: give each journey an h3 sub-slide so they number 2.3.1, 2.3.2 beneath it, and accept that a sub-slide carries no `Slide` marker.
+Under the Part shape, give every journey its own marker `name`, ultra-concise `toc` form, and full h2 claim.
 Every journey slide should contain a `Wireframe` with actual `Screen` mockups that show the interface states in the human loop; when no UI exists to show, add a non-empty `wireframeReason` attribute to the `Slide` marker and explain the opt-out. Prose may explain the screens but never replace them when a UI exists.
 Typed coverage is not a quality target.
 Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.

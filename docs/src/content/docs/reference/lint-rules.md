@@ -36,6 +36,8 @@ Big Plan renders the paragraph directly under the title as the document's subtit
 `slide-type-structure` enforces only objective facts from the registered catalog.
 Singleton types may appear at most once, `desired-experience` and `desired-outcome` may not appear together, repeated user journeys must keep distinct names and TOC forms, and every user journey must contain Wireframe mockups or a non-empty `wireframeReason` explaining why no UI was created.
 The two are exclusive: a user journey that contains a Wireframe and also carries a `wireframeReason` is flagged, because the reason only explains an absent wireframe.
+Every typed user journey must also nest inside its container: a Part whose title names the journeys container, such as “User journeys” or “Reviewer journeys”.
+Typed journeys authored beside an untyped “User journeys” slide are flagged at that slide, because they render as its siblings; nest them as h3 sub-slides of it, or turn the slide into a Part.
 It does not require any type, judge whether content matches a type, lint “Success looks like”, or enforce the plain-language title discipline.
 
 `acceptance-criteria-grouping` requires an acceptance-criteria slide with more than seven criteria to expose a grouping dimension.

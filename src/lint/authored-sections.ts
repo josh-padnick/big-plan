@@ -15,6 +15,8 @@ export type AuthoredSection = {
   readonly toc?: string;
   readonly wireframeReason?: string;
   readonly title: string;
+  /** Title of the nearest preceding top-level Part marker, when the plan uses Parts. */
+  readonly partTitle?: string;
   readonly components: ReadonlyArray<string>;
   readonly content: ReadonlyArray<Node>;
   readonly line: number;
@@ -66,10 +68,14 @@ export const collectAuthoredSections = (
     if (!isParent(parent)) {
       return;
     }
+    let partTitle: string | undefined;
     for (let index = 0; index < parent.children.length; index += 1) {
       const child = parent.children[index];
       if (child === undefined) {
         continue;
+      }
+      if (parent.type === "root" && isNamedFlowElement(child, "Part")) {
+        partTitle = stringAttribute({ node: child, name: "title" });
       }
       if (
         isHeading(child) &&
@@ -113,6 +119,7 @@ export const collectAuthoredSections = (
             name: journeyName ?? slideTypeFor(authoredType).name,
             ...(journeyToc === undefined ? {} : { toc: journeyToc }),
             ...(wireframeReason === undefined ? {} : { wireframeReason }),
+            ...(partTitle === undefined ? {} : { partTitle }),
             title,
             components,
             content: parent.children.slice(index + 1, sectionEnd),
@@ -129,6 +136,7 @@ export const collectAuthoredSections = (
         } else {
           sections.push({
             name: title,
+            ...(partTitle === undefined ? {} : { partTitle }),
             title,
             components,
             content: parent.children.slice(index + 1, sectionEnd),
