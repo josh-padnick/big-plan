@@ -302,4 +302,169 @@ describe("block identity boundaries", () => {
     expect(html).toContain('data-block-line="12"');
     expect(html).toContain('data-block-line="13"');
   });
+
+  it("should mark only a component's root and hand its declared internals the root as owner", () => {
+    const { blocks } = compile(
+      "## Summary\n\nIntro.\n\n<QuickSummary>\n\n<Why>\n\n- Value.\n\n</Why>\n\n<What>\n\n- Build it.\n\n</What>\n\n</QuickSummary>\n",
+    );
+    const summary = blocks.find((block) => block.kind === "quick-summary");
+    const facets = blocks.filter(
+      (block) => block.kind === "quick-summary-facet",
+    );
+    const paragraph = blocks.find((block) => block.kind === "paragraph");
+    expect(summary?.isComponentRoot).toBe(true);
+    expect(paragraph?.isComponentRoot).toBe(false);
+    expect(facets).toHaveLength(2);
+    for (const facet of facets) {
+      expect(facet.isComponentRoot).toBe(false);
+      expect(facet.ownerId).toBe(summary?.id);
+    }
+  });
+
+  it("should hand a Markdown table's rows, columns, and cells the table as owner", () => {
+    const { blocks } = compile(
+      "## Rows\n\n| Field | Meaning |\n| --- | --- |\n| `versionId` | Content hash |\n",
+    );
+    const table = blocks.find((block) => block.kind === "table");
+    const subTargets = blocks.filter((block) =>
+      ["table-row", "table-column", "table-cell"].includes(block.kind),
+    );
+    expect(table?.isComponentRoot).toBe(false);
+    expect(subTargets.length).toBeGreaterThan(0);
+    for (const subTarget of subTargets) {
+      expect(subTarget.ownerId).toBe(table?.id);
+    }
+  });
+
+  it("should expose an HttpEndpoint's header, description, parameters, and responses as labeled fields", () => {
+    const { blocks } = compile(
+      '## Api\n\n<HttpEndpoint method="POST" path="/queue" summary="Queue a refresh" auth="Service token">\n\nQueues one refresh.\n\n<Param name="force" in="query" type="boolean">\n\nRefreshes fresh entries too.\n\n</Param>\n\n<Response status="202" label="Queued" />\n\n</HttpEndpoint>\n',
+    );
+    const endpoint = blocks.find((block) => block.kind === "http-endpoint");
+    const fields = blocks.filter(
+      (block) => block.kind === "http-endpoint-field",
+    );
+    expect(fields.map((field) => field.label)).toEqual([
+      "POST /queue",
+      "Description",
+      "Query parameter: force",
+      "Response: 202 Queued",
+    ]);
+    for (const field of fields) {
+      expect(field.ownerId).toBe(endpoint?.id);
+    }
+    // The identity row keeps word boundaries when flattened, so a field diff
+    // reads "force boolean optional" rather than one run-together token.
+    const param = fields.find(
+      (field) => field.label === "Query parameter: force",
+    );
+    expect(param?.text).toMatch(/force boolean optional/);
+  });
+
+  it("should expose a GraphqlOperation's arguments, returns, and payload fields as labeled fields", () => {
+    const { blocks } = compile(
+      '## Api\n\n<GraphqlOperation kind="mutation" name="refreshCreate">\n\nQueues a refresh.\n\n<Argument name="input" type="RefreshInput!">\n\nThe input.\n\n</Argument>\n\n<Field in="payload" name="refresh" type="Refresh">\n\nThe job.\n\n</Field>\n\n<Returns type="RefreshPayload">\n\nThe payload.\n\n</Returns>\n\n</GraphqlOperation>\n',
+    );
+    const operation = blocks.find(
+      (block) => block.kind === "graphql-operation",
+    );
+    const fields = blocks.filter(
+      (block) => block.kind === "graphql-operation-field",
+    );
+    expect(fields.map((field) => field.label)).toEqual([
+      "mutation refreshCreate",
+      "Description",
+      "Argument: input",
+      "Returns: RefreshPayload",
+      "Payload field: refresh",
+    ]);
+    for (const field of fields) {
+      expect(field.ownerId).toBe(operation?.id);
+    }
+  });
+
+  it("should expose a GrpcMethod's signature, message fields, and status codes as labeled fields", () => {
+    const { blocks } = compile(
+      '## Api\n\n<GrpcMethod service="catalog.v1.RefreshService" name="WatchRefreshes" request="WatchRefreshesRequest" response="RefreshEvent" kind="serverStreaming">\n\nStreams refresh state changes.\n\n<Field in="request" name="refresh_id" type="string">\n\nWatches one job.\n\n</Field>\n\n<Error code="NOT_FOUND">\n\nNo such job.\n\n</Error>\n\n</GrpcMethod>\n',
+    );
+    const method = blocks.find((block) => block.kind === "grpc-method");
+    const fields = blocks.filter((block) => block.kind === "grpc-method-field");
+    expect(fields.map((field) => field.label)).toEqual([
+      "rpc WatchRefreshes",
+      "Description",
+      "Request field: refresh_id",
+      "Status code: NOT_FOUND",
+    ]);
+    for (const field of fields) {
+      expect(field.ownerId).toBe(method?.id);
+    }
+  });
+
+  it("should expose a DatabaseTableSchema's identity, columns, indexes, and DDL bands as labeled fields", () => {
+    const { blocks } = compile(
+      `## Schema\n\n<DatabaseTableSchema name="billing.plans">\n\n\`\`\`dbml\ncode  text [pk]\nlabel text [not null]\n\nindexes {\n  code [name: 'plans_code_idx']\n}\n\`\`\`\n\n<Ddl title="Triggers">\n\n\`\`\`sql\nCREATE TRIGGER plans_touch BEFORE UPDATE ON billing.plans;\n\`\`\`\n\n</Ddl>\n\n</DatabaseTableSchema>\n`,
+    );
+    const schema = blocks.find(
+      (block) => block.kind === "database-table-schema",
+    );
+    const fields = blocks.filter(
+      (block) => block.kind === "database-table-schema-field",
+    );
+    expect(fields.map((field) => field.label)).toEqual([
+      "Table: billing.plans",
+      "Column: code",
+      "Column: label",
+      "Index: plans_code_idx",
+      "DDL: Triggers",
+    ]);
+    for (const field of fields) {
+      expect(field.ownerId).toBe(schema?.id);
+    }
+  });
+
+  it("should keep hidden markup out of a block's diffable text", () => {
+    const { blocks } = compile(
+      `## Schema\n\n<DatabaseTableSchema name="billing.plans">\n\n\`\`\`dbml\ncode text [pk]\n\`\`\`\n\n</DatabaseTableSchema>\n`,
+    );
+    const schema = blocks.find(
+      (block) => block.kind === "database-table-schema",
+    );
+    // The dormant column menu and the machine-readable source ship with the
+    // hidden attribute; neither is presented to the reader, so neither may
+    // enter the text a causal diff shows.
+    expect(schema?.text).not.toContain("Reset column layout");
+    expect(schema?.text).not.toContain("[pk]");
+    expect(schema?.text).toContain("code");
+  });
+
+  it("should record a callout's authored type and a list's ordering as presentation facts", () => {
+    const { blocks } = compile(
+      '## Risks\n\n<Callout type="danger" title="Rollback risk">\n\nData loss until verified.\n\n</Callout>\n\n1. Freeze writes.\n2. Backfill twice.\n\n- Alpha\n- Beta\n\nPlain paragraph.\n',
+    );
+    const callout = blocks.find((block) => block.kind === "callout");
+    expect(callout?.presentation).toEqual({
+      aspect: "callout",
+      calloutType: "danger",
+    });
+    const lists = blocks.filter((block) => block.kind === "list");
+    expect(lists.map((block) => block.presentation)).toEqual([
+      { aspect: "list", isOrdered: true },
+      { aspect: "list", isOrdered: false },
+    ]);
+    const paragraph = blocks.find((block) => block.kind === "paragraph");
+    expect(paragraph?.presentation).toBeUndefined();
+  });
+
+  it("should keep block boundaries apart when component text is flattened", () => {
+    const { blocks } = compile(
+      "## Summary\n\n<QuickSummary>\n\n<Why>\n\n- Value.\n\n</Why>\n\n<What>\n\n- Build it.\n\n</What>\n\n<How>\n\n- Move retries out.\n- Record every attempt.\n\n</How>\n\n</QuickSummary>\n",
+    );
+    const facet = blocks.find(
+      (block) => block.kind === "quick-summary-facet" && block.label === "How",
+    );
+    expect(facet?.text).toMatch(/^How\n/);
+    expect(facet?.text).toMatch(
+      /Move retries out\.\s*\nRecord every attempt\./,
+    );
+  });
 });

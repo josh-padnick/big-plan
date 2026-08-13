@@ -573,6 +573,33 @@
   article .decision-proposal-cancel:hover {
     background: var(--surface-c);
   }
+  article .decision-proposal-action {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--edge-c);
+    border-radius: 0.375rem;
+    cursor: pointer;
+    background: var(--bg);
+    color: var(--color-accent);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  article .decision-proposal-action[hidden] {
+    display: none;
+  }
+  article .decision-proposal-action:hover {
+    background: var(--surface-c);
+  }
+  article .decision-proposal-action:disabled {
+    cursor: default;
+    color: var(--color-subtle);
+  }
+  article .decision-proposal-action:focus-visible {
+    outline: none;
+    box-shadow: var(--elevation-focus);
+  }
   article .decision-proposal-cancel:focus-visible {
     outline: none;
     border-color: var(--color-accent);

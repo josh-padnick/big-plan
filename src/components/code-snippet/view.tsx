@@ -15,11 +15,12 @@ import {
   MAXIMIZABLE_ATTRIBUTE,
 } from "../_model/figure-controls/figure-controls.js";
 import { MaximizeButton } from "../_shared/figure-controls/maximize-button.js";
+import { INFO_ICON } from "../../icons/lucide/info.js";
 
 // /* off-scale */ Phase A preserves the legacy header/body radii, 0.6rem
 // body padding, and annotation-rail width exactly for the zero-pixel contract.
 const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
-  <figcaption className="code-snippet-header flex min-w-0 items-center justify-between gap-3 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
+  <figcaption className="code-snippet-header flex min-w-0 items-center justify-between gap-1 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
     {filePath === undefined ? (
       <span className="code-snippet-label text-xs font-semibold text-muted">
         Code snippet
@@ -27,8 +28,8 @@ const SnippetHeader = ({ filePath }: { readonly filePath?: string }) => (
     ) : (
       <FileIdentity filePath={filePath} />
     )}
-    <span className="code-snippet-controls flex shrink-0 items-center gap-2">
-      <span className="figure-action-group inline-flex items-center gap-0.5">
+    <span className="code-snippet-controls flex shrink-0 items-center gap-1">
+      <span className="figure-action-group inline-flex items-center gap-1">
         <CopyButton subject="code" />
         <MaximizeButton subject="code" />
       </span>
@@ -83,6 +84,7 @@ const annotationCard = (annotation: CompiledCodeSnippetAnnotation) => (
         : `Lines ${annotation.start}-${annotation.end}`
     }
     children={annotation.children}
+    icon={INFO_ICON}
     // The card carries the same rail as the lines it refers to, at the same
     // width and the same left edge, so the spine runs unbroken from the first
     // covered line to the end of the note.

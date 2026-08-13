@@ -80,15 +80,15 @@ const COMPONENT_INTERACTIONS = {
   },
   GraphqlOperation: {
     selector: "[data-graphql-operation]",
-    affordances: [],
+    affordances: ["comment"],
   },
   GrpcMethod: {
     selector: "[data-grpc-method]",
-    affordances: [],
+    affordances: ["comment"],
   },
   HttpEndpoint: {
     selector: "[data-http-endpoint]",
-    affordances: [],
+    affordances: ["comment"],
   },
   Part: {
     selector: "[data-part]",
@@ -136,12 +136,45 @@ test("should account for every registered component in the interaction gate", as
   }
 });
 
+test("should expose endpoint comment controls and one shared selected-scope treatment", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+
+  // Each card also exposes its declared fields as comment targets, so the
+  // whole-card control is found by its accessible name.
+  for (const [selector, rootName] of [
+    ["[data-http-endpoint]", "Comment on Http endpoint"],
+    ["[data-grpc-method]", "Comment on Grpc method"],
+    ["[data-graphql-operation]", "Comment on Graphql operation"],
+  ] as const) {
+    const component = page.locator(selector).first();
+    const comment = component.getByRole("button", {
+      name: rootName,
+      exact: true,
+    });
+    await expect(comment).toBeVisible();
+    await comment.click();
+    await expect(component).toHaveAttribute("data-review-scope-selected", "");
+    await page
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByRole("button", { name: "Cancel" })
+      .click();
+    await expect(component).not.toHaveAttribute(
+      "data-review-scope-selected",
+      "",
+    );
+  }
+});
+
 test("should keep column drag cursors through pointer gestures in both themes", async ({
   page,
   allComponentsViewerUrl,
 }) => {
   await page.goto(allComponentsViewerUrl);
   const body = page.locator("body");
+  const dragPreview = page.locator("[data-column-drag-preview]");
   const pointerControl = page.locator("[data-preferences-open]");
   const plainTableHeader = page
     .locator(
@@ -219,12 +252,37 @@ test("should keep column drag cursors through pointer gestures in both themes", 
         ).toBe(true);
         await page.mouse.move(controlPoint.x, controlPoint.y, { steps: 10 });
         await expect(body).toHaveAttribute("data-column-dragging", "");
+        await expect(dragPreview).toBeVisible();
+        await expect(dragPreview).not.toHaveText("");
+        const previewVisual = await dragPreview.evaluate((preview) => {
+          const rect = preview.getBoundingClientRect();
+          const style = getComputedStyle(preview);
+          return {
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            opacity: Number.parseFloat(style.opacity),
+            background: style.backgroundColor,
+          };
+        });
+        const headerVisual = await header.evaluate((column) => {
+          const rect = column.getBoundingClientRect();
+          return {
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            background: getComputedStyle(column).backgroundColor,
+          };
+        });
+        expect(previewVisual.width).toBe(headerVisual.width);
+        expect(previewVisual.height).toBe(headerVisual.height);
+        expect(previewVisual.opacity).toBeLessThan(1);
+        expect(previewVisual.background).toBe(headerVisual.background);
         expect(await cursorAt(controlPoint.x, controlPoint.y)).toBe("grabbing");
         await expect(plainTableHeader).toHaveCSS("cursor", "default");
         await expect(schemaRowHeader).toHaveCSS("cursor", "default");
         await page.mouse.up();
         await expect(body).not.toHaveAttribute("data-column-pressing");
         await expect(body).not.toHaveAttribute("data-column-dragging");
+        await expect(dragPreview).toHaveCount(0);
         expect(await cursorAt(controlPoint.x, controlPoint.y)).toBe("pointer");
         await expect(header).toHaveCSS("cursor", "grab");
         await expect(plainTableHeader).toHaveCSS("cursor", "auto");

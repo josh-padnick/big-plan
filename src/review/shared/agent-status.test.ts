@@ -55,6 +55,24 @@ describe("current agent activity", () => {
     });
   });
 
+  it("should expire a previously connected agent when its heartbeat is stale", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [],
+        responseRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: true,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW - AGENT_STALL_MS - 1,
+      }),
+    ).toMatchObject({
+      state: "disconnected",
+      headline: "The agent is disconnected",
+      supporting: expect.stringContaining("No agent signal for 1m 30s"),
+    });
+  });
+
   it("should distinguish a disconnected agent from an ordinary wait", () => {
     const activity = deriveCurrentAgentActivity({
       requests: [request()],
@@ -75,7 +93,7 @@ describe("current agent activity", () => {
     expect(activity).not.toHaveProperty("requestId");
   });
 
-  it("should keep fresh claimed work active between agent commands", () => {
+  it("should let disconnection override fresh claimed work", () => {
     const activity = deriveCurrentAgentActivity({
       requests: [{ ...request(), claimedAt: new Date(NOW).toISOString() }],
       responseRequestIds: new Set(),
@@ -93,9 +111,8 @@ describe("current agent activity", () => {
       heartbeatAt: 0,
     });
     expect(activity).toMatchObject({
-      state: "working",
-      headline: "Responding to a comment",
-      latestStep: "Reading the current plan",
+      state: "disconnected",
+      headline: "The agent is disconnected",
     });
     expect(
       deriveAgentHealthLabel({
@@ -103,7 +120,7 @@ describe("current agent activity", () => {
         hasAgentRuntime: true,
         isReadOnly: false,
       }),
-    ).toBeNull();
+    ).toBe("Agent disconnected");
   });
 
   it.each([
@@ -147,7 +164,7 @@ describe("current agent activity", () => {
         agentConnected: true,
         runtimeOffline: false,
         now: NOW,
-        heartbeatAt: NOW - AGENT_STALL_MS - 1,
+        heartbeatAt: NOW,
       }),
     ).toMatchObject({ state: "stalled", headline: "Agent may be stalled" });
   });
@@ -177,6 +194,19 @@ describe("agent request status", () => {
     expect(status.stage).toBe("blocked");
     expect(status.headline).toBe("Blocked - no agent connected");
     expect(status.detail).toContain("Nothing is lost");
+  });
+
+  it("should show disconnected claimed work as blocked", () => {
+    const status = deriveAgentStatus({
+      runtime: "online",
+      request: "pending",
+      agentConnected: false,
+      pickedUp: true,
+      lastAgentSignalAtMs: NOW,
+      nowMs: NOW,
+    });
+    expect(status.stage).toBe("blocked");
+    expect(status.headline).toBe("Blocked - no agent connected");
   });
 
   it("should heal stalled work when a fresh agent signal arrives", () => {

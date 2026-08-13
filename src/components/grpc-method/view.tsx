@@ -41,6 +41,17 @@ const KIND_CLASSES: Readonly<Record<GrpcStreamingKind, string>> = {
 const DEPRECATED_CLASSES =
   "text-muted [background:color-mix(in_srgb,var(--color-muted)_14%,transparent)]";
 
+// Each field a reviewer can point at is declared as a commentable sub-target,
+// so a comment or a causal diff names one message field or status code instead
+// of the whole card. The labels are the words a reviewer would use in a thread.
+const FIELD_KIND = "grpc-method-field";
+
+// The reviewer-facing name of each message-field side.
+const FIELD_SIDE_LABELS: Readonly<Record<CompiledGrpcField["side"], string>> = {
+  request: "Request field",
+  response: "Response field",
+};
+
 const Keyword = ({ value }: { readonly value: string }) => (
   <span className="text-muted">{value}</span>
 );
@@ -84,10 +95,16 @@ const Signature = ({ model }: { readonly model: CompiledGrpcMethod }) => (
 // prose inside the description, matching the ecosystem.
 const FieldEntry = ({ field }: { readonly field: CompiledGrpcField }) => (
   <DefinitionEntry
-    dataProperties={{ "data-grpc-field": field.side }}
+    dataProperties={{
+      "data-grpc-field": field.side,
+      "data-commentable-kind": FIELD_KIND,
+      "data-commentable-label": `${FIELD_SIDE_LABELS[field.side]}: ${field.name}`,
+    }}
     term={
+      // The literal space keeps a word boundary in the flattened diff text;
+      // the flex layout never renders whitespace-only text between items.
       <>
-        <span className="font-mono text-sm font-semibold">{field.name}</span>
+        <span className="font-mono text-sm font-semibold">{field.name}</span>{" "}
         {field.fieldType === undefined ? null : (
           <span className="font-mono text-xs text-muted">
             {field.fieldType}
@@ -127,6 +144,8 @@ const ErrorEntry = ({ error }: { readonly error: CompiledGrpcError }) => (
   <div
     className="border-b border-edge py-3 last:border-b-0"
     data-grpc-error={error.code}
+    data-commentable-kind={FIELD_KIND}
+    data-commentable-label={`Status code: ${error.code}`}
   >
     <div className="mb-2 flex flex-wrap items-center gap-2">
       <span className="grpc-method-error-code inline-flex items-center rounded-full bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,transparent)] px-2 py-0.5 font-mono text-2xs leading-4 font-bold text-[var(--callout-warning-c)]">
@@ -144,7 +163,12 @@ const ProtoSection = ({
 }: {
   readonly proto: ReadonlyArray<ElementContent>;
 }) => (
-  <CardSection>
+  <CardSection
+    dataProperties={{
+      "data-commentable-kind": FIELD_KIND,
+      "data-commentable-label": "Proto",
+    }}
+  >
     <div className="mb-3">
       <SectionLabel label="Proto" />
     </div>
@@ -165,21 +189,32 @@ export const GrpcMethod = ({
     data-grpc-kind={model.kind}
     {...(model.deprecated ? { "data-grpc-deprecated": "" } : {})}
   >
-    <header className="bg-header px-4 py-3">
-      <div className="font-mono text-xs text-muted">{model.service}</div>
-      <div className="mt-1 flex flex-wrap items-center gap-3">
-        <Signature model={model} />
-        <BadgePill
-          label={KIND_LABELS[model.kind]}
-          classNames={["grpc-method-kind-pill", KIND_CLASSES[model.kind]]}
-        />
-        {model.deprecated ? (
-          <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
-        ) : null}
+    <header className="flex min-w-0 items-start justify-between gap-1 bg-header px-4 py-3">
+      <div
+        className="min-w-0"
+        data-commentable-kind={FIELD_KIND}
+        data-commentable-label={`rpc ${model.name}`}
+      >
+        <div className="font-mono text-xs text-muted">{model.service}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <Signature model={model} />{" "}
+          <BadgePill
+            label={KIND_LABELS[model.kind]}
+            classNames={["grpc-method-kind-pill", KIND_CLASSES[model.kind]]}
+          />{" "}
+          {model.deprecated ? (
+            <BadgePill label="Deprecated" classNames={[DEPRECATED_CLASSES]} />
+          ) : null}
+        </div>
       </div>
+      <span className="figure-action-group inline-flex shrink-0 items-center gap-1" />
     </header>
     {model.description.length === 0 ? null : (
-      <div className="px-4 py-4 [&>:last-child]:mb-0">
+      <div
+        className="px-4 py-4 [&>:last-child]:mb-0"
+        data-commentable-kind={FIELD_KIND}
+        data-commentable-label="Description"
+      >
         {hastContentToReact(model.description)}
       </div>
     )}
@@ -208,7 +243,15 @@ export const GrpcMethod = ({
       </CardSection>
     )}
     {model.examples.length === 0 ? null : (
-      <CardSection dataProperties={{ "data-grpc-example": "" }}>
+      <CardSection
+        dataProperties={{
+          "data-grpc-example": "",
+          // One grouped example is one reviewable field: a request payload and
+          // the stream it produces only make sense as a unit.
+          "data-commentable-kind": FIELD_KIND,
+          "data-commentable-label": "Example",
+        }}
+      >
         <div className="mb-3">
           <SectionLabel label="Example" />
         </div>

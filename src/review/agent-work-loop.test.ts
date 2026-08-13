@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildFeedbackPackage } from "./feedback-package.js";
 import {
-  deriveSourceRevision,
+  deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
   readAgentExchange,
@@ -23,7 +23,7 @@ import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
 
 let runtime: ReviewRuntime;
-let targetLabel = "";
+const commentBody = "Which confidence level should this claim use?";
 const executablePath = fileURLToPath(
   new URL("../../bin/big-plan.mjs", import.meta.url),
 );
@@ -46,7 +46,6 @@ beforeAll(async () => {
   if (target === undefined) {
     throw new Error("The sample plan has no paragraph target");
   }
-  targetLabel = target.label;
   const feedback = buildFeedbackPackage({
     sessionId: runtime.sessionId,
     packageId: "aaaaaaaaaaaaaaaa",
@@ -56,8 +55,9 @@ beforeAll(async () => {
     comments: [
       {
         id: "bbbbbbbbbbbbbbbb",
-        body: "Which confidence level should this claim use?",
+        body: commentBody,
         createdAt: "2026-08-02T12:00:00.000Z",
+        premiseSnapshot: deriveSnapshotDigest(source),
         target: {
           type: "block",
           blockId: target.id,
@@ -72,7 +72,7 @@ beforeAll(async () => {
     store: runtime.store,
     request: feedbackAgentRequest({
       feedback,
-      sourceRevision: deriveSourceRevision(source),
+      premiseSnapshot: deriveSnapshotDigest(source),
     }),
   });
 });
@@ -149,13 +149,13 @@ describe("agent work loop", () => {
         expect.objectContaining({
           step: "Reviewing feedback",
           state: "live",
-          detail: targetLabel,
+          detail: commentBody,
         }),
       ]),
     );
   });
 
-  it("should publish a complete question outcome without editing the plan", async () => {
+  it("should publish a complete needs-input outcome without editing the plan", async () => {
     const next = await runAgentWorkLoopAction({
       kind: "next",
       planPath: runtime.planPath,
@@ -173,7 +173,7 @@ describe("agent work loop", () => {
         outcomes: [
           {
             commentId: "bbbbbbbbbbbbbbbb",
-            state: "question",
+            state: "needs-input",
             message: "Should the plan state 90% or 95% confidence?",
           },
         ],
@@ -199,7 +199,7 @@ describe("agent work loop", () => {
       {
         outcomes: [
           {
-            state: "question",
+            state: "needs-input",
             message: "Should the plan state 90% or 95% confidence?",
           },
         ],
@@ -209,6 +209,34 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should explain a normal idle timeout to a waiting agent", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n");
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 1_000,
+    });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: true,
+        }),
+      ).resolves.toMatchObject({
+        pending: false,
+        ended: true,
+        reason:
+          "The review session ended normally after 1 second of inactivity.",
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should include complete original context when picking up an old reply", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-history-"));
     const planPath = join(directory, "plan.mdx");
@@ -216,11 +244,12 @@ describe("agent work loop lifecycle", () => {
     await writeFile(planPath, source);
     const review = await startReviewRuntime({ planPath });
     try {
-      const revision = deriveSourceRevision(source);
+      const revision = deriveSnapshotDigest(source);
       const comment = {
         id: "2222222222222222",
         body: "Explain the original decision.",
         createdAt: "2026-08-10T12:00:00.000Z",
+        premiseSnapshot: revision,
         target: { type: "document" as const },
       };
       const feedback = buildFeedbackPackage({
@@ -233,7 +262,7 @@ describe("agent work loop lifecycle", () => {
       });
       const originalRequest = feedbackAgentRequest({
         feedback,
-        sourceRevision: revision,
+        premiseSnapshot: revision,
       });
       await writeAgentRequest({
         store: review.store,
@@ -242,7 +271,7 @@ describe("agent work loop lifecycle", () => {
       const originalClaim = await claimAgentRequest({
         store: review.store,
         requestId: originalRequest.requestId,
-        sourceRevision: revision,
+        baselineSnapshot: revision,
         now: "2026-08-10T12:00:00.500Z",
       });
       await publishAgentResponse({
@@ -253,7 +282,7 @@ describe("agent work loop lifecycle", () => {
             outcomes: [
               {
                 commentId: comment.id,
-                state: "outside",
+                state: "declined",
                 message: "The original plan already explains it.",
               },
             ],
@@ -261,7 +290,7 @@ describe("agent work loop lifecycle", () => {
           request: originalClaim,
           commentsById: new Map([[comment.id, comment]]),
           changedBlocks: new Set(),
-          currentRevision: revision,
+          currentSnapshot: revision,
           now: "2026-08-10T12:00:01.000Z",
         }),
       });
@@ -271,7 +300,7 @@ describe("agent work loop lifecycle", () => {
           requestId: `8${index.toString(16).padStart(15, "0")}`,
           sessionId: review.sessionId,
           planId: review.planId,
-          sourceRevision: revision,
+          premiseSnapshot: revision,
           createdAt: new Date(
             Date.parse(comment.createdAt) + index + 1,
           ).toISOString(),
@@ -292,7 +321,7 @@ describe("agent work loop lifecycle", () => {
         requestId: "ffffffffffffffff",
         sessionId: review.sessionId,
         planId: review.planId,
-        sourceRevision: revision,
+        premiseSnapshot: revision,
         createdAt: "2026-08-10T12:00:01.000Z",
         body: "Please clarify that answer.",
         commentId: comment.id,

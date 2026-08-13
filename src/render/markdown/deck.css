@@ -50,14 +50,21 @@ stability follow from the layout instead of from hand-tuned insets.
   article .plan-card {
     padding: var(--deck-pad-y) var(--deck-pad-x);
   }
+  /*
+    --deck-slide-pad-x is the same number as a slide's own --deck-pad-x, but
+    a sub-slide re-declares only --deck-pad-x, so inside a sub-slide this one
+    still names the parent slide's padding. That is what lets chrome sitting
+    in a nested header measure the gutter the parent card opened for it.
+  */
   article .plan-slide.plan-card {
     --deck-pad-y: 1.5rem;
-    --deck-pad-x: 1.5rem;
+    --deck-slide-pad-x: 1.5rem;
+    --deck-pad-x: var(--deck-slide-pad-x);
   }
   @media (width >= 56rem) {
     article .plan-slide.plan-card {
       --deck-pad-y: 2rem;
-      --deck-pad-x: 2rem;
+      --deck-slide-pad-x: 2rem;
     }
   }
   /* One level tighter than a slide card (Contrast); uniform among sub-slides. */
@@ -81,7 +88,12 @@ stability follow from the layout instead of from hand-tuned insets.
   article .plan-collapse-chrome > :last-child {
     margin-bottom: 0;
   }
-  article [data-collapsible] > [data-collapse-header] .plan-slide-title {
+  /* A region's name is a pointer target once the viewer script has wired the
+     header, and only then; deck-collapse.ts owns which element is the name. */
+  article
+    [data-collapsible]
+    > [data-collapse-header][data-shown]
+    [data-collapse-name] {
     cursor: pointer;
   }
 

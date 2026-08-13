@@ -6,8 +6,17 @@ import type {
   ComponentPropsWithRef,
   HTMLAttributes,
   KeyboardEvent,
+  ReactElement,
 } from "react";
-import { useLayoutEffect, useRef } from "react";
+import {
+  cloneElement,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 
 const joinClasses = (
   ...values: ReadonlyArray<string | false | null | undefined>
@@ -129,10 +138,18 @@ export const Card = ({
 
 /** Token-themed shadcn Badge primitive. */
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
-  readonly size?: "default" | "compact" | "micro";
+  readonly size?: "default" | "compact" | "micro" | "status";
   readonly shape?: "badge" | "pill";
   readonly tone?:
-    "neutral" | "accent" | "accentOutline" | "annotation" | "secondary";
+    | "neutral"
+    | "accent"
+    | "accentOutline"
+    | "annotation"
+    | "secondary"
+    | "statusAccent"
+    | "statusNeutral"
+    | "statusWarning"
+    | "statusDanger";
   readonly weight?: "semibold" | "bold";
 };
 
@@ -140,6 +157,7 @@ const BADGE_SIZES = {
   default: "px-2 py-0.5 text-xs",
   compact: "px-1 py-0.5 text-2xs",
   micro: "px-0.5 py-0 text-2xs",
+  status: "px-1.5 py-0.5 text-2xs",
 } as const;
 
 const BADGE_TONES = {
@@ -149,6 +167,13 @@ const BADGE_TONES = {
   annotation:
     "border border-[var(--annotation-c)] bg-transparent text-[var(--annotation-c)]",
   secondary: "border border-transparent bg-well text-muted",
+  statusAccent:
+    "bg-[color-mix(in_srgb,var(--accent-c)_14%,var(--bg))] text-accent",
+  statusNeutral: "bg-[color-mix(in_srgb,var(--ink-c)_8%,var(--bg))] text-muted",
+  statusWarning:
+    "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,var(--bg))] text-[var(--callout-warning-c)]",
+  statusDanger:
+    "bg-[color-mix(in_srgb,var(--danger-c)_14%,var(--bg))] text-danger",
 } as const;
 
 const BADGE_SHAPES = {
@@ -182,6 +207,104 @@ export const Badge = ({
   />
 );
 
+type TooltipProps = {
+  readonly label: string;
+  readonly children: ReactElement<{ "aria-describedby"?: string }>;
+  readonly isInstant?: boolean;
+};
+
+/** A portal tooltip with a deliberate default pause before secondary help. */
+export const Tooltip = ({
+  label,
+  children,
+  isInstant = false,
+}: TooltipProps) => {
+  const tooltipId = useId();
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const timerRef = useRef<number | null>(null);
+  const [position, setPosition] = useState<{
+    readonly top: number;
+    readonly left: number;
+  } | null>(null);
+  const hide = () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+    setPosition(null);
+  };
+  const reveal = () => {
+    const rect = anchorRef.current?.getBoundingClientRect();
+    if (rect === undefined) return;
+    const center = rect.left + rect.width / 2;
+    const edge = Math.min(96, window.innerWidth / 2);
+    setPosition({
+      top: rect.top - 8,
+      left: Math.min(window.innerWidth - edge, Math.max(edge, center)),
+    });
+  };
+  const show = () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    if (isInstant) {
+      reveal();
+      return;
+    }
+    timerRef.current = window.setTimeout(() => {
+      reveal();
+      timerRef.current = null;
+    }, 1_000);
+  };
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
+  useEffect(() => {
+    if (position === null) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      hide();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [position]);
+  useLayoutEffect(() => {
+    if (position === null) return;
+    const reposition = () => reveal();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [position]);
+  return (
+    <span
+      ref={anchorRef}
+      className="inline-flex"
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocusCapture={show}
+      onBlurCapture={hide}
+    >
+      {cloneElement(children, { "aria-describedby": tooltipId })}
+      {position === null
+        ? null
+        : createPortal(
+            <span
+              id={tooltipId}
+              role="tooltip"
+              className="pointer-events-none fixed z-[2147483647] w-max max-w-44 -translate-x-1/2 -translate-y-full rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs font-semibold leading-[1.35] text-[var(--bg)] shadow-floating"
+              style={{ top: position.top, left: position.left }}
+            >
+              {label}
+            </span>,
+            document.body,
+          )}
+    </span>
+  );
+};
+
 type AlertDialogProps = {
   readonly open: boolean;
   readonly title: string;
@@ -210,7 +333,10 @@ export const AlertDialog = ({
     window.getSelection()?.removeAllRanges();
     dialogRef.current?.focus();
     return () => {
-      previousFocus?.focus();
+      // The element that opened this dialog can be replaced while the dialog
+      // is up - the plan refreshes in place - and focusing a detached node
+      // drops focus to the body instead of returning it.
+      if (previousFocus?.isConnected === true) previousFocus.focus();
     };
   }, [open]);
 

@@ -1,0 +1,78 @@
+# Causal Diff Gallery
+
+Make every meaningful agent change reviewable at its original place and long after later edits.
+
+## What this experience does
+
+This is a causal diff review experience: it shows reviewers the exact Was and Now content beside each place an agent changed, and ties each change back to the feedback that caused it.
+
+- Thread answers carry only the changes caused by that feedback.
+- Chat answers carry a grouped, plan-wide change digest.
+- Historical answers preserve their claim-time baseline and result snapshots.
+- A guided tour moves through every changed place without losing context.
+
+> **Review note:** verify the causal boundary, the in-place lens, and the historical state.
+
+### Causal boundary
+
+A response attributes only the edits made for the request it answers, rather than every difference between the reviewer's old page and the latest plan.
+
+- An anchored feedback response compares the claim-time baseline with the published result and names only the blocks changed for that request.
+- A plan-wide chat response groups every changed block from that request in presentation order.
+- An answered, declined, or needs-input response carries an explanation but no invented diff.
+- Later unrelated revisions never rewrite the evidence attached to an earlier response.
+
+## Delivery contract
+
+*Each answer includes the evidence that led to its declared outcome.*
+
+| Where reviewers see it | Evidence shown |
+| ---------------------- | -------------- |
+| Feedback thread | Was/Now diff attributed to that feedback |
+| Plan-wide chat | Grouped change digest and guided tour |
+| Current plan | Current source plus historical diffs |
+| Feedback on an older plan version | Stale badge and premise-to-current diff |
+
+```ts
+type Outcome = "answered" | "changed" | "needs-input" | "declined";
+
+type SnapshotExchange = {
+  premiseSnapshot: string;
+  baselineSnapshot?: string;
+  resultSnapshot: string;
+};
+```
+
+### Snapshot semantics
+
+- **Premise** captures the plan the reviewer saw when they authored feedback.
+- **Baseline** freezes the authoritative source when the agent claims the request, separating that work from changes that happened while the request waited.
+- **Result** captures the validated source published with the agent's response.
+- Every snapshot identifier resolves to immutable captured source; the MDX file remains authoritative for the current plan.
+
+### Stale feedback behavior
+
+When the premise differs from the current plan, the review marks the request stale without discarding it. The reviewer can compare premise to current state, while the agent still reports its own work from baseline to result. This keeps concurrent or delayed feedback understandable without attributing intervening edits to the wrong request.
+
+## Rollout
+
+The first release enables the full experience for every local reviewer and rejects responses whose claimed evidence cannot be verified.
+
+1. Capture the premise when feedback is authored.
+2. Freeze the baseline when the agent claims the request.
+3. Validate the outcome and every claimed changed block against the baseline-to-result diff.
+4. Attach the result snapshot and causal evidence to the answer.
+5. Tour grouped changed places in the live document.
+
+### Verification
+
+- Change one anchored block and confirm its thread shows only that block's Was/Now diff.
+- Change several places from plan-wide chat and confirm the digest groups them in presentation order.
+- Edit the plan again and confirm the earlier answer still renders its original baseline and result.
+- Submit feedback against an older premise and confirm the stale badge and premise-to-current comparison appear.
+- Claim a changed outcome without editing the source, or name an unchanged block, and confirm publication is rejected.
+- Move through the guided tour and confirm every changed place is reachable without losing the open conversation.
+
+### Scope boundary
+
+This experience explains and attributes plan revisions during plan review. It does not execute the plan, validate the finished deliverable, perform code review, or decide whether changes should merge.

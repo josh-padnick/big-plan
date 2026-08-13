@@ -19,7 +19,17 @@ Everything on this page is shipped and works today.
 - A sticky sidebar on wide screens; a compact sticky `Sections` menu on narrow ones.
 - Section links scroll smoothly, unless you've asked your OS for reduced motion.
 - Collapse controls on Parts, slides, and sub-slides, plus document-wide expand-all and collapse-all controls in the table of contents; TOC jumps expand collapsed ancestors.
-- Collapse choices, CodeDiff and FileTreeDiff views, database-schema column order and visibility, and a document-level review-comment draft persist only for the exact source path and authored revision, so same-titled plans and distinct authored revisions never share viewer state.
+- Collapse choices, CodeDiff and FileTreeDiff views, and database-schema column order and visibility persist only for the exact source path and authored revision, so same-titled plans and distinct authored revisions never share viewer state.
+- A static render's document-level review-comment draft follows that same revision-scoped browser-storage rule; live review persistence is described below.
+
+## Live review
+
+- `big-plan review` serves a loopback session with a per-session API token, comments on slides, components, or selected text, plus plan-wide chat and coding-agent status.
+- Sent feedback stays attached to durable threads while the connected coding agent answers, asks for input, declines, warns, or publishes a validated plan revision.
+- **What changed** compares each request's claim-time baseline with its result, keeps later historical and stale-premise diffs reviewable, preserves structured component presentation, and guides the reviewer through accepting each changed place; comment threads then offer resolution.
+- Review state and feedback packages stay in an ignored, owner-only `.big-plan/` directory beside the plan.
+
+See [Reviewing a plan](/reference/reviewing/) for the workflow, persistence model, causal diff behavior, and trust boundaries.
 
 ## Feedback and revision
 

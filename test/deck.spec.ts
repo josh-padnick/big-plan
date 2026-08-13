@@ -207,6 +207,40 @@ test("should collapse and expand deck parts, slides, and sub-slides", async ({
     await expect(toggle).toBeVisible();
   });
 
+  // Regression: the header hit target was once narrowed to the slide-level
+  // title class, which a sub-slide never carries because its name is the
+  // kicker. Clicking a sub-slide's name silently stopped toggling it.
+  await test.step("a sub-slide name toggles its own frame", async () => {
+    const worker = page.locator(
+      '[data-collapsible="subslide"][data-collapse-id="the-worker"]',
+    );
+    const parent = worker.locator(
+      'xpath=ancestor::*[@data-collapsible="slide"][1]',
+    );
+    const name = worker.locator(
+      ":scope > [data-collapse-header] [data-collapse-name]",
+    );
+    const toggle = worker.locator(
+      ":scope > [data-collapse-header] > [data-collapse-toggle]",
+    );
+    await expect(name).toHaveText(/2\.1\.1 \/ The worker/u);
+    await expect(name).toHaveCSS("cursor", "pointer");
+    await expect(worker).not.toHaveAttribute("data-collapsed", "");
+
+    await name.click();
+    await expect(worker).toHaveAttribute("data-collapsed", "");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // The name is a pointer affordance only: the chevron stays the single
+    // keyboard control, so the header gains no second tab stop.
+    await expect(name).toHaveCount(1);
+    await expect(name.locator("button, a, [tabindex]")).toHaveCount(0);
+    await expect(parent).not.toHaveAttribute("data-collapsed", "");
+
+    await name.click();
+    await expect(worker).not.toHaveAttribute("data-collapsed", "");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
   await test.step("collapsing a sub-slide hides only that frame's body", async () => {
     const worker = page.locator(
       '[data-collapsible="subslide"][data-collapse-id="the-worker"]',
