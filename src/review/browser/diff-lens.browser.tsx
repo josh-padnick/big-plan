@@ -534,16 +534,121 @@ const SnapshotSideContent = ({
   });
 };
 
+type WireframeScreenDiff = {
+  readonly id: string;
+  readonly name: string;
+  readonly status: "added" | "removed" | "updated";
+};
+
+const wireframeScreenMarkup = (
+  html: string | undefined,
+): Map<string, string> => {
+  const screens = new Map<string, string>();
+  if (html === undefined) return screens;
+  const document = new DOMParser().parseFromString(html, "text/html");
+  for (const screen of document.querySelectorAll<HTMLElement>(
+    "[data-wireframe-screen]",
+  )) {
+    const id = screen.dataset.wireframeScreen;
+    if (id === undefined) continue;
+    screen.removeAttribute("data-wireframe-current");
+    screens.set(id, screen.outerHTML);
+  }
+  return screens;
+};
+
+const wireframeScreenName = (html: string, id: string): string => {
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const screen = document.querySelector<HTMLElement>(
+    `[data-wireframe-screen="${CSS.escape(id)}"]`,
+  );
+  return (
+    screen?.querySelector<HTMLElement>(".wireframe-screen-name")?.textContent ??
+    screen?.getAttribute("aria-label")?.split(",")[0] ??
+    id
+  ).trim();
+};
+
+const wireframeScreenDiffs = (
+  oldHtml: string | undefined,
+  newHtml: string | undefined,
+): ReadonlyArray<WireframeScreenDiff> => {
+  const oldScreens = wireframeScreenMarkup(oldHtml);
+  const newScreens = wireframeScreenMarkup(newHtml);
+  const ids = [...new Set([...newScreens.keys(), ...oldScreens.keys()])];
+  return ids.flatMap((id) => {
+    const oldMarkup = oldScreens.get(id);
+    const newMarkup = newScreens.get(id);
+    const status =
+      oldMarkup === undefined
+        ? "added"
+        : newMarkup === undefined
+          ? "removed"
+          : oldMarkup === newMarkup
+            ? undefined
+            : "updated";
+    if (status === undefined) return [];
+    const nameSource = newMarkup === undefined ? oldHtml : newHtml;
+    return [
+      {
+        id,
+        name: wireframeScreenName(nameSource ?? "", id),
+        status,
+      },
+    ];
+  });
+};
+
+const screenStatusLabel = (status: WireframeScreenDiff["status"]): string =>
+  status.charAt(0).toUpperCase() + status.slice(1);
+
+const screenStatusClasses = (status: WireframeScreenDiff["status"]): string => {
+  if (status === "added") {
+    return "bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]";
+  }
+  if (status === "removed") {
+    return "bg-[var(--diff-remove-bg)] text-[var(--diff-remove-c)]";
+  }
+  return "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,var(--callout-warning-bg))] text-[var(--callout-warning-c)]";
+};
+
+const screenStatusBorder = (status: WireframeScreenDiff["status"]): string => {
+  if (status === "added") {
+    return "color-mix(in srgb, var(--diff-add-c) 52%, var(--diff-add-bg))";
+  }
+  if (status === "removed") {
+    return "color-mix(in srgb, var(--diff-remove-c) 52%, var(--diff-remove-bg))";
+  }
+  return "color-mix(in srgb, var(--callout-warning-c) 52%, var(--callout-warning-bg))";
+};
+
 const ComponentSnapshotComparison = ({
   location,
 }: {
   readonly location: DiffLocation;
 }) => {
   const initialSide = location.newHtml === undefined ? "old" : "new";
+  const screenDiffs = useMemo(
+    () => wireframeScreenDiffs(location.oldHtml, location.newHtml),
+    [location.oldHtml, location.newHtml],
+  );
   const [side, setSide] = useState<"old" | "new">(initialSide);
+  const [selectedScreenId, setSelectedScreenId] = useState(screenDiffs[0]?.id);
   const contentRef = useRef<HTMLDivElement>(null);
-  useEffect(() => setSide(initialSide), [initialSide, location]);
+  useEffect(() => {
+    setSide(initialSide);
+    setSelectedScreenId(screenDiffs[0]?.id);
+  }, [initialSide, location, screenDiffs]);
   const html = side === "old" ? location.oldHtml : location.newHtml;
+  const fallbackHtml = side === "old" ? location.newHtml : location.oldHtml;
+  const renderedHtml =
+    selectedScreenId === undefined ||
+    html?.includes(`data-wireframe-screen="${selectedScreenId}"`) === true
+      ? html
+      : fallbackHtml;
+  const selectedScreen = screenDiffs.find(
+    (screen) => screen.id === selectedScreenId,
+  );
   useEffect(() => {
     const content = contentRef.current;
     if (content === null) return;
@@ -565,43 +670,121 @@ const ComponentSnapshotComparison = ({
           Math.min(1, availableWidth / frame.offsetWidth),
         );
       }
+      for (const screen of content.querySelectorAll<HTMLElement>(
+        "[data-wireframe-screen]",
+      )) {
+        const selected = screen.dataset.wireframeScreen === selectedScreenId;
+        screen.hidden = !selected;
+        const diff = screenDiffs.find(
+          (candidate) => candidate.id === screen.dataset.wireframeScreen,
+        );
+        screen.style.border =
+          selected && diff !== undefined
+            ? `2px solid ${screenStatusBorder(diff.status)}`
+            : "";
+        screen.style.borderRadius = selected ? "0.75rem" : "";
+        screen.style.padding = selected ? "0.75rem" : "";
+        const name = screen.querySelector<HTMLElement>(
+          ".wireframe-screen-name",
+        );
+        if (name !== null && diff?.status === "removed") {
+          name.style.textDecoration = "line-through";
+          name.style.textDecorationThickness = "2px";
+          name.style.textDecorationColor = "var(--diff-remove-c)";
+        }
+      }
     };
     fitWireframes();
     const observer = new ResizeObserver(fitWireframes);
     observer.observe(content);
     return () => observer.disconnect();
-  }, [html]);
+  }, [renderedHtml, screenDiffs, selectedScreenId]);
   return (
     <div className="grid min-w-0 gap-2" data-review-component-diff="">
       {/* A component snapshot is a diff, not a pair of ordinary tabs, so the
           selected side and the panel it opens carry the same removed/added
           colours the word-level lens uses. The border repeats the colour at
           the edge of the content, where the reader is actually looking. */}
-      <div
-        className="flex w-fit items-center rounded-md border border-edge bg-surface p-0.5"
-        role="group"
-        aria-label="Choose component snapshot"
-      >
-        {location.oldHtml === undefined ? null : (
-          <button
-            type="button"
-            className="cursor-pointer rounded-sm px-2 py-1 text-2xs font-semibold text-muted aria-pressed:bg-[var(--diff-remove-bg)] aria-pressed:text-[var(--diff-remove-c)] aria-pressed:shadow-raised"
-            aria-pressed={side === "old"}
-            onClick={() => setSide("old")}
+      {screenDiffs.length > 0 ? (
+        <div className="grid min-w-0 gap-2" aria-label="Wireframe screens">
+          <div className="flex min-w-0 flex-wrap gap-2" role="list">
+            {screenDiffs.map((screen) => (
+              <button
+                key={screen.id}
+                type="button"
+                className={`flex min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold ${
+                  selectedScreenId === screen.id
+                    ? "bg-surface shadow-raised"
+                    : "border-edge bg-surface"
+                }`}
+                style={
+                  selectedScreenId === screen.id
+                    ? { borderColor: screenStatusBorder(screen.status) }
+                    : undefined
+                }
+                aria-pressed={selectedScreenId === screen.id}
+                onClick={() => setSelectedScreenId(screen.id)}
+              >
+                <span
+                  className={
+                    screen.status === "removed"
+                      ? "line-through decoration-2"
+                      : ""
+                  }
+                >
+                  {screen.name}
+                </span>
+                <span
+                  className={`rounded-md px-2 py-1 text-2xs font-bold ${screenStatusClasses(screen.status)}`}
+                >
+                  {screenStatusLabel(screen.status)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        {selectedScreen === undefined ? null : (
+          <span
+            className={`inline-flex items-center gap-2 text-xs font-bold uppercase tracking-caps ${screenStatusClasses(selectedScreen.status)}`}
           >
-            Was
-          </button>
+            <span aria-hidden="true">●</span>
+            {screenStatusLabel(selectedScreen.status)}
+          </span>
         )}
-        {location.newHtml === undefined ? null : (
-          <button
-            type="button"
-            className="cursor-pointer rounded-sm px-2 py-1 text-2xs font-semibold text-muted aria-pressed:bg-[var(--diff-add-bg)] aria-pressed:text-[var(--diff-add-c)] aria-pressed:shadow-raised"
-            aria-pressed={side === "new"}
-            onClick={() => setSide("new")}
-          >
-            Now
-          </button>
-        )}
+        <div
+          className="flex items-center gap-3"
+          role="group"
+          aria-label="Choose component snapshot"
+        >
+          {location.oldHtml === undefined ? null : (
+            <button
+              type="button"
+              className="cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-remove-c)] aria-pressed:bg-[var(--diff-remove-bg)] aria-pressed:text-[var(--diff-remove-c)]"
+              aria-pressed={side === "old"}
+              onClick={() => setSide("old")}
+            >
+              Was
+            </button>
+          )}
+          {location.oldHtml === undefined ||
+          location.newHtml === undefined ? null : (
+            <span className="text-xl text-ink" aria-hidden="true">
+              →
+            </span>
+          )}
+          {location.newHtml === undefined ? null : (
+            <button
+              type="button"
+              className="cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-add-c)] aria-pressed:bg-[var(--diff-add-bg)] aria-pressed:text-[var(--diff-add-c)]"
+              aria-pressed={side === "new"}
+              onClick={() => setSide("new")}
+            >
+              Now
+            </button>
+          )}
+        </div>
       </div>
       <div
         className={`min-w-0 overflow-hidden rounded-lg border-4 bg-surface p-3 text-ink inset-shadow-well ${
@@ -615,7 +798,7 @@ const ComponentSnapshotComparison = ({
           ref={contentRef}
           className="pointer-events-none min-w-0 [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_[data-flow-controls]]:hidden"
           inert
-          dangerouslySetInnerHTML={{ __html: html ?? "" }}
+          dangerouslySetInnerHTML={{ __html: renderedHtml ?? "" }}
         />
       </div>
     </div>
