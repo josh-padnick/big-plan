@@ -30,6 +30,7 @@ export const ComposeImages = ({
   placeholder,
   maxLength,
   onKeyDown,
+  textareaClassName,
   autoFocus = false,
   id,
 }: {
@@ -40,6 +41,7 @@ export const ComposeImages = ({
   readonly placeholder: string;
   readonly maxLength: number;
   readonly onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  readonly textareaClassName?: string;
   readonly autoFocus?: boolean;
   readonly id?: string;
 }) => {
@@ -128,6 +130,7 @@ export const ComposeImages = ({
       <Textarea
         ref={textarea}
         id={id}
+        className={textareaClassName}
         aria-label={label}
         value={body}
         maxLength={maxLength}

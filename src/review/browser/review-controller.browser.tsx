@@ -1564,6 +1564,7 @@ const CommentComposer = ({
           identity={identity}
           autoFocus
           label="Add a comment"
+          textareaClassName="bg-input!"
           placeholder="What should the agent change here?"
           body={body}
           maxLength={BODY_LIMIT}
@@ -3168,6 +3169,7 @@ const SentThread = ({
               id={`reply-${comment.id}`}
               identity={identity}
               label="Reply to the agent"
+              textareaClassName="mt-1 min-h-20"
               body={reply}
               maxLength={BODY_LIMIT}
               placeholder="Reply to the agent…"
