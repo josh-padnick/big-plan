@@ -285,10 +285,26 @@ test("should keep a sparse app shell top bar content-sized", async ({
   const topBar = page.locator(".wireframe-top-bar");
   const appContent = page.locator(".wireframe-app-content");
   const artboardHeight = await artboard.evaluate((node) => node.offsetHeight);
-  const topBarHeight = await topBar.evaluate((node) => node.clientHeight);
+  const topBarHeight = await topBar.evaluate((node) => node.offsetHeight);
 
   expect(artboardHeight).toBe(820);
   expect(topBarHeight).toBeLessThan(artboardHeight * 0.2);
+  expect(topBarHeight).toBeGreaterThanOrEqual(48);
+  await expect(topBar).toHaveCSS("border-bottom-style", "solid");
+  expect(
+    await topBar.evaluate((node) =>
+      parseFloat(getComputedStyle(node).borderBottomWidth),
+    ),
+  ).toBeGreaterThan(1);
+  expect(
+    await topBar.evaluate((node) => {
+      const title = node.querySelector(".wireframe-brand");
+      if (title === null) return false;
+      return (
+        title.getBoundingClientRect().left >= node.getBoundingClientRect().left
+      );
+    }),
+  ).toBe(true);
   expect(
     await appContent.evaluate((node) => node.clientHeight),
   ).toBeGreaterThan(topBarHeight * 3);
