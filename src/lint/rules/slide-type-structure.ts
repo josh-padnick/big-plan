@@ -125,15 +125,17 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
       }
       continue;
     }
-    if (
-      section.type !== "user-journey" ||
-      (section.partTitle !== undefined &&
-        namesJourneyContainer(section.partTitle))
-    ) {
+    if (section.type !== "user-journey") {
       continue;
     }
     if (container !== undefined && container.partTitle === section.partTitle) {
       containerSlides.add(container);
+      continue;
+    }
+    if (
+      section.partTitle !== undefined &&
+      namesJourneyContainer(section.partTitle)
+    ) {
       continue;
     }
     findings.push({
@@ -142,10 +144,14 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
     });
   }
   for (const slide of containerSlides) {
+    const fixes =
+      slide.partTitle !== undefined && namesJourneyContainer(slide.partTitle)
+        ? `delete that redundant slide so each typed journey remains directly inside <Part title="${slide.partTitle}" />, or make each journey an h3 sub-slide of it`
+        : `replace that slide with <Part title="${slide.title}" /> so each journey is a slide inside it, or make each journey an h3 sub-slide of it`;
     findings.push({
       line: slide.line,
       column: slide.column,
-      message: `Nest the journeys under "${slide.title}" instead of beside it: replace that slide with <Part title="${slide.title}" /> so each journey is a slide inside it, or make each journey an h3 sub-slide of it`,
+      message: `Nest the journeys under "${slide.title}" instead of beside it: ${fixes}`,
     });
   }
 

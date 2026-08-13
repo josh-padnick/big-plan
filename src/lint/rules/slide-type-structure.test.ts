@@ -91,6 +91,23 @@ describe("lintPlan slide-type-structure", () => {
     ]);
   });
 
+  it("should reject a redundant container slide inside a journeys Part", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Part title="User journeys" />\n\n## User journeys\n\nThe loops this plan changes.\n\n<Slide type="user-journey" name="Opening the plan" toc="Open" />\n\n## A reviewer opens the plan\n\nA.\n\n<Wireframe id="open"><Screen id="plan" name="Plan" device="desktop" /></Wireframe>\n\n<Slide type="user-journey" name="Accepting the plan" toc="Accept" />\n\n## A reviewer accepts the plan\n\nB.\n\n<Wireframe id="accept"><Screen id="review" name="Review" device="desktop" /></Wireframe>\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-type-structure",
+        line: 3,
+        column: 1,
+        message:
+          'Nest the journeys under "User journeys" instead of beside it: delete that redundant slide so each typed journey remains directly inside <Part title="User journeys" />, or make each journey an h3 sub-slide of it',
+      },
+    ]);
+  });
+
   it("should reject a journey slide that has no container at all", () => {
     expect(
       lintPlan({
