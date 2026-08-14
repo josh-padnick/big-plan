@@ -10,7 +10,7 @@ export type AgentModelVendor = "openai" | "claude" | "grok";
 // recognized by name; a bare or differently numbered "gpt" falls back to the
 // generic icon instead of guessing.
 const VENDOR_MARKERS: ReadonlyArray<readonly [AgentModelVendor, RegExp]> = [
-  ["openai", /openai|\bgpt-?[45]/i],
+  ["openai", /openai|\bgpt-?[45](?!all)/i],
   ["claude", /claude/i],
   ["grok", /grok/i],
 ];

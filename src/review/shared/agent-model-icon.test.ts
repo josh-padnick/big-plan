@@ -14,10 +14,15 @@ describe("agentModelVendor", () => {
     expect(agentModelVendor(name)).toBe(vendor);
   });
 
-  it.each(["GPT-J 6B", "GPT-NeoX-20B", "Llama 3.1", "Mistral Large", "", "  "])(
-    "should leave %j unrecognized instead of guessing a vendor",
-    (name) => {
-      expect(agentModelVendor(name)).toBeUndefined();
-    },
-  );
+  it.each([
+    "GPT-J 6B",
+    "GPT-NeoX-20B",
+    "GPT4All",
+    "Llama 3.1",
+    "Mistral Large",
+    "",
+    "  ",
+  ])("should leave %j unrecognized instead of guessing a vendor", (name) => {
+    expect(agentModelVendor(name)).toBeUndefined();
+  });
 });
