@@ -84,6 +84,41 @@ const runsWithChanges = (runs: ReadonlyArray<DiffRun>): ReactNode =>
 const sideText = (location: DiffLocation, side: "old" | "new"): string =>
   side === "old" ? location.oldText : location.newText;
 
+const sideHtml = (
+  location: DiffLocation,
+  side: "old" | "new",
+): string | undefined => (side === "old" ? location.oldHtml : location.newHtml);
+
+// A picture is evidence, not words: its extracted text is empty, so a lens
+// that shows only text drops the very block the reviewer asked about. The
+// compiled rendering is the honest content for that side.
+const isRenderedPicture = (location: DiffLocation): boolean =>
+  location.kind === "image";
+
+/** Whether one side of a location has anything at all to show. */
+const hasSideContent = (location: DiffLocation, side: "old" | "new"): boolean =>
+  sideText(location, side).trim() !== "" ||
+  (isRenderedPicture(location) && sideHtml(location, side) !== undefined);
+
+// The plan's own markup, replayed inert: a snapshot is evidence to read, never
+// a second copy of the document to interact with. A picture stands in for the
+// words a text side would carry, so it also claims the diff-content marker the
+// rest of the lens vocabulary uses.
+const RenderedSnapshot = ({
+  html,
+  isDiffContent = false,
+}: {
+  readonly html: string | undefined;
+  readonly isDiffContent?: boolean;
+}) => (
+  <div
+    className="pointer-events-none min-w-0 [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_[data-flow-controls]]:hidden"
+    inert
+    {...(isDiffContent ? { "data-review-diff-content": "" } : {})}
+    dangerouslySetInnerHTML={{ __html: html ?? "" }}
+  />
+);
+
 // Each side replays the meaning-bearing presentation facts its own snapshot
 // recorded on the wire. The live document can answer only for a block it still
 // contains - and then only with the current side's facts - so the lens never
@@ -477,6 +512,16 @@ const SnapshotBlock = ({
   readonly side: "old" | "new";
 }) => {
   const text = sideText(location, side);
+  if (isRenderedPicture(location)) {
+    // The lens is evidence beside the plan, not a second copy of the page: a
+    // picture is shown small enough that the reader can still see the words
+    // that changed with it, and the plan itself holds the full-size version.
+    return (
+      <div className="[&_img]:my-0 [&_img]:max-h-48 [&_img]:w-auto">
+        <RenderedSnapshot html={sideHtml(location, side)} isDiffContent />
+      </div>
+    );
+  }
   if (location.kind === "callout") {
     return <SnapshotCallout location={location} side={side} />;
   }
@@ -533,8 +578,8 @@ const SnapshotSideContent = ({
   readonly locations: ReadonlyArray<DiffLocation>;
   readonly side: "old" | "new";
 }) => {
-  const visible = locations.filter(
-    (location) => sideText(location, side).trim() !== "",
+  const visible = locations.filter((location) =>
+    hasSideContent(location, side),
   );
   const tableRows = visible.filter((location) => location.kind === "table-row");
   const firstTableRow = tableRows[0];
@@ -908,15 +953,19 @@ export const DiffLensContent = ({
       only.kind === "quote" ||
       only.kind === "list" ||
       only.kind in COMPONENT_FIELD_KINDS);
-  const hasOldText = visibleLocations.some(
-    (location) => location.oldText.trim() !== "",
+  const hasOldText = visibleLocations.some((location) =>
+    hasSideContent(location, "old"),
   );
-  const hasNewText = visibleLocations.some(
-    (location) => location.newText.trim() !== "",
+  const hasNewText = visibleLocations.some((location) =>
+    hasSideContent(location, "new"),
   );
+  // A picture stays inside the stacked Was/Now panels beside the words that
+  // changed with it. Only a component root, which is a whole card, takes the
+  // lens over as one switchable snapshot.
   const componentLocation = visibleLocations.find(
     (location) =>
-      location.oldHtml !== undefined || location.newHtml !== undefined,
+      !isRenderedPicture(location) &&
+      (location.oldHtml !== undefined || location.newHtml !== undefined),
   );
   const title = isHistorical
     ? "Updated"

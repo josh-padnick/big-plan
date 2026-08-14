@@ -288,17 +288,22 @@ describe("review runtime images", () => {
       id: descriptor.id,
     });
     const image = await fetch(
-      `${runtime.url.replace(/\/$/u, "")}/api/review-images?id=${descriptor.id}`,
-      {
-        headers: {
-          "x-big-plan-review-token": token,
-          "sec-fetch-site": "same-origin",
-          origin: runtime.url.replace(/\/$/u, ""),
-        },
-      },
+      `${runtime.url.replace(/\/$/u, "")}/review-images/${descriptor.id}`,
     );
     expect(image.status).toBe(200);
+    expect(image.headers.get("content-type")).toBe("image/png");
     expect(new Uint8Array(await image.arrayBuffer())).toEqual(TINY_PNG);
+  });
+
+  it("should refuse a review image path that names no stored picture", async () => {
+    const missing = await fetch(
+      `${runtime.url.replace(/\/$/u, "")}/review-images/${"a".repeat(64)}`,
+    );
+    expect(missing.status).toBe(404);
+    const malformed = await fetch(
+      `${runtime.url.replace(/\/$/u, "")}/review-images/not-a-digest`,
+    );
+    expect(malformed.status).toBe(404);
   });
 
   it("should reject image publication without the review token", async () => {
@@ -343,15 +348,10 @@ describe("review runtime images", () => {
 
     const restarted = await startReviewRuntime({ planPath });
     try {
+      // No token, and a different port: the picture belongs to the plan, so
+      // the reference minted in the first session still resolves in this one.
       const image = await fetch(
-        `${restarted.url}api/review-images?id=${descriptor.id}`,
-        {
-          headers: {
-            "x-big-plan-review-token": firstToken,
-            "sec-fetch-site": "same-origin",
-            origin: restarted.url.replace(/\/$/u, ""),
-          },
-        },
+        `${restarted.url}review-images/${descriptor.id}`,
       );
       expect(image.status).toBe(200);
       expect(new Uint8Array(await image.arrayBuffer())).toEqual(TINY_PNG);
@@ -1147,6 +1147,49 @@ Restores the selected snapshot as a new current plan.
     // including the Mermaid renderer, so it needs the same headroom the
     // renderer's own suites take rather than the default per-test timeout.
   }, 15000);
+
+  it("should carry both pictures when a snapshot swaps one", async () => {
+    const before = `# Pictures
+
+## Evidence
+
+![Retry dashboard](./assets/before.png)
+
+The dashboard shows the retry backlog.
+`;
+    const after = before
+      .replace("./assets/before.png", "./assets/after.png")
+      .replace("retry backlog", "retry backlog and its age");
+    const from = deriveSnapshotDigest(before);
+    const to = deriveSnapshotDigest(after);
+    await writeSnapshot({
+      store: runtime.store,
+      snapshot: from,
+      source: before,
+    });
+    await writeSnapshot({ store: runtime.store, snapshot: to, source: after });
+
+    const response = await call({
+      path: `/api/snapshot-diff?from=${from}&to=${to}`,
+    });
+    const value = (await response.json()) as {
+      readonly locations: ReadonlyArray<{
+        readonly kind: string;
+        readonly oldHtml?: string;
+        readonly newHtml?: string;
+      }>;
+      readonly places: ReadonlyArray<{ readonly note: string }>;
+    };
+    const picture = value.locations.find(
+      (location) => location.kind === "image",
+    );
+    // A picture carries no words, so its compiled markup is the only evidence
+    // the lens can show the reviewer.
+    expect(picture?.oldHtml).toContain("./assets/before.png");
+    expect(picture?.newHtml).toContain("./assets/after.png");
+    expect(picture?.oldHtml).not.toContain("data-block-id");
+    expect(value.places.map((place) => place.note)).toContain("replaced");
+  });
 
   it("should reject malformed snapshot names at the diff boundary", async () => {
     expect(

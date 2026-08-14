@@ -76,6 +76,11 @@ type WorkerFixtures = {
 
 type TestFixtures = {
   readonly reviewRuntimeUrl: string;
+  // Browser-level messages a journey deliberately provokes, such as the 404 a
+  // missing picture logs while the document proves it says so. Every other
+  // console error still fails the test, so an allowance names one expected
+  // message rather than relaxing the render-health contract.
+  readonly allowedConsoleErrors: ReadonlyArray<RegExp>;
 };
 
 const ANNOTATION_CODE_MDX = `# Annotation code
@@ -823,12 +828,16 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
+  allowedConsoleErrors: [[], { option: true }],
   // Render-health contract: any console error or uncaught page error during
   // the test fails it in teardown, even when every journey assertion passed.
-  page: async ({ page }, use) => {
+  page: async ({ page, allowedConsoleErrors }, use) => {
     const renderHealthErrors: Array<string> = [];
     page.on("console", (message) => {
-      if (message.type() === "error") {
+      if (
+        message.type() === "error" &&
+        !allowedConsoleErrors.some((allowed) => allowed.test(message.text()))
+      ) {
         renderHealthErrors.push(message.text());
       }
     });

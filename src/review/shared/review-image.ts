@@ -43,6 +43,17 @@ export const reviewImageId = (value: string): ReviewImageId => {
   return value;
 };
 
+// The path a rendered document loads an uploaded picture from. It names only
+// the content digest, so the picture belongs to the plan rather than to the
+// review session that accepted it: any later review server for the same plan
+// serves the same path, and a reference minted in one session still resolves
+// in the next.
+export const REVIEW_IMAGE_ROUTE = "/review-images/";
+
+/** Builds the durable, session-independent source path for one stored image. */
+export const reviewImageSource = (id: string): string =>
+  `${REVIEW_IMAGE_ROUTE}${reviewImageId(id)}`;
+
 /** Builds the inert Markdown reference stored in a reviewer-authored body. */
 export const buildReviewImageReference = ({
   alt,

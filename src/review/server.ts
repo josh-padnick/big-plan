@@ -92,9 +92,11 @@ import type { ReviewStore } from "./store.js";
 import { reviewPlanAssetName } from "./plan-assets.js";
 import {
   extractReviewImageReferences,
+  isReviewImageId,
   MAX_IMAGES_PER_MESSAGE,
   MAX_MESSAGE_IMAGE_BYTES,
   RAW_IMAGE_BODY_LIMIT,
+  REVIEW_IMAGE_ROUTE,
 } from "./shared/review-image.js";
 import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
 import {
@@ -249,7 +251,6 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "GET", path: "/api/progress" },
   { method: "GET", path: "/api/snapshot-diff" },
   { method: "POST", path: "/api/review-images", binary: true },
-  { method: "GET", path: "/api/review-images" },
 ];
 
 /** A running review runtime. */
@@ -949,6 +950,38 @@ export const startReviewRuntime = async ({
     return true;
   };
 
+  // An uploaded picture is plan state, not session state: it is stored beside
+  // the plan under its content digest and served from that digest alone, like
+  // a materialized plan asset. That is what keeps a reference minted in one
+  // review readable in every later one, including after a restart that mints a
+  // new session and a new token.
+  const handleReviewImage = async ({
+    response,
+    pathname,
+  }: {
+    readonly response: ServerResponse;
+    readonly pathname: string;
+  }): Promise<boolean> => {
+    if (!pathname.startsWith(REVIEW_IMAGE_ROUTE)) return false;
+    const id = pathname.slice(REVIEW_IMAGE_ROUTE.length);
+    if (!isReviewImageId(id)) {
+      refuse({ response, status: 404, reason: "Unknown review image" });
+      return true;
+    }
+    const image = await readReviewImage({ store, id });
+    if (image === undefined) {
+      refuse({ response, status: 404, reason: "Image unavailable" });
+      return true;
+    }
+    sendBinary({
+      response,
+      status: 200,
+      contentType: image.descriptor.mimeType,
+      body: image.bytes,
+    });
+    return true;
+  };
+
   const handleApi = async ({
     route,
     response,
@@ -986,25 +1019,6 @@ export const startReviewRuntime = async ({
             error instanceof Error ? error.message : "The image is invalid",
         });
       }
-      return;
-    }
-    if (route.path === "/api/review-images" && route.method === "GET") {
-      const id = query.get("id");
-      if (id === null) {
-        refuse({ response, status: 400, reason: "An image id is required" });
-        return;
-      }
-      const image = await readReviewImage({ store, id });
-      if (image === undefined) {
-        refuse({ response, status: 404, reason: "Image unavailable" });
-        return;
-      }
-      sendBinary({
-        response,
-        status: 200,
-        contentType: image.descriptor.mimeType,
-        body: image.bytes,
-      });
       return;
     }
     if (route.path === "/api/session") {
@@ -1803,6 +1817,12 @@ export const startReviewRuntime = async ({
       if (
         method === DOCUMENT_ROUTE.method &&
         (await handlePlanAsset({ response, pathname: target.pathname }))
+      ) {
+        return;
+      }
+      if (
+        method === DOCUMENT_ROUTE.method &&
+        (await handleReviewImage({ response, pathname: target.pathname }))
       ) {
         return;
       }

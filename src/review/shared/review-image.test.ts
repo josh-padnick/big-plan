@@ -5,6 +5,7 @@ import {
   isReviewImageWithinLimits,
   probeReviewImageDimensions,
   reviewImageId,
+  reviewImageSource,
   sniffReviewImage,
 } from "./review-image.js";
 
@@ -34,6 +35,13 @@ describe("review images", () => {
       { id, alt: "one" },
       { id, alt: "two" },
     ]);
+  });
+
+  it("should address a stored picture by digest alone", () => {
+    expect(reviewImageSource(id)).toBe(`/review-images/${id}`);
+    expect(() => reviewImageSource("not-a-digest")).toThrow(
+      "Invalid review image id",
+    );
   });
 
   it("should sniff supported signatures and reject lookalikes", () => {

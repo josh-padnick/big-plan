@@ -139,6 +139,66 @@ describe("review wire contract", () => {
     });
   });
 
+  it("should carry a picture's source, words, and replaced note across the wire", () => {
+    const decoded = decodeSnapshotDiff({
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      locations: [
+        {
+          status: "changed",
+          scope: "section/system-shape",
+          kind: "image",
+          label: "Retry dashboard",
+          section: "System shape",
+          oldText: "",
+          newText: "",
+          oldPresentation: {
+            aspect: "image",
+            source: "./assets/before.png",
+            alt: "Retry dashboard",
+          },
+          newPresentation: {
+            aspect: "image",
+            source: "./assets/after.png",
+            alt: "Retry dashboard",
+          },
+          oldHtml: '<img src="./assets/before.png" alt="Retry dashboard">',
+          newHtml: '<img src="./assets/after.png" alt="Retry dashboard">',
+          runs: [],
+        },
+        {
+          status: "changed",
+          scope: "section/system-shape",
+          kind: "image",
+          label: "Broken fact",
+          section: "System shape",
+          oldText: "",
+          newText: "",
+          newPresentation: { aspect: "image", source: 7, alt: "Missing" },
+          runs: [],
+        },
+      ],
+      places: [
+        {
+          placeId: "c".repeat(16),
+          status: "changed",
+          label: "Retry dashboard",
+          section: "System shape",
+          note: "replaced",
+          locationIndexes: [0],
+        },
+      ],
+    });
+
+    expect(decoded?.locations[0]).toMatchObject({
+      oldPresentation: { aspect: "image", source: "./assets/before.png" },
+      newPresentation: { aspect: "image", alt: "Retry dashboard" },
+      newHtml: '<img src="./assets/after.png" alt="Retry dashboard">',
+    });
+    expect(decoded?.locations[1]?.newPresentation).toBeUndefined();
+    expect(decoded?.places[0]?.note).toBe("replaced");
+  });
+
   it("should drop a malformed presentation fact instead of trusting it through", () => {
     const decoded = decodeSnapshotDiff({
       from: "a".repeat(16),

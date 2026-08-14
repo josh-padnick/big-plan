@@ -152,6 +152,19 @@ export const displayedStandIn = (element: HTMLElement): HTMLElement | null => {
   return null;
 };
 
+/**
+ * Lists the pictures the reader is reading. A lens now replays a changed
+ * picture as a scrubbed copy, so decorating every match in the document would
+ * hang a comment affordance on a snapshot of the plan rather than the plan.
+ */
+export const livePictures = (): ReadonlyArray<HTMLElement> => {
+  const article = liveArticle();
+  if (article === null) return [];
+  return Array.from(
+    article.querySelectorAll<HTMLElement>('[data-block-kind="image"]'),
+  ).filter((element) => !isLensCopy(element));
+};
+
 /** Resolves a block id to the block the reader is reading. */
 export const liveBlock = (blockId: string): LiveTargetResult => {
   const article = liveArticle();

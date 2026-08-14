@@ -702,4 +702,77 @@ describe("rendered snapshot rule", () => {
       usesRenderedSnapshot({ kind: "paragraph", isComponentRoot: false }),
     ).toBe(false);
   });
+
+  it("should give an authored picture a rendered snapshot even though it is no component", () => {
+    expect(
+      usesRenderedSnapshot({ kind: "image", isComponentRoot: false }),
+    ).toBe(true);
+  });
+});
+
+describe("picture changes", () => {
+  const picture = ({
+    id,
+    source,
+    alt,
+  }: {
+    readonly id: string;
+    readonly source: string;
+    readonly alt: string;
+  }) =>
+    block({
+      id,
+      text: "",
+      kind: "image",
+      label: alt,
+      presentation: { aspect: "image", source, alt },
+    });
+
+  it("should report a swapped picture whose words never changed", () => {
+    const diff = buildSnapshotDiff({
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      before: [
+        picture({ id: "s/image-1", source: "./assets/before.png", alt: "Map" }),
+      ],
+      after: [
+        picture({ id: "s/image-1", source: "./assets/after.png", alt: "Map" }),
+      ],
+    });
+    expect(diff.locations).toHaveLength(1);
+    expect(diff.locations[0]).toMatchObject({
+      status: "changed",
+      kind: "image",
+      oldBlockId: "s/image-1",
+      newBlockId: "s/image-1",
+    });
+    expect(diff.places[0]?.note).toBe("replaced");
+    expect(diff.places[0]?.label).toBe("Map");
+  });
+
+  it("should report a re-captioned picture and leave an untouched one alone", () => {
+    const unchanged = picture({
+      id: "s/image-1",
+      source: "./assets/one.png",
+      alt: "Map",
+    });
+    const diff = buildSnapshotDiff({
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      before: [
+        unchanged,
+        picture({ id: "s/image-2", source: "./assets/two.png", alt: "Flow" }),
+      ],
+      after: [
+        unchanged,
+        picture({
+          id: "s/image-2",
+          source: "./assets/two.png",
+          alt: "Flow, revised",
+        }),
+      ],
+    });
+    expect(diff.locations).toHaveLength(1);
+    expect(diff.locations[0]?.newBlockId).toBe("s/image-2");
+  });
 });

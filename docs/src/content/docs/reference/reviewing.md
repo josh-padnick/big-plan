@@ -38,6 +38,10 @@ Paste an image into a composer, drop a file onto it, or choose **Choose image**.
 The runtime stores each image by its SHA-256 digest and inserts a Markdown
 reference into the message.
 Images are limited to four per message, 10 MiB per image, and 20 MiB total.
+Each stored image belongs to the plan rather than to one review session, so a
+picture pasted today still appears after the review runtime is restarted.
+A picture the plan no longer holds is shown as an **Image unavailable**
+placeholder that explains itself on demand.
 The local `big-plan review` runtime is required to capture or retrieve images;
 standalone rendered files keep text drafts but do not accept image bytes.
 
@@ -98,6 +102,8 @@ larger rewrites, additions, removals, tables, and code. Decision, diagram, and
 file-tree changes retain their compiled component presentation behind a
 **Was**/**Now** switch instead of flattening their structure into prose.
 Wireframe changes add a per-screen selector for **Added**, **Removed**, **Updated**, **Moved**, and **Initial screen** changes, keep the full device frame visible behind interactive **Was**/**Now** controls, and carry the shared maximize control into the diff lens.
+An added or replaced picture shows the picture itself in its band, because a
+picture carries no words for a text comparison to show.
 Changes inside `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`, `GrpcMethod`,
 and `DatabaseTableSchema` are compared field by field.
 The change navigator tours several places without losing reading context.

@@ -21,10 +21,7 @@ import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import { Icon } from "./icon.browser.js";
-import {
-  ReviewImage,
-  runtimeReviewImageIdentity,
-} from "./review-image.browser.js";
+import { ReviewImage } from "./review-image.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
 import { Badge, Button, Tooltip } from "./ui.browser.js";
 
@@ -149,14 +146,7 @@ const renderReviewerNode = (
       </pre>
     );
   if (node.type === "image") {
-    return (
-      <ReviewImage
-        key={key}
-        id={node.id}
-        alt={node.alt}
-        identity={runtimeReviewImageIdentity()}
-      />
-    );
+    return <ReviewImage key={key} id={node.id} alt={node.alt} />;
   }
   const children = node.children.map((child, index) =>
     renderReviewerNode(child, `${key}-${index}`),

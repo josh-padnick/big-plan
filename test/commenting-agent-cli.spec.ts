@@ -100,18 +100,26 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
     await expect(rail.getByRole("img", { name: "Screenshot" })).toBeVisible();
     const thumbnail = rail.getByRole("button", { name: "Open Screenshot" });
     await thumbnail.click();
+    // The lightbox covers the whole document rather than the rail it was
+    // opened from, so it is never trapped inside a composer's own layer.
+    const lightbox = page.getByRole("dialog", { name: "Screenshot" });
+    await expect(lightbox).toBeVisible();
+    await expect(rail.getByRole("dialog", { name: "Screenshot" })).toHaveCount(
+      0,
+    );
     await expect(
-      rail.getByRole("dialog", { name: "Screenshot" }),
+      lightbox.getByRole("button", { name: "Zoom out" }),
     ).toBeVisible();
-    await expect(rail.getByRole("button", { name: "Zoom out" })).toBeVisible();
-    await expect(rail.getByRole("button", { name: "Fit image" })).toBeVisible();
-    await expect(rail.getByRole("button", { name: "Zoom in" })).toBeVisible();
-    await rail.getByRole("button", { name: "Zoom in" }).click();
-    await rail.getByRole("button", { name: "Fit image" }).click();
-    await page.keyboard.press("Escape");
     await expect(
-      rail.getByRole("dialog", { name: "Screenshot" }),
-    ).not.toBeVisible();
+      lightbox.getByRole("button", { name: "Fit image" }),
+    ).toBeVisible();
+    await expect(
+      lightbox.getByRole("button", { name: "Zoom in" }),
+    ).toBeVisible();
+    await lightbox.getByRole("button", { name: "Zoom in" }).click();
+    await lightbox.getByRole("button", { name: "Fit image" }).click();
+    await page.keyboard.press("Escape");
+    await expect(lightbox).toHaveCount(0);
     await expect(thumbnail).toBeFocused();
     await rail.getByRole("button", { name: "Send", exact: true }).click();
 

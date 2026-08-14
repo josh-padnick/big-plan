@@ -96,10 +96,7 @@ import {
 } from "./agent-message.browser.js";
 import { Icon } from "./icon.browser.js";
 import { ComposeImages } from "./compose-images.browser.js";
-import {
-  ReviewImage,
-  runtimeReviewImageIdentity,
-} from "./review-image.browser.js";
+import { ReviewImage } from "./review-image.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
 import {
   deriveReviewCommentSubmitAvailability,
@@ -111,6 +108,7 @@ import {
   foundElement,
   liveBlock,
   liveFlowAnchor,
+  livePictures,
 } from "./live-target.browser.js";
 import {
   agentProjectionForReviewPoll,
@@ -1210,14 +1208,7 @@ const renderReviewerNode = (
     );
   }
   if (node.type === "image") {
-    return (
-      <ReviewImage
-        key={key}
-        id={node.id}
-        alt={node.alt}
-        identity={runtimeReviewImageIdentity()}
-      />
-    );
+    return <ReviewImage key={key} id={node.id} alt={node.alt} />;
   }
   const children = node.children.map((child, index) =>
     renderReviewerNode(child, `${key}-${index}`),
@@ -1401,6 +1392,38 @@ const useBlockHosts = () => {
   return hosts;
 };
 
+// A picture's comment affordance lives in the margin between the picture and
+// the edge of the card it sits on, centred in that gap. Pinned to the picture
+// it reads as part of the artwork; pinned to the card edge it reads as page
+// chrome; centred it reads as what it is - this picture's control, in the
+// page's own margin. The card is the canvas edge the captain measured against,
+// and the reading column is the fallback for a picture outside one.
+const CANVAS_SELECTOR = "[data-slide], article";
+const MIN_IMAGE_HOST_GAP = 4;
+
+const placeImageHost = ({
+  block,
+  host,
+  parent,
+}: {
+  readonly block: HTMLElement;
+  readonly host: HTMLSpanElement;
+  readonly parent: HTMLElement;
+}): void => {
+  const parentRect = parent.getBoundingClientRect();
+  const imageRect = block.getBoundingClientRect();
+  const canvas = block.closest<HTMLElement>(CANVAS_SELECTOR);
+  const canvasRight =
+    canvas === null ? imageRect.right : canvas.getBoundingClientRect().right;
+  const hostWidth = host.offsetWidth;
+  const margin = Math.max(
+    MIN_IMAGE_HOST_GAP,
+    (canvasRight - imageRect.right - hostWidth) / 2,
+  );
+  host.style.left = `${imageRect.right - parentRect.left + margin}px`;
+  host.style.top = `${imageRect.top - parentRect.top}px`;
+};
+
 const useImageHosts = () => {
   const [hosts, setHosts] = useState<
     ReadonlyArray<{
@@ -1418,17 +1441,12 @@ const useImageHosts = () => {
     const frameHandles: Array<number> = [];
     const resize = new ResizeObserver(() => {
       for (const { block, host, parent } of mounted) {
-        const parentRect = parent.getBoundingClientRect();
-        const imageRect = block.getBoundingClientRect();
-        host.style.left = `${imageRect.right - parentRect.left + 8}px`;
-        host.style.top = `${imageRect.top - parentRect.top}px`;
+        placeImageHost({ block, host, parent });
       }
     });
     const mount = () => {
-      const next = Array.from(
-        document.querySelectorAll<HTMLElement>(
-          '[data-block-kind="image"]:not([data-review-image-mounted])',
-        ),
+      const next = livePictures().filter(
+        (candidate) => candidate.dataset.reviewImageMounted === undefined,
       );
       for (const block of next) {
         const parent = block.parentElement;
@@ -1445,12 +1463,7 @@ const useImageHosts = () => {
         resize.observe(block);
         resize.observe(parent);
         frameHandles.push(
-          requestAnimationFrame(() => {
-            const parentRect = parent.getBoundingClientRect();
-            const imageRect = block.getBoundingClientRect();
-            host.style.left = `${imageRect.right - parentRect.left + 8}px`;
-            host.style.top = `${imageRect.top - parentRect.top}px`;
-          }),
+          requestAnimationFrame(() => placeImageHost({ block, host, parent })),
         );
       }
       setHosts(mounted);

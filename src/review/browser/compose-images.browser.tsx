@@ -16,11 +16,13 @@ import {
   MAX_IMAGES_PER_MESSAGE,
   type ReviewImageDescriptor,
 } from "../shared/review-image.js";
-import {
-  ReviewImage,
-  type ReviewImageIdentity,
-} from "./review-image.browser.js";
+import { ReviewImage } from "./review-image.browser.js";
 import { Textarea } from "./ui.browser.js";
+
+// Uploading is the one image action that still needs the live session: it
+// writes into the plan's review store, so it carries the session token the
+// same way every other write does. Reading a stored picture does not.
+export type ReviewImageIdentity = { readonly token: string };
 
 export const ComposeImages = ({
   body,
@@ -146,7 +148,6 @@ export const ComposeImages = ({
               key={`${reference.id}-${index}`}
               id={reference.id}
               alt={reference.alt}
-              identity={identity}
             />
           ))}
         </div>
