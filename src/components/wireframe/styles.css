@@ -550,6 +550,22 @@ marks and a plan diff never jitters.
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
+  /* Pressed. The resting control is drawn as paper with a second stroke
+     offset below and to the right, which is a drawn shadow; pressing it moves
+     the paper onto that shadow and the shadow goes away. A control that
+     changes on hover and on focus but not under the finger is the one state a
+     reviewer tests by clicking and finds missing. */
+  .wireframe-button:active,
+  .wireframe-nav-item:active,
+  .wireframe-list-row:active,
+  .wireframe-choice-card:active {
+    translate: 1px 2px;
+    box-shadow: none;
+  }
+  .wireframe-nav-item:active,
+  .wireframe-list-row:active {
+    background: color-mix(in srgb, var(--color-ink) 11%, transparent);
+  }
   .wireframe-button[data-wireframe-emphasis="primary"] {
     border-color: var(--color-ink);
     background: color-mix(in srgb, var(--color-ink) 86%, transparent);
@@ -612,6 +628,15 @@ marks and a plan diff never jitters.
   }
   .wireframe-segmented-control .wireframe-button + .wireframe-button {
     border-left: 1px solid var(--wf-stroke-soft);
+  }
+  /* Every control that answers a pointer says so under one. The specific
+     rules above reset the shared button surface, which also resets the shared
+     hover, so each one restates it rather than leaving a control that looks
+     inert until it is clicked. */
+  .wireframe-segmented-control
+    .wireframe-button:not([data-wireframe-emphasis="primary"]):hover {
+    background: var(--wf-fill);
+    color: var(--color-ink);
   }
   .wireframe-segmented-control
     .wireframe-button[data-wireframe-emphasis="primary"] {
@@ -1661,6 +1686,12 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-device="phone"]
     .wireframe-bottom-bar
+    .wireframe-button:hover {
+    background: var(--wf-fill);
+    color: var(--color-ink);
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-bottom-bar
     .wireframe-button[data-wireframe-navigate]::after {
     content: none;
   }
@@ -2011,6 +2042,9 @@ marks and a plan diff never jitters.
     color: inherit;
     cursor: pointer;
   }
+  .wireframe-list-row:hover {
+    background: var(--wf-fill);
+  }
   .wireframe-list-row:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
@@ -2198,6 +2232,9 @@ marks and a plan diff never jitters.
   }
   input.wireframe-input[type="search"] {
     max-width: 16rem;
+  }
+  .wireframe-input:hover {
+    border-color: var(--color-ink);
   }
   .wireframe-input::placeholder {
     color: var(--color-muted);
