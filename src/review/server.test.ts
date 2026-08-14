@@ -31,6 +31,7 @@ import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
+import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import {
   readComments,
   readResolvedCommentIds,
@@ -458,6 +459,26 @@ describe("review runtime images", () => {
       await review.close();
       await rm(directory, { recursive: true, force: true });
       await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse oversized and non-regular plan pictures", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-plan-picture-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    await writeFile(
+      join(directory, "oversized.png"),
+      new Uint8Array(MAX_IMAGE_BYTES + 1),
+    );
+    await mkdir(join(directory, "directory.png"));
+    const review = await startReviewRuntime({ planPath });
+    const url = review.url.replace(/\/$/u, "");
+    try {
+      expect((await fetch(`${url}/oversized.png`)).status).toBe(404);
+      expect((await fetch(`${url}/directory.png`)).status).toBe(404);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
     }
   });
 });

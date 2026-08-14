@@ -106,6 +106,7 @@ import type { ReviewStore } from "./store.js";
 import {
   extractReviewImageReferences,
   isReviewImageId,
+  MAX_IMAGE_BYTES,
   MAX_IMAGES_PER_MESSAGE,
   MAX_MESSAGE_IMAGE_BYTES,
   RAW_IMAGE_BODY_LIMIT,
@@ -952,11 +953,10 @@ export const startReviewRuntime = async ({
   // subject is the ordinary case, and refusing it showed alternative words
   // where the plan promised a picture.
   //
-  // Three rules keep that safe, and each refuses rather than repairs:
-  // only a picture file type is served at all, the resolved real path must
-  // stay inside the plan's own directory, and a dot-prefixed segment is never
-  // served, which keeps the review state under `.big-plan/` outside the reach
-  // of a document request.
+  // The route serves only a bounded regular picture file whose requested and
+  // real paths stay inside the plan's own directory. A dot-prefixed segment is
+  // never served, which keeps the review state under `.big-plan/` outside the
+  // reach of a document request.
   const handlePlanAsset = async ({
     response,
     pathname,
@@ -1003,12 +1003,17 @@ export const startReviewRuntime = async ({
         refuse({ response, status: 404, reason: "Plan picture unavailable" });
         return true;
       }
+      const metadata = await stat(real);
+      if (!metadata.isFile() || metadata.size > MAX_IMAGE_BYTES) {
+        refuse({ response, status: 404, reason: "Plan picture unavailable" });
+        return true;
+      }
       const bytes = await readFile(real);
       sendBinary({
         response,
         status: 200,
         contentType,
-        body: Uint8Array.from(bytes),
+        body: bytes,
       });
     } catch {
       refuse({ response, status: 404, reason: "Plan picture unavailable" });
