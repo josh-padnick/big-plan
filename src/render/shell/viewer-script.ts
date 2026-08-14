@@ -2552,6 +2552,8 @@ const wireDecisions = () => {
     const explainZone = own("[data-decision-explain]");
     const weighting = own("[data-decision-weighting]");
     const persistenceStatus = own("[data-decision-persistence-status]");
+    const supersededNotice = own("[data-decision-superseded]");
+    const lockedNotes = ownAll("[data-decision-locked-note]");
     const picked = () => choices.find((choice) => choice.checked) || null;
     const proposes = (choice) =>
       choice instanceof Element &&
@@ -2794,6 +2796,13 @@ const wireDecisions = () => {
     }
     if (confirm === null || change === null || answer === null) continue;
 
+    // A read-only review cannot record an answer, so the card offers none to
+    // give: every control is inert and the reason sits beside it. The state is
+    // read from the root rather than pushed in, so a card wired after an
+    // article replacement starts out locked too.
+    const readOnlyReview = () =>
+      document.documentElement.hasAttribute("data-review-read-only");
+
     const showPanel = (index) => {
       for (const panel of panels) {
         const shown = panel.getAttribute("data-option-index") === index;
@@ -2811,6 +2820,7 @@ const wireDecisions = () => {
       }
     };
     const sync = () => {
+      const locked = readOnlyReview();
       const choice = picked();
       const proposing = proposes(choice);
       const index = choice === null ? null : choice.getAttribute("data-option-index");
@@ -2820,12 +2830,19 @@ const wireDecisions = () => {
         ? "Include with acceptance"
         : "Confirm choice";
       confirm.disabled =
-        choice === null || (proposing && proposalValue() === "");
+        locked || choice === null || (proposing && proposalValue() === "");
+      change.disabled = locked;
+      for (const candidate of choices) candidate.disabled = locked;
+      if (proposalText !== null) proposalText.disabled = locked;
+      for (const note of lockedNotes) note.hidden = !locked;
       proposalBatch.hidden = !proposing;
       proposalNow.hidden = !proposing;
-      proposalBatch.disabled = proposalValue() === "";
-      proposalNow.disabled = proposalValue() === "";
-      if (clear !== null) clear.hidden = !changingAnswer;
+      proposalBatch.disabled = locked || proposalValue() === "";
+      proposalNow.disabled = locked || proposalValue() === "";
+      if (clear !== null) {
+        clear.hidden = !changingAnswer;
+        clear.disabled = locked;
+      }
       if (summary !== null) {
         const line =
           choice === null
@@ -2939,6 +2956,9 @@ const wireDecisions = () => {
       paintColumn(proposing ? null : index, answered);
     };
 
+    const setSuperseded = (shown) => {
+      if (supersededNotice !== null) supersededNotice.hidden = !shown;
+    };
     const showPersistenceFailure = () => {
       if (answerLead !== null) answerLead.textContent = "Answer not saved";
       if (answerCaption !== null) {
@@ -2974,13 +2994,18 @@ const wireDecisions = () => {
       showPersistenceState("Saving with this review...");
     };
     const showPersistenceSaved = () => {
-      showPersistenceState("Saved with this review.");
+      showPersistenceState(
+        "Saved with this review. Your agent receives it when you approve the plan.",
+      );
     };
     const showReadingSession = () => {
-      showPersistenceState("Noted for this reading session.");
+      showPersistenceState(
+        "Noted for this reading session. It is not recorded for your agent.",
+      );
     };
     const recordAnswer = (choice, replay) => {
       const proposing = proposes(choice);
+      setSuperseded(false);
       if (answerLead !== null) {
         answerLead.textContent = proposing
           ? "Proposal recorded"
@@ -3031,6 +3056,7 @@ const wireDecisions = () => {
           proposalText.value = "";
         }
         if (answerTitle !== null) answerTitle.textContent = "";
+        setSuperseded(false);
         sync();
         // Confirm is disabled with nothing chosen, so focusing it would drop
         // the reader out of the card entirely. The first option is where a
@@ -3077,6 +3103,29 @@ const wireDecisions = () => {
       "bigplan:decision-persistence-reading",
       showReadingSession,
     );
+    decision.addEventListener("bigplan:decision-superseded", () =>
+      setSuperseded(true),
+    );
+    // The record no longer holds an answer for this decision, so the card
+    // returns to the chooser. This is the store telling the card what is true,
+    // not the reader retracting, so it announces nothing back.
+    decision.addEventListener("bigplan:decision-reset", () => {
+      changingAnswer = false;
+      for (const candidate of choices) candidate.checked = false;
+      previousOptionChoice = null;
+      if (proposalText !== null) {
+        proposalText.readOnly = false;
+        proposalText.value = "";
+      }
+      if (answerTitle !== null) answerTitle.textContent = "";
+      decision.removeAttribute("data-decision-answered");
+      for (const header of columnHeaders) {
+        header.removeAttribute("data-option-chosen");
+      }
+      compress(false);
+      sync();
+    });
+    document.addEventListener("bigplan:review-authority", sync);
     change.addEventListener("click", () => {
       changingAnswer = true;
       decision.removeAttribute("data-decision-answered");

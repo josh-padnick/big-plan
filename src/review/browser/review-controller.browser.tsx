@@ -3757,6 +3757,9 @@ export const ReviewController = () => {
   const [storedAnswers, setStoredAnswers] = useState<
     ReadonlyArray<StagedDecisionAnswer>
   >([]);
+  const [supersededDecisionIds, setSupersededDecisionIds] = useState<
+    ReadonlyArray<string>
+  >([]);
   const [pollHealth, setPollHealth] = useState<ReviewPollHealth>(
     INITIAL_REVIEW_POLL_HEALTH,
   );
@@ -3872,6 +3875,11 @@ export const ReviewController = () => {
   // an equal one is applied, because the same revision read against an edited
   // plan legitimately answers with a different set of current answers.
   const appliedAnswerRevision = useRef(-1);
+  // The decisions this page has told a card to show as answered. A card cannot
+  // work out on its own that an answer stopped applying, and a replaced article
+  // is replayed from the last known record before the fresh one arrives, so the
+  // difference between the two passes is what has to be taken back.
+  const appliedDecisionIds = useRef<ReadonlySet<string>>(new Set());
   const displayedSnapshotRef = useRef(displayedSnapshot);
   const justSubmittedCommentIds = useRef<ReadonlySet<string>>(new Set());
   const onUnsavedInputChange = useCallback<UnsavedInputChange>(
@@ -3935,6 +3943,7 @@ export const ReviewController = () => {
     if (state.revision < appliedAnswerRevision.current) return;
     appliedAnswerRevision.current = state.revision;
     setStoredAnswers(state.answers);
+    setSupersededDecisionIds(state.supersededDecisionIds);
   }, []);
   const flushPendingDecisionInputs = useCallback(async (): Promise<void> => {
     if (
@@ -4027,6 +4036,15 @@ export const ReviewController = () => {
         dispatchDecisionPersistenceState(decisionId, "reading");
         return;
       }
+      // The reader asked for this card to stop showing an answer, and the card
+      // has already done it. Forgetting that this page applied one keeps the
+      // record's own emptiness from being replayed as a second reset, which
+      // would drop the reader out of the change flow they just entered.
+      if (mutation.op === "retract") {
+        const remaining = new Set(appliedDecisionIds.current);
+        remaining.delete(decisionId);
+        appliedDecisionIds.current = remaining;
+      }
       pendingDecisionInputs.current.set(decisionId, {
         mutation,
         failures: 0,
@@ -4042,6 +4060,17 @@ export const ReviewController = () => {
   // known writable, or convert it to a reading-session answer once the session
   // is known read-only. Doing neither is what made the product's own promise -
   // confirming a decision persists it - untrue for the bootstrap window.
+  // A read-only review can record nothing, so the cards stop offering to. The
+  // state lives on the root because the shell owns what a card may do, and a
+  // card wired after an article replacement has to be able to read it rather
+  // than wait to be told again.
+  useEffect(() => {
+    rootElement.toggleAttribute(
+      "data-review-read-only",
+      reviewAuthority === "read-only",
+    );
+    document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
+  }, [articleVersion, reviewAuthority]);
   useEffect(() => {
     reviewAuthorityRef.current = reviewAuthority;
     if (reviewAuthority === "unknown") return;
@@ -4139,6 +4168,7 @@ export const ReviewController = () => {
         answers.delete(decisionId);
       }
     }
+    const applied = new Set<string>();
     for (const [decisionId, optionId] of answers) {
       const decision = liveDecisionFigure(decisionId);
       if ("missing" in decision) continue;
@@ -4146,17 +4176,41 @@ export const ReviewController = () => {
         `#${CSS.escape(optionId)}[data-decision-choice]`,
       );
       if (option === null) continue;
+      applied.add(decisionId);
       decision.found.dispatchEvent(
         new CustomEvent("bigplan:decision-apply", { detail: { optionId } }),
       );
     }
+    for (const decisionId of appliedDecisionIds.current) {
+      if (applied.has(decisionId)) continue;
+      const decision = liveDecisionFigure(decisionId);
+      if ("missing" in decision) continue;
+      decision.found.dispatchEvent(new CustomEvent("bigplan:decision-reset"));
+    }
+    appliedDecisionIds.current = applied;
     for (const [decisionId, pending] of pendingDecisionInputs.current) {
       dispatchDecisionPersistenceState(
         decisionId,
         pending.failures >= 2 ? "failed" : "pending",
       );
     }
-  }, [articleVersion, dispatchDecisionPersistenceState, storedAnswers]);
+    // A decision whose stored answer stopped applying looks unanswered, so the
+    // card is told why. A pending mutation is the reader answering it right
+    // now, which resolves the notice without it ever being shown.
+    for (const decisionId of supersededDecisionIds) {
+      if (pendingDecisionInputs.current.has(decisionId)) continue;
+      const decision = liveDecisionFigure(decisionId);
+      if ("missing" in decision) continue;
+      decision.found.dispatchEvent(
+        new CustomEvent("bigplan:decision-superseded"),
+      );
+    }
+  }, [
+    articleVersion,
+    dispatchDecisionPersistenceState,
+    storedAnswers,
+    supersededDecisionIds,
+  ]);
   const componentBatchNotes = useComponentBatchNotes(
     isOpen && tab === "comments",
   );

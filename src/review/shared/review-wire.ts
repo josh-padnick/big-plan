@@ -26,6 +26,11 @@ export type StagedDecisionAnswer = {
 
 export type ReviewState = {
   readonly answers: ReadonlyArray<StagedDecisionAnswer>;
+  // Decisions the plan still asks that hold an answer to content they no longer
+  // have. The reader gave that answer and deserves to be told it stopped
+  // applying, which a card cannot work out for itself: from the browser's side
+  // a masked answer and an unanswered decision look identical.
+  readonly supersededDecisionIds: ReadonlyArray<string>;
   // Monotonic across every accepted write to the answers store. The browser
   // applies a response only when this is newer than the last one it applied,
   // so an in-flight read can no longer land on top of a completed write.
@@ -251,13 +256,18 @@ export const encodeReviewState = (
  */
 export const decodeReviewState = (value: unknown): ReviewState => {
   if (!isReviewWireRecord(value) || !Array.isArray(value.answers)) {
-    return { answers: [], revision: -1 };
+    return { answers: [], supersededDecisionIds: [], revision: -1 };
   }
   return {
     revision:
       typeof value.revision === "number" && Number.isFinite(value.revision)
         ? value.revision
         : -1,
+    supersededDecisionIds: Array.isArray(value.supersededDecisionIds)
+      ? value.supersededDecisionIds.filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [],
     answers: value.answers.flatMap(
       (answer): ReadonlyArray<StagedDecisionAnswer> =>
         isReviewWireRecord(answer) &&

@@ -115,6 +115,7 @@ import {
   applyStagedInputMutation,
   currentAnswers,
   PlanInputsRejected,
+  supersededDecisionIds,
   validateStagedInputMutation,
   validateStagedInputs,
   type StagedInputs,
@@ -1082,6 +1083,10 @@ export const startReviewRuntime = async ({
         status: 200,
         value: encodeReviewState({
           answers: currentAnswers({ inputs, inventory: inventoryNow }),
+          supersededDecisionIds: supersededDecisionIds({
+            inputs,
+            inventory: inventoryNow,
+          }),
           revision: inputs.revision,
         }),
       });
@@ -1104,6 +1109,10 @@ export const startReviewRuntime = async ({
         status: 200,
         value: encodeReviewState({
           answers: currentAnswers({ inputs, inventory: inventoryNow }),
+          supersededDecisionIds: supersededDecisionIds({
+            inputs,
+            inventory: inventoryNow,
+          }),
           revision: inputs.revision,
         }),
       });

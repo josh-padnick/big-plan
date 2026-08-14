@@ -48,6 +48,13 @@ Choose the release path before implementation begins.
 </Decision>
 `;
 
+// The captions say what a recorded answer means, so they are asserted as whole
+// sentences rather than as the presence of a word.
+const SAVED_CAPTION =
+  "Saved with this review. Your agent receives it when you approve the plan.";
+const READING_CAPTION =
+  "Noted for this reading session. It is not recorded for your agent.";
+
 const releaseDecision = (page: Page) => page.locator("[data-decision]").first();
 const rollbackDecision = (page: Page) => page.locator("[data-decision]").nth(1);
 
@@ -126,7 +133,7 @@ test("should persist, retract, and clear a confirmed decision answer", async ({
       expect((await staged).ok()).toBe(true);
       await expect(
         releaseDecision(page).locator("[data-decision-answer-caption]"),
-      ).toHaveText("Saved with this review.");
+      ).toHaveText(SAVED_CAPTION);
 
       await page.reload();
       await expect(
@@ -137,7 +144,7 @@ test("should persist, retract, and clear a confirmed decision answer", async ({
       ).toBeVisible();
       await expect(
         releaseDecision(page).locator("[data-decision-answer-caption]"),
-      ).toHaveText("Saved with this review.");
+      ).toHaveText(SAVED_CAPTION);
     });
 
     await test.step("an answers response older than the applied one is ignored", async () => {
@@ -173,7 +180,7 @@ test("should persist, retract, and clear a confirmed decision answer", async ({
         releaseRead();
         await expect(
           decision.locator("[data-decision-answer-caption]"),
-        ).toHaveText("Saved with this review.");
+        ).toHaveText(SAVED_CAPTION);
         // The delayed read was answered before the write and carries the older
         // revision, so it must not put the previous option back on the card.
         await expect(
@@ -357,6 +364,39 @@ test("should mask an answer whose decision changed and restore it with the wordi
         releaseDecision(page).getByRole("radio", { name: "Gradual rollout" }),
       ).toBeChecked();
     });
+
+    await test.step("an edit the ids survive says on the card that the answer stopped applying", async () => {
+      await publishRevision({
+        requestId: "3333333333333333",
+        source: PLAN.replace(
+          "Start with one group.",
+          "Start with the beta group.",
+        ),
+        baseline: deriveSnapshotDigest(PLAN),
+        message: "Sharpen the gradual rollout summary.",
+      });
+
+      const notice = releaseDecision(page).locator(
+        "[data-decision-superseded]",
+      );
+      await expect(notice).toBeVisible({ timeout: 15_000 });
+      await expect(notice).toHaveText(
+        "This decision changed after you answered it. Answer it again to record your choice.",
+      );
+      await expect(
+        releaseDecision(page).locator("[data-decision-answer]"),
+      ).toBeHidden();
+
+      const restaged = page.waitForResponse((response) =>
+        isInputOperation(response, "stage"),
+      );
+      await answerGradualRollout(page);
+      expect((await restaged).ok()).toBe(true);
+      await expect(notice).toBeHidden();
+      await expect(
+        releaseDecision(page).locator("[data-decision-answer-caption]"),
+      ).toHaveText(SAVED_CAPTION);
+    });
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
@@ -431,7 +471,7 @@ test("should hold a confirm made before the session answers, then save it", asyn
     expect((await staged).ok()).toBe(true);
     await expect(
       releaseDecision(page).locator("[data-decision-answer-caption]"),
-    ).toHaveText("Saved with this review.");
+    ).toHaveText(SAVED_CAPTION);
 
     await page.unroute("**/api/session");
     await page.reload();
@@ -495,21 +535,35 @@ test("should turn a held confirm into a reading-session answer when read-only", 
       ).toBeVisible();
       await expect(
         releaseDecision(page).locator("[data-decision-answer-caption]"),
-      ).toHaveText("Noted for this reading session.");
+      ).toHaveText(READING_CAPTION);
       expect(inputWrites).toBe(0);
 
-      await releaseDecision(page)
-        .getByRole("button", { name: "Change" })
-        .click();
-      await releaseDecision(page)
-        .getByRole("radio", { name: "Immediate rollout" })
-        .check();
-      await releaseDecision(page)
-        .getByRole("button", { name: "Confirm choice" })
-        .click();
+      // Once the session is known read-only the card stops offering an answer
+      // at all: the controls are inert and say why beside themselves.
+      const decision = releaseDecision(page);
       await expect(
-        releaseDecision(page).locator("[data-decision-answer-caption]"),
-      ).toHaveText("Noted for this reading session.");
+        decision.getByRole("button", { name: "Change" }),
+      ).toBeDisabled();
+      await expect(
+        decision.locator("[data-decision-locked-note]:visible").first(),
+      ).toHaveText("This review is read-only, so no answer can be recorded.");
+
+      // The decision nobody answered is the one that shows what a read-only
+      // review offers: nothing to pick, nothing to confirm, and the reason why.
+      const unanswered = rollbackDecision(page);
+      await expect(
+        unanswered.getByRole("button", { name: "Confirm choice" }),
+      ).toBeDisabled();
+      for (const name of [
+        "The release engineer",
+        "The on-call rotation",
+        "Suggest another option",
+      ]) {
+        await expect(unanswered.getByRole("radio", { name })).toBeDisabled();
+      }
+      await expect(
+        unanswered.locator("[data-decision-locked-note]:visible").first(),
+      ).toHaveText("This review is read-only, so no answer can be recorded.");
       expect(inputWrites).toBe(0);
     } finally {
       releaseSessionRequest();
@@ -574,7 +628,7 @@ test("should keep a failed decision save visible after its toast is dismissed", 
 
     await page.unroute("**/api/inputs");
     await expect(decision.locator("[data-decision-answer-caption]")).toHaveText(
-      "Saved with this review.",
+      SAVED_CAPTION,
       { timeout: 10_000 },
     );
   } finally {

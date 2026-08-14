@@ -607,20 +607,33 @@ describe("review runtime staged decision answers", () => {
           "Start with the beta group.",
         ),
       );
-      const masked = await answersOf(
-        await callRuntime({ target, sessionToken, path: "/api/review-state" }),
-      );
-      expect(masked.answers).toEqual([]);
+      const masked = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/review-state",
+      });
+      const maskedBody = await masked.clone().json();
+      // The decision is still asked, so the reader who answered it is named a
+      // reason rather than left with a card that looks untouched.
+      expect(maskedBody).toMatchObject({
+        answers: [],
+        supersededDecisionIds: [DECISION_ID],
+      });
 
       await writeFile(planPath, DECISION_PLAN);
-      const restored = await answersOf(
-        await callRuntime({ target, sessionToken, path: "/api/review-state" }),
-      );
-      expect(restored.answers).toMatchObject([
-        { decisionId: DECISION_ID, optionId: GRADUAL_OPTION_ID },
-      ]);
+      const restored = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/review-state",
+      });
+      expect(await restored.clone().json()).toMatchObject({
+        answers: [{ decisionId: DECISION_ID, optionId: GRADUAL_OPTION_ID }],
+        supersededDecisionIds: [],
+      });
       // Masking retained the record, so nothing was written to bring it back.
-      expect(restored.revision).toBe(masked.revision);
+      expect((await answersOf(restored)).revision).toBe(
+        (await answersOf(masked)).revision,
+      );
     });
   });
 

@@ -140,6 +140,44 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
   );
 };
 
+// A read-only review cannot record anything, so the controls are inert and say
+// why beside themselves. It appears twice because both states can be reached in
+// a read-only session: an unanswered card that cannot be answered, and an
+// answered one whose answer cannot be changed.
+const ReadOnlyNote = () => (
+  <p
+    className="decision-locked-note m-0 flex min-w-0 items-center gap-1.5 text-xs font-medium text-[var(--callout-warning-c)]"
+    data-decision-locked-note=""
+    hidden
+  >
+    <span className="inline-flex size-4 shrink-0" aria-hidden="true">
+      {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
+    </span>
+    <span>{"This review is read-only, so no answer can be recorded."}</span>
+  </p>
+);
+
+// A masked answer and an unanswered decision are the same empty card, so the
+// reader who answered this one is told what happened to their answer instead of
+// being left to notice the difference.
+const SupersededNotice = () => (
+  <p
+    className="decision-superseded flex items-start gap-2 bg-[var(--callout-warning-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-warning-c)]"
+    data-decision-superseded=""
+    role="status"
+    hidden
+  >
+    <span className="mt-0.5 inline-flex size-4 shrink-0" aria-hidden="true">
+      {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
+    </span>
+    <span>
+      {
+        "This decision changed after you answered it. Answer it again to record your choice."
+      }
+    </span>
+  </p>
+);
+
 // The confirm row sits directly under the rationale panel rather than at the
 // end of the document, so the action is never screens away from the choice.
 // The whole card is about one screen now, which is why this is close rather
@@ -169,6 +207,7 @@ const AnswerControls = () => (
           "which one?", so it is an action beside the options rather than an
           entry inside them. It appears only after an answer exists, because
           before that there is nothing to clear. */}
+      <ReadOnlyNote />
       <button
         className="decision-clear"
         type="button"
@@ -215,6 +254,7 @@ const AnswerControls = () => (
           {"Noted for this reading session."}
         </p>
       </div>
+      <ReadOnlyNote />
       <button
         className="decision-change shrink-0"
         type="button"
@@ -332,6 +372,7 @@ export const DecisionCard = ({
           {hastContentToReact(model.context)}
         </div>
       )}
+      {answerable ? <SupersededNotice /> : null}
       <fieldset className="decision-fieldset m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">{model.question}</legend>
         <div

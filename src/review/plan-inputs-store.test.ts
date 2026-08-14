@@ -7,6 +7,7 @@ import {
   applyStagedInputMutation,
   currentAnswers,
   isCurrentAnswer,
+  supersededDecisionIds,
   validateStagedInputMutation,
   validateStagedInputs,
 } from "./plan-inputs-store.js";
@@ -273,6 +274,48 @@ describe("decision answer currency", () => {
     expect(
       isCurrentAnswer({ answer: STORED_ANSWER, inventory: inventoryOf() }),
     ).toBe(true);
+  });
+
+  it("should name a decision still asked whose answer stopped applying", () => {
+    const inputs = {
+      version: 1,
+      revision: 4,
+      answers: [STORED_ANSWER],
+    } as const;
+
+    expect(
+      supersededDecisionIds({
+        inputs,
+        inventory: inventoryOf({ decisionDigest: "0000000000000000" }),
+      }),
+    ).toEqual([DECISION_ID]);
+  });
+
+  it("should name no decision whose answer is still current", () => {
+    const inputs = {
+      version: 1,
+      revision: 4,
+      answers: [STORED_ANSWER],
+    } as const;
+
+    expect(supersededDecisionIds({ inputs, inventory: INVENTORY })).toEqual([]);
+  });
+
+  // A decision the plan dropped has no card left, so naming it would ask the
+  // browser to explain an answer beside nothing.
+  it("should name no decision the plan stopped asking altogether", () => {
+    const inputs = {
+      version: 1,
+      revision: 4,
+      answers: [STORED_ANSWER],
+    } as const;
+
+    expect(
+      supersededDecisionIds({
+        inputs,
+        inventory: inventoryOf({ decisionId: "decision-reworded" }),
+      }),
+    ).toEqual([]);
   });
 
   it("should show only the current answers of a record it never edits", () => {

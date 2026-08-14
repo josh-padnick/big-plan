@@ -633,7 +633,11 @@
     font-size: 0.8125rem;
     font-weight: 600;
   }
-  article .decision-confirm:disabled {
+  /* Nothing to confirm, or a read-only review that could not record it either
+     way: both read as the same inert control. */
+  article .decision-confirm:disabled,
+  article .decision-change:disabled,
+  article .decision-clear:disabled {
     cursor: default;
     background: var(--surface-c);
     color: var(--color-subtle);
@@ -692,6 +696,15 @@
   article .decision-answer:not([hidden]) {
     display: flex;
     background: var(--decision-pro-bg);
+  }
+  /* Both notices are revealed by the review island rather than by the author,
+     so like the strips above they carry their display here, where the hidden
+     attribute still wins. */
+  article .decision-superseded:not([hidden]) {
+    display: flex;
+  }
+  article .decision-locked-note:not([hidden]) {
+    display: flex;
   }
   article .decision-footer {
     background: color-mix(in srgb, var(--surface-c) 50%, var(--bg));

@@ -268,3 +268,24 @@ export const currentAnswers = ({
   inputs.answers.filter((stored) =>
     isCurrentAnswer({ answer: stored, inventory }),
   );
+
+/**
+ * The decisions whose stored answer stopped applying while the decision itself
+ * is still being asked. A reader who answered one of these is owed a reason for
+ * the empty card, so this is deliberately narrower than "not current": a
+ * decision the plan dropped altogether has no card left to explain anything on.
+ */
+export const supersededDecisionIds = ({
+  inputs,
+  inventory,
+}: {
+  readonly inputs: StagedInputs;
+  readonly inventory: DecisionInventory;
+}): ReadonlyArray<string> =>
+  inputs.answers
+    .filter(
+      (stored) =>
+        inventory.has(stored.decisionId) &&
+        !isCurrentAnswer({ answer: stored, inventory }),
+    )
+    .map((stored) => stored.decisionId);
