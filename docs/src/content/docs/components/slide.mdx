@@ -31,7 +31,7 @@ For each intended slide, use a type only when its matching rule fits; otherwise 
 | `status-quo`          | Status quo          | What is true today, including what already works                       |
 | `desired-experience`  | Desired experience  | The concrete lived experience introduced by a new feature              |
 | `desired-outcome`     | Desired outcome     | The concrete payoff of a bug fix, re-architecture, or tech-debt change |
-| `user-journey`        | User journeys       | A named container of individually named, complete human loops          |
+| `user-journey`        | User journeys       | One complete human loop nested under a journeys container              |
 | `acceptance-criteria` | Acceptance criteria | Independently checkable verification                                   |
 
 `desired-experience` and `desired-outcome` are mutually exclusive.
@@ -47,27 +47,37 @@ Big Plan does not lint that judgment because broad language checks would create 
 ### User journeys
 
 User journeys add one deeper name/title layer.
-Name the container “User journeys,” but choose the container presentation that fits the plan: either a Part or an untyped introductory slide.
-Big Plan deliberately supports both.
+Name the container “User journeys,” make it a Part, and nest every journey underneath it rather than beside it.
+Then count the actors to pick the shape.
+
+**Two or more actors: group by actor.** This is the default. Each actor gets one untyped group slide inside the Part, titled for that actor, and each of their journeys becomes a sub-slide of it, so 2.2 “Merchant journeys” holds 2.2.1 and 2.2.2. A reviewer who owns one actor reads that group and collapses the rest.
+
+**One actor: keep the journeys flat.** They stay typed slides directly inside the Part, numbered 2.1, 2.2, 2.3, because grouping a single actor adds a level that only repeats its owner.
+
+The marker sits above the heading the journey owns: the h3 when grouped, the h2 when flat. Either way the journey keeps its `name`, `toc`, and wireframe contract, and the heading beneath the marker becomes the title.
+Authoring typed journey slides beside an untyped container slide is rejected by the `slide-type-structure` lint rule, because they render as the container's siblings.
 
 ```mdx
 <Part title="User journeys" />
 
-<Slide type="user-journey" name="Drafting a status slide" toc="Draft status" />
+## Merchant journeys
 
-## An agent turns evidence into a status slide
+The merchant sees the failure first.
 
-<Wireframe id="draft-status" initialScreen="evidence">
-  <Screen id="evidence" name="Gather evidence" device="desktop">
-    ...
-  </Screen>
-  <Screen id="preview" name="Review status slide" device="desktop">
+<Slide type="user-journey" name="Review a failed payment" toc="Review failure" />
+
+### A merchant reads why one payment failed
+
+<Wireframe id="merchant-review" initialScreen="failure">
+  <Screen id="failure" name="Failed payment" device="desktop">
     ...
   </Screen>
 </Wireframe>
 ```
 
-For each journey:
+With a single actor, drop the group slide and put the marker above the h2 instead.
+
+For each typed journey:
 
 - `name` is a distinct, concrete journey name shown in the kicker and sidebar.
 - `toc` is an ultra-concise form shown in the TableOfContents.
@@ -84,9 +94,10 @@ Apply the Wireframe component's CLEAR quality bar to every mockup.
 
 - `type` is required and accepts only the five registered ids above.
 - `Slide` is self-closing and rejects body content.
-- The marker must be top-level and immediately followed by the h2 it describes.
+- The marker must be top-level and immediately followed by the h2 or h3 it describes. On an h3 it types one journey sub-slide: the marker's name fills the kicker, and the h3 becomes that sub-slide's title.
 - `user-journey` additionally requires non-empty `name` and `toc` attributes and accepts an optional non-empty `wireframeReason`; other types reject all three.
 - Every `user-journey` section must contain a `Wireframe` with actual UI mockups, or a non-empty `wireframeReason` that explains why no UI was created. Carrying both is rejected, because the reason only explains an absent wireframe.
+- Every `user-journey` slide must sit inside a Part whose title names the journeys container, such as “User journeys”; a grouped journey sub-slide may instead sit under an actor group titled “Merchant journeys”.
 - Singleton types may appear at most once; `user-journey` may repeat.
 - A plan may use `desired-experience` or `desired-outcome`, never both.
 - An acceptance-criteria slide with more than seven criteria must group them by a useful dimension.

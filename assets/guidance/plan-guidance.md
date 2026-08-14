@@ -33,8 +33,45 @@ A rendered plan reads as a deck: every section is one slide carrying one thought
 If a section needs a second screen, it holds a second thought; split it into h3 sub-slides, each of which renders as its own numbered frame.
 Before drafting, run `big-plan guidance Slide` once for the complete slide-type catalog.
 For each intended slide, ask whether its purpose matches a defined type; when one fits, use its `Slide` marker and type-specific guidance, and when none fits, author an untyped slide under these general principles rather than forcing a match.
-For user journeys, name the container “User journeys” as either a Part or an untyped introductory slide; give every journey its own marker `name`, ultra-concise `toc` form, and full h2 claim.
-Every journey slide should contain a `Wireframe` with actual `Screen` mockups that show the interface states in the human loop; when no UI exists to show, add a non-empty `wireframeReason` attribute to the `Slide` marker and explain the opt-out. Prose may explain the screens but never replace them when a UI exists.
+For user journeys, name the container “User journeys” as a `Part` and nest every journey underneath it; a journey authored beside its container reads as a peer of the container rather than one of the loops it holds.
+Then choose the shape by counting the actors, because the deck should group the way the reviewer divides the work.
+
+**Several actors: group by actor.** This is the default whenever two or more people live the journeys.
+Give each actor one group slide inside the container Part, and make each of that actor's journeys a sub-slide of the group, so the numbers carry their owner: 2.2 “Merchant journeys” holds 2.2.1 and 2.2.2, and 2.3 “Customer journeys” holds 2.3.1.
+A reviewer who owns one actor then reads one group and collapses the rest.
+Mark the sub-slide, not the group: put `<Slide type="user-journey" name="..." toc="..." />` directly above the journey's h3, which keeps the journey's name in the kicker, its `toc` form in the overview, and its wireframe contract, and frees the h3 to state this plan's claim as the sub-slide's title.
+Leave the group slide untyped, and title it for the actor whose journeys it holds.
+
+**One actor: stay flat.** Grouping a single actor adds a level that carries nothing, because every journey would repeat the same owner.
+Make each journey a typed slide directly inside the container Part, numbering 2.1, 2.2, 2.3, with its marker above the h2.
+
+Either way, give every journey its own marker `name`, ultra-concise `toc` form, and full plain-language claim in the heading the marker sits above.
+Open the container with a user-summaries overview slide, which is the standard convention for any slide that summarizes a set of user journeys.
+Write it in exactly this shape, so every plan's overview reads the same way:
+
+```mdx
+## Five journeys cover the recovery loop
+
+The user journeys cover three actors:
+
+- **Merchant**
+  - [**2.2.1** Review a failed payment](#a-merchant-reads-why-one-payment-failed)
+  - [**2.2.2** Queue a protected retry](#a-merchant-schedules-the-next-safe-attempt)
+- **Customer**
+  - [**2.3.1** Update an expired card](#a-customer-replaces-the-card-before-the-retry-runs)
+  - [**2.3.2** Confirm the recovered payment](#a-customer-sees-the-payment-complete-without-asking)
+- **Operator**
+  - [**2.4.1** Pause a payment that keeps failing](#an-operator-stops-the-retry-cycle-and-records-why)
+
+Together, they show the handoffs around one payment identity.
+```
+
+The lead line counts the actors, never the journeys: "The user journeys cover three actors:".
+Each actor is one bullet carrying only its bold name, with no journey count and no trailing punctuation; the sub-bullets carry the count, so an actor with two journeys simply shows two of them.
+Each journey is one sub-bullet written as a link whose text is the journey's bold slide number followed by its action phrase, and whose target is the slug of that journey's h2.
+Close with one line naming what the journeys share, opening "Together, they show".
+Title the slide with its claim ("Three journeys cover the recovery loop"), never "User journeys" again, because the container already carries that name and lint rejects the restatement.
+Every typed journey slide should contain a `Wireframe` with actual `Screen` mockups that show the interface states in the human loop; when no UI exists to show, add a non-empty `wireframeReason` attribute to the `Slide` marker and explain the opt-out. Prose may explain the screens but never replace them when a UI exists.
 Typed coverage is not a quality target.
 Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.
 Part 1 canonically holds "Status quo" and then "Success looks like": what is true today, and the outcome-level success a sponsor would repeat.

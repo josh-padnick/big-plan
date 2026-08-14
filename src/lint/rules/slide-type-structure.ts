@@ -1,10 +1,25 @@
 // Implements the objective typed-slide structure rule: singleton types may
-// not repeat, and the outcome pair is mutually exclusive. It deliberately
-// judges no slide content.
+// not repeat, the outcome pair is mutually exclusive, and every user journey
+// nests under its container. It deliberately judges no slide content.
 
 import { SLIDE_TYPES } from "../../plan-vocabulary/slide-types/index.js";
-import { collectAuthoredSections } from "../authored-sections.js";
+import {
+  collectAuthoredSections,
+  collectAuthoredSubSections,
+  type AuthoredSection,
+} from "../authored-sections.js";
 import type { PlanLintFinding, PlanLintRule } from "../types.js";
+
+// Recognizes the container heading or Part title that owns a run of journeys.
+// The catalog name is "User journeys", and a plan that splits journeys by
+// audience ("Reviewer journeys") still names the same container role.
+const namesJourneyContainer = (title: string): boolean =>
+  /\bjourneys$/u.test(
+    title
+      .trim()
+      .replace(/[.:!?]+$/u, "")
+      .toLowerCase(),
+  );
 
 const positionOf = ({
   markerLine,
@@ -20,9 +35,13 @@ const positionOf = ({
 });
 
 const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
-  const typed = collectAuthoredSections(tree).filter(
-    (section) => section.type !== undefined,
-  );
+  const sections = collectAuthoredSections(tree);
+  const subSections = collectAuthoredSubSections(tree);
+  // A grouped journey is a typed sub-slide, so every per-journey contract
+  // below reads both shapes; only the containment walk cares which is which.
+  const typed = [...sections, ...subSections]
+    .filter((section) => section.type !== undefined)
+    .sort((left, right) => left.line - right.line);
   const findings: Array<PlanLintFinding> = [];
 
   for (const definition of SLIDE_TYPES) {
@@ -97,6 +116,69 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
       }
       seen.add(value);
     }
+  }
+
+  // A journey belongs inside its container, never beside it. A Part titled
+  // "User journeys" is the container that holds typed journey slides; an
+  // untyped container slide can only hold h3 sub-slides, so typed journeys
+  // authored next to one render as its siblings instead of its children.
+  const containerSlides = new Set<AuthoredSection>();
+  let container: AuthoredSection | undefined;
+  for (const section of sections) {
+    if (section.type === undefined) {
+      if (section.isTopLevel && namesJourneyContainer(section.title)) {
+        container = section;
+      }
+      continue;
+    }
+    if (section.type !== "user-journey") {
+      continue;
+    }
+    if (
+      container !== undefined &&
+      container.partOrdinal === section.partOrdinal
+    ) {
+      containerSlides.add(container);
+      continue;
+    }
+    if (
+      section.partTitle !== undefined &&
+      namesJourneyContainer(section.partTitle)
+    ) {
+      continue;
+    }
+    findings.push({
+      ...positionOf(section),
+      message: `Put User journeys slide "${section.name}" inside a Part titled "User journeys" so every journey nests under its container`,
+    });
+  }
+  // A grouped journey is nested by construction, so it only has to sit under
+  // a container that names journeys: the Part, or the actor group holding it.
+  for (const journey of subSections) {
+    if (journey.type !== "user-journey") {
+      continue;
+    }
+    const contained = [journey.partTitle, journey.parentTitle].some(
+      (title) => title !== undefined && namesJourneyContainer(title),
+    );
+    if (contained) {
+      continue;
+    }
+    findings.push({
+      ...positionOf(journey),
+      message: `Put User journeys sub-slide "${journey.name}" under a container that names the journeys, such as <Part title="User journeys" /> or an actor group titled "Merchant journeys"`,
+    });
+  }
+  for (const slide of containerSlides) {
+    const fixes =
+      slide.partTitle !== undefined && namesJourneyContainer(slide.partTitle)
+        ? `delete that redundant slide so each typed journey remains directly inside <Part title="${slide.partTitle}" />, or make each journey an h3 sub-slide of it`
+        : `replace that slide with <Part title="${slide.title}" /> so each journey is a slide inside it, or make each journey an h3 sub-slide of it`;
+    findings.push({
+      line: slide.line,
+      column: slide.column,
+      message: `Nest the journeys under "${slide.title}" instead of beside it: ${fixes}`,
+    });
   }
 
   return findings;

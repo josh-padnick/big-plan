@@ -160,7 +160,7 @@ describe("Slide component", () => {
       expect(error.diagnostics).toMatchObject([
         {
           message:
-            "Slide must be a top-level self-closing marker immediately followed by the h2 it describes",
+            "Slide must be a top-level self-closing marker immediately followed by the h2 or h3 it describes",
           line: 1,
           column: 1,
         },
@@ -198,7 +198,7 @@ describe("Slide component", () => {
     );
 
     expect(rendered).toEqual([
-      "Slide must be a top-level self-closing marker immediately followed by the h2 it describes",
+      "Slide must be a top-level self-closing marker immediately followed by the h2 or h3 it describes",
     ]);
     expect(compiled).toEqual(rendered);
   });
