@@ -38,7 +38,6 @@ import { diffSnapshots } from "./snapshot-diff.js";
 import {
   liveReviewSessionForPlan,
   reviewSessionIsRunning,
-  reviewSessionStopReason,
   SessionAuthorityRejected,
 } from "./session-authority.js";
 import {
@@ -133,10 +132,14 @@ const reviewSessionIsAvailable = async ({
 }: {
   readonly store: Parameters<typeof reviewSessionIsRunning>[0]["store"];
   readonly sessionId: string;
-}): Promise<boolean> => {
+}): Promise<{
+  readonly running: boolean;
+  readonly stopReason?: string;
+}> => {
   let failedChecks = 0;
   while (true) {
-    if (await reviewSessionIsRunning({ store, sessionId })) {
+    const liveness = await reviewSessionIsRunning({ store, sessionId });
+    if (liveness.running) {
       if (failedChecks > 0) {
         console.error(
           `Review session heartbeat recovered after ${failedChecks} failed check${
@@ -144,14 +147,16 @@ const reviewSessionIsAvailable = async ({
           }`,
         );
       }
-      return true;
+      return { running: true };
     }
-    if ((await reviewSessionStopReason({ store, sessionId })) !== undefined) {
-      return false;
+    if (liveness.stopReason !== undefined) {
+      return liveness;
     }
-    if (failedChecks >= HEARTBEAT_FAILURE_BACKOFF_MS.length) return false;
+    if (failedChecks >= HEARTBEAT_FAILURE_BACKOFF_MS.length) {
+      return { running: false };
+    }
     const backoff = HEARTBEAT_FAILURE_BACKOFF_MS[failedChecks];
-    if (backoff === undefined) return false;
+    if (backoff === undefined) return { running: false };
     await wait(backoff);
     failedChecks += 1;
   }
@@ -273,22 +278,19 @@ const nextWork = async ({
       sessionId: session.sessionId,
       state: "waiting",
     });
-    if (
-      !(await reviewSessionIsAvailable({
-        store: session.store,
-        sessionId: session.sessionId,
-      }))
-    ) {
-      const reason = await reviewSessionStopReason({
-        store: session.store,
-        sessionId: session.sessionId,
-      });
+    const liveness = await reviewSessionIsAvailable({
+      store: session.store,
+      sessionId: session.sessionId,
+    });
+    if (!liveness.running) {
+      const reason =
+        liveness.stopReason ??
+        "The review server stopped while the agent was waiting.";
       return {
         pending: false,
         ended: true,
         plan: session.planPath,
-        reason:
-          reason ?? "The review server stopped while the agent was waiting.",
+        reason,
         help: ["Start a new review session to receive more feedback"],
       };
     }

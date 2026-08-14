@@ -172,14 +172,14 @@ describe("session authority", () => {
         sessionId: current.sessionId,
         now: 12_000,
       }),
-    ).resolves.toBe(true);
+    ).resolves.toMatchObject({ running: true });
     await expect(
       reviewSessionIsRunning({
         store,
         sessionId: replaced.sessionId,
         now: 12_000,
       }),
-    ).resolves.toBe(false);
+    ).resolves.toMatchObject({ running: false });
   });
 
   it("should return a stable reason when no matching live session exists", async () => {

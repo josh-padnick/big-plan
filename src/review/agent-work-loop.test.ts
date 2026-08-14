@@ -297,6 +297,48 @@ describe("agent work loop lifecycle", () => {
         ended: true,
         reason: "The review server stopped while the agent was waiting.",
       });
+      expect(heartbeat.mock.calls.length).toBeGreaterThan(6);
+    } finally {
+      heartbeat.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should return an explicit shutdown reason without rereading it", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-shutdown-reason-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n");
+    const review = await startReviewRuntime({ planPath });
+    const heartbeat = vi
+      .spyOn(reviewStore, "readSessionHeartbeatValue")
+      .mockResolvedValueOnce({
+        sessionId: review.sessionId,
+        running: true,
+        updatedAtMs: Date.now(),
+      })
+      .mockResolvedValueOnce({
+        sessionId: review.sessionId,
+        running: false,
+        updatedAtMs: Date.now(),
+        stopReason: "The review server was closed by the captain.",
+      });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: true,
+        }),
+      ).resolves.toMatchObject({
+        pending: false,
+        ended: true,
+        reason: "The review server was closed by the captain.",
+      });
+      expect(heartbeat).toHaveBeenCalledTimes(2);
     } finally {
       heartbeat.mockRestore();
       await review.close();
