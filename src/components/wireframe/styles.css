@@ -791,6 +791,55 @@ marks and a plan diff never jitters.
     max-width: 38rem;
   }
 
+  /* Default measure: a block sitting directly in the canvas or app content
+     column reads at the same 38rem prose measure Center already defaults to,
+     even when the author never reaches for Center. Without this, a screen
+     with no workspace row and no Center leaves prose, panels, fields, and
+     lists to stretch edge to edge, because nothing else in the artboard
+     bounds them.
+
+     A block keeps the cap only when nothing about it already justifies
+     running wide: AppShell and PageHeader are chrome that always spans its
+     column - AppShell governs its own nav rail and content split, and the
+     rule below reaches inside its AppContent separately; Center carries its
+     own measure; a workspace row is already pane-dominance managed; a Row
+     with more than one child is already distributing space between real
+     siblings; and a List, a Table, or a Panel wrapping one (or wrapping a
+     many-child Row, such as a toolbar) is a record collection or command bar
+     that naturally reads wide. Author escape hatch: wrap content that
+     legitimately wants the full artboard in a Row (even a single dominant
+     child beside an empty one) or a `Center measure="wide"` instead of a
+     bare Stack or Panel. */
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    > .wireframe-canvas
+    > *:not(
+      :is(
+        .wireframe-app-shell,
+        .wireframe-center,
+        .wireframe-page-header,
+        .wireframe-list,
+        .wireframe-table,
+        .wireframe-panel[data-wireframe-master],
+        .wireframe-row[data-wireframe-workspace],
+        .wireframe-row:has(> :nth-child(2))
+      )
+    ):not(:has(.wireframe-row > :nth-child(2))),
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    .wireframe-app-content
+    > *:not(
+      :is(
+        .wireframe-center,
+        .wireframe-page-header,
+        .wireframe-list,
+        .wireframe-table,
+        .wireframe-panel[data-wireframe-master],
+        .wireframe-row[data-wireframe-workspace],
+        .wireframe-row:has(> :nth-child(2))
+      )
+    ):not(:has(.wireframe-row > :nth-child(2))) {
+    max-width: 38rem;
+  }
+
   /* Tablet shells keep breathing room and a card-like rail: intentional for
      the device, not the default desktop treatment. */
   .wireframe-artboard[data-wireframe-device="tablet-portrait"]:has(
@@ -1965,6 +2014,23 @@ marks and a plan diff never jitters.
     color: var(--color-ink);
     font: inherit;
     font-size: 0.875rem;
+  }
+  /* Control width: a field draws the length of a plausible answer instead of
+     filling whatever column it lands in. TextArea is the deliberate
+     exception - prose entry earns the whole column - so it keeps width:100%
+     with no cap. A date or number answers in a handful of characters; a
+     select or a line of text still reads as one short answer, never a full
+     928px reading measure. There is no per-control override: a field that
+     genuinely needs more room is a TextArea, not a wider TextField. */
+  .wireframe-input:not(.wireframe-textarea) {
+    max-width: 22rem;
+  }
+  input.wireframe-input[type="number"],
+  input.wireframe-input[type="date"] {
+    max-width: 10rem;
+  }
+  input.wireframe-input[type="search"] {
+    max-width: 16rem;
   }
   .wireframe-input::placeholder {
     color: var(--color-muted);
