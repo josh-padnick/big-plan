@@ -3,7 +3,14 @@
 // ownership of plan content.
 
 import { createPortal } from "react-dom";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 import {
   BODY_ATTRIBUTE,
   MAXIMIZABLE_ATTRIBUTE,
@@ -543,22 +550,30 @@ const SnapshotSideContent = ({
 type WireframeScreenDiff = {
   readonly id: string;
   readonly name: string;
-  readonly status: "added" | "removed" | "updated";
+  readonly status: "added" | "moved" | "removed" | "updated";
+  readonly oldPosition?: number;
+  readonly newPosition?: number;
+};
+
+type WireframeScreenSnapshot = {
+  readonly markup: string;
+  readonly position: number;
 };
 
 const wireframeScreenMarkup = (
   html: string | undefined,
-): Map<string, string> => {
-  const screens = new Map<string, string>();
+): Map<string, WireframeScreenSnapshot> => {
+  const screens = new Map<string, WireframeScreenSnapshot>();
   if (html === undefined) return screens;
   const document = new DOMParser().parseFromString(html, "text/html");
-  for (const screen of document.querySelectorAll<HTMLElement>(
+  const renderedScreens = document.querySelectorAll<HTMLElement>(
     "[data-wireframe-screen]",
-  )) {
+  );
+  for (const [index, screen] of [...renderedScreens].entries()) {
     const id = screen.dataset.wireframeScreen;
     if (id === undefined) continue;
     screen.removeAttribute("data-wireframe-current");
-    screens.set(id, screen.outerHTML);
+    screens.set(id, { markup: screen.outerHTML, position: index + 1 });
   }
   return screens;
 };
@@ -583,30 +598,54 @@ const wireframeScreenDiffs = (
   const newScreens = wireframeScreenMarkup(newHtml);
   const ids = [...new Set([...newScreens.keys(), ...oldScreens.keys()])];
   return ids.flatMap((id) => {
-    const oldMarkup = oldScreens.get(id);
-    const newMarkup = newScreens.get(id);
+    const oldScreen = oldScreens.get(id);
+    const newScreen = newScreens.get(id);
     const status =
-      oldMarkup === undefined
+      oldScreen === undefined
         ? "added"
-        : newMarkup === undefined
+        : newScreen === undefined
           ? "removed"
-          : oldMarkup === newMarkup
-            ? undefined
-            : "updated";
+          : oldScreen.markup !== newScreen.markup
+            ? "updated"
+            : oldScreen.position !== newScreen.position
+              ? "moved"
+              : undefined;
     if (status === undefined) return [];
-    const nameSource = newMarkup === undefined ? oldHtml : newHtml;
+    const nameSource = newScreen === undefined ? oldHtml : newHtml;
     return [
       {
         id,
         name: wireframeScreenName(nameSource ?? "", id),
         status,
+        ...(oldScreen === undefined ? {} : { oldPosition: oldScreen.position }),
+        ...(newScreen === undefined ? {} : { newPosition: newScreen.position }),
       },
     ];
   });
 };
 
-const screenStatusLabel = (status: WireframeScreenDiff["status"]): string =>
-  status.charAt(0).toUpperCase() + status.slice(1);
+const screenStatusLabel = (screen: WireframeScreenDiff): string => {
+  if (screen.status === "added") {
+    return screen.newPosition === undefined
+      ? "Added"
+      : `Added at ${screen.newPosition}`;
+  }
+  if (screen.status === "removed") {
+    return screen.oldPosition === undefined
+      ? "Removed"
+      : `Removed from ${screen.oldPosition}`;
+  }
+  const moved =
+    screen.oldPosition !== undefined &&
+    screen.newPosition !== undefined &&
+    screen.oldPosition !== screen.newPosition;
+  if (screen.status === "moved" && moved) {
+    return `Moved ${screen.oldPosition} → ${screen.newPosition}`;
+  }
+  return moved
+    ? `Updated · ${screen.oldPosition} → ${screen.newPosition}`
+    : "Updated";
+};
 
 const screenStatusClasses = (status: WireframeScreenDiff["status"]): string => {
   if (status === "added") {
@@ -626,6 +665,33 @@ const screenStatusBorder = (status: WireframeScreenDiff["status"]): string => {
     return "color-mix(in srgb, var(--diff-remove-c) 30%, var(--diff-remove-bg))";
   }
   return "color-mix(in srgb, var(--callout-warning-c) 30%, var(--callout-warning-bg))";
+};
+
+const SNAPSHOT_CONTROL_SELECTOR =
+  'a[href], button, input, select, summary, textarea, [contenteditable]:not([contenteditable="false"]), [data-wireframe-navigate], [role="button"], [tabindex]';
+
+const sanitizeRenderedSnapshot = (html: string | undefined): string => {
+  if (html === undefined) return "";
+  const document = new DOMParser().parseFromString(html, "text/html");
+  for (const control of document.querySelectorAll<HTMLElement>(
+    SNAPSHOT_CONTROL_SELECTOR,
+  )) {
+    control.tabIndex = -1;
+    control.setAttribute("aria-disabled", "true");
+    control.removeAttribute("contenteditable");
+  }
+  return document.body.innerHTML;
+};
+
+const preventSnapshotControlClick = (
+  event: ReactMouseEvent<HTMLDivElement>,
+): void => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const control = target.closest(`${SNAPSHOT_CONTROL_SELECTOR}, label`);
+  if (control === null || !event.currentTarget.contains(control)) return;
+  event.preventDefault();
+  event.stopPropagation();
 };
 
 const ComponentSnapshotComparison = ({
@@ -656,6 +722,10 @@ const ComponentSnapshotComparison = ({
     (side === "old" && canShowOld) || !canShowNew ? "old" : "new";
   const renderedHtml =
     renderedSide === "old" ? location.oldHtml : location.newHtml;
+  const sanitizedRenderedHtml = useMemo(
+    () => sanitizeRenderedSnapshot(renderedHtml),
+    [renderedHtml],
+  );
   const renderedPresentation = sidePresentation(location, renderedSide);
   const visibleScreenId =
     selectedScreenId ??
@@ -774,7 +844,7 @@ const ComponentSnapshotComparison = ({
               <span
                 className={`rounded-md px-2 py-1 text-2xs font-bold ${screenStatusClasses(screen.status)}`}
               >
-                {screenStatusLabel(screen.status)}
+                {screenStatusLabel(screen)}
               </span>
             </button>
           ))}
@@ -831,9 +901,12 @@ const ComponentSnapshotComparison = ({
         <div
           ref={contentRef}
           {...{ [BODY_ATTRIBUTE]: "" }}
-          className="pointer-events-none min-w-0 [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_[data-flow-controls]]:hidden"
-          inert
-          dangerouslySetInnerHTML={{ __html: renderedHtml ?? "" }}
+          className="min-w-0 focus-visible:shadow-focus focus-visible:outline-none [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_.wireframe-switcher]:hidden [&_[data-flow-controls]]:hidden"
+          role="region"
+          aria-label={`${maximizeSubject} content`}
+          tabIndex={0}
+          onClickCapture={preventSnapshotControlClick}
+          dangerouslySetInnerHTML={{ __html: sanitizedRenderedHtml }}
         />
       </div>
     </div>

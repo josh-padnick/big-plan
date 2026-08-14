@@ -2346,6 +2346,20 @@ test("should fit a wireframe component snapshot and keep its pastel diff edge", 
   await page.setViewportSize({ width: 1600, height: 1000 });
   const directory = await mkdtemp(join(tmpdir(), "big-plan-wireframe-diff-"));
   const planPath = join(directory, "wireframe.mdx");
+  const overflowItems = Array.from(
+    { length: 40 },
+    (_, index) => `<ListItem label="Queue item ${index + 1}" />`,
+  ).join("\n");
+  const triageScreen = `<Screen id="triage" name="Triage" device="desktop">
+<Panel title="Triage queue">
+<Text text="Unchanged triage content" />
+</Panel>
+</Screen>`;
+  const archiveScreen = `<Screen id="archive" name="Archive" device="desktop">
+<Panel title="Archive queue">
+<Text text="Unchanged archive content" />
+</Panel>
+</Screen>`;
   const changedWorkspace = `<Wireframe id="queue-diff" title="Review queue">
 <Screen id="queue" name="Queue" device="desktop">
 <AppShell>
@@ -2355,6 +2369,7 @@ test("should fit a wireframe component snapshot and keep its pastel diff edge", 
 <Panel title="Threads">
 <List>
 <ListItem label="Keep the retry budget visible" selected />
+${overflowItems}
 </List>
 </Panel>
 </AppContent>
@@ -2365,6 +2380,8 @@ test("should fit a wireframe component snapshot and keep its pastel diff edge", 
 <Text text="Legacy queue content" />
 </Panel>
 </Screen>
+${triageScreen}
+${archiveScreen}
 </Wireframe>`;
   const unrelatedWorkspace = `<Wireframe id="queue-diff" title="Unrelated prototype">
 <Screen id="unrelated" name="Unrelated" device="desktop">
@@ -2400,6 +2417,10 @@ ${unrelatedWorkspace}
 </Panel>
 </Screen>`,
     );
+  const reorderedWorkspace = revisedWorkspace.replace(
+    `${triageScreen}\n${archiveScreen}`,
+    `${archiveScreen}\n${triageScreen}`,
+  );
   const after = `# Wireframe diff preview
 
 Review the queue change in context.
@@ -2408,7 +2429,7 @@ Review the queue change in context.
 
 ${unrelatedWorkspace}
 
-${revisedWorkspace}
+${reorderedWorkspace}
 `;
   await writeFile(planPath, after);
   const { startReviewRuntime: startCompiledReviewRuntime } =
@@ -2454,6 +2475,16 @@ ${revisedWorkspace}
       "data-review-component-snapshot",
       "new",
     );
+    await expect(
+      screenNavigation.getByRole("button", {
+        name: "Archive Moved 4 → 3",
+      }),
+    ).toBeVisible();
+    await expect(
+      screenNavigation.getByRole("button", {
+        name: "Triage Moved 3 → 4",
+      }),
+    ).toBeVisible();
     await screenNavigation
       .getByRole("button", { name: "Escalations Added" })
       .click();
@@ -2484,10 +2515,46 @@ ${revisedWorkspace}
     await expect(
       snapshot.getByRole("button", { name: "Maximize wireframe diff" }),
     ).toBeVisible();
+    await page.setViewportSize({ width: 1600, height: 600 });
     await snapshot
       .getByRole("button", { name: "Maximize wireframe diff" })
       .click();
     await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
+    const snapshotBody = snapshot.locator(":scope > [data-figure-body]");
+    await expect(snapshotBody).toHaveAttribute("tabindex", "0");
+    expect(await snapshotBody.evaluate((node) => node.inert)).toBe(false);
+    await expect(snapshotBody).toHaveCSS("pointer-events", "auto");
+    const embeddedControl = snapshotBody.locator("button").first();
+    await expect(embeddedControl).toHaveAttribute("tabindex", "-1");
+    await expect(embeddedControl).toHaveAttribute("aria-disabled", "true");
+    await expect
+      .poll(() =>
+        snapshotBody.evaluate((node) => node.scrollHeight > node.clientHeight),
+      )
+      .toBe(true);
+    const snapshotBodyBox = await snapshotBody.boundingBox();
+    if (snapshotBodyBox === null) {
+      throw new Error("The maximized snapshot body must be measurable");
+    }
+    await page.mouse.move(
+      snapshotBodyBox.x + snapshotBodyBox.width / 2,
+      snapshotBodyBox.y + snapshotBodyBox.height / 2,
+    );
+    await page.mouse.wheel(0, 400);
+    await expect
+      .poll(() => snapshotBody.evaluate((node) => node.scrollTop))
+      .toBeGreaterThan(0);
+    await snapshotBody.evaluate((node) => {
+      node.scrollTop = 0;
+    });
+    await snapshotBody.focus();
+    const initialScrollTop = await snapshotBody.evaluate(
+      (node) => node.scrollTop,
+    );
+    await page.keyboard.press("PageDown");
+    await expect
+      .poll(() => snapshotBody.evaluate((node) => node.scrollTop))
+      .toBeGreaterThan(initialScrollTop);
     await expect(
       snapshot.getByRole("button", { name: "Restore wireframe diff size" }),
     ).toBeVisible();
