@@ -661,7 +661,7 @@ const ComponentSnapshotComparison = ({
   useEffect(() => {
     setSide(initialSide);
     setSelectedScreenId(screenDiffs[0]?.id);
-  }, [initialSide, location, screenDiffs]);
+  }, [initialSide, location.oldHtml, location.newHtml, screenDiffs]);
   const selectedScreen = screenDiffs.find(
     (screen) => screen.id === selectedScreenId,
   );
