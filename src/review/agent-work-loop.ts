@@ -2,8 +2,9 @@
 // action; this module owns session lookup, request pickup, plan validation,
 // response publication, progress, and the agent's continuing work loop.
 
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { basename, extname, resolve } from "node:path";
+import { basename, extname, join, resolve } from "node:path";
 import { lintPlan } from "../lint/lint-plan.js";
 import { renderDocument } from "../render/render-document.js";
 import {
@@ -45,6 +46,8 @@ import {
   quoteShellArgument,
 } from "./shared/agent-command.js";
 import { projectConversationHistory } from "./shared/thread-projection.js";
+import { sniffReviewImage } from "./shared/review-image.js";
+import { materializeReviewImages, replacePlanSource } from "./plan-assets.js";
 
 export type AgentWorkLoopAction =
   | {
@@ -224,20 +227,21 @@ ${nextCommand}
 
 For each returned work item:
 1. Read the current plan source and the request plus its conversation history.
-2. As you work, narrate for the reviewer: run \`node ${quoteShellArgument(binPath)} agent note ${quoteShellArgument(
+2. If work.attachments is non-empty, open every attachment with the harness image-viewing capability before deciding how to respond.
+3. As you work, narrate for the reviewer: run \`node ${quoteShellArgument(binPath)} agent note ${quoteShellArgument(
     session.planPath,
   )} "<one short line>"\` when you start each meaningful step - reading the request, deciding an outcome, editing the plan, validating. If one step runs longer than a minute, add another note only when you can name concrete new progress. One line per update, present tense, no repeats.
-3. For every anchored comment, announce \`Comment i of N - slide title\` through \`agent note\` when you begin it, then choose exactly one outcome:
+4. For every anchored comment, announce \`Comment i of N - slide title\` through \`agent note\` when you begin it, then choose exactly one outcome:
    - answered: explain the answer when no plan edit is needed.
    - changed: revise the plan source, explain the revision, and list every changed render block id in changeTargets, in presentation order.
    - warning: do not edit; set summary to one short line naming the boundary the request would cross (80 characters max, for example "Would mix languages in one list"), explain the concrete standard, template, or safety boundary in message, and wait for explicit confirmation.
    - needs-input: do not guess; ask the precise question the reviewer must answer.
    - declined: explain the principled reason you will not revise the plan.
-4. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
-5. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
-6. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
+5. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
+6. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
+7. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
 
-Never edit rendered HTML. Never invent a Changed outcome without changing the plan source.`;
+Reviewer image references included in a changed plan are materialized into source-owned ./assets files during response validation. Never edit rendered HTML. Never invent a Changed outcome without changing the plan source.`;
   await writeAgentPrompt({ store: session.store, prompt });
   const promptArgument = `"$(cat ${quoteShellArgument(session.store.agentPromptPath)})"`;
   return {
@@ -311,6 +315,33 @@ const nextWork = async ({
   }
   const claimedSource = await readFile(session.planPath, "utf8");
   const claimedSnapshot = deriveSnapshotDigest(claimedSource);
+  for (const attachment of request.attachments) {
+    const attachmentRoot = `${join(session.store.requestAttachmentsDirectory, request.requestId)}${"/"}`;
+    if (!attachment.path.startsWith(attachmentRoot)) {
+      return fail(
+        `Attachment ${attachment.id} is outside the request attachment directory`,
+      );
+    }
+    let bytes: Uint8Array;
+    try {
+      bytes = Uint8Array.from(await readFile(attachment.path));
+    } catch {
+      return fail(
+        `Attachment ${attachment.id} could not be opened during agent pickup`,
+      );
+    }
+    const format = sniffReviewImage(bytes);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    if (
+      format?.mimeType !== attachment.mimeType ||
+      bytes.byteLength !== attachment.byteLength ||
+      digest !== attachment.sha256
+    ) {
+      return fail(
+        `Attachment ${attachment.id} failed byte, type, or SHA-256 verification during agent pickup`,
+      );
+    }
+  }
   await writeSnapshot({
     store: session.store,
     snapshot: claimedSnapshot,
@@ -379,6 +410,7 @@ const nextWork = async ({
       'A warning outcome must also carry summary: one short line naming the boundary it would cross, 80 characters max, such as "Would mix languages in one list"',
       "For a feedback batch, note each transition as Comment i of N - slide title",
       "Return exactly one outcome per requested comment",
+      "Open every work.attachments path with the harness image-viewing capability before choosing an outcome",
     ],
   };
 };
@@ -424,6 +456,21 @@ const respond = async ({
     markdown = await readFile(session.planPath, "utf8");
   } catch (error: unknown) {
     return fail(`Cannot read the plan source: ${String(error)}`);
+  }
+  try {
+    const materialized = await materializeReviewImages({
+      markdown,
+      planPath: session.planPath,
+      store: session.store,
+    });
+    if (materialized !== markdown) {
+      await replacePlanSource({ path: session.planPath, source: materialized });
+      markdown = materialized;
+    }
+  } catch (error: unknown) {
+    return fail(
+      `Cannot materialize reviewer images into plan assets: ${String(error)}`,
+    );
   }
   let rendered: ReturnType<typeof renderDocument>;
   try {

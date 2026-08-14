@@ -22,6 +22,8 @@ export type CommentTarget =
       readonly type: "selection";
       readonly blockId: string;
       readonly endBlockId?: string;
+      /** Authored image blocks included in this text/image highlight. */
+      readonly imageBlockIds?: ReadonlyArray<string>;
       readonly kind: string;
       readonly label: string;
       readonly section?: string;
@@ -249,6 +251,21 @@ const validateTarget = ({
       type === "selection" && target.endBlockId !== undefined
         ? resolveBlock({ value: target.endBlockId, blocks })
         : undefined;
+    const imageBlockIds =
+      type === "selection" && Array.isArray(target.imageBlockIds)
+        ? target.imageBlockIds.map((value, index) => {
+            const image = resolveBlock({
+              value,
+              blocks,
+            });
+            if (image.kind !== "image") {
+              throw new CommentRejected(
+                `"imageBlockIds[${index}]" must name an image block`,
+              );
+            }
+            return image.id;
+          })
+        : undefined;
     if ((endBlock === undefined || endBlock.id === block.id) && end < start) {
       throw new CommentRejected("A range must end at or after it starts");
     }
@@ -258,6 +275,9 @@ const validateTarget = ({
       ...(endBlock === undefined || endBlock.id === block.id
         ? {}
         : { endBlockId: endBlock.id }),
+      ...(imageBlockIds === undefined || imageBlockIds.length === 0
+        ? {}
+        : { imageBlockIds: [...new Set(imageBlockIds)] }),
       start,
       end,
       quote: asText({
@@ -321,6 +341,17 @@ const validateStoredTarget = (value: unknown): CommentTarget => {
     target.type === "selection" && target.endBlockId !== undefined
       ? target.endBlockId
       : undefined;
+  const imageBlockIds =
+    target.type === "selection" && Array.isArray(target.imageBlockIds)
+      ? target.imageBlockIds.map((value, index) => {
+          if (typeof value !== "string" || !BLOCK_ID.test(value)) {
+            throw new CommentRejected(
+              `"imageBlockIds[${index}]" must name a valid block`,
+            );
+          }
+          return value;
+        })
+      : undefined;
   if (
     ((endBlockId === undefined || endBlockId === target.blockId) &&
       end < start) ||
@@ -335,6 +366,9 @@ const validateStoredTarget = (value: unknown): CommentTarget => {
     ...(endBlockId === undefined || endBlockId === target.blockId
       ? {}
       : { endBlockId }),
+    ...(imageBlockIds === undefined || imageBlockIds.length === 0
+      ? {}
+      : { imageBlockIds: [...new Set(imageBlockIds)] }),
     start,
     end,
     quote: asText({

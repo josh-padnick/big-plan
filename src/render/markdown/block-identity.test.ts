@@ -190,6 +190,30 @@ describe("block identity kinds and labels", () => {
       "document/table-cell-2",
     ]);
   });
+
+  it("should address authored images inside prose as owned image blocks", () => {
+    const { html, blocks } = compile(
+      "## Evidence\n\n![Deployment screenshot](capture.png) and ![Trace](trace.webp)\n",
+    );
+    const images = blocks.filter((block) => block.kind === "image");
+    expect(
+      images.map(({ id, label, ownerId }) => ({ id, label, ownerId })),
+    ).toEqual([
+      {
+        id: "section/evidence/image-1",
+        label: "Deployment screenshot",
+        ownerId: "section/evidence/paragraph-1",
+      },
+      {
+        id: "section/evidence/image-2",
+        label: "Trace",
+        ownerId: "section/evidence/paragraph-1",
+      },
+    ]);
+    expect(attributesFor({ html, id: "section/evidence/image-1" })).toContain(
+      'data-block-kind="image"',
+    );
+  });
 });
 
 describe("block identity boundaries", () => {

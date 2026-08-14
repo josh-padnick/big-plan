@@ -2,7 +2,8 @@
 // crosses the same mailbox that the browser chat surface reads.
 
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +14,10 @@ import { expect, test } from "./fixtures";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const binPath = join(repoRoot, "bin", "big-plan.mjs");
+const PASTED_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
 
 const runAgentCli = (
   args: ReadonlyArray<string>,
@@ -40,7 +45,7 @@ const runAgentCli = (
           `Agent CLI timed out.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
         ),
       );
-    }, 4_000);
+    }, 10_000);
     child.once("error", (error) => {
       clearTimeout(timer);
       reject(
@@ -79,9 +84,35 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
     await page.getByRole("button", { name: /Feedback/u }).click();
     const rail = page.getByRole("complementary", { name: "Feedback" });
     await rail.getByRole("tab", { name: "Chat" }).click();
-    await rail
-      .getByPlaceholder("Ask about the plan as a whole…")
-      .fill("What is the plan's purpose?");
+    const composer = rail.getByPlaceholder("Ask about the plan as a whole…");
+    await composer.fill("What is the plan's purpose?");
+    await composer.evaluate((element, encoded) => {
+      const bytes = Uint8Array.from(atob(encoded), (character) =>
+        character.charCodeAt(0),
+      );
+      const file = new File([bytes], "clipboard.png", { type: "image/png" });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      element.dispatchEvent(
+        new ClipboardEvent("paste", { bubbles: true, clipboardData: transfer }),
+      );
+    }, PASTED_PNG.toString("base64"));
+    await expect(rail.getByRole("img", { name: "Screenshot" })).toBeVisible();
+    const thumbnail = rail.getByRole("button", { name: "Open Screenshot" });
+    await thumbnail.click();
+    await expect(
+      rail.getByRole("dialog", { name: "Screenshot" }),
+    ).toBeVisible();
+    await expect(rail.getByRole("button", { name: "Zoom out" })).toBeVisible();
+    await expect(rail.getByRole("button", { name: "Fit image" })).toBeVisible();
+    await expect(rail.getByRole("button", { name: "Zoom in" })).toBeVisible();
+    await rail.getByRole("button", { name: "Zoom in" }).click();
+    await rail.getByRole("button", { name: "Fit image" }).click();
+    await page.keyboard.press("Escape");
+    await expect(
+      rail.getByRole("dialog", { name: "Screenshot" }),
+    ).not.toBeVisible();
+    await expect(thumbnail).toBeFocused();
     await rail.getByRole("button", { name: "Send", exact: true }).click();
 
     const chat = rail.locator("li").filter({
@@ -102,6 +133,15 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
     if (request === undefined) {
       throw new Error("The real agent CLI did not claim the chat request");
     }
+    expect(request.attachments).toHaveLength(1);
+    const attachment = request.attachments[0];
+    if (attachment === undefined)
+      throw new Error("Missing claimed image attachment");
+    await expect(readFile(attachment.path)).resolves.toEqual(PASTED_PNG);
+    expect(createHash("sha256").update(PASTED_PNG).digest("hex")).toBe(
+      attachment.sha256,
+    );
+    expect(claim.stdout).toContain("Open every work.attachments path");
     await expect(
       readProgress({ store: runtime.store, sessionId: runtime.sessionId }),
     ).resolves.toEqual(

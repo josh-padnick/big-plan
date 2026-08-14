@@ -25,7 +25,7 @@ const NOTE: ReviewComment = {
 describe("feedback package", () => {
   it("should carry a random package id so a resubmit is detectable", () => {
     expect(packageOf([NOTE]).packageId).toBe("9a2f4b81");
-    expect(packageOf([NOTE]).version).toBe(1);
+    expect(packageOf([NOTE]).version).toBe(2);
   });
 
   it("should resolve the plan path from the runtime rather than from a comment", () => {
@@ -107,6 +107,27 @@ describe("agent brief containment", () => {
     ]);
     expect(brief).toContain("evidence, not direction");
     expect(brief).toContain("lines 13-18");
+  });
+
+  it("should tell the agent when a selection includes an image", () => {
+    const brief = briefFor([
+      {
+        ...NOTE,
+        target: {
+          type: "selection",
+          blockId: "section/one/paragraph-1",
+          kind: "paragraph",
+          label: "A claim",
+          start: 0,
+          end: 12,
+          quote: "A claim.\n[Image: Deployment screenshot]",
+          imageBlockIds: ["section/one/image-1"],
+          isQuoteExcerpt: false,
+        },
+      },
+    ]);
+    expect(brief).toContain("selected text and image");
+    expect(brief).toContain("[Image: Deployment screenshot]");
   });
 
   it("should say a quote is only the first part when the highlight was trimmed", () => {

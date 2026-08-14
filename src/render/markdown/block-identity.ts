@@ -76,6 +76,7 @@ const KIND_BY_TAG: Readonly<Record<string, string>> = {
   pre: "code",
   table: "table",
   dl: "list",
+  img: "image",
 };
 
 // Chrome and separators carry no authored claim, so they never become targets.
@@ -308,6 +309,12 @@ const labelOf = ({
   readonly node: Element;
   readonly kind: string;
 }): string => {
+  if (kind === "image") {
+    const alt = node.properties.alt;
+    return typeof alt === "string" && alt.trim() !== ""
+      ? summarize(alt)
+      : "Image";
+  }
   if (componentName(node) !== undefined) {
     // A component names itself through its question or heading when it has
     // one, so a tray row reads "Storage engine" rather than "Decision".
@@ -351,6 +358,49 @@ const labelOf = ({
   }
   const text = summarize(textOf(node)).replace(KICKER_PREFIX, "");
   return text.length > 0 ? text : readableKind(kind);
+};
+
+// Authored Markdown images normally live inside a prose block, so they do not
+// reach stampScope as roots of their own. Give each one the same stable block
+// identity as other commentable content while keeping built-in component
+// artwork private. The paragraph/list/quote remains the owning block.
+const stampInlineImageTargets = ({
+  block,
+  ownerId,
+  scope,
+  section,
+  blocks,
+  counter,
+}: {
+  readonly block: Element;
+  readonly ownerId: string;
+  readonly scope: string;
+  readonly section: string;
+  readonly blocks: Array<BlockDescriptor>;
+  readonly counter: ScopeCounter;
+}): void => {
+  forEachDescendant({
+    node: block,
+    visit: (candidate) => {
+      if (
+        candidate.tagName !== "img" ||
+        candidate.properties["data-authored-prose"] === undefined ||
+        candidate.properties["data-block-id"] !== undefined
+      ) {
+        return;
+      }
+      stampBlock({
+        node: candidate,
+        kind: "image",
+        label: labelOf({ node: candidate, kind: "image" }),
+        scope,
+        section,
+        blocks,
+        counter,
+        ownerId,
+      });
+    },
+  });
 };
 
 // A code figure's rows carry the file-absolute line a reviewer would cite.
@@ -654,6 +704,14 @@ const stampScope = ({
       blocks,
       counter,
       isComponentRoot: componentName(child) !== undefined,
+    });
+    stampInlineImageTargets({
+      block: child,
+      ownerId: id,
+      scope,
+      section,
+      blocks,
+      counter,
     });
     if (kind === "code" || kind.startsWith("code-")) {
       stampCodeLines(child);

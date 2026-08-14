@@ -57,7 +57,7 @@ describe("scripts-disabled notice", () => {
     expect(html).toContain("data-noscript-notice");
     expect(html).toContain("The full plan content is readable");
     expect(html).toContain(
-      "Interactive affordances such as sorting, collapse, maximize, and comments are unavailable.",
+      "Interactive affordances such as sorting, collapse, maximize, and comments are unavailable; comment screenshots require the local <code>big-plan review</code> runtime.",
     );
   });
 });

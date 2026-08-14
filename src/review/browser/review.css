@@ -61,6 +61,26 @@ here; all values use the document theme's closed token vocabulary.
     pointer-events: none;
   }
 
+  /* Authored images are ordinary block targets, but their affordance sits
+     beside the pixels so it never obscures the image or changes its link
+     behaviour. The host is inserted immediately after each image by the
+     browser island, which keeps the hover relationship local to that image. */
+  [data-review-image-host] {
+    position: absolute;
+    z-index: 4;
+    display: inline-flex;
+    width: 1.5rem;
+    height: 1.5rem;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  [data-review-selection-associated][data-block-kind="image"] {
+    outline: 3px solid color-mix(in srgb, var(--annotation-c) 55%, var(--bg));
+    outline-offset: 0.25rem;
+    box-shadow: 0 0 0 0.25rem var(--annotation-bg);
+  }
+
   :root[data-figure-maximized-open] [data-review-anchor-host] {
     display: none;
   }

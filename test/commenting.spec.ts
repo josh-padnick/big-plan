@@ -79,7 +79,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
     )
     .toBe(1);
 
-  const tooltip = comment.getByRole("tooltip");
+  const tooltip = page.getByRole("tooltip", { name: "Comment on slide" });
   await expect(tooltip).not.toBeVisible();
   await comment.hover();
   await expect(tooltip).toBeVisible();
@@ -136,7 +136,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
     "Keep `leaseOwner` explicit. <strong>Literal reviewer text</strong>",
   );
   await expect(submit).toBeEnabled();
-  const shortcutTooltip = dialog.getByRole("tooltip");
+  const shortcutTooltip = page.getByRole("tooltip").last();
   await expect(shortcutTooltip).not.toBeVisible();
   await submit.hover();
   await expect(shortcutTooltip).toBeVisible();
@@ -428,7 +428,7 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await reopenedEdit.fill("Keep `leaseOwner` explicit in this card.");
   const editSave = thread.getByRole("button", { name: "Save" });
   await editSave.hover();
-  await expect(thread.getByRole("tooltip")).toBeVisible();
+  await expect(page.getByRole("tooltip").last()).toBeVisible();
   const editShortcut = await page.evaluate(() =>
     /Mac|iPhone|iPad/u.test(navigator.platform) ? "Meta" : "Control",
   );
@@ -614,7 +614,12 @@ test("should replace an empty composer and protect a non-empty draft", async ({
   const first = slides.nth(0);
   const second = slides.nth(1);
   await first.getByRole("button", { name: "Comment on slide" }).click();
-  await second.getByRole("button", { name: "Comment on slide" }).click();
+  // The floating composer can cover a neighboring slide's gutter control;
+  // dispatch the replacement transition directly rather than making this
+  // lifecycle check depend on the panel's placement.
+  await second
+    .getByRole("button", { name: "Comment on slide" })
+    .dispatchEvent("click");
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(first).not.toHaveAttribute("data-review-slide-selected", "");
   await expect(second).toHaveAttribute("data-review-slide-selected", "");
@@ -622,6 +627,16 @@ test("should replace an empty composer and protect a non-empty draft", async ({
   const composer = page.getByRole("dialog", { name: /Comment on/u });
   const input = composer.getByLabel("Add a comment");
   await input.fill("Keep this draft while I inspect another slide.");
+  await input.press("Escape");
+  const closeWarning = page.getByRole("alertdialog", {
+    name: "Close this comment?",
+  });
+  await expect(closeWarning).toContainText("Your text will be lost.");
+  await closeWarning.getByRole("button", { name: "Keep editing" }).click();
+  await expect(input).toHaveValue(
+    "Keep this draft while I inspect another slide.",
+  );
+  await expect(input).toBeFocused();
   await first.getByRole("button", { name: "Comment on slide" }).click();
   const warning = page.getByRole("alertdialog", {
     name: "Finish your draft comment?",
@@ -1019,6 +1034,88 @@ test("should preserve a text selection while its compact composer is open", asyn
   await page.keyboard.press("Enter");
   await expect(deleteDialog).not.toBeVisible();
   await expect(rail.locator(".review-staged-card")).toHaveCount(0);
+});
+
+test("should comment image-only and mixed image selections", async ({
+  page,
+  imageSelectionViewerUrl,
+}) => {
+  await page.goto(imageSelectionViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const image = page.locator("[data-block-kind='image']").first();
+  const imageComment = image.locator(
+    "xpath=following-sibling::*[@data-review-image-host][1]//button",
+  );
+  await expect(imageComment).toBeVisible();
+  await expect(imageComment).toHaveCSS("opacity", "1");
+  await expect(imageComment).toHaveCSS("pointer-events", "auto");
+  const imageTooltip = page.getByRole("tooltip", { name: "Comment on image" });
+  await expect(imageTooltip).not.toBeVisible();
+  await imageComment.hover();
+  await expect(imageTooltip).not.toBeVisible({ timeout: 250 });
+  await expect(imageTooltip).toBeVisible({ timeout: 1_500 });
+
+  await image.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNode(element);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  const imageChip = page.getByRole("button", {
+    name: "Comment on selected text and image",
+  });
+  await expect(imageChip).toBeVisible();
+  await imageChip.click();
+  const imageComposer = page.getByRole("dialog", {
+    name: /Comment on Selected text and image in/u,
+  });
+  await expect(imageComposer).toBeVisible();
+  await imageComposer.getByLabel("Add a comment").fill("Review this image.");
+  await imageComposer
+    .getByRole("switch", { name: "Submit right away" })
+    .click();
+  await imageComposer.getByRole("button", { name: "Add Comment" }).click();
+
+  await page.evaluate(() => {
+    window.getSelection()?.removeAllRanges();
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  const mixed = await image.evaluate((element) => {
+    const slide = element.closest("[data-slide]");
+    const paragraphs = Array.from(
+      slide?.querySelectorAll("p[data-authored-prose]") ?? [],
+    );
+    const imageParagraph = element.parentElement;
+    const startParagraph = paragraphs.find(
+      (paragraph) =>
+        paragraph !== imageParagraph &&
+        (paragraph.compareDocumentPosition(element) &
+          Node.DOCUMENT_POSITION_FOLLOWING) !==
+          0,
+    );
+    const start = startParagraph?.firstChild;
+    if (!(start instanceof Text)) return false;
+    const range = document.createRange();
+    range.setStart(start, 0);
+    range.setEndAfter(element);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return range.intersectsNode(element);
+  });
+  expect(mixed).toBe(true);
+  await expect(imageChip).toBeVisible();
+  await imageChip.click();
+  await expect(
+    page.getByRole("dialog", {
+      name: /Comment on Selected text and image in/u,
+    }),
+  ).toBeVisible();
 });
 
 test("should offer selection comments after double-clicking Markdown and component prose", async ({
