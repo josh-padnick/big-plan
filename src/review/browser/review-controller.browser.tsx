@@ -5642,6 +5642,9 @@ export const ReviewController = () => {
                 presenceState: agentProjection.state,
                 connected: agentConnected,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
+                modelName: agentConnected
+                  ? agent.presence.model?.name
+                  : undefined,
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 agentCommand: agent.agentCommand,

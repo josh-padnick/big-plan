@@ -3,6 +3,7 @@
 // projection and local disclosure/copy interactions.
 
 import { useEffect, useRef, useState } from "react";
+import { BOT_ICON } from "../../icons/lucide/bot.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
@@ -144,11 +145,13 @@ const CopyBlock = ({
 
 const CurrentActivityCard = ({
   activity,
+  modelName,
   nowMs,
   attentionKey,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
+  readonly modelName?: string;
   readonly nowMs: number;
   readonly attentionKey: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
@@ -218,6 +221,15 @@ const CurrentActivityCard = ({
               : activity.state}
         </span>
       </div>
+      {modelName === undefined ? null : (
+        <span
+          className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-current/20 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2 py-0.5 text-2xs font-semibold text-ink [&>svg]:size-3"
+          data-review-agent-model={modelName}
+        >
+          <Icon icon={BOT_ICON} />
+          <span className="truncate">{modelName}</span>
+        </span>
+      )}
       {secondary === "" ? null : (
         <strong className="text-2xs uppercase tracking-caps text-ink">
           {secondary}
@@ -518,6 +530,7 @@ export const AgentConnectionPanel = ({
   presenceState,
   connected,
   heartbeatAt,
+  modelName,
   connectionLog,
   recoveryPrompt,
   agentCommand,
@@ -530,6 +543,7 @@ export const AgentConnectionPanel = ({
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
   readonly heartbeatAt: number;
+  readonly modelName?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   readonly recoveryPrompt: string;
   readonly agentCommand: string;
@@ -577,6 +591,7 @@ export const AgentConnectionPanel = ({
             ) : (
               <CurrentActivityCard
                 activity={activity}
+                modelName={isConnected ? modelName : undefined}
                 nowMs={currentNowMs}
                 attentionKey={attentionKey}
                 onViewRequest={onViewRequest}

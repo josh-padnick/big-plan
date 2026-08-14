@@ -255,6 +255,67 @@ test("should expire a held connected snapshot when the reviewer returns", async 
   await expect(rail).toContainText("No agent signal for 6h 00m");
 });
 
+test("should show the connector's reported model identity, or none, on the agent status card", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const session: unknown = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error(
+      "The model identity journey requires a live review session",
+    );
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+    model: { name: "Grok 4.6" },
+  });
+  await page.getByRole("button", { name: "Agent session active" }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const modelBadge = rail.locator("[data-review-agent-model]");
+  await expect(modelBadge).toBeVisible();
+  await expect(modelBadge).toContainText("Grok 4.6");
+  await expect(modelBadge.locator("svg")).toBeVisible();
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(modelBadge).toBeVisible();
+  await expect(modelBadge).toContainText("Grok 4.6");
+  await page.emulateMedia({ colorScheme: "light" });
+
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
+  await expect(rail.locator("[data-review-agent-model]")).toHaveCount(0);
+  await expect(
+    rail.locator("[data-review-current-activity='idle']"),
+  ).toContainText("Agent connected");
+});
+
 test("should pause a nonstandard request behind an explicit warning", async ({
   page,
   reviewRuntimeUrl,

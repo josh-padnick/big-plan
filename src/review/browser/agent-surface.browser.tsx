@@ -14,6 +14,7 @@ export type AgentSurfaceModel = {
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
   readonly heartbeatAt: number;
+  readonly modelName?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   readonly recoveryPrompt: string;
   readonly agentCommand: string;
@@ -39,6 +40,7 @@ export const AgentSurface = ({
       presenceState={model.presenceState}
       connected={model.connected}
       heartbeatAt={model.heartbeatAt}
+      modelName={model.modelName}
       connectionLog={model.connectionLog}
       recoveryPrompt={model.recoveryPrompt}
       agentCommand={
