@@ -489,7 +489,10 @@ test("should keep shipped desktop panes readable and layout regions separate", a
                 `primary ${primary}px beside a ${bounded}px secondary pane`,
               ).toBeGreaterThanOrEqual(PRIMARY_DOMINANCE_RATIO);
             } else if (masterWidths.length === 1 && railWidths.length === 1) {
-              expect(masterWidths[0]).toBeGreaterThan(railWidths[0]);
+              expect(
+                (masterWidths[0] ?? 0) / (railWidths[0] ?? 1),
+                `primary ${masterWidths[0]}px beside a ${railWidths[0]}px secondary pane`,
+              ).toBeGreaterThanOrEqual(PRIMARY_DOMINANCE_RATIO);
             }
           }
 

@@ -1168,6 +1168,31 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     // in greyscale and at drawing scale.
     expect(rendered).toContain('"data-lucide":"triangle-alert"');
     expect(rendered).toContain('"data-lucide":"hourglass"');
+    expect(rendered).toContain('"value":"Status: attention"');
+    expect(rendered).toContain('"value":"Status: waiting"');
+  });
+
+  it("should reject panel status without a title", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "approve",
+          children: [
+            element({
+              name: "Panel",
+              attributes: { status: "done" },
+              children: [
+                element({ name: "Text", attributes: { text: "Ready" } }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map(({ message }) => message)).toContain(
+      "Panel status needs title so the state mark has a group to label",
+    );
+    expect(compiled.model.screens[0]?.children[0]).not.toHaveProperty("status");
   });
 
   it("should reject a status outside the closed vocabulary", () => {

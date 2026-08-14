@@ -77,8 +77,6 @@ const STATUS_ICONS: Readonly<Record<WireframeStatus, LucideIcon>> = {
   blocked: CIRCLE_X_ICON,
 };
 
-// A status is already stated in the copy it sits beside, so the mark itself is
-// decoration to a screen reader and carries no separate label.
 const StatusMark = ({
   status,
 }: {
@@ -86,6 +84,7 @@ const StatusMark = ({
 }): JSX.Element => (
   <span className="wireframe-status-mark" data-wireframe-status={status}>
     {lucideIconToReact({ icon: STATUS_ICONS[status], hidden: false })}
+    <span className="sr-only">{`Status: ${status}`}</span>
   </span>
 );
 

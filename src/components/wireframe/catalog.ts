@@ -352,6 +352,13 @@ const CATALOG = {
         diagnostics,
         schema: PANEL_SCHEMA,
       });
+      if (validated.status !== undefined && validated.title === undefined) {
+        diagnostics.add({
+          message:
+            "Panel status needs title so the state mark has a group to label",
+          position,
+        });
+      }
       return {
         element: "Panel",
         ...(validated.title === undefined ? {} : { title: validated.title }),
@@ -359,7 +366,9 @@ const CATALOG = {
           ? {}
           : { eyebrow: validated.eyebrow }),
         surface: validated.surface ?? "plain",
-        ...(validated.status === undefined ? {} : { status: validated.status }),
+        ...(validated.status === undefined || validated.title === undefined
+          ? {}
+          : { status: validated.status }),
         children,
       };
     },

@@ -11,11 +11,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import postcss from "postcss";
 
-const SOURCE_ROOT = resolve(
+const DEFAULT_SOURCE_ROOT = resolve(
   fileURLToPath(new URL("../../src", import.meta.url)),
 );
-const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
 // The spacing scale, in Tailwind's 0.25rem units: 2, 4, 6, 8, 12, 16, 24, 32,
 // 48, 64, 96, and 128 pixels. Adjacent steps differ by a ratio a reader sees.
@@ -161,27 +161,21 @@ const RULES = [
   },
 ];
 
-// The artboard's own type ramp is a closed scale too, and it lives in CSS
-// custom properties rather than in utilities, so the module scan above cannot
-// see it. What matters here is not which sizes were picked but how far apart
-// they are: a section title a fifth of a step above the rows beneath it reads
-// as the same role drawn twice, which is how a drawing ends up looking flat
-// while technically having every level. The anchors start at a line break
-// because the same selectors also appear indented inside a grouped maximize
-// rule, whose block declares no ramp.
 const ARTBOARD_RAMP_STYLESHEET = "components/wireframe/styles.css";
 
-const ARTBOARD_RAMPS = [
-  { device: "shared default", anchor: "\n  .wireframe {" },
-  {
-    device: "desktop",
-    anchor: '\n  .wireframe-screen[data-wireframe-device="desktop"] {',
-  },
-  {
-    device: "landscape tablet",
-    anchor: '\n  .wireframe-screen[data-wireframe-device="tablet"] {',
-  },
+const ARTBOARD_DEVICES = [
+  { id: "desktop", name: "desktop", ownsRamp: true },
+  { id: "tablet", name: "landscape tablet", ownsRamp: true },
+  { id: "tablet-portrait", name: "portrait tablet", ownsRamp: false },
+  { id: "phone", name: "phone", ownsRamp: false },
 ];
+
+const ARTBOARD_ROLE_CLASSES = {
+  body: "wireframe-artboard",
+  heading: "wireframe-heading",
+  meta: "wireframe-eyebrow",
+  title: "wireframe-panel-title",
+};
 
 // Metadata sits closest to content because case and colour separate it as
 // well; a title has only size and weight to work with, so it needs a real step.
@@ -191,24 +185,161 @@ const ARTBOARD_RAMP_SEPARATIONS = [
   { larger: "heading", smaller: "title", minimumRatio: 1.2 },
 ];
 
-const rampSizes = (stylesheet, anchor) => {
-  const start = stylesheet.indexOf(anchor);
-  if (start < 0) {
-    return undefined;
-  }
-  const block = stylesheet.slice(start, stylesheet.indexOf("\n  }", start));
-  const sizes = {};
-  for (const [, role, size] of block.matchAll(
-    /--wf-text-([a-z]+):\s*([\d.]+)rem;/g,
-  )) {
-    sizes[role] = Number.parseFloat(size);
-  }
-  return sizes;
+const ARTBOARD_RAMP_ROLES = new Set(
+  ARTBOARD_RAMP_SEPARATIONS.flatMap(({ larger, smaller }) => [larger, smaller]),
+);
+
+const remSize = (value) => {
+  const match = /^([\d.]+)rem$/.exec(value.trim());
+  return match?.[1] === undefined ? undefined : Number.parseFloat(match[1]);
 };
 
-/** Reports artboard type roles that are too close to read as different roles. */
-const checkArtboardTypeRamp = async () => {
-  const path = join(SOURCE_ROOT, ARTBOARD_RAMP_STYLESHEET);
+const variableRole = (value) => {
+  const match = /^var\(--wf-text-([a-z]+)\)$/.exec(value.trim());
+  const role = match?.[1];
+  return role !== undefined && ARTBOARD_RAMP_ROLES.has(role) ? role : undefined;
+};
+
+const selectorDevices = (selector) => {
+  const devices = new Set();
+  for (const match of selector.matchAll(
+    /\[data-wireframe-device=["']([^"']+)["']\]/g,
+  )) {
+    const device = match[1];
+    if (device !== undefined) {
+      devices.add(device);
+    }
+  }
+  return devices;
+};
+
+const selectorHasClass = (selector, className) =>
+  new RegExp(`(?:^|[^a-zA-Z0-9_-])\\.${className}(?![a-zA-Z0-9_-])`).test(
+    selector,
+  );
+
+const targetCompound = (selector) => {
+  let start = 0;
+  let bracketDepth = 0;
+  let parenthesisDepth = 0;
+  let quote;
+  for (let index = 0; index < selector.length; index += 1) {
+    const character = selector[index];
+    if (character === "\\") {
+      index += 1;
+    } else if (quote !== undefined) {
+      if (character === quote) {
+        quote = undefined;
+      }
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === "[") {
+      bracketDepth += 1;
+    } else if (character === "]") {
+      bracketDepth -= 1;
+    } else if (character === "(") {
+      parenthesisDepth += 1;
+    } else if (character === ")") {
+      parenthesisDepth -= 1;
+    } else if (
+      bracketDepth === 0 &&
+      parenthesisDepth === 0 &&
+      (character === ">" ||
+        character === "+" ||
+        character === "~" ||
+        /\s/.test(character))
+    ) {
+      start = index + 1;
+    }
+  }
+  return selector.slice(start).trim();
+};
+
+const roleForDeclaration = ({ selector, value }) => {
+  const target = targetCompound(selector);
+  for (const [role, className] of Object.entries(ARTBOARD_ROLE_CLASSES)) {
+    if (!selectorHasClass(target, className)) {
+      continue;
+    }
+    if (
+      role === "title" &&
+      selector.match(/\.wireframe-panel(?![a-zA-Z0-9_-])/g)?.length === 2 &&
+      variableRole(value) === "meta"
+    ) {
+      return "meta";
+    }
+    return role;
+  }
+  return variableRole(value);
+};
+
+const selectorsFor = (declaration) =>
+  declaration.parent?.type === "rule" ? declaration.parent.selectors : [];
+
+const rampDeclarations = (root) => {
+  const shared = {};
+  const byDevice = new Map();
+  root.walkDecls(/^--wf-text-/, (declaration) => {
+    const role = declaration.prop.slice("--wf-text-".length);
+    const size = remSize(declaration.value);
+    if (!ARTBOARD_RAMP_ROLES.has(role) || size === undefined) {
+      return;
+    }
+    for (const selector of selectorsFor(declaration)) {
+      if (selector.trim() === ".wireframe") {
+        shared[role] = size;
+        continue;
+      }
+      if (!selectorHasClass(selector, "wireframe-screen")) {
+        continue;
+      }
+      for (const device of selectorDevices(selector)) {
+        const sizes = byDevice.get(device) ?? {};
+        sizes[role] = size;
+        byDevice.set(device, sizes);
+      }
+    }
+  });
+  return { shared, byDevice };
+};
+
+const roleSizesByDevice = ({ root, ramps }) => {
+  const sizesByDevice = new Map(
+    ARTBOARD_DEVICES.map(({ id }) => {
+      const ramp = { ...ramps.shared, ...ramps.byDevice.get(id) };
+      return [
+        id,
+        Object.fromEntries(
+          [...ARTBOARD_RAMP_ROLES].map((role) => [role, new Set([ramp[role]])]),
+        ),
+      ];
+    }),
+  );
+  root.walkDecls("font-size", (declaration) => {
+    for (const selector of selectorsFor(declaration)) {
+      const role = roleForDeclaration({ selector, value: declaration.value });
+      if (role === undefined) {
+        continue;
+      }
+      const constrainedDevices = selectorDevices(selector);
+      for (const { id } of ARTBOARD_DEVICES) {
+        if (constrainedDevices.size > 0 && !constrainedDevices.has(id)) {
+          continue;
+        }
+        const ramp = { ...ramps.shared, ...ramps.byDevice.get(id) };
+        const size =
+          remSize(declaration.value) ?? ramp[variableRole(declaration.value)];
+        if (size !== undefined) {
+          sizesByDevice.get(id)?.[role]?.add(size);
+        }
+      }
+    }
+  });
+  return sizesByDevice;
+};
+
+const checkArtboardTypeRamp = async (sourceRoot) => {
+  const path = join(sourceRoot, ARTBOARD_RAMP_STYLESHEET);
   let stylesheet;
   try {
     stylesheet = await readFile(path, "utf8");
@@ -216,28 +347,48 @@ const checkArtboardTypeRamp = async () => {
     // A source tree without the artboard stylesheet has no ramp to close.
     return [];
   }
+  const root = postcss.parse(stylesheet, { from: path });
+  const ramps = rampDeclarations(root);
+  const sizesByDevice = roleSizesByDevice({ root, ramps });
   const failures = [];
-  for (const { device, anchor } of ARTBOARD_RAMPS) {
-    const sizes = rampSizes(stylesheet, anchor);
+  for (const { id, name, ownsRamp } of ARTBOARD_DEVICES) {
+    const ownedRamp = ownsRamp ? ramps.byDevice.get(id) : ramps.shared;
+    const sizes = sizesByDevice.get(id);
     if (sizes === undefined) {
-      failures.push(
-        `${ARTBOARD_RAMP_STYLESHEET}: no ${device} type ramp; every device that scales down declares the whole ramp in one block`,
-      );
       continue;
     }
     for (const { larger, smaller, minimumRatio } of ARTBOARD_RAMP_SEPARATIONS) {
-      const largerSize = sizes[larger];
-      const smallerSize = sizes[smaller];
-      if (largerSize === undefined || smallerSize === undefined) {
+      if (
+        ownedRamp?.[larger] === undefined ||
+        ownedRamp?.[smaller] === undefined
+      ) {
         failures.push(
-          `${ARTBOARD_RAMP_STYLESHEET}: ${device} ramp is missing --wf-text-${largerSize === undefined ? larger : smaller}`,
+          `${ARTBOARD_RAMP_STYLESHEET}: ${name} ramp is missing --wf-text-${ownedRamp?.[larger] === undefined ? larger : smaller}`,
         );
         continue;
       }
-      const ratio = largerSize / smallerSize;
+      const largerSizes = [...sizes[larger]].filter(
+        (size) => size !== undefined,
+      );
+      const smallerSizes = [...sizes[smaller]].filter(
+        (size) => size !== undefined,
+      );
+      const pair = largerSizes
+        .flatMap((largerSize) =>
+          smallerSizes.map((smallerSize) => ({
+            largerSize,
+            smallerSize,
+            ratio: largerSize / smallerSize,
+          })),
+        )
+        .sort((left, right) => left.ratio - right.ratio)[0];
+      if (pair === undefined) {
+        continue;
+      }
+      const { largerSize, smallerSize, ratio } = pair;
       if (ratio < minimumRatio) {
         failures.push(
-          `${ARTBOARD_RAMP_STYLESHEET}: ${device} ${larger} (${largerSize}rem) is only ${ratio.toFixed(2)}x ${smaller} (${smallerSize}rem); a reader cannot see a step that small, so make it at least ${minimumRatio}x`,
+          `${ARTBOARD_RAMP_STYLESHEET}: ${name} ${larger} (${largerSize}rem) is only ${ratio.toFixed(2)}x ${smaller} (${smallerSize}rem); a reader cannot see a step that small, so make it at least ${minimumRatio}x`,
         );
       }
     }
@@ -271,10 +422,12 @@ const findModules = async (root) => {
 const isExempt = (relativePath) =>
   EXEMPT_PATHS.some((pattern) => pattern.test(relativePath));
 
-const check = async () => {
-  const failures = [...(await checkArtboardTypeRamp())];
-  for (const module of await findModules(SOURCE_ROOT)) {
-    const relativePath = relative(SOURCE_ROOT, module).replaceAll("\\", "/");
+export const checkDesignSystem = async ({
+  sourceRoot = DEFAULT_SOURCE_ROOT,
+} = {}) => {
+  const failures = [...(await checkArtboardTypeRamp(sourceRoot))];
+  for (const module of await findModules(sourceRoot)) {
+    const relativePath = relative(sourceRoot, module).replaceAll("\\", "/");
     if (isExempt(relativePath)) {
       continue;
     }
@@ -305,12 +458,22 @@ const check = async () => {
             continue;
           }
           failures.push(
-            `${relative(REPO_ROOT, module)}:${index + 1}: off-scale ${rule.name} "${match[0]}"; ${rule.advice}`,
+            `${relative(resolve(sourceRoot, ".."), module)}:${index + 1}: off-scale ${rule.name} "${match[0]}"; ${rule.advice}`,
           );
         }
       }
     });
   }
+  return failures;
+};
+
+const isMain =
+  process.argv[1] !== undefined &&
+  fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+
+if (isMain) {
+  const sourceRoot = resolve(process.cwd(), process.argv[2] ?? "src");
+  const failures = await checkDesignSystem({ sourceRoot });
   if (failures.length > 0) {
     console.error(
       "design system: authored markup must pick from the closed scales in _internal/DESIGN_PRINCIPLES.md",
@@ -319,9 +482,7 @@ const check = async () => {
       console.error(`  ${failure}`);
     }
     process.exitCode = 1;
-    return;
+  } else {
+    console.log("design system: passed");
   }
-  console.log("design system: passed");
-};
-
-await check();
+}

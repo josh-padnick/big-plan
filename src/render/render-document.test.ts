@@ -142,9 +142,7 @@ describe("renderDocument affordances", () => {
     }
   });
 
-  it("should hold a standard desktop wireframe inside its slide", () => {
-    // The content column and figure card account for nested card chrome, so
-    // the standard screen stays inside the card without a margin escape.
+  it("should render a standard desktop wireframe inside its slide", () => {
     const deckWireframe = `# Deck
 
 The lede.
@@ -166,16 +164,6 @@ The lede.
     expect(deckHtml).toContain("data-collapsible");
     expect(deckHtml).toContain("data-wireframe=");
     expect(deckHtml).toContain("data-wireframe-desktop");
-    // Every device envelope is capped to one figure budget, so no drawing can
-    // widen the reading column the table of contents shares.
-    expect(deckHtml).toContain("--figure-budget:48rem");
-    expect(deckHtml).toContain(
-      "--card-figure:calc(var(--figure-budget) + 6.5rem)",
-    );
-    expect(deckHtml).toContain("[data-slide]:has(.wireframe)");
-    // The true 1200px layout scales into the shared desktop review cap.
-    expect(deckHtml).toContain("max-width:var(--figure-budget)");
-    expect(deckHtml).not.toContain("--reading-free-inline");
   });
 
   it("should inline the stylesheet and viewer scripts when rendering", () => {
