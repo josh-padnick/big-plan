@@ -89,7 +89,7 @@ const LENS_COPY_SELECTOR =
 export const isLensCopy = (element: Element): boolean =>
   element.closest(LENS_COPY_SELECTOR) !== null;
 
-const liveArticle = (): HTMLElement | null =>
+export const liveArticle = (): HTMLElement | null =>
   document.querySelector<HTMLElement>("article");
 
 /**

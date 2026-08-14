@@ -2222,7 +2222,9 @@ test("should colour a component snapshot switch as a diff", async ({
   }
 });
 
-test("should keep a root-only wireframe diff visible", async ({ page }) => {
+test("should show each initial screen in a root-only wireframe diff", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   const directory = await mkdtemp(
     join(tmpdir(), "big-plan-wireframe-root-diff-"),
@@ -2230,15 +2232,23 @@ test("should keep a root-only wireframe diff visible", async ({ page }) => {
   const planPath = join(directory, "wireframe.mdx");
   const before = `# Wireframe root diff preview
 
-<Wireframe id="queue-root" title="Original queue">
+<Wireframe id="queue-root" title="Review queue" initialScreen="queue">
 <Screen id="queue" name="Queue" device="desktop">
-<Panel title="Queue remains visible">
-<Text text="Root metadata changed without changing this screen." />
+<Panel title="Queue screen">
+<Text text="The old initial screen remains visible in Was." />
+</Panel>
+</Screen>
+<Screen id="detail" name="Detail" device="desktop">
+<Panel title="Detail screen">
+<Text text="The new initial screen remains visible in Now." />
 </Panel>
 </Screen>
 </Wireframe>
 `;
-  const after = before.replace("Original queue", "Revised queue");
+  const after = before.replace(
+    'initialScreen="queue"',
+    'initialScreen="detail"',
+  );
   await writeFile(planPath, after);
   const { startReviewRuntime: startCompiledReviewRuntime } =
     await import("../dist/review/server.js");
@@ -2256,15 +2266,74 @@ test("should keep a root-only wireframe diff visible", async ({ page }) => {
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
     const snapshot = page.locator("[data-review-component-snapshot]");
-    const currentScreen = snapshot.locator(
-      "[data-wireframe-screen][data-wireframe-current]",
-    );
-
-    await expect(snapshot).toContainText("Queue remains visible");
-    await expect(currentScreen).toBeVisible();
+    const queueScreen = snapshot.locator('[data-wireframe-screen="queue"]');
+    const detailScreen = snapshot.locator('[data-wireframe-screen="detail"]');
+    await expect(detailScreen).toBeVisible();
+    await expect(queueScreen).toBeHidden();
     await page.getByRole("button", { name: "Was" }).click();
-    await expect(snapshot).toContainText("Queue remains visible");
-    await expect(currentScreen).toBeVisible();
+    await expect(queueScreen).toBeVisible();
+    await expect(detailScreen).toBeHidden();
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should keep a surviving wireframe visible beside a removed snapshot", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-wireframe-removal-diff-"),
+  );
+  const planPath = join(directory, "wireframe.mdx");
+  const removedWireframe = `<Wireframe id="removed" title="Removed prototype">
+<Screen id="removed-screen" name="Removed" device="desktop">
+<Panel title="Removed prototype content">
+<Text text="This snapshot belongs only in Was." />
+</Panel>
+</Screen>
+</Wireframe>`;
+  const survivingWireframe = `<Wireframe id="survivor" title="Surviving prototype">
+<Screen id="surviving-screen" name="Surviving" device="desktop">
+<Panel title="Surviving prototype content">
+<Text text="This live wireframe must remain beside the lens." />
+</Panel>
+</Screen>
+</Wireframe>`;
+  const before = `# Wireframe removal diff
+
+${removedWireframe}
+
+${survivingWireframe}
+`;
+  const after = `# Wireframe removal diff
+
+${survivingWireframe}
+`;
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    const survivor = page.locator('article [data-wireframe="survivor"]');
+    await expect(survivor).toBeVisible();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+
+    await expect(
+      page.locator("[data-review-component-snapshot]"),
+    ).toContainText("This snapshot belongs only in Was.");
+    await expect(survivor).toBeVisible();
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
@@ -3251,6 +3320,214 @@ Reviewers confirm the output by hand.
         isOutsideSlides: true,
       });
     });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should maximize a historical component when the current plan has no slides", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-historical-component-"),
+  );
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = `# Historical component plan
+
+<Slide type="desired-experience" />
+
+## Prototype
+
+<Wireframe id="historical" title="Historical prototype">
+<Screen id="queue" name="Queue" device="desktop">
+<Panel title="Manual queue">
+<Text text="Review the queue manually." />
+</Panel>
+</Screen>
+</Wireframe>
+`;
+  const revisedSource = initialSource
+    .replace("Manual queue", "Automated queue")
+    .replace("Review the queue manually.", "Review the queue automatically.");
+  const latestSource = `# Historical component plan
+
+The current plan contains no slides.
+`;
+  await writeFile(planPath, initialSource, "utf8");
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const { renderDocument: renderCompiledDocument } =
+    await import("../dist/render/render-document.js");
+  const runtime = await startCompiledReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await stageComment(page, "Automate the prototype queue.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+    await rail.getByRole("button", { name: "Close feedback" }).click();
+
+    const session: unknown = await page.evaluate(async () => {
+      const root = document.documentElement;
+      const response = await fetch("/api/session", {
+        headers: {
+          "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+        },
+      });
+      return response.json();
+    });
+    if (
+      typeof session !== "object" ||
+      session === null ||
+      !("sessionId" in session) ||
+      !("planId" in session) ||
+      !("plan" in session) ||
+      typeof session.sessionId !== "string" ||
+      typeof session.planId !== "string" ||
+      typeof session.plan !== "string"
+    ) {
+      throw new Error("The historical component journey requires a session");
+    }
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create component feedback work");
+    }
+    const initialBlocks = renderCompiledDocument({
+      markdown: initialSource,
+      fallbackTitle: "Historical component plan",
+      identity: {},
+    }).blocks;
+    const revisedBlocks = renderCompiledDocument({
+      markdown: revisedSource,
+      fallbackTitle: "Historical component plan",
+      identity: {},
+    }).blocks;
+    const changedBlockId = diffSnapshots({
+      before: initialBlocks,
+      after: revisedBlocks,
+    }).find(
+      (location) =>
+        location.status === "changed" && location.kind === "wireframe",
+    )?.newBlockId;
+    if (changedBlockId === undefined) {
+      throw new Error("The simulated revision produced no wireframe change");
+    }
+    const revisedSnapshot = deriveSnapshotDigest(revisedSource);
+    const latestSnapshot = deriveSnapshotDigest(latestSource);
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: revisedSource,
+    });
+    await writeSnapshot({
+      store,
+      snapshot: latestSnapshot,
+      source: latestSource,
+    });
+    const answeredAt = new Date().toISOString();
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: answeredAt,
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: request.comments.map((comment) => ({
+            commentId: comment.id,
+            state: "changed",
+            message: "Automated the prototype queue.",
+            changeTargets: [changedBlockId],
+          })),
+        },
+        request: claimed,
+        commentsById: commentsFromExchange(exchange),
+        changedBlocks: new Set([changedBlockId]),
+        currentSnapshot: revisedSnapshot,
+        now: answeredAt,
+      }),
+    });
+    await writeFile(session.plan, latestSource, "utf8");
+    const revisedAgainAt = new Date(Date.parse(answeredAt) + 1).toISOString();
+    const followUp = messageAgentRequest({
+      kind: "chat",
+      requestId: randomBytes(8).toString("hex"),
+      sessionId: session.sessionId,
+      planId: session.planId,
+      premiseSnapshot: revisedSnapshot,
+      createdAt: revisedAgainAt,
+      body: "Remove the historical prototype.",
+    });
+    await writeAgentRequest({ store, request: followUp });
+    const claimedFollowUp = await claimAgentRequest({
+      store,
+      requestId: followUp.requestId,
+      baselineSnapshot: revisedSnapshot,
+      now: revisedAgainAt,
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: followUp.requestId,
+          message: "The current plan no longer contains the prototype.",
+        },
+        request: claimedFollowUp,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: latestSnapshot,
+        now: revisedAgainAt,
+      }),
+    });
+
+    await expect(page.locator("article")).toContainText(
+      "The current plan contains no slides.",
+      { timeout: 15_000 },
+    );
+    await expect(page.locator("article [data-slide]")).toHaveCount(0);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const archive = page.locator("[data-review-historical-changes]");
+    const snapshot = archive.locator("[data-review-component-snapshot]");
+    await expect(archive).toHaveCount(1);
+    await expect(snapshot).toContainText("Automated queue");
+    expect(
+      await archive.evaluate((element) => element.closest("article") !== null),
+    ).toBe(true);
+    await snapshot
+      .getByRole("button", { name: "Maximize wireframe diff" })
+      .click();
+    await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
+    await expect(snapshot).toHaveCSS("position", "fixed");
+    await snapshot
+      .getByRole("button", { name: "Restore wireframe diff size" })
+      .click();
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

@@ -26,6 +26,7 @@ import { Icon } from "./icon.browser.js";
 import {
   foundElement,
   LENS_STAND_IN_ATTRIBUTE,
+  liveArticle,
   liveBlock,
   liveLensAnchor,
 } from "./live-target.browser.js";
@@ -655,6 +656,12 @@ const ComponentSnapshotComparison = ({
     (side === "old" && canShowOld) || !canShowNew ? "old" : "new";
   const renderedHtml =
     renderedSide === "old" ? location.oldHtml : location.newHtml;
+  const renderedPresentation = sidePresentation(location, renderedSide);
+  const visibleScreenId =
+    selectedScreenId ??
+    (renderedPresentation?.aspect === "wireframe"
+      ? renderedPresentation.currentScreenId
+      : undefined);
   const isWireframe = useMemo(
     () =>
       wireframeScreenMarkup(location.oldHtml).size > 0 ||
@@ -687,9 +694,9 @@ const ComponentSnapshotComparison = ({
         "[data-wireframe-screen]",
       )) {
         const selected =
-          selectedScreenId === undefined ||
-          screen.dataset.wireframeScreen === selectedScreenId;
-        screen.hidden = selectedScreenId !== undefined && !selected;
+          visibleScreenId === undefined ||
+          screen.dataset.wireframeScreen === visibleScreenId;
+        screen.hidden = visibleScreenId !== undefined && !selected;
         const diff = screenDiffs.find(
           (candidate) => candidate.id === screen.dataset.wireframeScreen,
         );
@@ -729,7 +736,7 @@ const ComponentSnapshotComparison = ({
       maximizable?.removeEventListener("figure-restored", fitWireframes);
       observer.disconnect();
     };
-  }, [renderedHtml, screenDiffs, selectedScreenId]);
+  }, [renderedHtml, screenDiffs, visibleScreenId]);
   useEffect(() => {
     document.dispatchEvent(new CustomEvent("bigplan:review-island-updated"));
   }, [renderedHtml]);
@@ -1002,8 +1009,8 @@ export const DiffLensPortal = ({
     if (anchor === null) {
       setIsHistorical(true);
       setPresentation(undefined);
-      const main = document.querySelector<HTMLElement>("main");
-      if (main === null) {
+      const article = liveArticle();
+      if (article === null) {
         setHost(null);
         return;
       }
@@ -1012,7 +1019,7 @@ export const DiffLensPortal = ({
       container.dataset.reviewHistoricalDiff = "";
       container.className =
         "mx-auto my-4 min-w-0 w-full max-w-[var(--measure)] px-4";
-      let archive = main.querySelector<HTMLElement>(
+      let archive = article.querySelector<HTMLElement>(
         "[data-review-historical-changes]",
       );
       const ownsArchive = archive === null;
@@ -1021,9 +1028,9 @@ export const DiffLensPortal = ({
         archive.dataset.reviewHistoricalChanges = "";
         archive.className = "mx-auto my-8 w-full max-w-[var(--measure)]";
         archive.setAttribute("aria-label", "Historical changes");
-        const slides = main.querySelectorAll<HTMLElement>("[data-slide]");
+        const slides = article.querySelectorAll<HTMLElement>("[data-slide]");
         const lastSlide = slides.item(slides.length - 1);
-        if (lastSlide === null) main.append(archive);
+        if (lastSlide === null) article.append(archive);
         else lastSlide.after(archive);
       }
       archive.append(container);
@@ -1054,7 +1061,9 @@ export const DiffLensPortal = ({
       );
     const direct = replaced.map((entry) => entry.element);
     const originalWireframes = [
-      anchor.element.closest<HTMLElement>("[data-wireframe]"),
+      anchor.placement === "replace"
+        ? anchor.element.closest<HTMLElement>("[data-wireframe]")
+        : null,
       ...direct.map((element) =>
         element.closest<HTMLElement>("[data-wireframe]"),
       ),
