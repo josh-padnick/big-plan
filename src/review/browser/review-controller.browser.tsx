@@ -481,6 +481,7 @@ const persistedReviewFingerprint = ({
 type LiveReviewRecovery = {
   readonly drafts: ReadonlyArray<ReviewComment>;
   readonly resolvedCommentIds: ReadonlySet<string>;
+  readonly baseFingerprint: string | null;
 };
 
 /** Reads a session-scoped recovery snapshot without accepting partial data. */
@@ -492,19 +493,26 @@ const readLiveReviewRecovery = (
     const parsed: unknown = raw === null ? null : JSON.parse(raw);
     if (
       !isRecord(parsed) ||
-      parsed.version !== 1 ||
+      (parsed.version !== 1 && parsed.version !== 2) ||
       !Array.isArray(parsed.drafts) ||
       !parsed.drafts.every(isComment) ||
       !Array.isArray(parsed.resolvedCommentIds) ||
       !parsed.resolvedCommentIds.every(
         (value): value is string => typeof value === "string",
-      )
+      ) ||
+      (parsed.version === 2 &&
+        parsed.baseFingerprint !== null &&
+        typeof parsed.baseFingerprint !== "string")
     ) {
       return null;
     }
     return {
       drafts: parsed.drafts,
       resolvedCommentIds: new Set(parsed.resolvedCommentIds),
+      baseFingerprint:
+        parsed.version === 2 && typeof parsed.baseFingerprint === "string"
+          ? parsed.baseFingerprint
+          : null,
     };
   } catch {
     return null;
@@ -515,23 +523,57 @@ const readLiveReviewRecovery = (
 const writeLiveReviewRecovery = ({
   identity,
   recovery,
+  baseFingerprint,
 }: {
   readonly identity: RuntimeIdentity;
-  readonly recovery: LiveReviewRecovery;
+  readonly recovery: Omit<LiveReviewRecovery, "baseFingerprint">;
+  readonly baseFingerprint: string | null;
 }): boolean => {
   try {
     localStorage.setItem(
       liveRecoveryStorageKey(identity),
       JSON.stringify({
-        version: 1,
+        version: 2,
         drafts: recovery.drafts,
         resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
+        baseFingerprint,
       }),
     );
     return true;
   } catch {
     return false;
   }
+};
+
+const reconcileLiveReviewRecovery = ({
+  runtime,
+  recovery,
+}: {
+  readonly runtime: Omit<LiveReviewRecovery, "baseFingerprint">;
+  readonly recovery: Omit<LiveReviewRecovery, "baseFingerprint">;
+}): Omit<LiveReviewRecovery, "baseFingerprint"> => {
+  const drafts = [...runtime.drafts];
+  const runtimeDrafts = new Map(
+    runtime.drafts.map((comment) => [comment.id, comment]),
+  );
+  const resolvedCommentIds = new Set(runtime.resolvedCommentIds);
+  for (const recovered of recovery.drafts) {
+    const current = runtimeDrafts.get(recovered.id);
+    if (current === undefined) {
+      drafts.push(recovered);
+      if (recovery.resolvedCommentIds.has(recovered.id)) {
+        resolvedCommentIds.add(recovered.id);
+      }
+      continue;
+    }
+    if (JSON.stringify(current) === JSON.stringify(recovered)) continue;
+    const recoveredId = randomId();
+    drafts.push({ ...recovered, id: recoveredId });
+    if (recovery.resolvedCommentIds.has(recovered.id)) {
+      resolvedCommentIds.add(recoveredId);
+    }
+  }
+  return { drafts, resolvedCommentIds };
 };
 
 /** Clears only the recovery snapshot confirmed by the completed runtime write. */
@@ -4066,21 +4108,33 @@ export const ReviewController = () => {
           const recovery = readLiveReviewRecovery(identity);
           const recoveryFingerprint =
             recovery === null ? null : persistedReviewFingerprint(recovery);
-          if (
-            recoveryFingerprint !== null &&
-            recoveryFingerprint === runtimeFingerprint
-          ) {
+          let restoredReviewState: Omit<LiveReviewRecovery, "baseFingerprint"> =
+            {
+              drafts: snapshot.drafts,
+              resolvedCommentIds: runtimeResolvedCommentIds,
+            };
+          if (recoveryFingerprint === runtimeFingerprint) {
             clearLiveReviewRecovery({
               identity,
-              fingerprint: recoveryFingerprint,
+              fingerprint: runtimeFingerprint,
+            });
+          } else if (recovery !== null) {
+            restoredReviewState =
+              recovery.baseFingerprint === runtimeFingerprint
+                ? recovery
+                : reconcileLiveReviewRecovery({
+                    runtime: restoredReviewState,
+                    recovery,
+                  });
+            writeLiveReviewRecovery({
+              identity,
+              recovery: restoredReviewState,
+              baseFingerprint: runtimeFingerprint,
             });
           }
-          const restoredDrafts = recovery?.drafts ?? snapshot.drafts;
-          const restoredResolvedCommentIds =
-            recovery?.resolvedCommentIds ?? runtimeResolvedCommentIds;
-          setDrafts(restoredDrafts);
+          setDrafts(restoredReviewState.drafts);
           setSent(snapshot.sent);
-          setResolvedCommentIds(restoredResolvedCommentIds);
+          setResolvedCommentIds(restoredReviewState.resolvedCommentIds);
           setStatus("Connected to the local review runtime.");
           setIsHydrated(true);
         }
@@ -4120,13 +4174,49 @@ export const ReviewController = () => {
       resolvedCommentIds,
     });
     if (persistedReviewState === fingerprint) return;
+    const existingRecovery = readLiveReviewRecovery(identity);
+    const recoveryBaseFingerprint =
+      existingRecovery?.baseFingerprint ?? persistedReviewState;
     writeLiveReviewRecovery({
       identity,
       recovery: { drafts, resolvedCommentIds },
+      baseFingerprint: recoveryBaseFingerprint,
     });
     if (!runtimeCanWrite) return;
-    void serializeRuntimeWrite(() =>
-      requestJson({
+    void serializeRuntimeWrite(async () => {
+      const runtimeSnapshot = parseSnapshot(
+        await requestJson({ path: "/api/drafts", identity }),
+      );
+      const runtimeReviewState = {
+        drafts: runtimeSnapshot.drafts,
+        resolvedCommentIds: new Set(runtimeSnapshot.resolvedCommentIds),
+      };
+      const runtimeFingerprint = persistedReviewFingerprint(runtimeReviewState);
+      if (runtimeFingerprint === fingerprint) {
+        return { state: "persisted" as const, fingerprint };
+      }
+      if (recoveryBaseFingerprint !== runtimeFingerprint) {
+        const reconciled = reconcileLiveReviewRecovery({
+          runtime: runtimeReviewState,
+          recovery: { drafts, resolvedCommentIds },
+        });
+        const reconciledFingerprint = persistedReviewFingerprint(reconciled);
+        if (reconciledFingerprint === runtimeFingerprint) {
+          clearLiveReviewRecovery({ identity, fingerprint });
+        } else {
+          writeLiveReviewRecovery({
+            identity,
+            recovery: reconciled,
+            baseFingerprint: runtimeFingerprint,
+          });
+        }
+        return {
+          state: "reconciled" as const,
+          reviewState: reconciled,
+          runtimeFingerprint,
+        };
+      }
+      await requestJson({
         path: "/api/drafts",
         identity,
         method: "PUT",
@@ -4135,11 +4225,21 @@ export const ReviewController = () => {
           activeDraft: "",
           resolvedCommentIds: Array.from(resolvedCommentIds),
         },
-      }),
-    )
-      .then(() => {
-        setPersistedReviewState(fingerprint);
-        clearLiveReviewRecovery({ identity, fingerprint });
+      });
+      return { state: "persisted" as const, fingerprint };
+    })
+      .then((result) => {
+        if (result.state === "reconciled") {
+          setPersistedReviewState(result.runtimeFingerprint);
+          setDrafts(result.reviewState.drafts);
+          setResolvedCommentIds(result.reviewState.resolvedCommentIds);
+          return;
+        }
+        setPersistedReviewState(result.fingerprint);
+        clearLiveReviewRecovery({
+          identity,
+          fingerprint: result.fingerprint,
+        });
       })
       .catch((error: unknown) => setStatus(errorMessage(error)));
   }, [

@@ -32,15 +32,27 @@ import { expect, stageComment, test, type Page } from "./fixtures";
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
-test("should block refresh until an outage-time draft replays", async ({
+test("should merge an outage-time draft with newer runtime state", async ({
   page,
   reviewRuntimeUrl,
 }) => {
   await page.goto(reviewRuntimeUrl);
-  const identity = await page.locator("html").evaluate((root) => ({
-    planId: root.getAttribute("data-plan-id") ?? "",
-    sessionId: root.getAttribute("data-review-session") ?? "",
-  }));
+  const identity = await page.locator("html").evaluate((root) => {
+    const bootstrap: unknown = JSON.parse(
+      root.getAttribute("data-review-bootstrap") ?? "{}",
+    );
+    return {
+      planId: root.getAttribute("data-plan-id") ?? "",
+      sessionId: root.getAttribute("data-review-session") ?? "",
+      currentSnapshot:
+        typeof bootstrap === "object" &&
+        bootstrap !== null &&
+        "currentSnapshot" in bootstrap &&
+        typeof bootstrap.currentSnapshot === "string"
+          ? bootstrap.currentSnapshot
+          : "",
+    };
+  });
   const recoveryKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}`;
   const runtimePaths = new Set([
     "/api/agent",
@@ -59,13 +71,6 @@ test("should block refresh until an outage-time draft replays", async ({
         ? Promise.reject(new TypeError("Failed to fetch"))
         : fetchFromRuntime(input, init);
     };
-    window.addEventListener(
-      "bigplan:test-restore-fetch",
-      () => {
-        window.fetch = fetchFromRuntime;
-      },
-      { once: true },
-    );
   }, Array.from(runtimePaths));
 
   const banner = page.getByRole("alert").filter({
@@ -97,21 +102,68 @@ test("should block refresh until an outage-time draft replays", async ({
     .not.toBeNull();
   await expect(refresh).toBeDisabled();
 
+  const newerRuntimeBody = "Preserve this newer runtime feedback.";
+  const reviewToken = await page
+    .locator("html")
+    .getAttribute("data-review-token");
+  if (reviewToken === null) {
+    throw new Error("The review runtime did not expose its request token");
+  }
+  const runtimeUpdate = await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      "x-big-plan-review-token": reviewToken,
+    },
+    body: JSON.stringify({
+      drafts: [
+        {
+          id: randomBytes(8).toString("hex"),
+          body: newerRuntimeBody,
+          createdAt: new Date().toISOString(),
+          premiseSnapshot: identity.currentSnapshot,
+          target: { type: "document" },
+        },
+      ],
+      activeDraft: "",
+      resolvedCommentIds: [],
+    }),
+  });
+  expect(runtimeUpdate.ok).toBe(true);
+
   const replayed = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/drafts") &&
       response.request().method() === "PUT" &&
       response.ok(),
   );
-  await page.evaluate(() =>
-    window.dispatchEvent(new Event("bigplan:test-restore-fetch")),
-  );
+  await page.reload();
   await replayed;
   await expect(banner).toBeHidden();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(
     page.getByRole("complementary", { name: "Feedback" }),
   ).toContainText("Preserve this comment through the outage.");
+  await expect(
+    page.getByRole("complementary", { name: "Feedback" }),
+  ).toContainText(newerRuntimeBody);
+  const persistedResponse = await fetch(
+    new URL("/api/drafts", reviewRuntimeUrl),
+    {
+      headers: {
+        "x-big-plan-review-token": reviewToken,
+      },
+    },
+  );
+  expect(persistedResponse.ok).toBe(true);
+  await expect(persistedResponse.json()).resolves.toMatchObject({
+    drafts: expect.arrayContaining([
+      expect.objectContaining({
+        body: "Preserve this comment through the outage.",
+      }),
+      expect.objectContaining({ body: newerRuntimeBody }),
+    ]),
+  });
   await expect
     .poll(() =>
       page.evaluate((key) => window.localStorage.getItem(key), recoveryKey),
