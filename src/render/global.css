@@ -246,7 +246,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --callout-danger-ink: var(--danger-900);
   --diff-add-c: var(--success-700);
   --diff-add-bg: var(--success-100);
-  --agent-active-ring-c: #e3e3e3;
+  --agent-active-ring-c: #e6e6e6;
   --diff-remove-c: var(--danger-700);
   --diff-remove-bg: var(--danger-50);
   --decision-pro-c: var(--success-700);
@@ -343,7 +343,7 @@ same separation.
     --callout-danger-ink: var(--danger-100);
     --diff-add-c: var(--success-300);
     --diff-add-bg: var(--success-800);
-    --agent-active-ring-c: #4d4d4d;
+    --agent-active-ring-c: #454545;
     --diff-remove-c: var(--danger-300);
     --diff-remove-bg: var(--danger-900);
     --decision-pro-c: var(--success-300);
@@ -421,7 +421,7 @@ same separation.
   --callout-danger-ink: var(--danger-100);
   --diff-add-c: var(--success-300);
   --diff-add-bg: var(--success-800);
-  --agent-active-ring-c: #4d4d4d;
+  --agent-active-ring-c: #454545;
   --diff-remove-c: var(--danger-300);
   --diff-remove-bg: var(--danger-900);
   --decision-pro-c: var(--success-300);
@@ -664,12 +664,12 @@ are declared, so a role or a scale step is the only thing a utility can name.
     content: "";
     position: absolute;
     aspect-ratio: 1;
-    inset: -3px;
+    inset: -2.5px;
     width: auto;
     height: auto;
     background: conic-gradient(
-      var(--agent-active-ring-c) 0deg 300deg,
-      transparent 300deg 360deg
+      var(--agent-active-ring-c) 0deg 295deg,
+      transparent 295deg 360deg
     );
     border-radius: 50%;
     -webkit-mask: radial-gradient(

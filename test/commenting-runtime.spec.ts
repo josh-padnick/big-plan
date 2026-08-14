@@ -871,16 +871,16 @@ test("should restore and submit staged comments through the local review runtime
   const lightOrbit = await readOrbitPresentation();
   expect(lightOrbit).toMatchObject({
     animationDuration: "1.6s",
-    bottom: "-3px",
-    height: "16px",
-    left: "-3px",
-    right: "-3px",
-    ringColor: "#e3e3e3",
-    top: "-3px",
-    width: "16px",
+    bottom: "-2.5px",
+    height: "15px",
+    left: "-2.5px",
+    right: "-2.5px",
+    ringColor: "#e6e6e6",
+    top: "-2.5px",
+    width: "15px",
   });
   expect(lightOrbit.animationName).not.toBe("none");
-  expect(lightOrbit.backgroundImage).toContain("300deg");
+  expect(lightOrbit.backgroundImage).toContain("295deg");
   expect(lightOrbit.backgroundImage).toContain("360deg");
   expect(lightOrbit.maskImage).toContain("calc(50% - 1px)");
   const firstRotation = await readRotationMatrix();
@@ -904,7 +904,7 @@ test("should restore and submit staged comments through the local review runtime
   await page.emulateMedia({ colorScheme: "dark" });
   await expect
     .poll(async () => (await readOrbitPresentation()).ringColor)
-    .toBe("#4d4d4d");
+    .toBe("#454545");
   await page.screenshot({
     path: testInfo.outputPath("agent-working-orbit-dark.png"),
   });
