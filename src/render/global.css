@@ -246,6 +246,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --callout-danger-ink: var(--danger-900);
   --diff-add-c: var(--success-700);
   --diff-add-bg: var(--success-100);
+  --agent-active-ring-c: #e3e3e3;
   --diff-remove-c: var(--danger-700);
   --diff-remove-bg: var(--danger-50);
   --decision-pro-c: var(--success-700);
@@ -342,6 +343,7 @@ same separation.
     --callout-danger-ink: var(--danger-100);
     --diff-add-c: var(--success-300);
     --diff-add-bg: var(--success-800);
+    --agent-active-ring-c: #4d4d4d;
     --diff-remove-c: var(--danger-300);
     --diff-remove-bg: var(--danger-900);
     --decision-pro-c: var(--success-300);
@@ -419,6 +421,7 @@ same separation.
   --callout-danger-ink: var(--danger-100);
   --diff-add-c: var(--success-300);
   --diff-add-bg: var(--success-800);
+  --agent-active-ring-c: #4d4d4d;
   --diff-remove-c: var(--danger-300);
   --diff-remove-bg: var(--danger-900);
   --decision-pro-c: var(--success-300);
@@ -648,6 +651,39 @@ are declared, so a role or a scale step is the only thing a utility can name.
     max-width: none;
   }
 
+  /* Utility form: review-agent-active-indicator--working */
+  .review-agent-active-indicator--working {
+    aspect-ratio: 1;
+    flex: 0 0 0.625rem;
+    width: 0.625rem;
+    height: 0.625rem;
+    position: relative;
+  }
+
+  .review-agent-active-indicator--working::before {
+    content: "";
+    position: absolute;
+    aspect-ratio: 1;
+    inset: -3px;
+    width: auto;
+    height: auto;
+    background: conic-gradient(
+      var(--agent-active-ring-c) 0deg 300deg,
+      transparent 300deg 360deg
+    );
+    border-radius: 50%;
+    -webkit-mask: radial-gradient(
+      circle,
+      transparent calc(50% - 1px),
+      #000 calc(50% - 0.5px)
+    );
+    mask: radial-gradient(
+      circle,
+      transparent calc(50% - 1px),
+      #000 calc(50% - 0.5px)
+    );
+  }
+
   /* Section navigation glides instead of jumping; readers who ask the OS for
      reduced motion keep instant jumps. */
   @media (prefers-reduced-motion: no-preference) {
@@ -655,40 +691,8 @@ are declared, so a role or a scale step is the only thing a utility can name.
       scroll-behavior: smooth;
     }
 
-    /* Utility form: review-agent-active-indicator--working */
-    .review-agent-active-indicator--working {
-      animation: review-agent-active-indicator-pulse 1.8s ease-in-out infinite;
-      aspect-ratio: 1;
-      flex: 0 0 0.625rem;
-      width: 0.625rem;
-      height: 0.625rem;
-      position: relative;
-    }
-
     .review-agent-active-indicator--working::before {
-      content: "";
-      position: absolute;
-      aspect-ratio: 1;
-      inset: -4px;
-      width: auto;
-      height: auto;
-      border: 2px solid var(--diff-add-c);
-      border-right-color: transparent;
-      border-radius: 9999px;
-      animation: review-agent-active-indicator-spin 1.1s linear infinite;
-    }
-
-    @keyframes review-agent-active-indicator-pulse {
-      0%,
-      100% {
-        opacity: 0.82;
-        transform: scale(0.96);
-      }
-
-      50% {
-        opacity: 1;
-        transform: scale(1.08);
-      }
+      animation: review-agent-active-indicator-spin 1.6s linear infinite;
     }
 
     @keyframes review-agent-active-indicator-spin {
