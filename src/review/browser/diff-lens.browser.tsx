@@ -738,6 +738,12 @@ const ComponentSnapshotComparison = ({
     fitWireframes();
     const observer = new ResizeObserver(fitWireframes);
     observer.observe(content);
+    for (const element of content.querySelectorAll<HTMLElement>(
+      ".wireframe-frame-card, [data-wireframe-screen]",
+    )) {
+      observer.observe(element);
+    }
+    requestAnimationFrame(fitWireframes);
     return () => {
       observer.disconnect();
       originalWireframes.forEach((element, index) => {
