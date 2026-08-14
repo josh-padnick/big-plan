@@ -736,8 +736,15 @@ const ComponentSnapshotComparison = ({
     )) {
       observer.observe(element);
     }
+    const maximizable = content.closest<HTMLElement>(
+      "[data-figure-maximizable]",
+    );
+    maximizable?.addEventListener("figure-restored", fitWireframes);
     requestAnimationFrame(fitWireframes);
-    return () => observer.disconnect();
+    return () => {
+      maximizable?.removeEventListener("figure-restored", fitWireframes);
+      observer.disconnect();
+    };
   }, [renderedHtml, screenDiffs, selectedScreenId]);
   useEffect(() => {
     document.dispatchEvent(new CustomEvent("bigplan:review-island-updated"));

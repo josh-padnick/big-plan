@@ -71,6 +71,7 @@ test("should review a static Mermaid SVG through the diagram canvas", async ({
   await expect(source).toHaveAttribute("data-flow-proposed", "removed");
   const removedMarker = diagram.locator("[data-flow-removed-marker]");
   await expect(removedMarker).toHaveCount(1);
+  await expect(removedMarker).toBeVisible();
   await expect(removedMarker).toHaveAttribute("data-flow-removed-kind", "node");
   await expect(removedMarker.locator("svg polygon")).toHaveCount(1);
   await expect(removedMarker.locator("svg line")).toHaveCount(0);
