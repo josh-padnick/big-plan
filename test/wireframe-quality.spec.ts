@@ -536,7 +536,7 @@ const PAINTED_FLOORS: ReadonlyArray<{
   { role: "eyebrow", selector: ".wireframe-eyebrow", minimum: 10 },
 ];
 
-test("should paint every desktop text role above its legibility floor", async ({
+test("should paint every text role above its legibility floor on every device", async ({
   page,
   wireframeFormFactorsViewerUrl,
   wireframeQualityViewerUrl,
@@ -548,16 +548,16 @@ test("should paint every desktop text role above its legibility floor", async ({
     wireframeFormFactorsViewerUrl,
   ]) {
     await page.goto(url);
-    const desktopScreens = page.locator(
-      '[data-wireframe-screen][data-wireframe-device="desktop"]',
-    );
+    // Every device, not only the one that scales the most: a floor that holds
+    // on desktop and not on tablet is a floor the reader still falls through.
+    const screens = page.locator("[data-wireframe-screen]");
 
     for (
       let screenIndex = 0;
-      screenIndex < (await desktopScreens.count());
+      screenIndex < (await screens.count());
       screenIndex += 1
     ) {
-      const screen = desktopScreens.nth(screenIndex);
+      const screen = screens.nth(screenIndex);
       const screenId = await screen.getAttribute("data-wireframe-screen");
 
       const painted = await screen.evaluate(
