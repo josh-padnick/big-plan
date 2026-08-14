@@ -1,6 +1,7 @@
 // Proves durable decision answers through the complete live review runtime:
-// reload, retraction, the currency of an edited decision, the bootstrap window
-// before authority is known, and a visible persistence failure.
+// reload, retraction, clearing, the currency of an edited decision, the
+// bootstrap window before authority is known, and a visible persistence
+// failure.
 
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -107,7 +108,7 @@ const storedAnswers = async (inputsPath: string): Promise<unknown> => {
     : undefined;
 };
 
-test("should persist and retract a confirmed decision answer", async ({
+test("should persist, retract, and clear a confirmed decision answer", async ({
   page,
 }) => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-approval-"));
@@ -199,6 +200,45 @@ test("should persist and retract a confirmed decision answer", async ({
       await expect(
         releaseDecision(page).locator("[data-decision-answer]"),
       ).toBeHidden();
+    });
+
+    await test.step("clearing leaves the decision unanswered on purpose", async () => {
+      await openWritableReview(page, runtime.url);
+      const staged = page.waitForResponse((response) =>
+        isInputOperation(response, "stage"),
+      );
+      await answerGradualRollout(page);
+      expect((await staged).ok()).toBe(true);
+
+      const decision = releaseDecision(page);
+      const clear = decision.getByRole("button", { name: "Clear answer" });
+      await expect(clear).toBeHidden();
+      await decision.getByRole("button", { name: "Change" }).click();
+      await expect(clear).toBeVisible();
+
+      // Clearing is an action beside the options; the options themselves stay
+      // answers to "which one?", with no entry standing for having none.
+      await expect(decision.getByRole("radio")).toHaveCount(3);
+      for (const name of [
+        "Gradual rollout",
+        "Immediate rollout",
+        "Suggest another option",
+      ]) {
+        await expect(decision.getByRole("radio", { name })).toHaveCount(1);
+      }
+
+      await clear.click();
+      await expect(
+        decision.getByRole("radio", { name: "Gradual rollout" }),
+      ).not.toBeChecked();
+      await expect(clear).toBeHidden();
+      await expect(decision.locator("[data-decision-answer]")).toBeHidden();
+
+      await page.reload();
+      await expect(
+        releaseDecision(page).locator("[data-decision-answer]"),
+      ).toBeHidden();
+      expect(await storedAnswers(runtime.store.inputsPath)).toEqual([]);
     });
   } finally {
     await runtime.close();

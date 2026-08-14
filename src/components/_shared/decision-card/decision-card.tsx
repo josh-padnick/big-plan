@@ -165,6 +165,18 @@ const AnswerControls = () => (
           {"Select an option to continue."}
         </span>
       </p>
+      {/* Leaving a decision unanswered on purpose is a different question from
+          "which one?", so it is an action beside the options rather than an
+          entry inside them. It appears only after an answer exists, because
+          before that there is nothing to clear. */}
+      <button
+        className="decision-clear"
+        type="button"
+        data-decision-clear=""
+        hidden
+      >
+        {"Clear answer"}
+      </button>
       <button
         className="decision-confirm"
         type="button"

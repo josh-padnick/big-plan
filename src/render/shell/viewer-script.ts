@@ -2531,6 +2531,7 @@ const wireDecisions = () => {
 
     const confirm = own("[data-decision-confirm]");
     const change = own("[data-decision-change]");
+    const clear = own("[data-decision-clear]");
     const footer = own("[data-decision-footer]");
     const answer = own("[data-decision-answer]");
     const answerTitle = own("[data-decision-answer-title]");
@@ -2572,6 +2573,10 @@ const wireDecisions = () => {
     }
     let previousOptionChoice =
       choices.find((choice) => choice.checked && !proposes(choice)) || null;
+    // True while the reader is changing an answer they already gave. Only then
+    // is there an answer to clear, which is why the exit is offered here and
+    // not to a reader who has merely selected something for the first time.
+    let changingAnswer = false;
 
     // Overlapping the panels freezes the region at the tallest one, so from
     // here on swapping the visible panel cannot move anything below it.
@@ -2819,6 +2824,7 @@ const wireDecisions = () => {
       proposalNow.hidden = !proposing;
       proposalBatch.disabled = proposalValue() === "";
       proposalNow.disabled = proposalValue() === "";
+      if (clear !== null) clear.hidden = !changingAnswer;
       if (summary !== null) {
         summary.textContent =
           choice === null
@@ -3004,9 +3010,33 @@ const wireDecisions = () => {
     confirm.addEventListener("click", () => {
       const choice = picked();
       if (choice === null || confirm.disabled) return;
+      changingAnswer = false;
       recordAnswer(choice, false);
       change.focus();
     });
+    if (clear !== null) {
+      clear.addEventListener("click", () => {
+        changingAnswer = false;
+        for (const choice of choices) choice.checked = false;
+        previousOptionChoice = null;
+        if (proposalText !== null) {
+          proposalText.readOnly = false;
+          proposalText.value = "";
+        }
+        if (answerTitle !== null) answerTitle.textContent = "";
+        sync();
+        confirm.focus();
+        // Clicking change already retracted the stored answer; announcing it
+        // again keeps the record empty even when the reader reached the
+        // chooser some other way, and repeating a retraction changes nothing.
+        decision.dispatchEvent(
+          new CustomEvent("bigplan:decision-retracted", {
+            bubbles: true,
+            detail: { decision: decision.id },
+          }),
+        );
+      });
+    }
     decision.addEventListener("bigplan:decision-apply", (event) => {
       const optionId = event.detail?.optionId;
       if (typeof optionId !== "string") return;
@@ -3014,6 +3044,7 @@ const wireDecisions = () => {
         (candidate) => candidate.id === optionId && !proposes(candidate),
       );
       if (choice === undefined) return;
+      changingAnswer = false;
       choice.checked = true;
       previousOptionChoice = choice;
       sync();
@@ -3036,6 +3067,7 @@ const wireDecisions = () => {
       showReadingSession,
     );
     change.addEventListener("click", () => {
+      changingAnswer = true;
       decision.removeAttribute("data-decision-answered");
       for (const header of columnHeaders) {
         header.removeAttribute("data-option-chosen");

@@ -664,6 +664,28 @@
     background: var(--surface-c);
   }
 
+  /* Clearing is the way out of the change flow, not a competing answer, so it
+     reads as a quiet action beside Confirm rather than a second button. */
+  article .decision-clear {
+    padding: 0.5rem 0.25rem;
+    border: 0;
+    cursor: pointer;
+    background: transparent;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  article .decision-clear:hover {
+    color: var(--color-ink);
+    text-decoration: underline;
+  }
+  article .decision-clear:focus-visible {
+    outline: none;
+    border-radius: 0.375rem;
+    color: var(--color-ink);
+    box-shadow: var(--elevation-focus);
+  }
+
   /* Answering compresses the matrix to the column that won and replaces the
      confirm row with the recorded strip. Which regions are showing is carried
      by the hidden attribute, the one display rule utilities cannot out-rank. */
