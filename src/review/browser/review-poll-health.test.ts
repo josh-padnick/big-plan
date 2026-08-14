@@ -80,6 +80,20 @@ describe("review poll health", () => {
   });
 
   it.each([
+    INITIAL_REVIEW_POLL_HEALTH,
+    transition(["runtime-unavailable"]),
+  ])("should preserve initial loading while runtime health is %o", (health) => {
+    expect(
+      agentProjectionForReviewPoll({
+        health,
+        hasObservedAgentSnapshot: false,
+        lastObservableAtMs: 1_000,
+        nowMs: 1_000_000,
+      }),
+    ).toEqual({ state: "loading", nowMs: 1_000_000 });
+  });
+
+  it.each([
     ["poll-failed", "runtime-unavailable"],
     ["runtime-unavailable", "poll-failed"],
   ] as const)(

@@ -15,6 +15,7 @@ import {
   relativeSignalLabel,
 } from "../shared/time-label.js";
 import { Icon } from "./icon.browser.js";
+import type { ReviewAgentProjection } from "./review-poll-health.js";
 
 const Spinner = () => (
   <span
@@ -303,6 +304,18 @@ const AgentPresenceUnavailableCard = () => (
   </article>
 );
 
+const AgentPresenceLoadingCard = () => (
+  <article
+    className="grid min-w-0 gap-1 rounded-lg border border-edge bg-raised p-3 text-xs leading-[1.45] text-muted"
+    data-review-connection-health="loading"
+  >
+    <strong className="text-sm text-ink">Checking agent status</strong>
+    <p className="m-0 [overflow-wrap:anywhere]">
+      Waiting for the first review session update.
+    </p>
+  </article>
+);
+
 const AnotherViewTip = () => (
   <aside className="mt-3 flex min-w-0 gap-2 rounded-md border border-edge bg-surface px-3 py-2 text-xs text-muted">
     <Icon icon={TERMINAL_ICON} />
@@ -502,7 +515,7 @@ const ConnectionLog = ({
 
 export const AgentConnectionPanel = ({
   activity,
-  presenceIsObservable,
+  presenceState,
   connected,
   heartbeatAt,
   connectionLog,
@@ -514,7 +527,7 @@ export const AgentConnectionPanel = ({
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
-  readonly presenceIsObservable: boolean;
+  readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
   readonly heartbeatAt: number;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -526,6 +539,7 @@ export const AgentConnectionPanel = ({
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
   const currentNowMs = useSecondClock();
+  const presenceIsObservable = presenceState === "observable";
   const isConnected =
     presenceIsObservable &&
     connected &&
@@ -568,6 +582,8 @@ export const AgentConnectionPanel = ({
             )}
           </section>
         </>
+      ) : presenceState === "loading" ? (
+        <AgentPresenceLoadingCard />
       ) : (
         <AgentPresenceUnavailableCard />
       )}

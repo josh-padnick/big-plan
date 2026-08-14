@@ -45,6 +45,7 @@ export const reviewPollIsOffline = (health: ReviewPollHealth): boolean =>
   health.state === "poll-failed" && health.consecutiveFailures >= 2;
 
 export type ReviewAgentProjection =
+  | { readonly state: "loading"; readonly nowMs: number }
   | { readonly state: "unobservable"; readonly nowMs: number }
   | { readonly state: "observable"; readonly nowMs: number };
 
@@ -61,7 +62,9 @@ export const agentProjectionForReviewPoll = ({
   readonly nowMs: number;
 }): ReviewAgentProjection => {
   if (!hasObservedAgentSnapshot) {
-    return { state: "unobservable", nowMs: lastObservableAtMs };
+    return reviewRuntimeIsDown(health)
+      ? { state: "unobservable", nowMs: lastObservableAtMs }
+      : { state: "loading", nowMs };
   }
   return {
     state: "observable",
