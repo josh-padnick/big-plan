@@ -466,7 +466,7 @@ test("should contain working comments when resolved threads expand", async ({
 test("should restore and submit staged comments through the local review runtime", async ({
   page,
   reviewRuntimeUrl,
-}) => {
+}, testInfo) => {
   await page.goto(reviewRuntimeUrl);
 
   const agentStatus = page.getByRole("button", {
@@ -478,8 +478,22 @@ test("should restore and submit staged comments through the local review runtime
   });
   const settingsAction = page.getByRole("button", { name: "Open settings" });
   await expect(agentStatus).toBeVisible();
+  await expect(
+    agentStatus.locator(".review-agent-active-indicator--working"),
+  ).toHaveCount(0);
   await expect(feedbackAction).toBeVisible();
   await expect(settingsAction).toBeVisible();
+  await expect(
+    page.locator('input[type="range"], input[type="color"]'),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("toolbar", { name: "Preview controls" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Light theme" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("button", { name: "Dark theme" })).toHaveCount(0);
+  await expect(page.getByText("Ring padding", { exact: true })).toHaveCount(0);
   const toolbarGaps = await Promise.all([
     agentStatus.boundingBox(),
     feedbackAction.boundingBox(),
@@ -815,6 +829,111 @@ test("should restore and submit staged comments through the local review runtime
   await expect(
     page.getByRole("button", { name: "Agent working" }),
   ).toBeVisible();
+  const workingAgent = page.getByRole("button", { name: "Agent working" });
+  const workingIndicator = workingAgent.locator(
+    ".review-agent-active-indicator--working",
+  );
+  // Read the shipped pseudo-element through the browser so this test observes
+  // the rendered orbit contract rather than its stylesheet implementation.
+  const readOrbitPresentation = () =>
+    workingIndicator.evaluate((indicator) => {
+      const style = getComputedStyle(indicator, "::before");
+      return {
+        animationDuration: style.animationDuration,
+        animationName: style.animationName,
+        backgroundImage: style.backgroundImage,
+        bottom: style.bottom,
+        height: style.height,
+        left: style.left,
+        maskImage: style.maskImage,
+        right: style.right,
+        ringColor: getComputedStyle(document.documentElement)
+          .getPropertyValue("--agent-active-ring-c")
+          .trim(),
+        top: style.top,
+        transform: style.transform,
+        width: style.width,
+      };
+    });
+  // A rotating matrix has unit scale and no translation at every sampled frame.
+  const readRotationMatrix = () =>
+    workingIndicator.evaluate((indicator) => {
+      const matrix = new DOMMatrix(
+        getComputedStyle(indicator, "::before").transform,
+      );
+      return {
+        scaleX: Math.hypot(matrix.a, matrix.b),
+        scaleY: Math.hypot(matrix.c, matrix.d),
+        translateX: matrix.e,
+        translateY: matrix.f,
+      };
+    });
+  const lightOrbit = await readOrbitPresentation();
+  expect(lightOrbit).toMatchObject({
+    animationDuration: "1.6s",
+    bottom: "-3px",
+    height: "16px",
+    left: "-3px",
+    right: "-3px",
+    ringColor: "#e3e3e3",
+    top: "-3px",
+    width: "16px",
+  });
+  expect(lightOrbit.animationName).not.toBe("none");
+  expect(lightOrbit.backgroundImage).toContain("300deg");
+  expect(lightOrbit.backgroundImage).toContain("360deg");
+  expect(lightOrbit.maskImage).toContain("calc(50% - 1px)");
+  const firstRotation = await readRotationMatrix();
+  await expect
+    .poll(async () => (await readOrbitPresentation()).transform)
+    .not.toBe(lightOrbit.transform);
+  const nextRotation = await readRotationMatrix();
+  for (const rotation of [firstRotation, nextRotation]) {
+    expect(rotation.scaleX).toBeCloseTo(1, 5);
+    expect(rotation.scaleY).toBeCloseTo(1, 5);
+    expect(rotation.translateX).toBe(0);
+    expect(rotation.translateY).toBe(0);
+  }
+  await page.screenshot({
+    path: testInfo.outputPath("agent-working-orbit-light.png"),
+  });
+  await workingAgent.screenshot({
+    path: testInfo.outputPath("agent-working-orbit-light-detail.png"),
+  });
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect
+    .poll(async () => (await readOrbitPresentation()).ringColor)
+    .toBe("#4d4d4d");
+  await page.screenshot({
+    path: testInfo.outputPath("agent-working-orbit-dark.png"),
+  });
+  await workingAgent.screenshot({
+    path: testInfo.outputPath("agent-working-orbit-dark-detail.png"),
+  });
+
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  const reducedMotionOrbit = await readOrbitPresentation();
+  expect(reducedMotionOrbit.animationName).toBe("none");
+  expect(reducedMotionOrbit.transform).toBe("none");
+  expect(reducedMotionOrbit).toMatchObject({
+    backgroundImage: lightOrbit.backgroundImage,
+    bottom: lightOrbit.bottom,
+    height: lightOrbit.height,
+    left: lightOrbit.left,
+    maskImage: lightOrbit.maskImage,
+    right: lightOrbit.right,
+    ringColor: lightOrbit.ringColor,
+    top: lightOrbit.top,
+    width: lightOrbit.width,
+  });
+  await workingAgent.screenshot({
+    path: testInfo.outputPath("agent-working-orbit-reduced-motion.png"),
+  });
+  await page.emulateMedia({
+    colorScheme: "light",
+    reducedMotion: "no-preference",
+  });
   await rail.getByRole("tab", { name: "Agent" }).click();
   const activeWork = rail.locator("[data-review-current-activity='working']");
   await expect(activeWork).toContainText("Responding to a comment");
