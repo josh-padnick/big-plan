@@ -847,9 +847,6 @@ test("should restore and submit staged comments through the local review runtime
         left: style.left,
         maskImage: style.maskImage,
         right: style.right,
-        ringColor: getComputedStyle(document.documentElement)
-          .getPropertyValue("--agent-active-ring-c")
-          .trim(),
         top: style.top,
         transform: style.transform,
         width: style.width,
@@ -875,12 +872,12 @@ test("should restore and submit staged comments through the local review runtime
     height: "15px",
     left: "-2.5px",
     right: "-2.5px",
-    ringColor: "#e6e6e6",
     top: "-2.5px",
     width: "15px",
   });
   expect(lightOrbit.animationName).not.toBe("none");
   expect(lightOrbit.backgroundImage).toContain("295deg");
+  expect(lightOrbit.backgroundImage).toContain("rgb(230, 230, 230)");
   expect(lightOrbit.backgroundImage).toContain("360deg");
   expect(lightOrbit.maskImage).toContain("calc(50% - 1px)");
   const firstRotation = await readRotationMatrix();
@@ -903,8 +900,8 @@ test("should restore and submit staged comments through the local review runtime
 
   await page.emulateMedia({ colorScheme: "dark" });
   await expect
-    .poll(async () => (await readOrbitPresentation()).ringColor)
-    .toBe("#454545");
+    .poll(async () => (await readOrbitPresentation()).backgroundImage)
+    .toContain("rgb(69, 69, 69)");
   await page.screenshot({
     path: testInfo.outputPath("agent-working-orbit-dark.png"),
   });
@@ -923,7 +920,6 @@ test("should restore and submit staged comments through the local review runtime
     left: lightOrbit.left,
     maskImage: lightOrbit.maskImage,
     right: lightOrbit.right,
-    ringColor: lightOrbit.ringColor,
     top: lightOrbit.top,
     width: lightOrbit.width,
   });
