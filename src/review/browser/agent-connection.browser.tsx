@@ -3,20 +3,44 @@
 // projection and local disclosure/copy interactions.
 
 import { useEffect, useRef, useState } from "react";
+import type { BrandIcon } from "../../icons/brand-icon.js";
+import { CLAUDE_ICON } from "../../icons/brands/claude.js";
+import { GROK_ICON } from "../../icons/brands/grok.js";
+import { OPENAI_ICON } from "../../icons/brands/openai.js";
 import { BOT_ICON } from "../../icons/lucide/bot.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { TERMINAL_ICON } from "../../icons/lucide/terminal.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
+import {
+  agentModelVendor,
+  type AgentModelVendor,
+} from "../shared/agent-model-icon.js";
 import type { CurrentAgentActivity } from "../shared/agent-status.js";
 import type { BrowserConnectionEvent } from "../shared/review-wire.js";
 import {
   compactDurationLabel,
   relativeSignalLabel,
 } from "../shared/time-label.js";
-import { Icon } from "./icon.browser.js";
+import { BrandIconView, Icon } from "./icon.browser.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
+
+const VENDOR_ICONS: Record<AgentModelVendor, BrandIcon> = {
+  openai: OPENAI_ICON,
+  claude: CLAUDE_ICON,
+  grok: GROK_ICON,
+};
+
+/** Picks the reported model's own mark, or a generic mark when unrecognized. */
+const ModelIcon = ({ modelName }: { readonly modelName: string }) => {
+  const vendor = agentModelVendor(modelName);
+  return vendor === undefined ? (
+    <Icon icon={BOT_ICON} />
+  ) : (
+    <BrandIconView icon={VENDOR_ICONS[vendor]} />
+  );
+};
 
 const Spinner = () => (
   <span
@@ -226,7 +250,7 @@ const CurrentActivityCard = ({
           className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-current/20 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2 py-0.5 text-2xs font-semibold text-ink [&>svg]:size-3"
           data-review-agent-model={modelName}
         >
-          <Icon icon={BOT_ICON} />
+          <ModelIcon modelName={modelName} />
           <span className="truncate">{modelName}</span>
         </span>
       )}

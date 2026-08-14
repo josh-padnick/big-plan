@@ -298,12 +298,26 @@ test("should show the connector's reported model identity, or none, on the agent
   const modelBadge = rail.locator("[data-review-agent-model]");
   await expect(modelBadge).toBeVisible();
   await expect(modelBadge).toContainText("Grok 4.6");
-  await expect(modelBadge.locator("svg")).toBeVisible();
+  await expect(modelBadge.locator("svg")).toHaveAttribute(
+    "viewBox",
+    "0 0 34 33",
+  );
 
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(modelBadge).toBeVisible();
   await expect(modelBadge).toContainText("Grok 4.6");
   await page.emulateMedia({ colorScheme: "light" });
+
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+    model: { name: "A model this badge does not recognize" },
+  });
+  await expect(modelBadge.locator("svg")).toHaveAttribute(
+    "viewBox",
+    "0 0 24 24",
+  );
 
   await writeAgentHeartbeat({
     store,
