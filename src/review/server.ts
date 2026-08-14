@@ -240,9 +240,6 @@ const PLAN_PICTURE_TYPES: ReadonlyMap<string, string> = new Map([
   [".webp", "image/webp"],
   [".gif", "image/gif"],
   [".avif", "image/avif"],
-  // An SVG is served as a picture, never as a document: the response carries
-  // the same `default-src 'none'` policy and nosniff header as every other
-  // response, and a browser runs no script inside an <img> source.
   [".svg", "image/svg+xml"],
 ]);
 
@@ -257,6 +254,8 @@ const CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'",
   "base-uri 'none'",
 ].join("; ");
+
+const ASSET_CONTENT_SECURITY_POLICY = "default-src 'none'; sandbox";
 
 type Route = {
   readonly method: "GET" | "PUT" | "POST";
@@ -406,7 +405,7 @@ const sendBinary = ({
 }): void => {
   response.writeHead(status, {
     "content-type": contentType,
-    "content-security-policy": CONTENT_SECURITY_POLICY,
+    "content-security-policy": ASSET_CONTENT_SECURITY_POLICY,
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
     "cache-control": "no-store",

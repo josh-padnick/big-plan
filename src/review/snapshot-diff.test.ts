@@ -775,4 +775,41 @@ describe("picture changes", () => {
     expect(diff.locations).toHaveLength(1);
     expect(diff.locations[0]?.newBlockId).toBe("s/image-2");
   });
+
+  it("should keep an existing picture aligned when another picture is inserted before it", () => {
+    const diff = buildSnapshotDiff({
+      from: "a".repeat(16),
+      to: "b".repeat(16),
+      before: [
+        picture({
+          id: "s/image-1",
+          source: "./assets/existing.png",
+          alt: "Existing",
+        }),
+      ],
+      after: [
+        picture({
+          id: "s/image-1",
+          source: "./assets/inserted.png",
+          alt: "Inserted",
+        }),
+        picture({
+          id: "s/image-2",
+          source: "./assets/existing.png",
+          alt: "Existing",
+        }),
+      ],
+    });
+
+    expect(diff.locations).toHaveLength(1);
+    expect(diff.locations[0]).toMatchObject({
+      status: "added",
+      newBlockId: "s/image-1",
+      newPresentation: {
+        aspect: "image",
+        source: "./assets/inserted.png",
+        alt: "Inserted",
+      },
+    });
+  });
 });

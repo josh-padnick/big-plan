@@ -327,9 +327,17 @@ const pairScore = ({
 const locationAnchor = (location: SnapshotDiffLocation): string | undefined =>
   location.newBlockId ?? location.beforeBlockId ?? location.afterBlockId;
 
-/** Groups globally exact kind/text counterparts before bounded fuzzy scoring. */
-const exactAlignmentKey = (block: SnapshotBlock): string =>
-  JSON.stringify([block.kind, normalizedAlignmentText(block.text)]);
+/** Groups globally exact counterparts before bounded fuzzy scoring. */
+const exactAlignmentKey = (block: SnapshotBlock): string => {
+  const presentation = block.presentation;
+  return JSON.stringify([
+    block.kind,
+    normalizedAlignmentText(block.text),
+    ...(presentation?.aspect === "image"
+      ? [presentation.source, presentation.alt]
+      : []),
+  ]);
+};
 
 /** Aligns blocks by stable identity, exact content, then guarded similarity. */
 export const diffSnapshots = ({

@@ -293,6 +293,9 @@ describe("review runtime images", () => {
     );
     expect(image.status).toBe(200);
     expect(image.headers.get("content-type")).toBe("image/png");
+    expect(image.headers.get("content-security-policy")).toBe(
+      "default-src 'none'; sandbox",
+    );
     expect(new Uint8Array(await image.arrayBuffer())).toEqual(TINY_PNG);
   });
 
@@ -399,6 +402,10 @@ describe("review runtime images", () => {
     await mkdir(join(directory, "assets", "site"), { recursive: true });
     await writeFile(join(directory, "assets", "site", "cabinet.jpg"), TINY_PNG);
     await writeFile(join(directory, "diagram.PNG"), TINY_PNG);
+    await writeFile(
+      join(directory, "scripted.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/")</script></svg>',
+    );
     await writeFile(join(directory, "notes.md"), "Not a picture.");
     await mkdir(join(directory, "inside"), { recursive: true });
     await writeFile(join(directory, "inside", "linked-target.png"), TINY_PNG);
@@ -416,6 +423,12 @@ describe("review runtime images", () => {
           "content-type",
         ),
       ).toBe("image/jpeg");
+      const svg = await fetch(`${url}/scripted.svg`);
+      expect(svg.status).toBe(200);
+      expect(svg.headers.get("content-type")).toBe("image/svg+xml");
+      expect(svg.headers.get("content-security-policy")).toBe(
+        "default-src 'none'; sandbox",
+      );
 
       // Everything that is not a picture inside this plan's own directory is
       // refused, including the plan source, the review state, an escape

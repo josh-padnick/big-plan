@@ -13,6 +13,7 @@ import type { DiffLocation } from "../shared/review-wire.js";
 import {
   candidateMatchesLiveText,
   lensAnchorCandidates,
+  type LensAnchorCandidate,
   type LensPlacement,
 } from "./diff-anchor.js";
 
@@ -183,6 +184,38 @@ export const liveFlowAnchor = (anchor: string): LiveTargetResult => {
   return resolveWithin(article, `[data-flow-anchor="${CSS.escape(anchor)}"]`);
 };
 
+type LivePictureIdentity = {
+  readonly source: string | null;
+  readonly alt: string | null;
+};
+
+const livePictureIdentity = (
+  element: HTMLElement,
+): LivePictureIdentity | undefined => {
+  const picture = element.matches("img")
+    ? element
+    : element.querySelector<HTMLElement>("img");
+  return picture === null
+    ? undefined
+    : {
+        source: picture.getAttribute("src"),
+        alt: picture.getAttribute("alt"),
+      };
+};
+
+/** Whether a live block presents the picture identity its candidate records. */
+export const candidateMatchesLivePicture = ({
+  candidate,
+  livePicture,
+}: {
+  readonly candidate: LensAnchorCandidate;
+  readonly livePicture: LivePictureIdentity | undefined;
+}): boolean =>
+  candidate.expectedPicture === undefined ||
+  (livePicture !== undefined &&
+    candidate.expectedPicture.source === livePicture.source &&
+    candidate.expectedPicture.alt === livePicture.alt);
+
 /**
  * Reads the text a live block presents to the reader, mirroring what
  * compile-time extraction recorded: screen-reader-only scaffolding and markup
@@ -225,6 +258,10 @@ export const liveLensAnchor = (
       !candidateMatchesLiveText({
         candidate,
         liveText: liveBlockText(resolved.found),
+      }) ||
+      !candidateMatchesLivePicture({
+        candidate,
+        livePicture: livePictureIdentity(resolved.found),
       })
     ) {
       misses.push("drifted-content");

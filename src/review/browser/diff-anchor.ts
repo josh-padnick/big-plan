@@ -1,16 +1,19 @@
 // Decides where a What-changed lens belongs relative to the blocks that
 // survive in the current plan. The choice is pure: it turns a diff location
 // into an ordered list of candidate block ids, each carrying how the lens sits
-// against that block and, when the id comes from an older revision, the text
-// the live block must still hold to be trusted. Resolving those ids against
-// the live document, and the portal that renders there, stay with the browser
-// island.
+// against that block and, when the id comes from an older revision, the content
+// facts the live block must still hold to be trusted. Resolving those ids
+// against the live document, and the portal that renders there, stay with the
+// browser island.
 
 import type {
+  BlockPresentation,
   DiffLocation,
   DiffPlace,
   SnapshotDiff,
 } from "../shared/review-wire.js";
+
+type PicturePresentation = Extract<BlockPresentation, { aspect: "image" }>;
 
 /**
  * How a lens sits against the block it resolved to. A changed block is
@@ -25,9 +28,10 @@ export type LensAnchorCandidate = {
   // The text the id's own snapshot recorded for this block. Present only when
   // the id crossed a snapshot boundary: block ids are structural paths, so an
   // id minted for an older revision can still resolve in a later document
-  // while naming different content, and only the recorded text can expose
-  // that. Absent when the id and the displayed document share a snapshot.
+  // while naming different content, and only the recorded content can expose
+  // that. Expectations are absent when the id and document share a snapshot.
   readonly expectedText?: string;
+  readonly expectedPicture?: PicturePresentation;
 };
 
 /**
@@ -35,9 +39,9 @@ export type LensAnchorCandidate = {
  * only ever anchors to its own new block: its neighbours describe a plan
  * revision the reader has already moved past, so following them would show the
  * change against unrelated content. That one candidate also carries the
- * result snapshot's text for the block, because the displayed document was
- * rendered from a later snapshot and the id alone cannot prove the block
- * still holds the content the diff is about.
+ * result snapshot's content facts for the block, because the displayed
+ * document was rendered from a later snapshot and the id alone cannot prove
+ * the block still holds the content the diff is about.
  */
 export const lensAnchorCandidates = (
   location: DiffLocation,
@@ -51,6 +55,9 @@ export const lensAnchorCandidates = (
             blockId: location.newBlockId,
             placement: "replace",
             expectedText: location.newText,
+            ...(location.newPresentation?.aspect === "image"
+              ? { expectedPicture: location.newPresentation }
+              : {}),
           },
         ];
   }

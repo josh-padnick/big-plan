@@ -105,6 +105,34 @@ describe("lensAnchorCandidates", () => {
     ]);
   });
 
+  it("should carry a picture identity when the id crosses a snapshot boundary", () => {
+    expect(
+      lensAnchorCandidates(
+        location({
+          kind: "image",
+          newBlockId: "approach/image-1",
+          newPresentation: {
+            aspect: "image",
+            source: "./assets/after.png",
+            alt: "Map",
+          },
+        }),
+        { isSuperseded: true },
+      ),
+    ).toEqual([
+      {
+        blockId: "approach/image-1",
+        placement: "replace",
+        expectedText: "now",
+        expectedPicture: {
+          aspect: "image",
+          source: "./assets/after.png",
+          alt: "Map",
+        },
+      },
+    ]);
+  });
+
   it("should leave same-snapshot candidates without a text expectation", () => {
     const candidates = lensAnchorCandidates(
       location({ newBlockId: "approach/paragraph-1" }),
