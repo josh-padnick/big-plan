@@ -85,7 +85,7 @@ word-level edits for close rewrites and stacked **Was**/**Now** bands for
 larger rewrites, additions, removals, tables, and code. Decision, diagram, and
 file-tree changes retain their compiled component presentation behind a
 **Was**/**Now** switch instead of flattening their structure into prose.
-Wireframe changes add a per-screen **Added**/**Removed**/**Updated** selector, keep the full device frame visible behind interactive **Was**/**Now** controls, and carry the shared maximize control into the diff lens.
+Wireframe changes add a per-screen selector for **Added**, **Removed**, **Updated**, **Moved**, and **Initial screen** changes, keep the full device frame visible behind interactive **Was**/**Now** controls, and carry the shared maximize control into the diff lens.
 Changes inside `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`, `GrpcMethod`,
 and `DatabaseTableSchema` are compared field by field.
 The change navigator tours several places without losing reading context.
