@@ -84,7 +84,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 
 - Make lists scan in stable rows—title/time, person/organization, state/identifier—and give customer, agent, and internal messages consistent distinct treatments. Unread, priority, assignment, waiting, selection, and open state cannot share one signal.
 - Use one sticky inbox toolbar for search, filter count, and sort, with active chips beneath. Show the result count once, keep create secondary during triage, and add bulk controls only for real batching.
-- Size controls to their values: channels 320–400px, times 140–180px, and readable forms around 760px.
+- Let controls use their built-in value-sized widths and ordinary desktop content use its default readable measure; reserve the full canvas for chrome, collections, and real multi-column layouts.
 - Optimize for a five-second scan before careful reading.
 - Use decoration only to identify content, communicate state, reinforce the emotional goal, or explain an unfinished visual decision.
 
@@ -365,6 +365,52 @@ The selected queue record remains visible while the conversation dominates and p
           <Select label="Assignee" value="Alex Rivera" />
           <Select label="Team" value="Payments" />
           <Text text="Saved just now · Undo" role="helper" />
+        </Panel>
+      </AppContent>
+    </AppShell>
+  </Screen>
+
+  <Screen
+    id="quality-desk-workspace-settings"
+    name="Desktop · Workspace settings"
+    device="desktop"
+    url="app.harbor.team/settings/workspace"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme Support">
+        <Nav label="Global">
+          <NavItem label="Inbox" />
+          <NavItem label="Customers" />
+          <NavItem label="Reports" />
+          <NavItem label="Settings" active />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Workspace settings"
+          description="Applies to everyone in Acme Support"
+        />
+        <Panel title="About this workspace">
+          <Text text="Acme Support handles checkout, billing, and account tickets for the whole Northwind account team, from first response through resolution." />
+        </Panel>
+        <Panel title="Region">
+          <TextField label="Workspace name" value="Acme Support" />
+          <Select label="Data region" value="US West" />
+        </Panel>
+        <Panel title="Recent changes">
+          <Text text="Workspace changes are retained for 90 days so administrators can audit configuration history." />
+          <List>
+            <ListItem
+              label="Data region changed to US West"
+              meta="Priya"
+              value="2d ago"
+            />
+            <ListItem
+              label="Workspace renamed to Acme Support"
+              meta="Alex"
+              value="1w ago"
+            />
+          </List>
         </Panel>
       </AppContent>
     </AppShell>

@@ -24,6 +24,7 @@ marks and a plan diff never jitters.
     --wf-stroke: color-mix(in srgb, var(--color-ink) 55%, transparent);
     --wf-stroke-soft: color-mix(in srgb, var(--color-ink) 22%, transparent);
     --wf-fill: color-mix(in srgb, var(--color-ink) 6%, transparent);
+    --wf-prose-measure: 38rem;
     --wf-sketch: 9px 4px 11px 5px / 5px 11px 4px 9px;
     --wf-sketch-alt: 11px 5px 9px 4px / 4px 9px 5px 11px;
     /* The page card's own chrome (2x0.5rem padding + 2x1px border) sits
@@ -788,7 +789,50 @@ marks and a plan diff never jitters.
     .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > .wireframe-stack:not(.wireframe-rail) {
-    max-width: 38rem;
+    max-width: var(--wf-prose-measure);
+  }
+
+  /* Default measure: a block sitting directly in the canvas or app content
+     column reads at the same prose measure Center already defaults to, even
+     when the author never reaches for Center. Without this, a screen with no
+     workspace row and no Center leaves prose, panels, fields, and lists to
+     stretch edge to edge, because nothing else in the artboard bounds them.
+
+     A block keeps the cap only when nothing about it already justifies
+     running wide: AppShell and PageHeader are chrome that always spans its
+     column - AppShell governs its own nav rail and content split, and the
+     rule below reaches inside its AppContent separately; Center carries its
+     own measure; a workspace row is already pane-dominance managed; a Row
+     with more than one child is already distributing space between real
+     siblings; and a List, a Table, or a Panel wrapping one (or wrapping a
+     many-child Row, such as a toolbar) is a record collection or command bar
+     that naturally reads wide. Author escape hatch: wrap content that
+     legitimately wants the full artboard in a Row (even a single dominant
+     child beside an empty one) or a `Center measure="wide"` instead of a
+     bare Stack or Panel. Wide surfaces keep their width, but Text within one
+     still follows the default prose measure. */
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    :is(.wireframe-canvas, .wireframe-app-content)
+    > *:not(
+      :is(
+        .wireframe-app-shell,
+        .wireframe-center,
+        .wireframe-page-header,
+        .wireframe-list,
+        .wireframe-table,
+        .wireframe-panel[data-wireframe-master],
+        .wireframe-row[data-wireframe-workspace],
+        .wireframe-row:has(> :nth-child(2))
+      )
+    ):not(:has(.wireframe-row > :nth-child(2))) {
+    max-width: var(--wf-prose-measure);
+  }
+  .wireframe-artboard[data-wireframe-device="desktop"]
+    .wireframe-text:not(
+      .wireframe-center *,
+      .wireframe-row[data-wireframe-workspace] *
+    ) {
+    max-width: var(--wf-prose-measure);
   }
 
   /* Tablet shells keep breathing room and a card-like rail: intentional for
@@ -1966,6 +2010,23 @@ marks and a plan diff never jitters.
     font: inherit;
     font-size: 0.875rem;
   }
+  /* Control width: a field draws the length of a plausible answer instead of
+     filling whatever column it lands in. TextArea is the deliberate
+     exception - prose entry earns the whole column - so it keeps width:100%
+     with no cap. A date or number answers in a handful of characters; a
+     select or a line of text still reads as one short answer, never a full
+     928px reading measure. There is no per-control override: a field that
+     genuinely needs more room is a TextArea, not a wider TextField. */
+  .wireframe-input:not(.wireframe-textarea) {
+    max-width: 22rem;
+  }
+  input.wireframe-input[type="number"],
+  input.wireframe-input[type="date"] {
+    max-width: 10rem;
+  }
+  input.wireframe-input[type="search"] {
+    max-width: 16rem;
+  }
   .wireframe-input::placeholder {
     color: var(--color-muted);
     opacity: 1;
@@ -2193,7 +2254,7 @@ marks and a plan diff never jitters.
     max-width: 26rem;
   }
   .wireframe-center[data-wireframe-measure="prose"] .wireframe-center-inner {
-    max-width: 38rem;
+    max-width: var(--wf-prose-measure);
   }
   .wireframe-center[data-wireframe-measure="wide"] .wireframe-center-inner {
     max-width: 54rem;
