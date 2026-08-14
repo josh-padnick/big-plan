@@ -177,6 +177,13 @@ a model provider itself. The launched coding-agent session uses:
 - `agent respond <input.mdx> <response.json>` to publish one complete answer
   after the current MDX has rendered and passed lint.
 
+Set the `BIG_PLAN_AGENT_MODEL` environment variable before running `agent
+next` or `agent note` to report which model is connected, for example `Grok
+4.6`.
+Use a non-empty model name of at most 80 characters.
+Every heartbeat that command sends carries the reported name; the reviewer's
+browser never guesses it.
+
 A `changed` outcome is accepted only when the result snapshot differs and every
 named target belongs to the computed snapshot diff. Other outcomes are
 `answered`, `warning`, `needs-input`, and `declined`; a warning makes no edit,

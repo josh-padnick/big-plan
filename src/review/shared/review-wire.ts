@@ -44,11 +44,16 @@ export type AgentResponse = {
   readonly message?: string;
 };
 
+export type AgentModelIdentity = {
+  readonly name: string;
+};
+
 export type AgentPresence = {
   readonly connected: boolean;
   readonly state: "waiting" | "working";
   readonly requestId?: string;
   readonly updatedAtMs?: number;
+  readonly model?: AgentModelIdentity;
 };
 
 export type BrowserConnectionEvent = {
@@ -358,6 +363,11 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           : {}),
         ...(typeof value.presence.updatedAtMs === "number"
           ? { updatedAtMs: value.presence.updatedAtMs }
+          : {}),
+        ...(isReviewWireRecord(value.presence.model) &&
+        typeof value.presence.model.name === "string" &&
+        value.presence.model.name.trim() !== ""
+          ? { model: { name: value.presence.model.name } }
           : {}),
       }
     : { connected: false, state: "waiting" as const };

@@ -1,7 +1,9 @@
-// Adapts framework-neutral Lucide catalog data to the review island's React
-// presentation edge so browser controls never define private icon geometry.
+// Adapts framework-neutral Lucide and vendor brand-mark catalog data to the
+// review island's React presentation edge so browser controls never define
+// private icon geometry.
 
 import { createElement } from "react";
+import type { BrandIcon } from "../../icons/brand-icon.js";
 import {
   DEFAULT_LUCIDE_STROKE_WIDTH,
   type LucideIcon,
@@ -20,6 +22,18 @@ export const Icon = ({ icon }: { readonly icon: LucideIcon }) => (
     strokeLinejoin="round"
     aria-hidden="true"
   >
+    {icon.node.map(([tagName, properties], index) =>
+      createElement(tagName, {
+        ...properties,
+        key: `${tagName}-${index}`,
+      }),
+    )}
+  </svg>
+);
+
+/** Renders one vendor brand mark on its own source-defined canvas. */
+export const BrandIconView = ({ icon }: { readonly icon: BrandIcon }) => (
+  <svg viewBox={icon.viewBox} width="1em" height="1em" aria-hidden="true">
     {icon.node.map(([tagName, properties], index) =>
       createElement(tagName, {
         ...properties,

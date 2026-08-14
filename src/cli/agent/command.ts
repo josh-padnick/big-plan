@@ -26,6 +26,14 @@ const executablePath = (): string =>
 
 const RESERVED_ACTIONS = new Set(["next", "note", "respond"]);
 
+// The connector's own report of which model is running it, e.g. "Grok 4.6".
+// Read once per process so the reviewer sees a name only when the launching
+// environment explicitly set one - never a guess from the connector itself.
+const connectorModelName = (): string | undefined => {
+  const trimmed = process.env["BIG_PLAN_AGENT_MODEL"]?.trim();
+  return trimmed === undefined || trimmed === "" ? undefined : trimmed;
+};
+
 /** Parses one public command into the review-owned work-loop action. */
 const parseAction = (args: ReadonlyArray<string>): AgentWorkLoopAction => {
   if (args.length === 1 && !RESERVED_ACTIONS.has(args[0] ?? "")) {
@@ -39,11 +47,13 @@ const parseAction = (args: ReadonlyArray<string>): AgentWorkLoopAction => {
     args[0] === "next" &&
     (args.length === 2 || (args.length === 3 && args[2] === "--wait"))
   ) {
+    const modelName = connectorModelName();
     return {
       kind: "next",
       planPath: args[1] ?? "",
       shouldWait: args[2] === "--wait",
       executablePath: executablePath(),
+      ...(modelName === undefined ? {} : { modelName }),
     };
   }
   if (args[0] === "respond" && args.length === 3) {
@@ -55,7 +65,13 @@ const parseAction = (args: ReadonlyArray<string>): AgentWorkLoopAction => {
     };
   }
   if (args[0] === "note" && args.length === 3) {
-    return { kind: "note", planPath: args[1] ?? "", detail: args[2] ?? "" };
+    const modelName = connectorModelName();
+    return {
+      kind: "note",
+      planPath: args[1] ?? "",
+      detail: args[2] ?? "",
+      ...(modelName === undefined ? {} : { modelName }),
+    };
   }
   return invalidArguments();
 };

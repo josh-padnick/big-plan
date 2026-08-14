@@ -553,6 +553,45 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should carry the connector's reported model identity onto the working heartbeat", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-model-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer this question.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "What should we prioritize?",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        executablePath,
+        shouldWait: false,
+        modelName: "Grok 4.6",
+      });
+      await expect(
+        reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toMatchObject({
+        connected: true,
+        model: { name: "Grok 4.6" },
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should validate a progress note before reading session state", async () => {
     await expect(
       runAgentWorkLoopAction({

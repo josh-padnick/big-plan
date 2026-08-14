@@ -74,6 +74,43 @@ describe("review wire contract", () => {
     });
   });
 
+  it("should carry the connector's reported model identity to the browser", () => {
+    const encoded = encodeAgentSnapshot({
+      currentSnapshot: "a".repeat(16),
+      presence: {
+        connected: true,
+        state: "working",
+        model: { name: "Grok 4.6" },
+      },
+      requests: [],
+      responses: [],
+      connectionLog: [],
+      plan: "/tmp/plan.mdx",
+      agentCommand: "big-plan agent /tmp/plan.mdx",
+      recoveryPrompt: "Reconnect this review",
+    });
+
+    expect(decodeAgentSnapshot(encoded).presence).toMatchObject({
+      connected: true,
+      model: { name: "Grok 4.6" },
+    });
+  });
+
+  it("should degrade to an unknown identity instead of trusting a malformed model", () => {
+    const encoded = encodeAgentSnapshot({
+      currentSnapshot: "a".repeat(16),
+      presence: { connected: true, state: "working", model: { name: "" } },
+      requests: [],
+      responses: [],
+      connectionLog: [],
+      plan: "/tmp/plan.mdx",
+      agentCommand: "big-plan agent /tmp/plan.mdx",
+      recoveryPrompt: "Reconnect this review",
+    });
+
+    expect(decodeAgentSnapshot(encoded).presence).not.toHaveProperty("model");
+  });
+
   it("should round-trip per-side presentation facts through a snapshot diff", () => {
     const diff: SnapshotDiff = {
       from: "a".repeat(16),

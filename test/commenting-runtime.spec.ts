@@ -255,6 +255,88 @@ test("should expire a held connected snapshot when the reviewer returns", async 
   await expect(rail).toContainText("No agent signal for 6h 00m");
 });
 
+test("should show the connector's reported model identity, or none, on the agent status card", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const session = await liveReviewSession(page);
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+    model: { name: "Grok 4.6" },
+  });
+  await page.getByRole("button", { name: "Agent session active" }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const modelBadge = rail.locator("[data-review-agent-model]");
+  await expect(modelBadge).toBeVisible();
+  await expect(modelBadge).toContainText("Grok 4.6");
+  await expect(modelBadge.locator("svg")).toHaveAttribute(
+    "viewBox",
+    "0 0 34 33",
+  );
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(modelBadge).toBeVisible();
+  await expect(modelBadge).toContainText("Grok 4.6");
+  await page.emulateMedia({ colorScheme: "light" });
+
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+    model: { name: "GPT-5.6-Luna" },
+  });
+  await expect(modelBadge).toContainText("GPT-5.6-Luna");
+  await expect(modelBadge.locator("svg")).toHaveAttribute(
+    "viewBox",
+    "0 0 512 512",
+  );
+  const openAiPath = await modelBadge.locator("svg path").getAttribute("d");
+
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+    model: { name: "Claude Sonnet 5" },
+  });
+  await expect(modelBadge).toContainText("Claude Sonnet 5");
+  await expect(modelBadge.locator("svg")).toHaveAttribute(
+    "viewBox",
+    "0 0 512 512",
+  );
+  await expect(modelBadge.locator("svg path")).not.toHaveAttribute(
+    "d",
+    openAiPath ?? "",
+  );
+
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+    model: { name: "A model this badge does not recognize" },
+  });
+  await expect(modelBadge.locator("svg")).toHaveAttribute(
+    "viewBox",
+    "0 0 24 24",
+  );
+
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
+  await expect(rail.locator("[data-review-agent-model]")).toHaveCount(0);
+  await expect(
+    rail.locator("[data-review-current-activity='idle']"),
+  ).toContainText("Agent connected");
+});
+
 test("should pause a nonstandard request behind an explicit warning", async ({
   page,
   reviewRuntimeUrl,

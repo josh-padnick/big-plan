@@ -78,6 +78,16 @@ explains the standard or template the request would cross, and lets the
 reviewer explicitly choose **Do it anyway**. A changed result updates the plan
 in place without discarding drafts, open threads, or scroll position.
 
+Set `BIG_PLAN_AGENT_MODEL` before starting the coding-agent session to name
+which model is connected, for example `Grok 4.6` or `GPT-5.6-Luna`. The
+**Agent** tab shows that name and an icon next to the connection status.
+A name containing `openai`, a `gpt-4` or `gpt-5` family name, `claude`, or
+`grok` uses that vendor's own logo; any other reported name uses a generic
+model icon instead of guessing a vendor. This keeps a different GPT-named
+model, such as EleutherAI's GPT-J, from showing the OpenAI logo.
+Leave `BIG_PLAN_AGENT_MODEL` unset and the tab still shows the agent as
+connected, with no name guessed on its behalf.
+
 ## Diff and anchor truth
 
 **What changed** compares the request's claim-time baseline snapshot with the
