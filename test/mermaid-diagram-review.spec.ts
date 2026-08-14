@@ -36,10 +36,10 @@ test("should review a static Mermaid SVG through the diagram canvas", async ({
   const viewerCluster = diagram.locator("[data-flow-zoom-controls]");
   const toolbarOrder = await viewerCluster.evaluate((element) =>
     Array.from(element.children).map((child) => {
-      if (child.matches(".flow-diagram-zoom")) return "zoom";
-      if (child.matches(".flow-diagram-fit")) return "fit";
       if (child.matches("[data-flow-figure-comment]")) return "comment";
       if (child.matches("[data-figure-maximize]")) return "maximize";
+      if (child.matches(".flow-diagram-zoom")) return "zoom";
+      if (child.matches(".flow-diagram-fit")) return "fit";
       if (child.getAttribute("aria-hidden") === "true") return "separator";
       return "other";
     }),
@@ -79,14 +79,28 @@ test("should review a static Mermaid SVG through the diagram canvas", async ({
     .getAttribute("points");
   expect(removedPoints).toMatch(/^2\.55,0 /u);
   expect(removedPoints).toContain("0,2.55");
-  const sourceBox = await source.boundingBox();
-  const removedBox = await removedMarker.boundingBox();
-  expect(removedBox?.width).toBeCloseTo((sourceBox?.width ?? 0) * 0.46, 0);
-  expect(removedBox?.height).toBeCloseTo((sourceBox?.height ?? 0) * 0.46, 0);
-  const markerAt100 = await removedMarker.boundingBox();
+  let markerWidthAt100 = 0;
+  await expect
+    .poll(async () => {
+      const [sourceBox, removedBox] = await Promise.all([
+        source.boundingBox(),
+        removedMarker.boundingBox(),
+      ]);
+      if (!sourceBox || !removedBox) return null;
+      markerWidthAt100 = removedBox.width;
+      return {
+        heightDelta: removedBox.height - sourceBox.height * 0.46,
+        widthDelta: removedBox.width - sourceBox.width * 0.46,
+      };
+    })
+    .toEqual({
+      heightDelta: expect.closeTo(0, 0),
+      widthDelta: expect.closeTo(0, 0),
+    });
   await diagram.getByRole("button", { name: "Zoom in" }).click();
-  const markerAt125 = await removedMarker.boundingBox();
-  expect(markerAt125?.width).toBeGreaterThan(markerAt100?.width ?? 0);
+  await expect
+    .poll(async () => (await removedMarker.boundingBox())?.width ?? 0)
+    .toBeGreaterThan(markerWidthAt100);
   await expect(source).toHaveAccessibleName("Source, proposed for removal");
   const sourceAnchor = await source.getAttribute("data-flow-anchor");
   await page.evaluate(() => {
@@ -524,4 +538,85 @@ test("should keep background comments open when Revert All closes with Escape", 
   await page.keyboard.press("Escape");
   await expect(revertAllDialog).toBeHidden();
   await expect(commentThread).toBeVisible();
+});
+
+test("should return focus to a live comment marker after a repaint", async ({
+  page,
+  mermaidDiagramViewerUrl,
+}) => {
+  await page.goto(mermaidDiagramViewerUrl);
+  await page.evaluate(() => {
+    document.documentElement.dataset["theme"] = "light";
+  });
+
+  const diagram = page.locator("[data-flow-diagram]").first();
+  const source = diagram.locator('[data-flow-node="source"]:visible').first();
+  const anchor = await source.getAttribute("data-flow-anchor");
+  await source.click();
+  await diagram.locator('[data-flow-action="comment"]').click();
+  await diagram
+    .locator(".flow-diagram-compose textarea")
+    .fill("Read me after the theme changes.");
+  await page.keyboard.press("ControlOrMeta+Enter");
+
+  const marker = diagram.locator(
+    `[data-flow-comment-marker][data-flow-comment-anchor="${anchor ?? ""}"]`,
+  );
+  await expect(marker).toBeVisible();
+  await marker.click();
+  const commentThread = diagram.locator(".flow-diagram-comment-thread");
+  await expect(commentThread).toBeVisible();
+
+  // The theme swap repaints the diagram, so the marker the thread was opened
+  // from is no longer the same node by the time the thread closes.
+  await page.evaluate(() => {
+    document.documentElement.dataset["theme"] = "dark";
+  });
+  await expect(marker).toBeVisible();
+  await commentThread.getByRole("button", { name: "Close comment" }).click();
+  await expect(commentThread).toBeHidden();
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.activeElement?.getAttribute("data-flow-comment-anchor") ??
+          null,
+      ),
+    )
+    .toBe(anchor);
+  // Focus landing on a live control is what keeps the next comment reachable.
+  await page.keyboard.press("Enter");
+  await expect(commentThread).toBeVisible();
+});
+
+test("should offer one whole-figure comment control, left of maximize", async ({
+  page,
+  mermaidDiagramViewerUrl,
+}) => {
+  await page.goto(mermaidDiagramViewerUrl);
+  const diagram = page.locator("[data-flow-diagram]").first();
+  await diagram.hover();
+
+  // The figure owns its whole-figure comment, so its notes join the batch the
+  // reader submits from the figure. The review island must not portal a second
+  // control into the same toolbar.
+  await expect(diagram.locator("[data-review-toolbar-host]")).toHaveCount(0);
+  const comments = diagram.getByRole("button", { name: /^Comment on/u });
+  await expect(comments).toHaveCount(1);
+
+  const order = await diagram
+    .locator("[data-flow-zoom-controls]")
+    .evaluate((element) =>
+      Array.from(element.children)
+        .filter(
+          (child) =>
+            child.matches("[data-flow-figure-comment]") ||
+            child.matches("[data-figure-maximize]"),
+        )
+        .map((button) =>
+          button.matches("[data-flow-figure-comment]") ? "comment" : "maximize",
+        ),
+    );
+  expect(order).toEqual(["comment", "maximize"]);
 });

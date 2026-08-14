@@ -3,15 +3,21 @@
 // does not depend on the browser or Node.
 
 import type { ProgressStepCode } from "./progress-code.js";
+import type { BrowserConnectionEvent } from "./review-wire.js";
+import { compactDurationLabel } from "./time-label.js";
 
-export const AGENT_STALL_MS = 90_000;
+// Agents are expected to send a progress note at least once per minute while
+// working. The extra 15 seconds absorbs scheduling and filesystem jitter, but
+// still marks a killed agent disconnected well before a two-minute wait.
+export const AGENT_STALL_MS = 75_000;
+export const AGENT_STALL_WINDOW_LABEL = "75 seconds";
 
 export type AgentActivityRequest = {
   readonly requestId: string;
   readonly kind: "feedback" | "reply" | "chat";
   readonly createdAt: string;
   readonly claimedAt?: string;
-  readonly claimedFromRevision?: string;
+  readonly baselineSnapshot?: string;
   readonly targetLabel?: string;
 };
 
@@ -61,12 +67,12 @@ export type CurrentAgentActivity =
       readonly state: "disconnected";
       readonly tone: "danger";
       readonly headline: "The agent is disconnected";
-      readonly supporting: "Reconnect the coding agent to continue. All comments are safe.";
+      readonly supporting: string;
     }
   | {
       readonly state: "offline";
       readonly tone: "danger";
-      readonly headline: "The review server is unreachable";
+      readonly headline: "Agent is unreachable";
       readonly supporting: string;
     }
   | {
@@ -88,8 +94,9 @@ export const deriveAgentHealthLabel = ({
 }): string | null => {
   if (isReadOnly) return "Using read-only session";
   if (!hasAgentRuntime) return null;
-  if (activity.state === "offline") return "Review server offline";
-  if (activity.state === "disconnected") return "Agent connection lost";
+  if (activity.state === "offline" || activity.state === "disconnected") {
+    return "Agent disconnected";
+  }
   if (activity.state === "stalled") return "Agent not responding";
   if (activity.state === "errored") return "Agent error";
   return null;
@@ -122,6 +129,101 @@ const meaningfulWork = (
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This updates by itself once the agent resumes.";
 
+/** Expires a browser-held presence snapshot at the same lease as the store. */
+export const agentPresenceIsFresh = ({
+  connected,
+  heartbeatAt,
+  now,
+}: {
+  readonly connected: boolean;
+  readonly heartbeatAt: number;
+  readonly now: number;
+}): boolean =>
+  connected &&
+  Number.isFinite(heartbeatAt) &&
+  Number.isFinite(now) &&
+  heartbeatAt > 0 &&
+  Math.max(0, now - heartbeatAt) <= AGENT_STALL_MS;
+
+/** Reconciles persisted connection events with the current presence lease. */
+export const projectAgentConnectionState = ({
+  presenceConnected,
+  heartbeatAt,
+  now,
+  events,
+}: {
+  readonly presenceConnected: boolean;
+  readonly heartbeatAt: number;
+  readonly now: number;
+  readonly events: ReadonlyArray<BrowserConnectionEvent>;
+}): {
+  readonly connected: boolean;
+  readonly events: ReadonlyArray<BrowserConnectionEvent>;
+} => {
+  const connected = agentPresenceIsFresh({
+    connected: presenceConnected,
+    heartbeatAt,
+    now,
+  });
+  let latest: { readonly connected: boolean; readonly atMs: number } | null =
+    null;
+  for (const event of events) {
+    const atMs = Date.parse(event.at);
+    if (Number.isFinite(atMs) && (latest === null || atMs >= latest.atMs)) {
+      latest = { connected: event.connected, atMs };
+    }
+  }
+  if (latest === null || latest.connected === connected) {
+    return { connected, events };
+  }
+
+  const leaseExpired =
+    Number.isFinite(heartbeatAt) &&
+    Number.isFinite(now) &&
+    heartbeatAt > 0 &&
+    now - heartbeatAt > AGENT_STALL_MS;
+  const observedAtMs = connected
+    ? heartbeatAt
+    : leaseExpired
+      ? heartbeatAt + AGENT_STALL_MS + 1
+      : now;
+  const projectedAtMs = Math.max(observedAtMs, latest.atMs + 1);
+  const projectedAt = new Date(projectedAtMs);
+  if (Number.isNaN(projectedAt.getTime())) return { connected, events };
+
+  return {
+    connected,
+    events: [
+      ...events,
+      {
+        eventId: `presence-${connected ? "connected" : "disconnected"}-${projectedAtMs}`,
+        connected,
+        at: projectedAt.toISOString(),
+        ...(!connected && leaseExpired
+          ? { reason: `No agent signal within ${AGENT_STALL_WINDOW_LABEL}` }
+          : {}),
+      },
+    ],
+  };
+};
+
+/** Explains a lost lease without claiming why the external agent stopped. */
+const disconnectedSupporting = ({
+  heartbeatAt,
+  now,
+}: {
+  readonly heartbeatAt: number;
+  readonly now: number;
+}): string => {
+  const quietFor = compactDurationLabel({
+    start: heartbeatAt,
+    end: Math.max(now, heartbeatAt),
+  });
+  return quietFor === null
+    ? "Reconnect the coding agent to continue. All comments are safe."
+    : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
+};
+
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({
   requests,
@@ -144,9 +246,17 @@ export const deriveCurrentAgentActivity = ({
     return {
       state: "offline",
       tone: "danger",
-      headline: "The review server is unreachable",
+      headline: "Agent is unreachable",
       supporting:
         "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
+    };
+  }
+  if (!agentPresenceIsFresh({ connected: agentConnected, heartbeatAt, now })) {
+    return {
+      state: "disconnected",
+      tone: "danger",
+      headline: "The agent is disconnected",
+      supporting: disconnectedSupporting({ heartbeatAt, now }),
     };
   }
 
@@ -154,15 +264,6 @@ export const deriveCurrentAgentActivity = ({
     (candidate) => !responseRequestIds.has(candidate.requestId),
   );
   if (request === undefined) {
-    if (!agentConnected) {
-      return {
-        state: "disconnected",
-        tone: "danger",
-        headline: "The agent is disconnected",
-        supporting:
-          "Reconnect the coding agent to continue. All comments are safe.",
-      };
-    }
     return {
       state: "idle",
       tone: "neutral",
@@ -196,18 +297,9 @@ export const deriveCurrentAgentActivity = ({
   const latest = meaningful.at(-1);
   if (
     request.claimedAt === undefined &&
-    request.claimedFromRevision === undefined &&
+    request.baselineSnapshot === undefined &&
     latest === undefined
   ) {
-    if (!agentConnected) {
-      return {
-        state: "disconnected",
-        tone: "danger",
-        headline: "The agent is disconnected",
-        supporting:
-          "Reconnect the coding agent to continue. All comments are safe.",
-      };
-    }
     return {
       ...facts,
       state: "waiting",
@@ -221,7 +313,6 @@ export const deriveCurrentAgentActivity = ({
   const observedAt = Math.max(
     0,
     latest?.atMs ?? 0,
-    heartbeatAt,
     Date.parse(request.claimedAt ?? request.createdAt) || 0,
   );
   if (now - observedAt > AGENT_STALL_MS) {
@@ -290,7 +381,7 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     return {
       stage: "offline",
       label: "Runtime offline",
-      headline: "The review server is unreachable",
+      headline: "Agent is unreachable",
       detail:
         "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
       tone: "danger",
@@ -327,26 +418,27 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
       tone: input.agentConnected ? "positive" : "neutral",
     };
   }
+  if (!input.agentConnected) {
+    return {
+      stage: "blocked",
+      label: "Blocked",
+      headline: "Blocked - no agent connected",
+      detail:
+        "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.",
+      tone: "warning",
+    };
+  }
   if (!input.pickedUp) {
-    return input.agentConnected
-      ? {
-          stage: "waiting",
-          label: "Waiting",
-          headline:
-            input.sessionBusy === true
-              ? "Waiting - the agent is working on another request"
-              : "Waiting for an agent",
-          detail: "",
-          tone: "neutral",
-        }
-      : {
-          stage: "blocked",
-          label: "Blocked",
-          headline: "Blocked - no agent connected",
-          detail:
-            "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.",
-          tone: "warning",
-        };
+    return {
+      stage: "waiting",
+      label: "Waiting",
+      headline:
+        input.sessionBusy === true
+          ? "Waiting - the agent is working on another request"
+          : "Waiting for an agent",
+      detail: "",
+      tone: "neutral",
+    };
   }
   const quietFor =
     input.lastAgentSignalAtMs === undefined

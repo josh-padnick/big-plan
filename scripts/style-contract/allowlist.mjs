@@ -43,7 +43,7 @@ export const DRAWING_SYSTEM_STYLESHEETS = new Set([
  */
 export const STYLESHEET_BUDGETS = {
   "src/components/_shared/decision-card/decision-card.css": {
-    declarations: 283,
+    declarations: 300,
   },
   "src/components/_shared/figure-controls/figure-controls.css": {
     declarations: 58,
@@ -53,7 +53,7 @@ export const STYLESHEET_BUDGETS = {
   "src/components/database-table-schema/styles.css": { declarations: 47 },
   "src/components/flow-diagram/styles.css": { declarations: 467 },
   "src/components/mermaid-diagram/styles.css": { declarations: 208 },
-  "src/components/wireframe/styles.css": { declarations: 914 },
+  "src/components/wireframe/styles.css": { declarations: 916 },
   "src/render/global.css": { declarations: 459 },
   "src/render/markdown/deck.css": { declarations: 48 },
   "src/render/markdown/prose.css": { declarations: 122 },

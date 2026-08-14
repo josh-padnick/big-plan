@@ -14,6 +14,7 @@ const comment: ReviewComment = {
   id: "bbbbbbbbbbbbbbbb",
   body: "Clarify the retry boundary.",
   createdAt: "2026-08-10T19:00:00Z",
+  premiseSnapshot: "1111111111111111",
   target: { type: "document" },
 };
 const presence = {
@@ -23,17 +24,17 @@ const presence = {
 };
 const request = (overrides: Partial<ThreadRequest> = {}): ThreadRequest => ({
   requestId: "aaaaaaaaaaaaaaaa",
-  sourceRevision: "1111111111111111",
+  premiseSnapshot: "1111111111111111",
   createdAt: "2026-08-10T19:01:00Z",
   kind: "feedback",
   commentIds: [comment.id],
   ...overrides,
 });
 const response = (
-  state: "changed" | "question" | "outside",
+  state: "answered" | "changed" | "warning" | "needs-input" | "declined",
 ): ThreadResponse => ({
   requestId: "aaaaaaaaaaaaaaaa",
-  sourceRevision: "2222222222222222",
+  resultSnapshot: "2222222222222222",
   createdAt: "2026-08-10T19:02:00Z",
   kind: "feedback",
   outcomes: [
@@ -87,7 +88,14 @@ describe("thread projection", () => {
       projectCommentThread({
         ...base,
         requests: [request()],
-        responses: [response("question")],
+        responses: [response("needs-input")],
+      }).group,
+    ).toBe("needs-input");
+    expect(
+      projectCommentThread({
+        ...base,
+        requests: [request()],
+        responses: [response("warning")],
       }).group,
     ).toBe("needs-input");
     expect(
@@ -102,7 +110,7 @@ describe("thread projection", () => {
   it("should preserve baseline and pending cancel facts", () => {
     const projection = projectCommentThread({
       comment,
-      requests: [request({ claimedFromRevision: "3333333333333333" })],
+      requests: [request({ baselineSnapshot: "3333333333333333" })],
       responses: [],
       progressEvents: [],
       presence,
@@ -110,7 +118,7 @@ describe("thread projection", () => {
       nowMs: NOW,
       cancelPendingRequestIds: new Set(["aaaaaaaaaaaaaaaa"]),
     });
-    expect(projection.latestExchange?.baselineRevision).toBe(
+    expect(projection.latestExchange?.baselineSnapshot).toBe(
       "3333333333333333",
     );
     expect(projection).toMatchObject({
@@ -228,7 +236,7 @@ describe("conversation history", () => {
         responses: [
           {
             requestId: earlier.requestId,
-            sourceRevision: earlier.sourceRevision,
+            resultSnapshot: earlier.premiseSnapshot,
             createdAt: "2026-08-10T18:01:00Z",
             kind: "chat",
             message: "The retry boundary changes.",
@@ -267,7 +275,7 @@ describe("conversation history", () => {
       projectConversationHistory({
         request: reply,
         requests: [original, reply],
-        responses: [response("question")],
+        responses: [response("needs-input")],
       }),
     ).toEqual([
       {
@@ -279,7 +287,7 @@ describe("conversation history", () => {
       {
         role: "agent",
         body: "A precise answer.",
-        state: "question",
+        state: "needs-input",
         createdAt: "2026-08-10T19:02:00Z",
       },
     ]);

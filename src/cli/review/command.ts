@@ -2,8 +2,10 @@
 // local review runtime and reports where the reviewer opens it. The command
 // keeps running because the runtime is the product - it is the only way submit
 // and progress can work - so it returns the address and then stays listening
-// until the reviewer stops it.
+// until the reviewer stops it or the configured idle policy closes it.
 
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { AxiError } from "axi-sdk-js";
 import { assertPlanPassesLint } from "../_shared/authoring-lint.js";
 import { requireGuidanceAcknowledgment } from "../_shared/guidance-gate.js";
@@ -15,14 +17,55 @@ import { startReviewRuntime } from "../../review/server.js";
 import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { renderDocument } from "../../render/render-document.js";
 
-const USAGE = "Usage: big-plan review <input.mdx>";
+const USAGE =
+  "Usage: big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]";
+
+const reviewArguments = (
+  args: ReadonlyArray<string>,
+): {
+  readonly positional: ReadonlyArray<string>;
+  readonly idleTimeoutMs: number;
+} => {
+  const positional: Array<string> = [];
+  let idleMinutes = 10;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--diff-preview") continue;
+    if (argument === "--idle-timeout") {
+      const value = args[index + 1];
+      const parsed = Number(value);
+      if (
+        value === undefined ||
+        value.trim() === "" ||
+        !Number.isFinite(parsed) ||
+        parsed < 0 ||
+        !Number.isFinite(parsed * 60_000)
+      ) {
+        throw new AxiError(
+          "--idle-timeout must be zero or a positive number of minutes",
+          "INVALID_INPUT",
+          [USAGE],
+        );
+      }
+      idleMinutes = parsed;
+      index += 1;
+      continue;
+    }
+    positional.push(argument ?? "");
+  }
+  return { positional, idleTimeoutMs: idleMinutes * 60_000 };
+};
 
 /** Serves one plan for interactive review on loopback. */
 export const reviewCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
+  // Temporary development chrome: keep the product contract independent of
+  // this gallery seed so the flag can disappear without a migration.
+  const diffPreview = args.includes("--diff-preview");
+  const parsedArguments = reviewArguments(args);
   const { inputPath } = parseInputCommandArguments({
-    args,
+    args: parsedArguments.positional,
     usage: USAGE,
     maximumArguments: 1,
   });
@@ -39,7 +82,23 @@ export const reviewCommand = async (
 
   let runtime;
   try {
-    runtime = await startReviewRuntime({ planPath: inputPath });
+    runtime = await startReviewRuntime({
+      planPath: inputPath,
+      idleTimeoutMs: parsedArguments.idleTimeoutMs,
+      ...(diffPreview
+        ? {
+            diffPreviewSource: await readFile(
+              fileURLToPath(
+                new URL(
+                  "../../../examples/diff-gallery-before.mdx",
+                  import.meta.url,
+                ),
+              ),
+              "utf8",
+            ),
+          }
+        : {}),
+    });
   } catch (error: unknown) {
     throw new AxiError(
       `Cannot start the review runtime: ${String(error)}`,
@@ -53,7 +112,7 @@ export const reviewCommand = async (
     if (stopping) return;
     stopping = true;
     void runtime
-      .close()
+      .close("The review session was stopped by the reviewer.")
       .catch((error: unknown) => {
         process.stderr.write(
           `Cannot stop the review runtime: ${String(error)}\n`,
@@ -76,6 +135,9 @@ export const reviewCommand = async (
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
       `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,
       "Press Ctrl+C to stop the review runtime",
+      parsedArguments.idleTimeoutMs === 0
+        ? "Idle timeout is disabled"
+        : `The session ends after ${parsedArguments.idleTimeoutMs / 60_000} minutes without reviewer activity; configure with --idle-timeout`,
     ],
   };
 };

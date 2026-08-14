@@ -14,6 +14,8 @@ import eslintConfigPrettier from "eslint-config-prettier";
 export default tseslint.config(
   {
     ignores: [
+      // Runtime artifacts written by local agent runs, never authored source.
+      ".agent-runs/",
       "dist/",
       "docs/",
       "node_modules/",
@@ -21,7 +23,6 @@ export default tseslint.config(
       "examples/",
       "test-results/",
       "playwright-report/",
-      ".agent-runs/",
     ],
   },
   js.configs.recommended,
@@ -390,6 +391,33 @@ export default tseslint.config(
     // the composer's serializer; production markdown files stay HAST-only.
     files: ["src/render/**/*.test.ts"],
     rules: { "no-restricted-imports": "off" },
+  },
+  {
+    // live-target.browser.ts is the one owner of identity lookups against plan
+    // DOM. A hand-written selector for a block id or a flow anchor skips its
+    // article scoping, its lens-copy exclusion, and its drift check, and every
+    // one of those omissions fails silently by resolving something plausible,
+    // so the selector text itself is fenced to the resolver. The shell scripts
+    // are fenced too even though they have no such lookup today: the layering
+    // keeps the resolver out of their reach, so a first one there needs a
+    // deliberate answer rather than a copied query.
+    files: [
+      "src/review/browser/**/*.ts",
+      "src/review/browser/**/*.tsx",
+      "src/render/shell/**/*.ts",
+    ],
+    ignores: ["src/review/browser/live-target.browser.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            'TemplateElement[value.raw=/data-(block-id|flow-anchor)="/], Literal[value=/data-(block-id|flow-anchor)="/]',
+          message:
+            "Resolve plan identity through live-target.browser.ts (liveBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, lens-copy exclusion, and the drift check.",
+        },
+      ],
+    },
   },
   {
     // Node-runtime JavaScript: the bin shim and build-time generators.

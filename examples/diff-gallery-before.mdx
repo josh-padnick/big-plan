@@ -1,0 +1,35 @@
+# Causal Diff Gallery
+
+Make every meaningful agent change reviewable at its original place.
+
+## Product promise
+
+Reviewers see a short summary after an agent edits the plan.
+
+- One summary for the whole plan.
+- A link opens the latest document.
+- Earlier answers remain in the conversation.
+
+> **Review note:** focus on whether the summary explains the result.
+
+## Delivery contract
+
+*The original surfaces summarize a revision without showing its evidence.*
+
+| Surface | Before |
+| ------- | ------ |
+| Thread | Agent message |
+| Chat | Text summary |
+| Plan | Latest source |
+
+```ts
+type Outcome = "answered" | "changed";
+```
+
+## Rollout
+
+The first release enables the experience for internal reviewers.
+
+1. Store the latest plan source.
+2. Render one change summary.
+3. Ask the reviewer to reload.

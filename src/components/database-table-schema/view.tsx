@@ -9,6 +9,11 @@ import {
   MAXIMIZABLE_ATTRIBUTE,
 } from "../_model/figure-controls/figure-controls.js";
 
+const qualifiedTableName = (
+  schemaName: string | undefined,
+  tableName: string,
+) => (schemaName === undefined ? tableName : `${schemaName}${tableName}`);
+
 export const DatabaseTableSchema = ({
   model,
 }: {
@@ -18,7 +23,10 @@ export const DatabaseTableSchema = ({
     className="table-schema mb-6 min-w-0 rounded-md border border-edge bg-raised"
     data-database-table-schema=""
     {...{ [MAXIMIZABLE_ATTRIBUTE]: "schema" }}
-    data-schema-table-name={`${model.schemaName ?? ""}${model.tableName}`}
+    data-schema-table-name={qualifiedTableName(
+      model.schemaName,
+      model.tableName,
+    )}
   >
     <TableSchemaHeader
       tableName={model.tableName}

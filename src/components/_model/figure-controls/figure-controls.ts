@@ -1,16 +1,17 @@
-// Owns the maximize contract shared by every figure a reader can promote to
-// the viewport: the attribute vocabulary, the labels, and nothing else.
+// Owns the figure-control contract shared by rendered figures: the maximize
+// and copy attribute vocabulary, labels, and fixed control styling.
 //
 // WHY THIS MODULE EXISTS
-// Maximize is drawn three different ways - a React view for components, a HAST
-// transform for plain fenced code, and CSS for the panel geometry - and driven
-// by a fourth, the viewer script. Four places agreeing on attribute spellings
-// by copy-paste is how collapse first broke (see markdown/deck-collapse.ts).
-// The spellings live here so the React edge and the HAST edge cannot drift;
-// the viewer script and stylesheet cite this module rather than importing it,
-// because one is a string template and the other is CSS.
+// Maximize and copy are drawn three different ways - React views for
+// components, a HAST transform for plain fenced code, and CSS for shared
+// state - and driven by a fourth, the viewer script. Places agreeing on
+// attribute spellings by copy-paste is how collapse first broke (see
+// markdown/deck-collapse.ts). The spellings and visual classes live here so
+// the React edge and the HAST edge cannot drift; the viewer script and
+// stylesheet cite this module rather than importing it, because one is a
+// string template and the other is CSS.
 //
-// DOM CONTRACT
+// MAXIMIZE DOM CONTRACT
 //  1. The maximizable element carries MAXIMIZABLE_ATTRIBUTE and is the frame
 //     the reader sees promoted. There is no separate wrapper.
 //  2. Exactly one descendant carries TRIGGER_ATTRIBUTE and is a real button
@@ -43,6 +44,15 @@ export const MAXIMIZED_ATTRIBUTE = "data-figure-maximized";
  * last.
  */
 export const BODY_ATTRIBUTE = "data-figure-body";
+
+/** The fixed icon-button styling shared by React and HAST figure controls. */
+export const FIGURE_CONTROL_BUTTON_CLASSES =
+  "figure-control relative inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted transition-[color,transform] hover:bg-transparent hover:text-ink focus-visible:bg-transparent focus-visible:text-ink focus-visible:shadow-focus focus-visible:outline-none [&_svg]:size-3.5";
+
+/** The subject nouns used by copy controls and their accessible labels. */
+export type CopySubject = "code" | "diff" | "schema" | "table";
+
+export const copyLabel = (subject: CopySubject): string => `Copy ${subject}`;
 
 /**
  * What the control says. The noun names the thing being promoted, so a

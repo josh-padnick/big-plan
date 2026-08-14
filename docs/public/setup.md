@@ -37,7 +37,7 @@ See https://big-plan.ai/for-agents/use-the-skill.md for update propagation.
 Before implementing any non-trivial task:
 
 1. Run `big-plan guidance` and follow its principles.
-   Validate and render stay locked until you have read it.
+   Validate, render, and review stay locked until you have read it.
 2. Write your implementation plan to an MDX file, for example `plan.mdx`.
 3. Run `big-plan validate plan.mdx` and fix every diagnostic until it passes.
 4. Run `big-plan render plan.mdx`.

@@ -2,7 +2,7 @@
 // review kernel owns polling and navigation; this module owns only the visual
 // projection and local disclosure/copy interactions.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
@@ -152,18 +152,60 @@ const activityTone = (activity: CurrentAgentActivity): string =>
 const CurrentActivityCard = ({
   activity,
   nowMs,
+  attentionKey,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
   readonly nowMs: number;
+  readonly attentionKey: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
+  const cardRef = useRef<HTMLElement>(null);
+  const [isAttentionActive, setIsAttentionActive] = useState(false);
+  useEffect(() => {
+    if (attentionKey === 0) return;
+    const card = cardRef.current;
+    if (card === null) return;
+    card.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "nearest",
+    });
+    card.focus({ preventScroll: true });
+    setIsAttentionActive(true);
+    const timer = window.setTimeout(() => setIsAttentionActive(false), 1_200);
+    return () => window.clearTimeout(timer);
+  }, [attentionKey]);
   const body =
     activity.state === "working" ? activity.latestStep : activity.supporting;
+  // A live connection is the fact a reviewer checks this card for; what the
+  // agent happens to be doing is the detail underneath it. Only the working
+  // state buries the connection behind the activity, so only it is retitled,
+  // and its activity joins the request it is working on one line down.
+  const title =
+    activity.state === "working" ? "Agent connected" : activity.headline;
+  const targetLabel =
+    activity.state !== "disconnected" && "targetLabel" in activity
+      ? activity.targetLabel
+      : undefined;
+  const secondary =
+    activity.state === "working"
+      ? [activity.headline, targetLabel].filter(Boolean).join(" · ")
+      : (targetLabel ?? "");
+  const footerLabel =
+    "updatedAtMs" in activity
+      ? `Updated ${relativeSignalLabel({ now: nowMs, at: activity.updatedAtMs })}`
+      : activity.state === "idle"
+        ? "No unanswered requests"
+        : null;
   return (
     <article
-      className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${activityTone(activity)}`}
+      ref={cardRef}
+      className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] outline-offset-2 transition-[outline-color] focus-visible:outline-2 focus-visible:outline-accent motion-reduce:scroll-auto ${isAttentionActive ? "outline-2 outline-accent" : "outline-transparent"} ${activityTone(activity)}`}
       data-review-current-activity={activity.state}
+      data-review-attention={isAttentionActive ? "true" : undefined}
+      tabIndex={-1}
     >
       <div className="flex min-w-0 items-center gap-2">
         {activity.state === "working" ? (
@@ -174,9 +216,7 @@ const CurrentActivityCard = ({
             aria-hidden="true"
           />
         )}
-        <strong className="min-w-0 flex-1 text-sm text-ink">
-          {activity.headline}
-        </strong>
+        <strong className="min-w-0 flex-1 text-sm text-ink">{title}</strong>
         <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
           {activity.state === "stalled"
             ? "warning"
@@ -185,34 +225,30 @@ const CurrentActivityCard = ({
               : activity.state}
         </span>
       </div>
-      {activity.state !== "disconnected" &&
-      "targetLabel" in activity &&
-      activity.targetLabel !== undefined ? (
+      {secondary === "" ? null : (
         <strong className="text-2xs uppercase tracking-caps text-ink">
-          {activity.targetLabel}
+          {secondary}
         </strong>
-      ) : null}
+      )}
       <p className="m-0 text-ink [overflow-wrap:anywhere]">{body}</p>
-      <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-2 text-2xs">
-        <span className="text-muted">
-          {"updatedAtMs" in activity
-            ? `Updated ${relativeSignalLabel({ now: nowMs, at: activity.updatedAtMs })}`
-            : activity.state === "idle"
-              ? "No unanswered requests"
-              : "Current queue state"}
-        </span>
-        {"requestId" in activity ? (
-          <button
-            type="button"
-            className="ml-auto cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={() =>
-              onViewRequest(activity.requestId, activity.requestKind)
-            }
-          >
-            View thread →
-          </button>
-        ) : null}
-      </div>
+      {footerLabel !== null || "requestId" in activity ? (
+        <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-2 text-2xs">
+          {footerLabel === null ? null : (
+            <span className="text-muted">{footerLabel}</span>
+          )}
+          {"requestId" in activity ? (
+            <button
+              type="button"
+              className="ml-auto cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onClick={() =>
+                onViewRequest(activity.requestId, activity.requestKind)
+              }
+            >
+              View thread →
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 };
@@ -412,6 +448,7 @@ export const AgentConnectionPanel = ({
   agentCommand,
   isReadOnly,
   replacementUrl,
+  attentionKey,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
@@ -422,9 +459,14 @@ export const AgentConnectionPanel = ({
   readonly agentCommand: string;
   readonly isReadOnly: boolean;
   readonly replacementUrl: string | null;
+  readonly attentionKey: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
   const currentNowMs = useSecondClock();
+  const isConnected =
+    connected &&
+    activity.state !== "offline" &&
+    activity.state !== "disconnected";
   return (
     <div className="min-w-0">
       <section>
@@ -437,11 +479,12 @@ export const AgentConnectionPanel = ({
           <CurrentActivityCard
             activity={activity}
             nowMs={currentNowMs}
+            attentionKey={attentionKey}
             onViewRequest={onViewRequest}
           />
         )}
       </section>
-      {isReadOnly || connected ? null : (
+      {isReadOnly || isConnected ? null : (
         <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
@@ -471,7 +514,7 @@ export const AgentConnectionPanel = ({
       )}
       {isReadOnly ? null : (
         <ConnectionLog
-          connected={connected}
+          connected={isConnected}
           heartbeatAt={heartbeatAt}
           events={connectionLog}
           nowMs={currentNowMs}

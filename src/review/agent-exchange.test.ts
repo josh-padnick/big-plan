@@ -10,12 +10,12 @@ import type { ReviewComment } from "./shared/comment.js";
 import {
   AgentExchangeRejected,
   commentsFromExchange,
-  deriveSourceRevision,
+  deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
   nextPendingAgentRequest,
   readAgentExchange,
-  requestBaselineRevision,
+  requestBaselineSnapshot,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
@@ -40,6 +40,7 @@ const comment: ReviewComment = {
   id: commentId,
   body: "Use the revised version.",
   createdAt: "2026-08-02T12:00:00.000Z",
+  premiseSnapshot: deriveSnapshotDigest(before),
   target: {
     type: "block",
     blockId,
@@ -60,7 +61,7 @@ const feedback = buildFeedbackPackage({
 
 const request = feedbackAgentRequest({
   feedback,
-  sourceRevision: deriveSourceRevision(before),
+  premiseSnapshot: deriveSnapshotDigest(before),
 });
 
 const snapshot = (): AgentExchangeSnapshot => ({
@@ -76,7 +77,7 @@ describe("agent exchange response contract", () => {
         request,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set([blockId]),
-        currentRevision: deriveSourceRevision(after),
+        currentSnapshot: deriveSnapshotDigest(after),
         now: "2026-08-02T12:01:00.000Z",
       }),
     ).toThrow(AgentExchangeRejected);
@@ -99,7 +100,7 @@ describe("agent exchange response contract", () => {
         request,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set([blockId]),
-        currentRevision: deriveSourceRevision(before),
+        currentSnapshot: deriveSnapshotDigest(before),
         now: "2026-08-02T12:01:00.000Z",
       }),
     ).toThrow(/requires a revision/);
@@ -122,7 +123,7 @@ describe("agent exchange response contract", () => {
         request,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set([blockId]),
-        currentRevision: deriveSourceRevision(after),
+        currentSnapshot: deriveSnapshotDigest(after),
         now: "2026-08-02T12:01:00.000Z",
       }),
     ).toMatchObject({
@@ -156,7 +157,7 @@ describe("agent exchange response contract", () => {
         request,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set([blockId]),
-        currentRevision: deriveSourceRevision(after),
+        currentSnapshot: deriveSnapshotDigest(after),
         now: "2026-08-02T12:01:00.000Z",
       }),
     ).toThrow(/block changed by this revision/);
@@ -180,7 +181,7 @@ describe("agent exchange response contract", () => {
         request,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set([blockId, secondBlock]),
-        currentRevision: deriveSourceRevision(after),
+        currentSnapshot: deriveSnapshotDigest(after),
         now: "2026-08-02T12:01:00.000Z",
       }).outcomes[0],
     ).toMatchObject({ changeTargets: [blockId, secondBlock] });
@@ -192,7 +193,7 @@ describe("agent exchange response contract", () => {
       requestId: "5555555555555555",
       sessionId,
       planId,
-      sourceRevision: deriveSourceRevision(after),
+      premiseSnapshot: deriveSnapshotDigest(after),
       createdAt: "2026-08-02T12:02:00.000Z",
       body: "Keep the shorter wording.",
       commentId,
@@ -206,7 +207,7 @@ describe("agent exchange response contract", () => {
             requestId: packageId,
             sessionId,
             planId,
-            sourceRevision: deriveSourceRevision(after),
+            resultSnapshot: deriveSnapshotDigest(after),
             createdAt: "2026-08-02T12:01:00.000Z",
             kind: "feedback",
             outcomes: [
@@ -226,6 +227,74 @@ describe("agent exchange response contract", () => {
   it("should collect original comments as reply validation context", () => {
     expect(commentsFromExchange(snapshot()).get(commentId)).toEqual(comment);
   });
+
+  it("should reject a warning when its scannable summary is missing", () => {
+    expect(() =>
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "warning",
+              message: "This request would cross the standard template.",
+            },
+          ],
+        },
+        request,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set(),
+        currentSnapshot: request.premiseSnapshot,
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toThrow(/one short line naming the boundary/);
+  });
+
+  it("should reject a warning when its summary is only whitespace", () => {
+    expect(() =>
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "warning",
+              summary: "   ",
+              message: "This request would cross the standard template.",
+            },
+          ],
+        },
+        request,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set(),
+        currentSnapshot: request.premiseSnapshot,
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toThrow(/one short line naming the boundary/);
+  });
+
+  it("should reject a warning when its summary exceeds one scannable line", () => {
+    expect(() =>
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "warning",
+              summary: "x".repeat(81),
+              message: "This request would cross the standard template.",
+            },
+          ],
+        },
+        request,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set(),
+        currentSnapshot: request.premiseSnapshot,
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toThrow(/longer than 80 characters/);
+  });
 });
 
 describe("agent exchange filesystem", () => {
@@ -239,22 +308,22 @@ describe("agent exchange filesystem", () => {
     const firstClaim = await claimAgentRequest({
       store,
       requestId: request.requestId,
-      sourceRevision: "aaaaaaaaaaaaaaaa",
+      baselineSnapshot: "aaaaaaaaaaaaaaaa",
       now: "2026-08-02T12:00:30.000Z",
     });
     const repeatedClaim = await claimAgentRequest({
       store,
       requestId: firstClaim.requestId,
-      sourceRevision: "bbbbbbbbbbbbbbbb",
+      baselineSnapshot: "bbbbbbbbbbbbbbbb",
       now: "2026-08-02T12:01:00.000Z",
     });
-    expect(requestBaselineRevision(repeatedClaim)).toBe("aaaaaaaaaaaaaaaa");
+    expect(requestBaselineSnapshot(repeatedClaim)).toBe("aaaaaaaaaaaaaaaa");
     await expect(
       readAgentExchange({ store, sessionId, planId }),
     ).resolves.toMatchObject({
       requests: [
         {
-          claimedFromRevision: "aaaaaaaaaaaaaaaa",
+          baselineSnapshot: "aaaaaaaaaaaaaaaa",
           claimedAt: "2026-08-02T12:00:30.000Z",
         },
       ],
@@ -271,7 +340,7 @@ describe("agent exchange filesystem", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
-      sourceRevision: request.sourceRevision,
+      baselineSnapshot: request.premiseSnapshot,
       now: "2026-08-02T12:00:30.000Z",
     });
     const response = validateAgentResponseDraft({
@@ -289,7 +358,7 @@ describe("agent exchange filesystem", () => {
       request: claimed,
       commentsById: new Map([[commentId, comment]]),
       changedBlocks: new Set([blockId]),
-      currentRevision: deriveSourceRevision(after),
+      currentSnapshot: deriveSnapshotDigest(after),
       now: "2026-08-02T12:01:00.000Z",
     });
     await publishAgentResponse({ store, response });
@@ -302,6 +371,44 @@ describe("agent exchange filesystem", () => {
     ).toEqual({
       requests: [claimed],
       responses: [response],
+    });
+  });
+
+  it("should accept a warning without inventing a changed snapshot", () => {
+    const claimed = {
+      ...request,
+      claimedAt: "2026-08-02T12:00:30.000Z",
+      baselineSnapshot: request.premiseSnapshot,
+    };
+    expect(
+      validateAgentResponseDraft({
+        value: {
+          requestId: packageId,
+          outcomes: [
+            {
+              commentId,
+              state: "warning",
+              summary: "Would depart from the standard template",
+              message:
+                "Fulfilling this request would deviate from the standard template.",
+            },
+          ],
+        },
+        request: claimed,
+        commentsById: new Map([[commentId, comment]]),
+        changedBlocks: new Set(),
+        currentSnapshot: request.premiseSnapshot,
+        now: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toMatchObject({
+      outcomes: [
+        {
+          state: "warning",
+          summary: "Would depart from the standard template",
+          message:
+            "Fulfilling this request would deviate from the standard template.",
+        },
+      ],
     });
   });
 
@@ -328,7 +435,7 @@ describe("agent exchange filesystem", () => {
       claimAgentRequest({
         store,
         requestId: request.requestId,
-        sourceRevision: "aaaaaaaaaaaaaaaa",
+        baselineSnapshot: "aaaaaaaaaaaaaaaa",
         now: "2026-08-02T12:00:50.000Z",
       }),
     ).rejects.toThrow(/canceled by the reviewer/);
@@ -339,7 +446,7 @@ describe("agent exchange filesystem", () => {
           outcomes: [
             {
               commentId,
-              state: "outside",
+              state: "declined",
               message: "This should never publish.",
             },
           ],
@@ -347,7 +454,7 @@ describe("agent exchange filesystem", () => {
         request: canceled,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set(),
-        currentRevision: deriveSourceRevision(before),
+        currentSnapshot: deriveSnapshotDigest(before),
         now: "2026-08-02T12:01:00.000Z",
       }),
     ).toThrow(/canceled by the reviewer/);
@@ -361,9 +468,7 @@ describe("agent exchange filesystem", () => {
     await prepareStore(store);
     const startedAt = Date.parse("2026-08-02T12:00:00.000Z");
     await writeAgentRequest({ store, request });
-    // One more terminal request than the exchange retains, so the read has to
-    // drop the oldest terminal request while keeping the pending one.
-    for (let index = 1; index <= 400; index += 1) {
+    for (let index = 1; index < 400; index += 1) {
       await writeAgentRequest({
         store,
         request: {
@@ -372,7 +477,7 @@ describe("agent exchange filesystem", () => {
             requestId: index.toString(16).padStart(16, "0"),
             sessionId,
             planId,
-            sourceRevision: deriveSourceRevision(before),
+            premiseSnapshot: deriveSnapshotDigest(before),
             createdAt: new Date(startedAt + index).toISOString(),
             body: `Question ${index}`,
           }),
@@ -385,8 +490,8 @@ describe("agent exchange filesystem", () => {
       requestId: "ffffffffffffffff",
       sessionId,
       planId,
-      sourceRevision: deriveSourceRevision(before),
-      createdAt: new Date(startedAt + 401).toISOString(),
+      premiseSnapshot: deriveSnapshotDigest(before),
+      createdAt: new Date(startedAt + 400).toISOString(),
       body: "Does the original feedback need a plan change?",
       commentId,
     });
@@ -394,8 +499,8 @@ describe("agent exchange filesystem", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: reply.requestId,
-      sourceRevision: reply.sourceRevision,
-      now: new Date(startedAt + 402).toISOString(),
+      baselineSnapshot: reply.premiseSnapshot,
+      now: new Date(startedAt + 401).toISOString(),
     });
     const response = validateAgentResponseDraft({
       value: {
@@ -403,7 +508,7 @@ describe("agent exchange filesystem", () => {
         outcomes: [
           {
             commentId,
-            state: "outside",
+            state: "declined",
             message: "No plan revision is needed.",
           },
         ],
@@ -411,20 +516,15 @@ describe("agent exchange filesystem", () => {
       request: claimed,
       commentsById: new Map([[commentId, comment]]),
       changedBlocks: new Set(),
-      currentRevision: claimed.sourceRevision,
-      now: new Date(startedAt + 403).toISOString(),
+      currentSnapshot: claimed.premiseSnapshot,
+      now: new Date(startedAt + 402).toISOString(),
     });
     await publishAgentResponse({ store, response });
 
     const bounded = await readAgentExchange({ store, sessionId, planId });
     expect(bounded.requests).toHaveLength(401);
     expect(bounded.requests[0]?.requestId).toBe(request.requestId);
-    expect(bounded.requests[1]?.requestId).toBe("0000000000000002");
-    expect(
-      bounded.requests.some(
-        (retained) => retained.requestId === "0000000000000001",
-      ),
-    ).toBe(false);
+    expect(bounded.requests[1]?.requestId).toBe("0000000000000001");
     expect(bounded.requests.at(-1)?.requestId).toBe(reply.requestId);
     expect(bounded.responses).toEqual([response]);
     expect(nextPendingAgentRequest(bounded)).toEqual(request);

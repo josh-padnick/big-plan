@@ -13,6 +13,11 @@ import { GRIP_VERTICAL_ICON } from "../../icons/lucide/grip-vertical.js";
 import { hastContentToReact } from "../_shared/hast-content/hast-content.js";
 import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 
+// Each unit a reviewer can point at is declared as a commentable sub-target,
+// so a comment or a causal diff names one column, index, or DDL band instead
+// of the whole schema. The labels are the words a reviewer would use.
+export const FIELD_KIND = "database-table-schema-field";
+
 // Shared by every pill in the grid and the bands below it.
 const BADGE_CLASSES =
   "table-schema-badge inline-flex shrink-0 items-center rounded-full bg-surface px-1.5 py-px align-middle font-sans text-2xs font-semibold tracking-caps text-subtle uppercase data-[schema-badge=pk]:bg-accent-soft data-[schema-badge=pk]:text-accent";
@@ -215,7 +220,12 @@ const ColumnRow = ({
   readonly column: TableColumn;
   readonly indexes: ReadonlyArray<TableIndex>;
 }) => (
-  <tr className="table-schema-column-row" data-schema-column={column.name}>
+  <tr
+    className="table-schema-column-row"
+    data-schema-column={column.name}
+    data-commentable-kind={FIELD_KIND}
+    data-commentable-label={`Column: ${column.name}`}
+  >
     {/* Semibold matches the index names in the band: both are the
         identifier the reader scans for. */}
     <th
@@ -319,6 +329,8 @@ const IndexEntry = ({
       ...(offset === 0 ? [] : ["border-t", "border-edge"]),
     ].join(" ")}
     data-schema-index={String(offset + 1)}
+    data-commentable-kind={FIELD_KIND}
+    data-commentable-label={`Index: ${index.name ?? indxLabel(offset + 1)}`}
   >
     <Badge kind="idx" label={indxLabel(offset + 1)} />
     <span className="min-w-0 flex-1">
@@ -368,6 +380,8 @@ const DdlSection = ({ section }: { readonly section: CompiledDdlSection }) => (
     className="table-schema-section border-t border-edge bg-surface pt-2"
     data-schema-section="ddl"
     data-schema-ddl-title={section.title}
+    data-commentable-kind={FIELD_KIND}
+    data-commentable-label={`DDL: ${section.title}`}
   >
     {/* The badge marks the band as verbatim DDL in both the inert stack and
         the live application's tab. */}

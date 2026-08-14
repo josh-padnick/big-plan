@@ -117,16 +117,16 @@ export const CodeDiffHeader = ({
   readonly removedCount: number;
   readonly showLineCounts: boolean;
 }) => (
-  <figcaption className="code-diff-header flex min-w-0 items-center justify-between gap-3 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
+  <figcaption className="code-diff-header flex min-w-0 items-center justify-between gap-1 rounded-t-md border-b border-edge bg-[var(--diff-header-bg)] px-2 py-1">
     <FileIdentity filePath={filePath} />
-    <span className="code-diff-controls flex shrink-0 items-center gap-3">
-      <span className="code-diff-view-group inline-flex items-center gap-2">
+    <span className="code-diff-controls flex shrink-0 items-center gap-1">
+      <span className="code-diff-view-group inline-flex items-center gap-1">
         {showLineCounts ? (
           <DiffStats addedCount={addedCount} removedCount={removedCount} />
         ) : null}
         <ViewToggleGroup />
       </span>
-      <span className="figure-action-group inline-flex items-center gap-0.5">
+      <span className="figure-action-group ml-1 inline-flex items-center gap-1 border-l border-edge pl-1">
         <CopyButton subject="diff" />
         {/* Far right so maximizing and restoring live in the same corner. */}
         <MaximizeButton subject="diff" />

@@ -37,6 +37,11 @@ export type ReviewSessionView = {
   readonly latestReviewUrl?: string;
 };
 
+export type ReviewSessionLiveness = {
+  readonly running: boolean;
+  readonly stopReason?: string;
+};
+
 export type SessionAuthorityErrorCode =
   "invalid" | "missing" | "wrong-plan" | "stopped";
 
@@ -196,7 +201,7 @@ const wait = async (milliseconds: number): Promise<void> => {
   });
 };
 
-/** Checks whether one matching server heartbeat is running and recent. */
+/** Returns matching server liveness and any explicit recorded stop reason. */
 export const reviewSessionIsRunning = async ({
   store,
   sessionId,
@@ -207,24 +212,34 @@ export const reviewSessionIsRunning = async ({
   readonly sessionId: string;
   readonly now?: number;
   readonly maximumAgeMs?: number;
-}): Promise<boolean> => {
+}): Promise<ReviewSessionLiveness> => {
   let value: unknown;
   for (let attempt = 0; attempt < HEARTBEAT_READ_ATTEMPTS; attempt += 1) {
     value = await readSessionHeartbeatValue(store);
     if (value !== undefined || attempt === HEARTBEAT_READ_ATTEMPTS - 1) break;
     await wait(HEARTBEAT_READ_RETRY_MS);
   }
-  if (!isRecord(value)) return false;
+  if (!isRecord(value)) return { running: false };
   const observedAtMs = now ?? Date.now();
   const updatedAtMs = value.updatedAtMs;
-  return (
-    value.sessionId === sessionId &&
-    value.running === true &&
-    typeof updatedAtMs === "number" &&
-    Number.isFinite(updatedAtMs) &&
-    observedAtMs - updatedAtMs >= 0 &&
-    observedAtMs - updatedAtMs <= maximumAgeMs
-  );
+  if (
+    value.sessionId !== sessionId ||
+    value.running !== true ||
+    typeof updatedAtMs !== "number" ||
+    !Number.isFinite(updatedAtMs) ||
+    observedAtMs - updatedAtMs < 0 ||
+    observedAtMs - updatedAtMs > maximumAgeMs
+  ) {
+    return {
+      running: false,
+      ...(value.sessionId === sessionId &&
+      value.running === false &&
+      typeof value.stopReason === "string"
+        ? { stopReason: value.stopReason }
+        : {}),
+    };
+  }
+  return { running: true };
 };
 
 /** Writes a heartbeat only while the same session still owns the mailbox. */
@@ -232,11 +247,13 @@ export const refreshReviewSessionHeartbeat = async ({
   store,
   sessionId,
   running,
+  stopReason,
   now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly running: boolean;
+  readonly stopReason?: string;
   readonly now?: number;
 }): Promise<boolean> => {
   const result = await withReviewSessionAuthority({
@@ -245,7 +262,12 @@ export const refreshReviewSessionHeartbeat = async ({
     change: async () => {
       await writeSessionHeartbeatValue({
         store,
-        value: { sessionId, running, updatedAtMs: now },
+        value: {
+          sessionId,
+          running,
+          updatedAtMs: now,
+          ...(stopReason === undefined ? {} : { stopReason }),
+        },
       });
     },
   });
@@ -270,7 +292,10 @@ export const liveReviewSessionForPlan = async ({
     if (current.planId !== planId || current.plan !== plan) {
       throw new SessionAuthorityRejected("wrong-plan");
     }
-    if (await reviewSessionIsRunning({ store, sessionId: current.sessionId })) {
+    if (
+      (await reviewSessionIsRunning({ store, sessionId: current.sessionId }))
+        .running
+    ) {
       return current;
     }
     if (attempt === 0) await wait(REVIEW_HEARTBEAT_INTERVAL_MS);

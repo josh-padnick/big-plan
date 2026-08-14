@@ -37,6 +37,20 @@ Light and dark follow the reader's OS in inert exports.
 @import "./fonts.generated.css";
 @import "../components/wireframe/styles.css";
 
+@keyframes boost-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 /* Only authored source emits utility candidates; examples and docs do not. */
 @source "../";
 
@@ -196,6 +210,11 @@ it that way: a band carries primary or secondary text, never tertiary.
   --muted-c: var(--grey-700);
   --subtle-c: var(--grey-600);
   --support-c: var(--grey-600);
+  /* The rest colour of a standalone comment affordance: an icon that floats
+     alone (slide gutter, table corner, callout, decision) recedes one ramp step
+     past tertiary text until hover restores ink. A comment control inside a
+     shared control bar keeps the ordinary control colour. */
+  --comment-rest-c: var(--grey-500);
 
   /* Lines. Kept because a few separations genuinely need one; depth is the
      first choice and a border is the exception. */
@@ -226,7 +245,7 @@ it that way: a band carries primary or secondary text, never tertiary.
   --callout-danger-bg: var(--danger-50);
   --callout-danger-ink: var(--danger-900);
   --diff-add-c: var(--success-700);
-  --diff-add-bg: var(--success-50);
+  --diff-add-bg: var(--success-100);
   --diff-remove-c: var(--danger-700);
   --diff-remove-bg: var(--danger-50);
   --decision-pro-c: var(--success-700);
@@ -296,6 +315,9 @@ same separation.
     --muted-c: var(--grey-300);
     --subtle-c: var(--grey-400);
     --support-c: var(--grey-400);
+    /* Quieter than dark-theme tertiary text means one ramp step darker, so the
+       resting affordance recedes toward the page instead of brightening. */
+    --comment-rest-c: var(--grey-500);
 
     --edge-c: var(--grey-800);
     --edge-strong-c: var(--grey-700);
@@ -319,7 +341,7 @@ same separation.
     --callout-danger-bg: var(--danger-900);
     --callout-danger-ink: var(--danger-100);
     --diff-add-c: var(--success-300);
-    --diff-add-bg: var(--success-900);
+    --diff-add-bg: var(--success-800);
     --diff-remove-c: var(--danger-300);
     --diff-remove-bg: var(--danger-900);
     --decision-pro-c: var(--success-300);
@@ -371,6 +393,8 @@ same separation.
   --muted-c: var(--grey-300);
   --subtle-c: var(--grey-400);
   --support-c: var(--grey-400);
+  /* Quieter than dark-theme tertiary text; see the OS-dark role above. */
+  --comment-rest-c: var(--grey-500);
 
   --edge-c: var(--grey-800);
   --edge-strong-c: var(--grey-700);
@@ -394,7 +418,7 @@ same separation.
   --callout-danger-bg: var(--danger-900);
   --callout-danger-ink: var(--danger-100);
   --diff-add-c: var(--success-300);
-  --diff-add-bg: var(--success-900);
+  --diff-add-bg: var(--success-800);
   --diff-remove-c: var(--danger-300);
   --diff-remove-bg: var(--danger-900);
   --decision-pro-c: var(--success-300);
@@ -468,6 +492,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-header: var(--header-bg);
   --color-comment-body: var(--comment-body-c);
   --color-comment-toolbar: var(--comment-toolbar-c);
+  --color-comment-rest: var(--comment-rest-c);
   --color-ink: var(--ink-c);
   --color-muted: var(--muted-c);
   --color-subtle: var(--subtle-c);
@@ -614,6 +639,35 @@ are declared, so a role or a scale step is the only thing a utility can name.
   [data-slide]:has([data-table-scroll-container]) {
     max-width: none;
   }
+  /* A sub-slide sits inside a slide that already earned its width, so it
+     fills that column instead of hugging the measure a second time. Nested
+     cards then share one right edge, which is both what the deck's uniform
+     sub-slide card intends and what keeps the comment affordance hanging in
+     that card's gutter from scattering across a column per sub-slide. */
+  [data-slide][data-subslide] {
+    max-width: none;
+  }
+
+  /* Utility form: review-agent-active-indicator--working */
+  .review-agent-active-indicator--working {
+    aspect-ratio: 1;
+    flex: 0 0 0.625rem;
+    width: 0.625rem;
+    height: 0.625rem;
+    position: relative;
+  }
+
+  .review-agent-active-indicator--working::before {
+    content: "";
+    position: absolute;
+    aspect-ratio: 1;
+    inset: -4px;
+    width: auto;
+    height: auto;
+    border: 2px solid var(--diff-add-c);
+    border-right-color: transparent;
+    border-radius: 9999px;
+  }
 
   /* Section navigation glides instead of jumping; readers who ask the OS for
      reduced motion keep instant jumps. */
@@ -622,26 +676,12 @@ are declared, so a role or a scale step is the only thing a utility can name.
       scroll-behavior: smooth;
     }
 
-    /* Utility form: review-agent-active-indicator--working */
+    /* Utility form: motion-safe:animate-[review-agent-active-indicator-pulse_1.8s_ease-in-out_infinite] */
     .review-agent-active-indicator--working {
       animation: review-agent-active-indicator-pulse 1.8s ease-in-out infinite;
-      aspect-ratio: 1;
-      flex: 0 0 0.625rem;
-      width: 0.625rem;
-      height: 0.625rem;
-      position: relative;
     }
 
     .review-agent-active-indicator--working::before {
-      content: "";
-      position: absolute;
-      aspect-ratio: 1;
-      inset: -4px;
-      width: auto;
-      height: auto;
-      border: 2px solid var(--diff-add-c);
-      border-right-color: transparent;
-      border-radius: 9999px;
       animation: review-agent-active-indicator-spin 1.1s linear infinite;
     }
 

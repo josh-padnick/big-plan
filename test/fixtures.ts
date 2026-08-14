@@ -39,13 +39,6 @@ const renderThroughCli = async ({
   );
 };
 
-// A test that writes durable review state cannot share the worker-scoped
-// runtime: one `.big-plan/` store is reused for every test in the worker, so
-// seeded drafts and sent comments would reach whichever test runs next.
-type TestFixtures = {
-  readonly isolatedReviewRuntimeUrl: string;
-};
-
 type WorkerFixtures = {
   readonly annotationCodeViewerUrl: string;
   readonly codeSnippetSyntaxMaximizeViewerUrl: string;
@@ -75,8 +68,13 @@ type WorkerFixtures = {
   readonly weightedAuditDecisionAnalysisViewerUrl: string;
   readonly wireframeFormFactorsViewerUrl: string;
   readonly wireframeQualityViewerUrl: string;
+  readonly wireframeSparseAppShellViewerUrl: string;
   readonly wireframeShortContentViewerUrl: string;
   readonly wireframeViewerUrl: string;
+};
+
+type TestFixtures = {
+  readonly reviewRuntimeUrl: string;
 };
 
 const ANNOTATION_CODE_MDX = `# Annotation code
@@ -274,6 +272,38 @@ const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
 </Wireframe>
 `;
 
+const WIREFRAME_SPARSE_APP_SHELL_MDX = `# Sparse application shells
+
+<Wireframe id="sparse-app-shell-top-bar">
+  <Screen id="workspace" name="Workspace" device="desktop">
+    <AppShell>
+      <TopBar title="Workspace" />
+      <AppContent>
+        <Row>
+          <Panel title="Workspace">
+            <Text text="One focused task." />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+
+<Wireframe id="sparse-app-shell-no-top-bar">
+  <Screen id="full-workspace" name="Full workspace" device="desktop">
+    <AppShell>
+      <AppContent>
+        <Row>
+          <Panel title="Workspace">
+            <Text text="One focused task." />
+          </Panel>
+        </Row>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+`;
+
 const REVIEW_RUNTIME_MDX = `# Review persistence
 
 Keep every reviewer note safe while the plan is discussed.
@@ -293,20 +323,6 @@ Sending writes one real feedback package beside this plan.
 `;
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
-  isolatedReviewRuntimeUrl: async ({}, use) => {
-    const outputDir = await mkdtemp(
-      join(tmpdir(), "big-plan-isolated-review-runtime-"),
-    );
-    const inputPath = join(outputDir, "plan.mdx");
-    await writeFile(inputPath, REVIEW_RUNTIME_MDX, "utf8");
-    const runtime = await startReviewRuntime({ planPath: inputPath });
-    try {
-      await use(runtime.url);
-    } finally {
-      await runtime.close();
-      await rm(outputDir, { recursive: true, force: true });
-    }
-  },
   reviewRuntimeUrl: [
     async ({}, use) => {
       const outputDir = await mkdtemp(
@@ -322,7 +338,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         await rm(outputDir, { recursive: true, force: true });
       }
     },
-    { scope: "worker" },
+    { scope: "test" },
   ],
   annotationCodeViewerUrl: [
     async ({}, use) => {
@@ -746,6 +762,20 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         outputPath,
         outputDir,
       });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeSparseAppShellViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-sparse-app-shell-"),
+      );
+      const inputPath = join(outputDir, "wireframe-sparse-app-shell.mdx");
+      const outputPath = join(outputDir, "wireframe-sparse-app-shell.html");
+      await writeFile(inputPath, WIREFRAME_SPARSE_APP_SHELL_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });
     },

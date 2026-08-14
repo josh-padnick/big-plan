@@ -22,12 +22,12 @@ import {
   readAgentPresence,
   readProgress,
   readResolvedCommentIds,
-  readRevisionSnapshot,
+  readSnapshot,
   reviewStoreFor,
   writeActiveDraft,
   writeAgentHeartbeat,
   writeResolvedCommentIds,
-  writeRevisionSnapshot,
+  writeSnapshot,
   writeSessionHeartbeatValue,
   withReviewStoreLock,
 } from "./store.js";
@@ -68,7 +68,7 @@ describe("review store placement", () => {
       store.agentResponseDirectory,
       store.agentDraftDirectory,
       store.agentPromptPath,
-      store.revisionDirectory,
+      store.snapshotDirectory,
       store.draftsPath,
       store.activeDraftPath,
       store.sentPath,
@@ -243,11 +243,29 @@ describe("review store revision history", () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
-    const revision = "1111111111111111";
-    await writeRevisionSnapshot({ store, revision, source: "# First\n" });
-    await writeRevisionSnapshot({ store, revision, source: "# Second\n" });
-    await expect(readRevisionSnapshot({ store, revision })).resolves.toBe(
-      "# First\n",
+    const snapshot = "1111111111111111";
+    await writeSnapshot({ store, snapshot, source: "# First\n" });
+    await writeSnapshot({ store, snapshot, source: "# Second\n" });
+    await expect(readSnapshot({ store, snapshot })).resolves.toBe("# First\n");
+  });
+
+  it("should migrate legacy revisions into snapshots without overwriting them", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    const snapshot = "2222222222222222";
+    const legacyDirectory = join(store.reviewDirectory, "revisions");
+    await mkdir(legacyDirectory, { recursive: true });
+    await writeFile(join(legacyDirectory, `${snapshot}.mdx`), "# Legacy\n");
+
+    await prepareStore(store);
+    await expect(readSnapshot({ store, snapshot })).resolves.toBe("# Legacy\n");
+    await writeFile(
+      join(store.snapshotDirectory, `${snapshot}.mdx`),
+      "# Current\n",
+    );
+    await prepareStore(store);
+    await expect(readSnapshot({ store, snapshot })).resolves.toBe(
+      "# Current\n",
     );
   });
 
@@ -401,7 +419,11 @@ describe("review store agent presence", () => {
         sessionId: "aaaaaaaaaaaaaaaa",
         now: 10_000 + AGENT_STALL_MS + 1,
       }),
-    ).resolves.toEqual({ connected: false, state: "waiting" });
+    ).resolves.toEqual({
+      connected: false,
+      state: "waiting",
+      updatedAtMs: 10_000,
+    });
   });
 });
 
