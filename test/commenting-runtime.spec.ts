@@ -2222,7 +2222,7 @@ test("should colour a component snapshot switch as a diff", async ({
   }
 });
 
-test("should show each initial screen in a root-only wireframe diff", async ({
+test("should show each initial screen when another wireframe screen changes", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -2243,12 +2243,16 @@ test("should show each initial screen in a root-only wireframe diff", async ({
 <Text text="The new initial screen remains visible in Now." />
 </Panel>
 </Screen>
+<Screen id="audit" name="Audit" device="desktop">
+<Panel title="Audit screen">
+<Text text="Audit before" />
+</Panel>
+</Screen>
 </Wireframe>
 `;
-  const after = before.replace(
-    'initialScreen="queue"',
-    'initialScreen="detail"',
-  );
+  const after = before
+    .replace('initialScreen="queue"', 'initialScreen="detail"')
+    .replace("Audit before", "Audit after");
   await writeFile(planPath, after);
   const { startReviewRuntime: startCompiledReviewRuntime } =
     await import("../dist/review/server.js");
@@ -2265,6 +2269,14 @@ test("should show each initial screen in a root-only wireframe diff", async ({
       .first()
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
+    const screenNavigation = page.getByRole("navigation", {
+      name: "Prototype screens",
+    });
+    await expect(
+      screenNavigation.getByRole("button", {
+        name: "Queue → Detail Initial screen",
+      }),
+    ).toBeVisible();
     const snapshot = page.locator("[data-review-component-snapshot]");
     const queueScreen = snapshot.locator('[data-wireframe-screen="queue"]');
     const detailScreen = snapshot.locator('[data-wireframe-screen="detail"]');
@@ -2366,6 +2378,8 @@ test("should fit a wireframe component snapshot and keep its pastel diff edge", 
 <Sidebar brand="Big Plan" mode="Review" />
 <AppContent>
 <PageHeader title="Plan review" />
+<Select label="Queue view" value="All threads" />
+<Checkbox label="Include resolved threads" checked />
 <Panel title="Threads">
 <List>
 <ListItem label="Keep the retry budget visible" selected />
@@ -2527,6 +2541,18 @@ ${reorderedWorkspace}
     const embeddedControl = snapshotBody.locator("button").first();
     await expect(embeddedControl).toHaveAttribute("tabindex", "-1");
     await expect(embeddedControl).toHaveAttribute("aria-disabled", "true");
+    expect(
+      await snapshotBody.getByLabel("Queue view").evaluate((control) => {
+        return control instanceof HTMLSelectElement && control.disabled;
+      }),
+    ).toBe(true);
+    expect(
+      await snapshotBody
+        .getByLabel("Include resolved threads")
+        .evaluate((control) => {
+          return control instanceof HTMLInputElement && control.disabled;
+        }),
+    ).toBe(true);
     await expect
       .poll(() =>
         snapshotBody.evaluate((node) => node.scrollHeight > node.clientHeight),

@@ -547,16 +547,45 @@ const SnapshotSideContent = ({
   });
 };
 
-type WireframeScreenDiff = {
-  readonly id: string;
-  readonly name: string;
-  readonly status: "added" | "moved" | "removed" | "updated";
-  readonly oldPosition?: number;
-  readonly newPosition?: number;
-};
+type WireframeScreenDiff =
+  | {
+      readonly key: string;
+      readonly name: string;
+      readonly status: "added";
+      readonly newScreenId: string;
+      readonly newPosition: number;
+    }
+  | {
+      readonly key: string;
+      readonly name: string;
+      readonly status: "initial";
+      readonly oldScreenId: string;
+      readonly newScreenId: string;
+      readonly oldPosition: number;
+      readonly newPosition: number;
+    }
+  | {
+      readonly key: string;
+      readonly name: string;
+      readonly status: "moved" | "updated";
+      readonly oldScreenId: string;
+      readonly newScreenId: string;
+      readonly oldPosition: number;
+      readonly newPosition: number;
+    }
+  | {
+      readonly key: string;
+      readonly name: string;
+      readonly status: "removed";
+      readonly oldScreenId: string;
+      readonly oldPosition: number;
+    };
 
 type WireframeScreenSnapshot = {
+  readonly id: string;
+  readonly isCurrent: boolean;
   readonly markup: string;
+  readonly name: string;
   readonly position: number;
 };
 
@@ -572,22 +601,23 @@ const wireframeScreenMarkup = (
   for (const [index, screen] of [...renderedScreens].entries()) {
     const id = screen.dataset.wireframeScreen;
     if (id === undefined) continue;
+    const name = (
+      screen.querySelector<HTMLElement>(".wireframe-screen-name")
+        ?.textContent ??
+      screen.getAttribute("aria-label")?.split(",")[0] ??
+      id
+    ).trim();
+    const isCurrent = screen.hasAttribute("data-wireframe-current");
     screen.removeAttribute("data-wireframe-current");
-    screens.set(id, { markup: screen.outerHTML, position: index + 1 });
+    screens.set(id, {
+      id,
+      isCurrent,
+      markup: screen.outerHTML,
+      name,
+      position: index + 1,
+    });
   }
   return screens;
-};
-
-const wireframeScreenName = (html: string, id: string): string => {
-  const document = new DOMParser().parseFromString(html, "text/html");
-  const screen = document.querySelector<HTMLElement>(
-    `[data-wireframe-screen="${CSS.escape(id)}"]`,
-  );
-  return (
-    screen?.querySelector<HTMLElement>(".wireframe-screen-name")?.textContent ??
-    screen?.getAttribute("aria-label")?.split(",")[0] ??
-    id
-  ).trim();
 };
 
 const wireframeScreenDiffs = (
@@ -596,49 +626,97 @@ const wireframeScreenDiffs = (
 ): ReadonlyArray<WireframeScreenDiff> => {
   const oldScreens = wireframeScreenMarkup(oldHtml);
   const newScreens = wireframeScreenMarkup(newHtml);
+  const oldCurrent = [...oldScreens.values()].find(
+    (screen) => screen.isCurrent,
+  );
+  const newCurrent = [...newScreens.values()].find(
+    (screen) => screen.isCurrent,
+  );
+  const initialScreenDiffs: ReadonlyArray<WireframeScreenDiff> =
+    oldCurrent !== undefined &&
+    newCurrent !== undefined &&
+    oldCurrent.id !== newCurrent.id
+      ? [
+          {
+            key: `initial:${oldCurrent.id}:${newCurrent.id}`,
+            name: `${oldCurrent.name} → ${newCurrent.name}`,
+            status: "initial",
+            oldScreenId: oldCurrent.id,
+            newScreenId: newCurrent.id,
+            oldPosition: oldCurrent.position,
+            newPosition: newCurrent.position,
+          },
+        ]
+      : [];
   const ids = [...new Set([...newScreens.keys(), ...oldScreens.keys()])];
-  return ids.flatMap((id) => {
+  const contentDiffs = ids.flatMap<WireframeScreenDiff>((id) => {
     const oldScreen = oldScreens.get(id);
     const newScreen = newScreens.get(id);
+    if (oldScreen === undefined && newScreen !== undefined) {
+      return [
+        {
+          key: `screen:${id}`,
+          name: newScreen.name,
+          status: "added",
+          newScreenId: id,
+          newPosition: newScreen.position,
+        },
+      ];
+    }
+    if (newScreen === undefined && oldScreen !== undefined) {
+      return [
+        {
+          key: `screen:${id}`,
+          name: oldScreen.name,
+          status: "removed",
+          oldScreenId: id,
+          oldPosition: oldScreen.position,
+        },
+      ];
+    }
+    if (oldScreen === undefined || newScreen === undefined) return [];
     const status =
-      oldScreen === undefined
-        ? "added"
-        : newScreen === undefined
-          ? "removed"
-          : oldScreen.markup !== newScreen.markup
-            ? "updated"
-            : oldScreen.position !== newScreen.position
-              ? "moved"
-              : undefined;
-    if (status === undefined) return [];
-    const nameSource = newScreen === undefined ? oldHtml : newHtml;
-    return [
-      {
-        id,
-        name: wireframeScreenName(nameSource ?? "", id),
-        status,
-        ...(oldScreen === undefined ? {} : { oldPosition: oldScreen.position }),
-        ...(newScreen === undefined ? {} : { newPosition: newScreen.position }),
-      },
-    ];
+      oldScreen.markup !== newScreen.markup
+        ? "updated"
+        : oldScreen.position !== newScreen.position
+          ? "moved"
+          : undefined;
+    return status === undefined
+      ? []
+      : [
+          {
+            key: `screen:${id}`,
+            name: newScreen.name,
+            status,
+            oldScreenId: id,
+            newScreenId: id,
+            oldPosition: oldScreen.position,
+            newPosition: newScreen.position,
+          },
+        ];
   });
+  return [...initialScreenDiffs, ...contentDiffs];
+};
+
+const screenIdForSide = (
+  screen: WireframeScreenDiff,
+  side: "old" | "new",
+): string | undefined => {
+  if (side === "old") {
+    return screen.status === "added" ? undefined : screen.oldScreenId;
+  }
+  return screen.status === "removed" ? undefined : screen.newScreenId;
 };
 
 const screenStatusLabel = (screen: WireframeScreenDiff): string => {
+  if (screen.status === "initial") return "Initial screen";
   if (screen.status === "added") {
-    return screen.newPosition === undefined
-      ? "Added"
-      : `Added at ${screen.newPosition}`;
+    return `Added at ${screen.newPosition}`;
   }
   if (screen.status === "removed") {
-    return screen.oldPosition === undefined
-      ? "Removed"
-      : `Removed from ${screen.oldPosition}`;
+    return `Removed from ${screen.oldPosition}`;
   }
-  const moved =
-    screen.oldPosition !== undefined &&
-    screen.newPosition !== undefined &&
-    screen.oldPosition !== screen.newPosition;
+  const moved = screen.oldPosition !== screen.newPosition;
   if (screen.status === "moved" && moved) {
     return `Moved ${screen.oldPosition} → ${screen.newPosition}`;
   }
@@ -679,6 +757,18 @@ const sanitizeRenderedSnapshot = (html: string | undefined): string => {
     control.tabIndex = -1;
     control.setAttribute("aria-disabled", "true");
     control.removeAttribute("contenteditable");
+    if (
+      control instanceof HTMLButtonElement ||
+      control instanceof HTMLInputElement ||
+      control instanceof HTMLSelectElement ||
+      control instanceof HTMLTextAreaElement
+    ) {
+      control.disabled = true;
+    } else if (control instanceof HTMLAnchorElement) {
+      control.removeAttribute("href");
+    } else {
+      control.inert = true;
+    }
   }
   return document.body.innerHTML;
 };
@@ -705,19 +795,25 @@ const ComponentSnapshotComparison = ({
     [location.oldHtml, location.newHtml],
   );
   const [side, setSide] = useState<"old" | "new">(initialSide);
-  const [selectedScreenId, setSelectedScreenId] = useState(screenDiffs[0]?.id);
+  const [selectedScreenKey, setSelectedScreenKey] = useState(
+    screenDiffs[0]?.key,
+  );
   const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     setSide(initialSide);
-    setSelectedScreenId(screenDiffs[0]?.id);
+    setSelectedScreenKey(screenDiffs[0]?.key);
   }, [initialSide, location.oldHtml, location.newHtml, screenDiffs]);
   const selectedScreen = screenDiffs.find(
-    (screen) => screen.id === selectedScreenId,
+    (screen) => screen.key === selectedScreenKey,
   );
   const canShowOld =
-    location.oldHtml !== undefined && selectedScreen?.status !== "added";
+    location.oldHtml !== undefined &&
+    (selectedScreen === undefined ||
+      screenIdForSide(selectedScreen, "old") !== undefined);
   const canShowNew =
-    location.newHtml !== undefined && selectedScreen?.status !== "removed";
+    location.newHtml !== undefined &&
+    (selectedScreen === undefined ||
+      screenIdForSide(selectedScreen, "new") !== undefined);
   const renderedSide =
     (side === "old" && canShowOld) || !canShowNew ? "old" : "new";
   const renderedHtml =
@@ -728,10 +824,11 @@ const ComponentSnapshotComparison = ({
   );
   const renderedPresentation = sidePresentation(location, renderedSide);
   const visibleScreenId =
-    selectedScreenId ??
-    (renderedPresentation?.aspect === "wireframe"
-      ? renderedPresentation.currentScreenId
-      : undefined);
+    selectedScreen === undefined
+      ? renderedPresentation?.aspect === "wireframe"
+        ? renderedPresentation.currentScreenId
+        : undefined
+      : screenIdForSide(selectedScreen, renderedSide);
   const isWireframe = useMemo(
     () =>
       wireframeScreenMarkup(location.oldHtml).size > 0 ||
@@ -767,10 +864,8 @@ const ComponentSnapshotComparison = ({
           visibleScreenId === undefined ||
           screen.dataset.wireframeScreen === visibleScreenId;
         screen.hidden = visibleScreenId !== undefined && !selected;
-        const diff = screenDiffs.find(
-          (candidate) => candidate.id === screen.dataset.wireframeScreen,
-        );
-        const highlighted = selected && diff !== undefined;
+        const diff = selected ? selectedScreen : undefined;
+        const highlighted = diff !== undefined;
         screen.style.border = highlighted
           ? `10px solid ${screenStatusBorder(diff.status)}`
           : "";
@@ -806,7 +901,7 @@ const ComponentSnapshotComparison = ({
       maximizable?.removeEventListener("figure-restored", fitWireframes);
       observer.disconnect();
     };
-  }, [renderedHtml, screenDiffs, visibleScreenId]);
+  }, [renderedHtml, selectedScreen, visibleScreenId]);
   useEffect(() => {
     document.dispatchEvent(new CustomEvent("bigplan:review-island-updated"));
   }, [renderedHtml]);
@@ -823,13 +918,15 @@ const ComponentSnapshotComparison = ({
         >
           {screenDiffs.map((screen) => (
             <button
-              key={screen.id}
+              key={screen.key}
               type="button"
               className="inline-flex cursor-pointer items-center gap-2 rounded-md border-2 border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted hover:bg-raised aria-pressed:border-ink aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              aria-current={selectedScreenId === screen.id ? "true" : undefined}
-              aria-pressed={selectedScreenId === screen.id}
+              aria-current={
+                selectedScreenKey === screen.key ? "true" : undefined
+              }
+              aria-pressed={selectedScreenKey === screen.key}
               onClick={() => {
-                setSelectedScreenId(screen.id);
+                setSelectedScreenKey(screen.key);
                 if (screen.status === "added") setSide("new");
                 if (screen.status === "removed") setSide("old");
               }}
