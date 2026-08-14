@@ -672,7 +672,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
       inset: -4px;
       width: auto;
       height: auto;
-      border: 1.5px solid var(--diff-add-c);
+      border: 2px solid var(--diff-add-c);
       border-right-color: transparent;
       border-radius: 9999px;
       animation: review-agent-active-indicator-spin 1.1s linear infinite;
