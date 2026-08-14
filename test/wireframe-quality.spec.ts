@@ -119,6 +119,9 @@ test("should render every proof at its native device geometry", async ({
     const recentPanel = screen.locator(".wireframe-panel", {
       hasText: "Recent changes",
     });
+    const recentProse = recentPanel.getByText(
+      "Workspace changes are retained for 90 days so administrators can audit configuration history.",
+    );
     const regionPanel = screen.locator(".wireframe-panel", {
       hasText: "Region",
     });
@@ -129,6 +132,7 @@ test("should render every proof at its native device geometry", async ({
     const headerWidth = (await boxOf(header)).width;
     const aboutWidth = (await boxOf(aboutPanel)).width;
     const recentWidth = (await boxOf(recentPanel)).width;
+    const recentProseWidth = (await boxOf(recentProse)).width;
     const selectWidth = (await boxOf(select)).width;
     const textFieldWidth = (await boxOf(textField)).width;
 
@@ -140,8 +144,10 @@ test("should render every proof at its native device geometry", async ({
     // PageHeader is banner chrome: it keeps spanning the column.
     expect(headerWidth).toBeGreaterThan(aboutWidth + 100);
     // A record-collection panel (holding a List) is exempt and stays wide,
-    // rather than being squeezed to the same narrow measure as prose.
+    // while prose riding alongside the collection keeps the readable measure.
     expect(recentWidth).toBeGreaterThan(aboutWidth + 100);
+    expect(recentProseWidth).toBeLessThanOrEqual(650);
+    expect(recentProseWidth).toBeLessThan(recentWidth - 100);
     // A control draws the length of a plausible answer, not the column: no
     // more 900px-wide Select for a two-word region name.
     expect(selectWidth).toBeLessThanOrEqual(400);
