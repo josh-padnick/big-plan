@@ -109,7 +109,7 @@ import {
   liveFlowAnchor,
 } from "./live-target.browser.js";
 import {
-  agentProjectionNowForReviewPoll,
+  agentProjectionForReviewPoll,
   INITIAL_REVIEW_POLL_HEALTH,
   reviewPollIsOffline,
   reviewRuntimeCanWrite,
@@ -3499,6 +3499,8 @@ export const ReviewController = () => {
   );
   const [commentQuery, setCommentQuery] = useState("");
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
+  const [hasObservedAgentSnapshot, setHasObservedAgentSnapshot] =
+    useState(false);
   const [displayedSnapshot, setDisplayedSnapshot] = useState(initialSnapshot);
   const [cancelPendingRequestIds, setCancelPendingRequestIds] = useState<
     ReadonlySet<string>
@@ -3551,11 +3553,14 @@ export const ReviewController = () => {
   const serverGone = reviewRuntimeIsDown(pollHealth);
   const threadRuntime: ThreadRuntime =
     identity === null ? "static" : pollIsOffline ? "offline" : "online";
-  const agentProjectionNowMs = agentProjectionNowForReviewPoll({
+  const agentProjection = agentProjectionForReviewPoll({
     health: pollHealth,
+    hasObservedAgentSnapshot,
     lastObservableAtMs: lastObservableAgentAtMs,
     nowMs: statusNowMs,
   });
+  const agentPresenceIsObservable = agentProjection.state === "observable";
+  const agentProjectionNowMs = agentProjection.nowMs;
   const agentConnection = projectAgentConnectionState({
     presenceConnected: agent.presence.connected,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
@@ -3563,10 +3568,11 @@ export const ReviewController = () => {
     events: agent.connectionLog,
   });
   const agentConnected = agentConnection.connected;
+  const runtimeCanWrite = reviewRuntimeCanWrite(pollHealth);
   const canSendToAgent =
     identity !== null &&
     threadRuntime === "online" &&
-    reviewRuntimeCanWrite(pollHealth) &&
+    runtimeCanWrite &&
     runtimeSession?.authoritative !== false;
   const unresolvedDrafts = useMemo(
     () => drafts.filter((comment) => !resolvedCommentIds.has(comment.id)),
@@ -3587,6 +3593,7 @@ export const ReviewController = () => {
   const persistedReviewState = useRef<string | null>(null);
   const justSubmittedCommentIds = useRef<ReadonlySet<string>>(new Set());
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
+    setHasObservedAgentSnapshot(true);
     setAgent(snapshot);
     setCancelPendingRequestIds((current) =>
       reconcilePendingCancellations({
@@ -4160,7 +4167,9 @@ export const ReviewController = () => {
     async (comments: ReadonlyArray<ReviewComment>) => {
       if (!canSendToAgent || identity === null) {
         setStatus(
-          "Agent disconnected. Your comment is saved and can be sent after reconnecting.",
+          runtimeCanWrite
+            ? "Agent disconnected. Your comment is saved and can be sent after reconnecting."
+            : "The review session is offline. Your comment is saved and can be sent after reconnecting.",
         );
         return;
       }
@@ -4196,7 +4205,7 @@ export const ReviewController = () => {
         setIsSending(false);
       }
     },
-    [canSendToAgent, identity, isOpen, serializeRuntimeWrite],
+    [canSendToAgent, identity, isOpen, runtimeCanWrite, serializeRuntimeWrite],
   );
 
   useEffect(() => {
@@ -4648,11 +4657,13 @@ export const ReviewController = () => {
       }),
     );
   }, [isOpen, threadProjections]);
-  const agentHealthLabel = deriveAgentHealthLabel({
-    activity: currentAgentActivity,
-    hasAgentRuntime: identity !== null,
-    isReadOnly: runtimeSession?.authoritative === false,
-  });
+  const agentHealthLabel = agentPresenceIsObservable
+    ? deriveAgentHealthLabel({
+        activity: currentAgentActivity,
+        hasAgentRuntime: identity !== null,
+        isReadOnly: runtimeSession?.authoritative === false,
+      })
+    : null;
   const isAgentWorking = currentAgentActivity.state === "working";
   const agentSessionLabel = isAgentWorking
     ? "Agent working"
@@ -5335,6 +5346,7 @@ export const ReviewController = () => {
             <AgentSurface
               model={{
                 activity: currentAgentActivity,
+                presenceIsObservable: agentPresenceIsObservable,
                 connected: agentConnected,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
                 connectionLog: agentConnection.events,
@@ -5353,10 +5365,7 @@ export const ReviewController = () => {
                 className="w-full px-3! py-2! text-xs"
                 size="sm"
                 disabled={
-                  unresolvedDrafts.length === 0 ||
-                  isSending ||
-                  currentAgentActivity.state === "offline" ||
-                  runtimeSession?.authoritative === false
+                  unresolvedDrafts.length === 0 || isSending || !canSendToAgent
                 }
                 onClick={() => void sendComments(unresolvedDrafts)}
               >
@@ -5365,6 +5374,15 @@ export const ReviewController = () => {
               {identity === null ? (
                 <p className="m-0 text-xs text-support" role="status">
                   {status}
+                </p>
+              ) : !agentPresenceIsObservable ? (
+                <p
+                  className="m-0 text-xs text-support"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Agent status is unavailable while the review session is
+                  offline.
                 </p>
               ) : (
                 <div role="status" aria-live="polite">
