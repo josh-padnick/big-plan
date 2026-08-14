@@ -17,6 +17,7 @@ Use “User journeys” as the container name, and nest every journey underneath
 Make the container a `Part` by default: a marker attaches only to an h2, so the Part is the only container that holds typed journey slides as its children, and lint rejects a typed journey authored next to an untyped container slide.
 Each typed journey then supplies a distinct `name` for its kicker and sidebar, an ultra-concise `toc` form for the overview, and a full plain-language h2 title.
 An untyped “User journeys” slide is still a valid container when every journey fits an h3 sub-slide of it, which trades those marker affordances and the wireframe contract for a shorter section.
+Open the container Part with an intro slide that introduces the actors - one bullet per actor with its journey count, a sub-bullet naming what that actor does, and a jump line linking each journey by the slug of its h2 - and title that slide with its claim, since the Part already carries the container name.
 Most typed journey slides should contain a `Wireframe` whose `Screen` mockups let the reviewer see and click through the actual interface states in that human loop.
 When no UI exists to show, add a non-empty `wireframeReason` attribute to the `Slide` marker that explains the choice; never leave a missing Wireframe unexplained.
 Prose can annotate what matters, and the Wireframe component's CLEAR guidance applies whenever you draw mockups.
