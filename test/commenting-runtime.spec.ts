@@ -312,6 +312,35 @@ test("should show the connector's reported model identity, or none, on the agent
     store,
     sessionId: session.sessionId,
     state: "waiting",
+    model: { name: "GPT-5.6-Luna" },
+  });
+  await expect(modelBadge).toContainText("GPT-5.6-Luna");
+  await expect(modelBadge.locator("svg")).toHaveAttribute(
+    "viewBox",
+    "0 0 512 512",
+  );
+  const openAiPath = await modelBadge.locator("svg path").getAttribute("d");
+
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+    model: { name: "Claude Sonnet 5" },
+  });
+  await expect(modelBadge).toContainText("Claude Sonnet 5");
+  await expect(modelBadge.locator("svg")).toHaveAttribute(
+    "viewBox",
+    "0 0 512 512",
+  );
+  await expect(modelBadge.locator("svg path")).not.toHaveAttribute(
+    "d",
+    openAiPath ?? "",
+  );
+
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
     model: { name: "A model this badge does not recognize" },
   });
   await expect(modelBadge.locator("svg")).toHaveAttribute(

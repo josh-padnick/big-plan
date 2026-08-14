@@ -81,6 +81,8 @@ in place without discarding drafts, open threads, or scroll position.
 Set `BIG_PLAN_AGENT_MODEL` before starting the coding-agent session to name
 which model is connected, for example `Grok 4.6` or `GPT-5.6-Luna`. The
 **Agent** tab shows that name and an icon next to the connection status.
+Names recognized as OpenAI or GPT, Claude, or Grok use that vendor's logo;
+other reported names use a generic model icon rather than guessing a vendor.
 Leave it unset and the tab still shows the agent as connected, with no name
 guessed on its behalf.
 

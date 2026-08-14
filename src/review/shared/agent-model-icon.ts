@@ -6,7 +6,7 @@
 export type AgentModelVendor = "openai" | "claude" | "grok";
 
 const VENDOR_MARKERS: ReadonlyArray<readonly [AgentModelVendor, RegExp]> = [
-  ["openai", /openai/i],
+  ["openai", /openai|gpt/i],
   ["claude", /claude/i],
   ["grok", /grok/i],
 ];
