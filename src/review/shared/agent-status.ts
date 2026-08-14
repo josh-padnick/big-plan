@@ -3,6 +3,7 @@
 // does not depend on the browser or Node.
 
 import type { ProgressStepCode } from "./progress-code.js";
+import type { BrowserConnectionEvent } from "./review-wire.js";
 import { compactDurationLabel } from "./time-label.js";
 
 // Agents are expected to send a progress note at least once per minute while
@@ -143,6 +144,46 @@ export const agentPresenceIsFresh = ({
   Number.isFinite(now) &&
   heartbeatAt > 0 &&
   Math.max(0, now - heartbeatAt) <= AGENT_STALL_MS;
+
+export const projectAgentConnectionEvents = ({
+  connected,
+  heartbeatAt,
+  now,
+  events,
+}: {
+  readonly connected: boolean;
+  readonly heartbeatAt: number;
+  readonly now: number;
+  readonly events: ReadonlyArray<BrowserConnectionEvent>;
+}): ReadonlyArray<BrowserConnectionEvent> => {
+  if (connected || !Number.isFinite(heartbeatAt) || !Number.isFinite(now)) {
+    return events;
+  }
+  const expiredAtMs = heartbeatAt + AGENT_STALL_MS + 1;
+  if (heartbeatAt <= 0 || expiredAtMs > now) return events;
+  const expiredAt = new Date(expiredAtMs);
+  if (Number.isNaN(expiredAt.getTime())) return events;
+
+  let latest: { readonly connected: boolean; readonly atMs: number } | null =
+    null;
+  for (const event of events) {
+    const atMs = Date.parse(event.at);
+    if (Number.isFinite(atMs) && (latest === null || atMs >= latest.atMs)) {
+      latest = { connected: event.connected, atMs };
+    }
+  }
+  if (latest?.connected !== true) return events;
+
+  return [
+    ...events,
+    {
+      eventId: `lease-expired-${expiredAtMs}`,
+      connected: false,
+      at: expiredAt.toISOString(),
+      reason: `No agent signal within ${AGENT_STALL_WINDOW_LABEL}`,
+    },
+  ];
+};
 
 /** Explains a lost lease without claiming why the external agent stopped. */
 const disconnectedSupporting = ({

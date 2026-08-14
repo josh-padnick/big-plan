@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   AGENT_STALL_MS,
+  agentPresenceIsFresh,
   deriveAgentStatus,
   deriveAgentHealthLabel,
   deriveCurrentAgentActivity,
+  projectAgentConnectionEvents,
   type AgentActivityRequest,
 } from "./agent-status.js";
 
@@ -56,6 +58,20 @@ describe("current agent activity", () => {
   });
 
   it("should expire a previously connected agent when its heartbeat is stale", () => {
+    expect(
+      agentPresenceIsFresh({
+        connected: true,
+        heartbeatAt: NOW - 75_000,
+        now: NOW,
+      }),
+    ).toBe(true);
+    expect(
+      agentPresenceIsFresh({
+        connected: true,
+        heartbeatAt: NOW - 75_001,
+        now: NOW,
+      }),
+    ).toBe(false);
     expect(
       deriveCurrentAgentActivity({
         requests: [],
@@ -167,6 +183,44 @@ describe("current agent activity", () => {
         heartbeatAt: NOW,
       }),
     ).toMatchObject({ state: "stalled", headline: "Agent may be stalled" });
+  });
+});
+
+describe("agent connection events", () => {
+  const connectedEvent = {
+    eventId: "event-1",
+    connected: true,
+    at: new Date(NOW - 80_000).toISOString(),
+  };
+
+  it("should keep the connected event current when the heartbeat is exactly 75 seconds old", () => {
+    expect(
+      projectAgentConnectionEvents({
+        connected: true,
+        heartbeatAt: NOW - 75_000,
+        now: NOW,
+        events: [connectedEvent],
+      }),
+    ).toEqual([connectedEvent]);
+  });
+
+  it("should project disconnection when the heartbeat is 75,001 milliseconds old", () => {
+    expect(
+      projectAgentConnectionEvents({
+        connected: false,
+        heartbeatAt: NOW - 75_001,
+        now: NOW,
+        events: [connectedEvent],
+      }),
+    ).toEqual([
+      connectedEvent,
+      {
+        eventId: `lease-expired-${NOW}`,
+        connected: false,
+        at: new Date(NOW).toISOString(),
+        reason: "No agent signal within 75 seconds",
+      },
+    ]);
   });
 });
 

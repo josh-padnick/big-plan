@@ -35,6 +35,7 @@ import {
   deriveAgentHealthLabel,
   deriveAgentStatus,
   deriveCurrentAgentActivity,
+  projectAgentConnectionEvents,
   type AgentStatus,
 } from "../shared/agent-status.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
@@ -4270,6 +4271,12 @@ export const ReviewController = () => {
     now: statusNowMs,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
   });
+  const projectedConnectionLog = projectAgentConnectionEvents({
+    connected: agentConnected,
+    heartbeatAt: agent.presence.updatedAtMs ?? 0,
+    now: statusNowMs,
+    events: agent.connectionLog,
+  });
   const chatRequests = agent.requests.filter(
     (request) => request.kind === "chat",
   );
@@ -5029,7 +5036,7 @@ export const ReviewController = () => {
                 activity: currentAgentActivity,
                 connected: agentConnected,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
-                connectionLog: agent.connectionLog,
+                connectionLog: projectedConnectionLog,
                 recoveryPrompt: agent.recoveryPrompt,
                 agentCommand: agent.agentCommand,
                 plan: agent.plan,

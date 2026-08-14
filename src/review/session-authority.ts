@@ -274,23 +274,6 @@ export const refreshReviewSessionHeartbeat = async ({
   return result.authoritative;
 };
 
-/** Returns the intentional reason a matching review session stopped, if recorded. */
-export const reviewSessionStopReason = async ({
-  store,
-  sessionId,
-}: {
-  readonly store: ReviewStore;
-  readonly sessionId: string;
-}): Promise<string | undefined> => {
-  const value = await readSessionHeartbeatValue(store);
-  return isRecord(value) &&
-    value.sessionId === sessionId &&
-    value.running === false &&
-    typeof value.stopReason === "string"
-    ? value.stopReason
-    : undefined;
-};
-
 /** Returns the current live session for one exact plan or a stable reason. */
 export const liveReviewSessionForPlan = async ({
   store,
