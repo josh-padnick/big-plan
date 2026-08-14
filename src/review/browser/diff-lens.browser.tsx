@@ -34,7 +34,7 @@ const BODY_ATTRIBUTE = "data-figure-body";
 const DiffMaximizeButton = () => (
   <button
     type="button"
-    className="figure-control inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:bg-transparent hover:text-ink focus-visible:bg-transparent focus-visible:text-ink focus-visible:shadow-focus focus-visible:outline-none [&_svg]:size-4"
+    className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:bg-transparent hover:text-ink focus-visible:bg-transparent focus-visible:text-ink focus-visible:shadow-focus focus-visible:outline-none [&_svg]:size-4"
     aria-label="Maximize wireframe diff"
     data-tooltip="Maximize wireframe diff"
     data-figure-maximize=""
@@ -769,7 +769,7 @@ const ComponentSnapshotComparison = ({
             <button
               key={screen.id}
               type="button"
-              className="cursor-pointer rounded-md border-2 border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted hover:bg-raised aria-pressed:border-ink aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="inline-flex cursor-pointer items-center gap-2 rounded-md border-2 border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted hover:bg-raised aria-pressed:border-ink aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               aria-current={selectedScreenId === screen.id ? "true" : undefined}
               aria-pressed={selectedScreenId === screen.id}
               onClick={() => setSelectedScreenId(screen.id)}
