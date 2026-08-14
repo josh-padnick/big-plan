@@ -1040,7 +1040,9 @@ marks and a plan diff never jitters.
         .wireframe-page-header,
         .wireframe-list,
         .wireframe-table,
-        .wireframe-panel[data-wireframe-master],
+        .wireframe-panel:has(
+          > .wireframe-panel-body > :is(.wireframe-list, .wireframe-table)
+        ),
         .wireframe-row[data-wireframe-workspace],
         .wireframe-row:has(> :nth-child(2))
       )
