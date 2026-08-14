@@ -27,7 +27,9 @@ background command.
    the visible primary action; `Escape` cancels.
 3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
    **Chat** tab asks questions about the plan as a whole, while **Agent** shows
-   the connection and current work for a live review session.
+   the coding-agent connection and current work for a live review session.
+   A review-session outage is reported separately and does not label the agent
+   as offline.
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
 

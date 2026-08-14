@@ -7,9 +7,11 @@ import type {
   RuntimeSession,
 } from "../shared/review-wire.js";
 import { AgentConnectionPanel } from "./agent-connection.browser.js";
+import type { ReviewAgentProjection } from "./review-poll-health.js";
 
 export type AgentSurfaceModel = {
   readonly activity: CurrentAgentActivity;
+  readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
   readonly heartbeatAt: number;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -34,6 +36,7 @@ export const AgentSurface = ({
   >
     <AgentConnectionPanel
       activity={model.activity}
+      presenceState={model.presenceState}
       connected={model.connected}
       heartbeatAt={model.heartbeatAt}
       connectionLog={model.connectionLog}

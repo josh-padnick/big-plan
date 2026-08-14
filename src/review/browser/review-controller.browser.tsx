@@ -101,6 +101,10 @@ import {
   runtimeReviewImageIdentity,
 } from "./review-image.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
+import {
+  deriveReviewCommentSubmitAvailability,
+  type ReviewCommentSubmitAvailability,
+} from "./review-comment-submit.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
   displayedStandIn,
@@ -108,6 +112,20 @@ import {
   liveBlock,
   liveFlowAnchor,
 } from "./live-target.browser.js";
+import {
+  agentProjectionForReviewPoll,
+  INITIAL_REVIEW_POLL_HEALTH,
+  reviewPollIsOffline,
+  reviewRuntimeCanWrite,
+  reviewRuntimeIsDown,
+  transitionReviewPollHealth,
+  type ReviewPollHealth,
+  type ReviewPollResult,
+} from "./review-poll-health.js";
+import {
+  isReviewRuntimeUnavailable,
+  normalizeReviewRuntimeRequestError,
+} from "./review-runtime-request.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
   AlertDialog,
@@ -209,6 +227,7 @@ const isNewCommentShortcut = (event: globalThis.KeyboardEvent): boolean =>
     ? event.ctrlKey && event.metaKey && !event.altKey
     : event.ctrlKey && event.altKey && !event.metaKey);
 type StagedCardSurface = "rail" | "thread";
+type UnsavedInputChange = (key: string, hasUnsavedInput: boolean) => void;
 type SelectionTarget = Extract<CommentTarget, { readonly type: "selection" }>;
 
 type FloatingRect = {
@@ -392,6 +411,9 @@ const bootstrapSnapshot = (): string => {
 const localStorageKey = (planId: string): string =>
   `big-plan:review:drafts:${planId}`;
 
+const liveRecoveryStorageKey = (identity: RuntimeIdentity): string =>
+  `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}`;
+
 const archivedChatStorageKey = (planId: string): string =>
   `big-plan:review:archived-chat:${planId}`;
 
@@ -456,6 +478,129 @@ const persistedReviewFingerprint = ({
     resolvedCommentIds: Array.from(resolvedCommentIds).sort(),
   });
 
+type LiveReviewRecovery = {
+  readonly drafts: ReadonlyArray<ReviewComment>;
+  readonly resolvedCommentIds: ReadonlySet<string>;
+  readonly baseFingerprint: string | null;
+};
+
+/** Reads a session-scoped recovery snapshot without accepting partial data. */
+const readLiveReviewRecovery = (
+  identity: RuntimeIdentity,
+): LiveReviewRecovery | null => {
+  try {
+    const raw = localStorage.getItem(liveRecoveryStorageKey(identity));
+    const parsed: unknown = raw === null ? null : JSON.parse(raw);
+    if (
+      !isRecord(parsed) ||
+      (parsed.version !== 1 && parsed.version !== 2) ||
+      !Array.isArray(parsed.drafts) ||
+      !parsed.drafts.every(isComment) ||
+      !Array.isArray(parsed.resolvedCommentIds) ||
+      !parsed.resolvedCommentIds.every(
+        (value): value is string => typeof value === "string",
+      ) ||
+      (parsed.version === 2 &&
+        parsed.baseFingerprint !== null &&
+        typeof parsed.baseFingerprint !== "string")
+    ) {
+      return null;
+    }
+    return {
+      drafts: parsed.drafts,
+      resolvedCommentIds: new Set(parsed.resolvedCommentIds),
+      baseFingerprint:
+        parsed.version === 2 && typeof parsed.baseFingerprint === "string"
+          ? parsed.baseFingerprint
+          : null,
+    };
+  } catch {
+    return null;
+  }
+};
+
+/** Saves unsynchronized live review state before a runtime write is attempted. */
+const writeLiveReviewRecovery = ({
+  identity,
+  recovery,
+  baseFingerprint,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly recovery: Omit<LiveReviewRecovery, "baseFingerprint">;
+  readonly baseFingerprint: string | null;
+}): boolean => {
+  try {
+    localStorage.setItem(
+      liveRecoveryStorageKey(identity),
+      JSON.stringify({
+        version: 2,
+        drafts: recovery.drafts,
+        resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
+        baseFingerprint,
+      }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const reconcileLiveReviewRecovery = ({
+  runtime,
+  recovery,
+}: {
+  readonly runtime: Omit<LiveReviewRecovery, "baseFingerprint">;
+  readonly recovery: Omit<LiveReviewRecovery, "baseFingerprint">;
+}): Omit<LiveReviewRecovery, "baseFingerprint"> => {
+  const drafts = [...runtime.drafts];
+  const runtimeDrafts = new Map(
+    runtime.drafts.map((comment) => [comment.id, comment]),
+  );
+  const resolvedCommentIds = new Set(runtime.resolvedCommentIds);
+  for (const recovered of recovery.drafts) {
+    const current = runtimeDrafts.get(recovered.id);
+    if (current === undefined) {
+      drafts.push(recovered);
+      if (recovery.resolvedCommentIds.has(recovered.id)) {
+        resolvedCommentIds.add(recovered.id);
+      }
+      continue;
+    }
+    // Target metadata is runtime-owned and may be canonicalized on first save.
+    // A matching body therefore represents the same immutable comment even
+    // when the browser's display kind differs from the stored block kind.
+    if (current.body === recovered.body) continue;
+    const recoveredId = randomId();
+    drafts.push({ ...recovered, id: recoveredId });
+    if (recovery.resolvedCommentIds.has(recovered.id)) {
+      resolvedCommentIds.add(recoveredId);
+    }
+  }
+  return { drafts, resolvedCommentIds };
+};
+
+/** Clears only the recovery snapshot confirmed by the completed runtime write. */
+const clearLiveReviewRecovery = ({
+  identity,
+  fingerprint,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly fingerprint: string;
+}): void => {
+  const recovery = readLiveReviewRecovery(identity);
+  if (
+    recovery === null ||
+    persistedReviewFingerprint(recovery) !== fingerprint
+  ) {
+    return;
+  }
+  try {
+    localStorage.removeItem(liveRecoveryStorageKey(identity));
+  } catch {
+    // The runtime now owns the state, so stale recovery cleanup is best effort.
+  }
+};
+
 const requestJson = async ({
   path,
   identity,
@@ -493,14 +638,49 @@ const requestJson = async ({
     }
     return await response.json();
   } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error("Review runtime request timed out.", { cause: error });
-    }
-    throw error;
+    throw normalizeReviewRuntimeRequestError({
+      error,
+      timedOut: controller.signal.aborted,
+    });
   } finally {
     window.clearTimeout(timeout);
   }
 };
+
+const ServerGoneBanner = ({
+  canRefresh,
+  onRefresh,
+}: {
+  readonly canRefresh: boolean;
+  readonly onRefresh: () => void;
+}) => (
+  <div
+    className="fixed top-14 right-3 left-3 z-50 mx-auto flex max-w-2xl min-w-0 items-start gap-3 rounded-lg border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-sm text-[var(--callout-danger-c)] shadow-floating"
+    role="alert"
+    aria-live="assertive"
+    data-review-server-gone=""
+  >
+    <Icon icon={CIRCLE_X_ICON} />
+    <div className="min-w-0 flex-1">
+      <strong className="block text-ink">
+        This review session is no longer online
+      </strong>
+      <p className="m-0 mt-1 text-xs text-ink [overflow-wrap:anywhere]">
+        {canRefresh
+          ? "The local review server stopped responding. Refresh when it is running again to continue reviewing. This is separate from the agent connection."
+          : "The local review server stopped responding. Keep this tab open because the latest review input has not reached the local review server. This is separate from the agent connection."}
+      </p>
+    </div>
+    <button
+      type="button"
+      className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--callout-danger-c)]"
+      onClick={onRefresh}
+      disabled={!canRefresh}
+    >
+      Refresh
+    </button>
+  </div>
+);
 
 type CachedSnapshotDiff =
   | { readonly state: "pending"; readonly value: Promise<SnapshotDiff> }
@@ -1620,7 +1800,7 @@ const CommentComposer = ({
   inline,
   submitRightAway,
   identity,
-  canSubmitRightAway,
+  submitAvailability,
   onCancel,
   onBodyChange,
   onSave,
@@ -1632,13 +1812,14 @@ const CommentComposer = ({
   readonly inline: boolean;
   readonly submitRightAway: boolean;
   readonly identity: RuntimeIdentity | null;
-  readonly canSubmitRightAway: boolean;
+  readonly submitAvailability: ReviewCommentSubmitAvailability;
   readonly onCancel: () => void;
   readonly onBodyChange: (body: string) => void;
   readonly onSave: (body: string, submitRightAway: boolean) => void;
   readonly onSubmitRightAwayChange: (submitRightAway: boolean) => void;
   readonly onShowAgent: () => void;
 }) => {
+  const canSubmitRightAway = submitAvailability.state === "available";
   const [floatingPosition, setFloatingPosition] = useState<FloatingPosition>({
     top: compose.top,
     left: compose.left,
@@ -1770,13 +1951,13 @@ const CommentComposer = ({
               </Button>
             </Tooltip>
           </div>
-          {submitRightAway && !canSubmitRightAway ? (
+          {submitRightAway && submitAvailability.state === "unavailable" ? (
             <button
               type="button"
               className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
               onClick={onShowAgent}
             >
-              Agent disconnected
+              {submitAvailability.label}
             </button>
           ) : null}
         </div>
@@ -2020,12 +2201,14 @@ const StagedCard = ({
   onDelete,
   onJump,
   onSubmit,
-  canSubmit,
+  submitAvailability,
   onShowAgent,
   onAssociate,
   identity,
   currentSnapshot,
   onStatus,
+  unsavedInputKey,
+  onUnsavedInputChange,
   resolved = false,
   onResolve,
   compact = false,
@@ -2045,16 +2228,19 @@ const StagedCard = ({
   readonly onDelete: () => void;
   readonly onJump: () => void;
   readonly onSubmit: () => void;
-  readonly canSubmit: boolean;
+  readonly submitAvailability: ReviewCommentSubmitAvailability;
   readonly onShowAgent: () => void;
   readonly onAssociate: (target: CommentTarget | null) => void;
   readonly identity: RuntimeIdentity | null;
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
+  readonly unsavedInputKey: string;
+  readonly onUnsavedInputChange: UnsavedInputChange;
   readonly resolved?: boolean;
   readonly onResolve?: () => void;
   readonly compact?: boolean;
 }) => {
+  const canSubmit = submitAvailability.state === "available";
   const setAssociated = (active: boolean) => {
     onAssociate(active ? comment.target : null);
   };
@@ -2070,6 +2256,11 @@ const StagedCard = ({
   useEffect(() => {
     if (isEditing) editRef.current?.focus();
   }, [isEditing]);
+  const hasUnsavedEdit = isEditing && editBody !== comment.body;
+  useEffect(() => {
+    onUnsavedInputChange(unsavedInputKey, hasUnsavedEdit);
+    return () => onUnsavedInputChange(unsavedInputKey, false);
+  }, [hasUnsavedEdit, onUnsavedInputChange, unsavedInputKey]);
   if (collapsed) {
     return (
       <ContextualCommentSummary
@@ -2276,13 +2467,13 @@ const StagedCard = ({
                 </Button>
               )}
             </div>
-            {!resolved && !canSubmit ? (
+            {!resolved && submitAvailability.state === "unavailable" ? (
               <button
                 type="button"
                 className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                 onClick={onShowAgent}
               >
-                Agent disconnected
+                {submitAvailability.label}
               </button>
             ) : null}
           </div>
@@ -2428,13 +2619,13 @@ const StagedCard = ({
           </Button>
         </div>
       )}
-      {!isEditing && !canSubmit ? (
+      {!isEditing && submitAvailability.state === "unavailable" ? (
         <button
           type="button"
           className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
           onClick={onShowAgent}
         >
-          Agent disconnected
+          {submitAvailability.label}
         </button>
       ) : null}
     </Card>
@@ -2640,6 +2831,8 @@ const SentThread = ({
   onDelete,
   onRevert,
   currentSnapshot,
+  unsavedInputKey,
+  onUnsavedInputChange,
   compact = false,
   queuePosition,
   suppressPendingStatus = false,
@@ -2666,12 +2859,19 @@ const SentThread = ({
   readonly onDelete: () => void;
   readonly onRevert: (requestId: string, commentId: string) => void;
   readonly currentSnapshot: string;
+  readonly unsavedInputKey: string;
+  readonly onUnsavedInputChange: UnsavedInputChange;
   readonly compact?: boolean;
   readonly queuePosition?: number;
   readonly suppressPendingStatus?: boolean;
 }) => {
   const [reply, setReply] = useState("");
   const [isReplying, setIsReplying] = useState(false);
+  const hasUnsavedReply = reply !== "";
+  useEffect(() => {
+    onUnsavedInputChange(unsavedInputKey, hasUnsavedReply);
+    return () => onUnsavedInputChange(unsavedInputKey, false);
+  }, [hasUnsavedReply, onUnsavedInputChange, unsavedInputKey]);
   const {
     exchanges,
     latestExchange,
@@ -3453,7 +3653,12 @@ export const ReviewController = () => {
     planId === "" ? new Set<string>() : readArchivedChatRequestIds(planId),
   );
   const [commentQuery, setCommentQuery] = useState("");
+  const [unsavedInputKeys, setUnsavedInputKeys] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
+  const [hasObservedAgentSnapshot, setHasObservedAgentSnapshot] =
+    useState(false);
   const [displayedSnapshot, setDisplayedSnapshot] = useState(initialSnapshot);
   const [cancelPendingRequestIds, setCancelPendingRequestIds] = useState<
     ReadonlySet<string>
@@ -3462,8 +3667,12 @@ export const ReviewController = () => {
   const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(
     null,
   );
-  const [pollFailures, setPollFailures] = useState(0);
+  const [pollHealth, setPollHealth] = useState<ReviewPollHealth>(
+    INITIAL_REVIEW_POLL_HEALTH,
+  );
   const [statusNowMs, setStatusNowMs] = useState(Date.now());
+  const [lastObservableAgentAtMs, setLastObservableAgentAtMs] =
+    useState(statusNowMs);
   const [threadOpenState, setThreadOpenState] = useState<ThreadOpenState>(
     new Map(),
   );
@@ -3498,19 +3707,37 @@ export const ReviewController = () => {
     }
   }, [archivedChatRequestIds, planId]);
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
+  const pollIsOffline = reviewPollIsOffline(pollHealth);
+  const serverGone = reviewRuntimeIsDown(pollHealth);
   const threadRuntime: ThreadRuntime =
-    identity === null ? "static" : pollFailures >= 2 ? "offline" : "online";
+    identity === null ? "static" : pollIsOffline ? "offline" : "online";
+  const agentProjection = agentProjectionForReviewPoll({
+    health: pollHealth,
+    hasObservedAgentSnapshot,
+    lastObservableAtMs: lastObservableAgentAtMs,
+    nowMs: statusNowMs,
+  });
+  const agentPresenceIsObservable = agentProjection.state === "observable";
+  const agentStatusIsAvailable =
+    agentPresenceIsObservable || agentProjection.state === "agent-unavailable";
+  const agentProjectionNowMs = agentProjection.nowMs;
   const agentConnection = projectAgentConnectionState({
     presenceConnected: agent.presence.connected,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
-    now: statusNowMs,
+    now: agentProjectionNowMs,
     events: agent.connectionLog,
   });
   const agentConnected = agentConnection.connected;
+  const runtimeCanWrite = reviewRuntimeCanWrite(pollHealth);
   const canSendToAgent =
     identity !== null &&
     threadRuntime === "online" &&
+    runtimeCanWrite &&
     runtimeSession?.authoritative !== false;
+  const commentSubmitAvailability = deriveReviewCommentSubmitAvailability({
+    canSubmit: identity === null || canSendToAgent,
+    runtimeCanWrite,
+  });
   const unresolvedDrafts = useMemo(
     () => drafts.filter((comment) => !resolvedCommentIds.has(comment.id)),
     [drafts, resolvedCommentIds],
@@ -3527,9 +3754,33 @@ export const ReviewController = () => {
     [resolvedCommentIds, sent, unresolvedDrafts],
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
-  const persistedReviewState = useRef<string | null>(null);
+  const [persistedReviewState, setPersistedReviewState] = useState<
+    string | null
+  >(null);
+  const currentReviewState = persistedReviewFingerprint({
+    drafts,
+    resolvedCommentIds,
+  });
+  const canRefreshReview =
+    persistedReviewState === currentReviewState &&
+    composeBody === "" &&
+    chatBody === "" &&
+    unsavedInputKeys.size === 0;
   const justSubmittedCommentIds = useRef<ReadonlySet<string>>(new Set());
+  const onUnsavedInputChange = useCallback<UnsavedInputChange>(
+    (key, hasUnsavedInput) => {
+      setUnsavedInputKeys((current) => {
+        if (current.has(key) === hasUnsavedInput) return current;
+        const next = new Set(current);
+        if (hasUnsavedInput) next.add(key);
+        else next.delete(key);
+        return next;
+      });
+    },
+    [],
+  );
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
+    setHasObservedAgentSnapshot(true);
     setAgent(snapshot);
     setCancelPendingRequestIds((current) =>
       reconcilePendingCancellations({
@@ -3849,21 +4100,61 @@ export const ReviewController = () => {
           await requestJson({ path: "/api/drafts", identity }),
         );
         if (current) {
-          const restoredResolvedCommentIds = new Set(
+          const runtimeResolvedCommentIds = new Set(
             snapshot.resolvedCommentIds,
           );
-          persistedReviewState.current = persistedReviewFingerprint({
+          const runtimeFingerprint = persistedReviewFingerprint({
             drafts: snapshot.drafts,
-            resolvedCommentIds: restoredResolvedCommentIds,
+            resolvedCommentIds: runtimeResolvedCommentIds,
           });
-          setDrafts(snapshot.drafts);
+          setPersistedReviewState(runtimeFingerprint);
+          const recovery = readLiveReviewRecovery(identity);
+          const recoveryFingerprint =
+            recovery === null ? null : persistedReviewFingerprint(recovery);
+          let restoredReviewState: Omit<LiveReviewRecovery, "baseFingerprint"> =
+            {
+              drafts: snapshot.drafts,
+              resolvedCommentIds: runtimeResolvedCommentIds,
+            };
+          if (recoveryFingerprint === runtimeFingerprint) {
+            clearLiveReviewRecovery({
+              identity,
+              fingerprint: runtimeFingerprint,
+            });
+          } else if (recovery !== null) {
+            restoredReviewState =
+              recovery.baseFingerprint === runtimeFingerprint
+                ? recovery
+                : reconcileLiveReviewRecovery({
+                    runtime: restoredReviewState,
+                    recovery,
+                  });
+            writeLiveReviewRecovery({
+              identity,
+              recovery: restoredReviewState,
+              baseFingerprint: runtimeFingerprint,
+            });
+          }
+          setDrafts(restoredReviewState.drafts);
           setSent(snapshot.sent);
-          setResolvedCommentIds(restoredResolvedCommentIds);
+          setResolvedCommentIds(restoredReviewState.resolvedCommentIds);
           setStatus("Connected to the local review runtime.");
           setIsHydrated(true);
         }
       } catch (error) {
         if (current) {
+          const recovery = readLiveReviewRecovery(identity);
+          if (recovery !== null) {
+            setDrafts(recovery.drafts);
+            setResolvedCommentIds(recovery.resolvedCommentIds);
+          } else {
+            setPersistedReviewState(
+              persistedReviewFingerprint({
+                drafts: [],
+                resolvedCommentIds: new Set(),
+              }),
+            );
+          }
           setStatus(errorMessage(error));
           setIsHydrated(true);
         }
@@ -3885,9 +4176,50 @@ export const ReviewController = () => {
       drafts,
       resolvedCommentIds,
     });
-    if (persistedReviewState.current === fingerprint) return;
-    void serializeRuntimeWrite(() =>
-      requestJson({
+    if (persistedReviewState === fingerprint) return;
+    const existingRecovery = readLiveReviewRecovery(identity);
+    const recoveryBaseFingerprint =
+      existingRecovery?.baseFingerprint ?? persistedReviewState;
+    writeLiveReviewRecovery({
+      identity,
+      recovery: { drafts, resolvedCommentIds },
+      baseFingerprint: recoveryBaseFingerprint,
+    });
+    if (!runtimeCanWrite) return;
+    void serializeRuntimeWrite(async () => {
+      const runtimeSnapshot = parseSnapshot(
+        await requestJson({ path: "/api/drafts", identity }),
+      );
+      const runtimeReviewState = {
+        drafts: runtimeSnapshot.drafts,
+        resolvedCommentIds: new Set(runtimeSnapshot.resolvedCommentIds),
+      };
+      const runtimeFingerprint = persistedReviewFingerprint(runtimeReviewState);
+      if (runtimeFingerprint === fingerprint) {
+        return { state: "persisted" as const, fingerprint };
+      }
+      if (recoveryBaseFingerprint !== runtimeFingerprint) {
+        const reconciled = reconcileLiveReviewRecovery({
+          runtime: runtimeReviewState,
+          recovery: { drafts, resolvedCommentIds },
+        });
+        const reconciledFingerprint = persistedReviewFingerprint(reconciled);
+        if (reconciledFingerprint === runtimeFingerprint) {
+          clearLiveReviewRecovery({ identity, fingerprint });
+        } else {
+          writeLiveReviewRecovery({
+            identity,
+            recovery: reconciled,
+            baseFingerprint: runtimeFingerprint,
+          });
+        }
+        return {
+          state: "reconciled" as const,
+          reviewState: reconciled,
+          runtimeFingerprint,
+        };
+      }
+      await requestJson({
         path: "/api/drafts",
         identity,
         method: "PUT",
@@ -3896,10 +4228,21 @@ export const ReviewController = () => {
           activeDraft: "",
           resolvedCommentIds: Array.from(resolvedCommentIds),
         },
-      }),
-    )
-      .then(() => {
-        persistedReviewState.current = fingerprint;
+      });
+      return { state: "persisted" as const, fingerprint };
+    })
+      .then((result) => {
+        if (result.state === "reconciled") {
+          setPersistedReviewState(result.runtimeFingerprint);
+          setDrafts(result.reviewState.drafts);
+          setResolvedCommentIds(result.reviewState.resolvedCommentIds);
+          return;
+        }
+        setPersistedReviewState(result.fingerprint);
+        clearLiveReviewRecovery({
+          identity,
+          fingerprint: result.fingerprint,
+        });
       })
       .catch((error: unknown) => setStatus(errorMessage(error)));
   }, [
@@ -3907,7 +4250,10 @@ export const ReviewController = () => {
     identity,
     isHydrated,
     planId,
+    pollHealth.state,
+    persistedReviewState,
     resolvedCommentIds,
+    runtimeCanWrite,
     runtimeSession?.authoritative,
     serializeRuntimeWrite,
   ]);
@@ -3938,12 +4284,19 @@ export const ReviewController = () => {
           setRuntimeSession(session);
           acceptAgentSnapshot(parseAgentSnapshot(agentValue));
           setProgress(parseProgress(progressValue));
-          setPollFailures(0);
-          setStatusNowMs(Date.now());
+          setPollHealth(INITIAL_REVIEW_POLL_HEALTH);
+          const now = Date.now();
+          setStatusNowMs(now);
+          setLastObservableAgentAtMs(now);
         }
-      } catch {
+      } catch (error) {
         if (current) {
-          setPollFailures((failures) => Math.min(2, failures + 1));
+          const result: ReviewPollResult = isReviewRuntimeUnavailable(error)
+            ? "runtime-unavailable"
+            : "poll-failed";
+          setPollHealth((health) =>
+            transitionReviewPollHealth({ health, result }),
+          );
           setStatusNowMs(Date.now());
         }
       } finally {
@@ -4095,9 +4448,13 @@ export const ReviewController = () => {
   const sendComments = useCallback(
     async (comments: ReadonlyArray<ReviewComment>) => {
       if (!canSendToAgent || identity === null) {
-        setStatus(
-          "Agent disconnected. Your comment is saved and can be sent after reconnecting.",
-        );
+        const availability = deriveReviewCommentSubmitAvailability({
+          canSubmit: false,
+          runtimeCanWrite,
+        });
+        if (availability.state === "unavailable") {
+          setStatus(availability.status);
+        }
         return;
       }
       setIsSending(true);
@@ -4132,7 +4489,7 @@ export const ReviewController = () => {
         setIsSending(false);
       }
     },
-    [canSendToAgent, identity, isOpen, serializeRuntimeWrite],
+    [canSendToAgent, identity, isOpen, runtimeCanWrite, serializeRuntimeWrite],
   );
 
   useEffect(() => {
@@ -4399,7 +4756,7 @@ export const ReviewController = () => {
     progressEvents: progress,
     presence: effectivePresence,
     runtime: threadRuntime,
-    nowMs: statusNowMs,
+    nowMs: agentProjectionNowMs,
     cancelPendingRequestIds,
   });
   const cancelRequestsForComment = (commentId: string) => {
@@ -4450,7 +4807,7 @@ export const ReviewController = () => {
       latestRequest?.claimedAt !== undefined || requestProgress.length > 0,
     ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
     ...(failure === undefined ? {} : { failure }),
-    nowMs: statusNowMs,
+    nowMs: agentProjectionNowMs,
   });
   const activityForRequest = (
     request: AgentRequest,
@@ -4469,7 +4826,7 @@ export const ReviewController = () => {
       presence: effectivePresence,
       runtime: threadRuntime,
       surface,
-      nowMs: statusNowMs,
+      nowMs: agentProjectionNowMs,
       cancelPendingRequestIds,
     });
   const currentAgentActivity = deriveCurrentAgentActivity({
@@ -4487,8 +4844,8 @@ export const ReviewController = () => {
     ]),
     progressEvents: progress,
     agentConnected,
-    runtimeOffline: pollFailures >= 2,
-    now: statusNowMs,
+    runtimeOffline: pollIsOffline,
+    now: agentProjectionNowMs,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
   });
   const chatRequests = agent.requests.filter(
@@ -4584,11 +4941,13 @@ export const ReviewController = () => {
       }),
     );
   }, [isOpen, threadProjections]);
-  const agentHealthLabel = deriveAgentHealthLabel({
-    activity: currentAgentActivity,
-    hasAgentRuntime: identity !== null,
-    isReadOnly: runtimeSession?.authoritative === false,
-  });
+  const agentHealthLabel = agentStatusIsAvailable
+    ? deriveAgentHealthLabel({
+        activity: currentAgentActivity,
+        hasAgentRuntime: identity !== null,
+        isReadOnly: runtimeSession?.authoritative === false,
+      })
+    : null;
   const isAgentWorking = currentAgentActivity.state === "working";
   const agentSessionLabel = isAgentWorking
     ? "Agent working"
@@ -4738,6 +5097,12 @@ export const ReviewController = () => {
 
   return (
     <>
+      {serverGone ? (
+        <ServerGoneBanner
+          canRefresh={canRefreshReview}
+          onRefresh={() => window.location.reload()}
+        />
+      ) : null}
       {reviewContainerHosts.map(({ container, host }) => {
         const target = targetForReviewContainer(container);
         if (target === null) return null;
@@ -4949,7 +5314,7 @@ export const ReviewController = () => {
       {isOpen ? (
         <aside
           id="big-plan-feedback-rail"
-          className="fixed top-11 right-0 bottom-0 z-20 flex w-[min(22rem,100vw)] min-w-0 max-w-full flex-col overflow-hidden border-l border-edge bg-paper text-ink shadow-floating"
+          className="fixed top-11 right-0 bottom-0 z-40 flex w-[min(22rem,100vw)] min-w-0 max-w-full flex-col overflow-hidden border-l border-edge bg-paper text-ink shadow-floating"
           aria-label="Feedback"
         >
           <div className="flex flex-none items-stretch border-b border-edge bg-paper">
@@ -5109,12 +5474,14 @@ export const ReviewController = () => {
                     }
                     onJump={() => jumpTo(comment)}
                     onSubmit={() => void sendComments([comment])}
-                    canSubmit={identity === null || canSendToAgent}
+                    submitAvailability={commentSubmitAvailability}
                     onShowAgent={showAgentSetup}
                     onAssociate={setAssociatedTarget}
                     identity={identity}
                     currentSnapshot={currentSnapshot}
                     onStatus={setStatus}
+                    unsavedInputKey={`draft:rail:${comment.id}`}
+                    onUnsavedInputChange={onUnsavedInputChange}
                     onResolve={() => toggleResolvedComment(comment.id)}
                     compact={compact}
                   />
@@ -5145,12 +5512,14 @@ export const ReviewController = () => {
                     }
                     onJump={() => jumpTo(comment)}
                     onSubmit={() => void sendComments([comment])}
-                    canSubmit={identity === null || canSendToAgent}
+                    submitAvailability={commentSubmitAvailability}
                     onShowAgent={showAgentSetup}
                     onAssociate={setAssociatedTarget}
                     identity={identity}
                     currentSnapshot={currentSnapshot}
                     onStatus={setStatus}
+                    unsavedInputKey={`draft:rail:${comment.id}`}
+                    onUnsavedInputChange={onUnsavedInputChange}
                     resolved
                     onResolve={() => toggleResolvedComment(comment.id)}
                   />
@@ -5209,6 +5578,8 @@ export const ReviewController = () => {
                         setPendingRevert({ requestId, commentId })
                       }
                       currentSnapshot={currentSnapshot}
+                      unsavedInputKey={`reply:rail:${comment.id}`}
+                      onUnsavedInputChange={onUnsavedInputChange}
                       compact={compact}
                       queuePosition={queuePosition}
                       suppressPendingStatus={activeBatchCommentIds.includes(
@@ -5268,6 +5639,7 @@ export const ReviewController = () => {
             <AgentSurface
               model={{
                 activity: currentAgentActivity,
+                presenceState: agentProjection.state,
                 connected: agentConnected,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
                 connectionLog: agentConnection.events,
@@ -5286,10 +5658,7 @@ export const ReviewController = () => {
                 className="w-full px-3! py-2! text-xs"
                 size="sm"
                 disabled={
-                  unresolvedDrafts.length === 0 ||
-                  isSending ||
-                  currentAgentActivity.state === "offline" ||
-                  runtimeSession?.authoritative === false
+                  unresolvedDrafts.length === 0 || isSending || !canSendToAgent
                 }
                 onClick={() => void sendComments(unresolvedDrafts)}
               >
@@ -5298,6 +5667,23 @@ export const ReviewController = () => {
               {identity === null ? (
                 <p className="m-0 text-xs text-support" role="status">
                   {status}
+                </p>
+              ) : agentProjection.state === "loading" ? (
+                <p
+                  className="m-0 text-xs text-support"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Checking agent status…
+                </p>
+              ) : agentProjection.state === "unobservable" ? (
+                <p
+                  className="m-0 text-xs text-support"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Agent status is unavailable while the review session is
+                  offline.
                 </p>
               ) : (
                 <div role="status" aria-live="polite">
@@ -5381,12 +5767,14 @@ export const ReviewController = () => {
               onDelete={() => setPendingDelete({ kind: "comment", comment })}
               onJump={() => jumpTo(comment)}
               onSubmit={() => void sendComments([comment])}
-              canSubmit={identity === null || canSendToAgent}
+              submitAvailability={commentSubmitAvailability}
               onShowAgent={showAgentSetup}
               onAssociate={setAssociatedTarget}
               identity={identity}
               currentSnapshot={currentSnapshot}
               onStatus={setStatus}
+              unsavedInputKey={`draft:thread:${comment.id}`}
+              onUnsavedInputChange={onUnsavedInputChange}
               onResolve={() => toggleResolvedComment(comment.id)}
             />
           ),
@@ -5440,6 +5828,8 @@ export const ReviewController = () => {
                   setPendingRevert({ requestId, commentId })
                 }
                 currentSnapshot={currentSnapshot}
+                unsavedInputKey={`reply:thread:${comment.id}`}
+                onUnsavedInputChange={onUnsavedInputChange}
               />
             );
           },
@@ -5457,7 +5847,7 @@ export const ReviewController = () => {
           body={composeBody}
           submitRightAway={submitRightAway}
           identity={identity}
-          canSubmitRightAway={identity === null || canSendToAgent}
+          submitAvailability={commentSubmitAvailability}
           onCancel={() => {
             setCompose(null);
             setComposeBody("");
@@ -5480,7 +5870,7 @@ export const ReviewController = () => {
             body={composeBody}
             submitRightAway={submitRightAway}
             identity={identity}
-            canSubmitRightAway={identity === null || canSendToAgent}
+            submitAvailability={commentSubmitAvailability}
             onCancel={() => {
               setCompose(null);
               setComposeBody("");

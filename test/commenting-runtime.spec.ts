@@ -32,6 +32,175 @@ import { expect, stageComment, test, type Page } from "./fixtures";
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
+test("should keep one staged comment after reloading the live review", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const commentBody = "Keep this staged comment unique after reload.";
+  await stageComment(page, commentBody);
+
+  await page.reload();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const feedback = page.getByRole("complementary", { name: "Feedback" });
+  await expect(
+    feedback.getByRole("button", {
+      name: `Expand staged comment: ${commentBody}`,
+    }),
+  ).toHaveCount(1);
+});
+
+test("should keep feedback tabs clickable above the mobile contents bar", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto(reviewRuntimeUrl);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  await page.getByRole("tab", { name: "Chat" }).click();
+
+  await expect(page.getByRole("tabpanel", { name: "Chat" })).toBeVisible();
+});
+
+test("should merge an outage-time draft with newer runtime state", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const identity = await page.locator("html").evaluate((root) => {
+    const bootstrap: unknown = JSON.parse(
+      root.getAttribute("data-review-bootstrap") ?? "{}",
+    );
+    return {
+      planId: root.getAttribute("data-plan-id") ?? "",
+      sessionId: root.getAttribute("data-review-session") ?? "",
+      currentSnapshot:
+        typeof bootstrap === "object" &&
+        bootstrap !== null &&
+        "currentSnapshot" in bootstrap &&
+        typeof bootstrap.currentSnapshot === "string"
+          ? bootstrap.currentSnapshot
+          : "",
+    };
+  });
+  const recoveryKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}`;
+  const runtimePaths = new Set([
+    "/api/agent",
+    "/api/drafts",
+    "/api/progress",
+    "/api/session",
+  ]);
+  await page.evaluate((paths) => {
+    const fetchFromRuntime = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(
+        input instanceof Request ? input.url : input,
+        window.location.href,
+      );
+      return paths.includes(url.pathname)
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : fetchFromRuntime(input, init);
+    };
+  }, Array.from(runtimePaths));
+
+  const banner = page.getByRole("alert").filter({
+    hasText: "This review session is no longer online",
+  });
+  await expect(banner).toBeVisible({ timeout: 6_000 });
+  const refresh = banner.getByRole("button", { name: "Refresh" });
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  const commentBody = composer.getByLabel("Add a comment");
+  await commentBody.fill("Preserve this comment through the outage.");
+  await expect(refresh).toBeDisabled();
+  await expect(banner).toContainText(
+    "the latest review input has not reached the local review server",
+  );
+  const submitRightAway = composer.getByRole("switch", {
+    name: "Submit right away",
+  });
+  if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+    await submitRightAway.click();
+  }
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate((key) => window.localStorage.getItem(key), recoveryKey),
+    )
+    .not.toBeNull();
+  await expect(refresh).toBeDisabled();
+
+  const newerRuntimeBody = "Preserve this newer runtime feedback.";
+  const reviewToken = await page
+    .locator("html")
+    .getAttribute("data-review-token");
+  if (reviewToken === null) {
+    throw new Error("The review runtime did not expose its request token");
+  }
+  const runtimeUpdate = await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      "x-big-plan-review-token": reviewToken,
+    },
+    body: JSON.stringify({
+      drafts: [
+        {
+          id: randomBytes(8).toString("hex"),
+          body: newerRuntimeBody,
+          createdAt: new Date().toISOString(),
+          premiseSnapshot: identity.currentSnapshot,
+          target: { type: "document" },
+        },
+      ],
+      activeDraft: "",
+      resolvedCommentIds: [],
+    }),
+  });
+  expect(runtimeUpdate.ok).toBe(true);
+
+  const replayed = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT" &&
+      response.ok(),
+  );
+  await page.reload();
+  await replayed;
+  await expect(banner).toBeHidden();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  await expect(
+    page.getByRole("complementary", { name: "Feedback" }),
+  ).toContainText("Preserve this comment through the outage.");
+  await expect(
+    page.getByRole("complementary", { name: "Feedback" }),
+  ).toContainText(newerRuntimeBody);
+  const persistedResponse = await fetch(
+    new URL("/api/drafts", reviewRuntimeUrl),
+    {
+      headers: {
+        "x-big-plan-review-token": reviewToken,
+      },
+    },
+  );
+  expect(persistedResponse.ok).toBe(true);
+  await expect(persistedResponse.json()).resolves.toMatchObject({
+    drafts: expect.arrayContaining([
+      expect.objectContaining({
+        body: "Preserve this comment through the outage.",
+      }),
+      expect.objectContaining({ body: newerRuntimeBody }),
+    ]),
+  });
+  await expect
+    .poll(() =>
+      page.evaluate((key) => window.localStorage.getItem(key), recoveryKey),
+    )
+    .toBeNull();
+});
+
 test("should expire a held connected snapshot when the reviewer returns", async ({
   page,
   reviewRuntimeUrl,
@@ -306,9 +475,15 @@ test("should contain working comments when resolved threads expand", async ({
   });
 
   for (let index = 0; index < 6; index += 1) {
+    const resolutionPersisted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/drafts") &&
+        response.request().method() === "PUT",
+    );
     await rail.getByRole("button", { name: "Resolve thread" }).first().click();
+    await expect(rail.getByText(`Resolved (${index + 1})`)).toBeVisible();
+    expect((await resolutionPersisted).ok()).toBe(true);
   }
-  await expect(rail.getByText("Resolved (6)")).toBeVisible();
 
   await rail.getByRole("button", { name: "Close feedback" }).click();
   await stageComment(

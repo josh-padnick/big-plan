@@ -20,6 +20,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { placeTooltip, type TooltipPosition } from "./tooltip-position.js";
 
 const joinClasses = (
   ...values: ReadonlyArray<string | false | null | undefined>
@@ -242,40 +243,66 @@ export const Tooltip = ({
 }: TooltipProps) => {
   const tooltipId = useId();
   const anchorRef = useRef<HTMLElement>(null);
-  const timerRef = useRef<number | null>(null);
-  const [position, setPosition] = useState<{
-    readonly top: number;
-    readonly left: number;
-  } | null>(null);
+  const showTimerRef = useRef<number | null>(null);
+  const hideTimerRef = useRef<number | null>(null);
+  const [position, setPosition] = useState<TooltipPosition | null>(null);
   const hide = () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    timerRef.current = null;
+    if (showTimerRef.current !== null) {
+      window.clearTimeout(showTimerRef.current);
+    }
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+    }
+    showTimerRef.current = null;
+    hideTimerRef.current = null;
     setPosition(null);
+  };
+  const scheduleHide = () => {
+    if (showTimerRef.current !== null) {
+      window.clearTimeout(showTimerRef.current);
+      showTimerRef.current = null;
+    }
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+    }
+    hideTimerRef.current = window.setTimeout(hide, 100);
   };
   const reveal = () => {
     const rect = anchorRef.current?.getBoundingClientRect();
     if (rect === undefined) return;
-    const center = rect.left + rect.width / 2;
-    const edge = Math.min(96, window.innerWidth / 2);
-    setPosition({
-      top: placement === "below" ? rect.bottom + 8 : rect.top - 8,
-      left: Math.min(window.innerWidth - edge, Math.max(edge, center)),
-    });
+    setPosition(
+      placeTooltip({
+        anchor: rect,
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        preferredPlacement: placement,
+      }),
+    );
   };
   const show = () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    if (showTimerRef.current !== null) {
+      window.clearTimeout(showTimerRef.current);
+    }
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
     if (isInstant) {
       reveal();
       return;
     }
-    timerRef.current = window.setTimeout(() => {
+    showTimerRef.current = window.setTimeout(() => {
       reveal();
-      timerRef.current = null;
+      showTimerRef.current = null;
     }, 1_000);
   };
   useEffect(
     () => () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      if (showTimerRef.current !== null) {
+        window.clearTimeout(showTimerRef.current);
+      }
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+      }
     },
     [],
   );
@@ -306,8 +333,14 @@ export const Tooltip = ({
           <span
             id={tooltipId}
             role="tooltip"
-            className={`pointer-events-none fixed z-[2147483647] w-max max-w-44 -translate-x-1/2 rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs font-semibold leading-[1.35] text-[var(--bg)] shadow-floating ${placement === "above" ? "-translate-y-full" : ""}`}
-            style={{ top: position.top, left: position.left }}
+            className={`pointer-events-auto fixed z-[2147483647] w-max max-w-[min(11rem,calc(100vw_-_2rem))] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs leading-[1.35] font-semibold whitespace-normal text-[var(--bg)] shadow-floating [overflow-wrap:anywhere] ${position.placement === "above" ? "-translate-y-full" : ""}`}
+            style={{
+              top: position.top,
+              left: position.left,
+              maxHeight: position.maxHeight,
+            }}
+            onMouseEnter={show}
+            onMouseLeave={hide}
             {...tooltipProps}
           >
             {label}
@@ -321,7 +354,7 @@ export const Tooltip = ({
           "aria-describedby": tooltipId,
           ref: anchorRef,
           onMouseEnter: show,
-          onMouseLeave: hide,
+          onMouseLeave: scheduleHide,
           onFocusCapture: show,
           onBlurCapture: hide,
         })}
@@ -334,7 +367,7 @@ export const Tooltip = ({
       ref={anchorRef}
       className={joinClasses("inline-flex", className)}
       onMouseEnter={show}
-      onMouseLeave={hide}
+      onMouseLeave={scheduleHide}
       onFocusCapture={show}
       onBlurCapture={hide}
     >

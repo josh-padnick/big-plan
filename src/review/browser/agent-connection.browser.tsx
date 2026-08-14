@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
+import { TERMINAL_ICON } from "../../icons/lucide/terminal.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import type { CurrentAgentActivity } from "../shared/agent-status.js";
 import type { BrowserConnectionEvent } from "../shared/review-wire.js";
@@ -14,6 +15,7 @@ import {
   relativeSignalLabel,
 } from "../shared/time-label.js";
 import { Icon } from "./icon.browser.js";
+import type { ReviewAgentProjection } from "./review-poll-health.js";
 
 const Spinner = () => (
   <span
@@ -140,15 +142,6 @@ const CopyBlock = ({
   );
 };
 
-const activityTone = (activity: CurrentAgentActivity): string =>
-  activity.state === "offline" ||
-  activity.state === "disconnected" ||
-  activity.state === "errored"
-    ? "border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]"
-    : activity.state === "stalled"
-      ? "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
-      : "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]";
-
 const CurrentActivityCard = ({
   activity,
   nowMs,
@@ -202,7 +195,7 @@ const CurrentActivityCard = ({
   return (
     <article
       ref={cardRef}
-      className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] outline-offset-2 transition-[outline-color] focus-visible:outline-2 focus-visible:outline-accent motion-reduce:scroll-auto ${isAttentionActive ? "outline-2 outline-accent" : "outline-transparent"} ${activityTone(activity)}`}
+      className={`grid min-w-0 gap-2 rounded-lg border border-edge bg-raised p-3 text-xs leading-[1.45] text-muted outline-offset-2 transition-[outline-color] focus-visible:outline-2 focus-visible:outline-accent motion-reduce:scroll-auto ${isAttentionActive ? "outline-2 outline-accent" : "outline-transparent"}`}
       data-review-current-activity={activity.state}
       data-review-attention={isAttentionActive ? "true" : undefined}
       tabIndex={-1}
@@ -252,6 +245,87 @@ const CurrentActivityCard = ({
     </article>
   );
 };
+
+const ConnectionHealthCard = ({
+  connected,
+  heartbeatAt,
+  nowMs,
+}: {
+  readonly connected: boolean;
+  readonly heartbeatAt: number;
+  readonly nowMs: number;
+}) => (
+  <article
+    className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${connected ? "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]" : "border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]"}`}
+    data-review-connection-health={connected ? "connected" : "disconnected"}
+  >
+    <div className="flex min-w-0 items-center gap-2">
+      <span
+        className="size-2 shrink-0 rounded-full border-2 border-current opacity-70"
+        aria-hidden="true"
+      />
+      <strong className="min-w-0 flex-1 text-sm text-ink">
+        {connected ? "Agent connected" : "Agent disconnected"}
+      </strong>
+      <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
+        {connected ? "online" : "offline"}
+      </span>
+    </div>
+    <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 border-t border-current/20 pt-2">
+      <div className="min-w-0">
+        <dt className="text-2xs font-bold uppercase tracking-caps opacity-80">
+          Connection
+        </dt>
+        <dd className="m-0 text-ink">
+          {connected ? "Healthy" : "Unavailable"}
+        </dd>
+      </div>
+      <div className="min-w-0">
+        <dt className="text-2xs font-bold uppercase tracking-caps opacity-80">
+          Last signal
+        </dt>
+        <dd className="m-0 text-ink [overflow-wrap:anywhere]">
+          {relativeSignalLabel({ now: nowMs, at: heartbeatAt })}
+        </dd>
+      </div>
+    </dl>
+  </article>
+);
+
+const AgentPresenceUnavailableCard = () => (
+  <article
+    className="grid min-w-0 gap-1 rounded-lg border border-edge bg-raised p-3 text-xs leading-[1.45] text-muted"
+    data-review-connection-health="unobservable"
+  >
+    <strong className="text-sm text-ink">Agent status unavailable</strong>
+    <p className="m-0 [overflow-wrap:anywhere]">
+      The review session is offline, so agent presence cannot be checked.
+    </p>
+  </article>
+);
+
+const AgentPresenceLoadingCard = () => (
+  <article
+    className="grid min-w-0 gap-1 rounded-lg border border-edge bg-raised p-3 text-xs leading-[1.45] text-muted"
+    data-review-connection-health="loading"
+  >
+    <strong className="text-sm text-ink">Checking agent status</strong>
+    <p className="m-0 [overflow-wrap:anywhere]">
+      Waiting for the first review session update.
+    </p>
+  </article>
+);
+
+const AnotherViewTip = () => (
+  <aside className="mt-3 flex min-w-0 gap-2 rounded-md border border-edge bg-surface px-3 py-2 text-xs text-muted">
+    <Icon icon={TERMINAL_ICON} />
+    <p className="m-0 min-w-0 [overflow-wrap:anywhere]">
+      <strong className="text-ink">Another view:</strong> inspect the agent chat
+      or terminal for another view of progress. This does not restore the review
+      connection.
+    </p>
+  </aside>
+);
 
 const ConnectionLog = ({
   connected,
@@ -441,6 +515,7 @@ const ConnectionLog = ({
 
 export const AgentConnectionPanel = ({
   activity,
+  presenceState,
   connected,
   heartbeatAt,
   connectionLog,
@@ -452,6 +527,7 @@ export const AgentConnectionPanel = ({
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
+  readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
   readonly heartbeatAt: number;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -463,28 +539,58 @@ export const AgentConnectionPanel = ({
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
   const currentNowMs = useSecondClock();
+  const presenceIsObservable = presenceState === "observable";
+  const agentStatusIsAvailable =
+    presenceIsObservable || presenceState === "agent-unavailable";
   const isConnected =
+    presenceIsObservable &&
     connected &&
     activity.state !== "offline" &&
     activity.state !== "disconnected";
   return (
-    <div className="min-w-0">
-      <section>
-        <p className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-muted">
-          Current status
-        </p>
-        {isReadOnly ? (
-          <ReadOnlySessionCard replacementUrl={replacementUrl} />
-        ) : (
-          <CurrentActivityCard
-            activity={activity}
+    <section className="min-w-0" aria-labelledby="agent-connection-heading">
+      <h2
+        id="agent-connection-heading"
+        className="m-0 mb-3 text-sm font-bold text-ink"
+      >
+        Agent Connection
+      </h2>
+      {agentStatusIsAvailable ? (
+        <>
+          <ConnectionHealthCard
+            connected={isConnected}
+            heartbeatAt={heartbeatAt}
             nowMs={currentNowMs}
-            attentionKey={attentionKey}
-            onViewRequest={onViewRequest}
           />
-        )}
-      </section>
-      {isReadOnly || isConnected ? null : (
+          <section
+            className="mt-4"
+            aria-labelledby="agent-current-status-heading"
+          >
+            <h3
+              id="agent-current-status-heading"
+              className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-muted"
+            >
+              Current status
+            </h3>
+            {isReadOnly ? (
+              <ReadOnlySessionCard replacementUrl={replacementUrl} />
+            ) : (
+              <CurrentActivityCard
+                activity={activity}
+                nowMs={currentNowMs}
+                attentionKey={attentionKey}
+                onViewRequest={onViewRequest}
+              />
+            )}
+          </section>
+        </>
+      ) : presenceState === "loading" ? (
+        <AgentPresenceLoadingCard />
+      ) : (
+        <AgentPresenceUnavailableCard />
+      )}
+      <AnotherViewTip />
+      {isReadOnly || isConnected || !agentStatusIsAvailable ? null : (
         <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
@@ -512,7 +618,7 @@ export const AgentConnectionPanel = ({
           </div>
         </details>
       )}
-      {isReadOnly ? null : (
+      {isReadOnly || !agentStatusIsAvailable ? null : (
         <ConnectionLog
           connected={isConnected}
           heartbeatAt={heartbeatAt}
@@ -520,6 +626,6 @@ export const AgentConnectionPanel = ({
           nowMs={currentNowMs}
         />
       )}
-    </div>
+    </section>
   );
 };
