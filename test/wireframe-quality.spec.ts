@@ -4,6 +4,10 @@
 
 import { boxOf, expect, test } from "./fixtures";
 
+// How much wider the primary surface must be than any pane beside it. A third
+// is the point where the eye stops asking which one is the subject.
+const PRIMARY_DOMINANCE_RATIO = 1.3;
+
 test("should render every proof at its native device geometry", async ({
   page,
   wireframeQualityViewerUrl,
@@ -432,8 +436,11 @@ test("should keep shipped desktop panes readable and layout regions separate", a
                 node instanceof HTMLElement ? node.offsetWidth : 0,
               ),
             );
+          // An inspector holds labelled values and needs less width than a
+          // collection of record titles, so the floor is the narrowest pane
+          // that still reads, not the collection's width.
           expect(
-            paneWidths.every((width) => width >= 280),
+            paneWidths.every((width) => width >= 240),
             `pane widths: ${paneWidths.join(", ")}`,
           ).toBe(true);
 
@@ -469,11 +476,18 @@ test("should keep shipped desktop panes readable and layout regions separate", a
                   node instanceof HTMLElement ? node.offsetWidth : 0,
                 ),
               );
+            // Dominance is a ratio, not a comparison. Two panes a few pixels
+            // apart read as a split the designer could not decide, which is
+            // the defect this fence exists to catch; a primary that is merely
+            // wider passes an inequality and still looks wrong.
             const boundedWidths = [...masterWidths, ...railWidths];
             if (primaryWidths.length > 0 && boundedWidths.length > 0) {
-              expect(Math.max(...primaryWidths)).toBeGreaterThan(
-                Math.max(...boundedWidths),
-              );
+              const primary = Math.max(...primaryWidths);
+              const bounded = Math.max(...boundedWidths);
+              expect(
+                primary / bounded,
+                `primary ${primary}px beside a ${bounded}px secondary pane`,
+              ).toBeGreaterThanOrEqual(PRIMARY_DOMINANCE_RATIO);
             } else if (masterWidths.length === 1 && railWidths.length === 1) {
               expect(masterWidths[0]).toBeGreaterThan(railWidths[0]);
             }

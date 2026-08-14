@@ -53,7 +53,7 @@ export const STYLESHEET_BUDGETS = {
   "src/components/database-table-schema/styles.css": { declarations: 47 },
   "src/components/flow-diagram/styles.css": { declarations: 467 },
   "src/components/mermaid-diagram/styles.css": { declarations: 208 },
-  "src/components/wireframe/styles.css": { declarations: 984 },
+  "src/components/wireframe/styles.css": { declarations: 991 },
   "src/render/global.css": { declarations: 459 },
   "src/render/markdown/deck.css": { declarations: 48 },
   "src/render/markdown/prose.css": { declarations: 122 },

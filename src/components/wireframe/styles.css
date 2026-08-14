@@ -47,11 +47,11 @@ marks and a plan diff never jitters.
     --wf-text-meta: 0.75rem;
     --wf-text-small: 0.8125rem;
     --wf-text-body: 0.875rem;
-    --wf-text-title: 0.9375rem;
-    --wf-text-strong: 1rem;
-    --wf-text-lead: 1.0625rem;
-    --wf-text-heading: 1.375rem;
-    --wf-text-display: 1.5rem;
+    --wf-text-title: 1.25rem;
+    --wf-text-strong: 1.25rem;
+    --wf-text-lead: 1.375rem;
+    --wf-text-heading: 1.625rem;
+    --wf-text-display: 1.875rem;
   }
   /* Isolation from the reading column's element selectors. */
   .wireframe h3,
@@ -237,11 +237,11 @@ marks and a plan diff never jitters.
     --wf-text-meta: 1.0625rem;
     --wf-text-small: 1.1875rem;
     --wf-text-body: 1.25rem;
-    --wf-text-title: 1.375rem;
-    --wf-text-strong: 1.5rem;
-    --wf-text-lead: 1.5rem;
-    --wf-text-heading: 1.75rem;
-    --wf-text-display: 2.25rem;
+    --wf-text-title: 1.625rem;
+    --wf-text-strong: 1.625rem;
+    --wf-text-lead: 1.75rem;
+    --wf-text-heading: 2.125rem;
+    --wf-text-display: 2.75rem;
     /* The width stays wide enough for the documented 280-320px pane floors
        (list/master, inspector/rail) beside a dominant primary surface;
        "shorter" for desktop means height, which nothing else depends on. */
@@ -266,11 +266,11 @@ marks and a plan diff never jitters.
     --wf-text-meta: 0.9375rem;
     --wf-text-small: 1rem;
     --wf-text-body: 1.0625rem;
-    --wf-text-title: 1.125rem;
-    --wf-text-strong: 1.1875rem;
-    --wf-text-lead: 1.25rem;
-    --wf-text-heading: 1.5rem;
-    --wf-text-display: 1.875rem;
+    --wf-text-title: 1.375rem;
+    --wf-text-strong: 1.375rem;
+    --wf-text-lead: 1.4375rem;
+    --wf-text-heading: 1.75rem;
+    --wf-text-display: 2.125rem;
     max-width: var(--figure-budget);
   }
   .wireframe-screen[data-wireframe-device="tablet-portrait"] {
@@ -466,6 +466,17 @@ marks and a plan diff never jitters.
     flex: 1 1 0;
     min-width: 8rem;
   }
+  /* A collection beside its detail is never an even split, on any device. The
+     record being read is the primary surface; the collection is how the reader
+     got to it, and it only has to stay wide enough to compare titles. Two
+     panes of equal width read as a layout nobody chose, which is the single
+     most common way a workspace drawing looks amateur. Desktop refines these
+     numbers below against its own fixed budget; this is the rule everywhere
+     else, including tablet. */
+  .wireframe-row[data-wireframe-workspace] > [data-wireframe-master] {
+    flex: 0 1 22rem;
+    min-width: 15rem;
+  }
 
   /* Outlining every region makes controls, panels, and page structure all
      compete, so nothing reads as more important than anything else. A region
@@ -496,10 +507,30 @@ marks and a plan diff never jitters.
   .wireframe-panel-head {
     margin-bottom: 0.5rem;
   }
-  /* Three text levels and no more: page title, content, metadata. A panel
-     title is content-level, so it never competes with the page title. */
-  .wireframe-panel-title {
+  /* Four levels of attention, each one a step a reader can see: page title,
+     section title, content, metadata. The rule that matters is the distance
+     between them - two roles a third of a step apart read as the same role
+     drawn twice, which is how a screen ends up looking flat even when every
+     level is technically present. A ramp-step test fences the distances.
+
+     This wins over the `h4` element rule above because the role a heading
+     plays is what sets its size, not the tag the view happened to pick. */
+  .wireframe h4.wireframe-panel-title,
+  .wireframe h5.wireframe-panel-title {
     font-size: var(--wf-text-title);
+  }
+  /* A panel inside another panel is labelling a group, not titling a surface,
+     so it steps down into the label vocabulary rather than competing with the
+     title above it. Smaller, tracked, and quieter makes it unmistakably a
+     different thing from the rows beneath it, which stay ordinary content -
+     the difference is carried on three axes at once, not on size alone. */
+  .wireframe-panel .wireframe-panel h4.wireframe-panel-title,
+  .wireframe-panel .wireframe-panel h5.wireframe-panel-title {
+    font-size: var(--wf-text-meta);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
   }
   .wireframe-eyebrow {
     font-size: var(--wf-text-meta);
@@ -838,18 +869,23 @@ marks and a plan diff never jitters.
   }
   /* A queue/list is a stable master pane. The primary sibling receives the
      remaining width, which keeps conversation, document, or canvas dominant.
+
      The bases are a budget, not three independent guesses: on the 1200px
-     canvas a 240px sidebar leaves a 928px workspace row, and holding both
-     bounded panes at their documented 280px floor leaves the primary surface
-     368px - still the widest pane in a three-pane triage screen, which is the
-     invariant, while a fourth pane would break it. */
+     canvas a 240px sidebar leaves a 928px workspace row, and 272 for the
+     collection plus 240 for the inspector leaves the primary surface 416px.
+     Dominance is a ratio, not a comparison: merely being a few pixels wider
+     reads as two panes the designer could not choose between, so the primary
+     is held at least a third wider than any pane beside it and the geometry
+     test measures that ratio rather than a bare inequality. An inspector is
+     the narrowest of the three because it holds labelled values, which need
+     far less width than a collection of record titles. */
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > [data-wireframe-master] {
-    flex: 0 1 17.5rem;
-    min-width: 16rem;
-    max-width: 20rem;
+    flex: 0 1 17rem;
+    min-width: 15rem;
+    max-width: 19rem;
     overflow-y: auto;
   }
   /* In a two-pane comparison workspace, the collection is the primary working
@@ -2445,9 +2481,9 @@ marks and a plan diff never jitters.
     .wireframe-app-content
     > .wireframe-row[data-wireframe-workspace]
     > .wireframe-rail {
-    flex: 0 0 17.5rem;
-    min-width: 17.5rem;
-    max-width: 19rem;
+    flex: 0 0 15rem;
+    min-width: 14rem;
+    max-width: 17rem;
     min-height: 0;
     overflow-y: auto;
   }

@@ -94,15 +94,23 @@ const statusMarkFor = (status: WireframeStatus | undefined): ReactNode =>
 
 // A direct record collection makes its Panel the master pane. Rail is the only
 // authored width primitive; the Row owns every other workspace proportion.
-const isMasterPane = (node: WireframeNode): boolean =>
+const holdsCollection = (node: WireframeNode): boolean =>
   node.element === "Panel" &&
   node.children.some(
     (child) => child.element === "List" || child.element === "Table",
   );
 
+// Exactly one pane in a row is the collection: the first one. A detail pane
+// often holds a list too - properties, context, a checklist - and reading that
+// as a second collection is what produces two equally bounded panes with no
+// primary surface between them. Reading order decides, because the collection
+// is what the reader came through to reach the record.
+const masterIndexIn = (children: ReadonlyArray<WireframeNode>): number =>
+  children.length > 1 ? children.findIndex(holdsCollection) : -1;
+
 const isWorkspaceRow = (children: ReadonlyArray<WireframeNode>): boolean =>
   children.some((child) => child.element === "Rail") ||
-  (children.length > 1 && children.some(isMasterPane));
+  masterIndexIn(children) >= 0;
 
 // A conversation has two independently behaving regions behind the ordinary
 // Panel interface: the thread scrolls, while the mode and composer stay
@@ -134,8 +142,12 @@ const conversationPartsFor = (
 
 const WireframeElement = ({
   node,
+  isMasterPane = false,
 }: {
   readonly node: WireframeNode;
+  // Set only by the Row that owns this pane, because whether a panel is the
+  // collection is a fact about its siblings, not about the panel alone.
+  readonly isMasterPane?: boolean;
 }): JSX.Element => {
   switch (node.element) {
     case "Stack":
@@ -154,7 +166,10 @@ const WireframeElement = ({
             ? { "data-wireframe-workspace": "" }
             : {})}
         >
-          <WireframeElements nodes={node.children} />
+          <WireframeElements
+            nodes={node.children}
+            masterIndex={masterIndexIn(node.children)}
+          />
         </div>
       );
     case "Panel": {
@@ -163,7 +178,7 @@ const WireframeElement = ({
         <section
           className="wireframe-panel relative"
           data-wireframe-surface={node.surface}
-          {...(isMasterPane(node) ? { "data-wireframe-master": "" } : {})}
+          {...(isMasterPane ? { "data-wireframe-master": "" } : {})}
         >
           {node.eyebrow === undefined && node.title === undefined ? null : (
             <header className="wireframe-panel-head">
@@ -704,12 +719,18 @@ const Field = ({
 
 const WireframeElements = ({
   nodes,
+  masterIndex = -1,
 }: {
   readonly nodes: ReadonlyArray<WireframeNode>;
+  readonly masterIndex?: number;
 }) => (
   <>
     {nodes.map((node, index) => (
-      <WireframeElement key={index} node={node} />
+      <WireframeElement
+        key={index}
+        node={node}
+        isMasterPane={index === masterIndex}
+      />
     ))}
   </>
 );
