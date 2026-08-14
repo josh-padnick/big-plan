@@ -3,9 +3,14 @@
 // does not depend on the browser or Node.
 
 import type { ProgressStepCode } from "./progress-code.js";
+import type { BrowserConnectionEvent } from "./review-wire.js";
 import { compactDurationLabel } from "./time-label.js";
 
-export const AGENT_STALL_MS = 90_000;
+// Agents are expected to send a progress note at least once per minute while
+// working. The extra 15 seconds absorbs scheduling and filesystem jitter, but
+// still marks a killed agent disconnected well before a two-minute wait.
+export const AGENT_STALL_MS = 75_000;
+export const AGENT_STALL_WINDOW_LABEL = "75 seconds";
 
 export type AgentActivityRequest = {
   readonly requestId: string;
@@ -140,6 +145,68 @@ export const agentPresenceIsFresh = ({
   heartbeatAt > 0 &&
   Math.max(0, now - heartbeatAt) <= AGENT_STALL_MS;
 
+/** Reconciles persisted connection events with the current presence lease. */
+export const projectAgentConnectionState = ({
+  presenceConnected,
+  heartbeatAt,
+  now,
+  events,
+}: {
+  readonly presenceConnected: boolean;
+  readonly heartbeatAt: number;
+  readonly now: number;
+  readonly events: ReadonlyArray<BrowserConnectionEvent>;
+}): {
+  readonly connected: boolean;
+  readonly events: ReadonlyArray<BrowserConnectionEvent>;
+} => {
+  const connected = agentPresenceIsFresh({
+    connected: presenceConnected,
+    heartbeatAt,
+    now,
+  });
+  let latest: { readonly connected: boolean; readonly atMs: number } | null =
+    null;
+  for (const event of events) {
+    const atMs = Date.parse(event.at);
+    if (Number.isFinite(atMs) && (latest === null || atMs >= latest.atMs)) {
+      latest = { connected: event.connected, atMs };
+    }
+  }
+  if (latest === null || latest.connected === connected) {
+    return { connected, events };
+  }
+
+  const leaseExpired =
+    Number.isFinite(heartbeatAt) &&
+    Number.isFinite(now) &&
+    heartbeatAt > 0 &&
+    now - heartbeatAt > AGENT_STALL_MS;
+  const observedAtMs = connected
+    ? heartbeatAt
+    : leaseExpired
+      ? heartbeatAt + AGENT_STALL_MS + 1
+      : now;
+  const projectedAtMs = Math.max(observedAtMs, latest.atMs + 1);
+  const projectedAt = new Date(projectedAtMs);
+  if (Number.isNaN(projectedAt.getTime())) return { connected, events };
+
+  return {
+    connected,
+    events: [
+      ...events,
+      {
+        eventId: `presence-${connected ? "connected" : "disconnected"}-${projectedAtMs}`,
+        connected,
+        at: projectedAt.toISOString(),
+        ...(!connected && leaseExpired
+          ? { reason: `No agent signal within ${AGENT_STALL_WINDOW_LABEL}` }
+          : {}),
+      },
+    ],
+  };
+};
+
 /** Explains a lost lease without claiming why the external agent stopped. */
 const disconnectedSupporting = ({
   heartbeatAt,
@@ -154,7 +221,7 @@ const disconnectedSupporting = ({
   });
   return quietFor === null
     ? "Reconnect the coding agent to continue. All comments are safe."
-    : `No agent signal for ${quietFor}; the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
+    : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
 };
 
 /** Derives the single current-work card from immutable runtime facts. */

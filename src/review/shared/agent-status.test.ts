@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   AGENT_STALL_MS,
+  agentPresenceIsFresh,
   deriveAgentStatus,
   deriveAgentHealthLabel,
   deriveCurrentAgentActivity,
+  projectAgentConnectionState,
   type AgentActivityRequest,
 } from "./agent-status.js";
 
@@ -57,6 +59,20 @@ describe("current agent activity", () => {
 
   it("should expire a previously connected agent when its heartbeat is stale", () => {
     expect(
+      agentPresenceIsFresh({
+        connected: true,
+        heartbeatAt: NOW - 75_000,
+        now: NOW,
+      }),
+    ).toBe(true);
+    expect(
+      agentPresenceIsFresh({
+        connected: true,
+        heartbeatAt: NOW - 75_001,
+        now: NOW,
+      }),
+    ).toBe(false);
+    expect(
       deriveCurrentAgentActivity({
         requests: [],
         responseRequestIds: new Set(),
@@ -69,7 +85,7 @@ describe("current agent activity", () => {
     ).toMatchObject({
       state: "disconnected",
       headline: "The agent is disconnected",
-      supporting: expect.stringContaining("No agent signal for 1m 30s"),
+      supporting: expect.stringContaining("disconnect threshold: 75 seconds"),
     });
   });
 
@@ -170,6 +186,91 @@ describe("current agent activity", () => {
   });
 });
 
+describe("agent connection events", () => {
+  const connectedEvent = {
+    eventId: "event-1",
+    connected: true,
+    at: new Date(NOW - 80_000).toISOString(),
+  };
+
+  it("should keep the connected event current when the heartbeat is exactly 75 seconds old", () => {
+    expect(
+      projectAgentConnectionState({
+        presenceConnected: true,
+        heartbeatAt: NOW - 75_000,
+        now: NOW,
+        events: [connectedEvent],
+      }),
+    ).toEqual({ connected: true, events: [connectedEvent] });
+  });
+
+  it("should project disconnection when the heartbeat is 75,001 milliseconds old", () => {
+    expect(
+      projectAgentConnectionState({
+        presenceConnected: true,
+        heartbeatAt: NOW - 75_001,
+        now: NOW,
+        events: [connectedEvent],
+      }),
+    ).toEqual({
+      connected: false,
+      events: [
+        connectedEvent,
+        {
+          eventId: `presence-disconnected-${NOW}`,
+          connected: false,
+          at: new Date(NOW).toISOString(),
+          reason: "No agent signal within 75 seconds",
+        },
+      ],
+    });
+  });
+
+  it("should keep disconnection current when a reconnect event races after stale presence", () => {
+    const reconnectAt = NOW - 500;
+    const projection = projectAgentConnectionState({
+      presenceConnected: false,
+      heartbeatAt: NOW - 76_000,
+      now: NOW,
+      events: [
+        connectedEvent,
+        {
+          eventId: "event-2",
+          connected: true,
+          at: new Date(reconnectAt).toISOString(),
+        },
+      ],
+    });
+    expect(projection.connected).toBe(false);
+    expect(projection.events.at(-1)).toMatchObject({
+      connected: false,
+      at: new Date(reconnectAt + 1).toISOString(),
+    });
+  });
+
+  it("should keep connection current when a disconnect event races after fresh presence", () => {
+    const disconnectAt = NOW - 500;
+    const projection = projectAgentConnectionState({
+      presenceConnected: true,
+      heartbeatAt: NOW - 1_000,
+      now: NOW,
+      events: [
+        connectedEvent,
+        {
+          eventId: "event-2",
+          connected: false,
+          at: new Date(disconnectAt).toISOString(),
+        },
+      ],
+    });
+    expect(projection.connected).toBe(true);
+    expect(projection.events.at(-1)).toMatchObject({
+      connected: true,
+      at: new Date(disconnectAt + 1).toISOString(),
+    });
+  });
+});
+
 describe("agent request status", () => {
   it("should never call queued work working before pickup", () => {
     const status = deriveAgentStatus({
@@ -222,7 +323,7 @@ describe("agent request status", () => {
       lastAgentSignalAtMs: NOW - AGENT_STALL_MS - 1,
     });
     expect(stalled.stage).toBe("stalled");
-    expect(stalled.headline).toBe("No progress for 2m");
+    expect(stalled.headline).toBe("No progress for 1m");
     expect(stalled.detail).toContain("agent session is still connected");
     expect(
       deriveAgentStatus({

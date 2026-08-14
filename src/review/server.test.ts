@@ -1652,7 +1652,7 @@ describe("review runtime shutdown", () => {
           store: replacement.store,
           sessionId: replacement.sessionId,
         }),
-      ).toBe(true);
+      ).toMatchObject({ running: true });
       const oldSessionResponse = await fetch(`${first.url}api/session`, {
         headers: { "x-big-plan-review-token": firstToken },
       });
