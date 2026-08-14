@@ -243,8 +243,8 @@ marks and a plan diff never jitters.
     --wf-text-lead: 1.75rem;
     --wf-text-heading: 2.125rem;
     --wf-text-display: 2.75rem;
-    /* The width stays wide enough for the documented 280-320px pane floors
-       (list/master, inspector/rail) beside a dominant primary surface;
+    /* The 1200px desktop stays wide enough for its 240px sidebar and the
+       documented 272px collection, 416px primary, and 240px inspector;
        "shorter" for desktop means height, which nothing else depends on. */
     --wf-min-height: 820px;
     /* One review width for every desktop prototype, and the figure budget is

@@ -12,7 +12,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 - **A · Audience language.** Do identity, terms, consequences, and next actions sound natural to this person?
 - **R · Real device.** Is this the native interaction pattern for this device and task complexity?
 
-**LOOP** is only the render-and-review workflow. **CRAP** remains the separate standard for the plan page around the artboard.
+**LOOP** is only the render-and-review workflow. **CRAP** governs both the plan page and the product UI inside the artboard.
 
 ## C · Clear job
 
@@ -90,7 +90,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 
 **Reject:** a tablet decision split into columns; thin-row pseudo-selection; graph paper louder than the task; a shrunken desktop form floating in an iPad; equal-weight or squeezed panes; card walls; floating metadata or actions; cramped matrix headers; criteria styled like option titles; definitions that read as answers; comment borders crossing text; repeated anchored context; detached tray actions; unrelated dependencies; recommendation/value ambiguity; oversized empty panels; biased choices; decorative filler; anything louder than its importance.
 
-**Mechanics:** plain panels, dominant derived panes, and `Rail` encode the default hierarchy. Compilation blocks equal desktop thirds and four-or-more outlined siblings; geometry tests block cramped panes, overlap, and dead bands.
+**Mechanics:** plain panels, dominant derived panes, and `Rail` encode the default hierarchy. Compilation blocks equal desktop thirds and four-or-more outlined siblings; lint blocks a `Row` beyond its device column budget; a ramp check separates the four type levels; geometry tests block cramped panes, overlap, dead bands, illegible painted type, and a primary surface less than a third wider than an adjacent pane.
 
 ## E · Explicit change
 
@@ -180,14 +180,14 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 
 - Use a native layout language, not one design scaled three ways: dense B2B patterns on desktop, iPadOS composition on tablet, and iOS push navigation on phone.
 - Put hand-drawn irregularity in strokes, grid, icons, and rough borders—never alignment, spacing, reading order, contrast, information architecture, or target size.
-- Keep three legible type roles: page title, content, and metadata.
+- Keep four visibly separated type levels: heading, panel title, body, and metadata.
 - Make controls unmistakable through shape and state. Tablet and phone targets are at least 44px.
 - In an expanded multi-screen viewer, show screen names as a vertical list on the left; arrow keys move through it and keep the active screen visible.
 - Enter expanded mode fit-to-viewport and centered on both axes; allow zoom below 100%. Comment and selection markers keep a fixed readable screen size under zoom instead of scaling with the canvas.
 - Reserve element comments for expanded mode: select the element, then comment. Inline mode keeps one calm whole-screen comment area and passive scrolling never triggers element affordances.
 - Keep the expanded toolbar stable: `Add N notes to plan feedback` stays flush left in inline and expanded modes and never overlaps the live note count.
 
-**Desktop passes:** a 1200 × 820 application viewport with no app-wide horizontal scroll; flexible minmax-style columns keep a 64–180px navigation rail, 280–320px list, dominant primary surface, and 280–320px inspector in one row; persistent panes scroll independently while the header and composer remain anchored; narrower widths collapse navigation, then inspector, before overflow; tight vertical rhythm; Linear-style settings; create/edit as a route or true modal; and keyboard shortcuts for list movement, search, open, compose, mode switch, send, assign, and resolve that supplement visible controls.
+**Desktop passes:** a 1200 × 820 application viewport with no app-wide horizontal scroll; a 240px labelled navigation sidebar, 272px collection, 416px dominant primary surface, and 240px inspector spend the canvas exactly once; persistent panes scroll independently while the header and composer remain anchored; narrower widths collapse navigation, then inspector, before overflow; tight vertical rhythm; Linear-style settings; create/edit as a route or true modal; and keyboard shortcuts for list movement, search, open, compose, mode switch, send, assign, and resolve that supplement visible controls. A deliberate 64–72px icon-only rail is a different navigation design, not a squeezed labelled sidebar.
 
 **Desktop rejects:** equal thirds; whole-page scrolling while answering; app-wide horizontal scroll; four squeezed screens; a sidebar taking a third; floating tablet navigation; two large settings cards; inflated chrome; oversized iPad sheets.
 
@@ -199,7 +199,7 @@ CLEAR keeps the complete design standard memorable. The product sketches use onl
 
 **Phone rejects:** desktop shells; side-by-side properties; a vertical iPad; height-only tablet cards; desktop copy squeezed narrow.
 
-**Mechanics:** device presets own widths, fixed tablet ratio, shell availability, type roles, flexible pane widths, independent overflow, anchored conversation chrome, touch floors, contrast, and state paint. `ChoiceGroup` and `ChoiceCard` own simple-decision dominance, touch surfaces, and multi-signal selection; compilation blocks initial preselection, premature continuation, nonmatching option outcomes, and competing tablet columns. Viewer primitives own fit, centered expansion, below-100% zoom, fixed-size markers, expanded navigation, toolbar placement, focus return, and scroll preservation. Browser geometry checks fence app-wide overflow, primary dominance, independent panes, anchored header/composer, 1.39–1.44 tablet ratio, shells, readable panes, overlap, unjustified dead bands, and target sizes.
+**Mechanics:** device presets own widths, fixed tablet ratio, shell availability, type roles, flexible pane widths, independent overflow, anchored conversation chrome, touch floors, contrast, and state paint. `ChoiceGroup` and `ChoiceCard` own simple-decision dominance, touch surfaces, and multi-signal selection; compilation blocks initial preselection, premature continuation, nonmatching option outcomes, and competing tablet columns. Viewer primitives own width fitting at rest, two-axis fitting while maximized, expanded navigation, toolbar placement, focus return, and scroll preservation. Horizontal centering of the fitted frame, below-100% zoom, and fixed-size markers remain standards a product wireframe must depict rather than reader controls the viewer supplies. Browser geometry checks fence app-wide overflow, primary dominance, independent panes, anchored header/composer, 1.39–1.44 tablet ratio, shells, readable panes, overlap, unjustified dead bands, legibility floors, type-level separation, and target sizes.
 
 ## What the curation absorbed
 

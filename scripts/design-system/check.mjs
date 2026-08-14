@@ -1,12 +1,15 @@
 // Enforces the closed design scales described in _internal/DESIGN_PRINCIPLES.md. This
 // check owns the exact allowed steps; the document owns why they are the steps.
 //
-// Colour and type need no check here, because the theme already closes them:
-// a palette shade is a plain custom property and never becomes a utility, and
-// every stock Tailwind size and tracking step is dropped before the product's
-// own are declared. Spacing cannot be closed the same way, because Tailwind
-// derives every numeric spacing utility from one base unit. So spacing, radius,
-// and shadow are closed here instead.
+// The reading surface's colour and type need no utility check here, because the
+// theme already closes them: a palette shade is a plain custom property and
+// never becomes a utility, and every stock Tailwind size and tracking step is
+// dropped before the product's own are declared. The wireframe artboard has a
+// separate role-based type ramp, so this check also closes that ramp per device
+// and keeps adjacent information-hierarchy roles visibly separated. Spacing
+// cannot be closed through the theme because Tailwind derives every numeric
+// spacing utility from one base unit, so spacing, radius, and shadow are closed
+// here too.
 
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
@@ -305,10 +308,7 @@ const rampSelectorDevices = (selector) => {
 
 const isDeviceRootSelector = (selector, className, device) => {
   const normalized = selector.trim().replaceAll("'", '"');
-  return (
-    normalized ===
-    `.${className}[data-wireframe-device="${device}"]`
-  );
+  return normalized === `.${className}[data-wireframe-device="${device}"]`;
 };
 
 const rampDeclarations = (root) => {
@@ -356,21 +356,13 @@ const rampDeclarations = (root) => {
     }
     for (const device of declaration.devices) {
       if (
-        isDeviceRootSelector(
-          declaration.selector,
-          "wireframe-screen",
-          device,
-        )
+        isDeviceRootSelector(declaration.selector, "wireframe-screen", device)
       ) {
         const sizes = ownedByDevice.get(device) ?? {};
         sizes[declaration.role] = declaration.size;
         ownedByDevice.set(device, sizes);
       } else if (
-        isDeviceRootSelector(
-          declaration.selector,
-          "wireframe-artboard",
-          device,
-        )
+        isDeviceRootSelector(declaration.selector, "wireframe-artboard", device)
       ) {
         const sizes = artboardByDevice.get(device) ?? {};
         sizes[declaration.role] = declaration.size;
