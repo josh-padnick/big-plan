@@ -306,7 +306,7 @@ export const Tooltip = ({
           <span
             id={tooltipId}
             role="tooltip"
-            className={`pointer-events-none fixed z-[2147483647] w-max max-w-44 -translate-x-1/2 rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs font-semibold leading-[1.35] text-[var(--bg)] shadow-floating ${placement === "above" ? "-translate-y-full" : ""}`}
+            className={`pointer-events-none fixed z-[2147483647] w-max max-w-[min(11rem,calc(100vw_-_2rem))] -translate-x-1/2 rounded-sm bg-[var(--ink-c)] px-2 py-1 text-center text-2xs leading-[1.35] font-semibold whitespace-normal text-[var(--bg)] shadow-floating [overflow-wrap:anywhere] ${placement === "above" ? "-translate-y-full" : ""}`}
             style={{ top: position.top, left: position.left }}
             {...tooltipProps}
           >
