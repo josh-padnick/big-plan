@@ -60,6 +60,7 @@ export type AgentWorkLoopAction =
       readonly planPath: string;
       readonly executablePath: string;
       readonly shouldWait: boolean;
+      readonly modelName?: string;
     }
   | {
       readonly kind: "respond";
@@ -71,6 +72,7 @@ export type AgentWorkLoopAction =
       readonly kind: "note";
       readonly planPath: string;
       readonly detail: string;
+      readonly modelName?: string;
     };
 
 export type AgentWorkLoopErrorCode = "invalid-input" | "validation-error";
@@ -264,11 +266,14 @@ const nextWork = async ({
   planPath,
   shouldWait,
   executablePath,
+  modelName,
 }: {
   readonly planPath: string;
   readonly shouldWait: boolean;
   readonly executablePath: string;
+  readonly modelName?: string;
 }): Promise<Record<string, unknown>> => {
+  const model = modelName === undefined ? undefined : { name: modelName };
   const session = await readPlanSession(planPath);
   let snapshot = await readAgentExchange({
     store: session.store,
@@ -281,6 +286,7 @@ const nextWork = async ({
       store: session.store,
       sessionId: session.sessionId,
       state: "waiting",
+      ...(model === undefined ? {} : { model }),
     });
     const liveness = await reviewSessionIsAvailable({
       store: session.store,
@@ -363,6 +369,7 @@ const nextWork = async ({
     sessionId: session.sessionId,
     state: "working",
     requestId: request.requestId,
+    ...(model === undefined ? {} : { model }),
   });
   await appendProgressEvent({
     store: session.store,
@@ -582,10 +589,13 @@ const respond = async ({
 const note = async ({
   planPath,
   detail,
+  modelName,
 }: {
   readonly planPath: string;
   readonly detail: string;
+  readonly modelName?: string;
 }): Promise<Record<string, unknown>> => {
+  const model = modelName === undefined ? undefined : { name: modelName };
   const message = detail.trim();
   if (message === "" || message.length > 160) {
     return fail("Progress must be between 1 and 160 characters");
@@ -628,6 +638,7 @@ const note = async ({
     sessionId: session.sessionId,
     state: "working",
     requestId: request.requestId,
+    ...(model === undefined ? {} : { model }),
   });
   return { noted: message, requestId: request.requestId };
 };
@@ -644,6 +655,9 @@ export const runAgentWorkLoopAction = async (
       planPath: action.planPath,
       shouldWait: action.shouldWait,
       executablePath: action.executablePath,
+      ...(action.modelName === undefined
+        ? {}
+        : { modelName: action.modelName }),
     });
   }
   if (action.kind === "respond") {
@@ -653,5 +667,9 @@ export const runAgentWorkLoopAction = async (
       executablePath: action.executablePath,
     });
   }
-  return note({ planPath: action.planPath, detail: action.detail });
+  return note({
+    planPath: action.planPath,
+    detail: action.detail,
+    ...(action.modelName === undefined ? {} : { modelName: action.modelName }),
+  });
 };

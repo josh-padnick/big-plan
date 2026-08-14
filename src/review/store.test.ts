@@ -483,6 +483,68 @@ describe("review store agent presence", () => {
       updatedAtMs: 10_000,
     });
   });
+
+  it("reports the connector's self-reported model identity while fresh", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      model: { name: "Grok 4.6" },
+      now: 10_000,
+    });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 12_000,
+      }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      model: { name: "Grok 4.6" },
+      updatedAtMs: 10_000,
+    });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 10_000 + AGENT_STALL_MS + 1,
+      }),
+    ).resolves.toEqual({
+      connected: false,
+      state: "waiting",
+      updatedAtMs: 10_000,
+    });
+  });
+
+  it("degrades to an unknown identity instead of trusting a malformed model", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeFile(
+      store.agentHeartbeatPath,
+      JSON.stringify({
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "waiting",
+        model: { name: "  " },
+        updatedAtMs: 10_000,
+      }),
+    );
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 12_000,
+      }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      updatedAtMs: 10_000,
+    });
+  });
 });
 
 describe("review store progress relay", () => {

@@ -1303,12 +1303,22 @@ export const writeSessionHeartbeatValue = async ({
   await writeJson({ path: store.heartbeatPath, value });
 };
 
+export type AgentModelIdentity = {
+  readonly name: string;
+};
+
 export type AgentPresence = {
   readonly connected: boolean;
   readonly state: "waiting" | "working";
   readonly requestId?: string;
   readonly updatedAtMs?: number;
+  readonly model?: AgentModelIdentity;
 };
+
+// The longest model name the card will trust. Long enough for real names
+// like "GPT-5.6-Luna", short enough that a malformed value cannot push
+// layout around.
+const MAXIMUM_MODEL_NAME_LENGTH = 80;
 
 /** Refreshes the coding-agent liveness signal with its observable state. */
 export const writeAgentHeartbeat = async ({
@@ -1316,12 +1326,14 @@ export const writeAgentHeartbeat = async ({
   sessionId,
   state,
   requestId,
+  model,
   now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly state: "waiting" | "working";
   readonly requestId?: string;
+  readonly model?: AgentModelIdentity;
   readonly now?: number;
 }): Promise<void> => {
   await writeJson({
@@ -1330,6 +1342,7 @@ export const writeAgentHeartbeat = async ({
       sessionId,
       state,
       ...(requestId === undefined ? {} : { requestId }),
+      ...(model === undefined ? {} : { model }),
       updatedAtMs: now,
     },
   });
@@ -1376,10 +1389,22 @@ export const readAgentPresence = async ({
     /^[a-f0-9]{16}$/.test(value.requestId)
       ? value.requestId
       : undefined;
+  const modelName =
+    "model" in value &&
+    typeof value.model === "object" &&
+    value.model !== null &&
+    !Array.isArray(value.model) &&
+    "name" in value.model &&
+    typeof value.model.name === "string" &&
+    value.model.name.trim() !== "" &&
+    value.model.name.trim().length <= MAXIMUM_MODEL_NAME_LENGTH
+      ? value.model.name.trim()
+      : undefined;
   return {
     connected: true,
     state: value.state,
     ...(requestId === undefined ? {} : { requestId }),
+    ...(modelName === undefined ? {} : { model: { name: modelName } }),
     updatedAtMs: value.updatedAtMs,
   };
 };
