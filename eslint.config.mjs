@@ -14,6 +14,8 @@ import eslintConfigPrettier from "eslint-config-prettier";
 export default tseslint.config(
   {
     ignores: [
+      // Runtime artifacts written by local agent runs, never authored source.
+      ".agent-runs/",
       "dist/",
       "docs/",
       "node_modules/",
@@ -21,7 +23,6 @@ export default tseslint.config(
       "examples/",
       "test-results/",
       "playwright-report/",
-      ".agent-runs/",
     ],
   },
   js.configs.recommended,

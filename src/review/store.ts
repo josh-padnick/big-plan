@@ -1359,10 +1359,16 @@ export const readAgentPresence = async ({
     !("updatedAtMs" in value) ||
     typeof value.updatedAtMs !== "number" ||
     !Number.isFinite(value.updatedAtMs) ||
-    now - value.updatedAtMs < 0 ||
-    now - value.updatedAtMs > maximumAgeMs
+    now - value.updatedAtMs < 0
   ) {
     return { connected: false, state: "waiting" };
+  }
+  if (now - value.updatedAtMs > maximumAgeMs) {
+    return {
+      connected: false,
+      state: "waiting",
+      updatedAtMs: value.updatedAtMs,
+    };
   }
   const requestId =
     "requestId" in value &&

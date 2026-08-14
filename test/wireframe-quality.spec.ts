@@ -274,6 +274,70 @@ test("should render every proof at its native device geometry", async ({
   });
 });
 
+test("should keep sparse app shell chrome compact and workspace full-width", async ({
+  page,
+  wireframeSparseAppShellViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1200 });
+  await page.goto(wireframeSparseAppShellViewerUrl);
+
+  const topBarWireframe = page.locator(
+    '[data-wireframe="sparse-app-shell-top-bar"]',
+  );
+  const artboard = topBarWireframe.locator(".wireframe-artboard");
+  const topBar = topBarWireframe.locator(".wireframe-top-bar");
+  const appContent = topBarWireframe.locator(".wireframe-app-content");
+  const artboardHeight = await artboard.evaluate((node) => node.offsetHeight);
+  const topBarHeight = await topBar.evaluate((node) => node.offsetHeight);
+
+  expect(artboardHeight).toBe(820);
+  expect(topBarHeight).toBeLessThan(artboardHeight * 0.2);
+  expect(topBarHeight).toBeGreaterThanOrEqual(48);
+  await expect(topBar).toHaveCSS("border-bottom-style", "solid");
+  expect(
+    await topBar.evaluate((node) =>
+      parseFloat(getComputedStyle(node).borderBottomWidth),
+    ),
+  ).toBeGreaterThan(1);
+  const titleAlignment = await topBar.evaluate((node) => {
+    const titleNode = node.querySelector(".wireframe-brand");
+    if (!(titleNode instanceof HTMLElement)) {
+      return { contentLeft: Number.NaN, titleLeft: Number.NaN };
+    }
+    const topBarBox = node.getBoundingClientRect();
+    const scale = topBarBox.width / node.offsetWidth;
+    return {
+      contentLeft:
+        topBarBox.left +
+        Number.parseFloat(getComputedStyle(node).paddingLeft) * scale,
+      titleLeft: titleNode.getBoundingClientRect().left,
+    };
+  });
+  expect(
+    Math.abs(titleAlignment.titleLeft - titleAlignment.contentLeft),
+  ).toBeLessThan(0.75);
+  expect(
+    await appContent.evaluate((node) => node.clientHeight),
+  ).toBeGreaterThan(topBarHeight * 3);
+  expect(await appContent.evaluate((node) => node.clientWidth)).toBeGreaterThan(
+    800,
+  );
+
+  const noTopBarWireframe = page.locator(
+    '[data-wireframe="sparse-app-shell-no-top-bar"]',
+  );
+  const noTopBarShell = noTopBarWireframe.locator(".wireframe-app-shell");
+  const noTopBarContent = noTopBarWireframe.locator(".wireframe-app-content");
+  const noTopBarShellBox = await boxOf(noTopBarShell);
+  const noTopBarContentBox = await boxOf(noTopBarContent);
+  expect(Math.abs(noTopBarContentBox.x - noTopBarShellBox.x)).toBeLessThan(
+    0.75,
+  );
+  expect(
+    Math.abs(noTopBarContentBox.width - noTopBarShellBox.width),
+  ).toBeLessThan(0.75);
+});
+
 test("should keep shipped desktop panes readable and layout regions separate", async ({
   page,
   wireframeFormFactorsViewerUrl,

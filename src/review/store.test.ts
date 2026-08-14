@@ -477,7 +477,11 @@ describe("review store agent presence", () => {
         sessionId: "aaaaaaaaaaaaaaaa",
         now: 10_000 + AGENT_STALL_MS + 1,
       }),
-    ).resolves.toEqual({ connected: false, state: "waiting" });
+    ).resolves.toEqual({
+      connected: false,
+      state: "waiting",
+      updatedAtMs: 10_000,
+    });
   });
 });
 

@@ -31,10 +31,10 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
   AGENT_STALL_MS,
-  agentPresenceIsFresh,
   deriveAgentHealthLabel,
   deriveAgentStatus,
   deriveCurrentAgentActivity,
+  projectAgentConnectionState,
   type AgentStatus,
 } from "../shared/agent-status.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
@@ -3500,11 +3500,13 @@ export const ReviewController = () => {
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
   const threadRuntime: ThreadRuntime =
     identity === null ? "static" : pollFailures >= 2 ? "offline" : "online";
-  const agentConnected = agentPresenceIsFresh({
-    connected: agent.presence.connected,
+  const agentConnection = projectAgentConnectionState({
+    presenceConnected: agent.presence.connected,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
     now: statusNowMs,
+    events: agent.connectionLog,
   });
+  const agentConnected = agentConnection.connected;
   const canSendToAgent =
     identity !== null &&
     threadRuntime === "online" &&
@@ -5264,7 +5266,7 @@ export const ReviewController = () => {
                 activity: currentAgentActivity,
                 connected: agentConnected,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
-                connectionLog: agent.connectionLog,
+                connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 agentCommand: agent.agentCommand,
                 plan: agent.plan,
