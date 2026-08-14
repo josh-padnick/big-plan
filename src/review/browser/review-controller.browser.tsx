@@ -3989,9 +3989,10 @@ export const ReviewController = () => {
         }
       } catch (error) {
         if (current) {
-          setPollFailures((failures) => Math.min(2, failures + 1));
           if (isReviewRuntimeUnavailable(error)) {
             setServerGoneFailures((failures) => Math.min(2, failures + 1));
+          } else {
+            setPollFailures((failures) => Math.min(2, failures + 1));
           }
           setStatusNowMs(Date.now());
         }
