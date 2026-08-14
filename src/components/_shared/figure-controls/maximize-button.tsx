@@ -19,7 +19,7 @@ const BUTTON_CLASSES =
 
 const BUTTON_SIZE_CLASSES = {
   compact: "h-6 w-6 [&_svg]:size-3.5",
-  toolbar: "h-9 w-9 [&_svg]:size-4",
+  toolbar: "h-11 w-11 wide:h-9 wide:w-9 [&_svg]:size-4",
 } as const;
 
 /**

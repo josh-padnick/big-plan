@@ -38,6 +38,13 @@ import {
   liveLensAnchor,
 } from "./live-target.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
+import {
+  compareWireframeScreens,
+  wireframeScreenIdForSide,
+  wireframeScreenStatusLabel,
+  type WireframeScreenDiff,
+  type WireframeScreenSnapshot,
+} from "./wireframe-screen-diff.js";
 
 const placeLocations = ({
   diff,
@@ -547,48 +554,6 @@ const SnapshotSideContent = ({
   });
 };
 
-type WireframeScreenDiff =
-  | {
-      readonly key: string;
-      readonly name: string;
-      readonly status: "added";
-      readonly newScreenId: string;
-      readonly newPosition: number;
-    }
-  | {
-      readonly key: string;
-      readonly name: string;
-      readonly status: "initial";
-      readonly oldScreenId: string;
-      readonly newScreenId: string;
-      readonly oldPosition: number;
-      readonly newPosition: number;
-    }
-  | {
-      readonly key: string;
-      readonly name: string;
-      readonly status: "moved" | "updated";
-      readonly oldScreenId: string;
-      readonly newScreenId: string;
-      readonly oldPosition: number;
-      readonly newPosition: number;
-    }
-  | {
-      readonly key: string;
-      readonly name: string;
-      readonly status: "removed";
-      readonly oldScreenId: string;
-      readonly oldPosition: number;
-    };
-
-type WireframeScreenSnapshot = {
-  readonly id: string;
-  readonly isCurrent: boolean;
-  readonly markup: string;
-  readonly name: string;
-  readonly position: number;
-};
-
 const wireframeScreenMarkup = (
   html: string | undefined,
 ): Map<string, WireframeScreenSnapshot> => {
@@ -618,111 +583,6 @@ const wireframeScreenMarkup = (
     });
   }
   return screens;
-};
-
-const wireframeScreenDiffs = (
-  oldHtml: string | undefined,
-  newHtml: string | undefined,
-): ReadonlyArray<WireframeScreenDiff> => {
-  const oldScreens = wireframeScreenMarkup(oldHtml);
-  const newScreens = wireframeScreenMarkup(newHtml);
-  const oldCurrent = [...oldScreens.values()].find(
-    (screen) => screen.isCurrent,
-  );
-  const newCurrent = [...newScreens.values()].find(
-    (screen) => screen.isCurrent,
-  );
-  const initialScreenDiffs: ReadonlyArray<WireframeScreenDiff> =
-    oldCurrent !== undefined &&
-    newCurrent !== undefined &&
-    oldCurrent.id !== newCurrent.id
-      ? [
-          {
-            key: `initial:${oldCurrent.id}:${newCurrent.id}`,
-            name: `${oldCurrent.name} → ${newCurrent.name}`,
-            status: "initial",
-            oldScreenId: oldCurrent.id,
-            newScreenId: newCurrent.id,
-            oldPosition: oldCurrent.position,
-            newPosition: newCurrent.position,
-          },
-        ]
-      : [];
-  const ids = [...new Set([...newScreens.keys(), ...oldScreens.keys()])];
-  const contentDiffs = ids.flatMap<WireframeScreenDiff>((id) => {
-    const oldScreen = oldScreens.get(id);
-    const newScreen = newScreens.get(id);
-    if (oldScreen === undefined && newScreen !== undefined) {
-      return [
-        {
-          key: `screen:${id}`,
-          name: newScreen.name,
-          status: "added",
-          newScreenId: id,
-          newPosition: newScreen.position,
-        },
-      ];
-    }
-    if (newScreen === undefined && oldScreen !== undefined) {
-      return [
-        {
-          key: `screen:${id}`,
-          name: oldScreen.name,
-          status: "removed",
-          oldScreenId: id,
-          oldPosition: oldScreen.position,
-        },
-      ];
-    }
-    if (oldScreen === undefined || newScreen === undefined) return [];
-    const status =
-      oldScreen.markup !== newScreen.markup
-        ? "updated"
-        : oldScreen.position !== newScreen.position
-          ? "moved"
-          : undefined;
-    return status === undefined
-      ? []
-      : [
-          {
-            key: `screen:${id}`,
-            name: newScreen.name,
-            status,
-            oldScreenId: id,
-            newScreenId: id,
-            oldPosition: oldScreen.position,
-            newPosition: newScreen.position,
-          },
-        ];
-  });
-  return [...initialScreenDiffs, ...contentDiffs];
-};
-
-const screenIdForSide = (
-  screen: WireframeScreenDiff,
-  side: "old" | "new",
-): string | undefined => {
-  if (side === "old") {
-    return screen.status === "added" ? undefined : screen.oldScreenId;
-  }
-  return screen.status === "removed" ? undefined : screen.newScreenId;
-};
-
-const screenStatusLabel = (screen: WireframeScreenDiff): string => {
-  if (screen.status === "initial") return "Initial screen";
-  if (screen.status === "added") {
-    return `Added at ${screen.newPosition}`;
-  }
-  if (screen.status === "removed") {
-    return `Removed from ${screen.oldPosition}`;
-  }
-  const moved = screen.oldPosition !== screen.newPosition;
-  if (screen.status === "moved" && moved) {
-    return `Moved ${screen.oldPosition} → ${screen.newPosition}`;
-  }
-  return moved
-    ? `Updated · ${screen.oldPosition} → ${screen.newPosition}`
-    : "Updated";
 };
 
 const screenStatusClasses = (status: WireframeScreenDiff["status"]): string => {
@@ -791,7 +651,11 @@ const ComponentSnapshotComparison = ({
 }) => {
   const initialSide = location.newHtml === undefined ? "old" : "new";
   const screenDiffs = useMemo(
-    () => wireframeScreenDiffs(location.oldHtml, location.newHtml),
+    () =>
+      compareWireframeScreens({
+        oldScreens: wireframeScreenMarkup(location.oldHtml),
+        newScreens: wireframeScreenMarkup(location.newHtml),
+      }),
     [location.oldHtml, location.newHtml],
   );
   const [side, setSide] = useState<"old" | "new">(initialSide);
@@ -809,11 +673,11 @@ const ComponentSnapshotComparison = ({
   const canShowOld =
     location.oldHtml !== undefined &&
     (selectedScreen === undefined ||
-      screenIdForSide(selectedScreen, "old") !== undefined);
+      wireframeScreenIdForSide(selectedScreen, "old") !== undefined);
   const canShowNew =
     location.newHtml !== undefined &&
     (selectedScreen === undefined ||
-      screenIdForSide(selectedScreen, "new") !== undefined);
+      wireframeScreenIdForSide(selectedScreen, "new") !== undefined);
   const renderedSide =
     (side === "old" && canShowOld) || !canShowNew ? "old" : "new";
   const renderedHtml =
@@ -828,7 +692,7 @@ const ComponentSnapshotComparison = ({
       ? renderedPresentation?.aspect === "wireframe"
         ? renderedPresentation.currentScreenId
         : undefined
-      : screenIdForSide(selectedScreen, renderedSide);
+      : wireframeScreenIdForSide(selectedScreen, renderedSide);
   const isWireframe = useMemo(
     () =>
       wireframeScreenMarkup(location.oldHtml).size > 0 ||
@@ -920,7 +784,7 @@ const ComponentSnapshotComparison = ({
             <button
               key={screen.key}
               type="button"
-              className="inline-flex cursor-pointer items-center gap-2 rounded-md border-2 border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted hover:bg-raised aria-pressed:border-ink aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="inline-flex min-h-11 min-w-11 cursor-pointer items-center gap-2 rounded-md border-2 border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted hover:bg-raised aria-pressed:border-ink aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0 wide:min-w-0"
               aria-current={
                 selectedScreenKey === screen.key ? "true" : undefined
               }
@@ -941,7 +805,7 @@ const ComponentSnapshotComparison = ({
               <span
                 className={`rounded-md px-2 py-1 text-2xs font-bold ${screenStatusClasses(screen.status)}`}
               >
-                {screenStatusLabel(screen)}
+                {wireframeScreenStatusLabel(screen)}
               </span>
             </button>
           ))}
@@ -956,7 +820,7 @@ const ComponentSnapshotComparison = ({
           {location.oldHtml === undefined ? null : (
             <button
               type="button"
-              className="cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-remove-c)] aria-pressed:bg-[var(--diff-remove-bg)] aria-pressed:text-[var(--diff-remove-c)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-11 min-w-11 cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-remove-c)] aria-pressed:bg-[var(--diff-remove-bg)] aria-pressed:text-[var(--diff-remove-c)] disabled:cursor-not-allowed disabled:opacity-50 wide:min-h-0 wide:min-w-0"
               aria-pressed={renderedSide === "old"}
               disabled={!canShowOld}
               onClick={() => setSide("old")}
@@ -973,7 +837,7 @@ const ComponentSnapshotComparison = ({
           {location.newHtml === undefined ? null : (
             <button
               type="button"
-              className="cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-add-c)] aria-pressed:bg-[var(--diff-add-bg)] aria-pressed:text-[var(--diff-add-c)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-11 min-w-11 cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-add-c)] aria-pressed:bg-[var(--diff-add-bg)] aria-pressed:text-[var(--diff-add-c)] disabled:cursor-not-allowed disabled:opacity-50 wide:min-h-0 wide:min-w-0"
               aria-pressed={renderedSide === "new"}
               disabled={!canShowNew}
               onClick={() => setSide("new")}

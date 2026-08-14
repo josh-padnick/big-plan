@@ -2452,181 +2452,220 @@ ${reorderedWorkspace}
     planPath,
     diffPreviewSource: before,
   });
+  const wireframes = page.locator('article [data-wireframe="queue-diff"]');
+  const isLiveWireframeVisible = async (): Promise<boolean> =>
+    wireframes.evaluateAll((elements) => {
+      const live = elements.find(
+        (element) =>
+          element.closest("[data-review-diff-lens-host]") === null &&
+          element.textContent?.includes("Keep the rollback owner explicit"),
+      );
+      if (!(live instanceof HTMLElement)) return false;
+      return getComputedStyle(live).display !== "none";
+    });
+  const unrelatedWireframe = wireframes.filter({
+    hasText: "Unrelated prototype remains visible",
+  });
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const componentDiff = page.locator("[data-review-component-diff]");
+  const snapshot = componentDiff.locator("[data-review-component-snapshot]");
+  const now = componentDiff.getByRole("button", { name: "Now" });
+  const was = componentDiff.getByRole("button", { name: "Was" });
+  const screenNavigation = componentDiff.getByRole("navigation", {
+    name: "Prototype screens",
+  });
+  const maximize = snapshot.getByRole("button", {
+    name: "Maximize wireframe diff",
+  });
+  const snapshotBody = snapshot.locator(":scope > [data-figure-body]");
   try {
-    await page.goto(runtime.url);
-    const wireframes = page.locator('article [data-wireframe="queue-diff"]');
-    const isLiveWireframeVisible = async (): Promise<boolean> =>
-      wireframes.evaluateAll((elements) => {
-        const live = elements.find(
-          (element) =>
-            element.closest("[data-review-diff-lens-host]") === null &&
-            element.textContent?.includes("Keep the rollback owner explicit"),
-        );
-        if (!(live instanceof HTMLElement)) return false;
-        return getComputedStyle(live).display !== "none";
-      });
-    const unrelatedWireframe = wireframes.filter({
-      hasText: "Unrelated prototype remains visible",
-    });
-    await expect.poll(isLiveWireframeVisible).toBe(true);
-    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-    const rail = page.getByRole("complementary", { name: "Feedback" });
-    await rail
-      .getByRole("button", { name: /Expand thread:/u })
-      .first()
-      .click();
-    await rail.getByRole("button", { name: "Review change" }).click();
-    const componentDiff = page.locator("[data-review-component-diff]");
-    const snapshot = componentDiff.locator("[data-review-component-snapshot]");
-    const now = componentDiff.getByRole("button", { name: "Now" });
-    const was = componentDiff.getByRole("button", { name: "Was" });
-    const screenNavigation = componentDiff.getByRole("navigation", {
-      name: "Prototype screens",
-    });
-    await expect.poll(isLiveWireframeVisible).toBe(false);
-    await expect(unrelatedWireframe).toBeVisible();
-    await expect(snapshot).toHaveAttribute(
-      "data-review-component-snapshot",
-      "new",
-    );
-    await expect(
-      screenNavigation.getByRole("button", {
-        name: "Archive Moved 4 → 3",
-      }),
-    ).toBeVisible();
-    await expect(
-      screenNavigation.getByRole("button", {
-        name: "Triage Moved 3 → 4",
-      }),
-    ).toBeVisible();
-    await screenNavigation
-      .getByRole("button", { name: "Escalations Added" })
-      .click();
-    await expect(was).toBeDisabled();
-    await expect(now).toBeEnabled();
-    await expect(now).toHaveAttribute("aria-pressed", "true");
-    await expect(snapshot).toContainText("New escalation queue content");
-    await expect(snapshot).not.toContainText("Legacy queue content");
-
-    await screenNavigation
-      .getByRole("button", { name: "Retired Removed" })
-      .click();
-    await expect(now).toBeDisabled();
-    await expect(was).toBeEnabled();
-    await expect(was).toHaveAttribute("aria-pressed", "true");
-    await expect(snapshot).toHaveAttribute(
-      "data-review-component-snapshot",
-      "old",
-    );
-    await expect(snapshot).toContainText("Legacy queue content");
-    await expect(snapshot).not.toContainText("New escalation queue content");
-
-    await screenNavigation
-      .getByRole("button", { name: "Queue Updated" })
-      .click();
-    await now.click();
-    await expect(snapshot).toHaveCSS("border-top-width", "10px");
-    await expect(
-      snapshot.getByRole("button", { name: "Maximize wireframe diff" }),
-    ).toBeVisible();
-    await page.setViewportSize({ width: 1600, height: 600 });
-    await snapshot
-      .getByRole("button", { name: "Maximize wireframe diff" })
-      .click();
-    await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
-    const snapshotBody = snapshot.locator(":scope > [data-figure-body]");
-    await expect(snapshotBody).toHaveAttribute("tabindex", "0");
-    expect(await snapshotBody.evaluate((node) => node.inert)).toBe(false);
-    await expect(snapshotBody).toHaveCSS("pointer-events", "auto");
-    const embeddedControl = snapshotBody.locator("button").first();
-    await expect(embeddedControl).toHaveAttribute("tabindex", "-1");
-    await expect(embeddedControl).toHaveAttribute("aria-disabled", "true");
-    expect(
-      await snapshotBody.getByLabel("Queue view").evaluate((control) => {
-        return control instanceof HTMLSelectElement && control.disabled;
-      }),
-    ).toBe(true);
-    expect(
-      await snapshotBody
-        .getByLabel("Include resolved threads")
-        .evaluate((control) => {
-          return control instanceof HTMLInputElement && control.disabled;
+    await test.step("open the changed wireframe without hiding its duplicate", async () => {
+      await page.goto(runtime.url);
+      await expect.poll(isLiveWireframeVisible).toBe(true);
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      await rail
+        .getByRole("button", { name: /Expand thread:/u })
+        .first()
+        .click();
+      await rail.getByRole("button", { name: "Review change" }).click();
+      await expect.poll(isLiveWireframeVisible).toBe(false);
+      await expect(unrelatedWireframe).toBeVisible();
+      await expect(snapshot).toHaveAttribute(
+        "data-review-component-snapshot",
+        "new",
+      );
+      await expect(
+        screenNavigation.getByRole("button", {
+          name: "Archive Moved 4 → 3",
         }),
-    ).toBe(true);
-    await expect
-      .poll(() =>
-        snapshotBody.evaluate((node) => node.scrollHeight > node.clientHeight),
-      )
-      .toBe(true);
-    const snapshotBodyBox = await snapshotBody.boundingBox();
-    if (snapshotBodyBox === null) {
-      throw new Error("The maximized snapshot body must be measurable");
-    }
-    await page.mouse.move(
-      snapshotBodyBox.x + snapshotBodyBox.width / 2,
-      snapshotBodyBox.y + snapshotBodyBox.height / 2,
-    );
-    await page.mouse.wheel(0, 400);
-    await expect
-      .poll(() => snapshotBody.evaluate((node) => node.scrollTop))
-      .toBeGreaterThan(0);
-    await snapshotBody.evaluate((node) => {
-      node.scrollTop = 0;
+      ).toBeVisible();
+      await expect(
+        screenNavigation.getByRole("button", {
+          name: "Triage Moved 3 → 4",
+        }),
+      ).toBeVisible();
     });
-    await snapshotBody.focus();
-    const initialScrollTop = await snapshotBody.evaluate(
-      (node) => node.scrollTop,
-    );
-    await page.keyboard.press("PageDown");
-    await expect
-      .poll(() => snapshotBody.evaluate((node) => node.scrollTop))
-      .toBeGreaterThan(initialScrollTop);
-    await expect(
-      snapshot.getByRole("button", { name: "Restore wireframe diff size" }),
-    ).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
-    await expect(componentDiff).toHaveCount(1);
-    await snapshot
-      .getByRole("button", { name: "Maximize wireframe diff" })
-      .click();
-    await snapshot
-      .getByRole("button", { name: "Restore wireframe diff size" })
-      .click();
-    await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
-    const geometry = await snapshot.evaluate((node) => {
-      const frame = node.querySelector<HTMLElement>(".wireframe-frame");
-      const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
-      if (frame === null || card === null) return null;
-      return {
-        frameRight: frame.getBoundingClientRect().right,
-        cardRight: card.getBoundingClientRect().right,
-        scrollWidth: node.scrollWidth,
-        clientWidth: node.clientWidth,
-      };
-    });
-    expect(geometry).not.toBeNull();
-    expect(geometry?.frameRight).toBeLessThanOrEqual(
-      (geometry?.cardRight ?? 0) + 0.5,
-    );
-    expect(geometry?.scrollWidth).toBe(geometry?.clientWidth);
 
-    await was.click();
-    await expect(snapshot).toHaveAttribute(
-      "data-review-component-snapshot",
-      "old",
-    );
-    await expect(snapshot).toHaveCSS("border-top-width", "10px");
-    await page.evaluate(() => {
-      document.documentElement.setAttribute("data-theme", "dark");
+    await test.step("keep every diff control touchable on a narrow screen", async () => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      const touchTargets = [
+        {
+          name: "prototype screen",
+          locator: screenNavigation.getByRole("button").first(),
+        },
+        { name: "Was", locator: was },
+        { name: "Now", locator: now },
+        { name: "maximize", locator: maximize },
+      ];
+      for (const target of touchTargets) {
+        const box = await target.locator.boundingBox();
+        if (box === null) {
+          throw new Error(`${target.name} touch target must be measurable`);
+        }
+        expect(
+          box.width,
+          `${target.name} touch target width`,
+        ).toBeGreaterThanOrEqual(44);
+        expect(
+          box.height,
+          `${target.name} touch target height`,
+        ).toBeGreaterThanOrEqual(44);
+      }
+      await page.setViewportSize({ width: 1600, height: 1000 });
     });
-    await expect(snapshot).toHaveCSS("border-top-width", "10px");
-    expect(
-      await snapshot.evaluate((node) => node.scrollWidth === node.clientWidth),
-    ).toBe(true);
-    await rail.getByRole("button", { name: "Exit review" }).click();
-    await expect(componentDiff).toHaveCount(0);
-    await expect.poll(isLiveWireframeVisible).toBe(true);
+
+    await test.step("navigate added and removed prototype screens", async () => {
+      await screenNavigation
+        .getByRole("button", { name: "Escalations Added" })
+        .click();
+      await expect(was).toBeDisabled();
+      await expect(now).toBeEnabled();
+      await expect(now).toHaveAttribute("aria-pressed", "true");
+      await expect(snapshot).toContainText("New escalation queue content");
+      await expect(snapshot).not.toContainText("Legacy queue content");
+
+      await screenNavigation
+        .getByRole("button", { name: "Retired Removed" })
+        .click();
+      await expect(now).toBeDisabled();
+      await expect(was).toBeEnabled();
+      await expect(was).toHaveAttribute("aria-pressed", "true");
+      await expect(snapshot).toHaveAttribute(
+        "data-review-component-snapshot",
+        "old",
+      );
+      await expect(snapshot).toContainText("Legacy queue content");
+      await expect(snapshot).not.toContainText("New escalation queue content");
+    });
+
+    await test.step("maximize an accessible scrollable snapshot", async () => {
+      await screenNavigation
+        .getByRole("button", { name: "Queue Updated" })
+        .click();
+      await now.click();
+      await expect(snapshot).toHaveCSS("border-top-width", "10px");
+      await expect(maximize).toBeVisible();
+      await page.setViewportSize({ width: 1600, height: 600 });
+      await maximize.click();
+      await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
+      await expect(snapshotBody).toHaveAttribute("tabindex", "0");
+      expect(await snapshotBody.evaluate((node) => node.inert)).toBe(false);
+      await expect(snapshotBody).toHaveCSS("pointer-events", "auto");
+      const embeddedControl = snapshotBody.locator("button").first();
+      await expect(embeddedControl).toHaveAttribute("tabindex", "-1");
+      await expect(embeddedControl).toHaveAttribute("aria-disabled", "true");
+      expect(
+        await snapshotBody.getByLabel("Queue view").evaluate((control) => {
+          return control instanceof HTMLSelectElement && control.disabled;
+        }),
+      ).toBe(true);
+      expect(
+        await snapshotBody
+          .getByLabel("Include resolved threads")
+          .evaluate((control) => {
+            return control instanceof HTMLInputElement && control.disabled;
+          }),
+      ).toBe(true);
+      await expect
+        .poll(() =>
+          snapshotBody.evaluate(
+            (node) => node.scrollHeight > node.clientHeight,
+          ),
+        )
+        .toBe(true);
+      const snapshotBodyBox = await snapshotBody.boundingBox();
+      if (snapshotBodyBox === null) {
+        throw new Error("The maximized snapshot body must be measurable");
+      }
+      await page.mouse.move(
+        snapshotBodyBox.x + snapshotBodyBox.width / 2,
+        snapshotBodyBox.y + snapshotBodyBox.height / 2,
+      );
+      await page.mouse.wheel(0, 400);
+      await expect
+        .poll(() => snapshotBody.evaluate((node) => node.scrollTop))
+        .toBeGreaterThan(0);
+      await snapshotBody.evaluate((node) => {
+        node.scrollTop = 0;
+      });
+      await snapshotBody.focus();
+      const initialScrollTop = await snapshotBody.evaluate(
+        (node) => node.scrollTop,
+      );
+      await page.keyboard.press("PageDown");
+      await expect
+        .poll(() => snapshotBody.evaluate((node) => node.scrollTop))
+        .toBeGreaterThan(initialScrollTop);
+      await expect(
+        snapshot.getByRole("button", { name: "Restore wireframe diff size" }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
+      await expect(componentDiff).toHaveCount(1);
+      await maximize.click();
+      await snapshot
+        .getByRole("button", { name: "Restore wireframe diff size" })
+        .click();
+      await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
+    });
+
+    await test.step("preserve fitted pastel framing across sides and themes", async () => {
+      const geometry = await snapshot.evaluate((node) => {
+        const frame = node.querySelector<HTMLElement>(".wireframe-frame");
+        const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
+        if (frame === null || card === null) return null;
+        return {
+          frameRight: frame.getBoundingClientRect().right,
+          cardRight: card.getBoundingClientRect().right,
+          scrollWidth: node.scrollWidth,
+          clientWidth: node.clientWidth,
+        };
+      });
+      expect(geometry).not.toBeNull();
+      expect(geometry?.frameRight).toBeLessThanOrEqual(
+        (geometry?.cardRight ?? 0) + 0.5,
+      );
+      expect(geometry?.scrollWidth).toBe(geometry?.clientWidth);
+
+      await was.click();
+      await expect(snapshot).toHaveAttribute(
+        "data-review-component-snapshot",
+        "old",
+      );
+      await expect(snapshot).toHaveCSS("border-top-width", "10px");
+      await page.evaluate(() => {
+        document.documentElement.setAttribute("data-theme", "dark");
+      });
+      await expect(snapshot).toHaveCSS("border-top-width", "10px");
+      expect(
+        await snapshot.evaluate(
+          (node) => node.scrollWidth === node.clientWidth,
+        ),
+      ).toBe(true);
+      await rail.getByRole("button", { name: "Exit review" }).click();
+      await expect(componentDiff).toHaveCount(0);
+      await expect.poll(isLiveWireframeVisible).toBe(true);
+    });
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
