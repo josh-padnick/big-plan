@@ -812,6 +812,9 @@ test("should restore and submit staged comments through the local review runtime
   await expect(
     page.getByRole("button", { name: /Agent disconnected/u }),
   ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Agent working" }),
+  ).toBeVisible();
   await rail.getByRole("tab", { name: "Agent" }).click();
   const activeWork = rail.locator("[data-review-current-activity='working']");
   await expect(activeWork).toContainText("Responding to a comment");

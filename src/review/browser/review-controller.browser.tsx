@@ -4589,6 +4589,10 @@ export const ReviewController = () => {
     hasAgentRuntime: identity !== null,
     isReadOnly: runtimeSession?.authoritative === false,
   });
+  const isAgentWorking = currentAgentActivity.state === "working";
+  const agentSessionLabel = isAgentWorking
+    ? "Agent working"
+    : "Agent session active";
   const threadIsOpen = ({
     commentId,
     kind,
@@ -4887,18 +4891,18 @@ export const ReviewController = () => {
             <>
               {agentHealthLabel === null ? (
                 identity !== null && agentConnected ? (
-                  <Tooltip label="Agent session active">
+                  <Tooltip label={agentSessionLabel}>
                     <button
                       type="button"
                       className="inline-flex size-11 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-surface focus-visible:bg-surface focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent wide:size-8"
-                      aria-label="Agent session active"
+                      aria-label={agentSessionLabel}
                       onClick={() => {
                         setIsOpen(true);
                         setTab("agent");
                       }}
                     >
                       <span
-                        className={`review-agent-active-indicator inline-flex size-2.5 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--diff-add-c)_34%,transparent)] ${currentAgentActivity.state === "working" ? "review-agent-active-indicator--working" : ""}`}
+                        className={`review-agent-active-indicator inline-flex size-2.5 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--diff-add-c)_34%,transparent)] ${isAgentWorking ? "review-agent-active-indicator--working" : ""}`}
                         aria-hidden="true"
                       >
                         <span className="size-1.5 rounded-full bg-[var(--diff-add-c)]" />
