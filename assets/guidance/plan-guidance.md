@@ -33,25 +33,35 @@ A rendered plan reads as a deck: every section is one slide carrying one thought
 If a section needs a second screen, it holds a second thought; split it into h3 sub-slides, each of which renders as its own numbered frame.
 Before drafting, run `big-plan guidance Slide` once for the complete slide-type catalog.
 For each intended slide, ask whether its purpose matches a defined type; when one fits, use its `Slide` marker and type-specific guidance, and when none fits, author an untyped slide under these general principles rather than forcing a match.
-For user journeys, name the container “User journeys” and nest every journey underneath it; a journey authored beside its container reads as a peer of the container rather than one of the loops it holds.
-By default make the container a `Part`, so each journey is a typed slide inside it and numbers as 3.1, 3.2, 3.3 under Part 3.
-That is the default because a `Slide` marker attaches only to an h2, so only the Part shape lets a nested journey keep its marker `name` in the kicker and sidebar, its `toc` form in the overview, and its wireframe contract.
-An untyped “User journeys” slide is still a valid container when the journeys are short: give each journey an h3 sub-slide so they number 2.3.1, 2.3.2 beneath it, and accept that a sub-slide carries no `Slide` marker.
-Under the Part shape, give every journey its own marker `name`, ultra-concise `toc` form, and full h2 claim.
+For user journeys, name the container “User journeys” as a `Part` and nest every journey underneath it; a journey authored beside its container reads as a peer of the container rather than one of the loops it holds.
+Then choose the shape by counting the actors, because the deck should group the way the reviewer divides the work.
+
+**Several actors: group by actor.** This is the default whenever two or more people live the journeys.
+Give each actor one group slide inside the container Part, and make each of that actor's journeys a sub-slide of the group, so the numbers carry their owner: 2.2 “Merchant journeys” holds 2.2.1 and 2.2.2, and 2.3 “Customer journeys” holds 2.3.1.
+A reviewer who owns one actor then reads one group and collapses the rest.
+Mark the sub-slide, not the group: put `<Slide type="user-journey" name="..." toc="..." />` directly above the journey's h3, which keeps the journey's name in the kicker, its `toc` form in the overview, and its wireframe contract, and frees the h3 to state this plan's claim as the sub-slide's title.
+Leave the group slide untyped, and title it for the actor whose journeys it holds.
+
+**One actor: stay flat.** Grouping a single actor adds a level that carries nothing, because every journey would repeat the same owner.
+Make each journey a typed slide directly inside the container Part, numbering 2.1, 2.2, 2.3, with its marker above the h2.
+
+Either way, give every journey its own marker `name`, ultra-concise `toc` form, and full plain-language claim in the heading the marker sits above.
 Open the container with a user-summaries overview slide, which is the standard convention for any slide that summarizes a set of user journeys.
 Write it in exactly this shape, so every plan's overview reads the same way:
 
 ```mdx
-## Three journeys cover the recovery loop
+## Five journeys cover the recovery loop
 
 The user journeys cover three actors:
 
 - **Merchant**
-  - [**3.2** Review and queue a protected retry](#a-merchant-can-review-and-safely-retry-one-payment)
+  - [**2.2.1** Review a failed payment](#a-merchant-reads-why-one-payment-failed)
+  - [**2.2.2** Queue a protected retry](#a-merchant-schedules-the-next-safe-attempt)
 - **Customer**
-  - [**3.3** Update an expired card](#a-customer-can-update-payment-details-before-the-next-retry)
+  - [**2.3.1** Update an expired card](#a-customer-replaces-the-card-before-the-retry-runs)
+  - [**2.3.2** Confirm the recovered payment](#a-customer-sees-the-payment-complete-without-asking)
 - **Operator**
-  - [**3.4** Pause and resolve repeated failure](#an-operator-can-pause-inspect-and-resolve-a-payment-that-keeps-failing)
+  - [**2.4.1** Pause a payment that keeps failing](#an-operator-stops-the-retry-cycle-and-records-why)
 
 Together, they show the handoffs around one payment identity.
 ```

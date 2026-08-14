@@ -13,10 +13,10 @@ The h2 supplies this plan's title: normally distinct from the name, written with
 This plain-language discipline stays guidance because broad title lint would create false positives; identical name and title remain structurally valid when a distinct title would be strained.
 
 `user-journey` applies the same distinction one level deeper.
-Use “User journeys” as the container name, and nest every journey underneath it rather than beside it.
-Make the container a `Part` by default: a marker attaches only to an h2, so the Part is the only container that holds typed journey slides as its children, and lint rejects a typed journey authored next to an untyped container slide.
-Each typed journey then supplies a distinct `name` for its kicker and sidebar, an ultra-concise `toc` form for the overview, and a full plain-language h2 title.
-An untyped “User journeys” slide is still a valid container when every journey fits an h3 sub-slide of it, which trades those marker affordances and the wireframe contract for a shorter section.
+Use “User journeys” as the container name, make it a `Part`, and nest every journey underneath it rather than beside it; lint rejects a typed journey authored next to an untyped container slide.
+Count the actors to pick the shape. With two or more actors, group by actor by default: one untyped group slide per actor inside the Part, titled for that actor, each holding that actor's journeys as sub-slides, so 2.2 “Merchant journeys” holds 2.2.1 and 2.2.2. With a single actor, keep the journeys flat as typed slides directly inside the Part.
+Put the marker above the heading the journey owns, the h3 when grouped and the h2 when flat.
+Each typed journey then supplies a distinct `name` for its kicker and sidebar, an ultra-concise `toc` form for the overview, and a full plain-language claim in its heading.
 Open the container Part with a user-summaries overview slide in the standard convention: a lead line counting the actors, one bullet per actor carrying only its bold name, one sub-bullet per journey written as a link whose text is the journey's bold slide number followed by its action phrase, and a closing line opening “Together, they show”.
 The sub-bullets carry the count, so never label an actor with one, and title that slide with its claim, since the Part already carries the container name.
 Most typed journey slides should contain a `Wireframe` whose `Screen` mockups let the reviewer see and click through the actual interface states in that human loop.
