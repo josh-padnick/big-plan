@@ -227,6 +227,7 @@ const isNewCommentShortcut = (event: globalThis.KeyboardEvent): boolean =>
     ? event.ctrlKey && event.metaKey && !event.altKey
     : event.ctrlKey && event.altKey && !event.metaKey);
 type StagedCardSurface = "rail" | "thread";
+type UnsavedInputChange = (key: string, hasUnsavedInput: boolean) => void;
 type SelectionTarget = Extract<CommentTarget, { readonly type: "selection" }>;
 
 type FloatingRect = {
@@ -622,12 +623,12 @@ const ServerGoneBanner = ({
       <p className="m-0 mt-1 text-xs text-ink [overflow-wrap:anywhere]">
         {canRefresh
           ? "The local review server stopped responding. Refresh when it is running again to continue reviewing. This is separate from the agent connection."
-          : "The local review server stopped responding. Keep this tab open because browser storage could not save the latest review changes. This is separate from the agent connection."}
+          : "The local review server stopped responding. Keep this tab open because the latest review input has not reached the local review server. This is separate from the agent connection."}
       </p>
     </div>
     <button
       type="button"
-      className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--callout-danger-c)]"
       onClick={onRefresh}
       disabled={!canRefresh}
     >
@@ -2161,6 +2162,8 @@ const StagedCard = ({
   identity,
   currentSnapshot,
   onStatus,
+  unsavedInputKey,
+  onUnsavedInputChange,
   resolved = false,
   onResolve,
   compact = false,
@@ -2186,6 +2189,8 @@ const StagedCard = ({
   readonly identity: RuntimeIdentity | null;
   readonly currentSnapshot: string;
   readonly onStatus: (message: string) => void;
+  readonly unsavedInputKey: string;
+  readonly onUnsavedInputChange: UnsavedInputChange;
   readonly resolved?: boolean;
   readonly onResolve?: () => void;
   readonly compact?: boolean;
@@ -2206,6 +2211,11 @@ const StagedCard = ({
   useEffect(() => {
     if (isEditing) editRef.current?.focus();
   }, [isEditing]);
+  const hasUnsavedEdit = isEditing && editBody !== comment.body;
+  useEffect(() => {
+    onUnsavedInputChange(unsavedInputKey, hasUnsavedEdit);
+    return () => onUnsavedInputChange(unsavedInputKey, false);
+  }, [hasUnsavedEdit, onUnsavedInputChange, unsavedInputKey]);
   if (collapsed) {
     return (
       <ContextualCommentSummary
@@ -2776,6 +2786,8 @@ const SentThread = ({
   onDelete,
   onRevert,
   currentSnapshot,
+  unsavedInputKey,
+  onUnsavedInputChange,
   compact = false,
   queuePosition,
   suppressPendingStatus = false,
@@ -2802,12 +2814,19 @@ const SentThread = ({
   readonly onDelete: () => void;
   readonly onRevert: (requestId: string, commentId: string) => void;
   readonly currentSnapshot: string;
+  readonly unsavedInputKey: string;
+  readonly onUnsavedInputChange: UnsavedInputChange;
   readonly compact?: boolean;
   readonly queuePosition?: number;
   readonly suppressPendingStatus?: boolean;
 }) => {
   const [reply, setReply] = useState("");
   const [isReplying, setIsReplying] = useState(false);
+  const hasUnsavedReply = reply !== "";
+  useEffect(() => {
+    onUnsavedInputChange(unsavedInputKey, hasUnsavedReply);
+    return () => onUnsavedInputChange(unsavedInputKey, false);
+  }, [hasUnsavedReply, onUnsavedInputChange, unsavedInputKey]);
   const {
     exchanges,
     latestExchange,
@@ -3580,9 +3599,6 @@ export const ReviewController = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [tab, setTab] = useState<FeedbackTab>("comments");
   const [isHydrated, setIsHydrated] = useState(false);
-  const [recoverableReviewState, setRecoverableReviewState] = useState<
-    string | null
-  >(null);
   const [isSending, setIsSending] = useState(false);
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatBody, setChatBody] = useState("");
@@ -3592,6 +3608,9 @@ export const ReviewController = () => {
     planId === "" ? new Set<string>() : readArchivedChatRequestIds(planId),
   );
   const [commentQuery, setCommentQuery] = useState("");
+  const [unsavedInputKeys, setUnsavedInputKeys] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
   const [hasObservedAgentSnapshot, setHasObservedAgentSnapshot] =
     useState(false);
@@ -3690,15 +3709,31 @@ export const ReviewController = () => {
     [resolvedCommentIds, sent, unresolvedDrafts],
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
-  const persistedReviewState = useRef<string | null>(null);
+  const [persistedReviewState, setPersistedReviewState] = useState<
+    string | null
+  >(null);
   const currentReviewState = persistedReviewFingerprint({
     drafts,
     resolvedCommentIds,
   });
   const canRefreshReview =
-    persistedReviewState.current === currentReviewState ||
-    recoverableReviewState === currentReviewState;
+    persistedReviewState === currentReviewState &&
+    composeBody === "" &&
+    chatBody === "" &&
+    unsavedInputKeys.size === 0;
   const justSubmittedCommentIds = useRef<ReadonlySet<string>>(new Set());
+  const onUnsavedInputChange = useCallback<UnsavedInputChange>(
+    (key, hasUnsavedInput) => {
+      setUnsavedInputKeys((current) => {
+        if (current.has(key) === hasUnsavedInput) return current;
+        const next = new Set(current);
+        if (hasUnsavedInput) next.add(key);
+        else next.delete(key);
+        return next;
+      });
+    },
+    [],
+  );
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
     setAgent(snapshot);
@@ -4023,16 +4058,17 @@ export const ReviewController = () => {
           const runtimeResolvedCommentIds = new Set(
             snapshot.resolvedCommentIds,
           );
-          persistedReviewState.current = persistedReviewFingerprint({
+          const runtimeFingerprint = persistedReviewFingerprint({
             drafts: snapshot.drafts,
             resolvedCommentIds: runtimeResolvedCommentIds,
           });
+          setPersistedReviewState(runtimeFingerprint);
           const recovery = readLiveReviewRecovery(identity);
           const recoveryFingerprint =
             recovery === null ? null : persistedReviewFingerprint(recovery);
           if (
             recoveryFingerprint !== null &&
-            recoveryFingerprint === persistedReviewState.current
+            recoveryFingerprint === runtimeFingerprint
           ) {
             clearLiveReviewRecovery({
               identity,
@@ -4042,11 +4078,6 @@ export const ReviewController = () => {
           const restoredDrafts = recovery?.drafts ?? snapshot.drafts;
           const restoredResolvedCommentIds =
             recovery?.resolvedCommentIds ?? runtimeResolvedCommentIds;
-          setRecoverableReviewState(
-            recoveryFingerprint === persistedReviewState.current
-              ? null
-              : recoveryFingerprint,
-          );
           setDrafts(restoredDrafts);
           setSent(snapshot.sent);
           setResolvedCommentIds(restoredResolvedCommentIds);
@@ -4059,9 +4090,8 @@ export const ReviewController = () => {
           if (recovery !== null) {
             setDrafts(recovery.drafts);
             setResolvedCommentIds(recovery.resolvedCommentIds);
-            setRecoverableReviewState(persistedReviewFingerprint(recovery));
           } else {
-            setRecoverableReviewState(
+            setPersistedReviewState(
               persistedReviewFingerprint({
                 drafts: [],
                 resolvedCommentIds: new Set(),
@@ -4089,12 +4119,11 @@ export const ReviewController = () => {
       drafts,
       resolvedCommentIds,
     });
-    if (persistedReviewState.current === fingerprint) return;
-    const isRecoverable = writeLiveReviewRecovery({
+    if (persistedReviewState === fingerprint) return;
+    writeLiveReviewRecovery({
       identity,
       recovery: { drafts, resolvedCommentIds },
     });
-    if (isRecoverable) setRecoverableReviewState(fingerprint);
     if (!runtimeCanWrite) return;
     void serializeRuntimeWrite(() =>
       requestJson({
@@ -4109,11 +4138,8 @@ export const ReviewController = () => {
       }),
     )
       .then(() => {
-        persistedReviewState.current = fingerprint;
+        setPersistedReviewState(fingerprint);
         clearLiveReviewRecovery({ identity, fingerprint });
-        setRecoverableReviewState((current) =>
-          current === fingerprint ? null : current,
-        );
       })
       .catch((error: unknown) => setStatus(errorMessage(error)));
   }, [
@@ -4122,6 +4148,7 @@ export const ReviewController = () => {
     isHydrated,
     planId,
     pollHealth.state,
+    persistedReviewState,
     resolvedCommentIds,
     runtimeCanWrite,
     runtimeSession?.authoritative,
@@ -5350,6 +5377,8 @@ export const ReviewController = () => {
                     identity={identity}
                     currentSnapshot={currentSnapshot}
                     onStatus={setStatus}
+                    unsavedInputKey={`draft:rail:${comment.id}`}
+                    onUnsavedInputChange={onUnsavedInputChange}
                     onResolve={() => toggleResolvedComment(comment.id)}
                     compact={compact}
                   />
@@ -5386,6 +5415,8 @@ export const ReviewController = () => {
                     identity={identity}
                     currentSnapshot={currentSnapshot}
                     onStatus={setStatus}
+                    unsavedInputKey={`draft:rail:${comment.id}`}
+                    onUnsavedInputChange={onUnsavedInputChange}
                     resolved
                     onResolve={() => toggleResolvedComment(comment.id)}
                   />
@@ -5444,6 +5475,8 @@ export const ReviewController = () => {
                         setPendingRevert({ requestId, commentId })
                       }
                       currentSnapshot={currentSnapshot}
+                      unsavedInputKey={`reply:rail:${comment.id}`}
+                      onUnsavedInputChange={onUnsavedInputChange}
                       compact={compact}
                       queuePosition={queuePosition}
                       suppressPendingStatus={activeBatchCommentIds.includes(
@@ -5637,6 +5670,8 @@ export const ReviewController = () => {
               identity={identity}
               currentSnapshot={currentSnapshot}
               onStatus={setStatus}
+              unsavedInputKey={`draft:thread:${comment.id}`}
+              onUnsavedInputChange={onUnsavedInputChange}
               onResolve={() => toggleResolvedComment(comment.id)}
             />
           ),
@@ -5690,6 +5725,8 @@ export const ReviewController = () => {
                   setPendingRevert({ requestId, commentId })
                 }
                 currentSnapshot={currentSnapshot}
+                unsavedInputKey={`reply:thread:${comment.id}`}
+                onUnsavedInputChange={onUnsavedInputChange}
               />
             );
           },

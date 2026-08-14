@@ -32,7 +32,7 @@ import { expect, stageComment, test, type Page } from "./fixtures";
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
-test("should recover an outage-time draft before refreshing", async ({
+test("should block refresh until an outage-time draft replays", async ({
   page,
   reviewRuntimeUrl,
 }) => {
@@ -59,18 +59,43 @@ test("should recover an outage-time draft before refreshing", async ({
         ? Promise.reject(new TypeError("Failed to fetch"))
         : fetchFromRuntime(input, init);
     };
+    window.addEventListener(
+      "bigplan:test-restore-fetch",
+      () => {
+        window.fetch = fetchFromRuntime;
+      },
+      { once: true },
+    );
   }, Array.from(runtimePaths));
 
   const banner = page.getByRole("alert").filter({
     hasText: "This review session is no longer online",
   });
   await expect(banner).toBeVisible({ timeout: 6_000 });
-  await stageComment(page, "Preserve this comment through the outage.");
+  const refresh = banner.getByRole("button", { name: "Refresh" });
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  const commentBody = composer.getByLabel("Add a comment");
+  await commentBody.fill("Preserve this comment through the outage.");
+  await expect(refresh).toBeDisabled();
+  await expect(banner).toContainText(
+    "the latest review input has not reached the local review server",
+  );
+  const submitRightAway = composer.getByRole("switch", {
+    name: "Submit right away",
+  });
+  if ((await submitRightAway.getAttribute("aria-checked")) === "true") {
+    await submitRightAway.click();
+  }
+  await composer.getByRole("button", { name: "Add Comment" }).click();
   await expect
     .poll(() =>
       page.evaluate((key) => window.localStorage.getItem(key), recoveryKey),
     )
     .not.toBeNull();
+  await expect(refresh).toBeDisabled();
 
   const replayed = page.waitForResponse(
     (response) =>
@@ -78,8 +103,11 @@ test("should recover an outage-time draft before refreshing", async ({
       response.request().method() === "PUT" &&
       response.ok(),
   );
-  await banner.getByRole("button", { name: "Refresh" }).click();
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("bigplan:test-restore-fetch")),
+  );
   await replayed;
+  await expect(banner).toBeHidden();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(
     page.getByRole("complementary", { name: "Feedback" }),
