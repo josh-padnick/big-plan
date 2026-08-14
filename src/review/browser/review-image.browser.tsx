@@ -31,7 +31,10 @@ const CONTROL_GROUP_CLASSES =
  * Says that a picture is missing instead of leaving a bare box the reader has
  * to interpret. The reason is one disclosure away: it explains the failure to
  * a reader who wants it without spending the space on every reader who does
- * not.
+ * not. One load failure covers several causes - a stopped review runtime, a
+ * request that failed, a file the runtime could not read, and a picture the
+ * plan no longer holds - and the island cannot tell them apart from an image
+ * error alone, so the words name the possibilities instead of asserting one.
  */
 const UnavailableImage = ({ alt }: { readonly alt: string }) => (
   <span
@@ -47,9 +50,8 @@ const UnavailableImage = ({ alt }: { readonly alt: string }) => (
         What happened
       </summary>
       <span className="mt-1 block text-2xs leading-normal text-subtle">
-        This plan no longer holds the picture “{alt === "" ? "Screenshot" : alt}
-        ”. It was removed from the plan's review store, or it was uploaded to a
-        different plan.
+        Big Plan could not load “{alt === "" ? "Screenshot" : alt}”. The review
+        runtime may be stopped, or this plan may no longer hold the picture.
       </span>
     </details>
   </span>

@@ -63,6 +63,36 @@ test("should render a photograph stored beside the plan", async ({ page }) => {
         photograph.evaluate((image: HTMLImageElement) => image.naturalWidth),
       )
       .toBeGreaterThan(0);
+
+    // The picture's comment control belongs in the margin between the picture
+    // and the edge of the card, centred in it. Both appearances are measured,
+    // because the rule is geometry the reader sees in either one.
+    for (const colorScheme of ["light", "dark"] as const) {
+      await test.step(`the comment control stays centred in ${colorScheme}`, async () => {
+        await page.emulateMedia({ colorScheme });
+        const host = page.locator("[data-review-image-host]").first();
+        await expect(host).toBeVisible();
+        const geometry = await host.evaluate((element) => {
+          const picture = element.previousElementSibling;
+          const card =
+            element.closest("[data-slide]") ?? element.closest("article");
+          if (picture === null || card === null) {
+            throw new Error("The picture or its card is missing");
+          }
+          const control = element.getBoundingClientRect();
+          return {
+            controlCentre: control.left + control.width / 2,
+            midpoint:
+              (picture.getBoundingClientRect().right +
+                card.getBoundingClientRect().right) /
+              2,
+          };
+        });
+        expect(
+          Math.abs(geometry.controlCentre - geometry.midpoint),
+        ).toBeLessThanOrEqual(1);
+      });
+    }
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

@@ -3511,11 +3511,14 @@ test.describe("a picture the plan no longer holds", () => {
     const unavailable = rail.locator("[data-review-image-unavailable]");
     await expect(unavailable).toContainText("Image unavailable");
     await expect(rail.getByRole("img", { name: "Capture" })).toHaveCount(0);
-    // The reason is available on demand rather than crowding the message.
-    const reason = unavailable.getByText(/review store/u);
+    // The reason is available on demand rather than crowding the message, and
+    // it names the possible causes instead of asserting one, because a single
+    // load failure covers a stopped runtime as well as a missing picture.
+    const reason = unavailable.getByText(/could not load/u);
     await expect(reason).toBeHidden();
     await unavailable.getByText("What happened").click();
     await expect(reason).toBeVisible();
+    await expect(reason).toContainText("runtime may be stopped");
   });
 });
 
