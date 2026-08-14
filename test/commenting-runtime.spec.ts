@@ -260,29 +260,7 @@ test("should show the connector's reported model identity, or none, on the agent
   reviewRuntimeUrl,
 }) => {
   await page.goto(reviewRuntimeUrl);
-  const session: unknown = await page.evaluate(async () => {
-    const root = document.documentElement;
-    const response = await fetch("/api/session", {
-      headers: {
-        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
-      },
-    });
-    return response.json();
-  });
-  if (
-    typeof session !== "object" ||
-    session === null ||
-    !("sessionId" in session) ||
-    !("planId" in session) ||
-    !("plan" in session) ||
-    typeof session.sessionId !== "string" ||
-    typeof session.planId !== "string" ||
-    typeof session.plan !== "string"
-  ) {
-    throw new Error(
-      "The model identity journey requires a live review session",
-    );
-  }
+  const session = await liveReviewSession(page);
   const store = reviewStoreFor({
     planPath: session.plan,
     planId: session.planId,

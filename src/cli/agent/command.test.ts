@@ -61,7 +61,9 @@ describe("agent command connector model identity", () => {
     } else {
       process.env["BIG_PLAN_AGENT_MODEL"] = environmentValue;
     }
-    const directory = await mkdtemp(join(tmpdir(), "big-plan-cli-agent-model-"));
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-cli-agent-model-"),
+    );
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nAnswer this question.\n";
     try {
