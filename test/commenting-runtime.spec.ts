@@ -32,6 +32,36 @@ import { expect, stageComment, test, type Page } from "./fixtures";
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
+test("should keep one staged comment after reloading the live review", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const commentBody = "Keep this staged comment unique after reload.";
+  await stageComment(page, commentBody);
+
+  await page.reload();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const feedback = page.getByRole("complementary", { name: "Feedback" });
+  await expect(
+    feedback.getByRole("button", {
+      name: `Expand staged comment: ${commentBody}`,
+    }),
+  ).toHaveCount(1);
+});
+
+test("should keep feedback tabs clickable above the mobile contents bar", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto(reviewRuntimeUrl);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  await page.getByRole("tab", { name: "Chat" }).click();
+
+  await expect(page.getByRole("tabpanel", { name: "Chat" })).toBeVisible();
+});
+
 test("should merge an outage-time draft with newer runtime state", async ({
   page,
   reviewRuntimeUrl,

@@ -566,7 +566,10 @@ const reconcileLiveReviewRecovery = ({
       }
       continue;
     }
-    if (JSON.stringify(current) === JSON.stringify(recovered)) continue;
+    // Target metadata is runtime-owned and may be canonicalized on first save.
+    // A matching body therefore represents the same immutable comment even
+    // when the browser's display kind differs from the stored block kind.
+    if (current.body === recovered.body) continue;
     const recoveredId = randomId();
     drafts.push({ ...recovered, id: recoveredId });
     if (recovery.resolvedCommentIds.has(recovered.id)) {
@@ -5311,7 +5314,7 @@ export const ReviewController = () => {
       {isOpen ? (
         <aside
           id="big-plan-feedback-rail"
-          className="fixed top-11 right-0 bottom-0 z-20 flex w-[min(22rem,100vw)] min-w-0 max-w-full flex-col overflow-hidden border-l border-edge bg-paper text-ink shadow-floating"
+          className="fixed top-11 right-0 bottom-0 z-40 flex w-[min(22rem,100vw)] min-w-0 max-w-full flex-col overflow-hidden border-l border-edge bg-paper text-ink shadow-floating"
           aria-label="Feedback"
         >
           <div className="flex flex-none items-stretch border-b border-edge bg-paper">
