@@ -2299,9 +2299,7 @@ Review the queue change in context.
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
     const componentDiff = page.locator("[data-review-component-diff]");
-    const snapshot = componentDiff.locator(
-      "[data-review-component-snapshot]",
-    );
+    const snapshot = componentDiff.locator("[data-review-component-snapshot]");
     const now = componentDiff.getByRole("button", { name: "Now" });
     const was = componentDiff.getByRole("button", { name: "Was" });
     const screenNavigation = componentDiff.getByRole("navigation", {
