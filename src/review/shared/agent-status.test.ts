@@ -5,7 +5,7 @@ import {
   deriveAgentStatus,
   deriveAgentHealthLabel,
   deriveCurrentAgentActivity,
-  projectAgentConnectionEvents,
+  projectAgentConnectionState,
   type AgentActivityRequest,
 } from "./agent-status.js";
 
@@ -195,32 +195,79 @@ describe("agent connection events", () => {
 
   it("should keep the connected event current when the heartbeat is exactly 75 seconds old", () => {
     expect(
-      projectAgentConnectionEvents({
-        connected: true,
+      projectAgentConnectionState({
+        presenceConnected: true,
         heartbeatAt: NOW - 75_000,
         now: NOW,
         events: [connectedEvent],
       }),
-    ).toEqual([connectedEvent]);
+    ).toEqual({ connected: true, events: [connectedEvent] });
   });
 
   it("should project disconnection when the heartbeat is 75,001 milliseconds old", () => {
     expect(
-      projectAgentConnectionEvents({
-        connected: false,
+      projectAgentConnectionState({
+        presenceConnected: true,
         heartbeatAt: NOW - 75_001,
         now: NOW,
         events: [connectedEvent],
       }),
-    ).toEqual([
-      connectedEvent,
-      {
-        eventId: `lease-expired-${NOW}`,
-        connected: false,
-        at: new Date(NOW).toISOString(),
-        reason: "No agent signal within 75 seconds",
-      },
-    ]);
+    ).toEqual({
+      connected: false,
+      events: [
+        connectedEvent,
+        {
+          eventId: `presence-disconnected-${NOW}`,
+          connected: false,
+          at: new Date(NOW).toISOString(),
+          reason: "No agent signal within 75 seconds",
+        },
+      ],
+    });
+  });
+
+  it("should keep disconnection current when a reconnect event races after stale presence", () => {
+    const reconnectAt = NOW - 500;
+    const projection = projectAgentConnectionState({
+      presenceConnected: false,
+      heartbeatAt: NOW - 76_000,
+      now: NOW,
+      events: [
+        connectedEvent,
+        {
+          eventId: "event-2",
+          connected: true,
+          at: new Date(reconnectAt).toISOString(),
+        },
+      ],
+    });
+    expect(projection.connected).toBe(false);
+    expect(projection.events.at(-1)).toMatchObject({
+      connected: false,
+      at: new Date(reconnectAt + 1).toISOString(),
+    });
+  });
+
+  it("should keep connection current when a disconnect event races after fresh presence", () => {
+    const disconnectAt = NOW - 500;
+    const projection = projectAgentConnectionState({
+      presenceConnected: true,
+      heartbeatAt: NOW - 1_000,
+      now: NOW,
+      events: [
+        connectedEvent,
+        {
+          eventId: "event-2",
+          connected: false,
+          at: new Date(disconnectAt).toISOString(),
+        },
+      ],
+    });
+    expect(projection.connected).toBe(true);
+    expect(projection.events.at(-1)).toMatchObject({
+      connected: true,
+      at: new Date(disconnectAt + 1).toISOString(),
+    });
   });
 });
 

@@ -145,25 +145,25 @@ export const agentPresenceIsFresh = ({
   heartbeatAt > 0 &&
   Math.max(0, now - heartbeatAt) <= AGENT_STALL_MS;
 
-export const projectAgentConnectionEvents = ({
-  connected,
+export const projectAgentConnectionState = ({
+  presenceConnected,
   heartbeatAt,
   now,
   events,
 }: {
-  readonly connected: boolean;
+  readonly presenceConnected: boolean;
   readonly heartbeatAt: number;
   readonly now: number;
   readonly events: ReadonlyArray<BrowserConnectionEvent>;
-}): ReadonlyArray<BrowserConnectionEvent> => {
-  if (connected || !Number.isFinite(heartbeatAt) || !Number.isFinite(now)) {
-    return events;
-  }
-  const expiredAtMs = heartbeatAt + AGENT_STALL_MS + 1;
-  if (heartbeatAt <= 0 || expiredAtMs > now) return events;
-  const expiredAt = new Date(expiredAtMs);
-  if (Number.isNaN(expiredAt.getTime())) return events;
-
+}): {
+  readonly connected: boolean;
+  readonly events: ReadonlyArray<BrowserConnectionEvent>;
+} => {
+  const connected = agentPresenceIsFresh({
+    connected: presenceConnected,
+    heartbeatAt,
+    now,
+  });
   let latest: { readonly connected: boolean; readonly atMs: number } | null =
     null;
   for (const event of events) {
@@ -172,17 +172,38 @@ export const projectAgentConnectionEvents = ({
       latest = { connected: event.connected, atMs };
     }
   }
-  if (latest?.connected !== true) return events;
+  if (latest === null || latest.connected === connected) {
+    return { connected, events };
+  }
 
-  return [
-    ...events,
-    {
-      eventId: `lease-expired-${expiredAtMs}`,
-      connected: false,
-      at: expiredAt.toISOString(),
-      reason: `No agent signal within ${AGENT_STALL_WINDOW_LABEL}`,
-    },
-  ];
+  const leaseExpired =
+    Number.isFinite(heartbeatAt) &&
+    Number.isFinite(now) &&
+    heartbeatAt > 0 &&
+    now - heartbeatAt > AGENT_STALL_MS;
+  const observedAtMs = connected
+    ? heartbeatAt
+    : leaseExpired
+      ? heartbeatAt + AGENT_STALL_MS + 1
+      : now;
+  const projectedAtMs = Math.max(observedAtMs, latest.atMs + 1);
+  const projectedAt = new Date(projectedAtMs);
+  if (Number.isNaN(projectedAt.getTime())) return { connected, events };
+
+  return {
+    connected,
+    events: [
+      ...events,
+      {
+        eventId: `presence-${connected ? "connected" : "disconnected"}-${projectedAtMs}`,
+        connected,
+        at: projectedAt.toISOString(),
+        ...(!connected && leaseExpired
+          ? { reason: `No agent signal within ${AGENT_STALL_WINDOW_LABEL}` }
+          : {}),
+      },
+    ],
+  };
 };
 
 /** Explains a lost lease without claiming why the external agent stopped. */
