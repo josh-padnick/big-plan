@@ -150,3 +150,18 @@ test("rejects an effective device override that flattens the ramp", async () => 
     /phone heading \(1\.375rem\) is only 1\.10x title/,
   );
 });
+
+test("rejects a device artboard ramp override that flattens the ramp", async () => {
+  const result = await runAgainst(
+    {},
+    {
+      artboardStylesheet: artboardStylesheet({
+        desktopTitle: "1.625rem",
+        effectiveOverride:
+          '  .wireframe-artboard[data-wireframe-device="phone"] { --wf-text-title: 1rem; }',
+      }),
+    },
+  );
+  assert.equal(result.failed, true);
+  assert.match(result.output, /phone title \(1rem\) is only 1\.14x body/);
+});

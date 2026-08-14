@@ -871,6 +871,65 @@ The fixed-ratio iPad flow gives each decision its own screen, makes progress mea
   </Screen>
 </Wireframe>
 
+## Tablet workspace geometry
+
+The collection and inspector stay subordinate when a landscape workspace uses all three permitted columns.
+
+<Wireframe id="quality-tablet-three-pane" title="Tablet three-pane workspace">
+  <Screen
+    id="quality-tablet-three-pane-screen"
+    name="Tablet · Three panes"
+    device="tablet"
+  >
+    <Row gap="md">
+      <Panel title="Queue" surface="filled">
+        <List>
+          <ListItem label="Checkout blocked" meta="Priority · 4m" selected />
+          <ListItem label="SSO expires early" meta="Waiting · 2h" />
+        </List>
+      </Panel>
+      <Panel title="Conversation">
+        <Heading text="Checkout blocked" level="2" />
+        <Text text="The payment form freezes after submission." />
+        <TextArea label="Reply" placeholder="Write a reply…" />
+      </Panel>
+      <Rail>
+        <Panel title="Properties">
+          <Select label="Status" value="Open" />
+          <Select label="Assignee" value="Alex Rivera" />
+        </Panel>
+      </Rail>
+    </Row>
+  </Screen>
+</Wireframe>
+
+The portrait master-detail layout keeps the detail surface dominant without changing the approved landscape pair.
+
+<Wireframe
+  id="quality-tablet-portrait-master-detail"
+  title="Portrait tablet master-detail workspace"
+>
+  <Screen
+    id="quality-tablet-portrait-master-detail-screen"
+    name="Portrait tablet · Master detail"
+    device="tablet-portrait"
+  >
+    <Row gap="md">
+      <Panel title="Queue" surface="filled">
+        <List>
+          <ListItem label="Checkout blocked" meta="Priority · 4m" selected />
+          <ListItem label="SSO expires early" meta="Waiting · 2h" />
+        </List>
+      </Panel>
+      <Panel title="Conversation">
+        <Heading text="Checkout blocked" level="2" />
+        <Text text="The payment form freezes after submission." />
+        <TextArea label="Reply" placeholder="Write a reply…" />
+      </Panel>
+    </Row>
+  </Screen>
+</Wireframe>
+
 ## Phone support flow
 
 The phone uses a one-column list-to-detail push with compact navigation, comfortable rows, and bottom destinations.

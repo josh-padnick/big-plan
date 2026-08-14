@@ -395,26 +395,27 @@ test("should keep sparse app shell chrome compact and workspace full-width", asy
   ).toBeLessThan(0.75);
 });
 
-test("should keep shipped desktop panes readable and layout regions separate", async ({
+test("should keep shipped workspace panes dominant and layout regions separate", async ({
   page,
   wireframeFormFactorsViewerUrl,
   wireframeQualityViewerUrl,
 }) => {
+  const exercisedTabletProofs = new Set<string>();
   for (const url of [
     wireframeQualityViewerUrl,
     wireframeFormFactorsViewerUrl,
   ]) {
     await page.goto(url);
-    const desktopWireframes = page.locator(
-      '[data-wireframe]:has([data-wireframe-device="desktop"])',
+    const workspaceWireframes = page.locator(
+      '[data-wireframe]:has([data-wireframe-device="desktop"]), [data-wireframe="quality-tablet-three-pane"], [data-wireframe="quality-tablet-portrait-master-detail"]',
     );
 
     for (
       let wireframeIndex = 0;
-      wireframeIndex < (await desktopWireframes.count());
+      wireframeIndex < (await workspaceWireframes.count());
       wireframeIndex += 1
     ) {
-      const wireframe = desktopWireframes.nth(wireframeIndex);
+      const wireframe = workspaceWireframes.nth(wireframeIndex);
       const switches = wireframe.locator("[data-wireframe-switch]");
       const screenCount = Math.max(await switches.count(), 1);
 
@@ -423,7 +424,7 @@ test("should keep shipped desktop panes readable and layout regions separate", a
           await switches.nth(screenIndex).click();
         }
         const screen = wireframe.locator(
-          '[data-wireframe-device="desktop"]:visible',
+          ':is([data-wireframe-device="desktop"], [data-wireframe-device="tablet"], [data-wireframe-device="tablet-portrait"]):visible',
         );
 
         await test.step(`${await wireframe.getAttribute("data-wireframe")} screen ${screenIndex + 1}`, async () => {
@@ -488,6 +489,11 @@ test("should keep shipped desktop panes readable and layout regions separate", a
                 primary / bounded,
                 `primary ${primary}px beside a ${bounded}px secondary pane`,
               ).toBeGreaterThanOrEqual(PRIMARY_DOMINANCE_RATIO);
+              const wireframeId =
+                await wireframe.getAttribute("data-wireframe");
+              if (wireframeId?.startsWith("quality-tablet-")) {
+                exercisedTabletProofs.add(wireframeId);
+              }
             } else if (masterWidths.length === 1 && railWidths.length === 1) {
               expect(
                 (masterWidths[0] ?? 0) / (railWidths[0] ?? 1),
@@ -530,6 +536,10 @@ test("should keep shipped desktop panes readable and layout regions separate", a
       }
     }
   }
+  expect([...exercisedTabletProofs].sort()).toEqual([
+    "quality-tablet-portrait-master-detail",
+    "quality-tablet-three-pane",
+  ]);
 });
 
 // The floors are product judgement, set by looking at rendered documents, not

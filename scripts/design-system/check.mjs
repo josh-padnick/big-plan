@@ -170,6 +170,8 @@ const ARTBOARD_DEVICES = [
   { id: "phone", name: "phone", ownsRamp: false },
 ];
 
+const ARTBOARD_DEVICE_IDS = new Set(ARTBOARD_DEVICES.map(({ id }) => id));
+
 const ARTBOARD_ROLE_CLASSES = {
   body: "wireframe-artboard",
   heading: "wireframe-heading",
@@ -276,41 +278,162 @@ const roleForDeclaration = ({ selector, value }) => {
 const selectorsFor = (declaration) =>
   declaration.parent?.type === "rule" ? declaration.parent.selectors : [];
 
+const rampSelectorDevices = (selector) => {
+  const constrainedDevices = selectorDevices(selector);
+  const unknownDevices = [...constrainedDevices].filter(
+    (device) => !ARTBOARD_DEVICE_IDS.has(device),
+  );
+  if (unknownDevices.length > 0) {
+    return {
+      failure: `cannot attribute type-ramp declaration from selector "${selector}" to a supported device`,
+    };
+  }
+  if (constrainedDevices.size > 0) {
+    return { devices: constrainedDevices };
+  }
+  if (
+    selectorHasClass(selector, "wireframe") ||
+    selectorHasClass(selector, "wireframe-screen") ||
+    selectorHasClass(selector, "wireframe-artboard")
+  ) {
+    return { devices: new Set(ARTBOARD_DEVICE_IDS) };
+  }
+  return {
+    failure: `cannot attribute type-ramp declaration from selector "${selector}" to a wireframe device`,
+  };
+};
+
+const isDeviceRootSelector = (selector, className, device) => {
+  const normalized = selector.trim().replaceAll("'", '"');
+  return (
+    normalized ===
+    `.${className}[data-wireframe-device="${device}"]`
+  );
+};
+
 const rampDeclarations = (root) => {
-  const shared = {};
-  const byDevice = new Map();
+  const declarations = new Map();
+  const failures = [];
+  let sourceOrder = 0;
   root.walkDecls(/^--wf-text-/, (declaration) => {
     const role = declaration.prop.slice("--wf-text-".length);
-    const size = remSize(declaration.value);
-    if (!ARTBOARD_RAMP_ROLES.has(role) || size === undefined) {
+    if (!ARTBOARD_RAMP_ROLES.has(role)) {
       return;
     }
+    const size = remSize(declaration.value);
     for (const selector of selectorsFor(declaration)) {
-      if (selector.trim() === ".wireframe") {
-        shared[role] = size;
+      const attribution = rampSelectorDevices(selector);
+      if (attribution.failure !== undefined) {
+        failures.push(`${ARTBOARD_RAMP_STYLESHEET}: ${attribution.failure}`);
         continue;
       }
-      if (!selectorHasClass(selector, "wireframe-screen")) {
+      if (size === undefined) {
+        failures.push(
+          `${ARTBOARD_RAMP_STYLESHEET}: selector "${selector}" gives --wf-text-${role} an unsupported value "${declaration.value}"`,
+        );
         continue;
       }
-      for (const device of selectorDevices(selector)) {
-        const sizes = byDevice.get(device) ?? {};
-        sizes[role] = size;
-        byDevice.set(device, sizes);
-      }
+      declarations.set(`${selector}\u0000${role}`, {
+        devices: attribution.devices,
+        role,
+        selector,
+        size,
+        sourceOrder,
+      });
+      sourceOrder += 1;
     }
   });
-  return { shared, byDevice };
+  const orderedDeclarations = [...declarations.values()].sort(
+    (left, right) => left.sourceOrder - right.sourceOrder,
+  );
+  const shared = {};
+  const ownedByDevice = new Map();
+  const artboardByDevice = new Map();
+  for (const declaration of orderedDeclarations) {
+    if (declaration.selector.trim() === ".wireframe") {
+      shared[declaration.role] = declaration.size;
+      continue;
+    }
+    for (const device of declaration.devices) {
+      if (
+        isDeviceRootSelector(
+          declaration.selector,
+          "wireframe-screen",
+          device,
+        )
+      ) {
+        const sizes = ownedByDevice.get(device) ?? {};
+        sizes[declaration.role] = declaration.size;
+        ownedByDevice.set(device, sizes);
+      } else if (
+        isDeviceRootSelector(
+          declaration.selector,
+          "wireframe-artboard",
+          device,
+        )
+      ) {
+        const sizes = artboardByDevice.get(device) ?? {};
+        sizes[declaration.role] = declaration.size;
+        artboardByDevice.set(device, sizes);
+      }
+    }
+  }
+  const valuesByDevice = new Map(
+    ARTBOARD_DEVICES.map(({ id }) => {
+      const effectiveRamp = {
+        ...shared,
+        ...ownedByDevice.get(id),
+        ...artboardByDevice.get(id),
+      };
+      return [
+        id,
+        Object.fromEntries(
+          [...ARTBOARD_RAMP_ROLES].map((role) => [
+            role,
+            new Set(
+              effectiveRamp[role] === undefined ? [] : [effectiveRamp[role]],
+            ),
+          ]),
+        ),
+      ];
+    }),
+  );
+  for (const declaration of orderedDeclarations) {
+    if (
+      declaration.selector.trim() === ".wireframe" ||
+      [...declaration.devices].every(
+        (device) =>
+          isDeviceRootSelector(
+            declaration.selector,
+            "wireframe-screen",
+            device,
+          ) ||
+          isDeviceRootSelector(
+            declaration.selector,
+            "wireframe-artboard",
+            device,
+          ),
+      )
+    ) {
+      continue;
+    }
+    for (const device of declaration.devices) {
+      valuesByDevice.get(device)?.[declaration.role]?.add(declaration.size);
+    }
+  }
+  return { failures, ownedByDevice, shared, valuesByDevice };
 };
 
 const roleSizesByDevice = ({ root, ramps }) => {
   const sizesByDevice = new Map(
     ARTBOARD_DEVICES.map(({ id }) => {
-      const ramp = { ...ramps.shared, ...ramps.byDevice.get(id) };
       return [
         id,
         Object.fromEntries(
-          [...ARTBOARD_RAMP_ROLES].map((role) => [role, new Set([ramp[role]])]),
+          [...ARTBOARD_RAMP_ROLES].map((role) => [
+            role,
+            new Set(ramps.valuesByDevice.get(id)?.[role]),
+          ]),
         ),
       ];
     }),
@@ -326,10 +449,13 @@ const roleSizesByDevice = ({ root, ramps }) => {
         if (constrainedDevices.size > 0 && !constrainedDevices.has(id)) {
           continue;
         }
-        const ramp = { ...ramps.shared, ...ramps.byDevice.get(id) };
-        const size =
-          remSize(declaration.value) ?? ramp[variableRole(declaration.value)];
-        if (size !== undefined) {
+        const directSize = remSize(declaration.value);
+        const referencedRole = variableRole(declaration.value);
+        const effectiveSizes =
+          directSize === undefined
+            ? (ramps.valuesByDevice.get(id)?.[referencedRole] ?? [])
+            : [directSize];
+        for (const size of effectiveSizes) {
           sizesByDevice.get(id)?.[role]?.add(size);
         }
       }
@@ -350,9 +476,9 @@ const checkArtboardTypeRamp = async (sourceRoot) => {
   const root = postcss.parse(stylesheet, { from: path });
   const ramps = rampDeclarations(root);
   const sizesByDevice = roleSizesByDevice({ root, ramps });
-  const failures = [];
+  const failures = [...ramps.failures];
   for (const { id, name, ownsRamp } of ARTBOARD_DEVICES) {
-    const ownedRamp = ownsRamp ? ramps.byDevice.get(id) : ramps.shared;
+    const ownedRamp = ownsRamp ? ramps.ownedByDevice.get(id) : ramps.shared;
     const sizes = sizesByDevice.get(id);
     if (sizes === undefined) {
       continue;

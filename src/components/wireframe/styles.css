@@ -478,6 +478,19 @@ marks and a plan diff never jitters.
     flex: 0 1 22rem;
     min-width: 15rem;
   }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-row[data-wireframe-workspace]:has(> .wireframe-rail)
+    > [data-wireframe-master] {
+    flex-basis: 16rem;
+  }
+  .wireframe-artboard[data-wireframe-device="tablet-portrait"]
+    .wireframe-row[data-wireframe-workspace]:not(:has(> .wireframe-rail))
+    > [data-wireframe-master] {
+    flex-basis: 21rem;
+  }
   .wireframe-row[data-wireframe-workspace]
     > [data-wireframe-master]:first-child:nth-last-child(2):has(
       + .wireframe-rail:last-child
@@ -2488,6 +2501,16 @@ marks and a plan diff never jitters.
     flex: 0 0 19rem;
     min-width: 18.75rem;
     max-width: 20rem;
+  }
+  .wireframe-artboard:is(
+      [data-wireframe-device="tablet"],
+      [data-wireframe-device="tablet-portrait"]
+    )
+    .wireframe-row[data-wireframe-workspace]:has(> .wireframe-rail)
+    > .wireframe-rail {
+    flex: 0 0 15rem;
+    min-width: 15rem;
+    max-width: 15rem;
   }
   .wireframe-artboard[data-wireframe-device="desktop"]
     .wireframe-app-content
