@@ -293,6 +293,9 @@ Keep design tokens, shared keyframes, and true document-wide resets in their glo
 Keep layout, spacing, typography, cursor, hover, focus, and component state visible with the owned markup whenever the three tests pass.
 Use Lucide icons through the framework-neutral catalog in `src/icons/lucide/`; never define component-local icon paths.
 
+`:has()` cannot nest inside another `:has()`'s argument; the CSS spec forbids it, but the Tailwind/Lightning CSS build accepts the syntax and emits the rule anyway, so the failure surfaces only as a browser silently dropping the whole selector at paint time.
+Rewrite a "contains a Row with 2+ children" style check as `:has(.foo > :nth-child(2))` (a compound descendant selector, not a second `:has()`), and verify a suspect selector with `element.matches(selector)` in the browser console before trusting that it renders.
+
 ## Tooling and generated sources
 
 - Keep TypeScript strict.
