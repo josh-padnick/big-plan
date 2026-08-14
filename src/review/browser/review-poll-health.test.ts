@@ -2,8 +2,9 @@
 // from other poll failures and heals after a successful poll.
 
 import { describe, expect, it } from "vitest";
+import { deriveCurrentAgentActivity } from "../shared/agent-status.js";
 import {
-  agentConnectionForReviewPoll,
+  agentProjectionNowForReviewPoll,
   INITIAL_REVIEW_POLL_HEALTH,
   reviewPollIsOffline,
   reviewRuntimeCanWrite,
@@ -30,13 +31,23 @@ describe("review poll health", () => {
     expect(reviewRuntimeIsDown(second)).toBe(true);
     expect(reviewPollIsOffline(second)).toBe(false);
     expect(reviewRuntimeCanWrite(second)).toBe(false);
+    const projectionNow = agentProjectionNowForReviewPoll({
+      health: second,
+      lastObservableAtMs: 1_000,
+      nowMs: 1_000_000,
+    });
+    expect(projectionNow).toBe(1_000);
     expect(
-      agentConnectionForReviewPoll({
-        health: second,
-        lastKnownConnected: true,
-        presenceIsFresh: false,
+      deriveCurrentAgentActivity({
+        requests: [],
+        responseRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: true,
+        runtimeOffline: false,
+        now: projectionNow,
+        heartbeatAt: 1_000,
       }),
-    ).toBe(true);
+    ).toMatchObject({ state: "idle", headline: "Agent connected" });
   });
 
   it("should report poll failure without reporting runtime unavailability", () => {
@@ -45,12 +56,12 @@ describe("review poll health", () => {
     expect(reviewPollIsOffline(health)).toBe(true);
     expect(reviewRuntimeIsDown(health)).toBe(false);
     expect(
-      agentConnectionForReviewPoll({
+      agentProjectionNowForReviewPoll({
         health,
-        lastKnownConnected: true,
-        presenceIsFresh: false,
+        lastObservableAtMs: 1_000,
+        nowMs: 1_000_000,
       }),
-    ).toBe(false);
+    ).toBe(1_000_000);
   });
 
   it.each([
