@@ -101,6 +101,10 @@ import {
   runtimeReviewImageIdentity,
 } from "./review-image.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
+import {
+  deriveReviewCommentSubmitAvailability,
+  type ReviewCommentSubmitAvailability,
+} from "./review-comment-submit.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
   displayedStandIn,
@@ -1665,7 +1669,7 @@ const CommentComposer = ({
   inline,
   submitRightAway,
   identity,
-  canSubmitRightAway,
+  submitAvailability,
   onCancel,
   onBodyChange,
   onSave,
@@ -1677,13 +1681,14 @@ const CommentComposer = ({
   readonly inline: boolean;
   readonly submitRightAway: boolean;
   readonly identity: RuntimeIdentity | null;
-  readonly canSubmitRightAway: boolean;
+  readonly submitAvailability: ReviewCommentSubmitAvailability;
   readonly onCancel: () => void;
   readonly onBodyChange: (body: string) => void;
   readonly onSave: (body: string, submitRightAway: boolean) => void;
   readonly onSubmitRightAwayChange: (submitRightAway: boolean) => void;
   readonly onShowAgent: () => void;
 }) => {
+  const canSubmitRightAway = submitAvailability.state === "available";
   const [floatingPosition, setFloatingPosition] = useState<FloatingPosition>({
     top: compose.top,
     left: compose.left,
@@ -1815,13 +1820,13 @@ const CommentComposer = ({
               </Button>
             </Tooltip>
           </div>
-          {submitRightAway && !canSubmitRightAway ? (
+          {submitRightAway && submitAvailability.state === "unavailable" ? (
             <button
               type="button"
               className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
               onClick={onShowAgent}
             >
-              Agent disconnected
+              {submitAvailability.label}
             </button>
           ) : null}
         </div>
@@ -2065,7 +2070,7 @@ const StagedCard = ({
   onDelete,
   onJump,
   onSubmit,
-  canSubmit,
+  submitAvailability,
   onShowAgent,
   onAssociate,
   identity,
@@ -2090,7 +2095,7 @@ const StagedCard = ({
   readonly onDelete: () => void;
   readonly onJump: () => void;
   readonly onSubmit: () => void;
-  readonly canSubmit: boolean;
+  readonly submitAvailability: ReviewCommentSubmitAvailability;
   readonly onShowAgent: () => void;
   readonly onAssociate: (target: CommentTarget | null) => void;
   readonly identity: RuntimeIdentity | null;
@@ -2100,6 +2105,7 @@ const StagedCard = ({
   readonly onResolve?: () => void;
   readonly compact?: boolean;
 }) => {
+  const canSubmit = submitAvailability.state === "available";
   const setAssociated = (active: boolean) => {
     onAssociate(active ? comment.target : null);
   };
@@ -2321,13 +2327,13 @@ const StagedCard = ({
                 </Button>
               )}
             </div>
-            {!resolved && !canSubmit ? (
+            {!resolved && submitAvailability.state === "unavailable" ? (
               <button
                 type="button"
                 className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                 onClick={onShowAgent}
               >
-                Agent disconnected
+                {submitAvailability.label}
               </button>
             ) : null}
           </div>
@@ -2473,13 +2479,13 @@ const StagedCard = ({
           </Button>
         </div>
       )}
-      {!isEditing && !canSubmit ? (
+      {!isEditing && submitAvailability.state === "unavailable" ? (
         <button
           type="button"
           className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
           onClick={onShowAgent}
         >
-          Agent disconnected
+          {submitAvailability.label}
         </button>
       ) : null}
     </Card>
@@ -3574,6 +3580,10 @@ export const ReviewController = () => {
     threadRuntime === "online" &&
     runtimeCanWrite &&
     runtimeSession?.authoritative !== false;
+  const commentSubmitAvailability = deriveReviewCommentSubmitAvailability({
+    canSubmit: identity === null || canSendToAgent,
+    runtimeCanWrite,
+  });
   const unresolvedDrafts = useMemo(
     () => drafts.filter((comment) => !resolvedCommentIds.has(comment.id)),
     [drafts, resolvedCommentIds],
@@ -4166,11 +4176,13 @@ export const ReviewController = () => {
   const sendComments = useCallback(
     async (comments: ReadonlyArray<ReviewComment>) => {
       if (!canSendToAgent || identity === null) {
-        setStatus(
-          runtimeCanWrite
-            ? "Agent disconnected. Your comment is saved and can be sent after reconnecting."
-            : "The review session is offline. Your comment is saved and can be sent after reconnecting.",
-        );
+        const availability = deriveReviewCommentSubmitAvailability({
+          canSubmit: false,
+          runtimeCanWrite,
+        });
+        if (availability.state === "unavailable") {
+          setStatus(availability.status);
+        }
         return;
       }
       setIsSending(true);
@@ -5187,7 +5199,7 @@ export const ReviewController = () => {
                     }
                     onJump={() => jumpTo(comment)}
                     onSubmit={() => void sendComments([comment])}
-                    canSubmit={identity === null || canSendToAgent}
+                    submitAvailability={commentSubmitAvailability}
                     onShowAgent={showAgentSetup}
                     onAssociate={setAssociatedTarget}
                     identity={identity}
@@ -5223,7 +5235,7 @@ export const ReviewController = () => {
                     }
                     onJump={() => jumpTo(comment)}
                     onSubmit={() => void sendComments([comment])}
-                    canSubmit={identity === null || canSendToAgent}
+                    submitAvailability={commentSubmitAvailability}
                     onShowAgent={showAgentSetup}
                     onAssociate={setAssociatedTarget}
                     identity={identity}
@@ -5346,7 +5358,7 @@ export const ReviewController = () => {
             <AgentSurface
               model={{
                 activity: currentAgentActivity,
-                presenceIsObservable: agentPresenceIsObservable,
+                presenceState: agentProjection.state,
                 connected: agentConnected,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
                 connectionLog: agentConnection.events,
@@ -5374,6 +5386,14 @@ export const ReviewController = () => {
               {identity === null ? (
                 <p className="m-0 text-xs text-support" role="status">
                   {status}
+                </p>
+              ) : agentProjection.state === "loading" ? (
+                <p
+                  className="m-0 text-xs text-support"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Checking agent status…
                 </p>
               ) : !agentPresenceIsObservable ? (
                 <p
@@ -5466,7 +5486,7 @@ export const ReviewController = () => {
               onDelete={() => setPendingDelete({ kind: "comment", comment })}
               onJump={() => jumpTo(comment)}
               onSubmit={() => void sendComments([comment])}
-              canSubmit={identity === null || canSendToAgent}
+              submitAvailability={commentSubmitAvailability}
               onShowAgent={showAgentSetup}
               onAssociate={setAssociatedTarget}
               identity={identity}
@@ -5542,7 +5562,7 @@ export const ReviewController = () => {
           body={composeBody}
           submitRightAway={submitRightAway}
           identity={identity}
-          canSubmitRightAway={identity === null || canSendToAgent}
+          submitAvailability={commentSubmitAvailability}
           onCancel={() => {
             setCompose(null);
             setComposeBody("");
@@ -5565,7 +5585,7 @@ export const ReviewController = () => {
             body={composeBody}
             submitRightAway={submitRightAway}
             identity={identity}
-            canSubmitRightAway={identity === null || canSendToAgent}
+            submitAvailability={commentSubmitAvailability}
             onCancel={() => {
               setCompose(null);
               setComposeBody("");
