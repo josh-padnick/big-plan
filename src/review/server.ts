@@ -113,10 +113,16 @@ import {
 } from "./shared/review-wire.js";
 import {
   applyStagedInputMutation,
+  currentAnswers,
   PlanInputsRejected,
   validateStagedInputMutation,
   validateStagedInputs,
+  type StagedInputs,
 } from "./plan-inputs-store.js";
+import {
+  deriveDecisionInventory,
+  type DecisionInventory,
+} from "./decision-inventory.js";
 import {
   activateReviewSession,
   REVIEW_HEARTBEAT_INTERVAL_MS,
@@ -865,6 +871,42 @@ export const startReviewRuntime = async ({
       diffPreview: diffPreviewSource !== undefined,
     });
 
+  // The compiled inventory of decisions the plan currently asks. It is derived
+  // from the same source the document is rendered from, keyed by that source's
+  // digest, so it can never describe a plan the reader was not served.
+  let inventoryDigest: string | undefined;
+  let inventory: DecisionInventory = new Map();
+  const decisionInventory = async (): Promise<DecisionInventory> => {
+    const markdown = await readFile(resolvedPlanPath, "utf8");
+    const digest = deriveSnapshotDigest(markdown);
+    if (inventoryDigest !== digest) {
+      inventory = deriveDecisionInventory({
+        markdown,
+        fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+      });
+      inventoryDigest = digest;
+    }
+    return inventory;
+  };
+
+  // Total answer loss deserves one line a human can act on. Reported once per
+  // runtime, because every later read of the same file would repeat it and the
+  // next accepted write replaces the record anyway.
+  let reportedUnreadableAnswers = false;
+  const readAnswers = async (): Promise<StagedInputs> => {
+    const { inputs, unreadable } = await readStagedInputs({
+      store,
+      validate: validateStagedInputs,
+    });
+    if (unreadable !== undefined && !reportedUnreadableAnswers) {
+      reportedUnreadableAnswers = true;
+      console.error(
+        `Stored decision answers could not be read and were treated as empty: ${unreadable}`,
+      );
+    }
+    return inputs;
+  };
+
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");
     if (blockMapMarkdown !== markdown) {
@@ -1033,34 +1075,37 @@ export const startReviewRuntime = async ({
       return;
     }
     if (route.path === "/api/review-state") {
-      const inputs = await readStagedInputs({
-        store,
-        validate: validateStagedInputs,
-      });
+      const inventoryNow = await decisionInventory();
+      const inputs = await readAnswers();
       sendJson({
         response,
         status: 200,
-        value: encodeReviewState({ answers: inputs.answers }),
+        value: encodeReviewState({
+          answers: currentAnswers({ inputs, inventory: inventoryNow }),
+          revision: inputs.revision,
+        }),
       });
       return;
     }
     if (route.path === "/api/inputs") {
+      const inventoryNow = await decisionInventory();
       const mutation = validateStagedInputMutation({
         value: body,
         now: new Date().toISOString(),
+        inventory: inventoryNow,
       });
       const inputs = applyStagedInputMutation({
-        inputs: await readStagedInputs({
-          store,
-          validate: validateStagedInputs,
-        }),
+        inputs: await readAnswers(),
         mutation,
       });
       await writeStagedInputs({ store, inputs });
       sendJson({
         response,
         status: 200,
-        value: { answers: inputs.answers.length },
+        value: encodeReviewState({
+          answers: currentAnswers({ inputs, inventory: inventoryNow }),
+          revision: inputs.revision,
+        }),
       });
       return;
     }

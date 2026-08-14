@@ -3031,6 +3031,10 @@ const wireDecisions = () => {
       "bigplan:decision-persistence-saved",
       showPersistenceSaved,
     );
+    decision.addEventListener(
+      "bigplan:decision-persistence-reading",
+      showReadingSession,
+    );
     change.addEventListener("click", () => {
       decision.removeAttribute("data-decision-answered");
       for (const header of columnHeaders) {

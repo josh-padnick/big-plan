@@ -1,7 +1,8 @@
-// Proves durable decision answers through the complete live review runtime,
-// including reload, retraction, stale replay, and visible persistence failure.
+// Proves durable decision answers through the complete live review runtime:
+// reload, retraction, the currency of an edited decision, the bootstrap window
+// before authority is known, and a visible persistence failure.
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -32,10 +33,25 @@ Choose the release path before implementation begins.
 </Option>
 
 </Decision>
+
+<Decision question="Who owns the rollback?">
+
+<Option title="The release engineer" recommended summary="One named owner.">
+<Consideration label="Speed" verdict="Fast" tone="good" />
+</Option>
+
+<Option title="The on-call rotation" summary="Whoever is paged.">
+<Consideration label="Speed" verdict="Slower" tone="mixed" />
+</Option>
+
+</Decision>
 `;
 
+const releaseDecision = (page: Page) => page.locator("[data-decision]").first();
+const rollbackDecision = (page: Page) => page.locator("[data-decision]").nth(1);
+
 const answerGradualRollout = async (page: Page): Promise<void> => {
-  const decision = page.locator("[data-decision]").first();
+  const decision = releaseDecision(page);
   await decision.getByRole("radio", { name: "Gradual rollout" }).check();
   await decision.getByRole("button", { name: "Confirm choice" }).click();
 };
@@ -47,7 +63,51 @@ const startCompiledReviewRuntime = async (planPath: string) => {
   return startReviewRuntime({ planPath });
 };
 
-test("should persist, retract, and invalidate a confirmed decision answer", async ({
+const isInputOperation = (
+  response: {
+    readonly url: () => string;
+    readonly request: () => {
+      readonly method: () => string;
+      readonly postDataJSON: () => unknown;
+    };
+  },
+  operation: "stage" | "retract",
+): boolean => {
+  if (
+    !response.url().endsWith("/api/inputs") ||
+    response.request().method() !== "POST"
+  ) {
+    return false;
+  }
+  const body = response.request().postDataJSON();
+  return typeof body === "object" && body !== null && "op" in body
+    ? body.op === operation
+    : false;
+};
+
+// A writable review is open once the session has answered and the answers
+// record has been read, because those two responses are what decides whether a
+// confirm is written and what the cards already show.
+const openWritableReview = async (page: Page, url: string): Promise<void> => {
+  const session = page.waitForResponse((response) =>
+    response.url().endsWith("/api/session"),
+  );
+  const answers = page.waitForResponse((response) =>
+    response.url().endsWith("/api/review-state"),
+  );
+  await page.goto(url);
+  expect((await session).ok()).toBe(true);
+  expect((await answers).ok()).toBe(true);
+};
+
+const storedAnswers = async (inputsPath: string): Promise<unknown> => {
+  const stored: unknown = JSON.parse(await readFile(inputsPath, "utf8"));
+  return typeof stored === "object" && stored !== null && "answers" in stored
+    ? stored.answers
+    : undefined;
+};
+
+test("should persist and retract a confirmed decision answer", async ({
   page,
 }) => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-approval-"));
@@ -55,132 +115,368 @@ test("should persist, retract, and invalidate a confirmed decision answer", asyn
   await writeFile(planPath, PLAN);
   const runtime = await startCompiledReviewRuntime(planPath);
   try {
-    await page.goto(runtime.url);
-    const decision = page.locator("[data-decision]").first();
+    await openWritableReview(page, runtime.url);
 
     await test.step("a confirmed answer survives reload", async () => {
-      const staged = page.waitForResponse(
-        (response) =>
-          response.url().endsWith("/api/inputs") &&
-          response.request().method() === "POST",
+      const staged = page.waitForResponse((response) =>
+        isInputOperation(response, "stage"),
       );
       await answerGradualRollout(page);
       expect((await staged).ok()).toBe(true);
       await expect(
-        decision.locator("[data-decision-answer-caption]"),
+        releaseDecision(page).locator("[data-decision-answer-caption]"),
       ).toHaveText("Saved with this review.");
 
       await page.reload();
       await expect(
-        page.locator("[data-decision]").first().getByRole("radio", {
-          name: "Gradual rollout",
-        }),
+        releaseDecision(page).getByRole("radio", { name: "Gradual rollout" }),
       ).toBeChecked();
       await expect(
-        page
-          .locator("[data-decision]")
-          .first()
-          .locator("[data-decision-answer]"),
+        releaseDecision(page).locator("[data-decision-answer]"),
       ).toBeVisible();
       await expect(
-        page
-          .locator("[data-decision]")
-          .first()
-          .locator("[data-decision-answer-caption]"),
+        releaseDecision(page).locator("[data-decision-answer-caption]"),
       ).toHaveText("Saved with this review.");
     });
 
+    await test.step("an answers response older than the applied one is ignored", async () => {
+      let markReadStarted = (): void => undefined;
+      let releaseRead = (): void => undefined;
+      const readStarted = new Promise<void>((resolve) => {
+        markReadStarted = resolve;
+      });
+      const readGate = new Promise<void>((resolve) => {
+        releaseRead = resolve;
+      });
+      let delayed = false;
+      await page.route("**/api/review-state", async (route) => {
+        if (!delayed) {
+          delayed = true;
+          markReadStarted();
+          await readGate;
+        }
+        await route.continue();
+      });
+      try {
+        await page.goto(runtime.url);
+        await readStarted;
+        const staged = page.waitForResponse((response) =>
+          isInputOperation(response, "stage"),
+        );
+        const decision = releaseDecision(page);
+        await decision
+          .getByRole("radio", { name: "Immediate rollout" })
+          .check();
+        await decision.getByRole("button", { name: "Confirm choice" }).click();
+        expect((await staged).ok()).toBe(true);
+        releaseRead();
+        await expect(
+          decision.locator("[data-decision-answer-caption]"),
+        ).toHaveText("Saved with this review.");
+        // The delayed read was answered before the write and carries the older
+        // revision, so it must not put the previous option back on the card.
+        await expect(
+          decision.getByRole("radio", { name: "Immediate rollout" }),
+        ).toBeChecked();
+      } finally {
+        releaseRead();
+        await page.unroute("**/api/review-state");
+      }
+    });
+
     await test.step("changing the answer retracts it durably", async () => {
-      const retracted = page.waitForResponse(
-        (response) =>
-          response.url().endsWith("/api/inputs") &&
-          response.request().method() === "POST",
+      const retracted = page.waitForResponse((response) =>
+        isInputOperation(response, "retract"),
       );
-      await page
-        .locator("[data-decision]")
-        .first()
+      await releaseDecision(page)
         .getByRole("button", { name: "Change" })
         .click();
       expect((await retracted).ok()).toBe(true);
       await page.reload();
       await expect(
-        page
-          .locator("[data-decision]")
-          .first()
-          .locator("[data-decision-footer]"),
+        releaseDecision(page).locator("[data-decision-footer]"),
       ).toBeVisible();
       await expect(
-        page
-          .locator("[data-decision]")
-          .first()
-          .locator("[data-decision-answer]"),
+        releaseDecision(page).locator("[data-decision-answer]"),
       ).toBeHidden();
     });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
-    await test.step("a reworded question does not replay the old answer", async () => {
-      const staged = page.waitForResponse(
-        (response) =>
-          response.url().endsWith("/api/inputs") &&
-          response.request().method() === "POST",
-      );
-      await answerGradualRollout(page);
-      expect((await staged).ok()).toBe(true);
-
-      const request = messageAgentRequest({
-        kind: "chat",
-        requestId: "1111111111111111",
-        sessionId: runtime.sessionId,
-        planId: runtime.planId,
-        premiseSnapshot: deriveSnapshotDigest(PLAN),
-        createdAt: new Date().toISOString(),
-        body: "Clarify the release decision.",
-      });
-      await writeAgentRequest({ store: runtime.store, request });
-      const claimed = await claimAgentRequest({
-        store: runtime.store,
-        requestId: request.requestId,
-        baselineSnapshot: request.premiseSnapshot,
+test("should mask an answer whose decision changed and restore it with the wording", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-approval-currency-"),
+  );
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  const reworded = PLAN.replace(
+    "Which release path should we use?",
+    "How should the release reach users?",
+  );
+  const publishRevision = async ({
+    requestId,
+    source,
+    baseline,
+    message,
+  }: {
+    readonly requestId: string;
+    readonly source: string;
+    readonly baseline: string;
+    readonly message: string;
+  }): Promise<void> => {
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+      premiseSnapshot: baseline,
+      createdAt: new Date().toISOString(),
+      body: message,
+    });
+    await writeAgentRequest({ store: runtime.store, request });
+    const claimed = await claimAgentRequest({
+      store: runtime.store,
+      requestId: request.requestId,
+      baselineSnapshot: baseline,
+      now: new Date().toISOString(),
+    });
+    const resultSnapshot = deriveSnapshotDigest(source);
+    await writeFile(planPath, source);
+    await writeSnapshot({
+      store: runtime.store,
+      snapshot: resultSnapshot,
+      source,
+    });
+    await publishAgentResponse({
+      store: runtime.store,
+      response: validateAgentResponseDraft({
+        value: { requestId: request.requestId, message },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: resultSnapshot,
         now: new Date().toISOString(),
-      });
-      const revised = PLAN.replace(
-        "Which release path should we use?",
-        "How should the release reach users?",
-      );
-      const resultSnapshot = deriveSnapshotDigest(revised);
-      await writeFile(planPath, revised);
-      await writeSnapshot({
-        store: runtime.store,
-        snapshot: resultSnapshot,
-        source: revised,
-      });
-      await publishAgentResponse({
-        store: runtime.store,
-        response: validateAgentResponseDraft({
-          value: {
-            requestId: request.requestId,
-            message: "Clarified the decision question.",
-          },
-          request: claimed,
-          commentsById: new Map(),
-          changedBlocks: new Set(),
-          currentSnapshot: resultSnapshot,
-          now: new Date().toISOString(),
-        }),
+      }),
+    });
+  };
+  try {
+    await openWritableReview(page, runtime.url);
+    const staged = page.waitForResponse((response) =>
+      isInputOperation(response, "stage"),
+    );
+    await answerGradualRollout(page);
+    expect((await staged).ok()).toBe(true);
+
+    await test.step("a reworded question masks its answer and keeps the record", async () => {
+      await publishRevision({
+        requestId: "1111111111111111",
+        source: reworded,
+        baseline: deriveSnapshotDigest(PLAN),
+        message: "Clarify the release decision.",
       });
 
-      const revisedDecision = page.locator("[data-decision]").first();
-      await expect(revisedDecision).toContainText(
+      await expect(releaseDecision(page)).toContainText(
         "How should the release reach users?",
         { timeout: 15_000 },
       );
       await expect(
-        revisedDecision.locator("[data-decision-footer]"),
+        releaseDecision(page).locator("[data-decision-footer]"),
       ).toBeVisible();
       await expect(
-        revisedDecision.locator("[data-decision-answer]"),
+        releaseDecision(page).locator("[data-decision-answer]"),
       ).toBeHidden();
+      // Masked, never deleted: the record is what makes the restore below a
+      // recovery rather than a re-answer.
+      expect(await storedAnswers(runtime.store.inputsPath)).toMatchObject([
+        { optionTitle: "Gradual rollout" },
+      ]);
+    });
+
+    await test.step("restoring the exact wording shows the original answer again", async () => {
+      await publishRevision({
+        requestId: "2222222222222222",
+        source: PLAN,
+        baseline: deriveSnapshotDigest(reworded),
+        message: "Restore the original decision wording.",
+      });
+
+      await expect(releaseDecision(page)).toContainText(
+        "Which release path should we use?",
+        { timeout: 15_000 },
+      );
+      await expect(
+        releaseDecision(page).locator("[data-decision-answer]"),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(
+        releaseDecision(page).getByRole("radio", { name: "Gradual rollout" }),
+      ).toBeChecked();
     });
   } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should hold a confirm made before the session answers, then save it", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-approval-authority-"),
+  );
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  let markSessionRequestStarted = (): void => undefined;
+  let releaseSessionRequest = (): void => undefined;
+  const sessionRequestStarted = new Promise<void>((resolve) => {
+    markSessionRequestStarted = resolve;
+  });
+  const sessionRequestGate = new Promise<void>((resolve) => {
+    releaseSessionRequest = resolve;
+  });
+  let inputWrites = 0;
+  try {
+    // A saved answer from an earlier visit is what the bootstrap window must
+    // not disturb while a new confirm is being held.
+    await openWritableReview(page, runtime.url);
+    const seeded = page.waitForResponse((response) =>
+      isInputOperation(response, "stage"),
+    );
+    await rollbackDecision(page)
+      .getByRole("radio", { name: "The release engineer" })
+      .check();
+    await rollbackDecision(page)
+      .getByRole("button", { name: "Confirm choice" })
+      .click();
+    expect((await seeded).ok()).toBe(true);
+
+    await page.route("**/api/session", async (route) => {
+      markSessionRequestStarted();
+      await sessionRequestGate;
+      await route.continue();
+    });
+    page.on("request", (request) => {
+      if (
+        request.url().endsWith("/api/inputs") &&
+        request.method() === "POST"
+      ) {
+        inputWrites += 1;
+      }
+    });
+    await page.goto(runtime.url);
+    await sessionRequestStarted;
+
+    await answerGradualRollout(page);
+    await expect(
+      releaseDecision(page).locator("[data-decision-answer-caption]"),
+    ).toHaveText("Saving with this review...");
+    expect(inputWrites).toBe(0);
+    // The earlier answer stays on the page while this one waits.
+    await expect(
+      rollbackDecision(page).getByRole("radio", {
+        name: "The release engineer",
+      }),
+    ).toBeChecked();
+
+    const staged = page.waitForResponse((response) =>
+      isInputOperation(response, "stage"),
+    );
+    releaseSessionRequest();
+    expect((await staged).ok()).toBe(true);
+    await expect(
+      releaseDecision(page).locator("[data-decision-answer-caption]"),
+    ).toHaveText("Saved with this review.");
+
+    await page.unroute("**/api/session");
+    await page.reload();
+    await expect(
+      releaseDecision(page).getByRole("radio", { name: "Gradual rollout" }),
+    ).toBeChecked();
+    await expect(
+      rollbackDecision(page).getByRole("radio", {
+        name: "The release engineer",
+      }),
+    ).toBeChecked();
+  } finally {
+    releaseSessionRequest();
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should turn a held confirm into a reading-session answer when read-only", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-approval-readonly-"),
+  );
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const runtime = await startCompiledReviewRuntime(planPath);
+  let markSessionRequestStarted = (): void => undefined;
+  let releaseSessionRequest = (): void => undefined;
+  const sessionRequestStarted = new Promise<void>((resolve) => {
+    markSessionRequestStarted = resolve;
+  });
+  const sessionRequestGate = new Promise<void>((resolve) => {
+    releaseSessionRequest = resolve;
+  });
+  let inputWrites = 0;
+  try {
+    await page.route("**/api/session", async (route) => {
+      markSessionRequestStarted();
+      await sessionRequestGate;
+      await route.continue();
+    });
+    page.on("request", (request) => {
+      if (
+        request.url().endsWith("/api/inputs") &&
+        request.method() === "POST"
+      ) {
+        inputWrites += 1;
+      }
+    });
+    await page.goto(runtime.url);
+    await sessionRequestStarted;
+    const replacement = await startCompiledReviewRuntime(planPath);
+    try {
+      await answerGradualRollout(page);
+      expect(inputWrites).toBe(0);
+
+      releaseSessionRequest();
+      await expect(
+        page.getByRole("button", { name: /Using read-only session/ }),
+      ).toBeVisible();
+      await expect(
+        releaseDecision(page).locator("[data-decision-answer-caption]"),
+      ).toHaveText("Noted for this reading session.");
+      expect(inputWrites).toBe(0);
+
+      await releaseDecision(page)
+        .getByRole("button", { name: "Change" })
+        .click();
+      await releaseDecision(page)
+        .getByRole("radio", { name: "Immediate rollout" })
+        .check();
+      await releaseDecision(page)
+        .getByRole("button", { name: "Confirm choice" })
+        .click();
+      await expect(
+        releaseDecision(page).locator("[data-decision-answer-caption]"),
+      ).toHaveText("Noted for this reading session.");
+      expect(inputWrites).toBe(0);
+    } finally {
+      releaseSessionRequest();
+      await replacement.close();
+    }
+  } finally {
+    releaseSessionRequest();
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
@@ -215,10 +511,10 @@ test("should keep a failed decision save visible after its toast is dismissed", 
         body: "{",
       });
     });
-    await page.goto(runtime.url);
+    await openWritableReview(page, runtime.url);
     await answerGradualRollout(page);
     await firstAttemptStarted;
-    const decision = page.locator("[data-decision]").first();
+    const decision = releaseDecision(page);
     await expect(decision.locator("[data-decision-answer-caption]")).toHaveText(
       "Saving with this review...",
     );

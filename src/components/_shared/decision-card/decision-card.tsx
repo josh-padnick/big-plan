@@ -11,11 +11,12 @@
 // Selection is a native radio group, so choosing survives with the viewer
 // script disabled.
 
-import type {
-  CompiledDecisionCard,
-  CompiledDecisionCardOption,
-  DecisionCardStatus,
-  DecisionCardTone,
+import {
+  isAnswerableDecisionCard,
+  type CompiledDecisionCard,
+  type CompiledDecisionCardOption,
+  type DecisionCardStatus,
+  type DecisionCardTone,
 } from "../../_model/decision-card.js";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
 import { PLUS_ICON } from "../../../icons/lucide/plus.js";
@@ -50,11 +51,6 @@ const statusLabel = (model: CompiledDecisionCard): string =>
   model.status === "open" && model.interaction === "audit"
     ? "Proposed"
     : STATUS_LABELS[model.status];
-
-// The reader is only invited to answer while the question is genuinely open;
-// a settled or deferred decision renders as a record, not as a control.
-const isAnswerable = (model: CompiledDecisionCard): boolean =>
-  model.status === "open" && model.interaction === "choose";
 
 // A settled record explains its outcome; an open question begins with the
 // agent's recommendation without preselecting any radio.
@@ -278,7 +274,7 @@ export const DecisionCard = ({
 }: {
   readonly model: CompiledDecisionCard;
 }) => {
-  const answerable = isAnswerable(model);
+  const answerable = isAnswerableDecisionCard(model);
   const defaultIndex = defaultPanelIndex(model);
   return (
     <figure

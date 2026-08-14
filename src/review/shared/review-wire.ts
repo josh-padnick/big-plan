@@ -18,10 +18,18 @@ export type StagedDecisionAnswer = {
   readonly prompt: string;
   readonly answeredAt: string;
   readonly premiseSnapshot: string;
+  // The digest of the decision this answered, stamped by the server from the
+  // compiled plan. An answer is current only while it still matches, so the
+  // reviewer's confirmation can never migrate onto edited content.
+  readonly decisionDigest: string;
 };
 
 export type ReviewState = {
   readonly answers: ReadonlyArray<StagedDecisionAnswer>;
+  // Monotonic across every accepted write to the answers store. The browser
+  // applies a response only when this is newer than the last one it applied,
+  // so an in-flight read can no longer land on top of a completed write.
+  readonly revision: number;
 };
 
 export type AgentOutcome = {
@@ -236,12 +244,20 @@ export const encodeReviewState = (
   value: ReviewStateSource,
 ): ReviewStateSource => value;
 
-/** Decodes staged answers while dropping malformed transport entries. */
+/**
+ * Decodes staged answers while dropping malformed transport entries. A body
+ * without a usable revision decodes to -1, which is older than any accepted
+ * write, so an unreadable response can never displace applied state.
+ */
 export const decodeReviewState = (value: unknown): ReviewState => {
   if (!isReviewWireRecord(value) || !Array.isArray(value.answers)) {
-    return { answers: [] };
+    return { answers: [], revision: -1 };
   }
   return {
+    revision:
+      typeof value.revision === "number" && Number.isFinite(value.revision)
+        ? value.revision
+        : -1,
     answers: value.answers.flatMap(
       (answer): ReadonlyArray<StagedDecisionAnswer> =>
         isReviewWireRecord(answer) &&
@@ -250,7 +266,8 @@ export const decodeReviewState = (value: unknown): ReviewState => {
         typeof answer.optionTitle === "string" &&
         typeof answer.prompt === "string" &&
         typeof answer.answeredAt === "string" &&
-        typeof answer.premiseSnapshot === "string"
+        typeof answer.premiseSnapshot === "string" &&
+        typeof answer.decisionDigest === "string"
           ? [
               {
                 decisionId: answer.decisionId,
@@ -259,6 +276,7 @@ export const decodeReviewState = (value: unknown): ReviewState => {
                 prompt: answer.prompt,
                 answeredAt: answer.answeredAt,
                 premiseSnapshot: answer.premiseSnapshot,
+                decisionDigest: answer.decisionDigest,
               },
             ]
           : [],

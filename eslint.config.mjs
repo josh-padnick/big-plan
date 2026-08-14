@@ -226,7 +226,9 @@ export default tseslint.config(
       },
       // The local review runtime: loopback transport, session identity, the
       // reviewer's on-disk state, and the feedback package. It renders through
-      // the composer's public entry points and owns no command I/O.
+      // the composer's public entry points and owns no command I/O. It reads
+      // compiled component models because the runtime, not the browser, decides
+      // which stored answers the plan still asks for.
       review: {
         files: ["src/review/**/*.ts", "src/review/**/*.tsx"],
         ignores: [
@@ -236,7 +238,7 @@ export default tseslint.config(
           "src/review/shared/**/*.tsx",
         ],
         imports: ["**/review/**"],
-        mayImport: ["composer", "icons", "planLint", "reviewShared"],
+        mayImport: ["composer", "icons", "model", "planLint", "reviewShared"],
       },
       cli: {
         files: ["src/cli/**/*.ts"],

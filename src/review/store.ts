@@ -809,6 +809,36 @@ export const writeActiveDraft = async ({
   await writeJson({ path, value });
 };
 
+/**
+ * One read of the staged decision answers. An unreadable record is reported
+ * rather than swallowed: falling back to an empty one is total answer loss, and
+ * the next accepted write overwrites the evidence, so the caller that owns
+ * operational output gets the chance to say so.
+ */
+export type StagedInputsRead = {
+  readonly inputs: StagedInputs;
+  readonly unreadable?: string;
+};
+
+// Absent and unreadable are the same empty record but not the same event, so
+// this store reads its own file rather than through the shared helper, which
+// answers undefined for both.
+const readInputsText = async (path: string): Promise<string | undefined> => {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
+};
+
 /** Reads staged decision answers back through their owned validator. */
 export const readStagedInputs = async ({
   store,
@@ -816,12 +846,16 @@ export const readStagedInputs = async ({
 }: {
   readonly store: ReviewStore;
   readonly validate: (value: unknown) => StagedInputs;
-}): Promise<StagedInputs> => {
-  const stored = await readJson(store.inputsPath);
+}): Promise<StagedInputsRead> => {
+  const stored = await readInputsText(store.inputsPath);
+  if (stored === undefined) return { inputs: validate(undefined) };
   try {
-    return validate(stored);
-  } catch {
-    return validate(undefined);
+    return { inputs: validate(JSON.parse(stored)) };
+  } catch (error: unknown) {
+    return {
+      inputs: validate(undefined),
+      unreadable: error instanceof Error ? error.message : String(error),
+    };
   }
 };
 
