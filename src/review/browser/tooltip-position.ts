@@ -3,6 +3,7 @@
 const TOOLTIP_GAP = 8;
 const VIEWPORT_INSET = 8;
 const TOOLTIP_MAX_WIDTH = 11 * 16;
+const TOOLTIP_MIN_READABLE_HEIGHT = 2 * 16;
 
 export type TooltipPosition = {
   readonly top: number;
@@ -34,8 +35,14 @@ export const placeTooltip = ({
     0,
     viewport.height - anchor.bottom - TOOLTIP_GAP - VIEWPORT_INSET,
   );
+  const roomierPlacement = roomAbove >= roomBelow ? "above" : "below";
+  const preferredRoom = preferredPlacement === "above" ? roomAbove : roomBelow;
   const placement =
-    preferredPlacement ?? (roomAbove >= roomBelow ? "above" : "below");
+    preferredPlacement === undefined ||
+    (preferredRoom < TOOLTIP_MIN_READABLE_HEIGHT &&
+      (preferredPlacement === "above" ? roomBelow : roomAbove) > preferredRoom)
+      ? roomierPlacement
+      : preferredPlacement;
   const center = anchor.left + (anchor.right - anchor.left) / 2;
   const horizontalEdge = Math.min(
     TOOLTIP_MAX_WIDTH / 2 + VIEWPORT_INSET,

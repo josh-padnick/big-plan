@@ -25,6 +25,16 @@ describe("tooltip position", () => {
     ).toMatchObject({ placement: "above", top: 572, maxHeight: 564 });
   });
 
+  it("should flip a preferred-below tooltip above a bottom-edge anchor", () => {
+    expect(
+      placeTooltip({
+        anchor: { top: 580, right: 180, bottom: 604, left: 140 },
+        viewport: VIEWPORT,
+        preferredPlacement: "below",
+      }),
+    ).toMatchObject({ placement: "above", top: 572, maxHeight: 564 });
+  });
+
   it("should keep a wide anchor tooltip inside narrow horizontal edges", () => {
     expect(
       placeTooltip({

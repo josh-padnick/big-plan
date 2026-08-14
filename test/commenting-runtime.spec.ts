@@ -32,6 +32,65 @@ import { expect, stageComment, test, type Page } from "./fixtures";
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
+test("should recover an outage-time draft before refreshing", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const identity = await page.locator("html").evaluate((root) => ({
+    planId: root.getAttribute("data-plan-id") ?? "",
+    sessionId: root.getAttribute("data-review-session") ?? "",
+  }));
+  const recoveryKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}`;
+  const runtimePaths = new Set([
+    "/api/agent",
+    "/api/drafts",
+    "/api/progress",
+    "/api/session",
+  ]);
+  await page.evaluate((paths) => {
+    const fetchFromRuntime = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(
+        input instanceof Request ? input.url : input,
+        window.location.href,
+      );
+      return paths.includes(url.pathname)
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : fetchFromRuntime(input, init);
+    };
+  }, Array.from(runtimePaths));
+
+  const banner = page.getByRole("alert").filter({
+    hasText: "This review session is no longer online",
+  });
+  await expect(banner).toBeVisible({ timeout: 6_000 });
+  await stageComment(page, "Preserve this comment through the outage.");
+  await expect
+    .poll(() =>
+      page.evaluate((key) => window.localStorage.getItem(key), recoveryKey),
+    )
+    .not.toBeNull();
+
+  const replayed = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/drafts") &&
+      response.request().method() === "PUT" &&
+      response.ok(),
+  );
+  await banner.getByRole("button", { name: "Refresh" }).click();
+  await replayed;
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  await expect(
+    page.getByRole("complementary", { name: "Feedback" }),
+  ).toContainText("Preserve this comment through the outage.");
+  await expect
+    .poll(() =>
+      page.evaluate((key) => window.localStorage.getItem(key), recoveryKey),
+    )
+    .toBeNull();
+});
+
 test("should expire a held connected snapshot when the reviewer returns", async ({
   page,
   reviewRuntimeUrl,

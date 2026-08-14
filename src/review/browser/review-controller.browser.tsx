@@ -410,6 +410,9 @@ const bootstrapSnapshot = (): string => {
 const localStorageKey = (planId: string): string =>
   `big-plan:review:drafts:${planId}`;
 
+const liveRecoveryStorageKey = (identity: RuntimeIdentity): string =>
+  `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}`;
+
 const archivedChatStorageKey = (planId: string): string =>
   `big-plan:review:archived-chat:${planId}`;
 
@@ -474,6 +477,84 @@ const persistedReviewFingerprint = ({
     resolvedCommentIds: Array.from(resolvedCommentIds).sort(),
   });
 
+type LiveReviewRecovery = {
+  readonly drafts: ReadonlyArray<ReviewComment>;
+  readonly resolvedCommentIds: ReadonlySet<string>;
+};
+
+/** Reads a session-scoped recovery snapshot without accepting partial data. */
+const readLiveReviewRecovery = (
+  identity: RuntimeIdentity,
+): LiveReviewRecovery | null => {
+  try {
+    const raw = localStorage.getItem(liveRecoveryStorageKey(identity));
+    const parsed: unknown = raw === null ? null : JSON.parse(raw);
+    if (
+      !isRecord(parsed) ||
+      parsed.version !== 1 ||
+      !Array.isArray(parsed.drafts) ||
+      !parsed.drafts.every(isComment) ||
+      !Array.isArray(parsed.resolvedCommentIds) ||
+      !parsed.resolvedCommentIds.every(
+        (value): value is string => typeof value === "string",
+      )
+    ) {
+      return null;
+    }
+    return {
+      drafts: parsed.drafts,
+      resolvedCommentIds: new Set(parsed.resolvedCommentIds),
+    };
+  } catch {
+    return null;
+  }
+};
+
+/** Saves unsynchronized live review state before a runtime write is attempted. */
+const writeLiveReviewRecovery = ({
+  identity,
+  recovery,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly recovery: LiveReviewRecovery;
+}): boolean => {
+  try {
+    localStorage.setItem(
+      liveRecoveryStorageKey(identity),
+      JSON.stringify({
+        version: 1,
+        drafts: recovery.drafts,
+        resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
+      }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Clears only the recovery snapshot confirmed by the completed runtime write. */
+const clearLiveReviewRecovery = ({
+  identity,
+  fingerprint,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly fingerprint: string;
+}): void => {
+  const recovery = readLiveReviewRecovery(identity);
+  if (
+    recovery === null ||
+    persistedReviewFingerprint(recovery) !== fingerprint
+  ) {
+    return;
+  }
+  try {
+    localStorage.removeItem(liveRecoveryStorageKey(identity));
+  } catch {
+    // The runtime now owns the state, so stale recovery cleanup is best effort.
+  }
+};
+
 const requestJson = async ({
   path,
   identity,
@@ -521,8 +602,10 @@ const requestJson = async ({
 };
 
 const ServerGoneBanner = ({
+  canRefresh,
   onRefresh,
 }: {
+  readonly canRefresh: boolean;
   readonly onRefresh: () => void;
 }) => (
   <div
@@ -537,14 +620,16 @@ const ServerGoneBanner = ({
         This review session is no longer online
       </strong>
       <p className="m-0 mt-1 text-xs text-ink [overflow-wrap:anywhere]">
-        The local review server stopped responding. Refresh when it is running
-        again to continue reviewing. This is separate from the agent connection.
+        {canRefresh
+          ? "The local review server stopped responding. Refresh when it is running again to continue reviewing. This is separate from the agent connection."
+          : "The local review server stopped responding. Keep this tab open because browser storage could not save the latest review changes. This is separate from the agent connection."}
       </p>
     </div>
     <button
       type="button"
       className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       onClick={onRefresh}
+      disabled={!canRefresh}
     >
       Refresh
     </button>
@@ -3495,6 +3580,9 @@ export const ReviewController = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [tab, setTab] = useState<FeedbackTab>("comments");
   const [isHydrated, setIsHydrated] = useState(false);
+  const [recoverableReviewState, setRecoverableReviewState] = useState<
+    string | null
+  >(null);
   const [isSending, setIsSending] = useState(false);
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatBody, setChatBody] = useState("");
@@ -3603,6 +3691,13 @@ export const ReviewController = () => {
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
   const persistedReviewState = useRef<string | null>(null);
+  const currentReviewState = persistedReviewFingerprint({
+    drafts,
+    resolvedCommentIds,
+  });
+  const canRefreshReview =
+    persistedReviewState.current === currentReviewState ||
+    recoverableReviewState === currentReviewState;
   const justSubmittedCommentIds = useRef<ReadonlySet<string>>(new Set());
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
@@ -3925,14 +4020,34 @@ export const ReviewController = () => {
           await requestJson({ path: "/api/drafts", identity }),
         );
         if (current) {
-          const restoredResolvedCommentIds = new Set(
+          const runtimeResolvedCommentIds = new Set(
             snapshot.resolvedCommentIds,
           );
           persistedReviewState.current = persistedReviewFingerprint({
             drafts: snapshot.drafts,
-            resolvedCommentIds: restoredResolvedCommentIds,
+            resolvedCommentIds: runtimeResolvedCommentIds,
           });
-          setDrafts(snapshot.drafts);
+          const recovery = readLiveReviewRecovery(identity);
+          const recoveryFingerprint =
+            recovery === null ? null : persistedReviewFingerprint(recovery);
+          if (
+            recoveryFingerprint !== null &&
+            recoveryFingerprint === persistedReviewState.current
+          ) {
+            clearLiveReviewRecovery({
+              identity,
+              fingerprint: recoveryFingerprint,
+            });
+          }
+          const restoredDrafts = recovery?.drafts ?? snapshot.drafts;
+          const restoredResolvedCommentIds =
+            recovery?.resolvedCommentIds ?? runtimeResolvedCommentIds;
+          setRecoverableReviewState(
+            recoveryFingerprint === persistedReviewState.current
+              ? null
+              : recoveryFingerprint,
+          );
+          setDrafts(restoredDrafts);
           setSent(snapshot.sent);
           setResolvedCommentIds(restoredResolvedCommentIds);
           setStatus("Connected to the local review runtime.");
@@ -3940,6 +4055,19 @@ export const ReviewController = () => {
         }
       } catch (error) {
         if (current) {
+          const recovery = readLiveReviewRecovery(identity);
+          if (recovery !== null) {
+            setDrafts(recovery.drafts);
+            setResolvedCommentIds(recovery.resolvedCommentIds);
+            setRecoverableReviewState(persistedReviewFingerprint(recovery));
+          } else {
+            setRecoverableReviewState(
+              persistedReviewFingerprint({
+                drafts: [],
+                resolvedCommentIds: new Set(),
+              }),
+            );
+          }
           setStatus(errorMessage(error));
           setIsHydrated(true);
         }
@@ -3962,6 +4090,12 @@ export const ReviewController = () => {
       resolvedCommentIds,
     });
     if (persistedReviewState.current === fingerprint) return;
+    const isRecoverable = writeLiveReviewRecovery({
+      identity,
+      recovery: { drafts, resolvedCommentIds },
+    });
+    if (isRecoverable) setRecoverableReviewState(fingerprint);
+    if (!runtimeCanWrite) return;
     void serializeRuntimeWrite(() =>
       requestJson({
         path: "/api/drafts",
@@ -3976,6 +4110,10 @@ export const ReviewController = () => {
     )
       .then(() => {
         persistedReviewState.current = fingerprint;
+        clearLiveReviewRecovery({ identity, fingerprint });
+        setRecoverableReviewState((current) =>
+          current === fingerprint ? null : current,
+        );
       })
       .catch((error: unknown) => setStatus(errorMessage(error)));
   }, [
@@ -3983,7 +4121,9 @@ export const ReviewController = () => {
     identity,
     isHydrated,
     planId,
+    pollHealth.state,
     resolvedCommentIds,
+    runtimeCanWrite,
     runtimeSession?.authoritative,
     serializeRuntimeWrite,
   ]);
@@ -4828,7 +4968,10 @@ export const ReviewController = () => {
   return (
     <>
       {serverGone ? (
-        <ServerGoneBanner onRefresh={() => window.location.reload()} />
+        <ServerGoneBanner
+          canRefresh={canRefreshReview}
+          onRefresh={() => window.location.reload()}
+        />
       ) : null}
       {reviewContainerHosts.map(({ container, host }) => {
         const target = targetForReviewContainer(container);
