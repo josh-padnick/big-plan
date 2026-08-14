@@ -2277,13 +2277,7 @@ test("should fit a wireframe component snapshot and keep its pastel diff edge", 
   await page.setViewportSize({ width: 1600, height: 1000 });
   const directory = await mkdtemp(join(tmpdir(), "big-plan-wireframe-diff-"));
   const planPath = join(directory, "wireframe.mdx");
-  const before = `# Wireframe diff preview
-
-Review the queue change in context.
-
-## Workspace
-
-<Wireframe id="queue-diff" title="Review queue">
+  const changedWorkspace = `<Wireframe id="queue-diff" title="Review queue">
 <Screen id="queue" name="Queue" device="desktop">
 <AppShell>
 <Sidebar brand="Big Plan" mode="Review" />
@@ -2302,19 +2296,25 @@ Review the queue change in context.
 <Text text="Legacy queue content" />
 </Panel>
 </Screen>
-</Wireframe>
-
-## Unrelated workspace
-
-<Wireframe id="queue-diff" title="Unrelated prototype">
+</Wireframe>`;
+  const unrelatedWorkspace = `<Wireframe id="queue-diff" title="Unrelated prototype">
 <Screen id="unrelated" name="Unrelated" device="desktop">
 <Panel title="Unrelated prototype remains visible">
 <Text text="This wireframe deliberately reuses the authored id." />
 </Panel>
 </Screen>
-</Wireframe>
+</Wireframe>`;
+  const before = `# Wireframe diff preview
+
+Review the queue change in context.
+
+## Workspace
+
+${changedWorkspace}
+
+${unrelatedWorkspace}
 `;
-  const after = before
+  const revisedWorkspace = changedWorkspace
     .replace(
       "Keep the retry budget visible",
       "Keep the rollback owner explicit",
@@ -2331,6 +2331,16 @@ Review the queue change in context.
 </Panel>
 </Screen>`,
     );
+  const after = `# Wireframe diff preview
+
+Review the queue change in context.
+
+## Workspace
+
+${unrelatedWorkspace}
+
+${revisedWorkspace}
+`;
   await writeFile(planPath, after);
   const { startReviewRuntime: startCompiledReviewRuntime } =
     await import("../dist/review/server.js");

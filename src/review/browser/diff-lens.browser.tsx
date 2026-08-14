@@ -1053,19 +1053,10 @@ export const DiffLensPortal = ({
           entry.element !== null,
       );
     const direct = replaced.map((entry) => entry.element);
-    const wireframeBlockIds = new Set(
-      locations.flatMap((location) =>
-        [location.oldBlockId, location.newBlockId].filter(
-          (blockId): blockId is string => blockId !== undefined,
-        ),
-      ),
-    );
     const originalWireframes = [
       anchor.element.closest<HTMLElement>("[data-wireframe]"),
-      ...Array.from(wireframeBlockIds).map((blockId) =>
-        foundElement(liveBlock(blockId))?.closest<HTMLElement>(
-          "[data-wireframe]",
-        ),
+      ...direct.map((element) =>
+        element.closest<HTMLElement>("[data-wireframe]"),
       ),
     ].filter(
       (element): element is HTMLElement =>
