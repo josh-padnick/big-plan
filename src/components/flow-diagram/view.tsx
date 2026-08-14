@@ -114,7 +114,7 @@ const Node = ({
     data-flow-diagram-tone={node.tone}
     data-flow-node={node.id}
     data-flow-in-stage={stage.id}
-    className={`flow-diagram-node rounded-lg border border-edge px-3 py-2 leading-normal${spaced ? " my-1" : ""}`}
+    className={`flow-diagram-node max-w-[28ch] [overflow-wrap:anywhere] rounded-lg border border-edge px-3 py-2 leading-normal${spaced ? " my-1" : ""}`}
     style={style}
     {...targetProps({
       kind: "node",
