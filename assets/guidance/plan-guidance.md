@@ -38,9 +38,29 @@ By default make the container a `Part`, so each journey is a typed slide inside 
 That is the default because a `Slide` marker attaches only to an h2, so only the Part shape lets a nested journey keep its marker `name` in the kicker and sidebar, its `toc` form in the overview, and its wireframe contract.
 An untyped “User journeys” slide is still a valid container when the journeys are short: give each journey an h3 sub-slide so they number 2.3.1, 2.3.2 beneath it, and accept that a sub-slide carries no `Slide` marker.
 Under the Part shape, give every journey its own marker `name`, ultra-concise `toc` form, and full h2 claim.
-Open the container with a journeys intro slide so the reviewer meets the cast before the loops: one bullet per actor carrying that actor's journey count, a sub-bullet under it naming what the actor does, and a closing line saying what the journeys share.
-Finish that slide with a jump line - `**Jump to a journey:** [Merchant retries](#merchant-retries), ...` - linking each journey by the slug of its h2, so a reviewer can enter at the journey they came for.
-Title the intro slide with its claim ("Three journeys cover the recovery loop"), never "User journeys" again, because the container already carries that name and lint rejects the restatement.
+Open the container with a user-summaries overview slide, which is the standard convention for any slide that summarizes a set of user journeys.
+Write it in exactly this shape, so every plan's overview reads the same way:
+
+```mdx
+## Three journeys cover the recovery loop
+
+The user journeys cover three actors:
+
+- **Merchant**
+  - [**3.2** Review and queue a protected retry](#a-merchant-can-review-and-safely-retry-one-payment)
+- **Customer**
+  - [**3.3** Update an expired card](#a-customer-can-update-payment-details-before-the-next-retry)
+- **Operator**
+  - [**3.4** Pause and resolve repeated failure](#an-operator-can-pause-inspect-and-resolve-a-payment-that-keeps-failing)
+
+Together, they show the handoffs around one payment identity.
+```
+
+The lead line counts the actors, never the journeys: "The user journeys cover three actors:".
+Each actor is one bullet carrying only its bold name, with no journey count and no trailing punctuation; the sub-bullets carry the count, so an actor with two journeys simply shows two of them.
+Each journey is one sub-bullet written as a link whose text is the journey's bold slide number followed by its action phrase, and whose target is the slug of that journey's h2.
+Close with one line naming what the journeys share, opening "Together, they show".
+Title the slide with its claim ("Three journeys cover the recovery loop"), never "User journeys" again, because the container already carries that name and lint rejects the restatement.
 Every typed journey slide should contain a `Wireframe` with actual `Screen` mockups that show the interface states in the human loop; when no UI exists to show, add a non-empty `wireframeReason` attribute to the `Slide` marker and explain the opt-out. Prose may explain the screens but never replace them when a UI exists.
 Typed coverage is not a quality target.
 Group the slides with `Part` markers into about three acts - Context, The proposal, and Shipping & your review - adapting the names when this plan demands it.
