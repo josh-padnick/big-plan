@@ -1207,6 +1207,7 @@ const fitWireframeScreen = (screen) => {
   const card = screen.querySelector(":scope > .wireframe-frame-card");
   const frame = card === null ? null : card.querySelector(":scope > .wireframe-frame");
   if (card === null || frame === null || screen.clientWidth === 0) return;
+  const caption = screen.querySelector(":scope > .wireframe-screen-caption");
   // offsetWidth stays in the frame's unscaled coordinate space. Writing a
   // numeric zoom avoids relying on unsupported length division in CSS.
   frame.style.zoom = "1";
@@ -1220,9 +1221,41 @@ const fitWireframeScreen = (screen) => {
     parseFloat(cardStyle.paddingRight) +
     parseFloat(cardStyle.borderLeftWidth) +
     parseFloat(cardStyle.borderRightWidth);
-  frame.style.zoom = String(
-    Math.min(1, (screen.clientWidth - inset) / frame.offsetWidth),
-  );
+  const widthScale = (screen.clientWidth - inset) / frame.offsetWidth;
+  // Height only constrains a maximized figure. At rest the document owns
+  // vertical scrolling and the screen box grows with the drawing, so its
+  // height carries no budget to fit into; fitting to it there would shrink
+  // every phone and tablet away from the true size they are drawn at.
+  //
+  // A maximized panel is the opposite: its height is fixed, and fitting only
+  // the width means a short wide window scrolls the device out of view - the
+  // reader opened the figure to see all of it at once, and instead gets a
+  // scrollbar and a cut-off frame. Both axes have to fit.
+  let scale = Math.min(1, widthScale);
+  if (screen.closest("[data-figure-maximized]") !== null) {
+    const verticalInset =
+      parseFloat(cardStyle.paddingTop) +
+      parseFloat(cardStyle.paddingBottom) +
+      parseFloat(cardStyle.borderTopWidth) +
+      parseFloat(cardStyle.borderBottomWidth);
+    // The caption is a block spanning the screen, so its height does not
+    // depend on the scale being computed and one pass settles. A caption
+    // pinned to the frame's painted width would reintroduce that circularity
+    // and need to iterate.
+    let captionHeight = 0;
+    if (caption !== null) {
+      const captionStyle = getComputedStyle(caption);
+      captionHeight =
+        caption.getBoundingClientRect().height +
+        parseFloat(captionStyle.marginTop) +
+        parseFloat(captionStyle.marginBottom);
+    }
+    const heightScale =
+      (screen.clientHeight - captionHeight - verticalInset) /
+      frame.offsetHeight;
+    scale = Math.min(scale, heightScale);
+  }
+  frame.style.zoom = String(scale);
 };
 // Maximizing (or restoring) changes the width available to the active frame
 // without firing a window resize event, and the expanded rail narrows it
