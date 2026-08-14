@@ -2538,6 +2538,7 @@ const wireDecisions = () => {
     const answerLead = own("[data-decision-answer-lead]");
     const answerCaption = own("[data-decision-answer-caption]");
     const summary = own("[data-decision-selection-summary]");
+    const summaryCopy = own("[data-decision-selection-copy]");
     const rationale = own("[data-decision-rationale]");
     const question = own("[data-decision-question]");
     const proposalText = own("[data-decision-proposal-text]");
@@ -2826,12 +2827,19 @@ const wireDecisions = () => {
       proposalNow.disabled = proposalValue() === "";
       if (clear !== null) clear.hidden = !changingAnswer;
       if (summary !== null) {
-        summary.textContent =
+        const line =
           choice === null
             ? "Select an option to continue."
             : proposing
               ? "Your own approach selected."
               : choice.value + " selected.";
+        // Write into the copy element rather than over the paragraph: the
+        // paragraph also holds the selection mark the picked state reveals,
+        // and replacing its text content deletes that mark on first sync.
+        if (summaryCopy === null) summary.textContent = line;
+        else summaryCopy.textContent = line;
+        if (choice === null) summary.removeAttribute("data-selection-picked");
+        else summary.setAttribute("data-selection-picked", "");
       }
     };
     decision.addEventListener("change", (event) => {
@@ -2846,10 +2854,9 @@ const wireDecisions = () => {
     const handOffProposal = (submit) => {
       const target = window.bigPlan?.feedback;
       if (typeof target?.add !== "function") {
-        if (summary !== null) {
-          summary.textContent =
-            "Open this document in a live review to submit feedback.";
-        }
+        const line = "Open this document in a live review to submit feedback.";
+        if (summaryCopy !== null) summaryCopy.textContent = line;
+        else if (summary !== null) summary.textContent = line;
         return;
       }
       target.add({
@@ -3025,7 +3032,11 @@ const wireDecisions = () => {
         }
         if (answerTitle !== null) answerTitle.textContent = "";
         sync();
-        confirm.focus();
+        // Confirm is disabled with nothing chosen, so focusing it would drop
+        // the reader out of the card entirely. The first option is where a
+        // keyboard reader continues from here.
+        const first = choices.find((candidate) => !proposes(candidate));
+        if (first !== undefined) first.focus();
         // Clicking change already retracted the stored answer; announcing it
         // again keeps the record empty even when the reader reached the
         // chooser some other way, and repeating a retraction changes nothing.
