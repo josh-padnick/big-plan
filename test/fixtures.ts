@@ -336,7 +336,7 @@ Sending writes one real feedback package beside this plan.
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   reviewRuntimeUrl: [
-    async ({}, use) => {
+    async ({ page }, use) => {
       const outputDir = await mkdtemp(
         join(tmpdir(), "big-plan-review-runtime-"),
       );
@@ -346,6 +346,8 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       try {
         await use(runtime.url);
       } finally {
+        // Unmount the polling review island before its runtime disappears.
+        if (!page.isClosed()) await page.goto("about:blank");
         await runtime.close();
         await rm(outputDir, { recursive: true, force: true });
       }

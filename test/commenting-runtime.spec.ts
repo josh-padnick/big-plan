@@ -475,9 +475,15 @@ test("should contain working comments when resolved threads expand", async ({
   });
 
   for (let index = 0; index < 6; index += 1) {
+    const resolutionPersisted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/drafts") &&
+        response.request().method() === "PUT",
+    );
     await rail.getByRole("button", { name: "Resolve thread" }).first().click();
+    await expect(rail.getByText(`Resolved (${index + 1})`)).toBeVisible();
+    expect((await resolutionPersisted).ok()).toBe(true);
   }
-  await expect(rail.getByText("Resolved (6)")).toBeVisible();
 
   await rail.getByRole("button", { name: "Close feedback" }).click();
   await stageComment(
