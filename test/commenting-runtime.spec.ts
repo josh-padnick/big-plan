@@ -27,7 +27,15 @@ import {
   writeSnapshot,
 } from "../src/review/store.js";
 import { renderDocument } from "../src/render/render-document.js";
-import { expect, stageComment, test, type Page } from "./fixtures";
+import {
+  agentSidebar,
+  agentStatusIndicator,
+  agentStatusTrigger,
+  expect,
+  stageComment,
+  test,
+  type Page,
+} from "./fixtures";
 
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -71,19 +79,24 @@ test("should expire a held connected snapshot when the reviewer returns", async 
     now,
   });
   await page.clock.runFor(1_600);
-  await expect(
-    page.getByRole("button", { name: "Agent session active" }),
-  ).toBeVisible();
+  const agentStatus = agentStatusTrigger(page);
+  await expect(agentStatus).toBeVisible();
+  await expect(agentStatusIndicator(page)).toHaveAttribute(
+    "data-review-agent-status",
+    "healthy",
+  );
 
   await page.clock.setSystemTime(now + 6 * 60 * 60_000);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  const connectionLost = page.getByRole("button", {
-    name: /Agent disconnected/u,
-  });
-  await expect(connectionLost).toBeVisible();
-  await connectionLost.click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
-  await expect(rail).toContainText("No agent signal for 6h 00m");
+  await expect(agentStatus).toHaveAccessibleName(
+    "Agent Status: Agent disconnected",
+  );
+  await expect(agentStatusIndicator(page)).toHaveAttribute(
+    "data-review-agent-status",
+    "error",
+  );
+  await agentStatus.click();
+  await expect(agentSidebar(page)).toContainText("No agent signal for 6h 00m");
 });
 
 test("should pause a nonstandard request behind an explicit warning", async ({
@@ -469,18 +482,14 @@ test("should restore and submit staged comments through the local review runtime
 }, testInfo) => {
   await page.goto(reviewRuntimeUrl);
 
-  const agentStatus = page.getByRole("button", {
-    name: /Agent session active|open agent connection status/u,
-  });
+  const agentStatus = agentStatusTrigger(page);
   const feedbackAction = page.getByRole("button", {
     name: "Feedback",
     exact: true,
   });
   const settingsAction = page.getByRole("button", { name: "Open settings" });
   await expect(agentStatus).toBeVisible();
-  await expect(
-    agentStatus.locator(".review-agent-active-indicator--working"),
-  ).toHaveCount(0);
+  await expect(agentStatus).toContainText("Agent Status");
   await expect(feedbackAction).toBeVisible();
   await expect(settingsAction).toBeVisible();
   await expect(
@@ -638,9 +647,9 @@ test("should restore and submit staged comments through the local review runtime
     planId: session.planId,
   });
   await rm(store.agentHeartbeatPath, { force: true });
-  await expect(
-    page.getByRole("button", { name: /Agent disconnected/u }),
-  ).toBeVisible();
+  await expect(agentStatusTrigger(page)).toHaveAccessibleName(
+    "Agent Status: Agent disconnected",
+  );
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   const blockedSummary = page.locator(
     ".review-contextual-summary[data-review-sent-thread='queued']",
@@ -663,9 +672,12 @@ test("should restore and submit staged comments through the local review runtime
   ).toBeVisible();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
 
-  await rail.getByRole("tab", { name: "Agent" }).click();
-  await expect(rail.getByText("Current status", { exact: true })).toBeVisible();
-  const currentActivity = rail.locator("[data-review-current-activity]");
+  await agentStatusTrigger(page).click();
+  const agentRail = agentSidebar(page);
+  await expect(
+    agentRail.getByText("Current status", { exact: true }),
+  ).toBeVisible();
+  const currentActivity = agentRail.locator("[data-review-current-activity]");
   await expect(currentActivity).toHaveAttribute(
     "data-review-current-activity",
     "disconnected",
@@ -675,16 +687,18 @@ test("should restore and submit staged comments through the local review runtime
   await expect(
     currentActivity.getByRole("button", { name: "View thread →" }),
   ).toHaveCount(0);
-  await expect(currentActivity.getByText("offline")).toHaveCSS(
-    "text-transform",
-    "uppercase",
-  );
-  const connectionLog = rail
+  // The card's own colour and heading already say the state, so no badge
+  // repeats it, and the reconnect payload leads because it is the task here.
+  await expect(agentRail.getByText("offline", { exact: true })).toHaveCount(0);
+  await expect(
+    agentRail.locator("[data-review-reconnect='primary']"),
+  ).toHaveAttribute("open", "");
+  const connectionLog = agentRail
     .getByText("Connection log", { exact: true })
     .locator("xpath=ancestor::summary");
   await expect(connectionLog.locator("svg")).toHaveCount(1);
   await connectionLog.click();
-  const currentConnectionEvent = rail.locator(
+  const currentConnectionEvent = agentRail.locator(
     "[data-review-connection-current]",
   );
   await expect(currentConnectionEvent).toHaveCSS("line-height", "12px");
@@ -742,6 +756,9 @@ test("should restore and submit staged comments through the local review runtime
     expect(current).toBeGreaterThan(previous);
     expect(current - previous).toBeLessThanOrEqual(2);
   }
+  // Escape is one of the three return paths, and every one lands on feedback.
+  await page.keyboard.press("Escape");
+  await expect(agentRail).toHaveCount(0);
   await rail.getByRole("tab", { name: "Comments" }).click();
   const selectedThread = rail
     .locator("[data-review-comment-id]")
@@ -770,20 +787,30 @@ test("should restore and submit staged comments through the local review runtime
     exact: true,
   });
   await expect(selectedTitle).toHaveCSS("text-decoration-line", "none");
+  // The comments panel keeps its scroll position and every draft across a
+  // round trip through the agent sidebar, because the swap owns neither.
+  const scrollBefore = await rail
+    .locator(".review-feedback-panel")
+    .evaluate((panel) => {
+      panel.scrollTop = 40;
+      return panel.scrollTop;
+    });
   await rail
     .getByRole("button", {
-      name: /view Agent tab$/u,
+      name: /open Agent Status$/u,
     })
     .click();
-  await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
-    "aria-selected",
+  await expect(agentStatusTrigger(page)).toHaveAttribute(
+    "aria-expanded",
     "true",
   );
-  await expect(rail.locator("[data-review-current-activity]")).toHaveAttribute(
-    "data-review-attention",
-    "true",
-  );
-  await rail.getByRole("tab", { name: "Comments" }).click();
+  await expect(agentRail).toBeVisible();
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  expect(
+    await rail
+      .locator(".review-feedback-panel")
+      .evaluate((panel) => panel.scrollTop),
+  ).toBe(scrollBefore);
   await expect(reply).toBeVisible();
   await selectedTitle.click();
   await expect(reply).toBeVisible();
@@ -823,13 +850,10 @@ test("should restore and submit staged comments through the local review runtime
     },
   });
 
-  await expect(
-    page.getByRole("button", { name: /Agent disconnected/u }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Agent working" }),
-  ).toBeVisible();
-  const workingAgent = page.getByRole("button", { name: "Agent working" });
+  const workingAgent = agentStatusTrigger(page);
+  await expect(workingAgent).toHaveAccessibleName(
+    "Agent Status: Agent working",
+  );
   const workingIndicator = workingAgent.locator(
     ".review-agent-active-indicator--working",
   );
@@ -869,11 +893,11 @@ test("should restore and submit staged comments through the local review runtime
   expect(lightOrbit).toMatchObject({
     animationDuration: "1.6s",
     bottom: "-2.5px",
-    height: "15px",
+    height: "19px",
     left: "-2.5px",
     right: "-2.5px",
     top: "-2.5px",
-    width: "15px",
+    width: "19px",
   });
   expect(lightOrbit.animationName).not.toBe("none");
   expect(lightOrbit.backgroundImage).toContain("295deg");
@@ -930,10 +954,14 @@ test("should restore and submit staged comments through the local review runtime
     colorScheme: "light",
     reducedMotion: "no-preference",
   });
-  await rail.getByRole("tab", { name: "Agent" }).click();
-  const activeWork = rail.locator("[data-review-current-activity='working']");
+  await workingAgent.click();
+  const activeWork = agentSidebar(page).locator(
+    "[data-review-current-activity='working']",
+  );
   await expect(activeWork).toContainText("Responding to a comment");
   await expect(activeWork).toContainText("Reviewing the shared feedback batch");
+  // Re-clicking the trigger toggles back to the feedback it replaced.
+  await workingAgent.click();
   await rail.getByRole("tab", { name: "Chat" }).click();
   await rail
     .getByPlaceholder("Ask about the plan as a whole…")
@@ -977,17 +1005,18 @@ test("should restore and submit staged comments through the local review runtime
   await expect(threadActivity).toContainText(
     "Reviewing the shared feedback batch",
   );
-  await rail.getByRole("tab", { name: "Agent" }).click();
+  await workingAgent.click();
   await writeAgentHeartbeat({
     store,
     sessionId: session.sessionId,
     state: "working",
     requestId: request.requestId,
   });
-  await rail
+  await agentSidebar(page)
     .getByText("Connection log", { exact: true })
     .locator("xpath=ancestor::summary")
     .click();
+  await workingAgent.click();
   await rail.getByRole("tab", { name: "Comments" }).click();
 
   await rail.getByRole("button", { name: "Close feedback" }).click();
@@ -1209,11 +1238,11 @@ test("should restore and submit staged comments through the local review runtime
   ).toBe(true);
   expect(
     await sentThread.evaluate((thread) => {
-      const rail = thread.closest("#big-plan-feedback-rail");
-      if (rail === null) throw new Error("The feedback rail is missing");
+      const sidebar = thread.closest("#big-plan-feedback-sidebar");
+      if (sidebar === null) throw new Error("The feedback sidebar is missing");
       return (
         Math.ceil(thread.getBoundingClientRect().right) <=
-        Math.ceil(rail.getBoundingClientRect().right)
+        Math.ceil(sidebar.getBoundingClientRect().right)
       );
     }),
   ).toBe(true);
@@ -2745,20 +2774,25 @@ test("should mark a superseded review as read-only and link to its replacement",
   }
   const replacement = await startReviewRuntime({ planPath: session.plan });
   try {
-    const readOnly = page.getByRole("button", {
-      name: /Using read-only session/,
-    });
-    await expect(readOnly).toBeVisible();
-    await readOnly.click();
-    const rail = page.getByRole("complementary", { name: "Feedback" });
-    await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
-      "aria-selected",
-      "true",
+    const readOnly = agentStatusTrigger(page);
+    await expect(readOnly).toHaveAccessibleName(
+      "Agent Status: Using read-only session",
     );
-    await expect(rail).toContainText("This review was replaced");
+    await expect(agentStatusIndicator(page)).toHaveAttribute(
+      "data-review-agent-status",
+      "warning",
+    );
+    await readOnly.click();
+    const rail = agentSidebar(page);
+    await expect(rail).toContainText("This review session is no longer valid");
+    await expect(rail).toContainText("read-only");
+    await expect(rail.getByText("Read only", { exact: true })).toHaveCount(0);
     await expect(
-      rail.getByRole("link", { name: "Open latest review" }),
+      rail.getByRole("link", { name: "Open the latest review" }),
     ).toHaveAttribute("href", replacement.url);
+    // A superseded session has nothing here that could be repaired.
+    await expect(rail.getByText("Connection log")).toHaveCount(0);
+    await expect(rail.locator("[data-review-reconnect]")).toHaveCount(0);
     expect(draftWrites).toBe(0);
   } finally {
     await replacement.close();

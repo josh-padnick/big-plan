@@ -541,7 +541,12 @@ test("should stage and restore a slide comment through the legacy chrome", async
   await expect(rail.getByRole("tab", { name: "Comments" })).toBeVisible();
   await rail.getByRole("tab", { name: "Chat" }).click();
   await expect(rail).toContainText("Plan-wide chat needs the local runtime");
+  // A static document has no agent session, so it offers no agent surface and
+  // no control that would open one.
   await expect(rail.getByRole("tab", { name: "Agent" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /^Agent Status:/u }),
+  ).toHaveCount(0);
 
   for (const theme of ["light", "dark"]) {
     await page.evaluate(

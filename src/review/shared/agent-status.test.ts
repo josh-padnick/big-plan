@@ -3,7 +3,7 @@ import {
   AGENT_STALL_MS,
   agentPresenceIsFresh,
   deriveAgentStatus,
-  deriveAgentHealthLabel,
+  deriveAgentHealth,
   deriveCurrentAgentActivity,
   projectAgentConnectionState,
   type AgentActivityRequest,
@@ -17,6 +17,92 @@ const request = (
   kind,
   createdAt: "2026-08-08T19:59:00.000Z",
   targetLabel: "Background",
+});
+
+describe("agent health", () => {
+  const activityFor = (agentConnected: boolean, claimed: boolean) =>
+    deriveCurrentAgentActivity({
+      requests: claimed
+        ? [{ ...request(), claimedAt: new Date(NOW).toISOString() }]
+        : [],
+      responseRequestIds: new Set(),
+      progressEvents: [],
+      agentConnected,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: agentConnected ? NOW : 0,
+    });
+
+  it("should report an unobservable review session as unknown, never as bad", () => {
+    expect(
+      deriveAgentHealth({
+        activity: activityFor(false, false),
+        hasAgentRuntime: true,
+        isReadOnly: false,
+        isObservable: false,
+      }),
+    ).toEqual({ indicator: "unavailable", label: "Agent status unavailable" });
+  });
+
+  it("should rank a superseded session above every observable agent state", () => {
+    expect(
+      deriveAgentHealth({
+        activity: activityFor(true, false),
+        hasAgentRuntime: true,
+        isReadOnly: true,
+        isObservable: true,
+      }),
+    ).toEqual({ indicator: "warning", label: "Using read-only session" });
+  });
+
+  it("should separate a stalled agent from a disconnected one", () => {
+    expect(
+      deriveAgentHealth({
+        activity: {
+          state: "stalled",
+          tone: "warning",
+          headline: "Agent may be stalled",
+          supporting: "quiet",
+          updatedAtMs: NOW,
+          requestId: "1111111111111111",
+          requestKind: "feedback",
+        },
+        hasAgentRuntime: true,
+        isReadOnly: false,
+        isObservable: true,
+      }),
+    ).toEqual({ indicator: "warning", label: "Agent not responding" });
+  });
+
+  it("should read a healthy agent as healthy whether idle or working", () => {
+    expect(
+      deriveAgentHealth({
+        activity: activityFor(true, false),
+        hasAgentRuntime: true,
+        isReadOnly: false,
+        isObservable: true,
+      }),
+    ).toEqual({ indicator: "healthy", label: "Agent connected" });
+    expect(
+      deriveAgentHealth({
+        activity: activityFor(true, true),
+        hasAgentRuntime: true,
+        isReadOnly: false,
+        isObservable: true,
+      }).indicator,
+    ).toBe("healthy");
+  });
+
+  it("should stay unavailable when the document has no agent runtime at all", () => {
+    expect(
+      deriveAgentHealth({
+        activity: activityFor(false, false),
+        hasAgentRuntime: false,
+        isReadOnly: false,
+        isObservable: true,
+      }),
+    ).toEqual({ indicator: "unavailable", label: "No agent session" });
+  });
 });
 
 describe("current agent activity", () => {
@@ -131,12 +217,13 @@ describe("current agent activity", () => {
       headline: "The agent is disconnected",
     });
     expect(
-      deriveAgentHealthLabel({
+      deriveAgentHealth({
         activity,
         hasAgentRuntime: true,
         isReadOnly: false,
+        isObservable: true,
       }),
-    ).toBe("Agent disconnected");
+    ).toEqual({ indicator: "error", label: "Agent disconnected" });
   });
 
   it.each([

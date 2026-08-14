@@ -1,19 +1,27 @@
-// Renders the legacy agent-health surface from truthful runtime facts. The
-// review kernel owns polling and navigation; this module owns only the visual
+// Renders the agent sidebar's body from truthful runtime facts. The review
+// kernel owns polling and navigation; this module owns only the visual
 // projection and local disclosure/copy interactions.
+//
+// Reading order is a function of state, because the next action differs by
+// state: connection health always leads, then whichever of reconnecting or
+// checking the agent is actually the right move.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { TERMINAL_ICON } from "../../icons/lucide/terminal.js";
-import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
-import type { CurrentAgentActivity } from "../shared/agent-status.js";
+import type {
+  AgentHealth,
+  AgentHealthIndicator,
+  CurrentAgentActivity,
+} from "../shared/agent-status.js";
 import type { BrowserConnectionEvent } from "../shared/review-wire.js";
 import {
   compactDurationLabel,
   relativeSignalLabel,
 } from "../shared/time-label.js";
+import { AgentStatusGlyph } from "./agent-status.browser.js";
 import { Icon } from "./icon.browser.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
 
@@ -25,7 +33,7 @@ const Spinner = () => (
 );
 
 // Keep human-readable elapsed time independent from the slower network poll.
-// This component exists only while the Agent tab is mounted, so the local
+// This component exists only while the agent sidebar is mounted, so the local
 // tick cannot make the rest of the review workspace rerender every second.
 const useSecondClock = (): number => {
   const [nowMs, setNowMs] = useState(Date.now);
@@ -36,26 +44,8 @@ const useSecondClock = (): number => {
   return nowMs;
 };
 
-export const AgentHealthAlert = ({
-  label,
-  tone,
-  onOpen,
-}: {
-  readonly label: string;
-  readonly tone: "warning" | "danger";
-  readonly onOpen: () => void;
-}) => (
-  <button
-    type="button"
-    className={`inline-flex min-h-11 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-1 py-1 text-xs font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-8 [&>svg]:size-4 ${tone === "warning" ? "text-warning" : "text-danger"}`}
-    aria-label={`${label} — open agent connection status`}
-    onClick={onOpen}
-  >
-    <Icon icon={TRIANGLE_ALERT_ICON} />
-    {label}
-  </button>
-);
-
+// Nothing on this page can restore a superseded session, so this card states
+// what happened and offers the one route out, and nothing else.
 const ReadOnlySessionCard = ({
   replacementUrl,
 }: {
@@ -66,20 +56,15 @@ const ReadOnlySessionCard = ({
     data-review-current-activity="read-only"
   >
     <div className="flex min-w-0 items-center gap-2">
-      <span
-        className="size-2 shrink-0 rounded-full border-2 border-current opacity-70"
-        aria-hidden="true"
-      />
+      <AgentStatusGlyph indicator="warning" />
       <strong className="min-w-0 flex-1 text-sm text-ink">
-        This review was replaced
+        This review session is no longer valid
       </strong>
-      <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
-        Read only
-      </span>
     </div>
     <p className="m-0 text-ink [overflow-wrap:anywhere]">
-      A newer review session is active for this plan. This tab remains safe to
-      read, but it can no longer make changes.
+      A newer review session is active for this plan, so this plan is{" "}
+      <strong className="text-ink">read-only</strong>. It stays safe to read,
+      but it can no longer make changes.
     </p>
     <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-2 text-2xs">
       <span className="text-muted">
@@ -90,7 +75,7 @@ const ReadOnlySessionCard = ({
           className="ml-auto shrink-0 font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           href={replacementUrl}
         >
-          Open latest review →
+          Open the latest review →
         </a>
       )}
     </div>
@@ -124,68 +109,54 @@ const CopyBlock = ({
     : copied
       ? `${label} copied`
       : `Copy ${label}`;
+  // The control floats in the payload's own corner rather than being absolutely
+  // positioned over it. A float reserves exactly its own width on exactly the
+  // lines it covers, so no line runs underneath it at sidebar width and no
+  // fixed padding has to be guessed against a label that changes with state.
+  // It is unselectable so copying the payload by hand never picks it up.
   return (
-    <div className="relative min-w-0">
-      <pre className="m-0 min-w-0 overflow-x-auto rounded-md border border-edge bg-surface p-3 pr-12 font-mono text-xs whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
-        <code>{value}</code>
-      </pre>
+    <pre className="m-0 min-w-0 overflow-x-auto rounded-md border border-edge bg-surface p-3 font-mono text-xs whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
       <button
         type="button"
-        className="absolute top-2 right-2 inline-flex cursor-pointer items-center gap-1 rounded-sm border border-edge bg-surface px-1.5 py-1 text-2xs text-muted hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
+        className="float-right mb-1 ml-2 inline-flex cursor-pointer items-center gap-1 rounded-sm border border-edge bg-surface px-1.5 py-1 font-sans text-2xs text-muted select-none hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
         aria-label={buttonLabel}
         onClick={() => void copy()}
       >
         <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
         {failed ? "Copy failed" : copied ? "Copied" : "Copy"}
       </button>
-    </div>
+      <code>{value}</code>
+    </pre>
   );
 };
 
-const CurrentActivityCard = ({
+// Current status is something a reviewer reads, not something they act on, so
+// it is plain sidebar content. Only Reconnect and See all agent activity keep
+// card chrome, because those are the actions available here.
+const CurrentActivityBlock = ({
   activity,
   nowMs,
-  attentionKey,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
   readonly nowMs: number;
-  readonly attentionKey: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
-  const cardRef = useRef<HTMLElement>(null);
-  const [isAttentionActive, setIsAttentionActive] = useState(false);
-  useEffect(() => {
-    if (attentionKey === 0) return;
-    const card = cardRef.current;
-    if (card === null) return;
-    card.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-      block: "nearest",
-    });
-    card.focus({ preventScroll: true });
-    setIsAttentionActive(true);
-    const timer = window.setTimeout(() => setIsAttentionActive(false), 1_200);
-    return () => window.clearTimeout(timer);
-  }, [attentionKey]);
-  const body =
-    activity.state === "working" ? activity.latestStep : activity.supporting;
-  // A live connection is the fact a reviewer checks this card for; what the
-  // agent happens to be doing is the detail underneath it. Only the working
-  // state buries the connection behind the activity, so only it is retitled,
-  // and its activity joins the request it is working on one line down.
+  // Health above already states the connection, so this block leads with the
+  // work instead of repeating it. An idle agent has no work to describe, so it
+  // says only that, rather than restating "connected" a third time.
   const title =
-    activity.state === "working" ? "Agent connected" : activity.headline;
-  const targetLabel =
-    activity.state !== "disconnected" && "targetLabel" in activity
-      ? activity.targetLabel
-      : undefined;
-  const secondary =
+    activity.state === "idle" ? "Waiting for feedback" : activity.headline;
+  const body =
     activity.state === "working"
-      ? [activity.headline, targetLabel].filter(Boolean).join(" · ")
-      : (targetLabel ?? "");
+      ? activity.latestStep
+      : activity.state === "idle"
+        ? ""
+        : activity.supporting;
+  const secondary =
+    activity.state !== "disconnected" && "targetLabel" in activity
+      ? (activity.targetLabel ?? "")
+      : "";
   const footerLabel =
     "updatedAtMs" in activity
       ? `Updated ${relativeSignalLabel({ now: nowMs, at: activity.updatedAtMs })}`
@@ -193,39 +164,24 @@ const CurrentActivityCard = ({
         ? "No unanswered requests"
         : null;
   return (
-    <article
-      ref={cardRef}
-      className={`grid min-w-0 gap-2 rounded-lg border border-edge bg-raised p-3 text-xs leading-[1.45] text-muted outline-offset-2 transition-[outline-color] focus-visible:outline-2 focus-visible:outline-accent motion-reduce:scroll-auto ${isAttentionActive ? "outline-2 outline-accent" : "outline-transparent"}`}
+    <div
+      className="grid min-w-0 gap-2 text-xs leading-[1.45] text-muted"
       data-review-current-activity={activity.state}
-      data-review-attention={isAttentionActive ? "true" : undefined}
-      tabIndex={-1}
     >
       <div className="flex min-w-0 items-center gap-2">
-        {activity.state === "working" ? (
-          <Spinner />
-        ) : (
-          <span
-            className="size-2 shrink-0 rounded-full border-2 border-current opacity-70"
-            aria-hidden="true"
-          />
-        )}
+        {activity.state === "working" ? <Spinner /> : null}
         <strong className="min-w-0 flex-1 text-sm text-ink">{title}</strong>
-        <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
-          {activity.state === "stalled"
-            ? "warning"
-            : activity.state === "disconnected"
-              ? "offline"
-              : activity.state}
-        </span>
       </div>
       {secondary === "" ? null : (
         <strong className="text-2xs uppercase tracking-caps text-ink">
           {secondary}
         </strong>
       )}
-      <p className="m-0 text-ink [overflow-wrap:anywhere]">{body}</p>
+      {body === "" ? null : (
+        <p className="m-0 text-ink [overflow-wrap:anywhere]">{body}</p>
+      )}
       {footerLabel !== null || "requestId" in activity ? (
-        <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-2 text-2xs">
+        <div className="flex min-w-0 items-center gap-2 text-2xs">
           {footerLabel === null ? null : (
             <span className="text-muted">{footerLabel}</span>
           )}
@@ -242,34 +198,42 @@ const CurrentActivityCard = ({
           ) : null}
         </div>
       ) : null}
-    </article>
+    </div>
   );
 };
 
+// Every tone is a complete static class string, so each Tailwind candidate
+// stays discoverable in source rather than being assembled at runtime.
+const HEALTH_CARD_TONE: Record<AgentHealthIndicator, string> = {
+  healthy:
+    "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]",
+  warning:
+    "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]",
+  error:
+    "border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]",
+  unavailable: "border-edge bg-raised text-muted",
+};
+
+// Connection health leads the sidebar in every state, because it is the fact
+// that decides which action below it is the right one.
 const ConnectionHealthCard = ({
-  connected,
+  status,
   heartbeatAt,
   nowMs,
 }: {
-  readonly connected: boolean;
+  readonly status: AgentHealth;
   readonly heartbeatAt: number;
   readonly nowMs: number;
 }) => (
   <article
-    className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${connected ? "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]" : "border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]"}`}
-    data-review-connection-health={connected ? "connected" : "disconnected"}
+    className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${HEALTH_CARD_TONE[status.indicator]}`}
+    data-review-connection-health={status.indicator}
   >
     <div className="flex min-w-0 items-center gap-2">
-      <span
-        className="size-2 shrink-0 rounded-full border-2 border-current opacity-70"
-        aria-hidden="true"
-      />
+      <AgentStatusGlyph indicator={status.indicator} />
       <strong className="min-w-0 flex-1 text-sm text-ink">
-        {connected ? "Agent connected" : "Agent disconnected"}
+        {status.label}
       </strong>
-      <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
-        {connected ? "online" : "offline"}
-      </span>
     </div>
     <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 border-t border-current/20 pt-2">
       <div className="min-w-0">
@@ -277,7 +241,7 @@ const ConnectionHealthCard = ({
           Connection
         </dt>
         <dd className="m-0 text-ink">
-          {connected ? "Healthy" : "Unavailable"}
+          {status.indicator === "healthy" ? "Healthy" : "Unavailable"}
         </dd>
       </div>
       <div className="min-w-0">
@@ -316,15 +280,20 @@ const AgentPresenceLoadingCard = () => (
   </article>
 );
 
-const AnotherViewTip = () => (
-  <aside className="mt-3 flex min-w-0 gap-2 rounded-md border border-edge bg-surface px-3 py-2 text-xs text-muted">
-    <Icon icon={TERMINAL_ICON} />
+// Going to the agent itself is an action, so this keeps card chrome. When the
+// agent has gone quiet it is also the right first move, so the panel orders it
+// above Reconnect rather than changing what it says.
+const AgentActivityCard = () => (
+  <article className="flex min-w-0 gap-2 rounded-md border border-edge bg-surface px-3 py-2 text-xs text-muted">
+    <span className="inline-flex size-6 shrink-0 items-center justify-center self-start rounded-sm border border-edge text-ink [&>svg]:size-3.5">
+      <Icon icon={TERMINAL_ICON} />
+    </span>
     <p className="m-0 min-w-0 [overflow-wrap:anywhere]">
-      <strong className="text-ink">Another view:</strong> inspect the agent chat
-      or terminal for another view of progress. This does not restore the review
-      connection.
+      <strong className="text-ink">See all agent activity</strong> by going to
+      the agent directly - open the terminal or chat session it is running in to
+      watch what it is doing. This does not restore the review connection.
     </p>
-  </aside>
+  </article>
 );
 
 const ConnectionLog = ({
@@ -373,7 +342,7 @@ const ConnectionLog = ({
     }).format(new Date(at));
   return (
     <details
-      className="group mt-3 text-xs text-muted tabular-nums"
+      className="group text-xs text-muted tabular-nums"
       data-review-connection-history
     >
       <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-[650] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
@@ -513,8 +482,59 @@ const ConnectionLog = ({
   );
 };
 
+// Reconnecting is the task when the agent is gone, so the payload is open on
+// arrival; when the agent is merely quiet it is the wrong first move, so it
+// stays a closed disclosure ranked below checking the agent.
+const ReconnectCard = ({
+  recoveryPrompt,
+  agentCommand,
+  isPrimary,
+}: {
+  readonly recoveryPrompt: string;
+  readonly agentCommand: string;
+  readonly isPrimary: boolean;
+}) => (
+  <details
+    className="group rounded-md border border-edge text-xs text-muted"
+    open={isPrimary}
+    data-review-reconnect={isPrimary ? "primary" : "secondary"}
+  >
+    <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+      <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
+        <Icon icon={CHEVRON_RIGHT_ICON} />
+      </span>
+      Reconnect your agent
+    </summary>
+    <div className="grid gap-2 border-t border-edge px-3 py-3">
+      {isPrimary ? null : (
+        <p className="m-0">
+          Only if checking the agent shows it has really stopped. Reconnecting
+          an agent that is still working interrupts it.
+        </p>
+      )}
+      <p className="m-0">
+        To reconnect this running review, paste this exact prompt into your
+        coding agent:
+      </p>
+      <CopyBlock
+        value={
+          recoveryPrompt ||
+          "Ask your coding agent to reconnect to this Big Plan review and keep its feedback loop running."
+        }
+        label="recovery prompt"
+      />
+      <p className="m-0">
+        Or run this exact connector command yourself from the Big Plan
+        repository:
+      </p>
+      <CopyBlock value={agentCommand} label="connector command" />
+    </div>
+  </details>
+);
+
 export const AgentConnectionPanel = ({
   activity,
+  status,
   presenceState,
   connected,
   heartbeatAt,
@@ -523,10 +543,10 @@ export const AgentConnectionPanel = ({
   agentCommand,
   isReadOnly,
   replacementUrl,
-  attentionKey,
   onViewRequest,
 }: {
   readonly activity: CurrentAgentActivity;
+  readonly status: AgentHealth;
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
   readonly heartbeatAt: number;
@@ -535,7 +555,6 @@ export const AgentConnectionPanel = ({
   readonly agentCommand: string;
   readonly isReadOnly: boolean;
   readonly replacementUrl: string | null;
-  readonly attentionKey: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
   const currentNowMs = useSecondClock();
@@ -547,85 +566,71 @@ export const AgentConnectionPanel = ({
     connected &&
     activity.state !== "offline" &&
     activity.state !== "disconnected";
+  // A superseded session cannot be repaired from this page, so it shows what
+  // happened and the one route out, and never a reconnect prompt or a log.
+  if (isReadOnly) {
+    return (
+      <div className="grid min-w-0 gap-3">
+        <ReadOnlySessionCard replacementUrl={replacementUrl} />
+      </div>
+    );
+  }
+  if (!agentStatusIsAvailable) {
+    return (
+      <div className="grid min-w-0 gap-3">
+        {presenceState === "loading" ? (
+          <AgentPresenceLoadingCard />
+        ) : (
+          <AgentPresenceUnavailableCard />
+        )}
+        <AgentActivityCard />
+      </div>
+    );
+  }
+  const reconnect = isConnected ? null : (
+    <ReconnectCard
+      recoveryPrompt={recoveryPrompt}
+      agentCommand={agentCommand}
+      isPrimary={status.indicator === "error"}
+    />
+  );
   return (
-    <section className="min-w-0" aria-labelledby="agent-connection-heading">
-      <h2
-        id="agent-connection-heading"
-        className="m-0 mb-3 text-sm font-bold text-ink"
-      >
-        Agent Connection
-      </h2>
-      {agentStatusIsAvailable ? (
-        <>
-          <ConnectionHealthCard
-            connected={isConnected}
-            heartbeatAt={heartbeatAt}
-            nowMs={currentNowMs}
-          />
-          <section
-            className="mt-4"
-            aria-labelledby="agent-current-status-heading"
-          >
-            <h3
-              id="agent-current-status-heading"
-              className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-muted"
-            >
-              Current status
-            </h3>
-            {isReadOnly ? (
-              <ReadOnlySessionCard replacementUrl={replacementUrl} />
-            ) : (
-              <CurrentActivityCard
-                activity={activity}
-                nowMs={currentNowMs}
-                attentionKey={attentionKey}
-                onViewRequest={onViewRequest}
-              />
-            )}
-          </section>
-        </>
-      ) : presenceState === "loading" ? (
-        <AgentPresenceLoadingCard />
-      ) : (
-        <AgentPresenceUnavailableCard />
-      )}
-      <AnotherViewTip />
-      {isReadOnly || isConnected || !agentStatusIsAvailable ? null : (
-        <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
-          <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-            <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
-              <Icon icon={CHEVRON_RIGHT_ICON} />
-            </span>
-            Re-connect your session
-          </summary>
-          <div className="grid gap-2 border-t border-edge px-3 py-3">
-            <p className="m-0">
-              To reconnect this running review, paste this exact prompt into
-              your coding agent:
-            </p>
-            <CopyBlock
-              value={
-                recoveryPrompt ||
-                "Ask your coding agent to reconnect to this Big Plan review and keep its feedback loop running."
-              }
-              label="recovery prompt"
-            />
-            <p className="m-0">
-              Or run this exact connector command yourself from the Big Plan
-              repository:
-            </p>
-            <CopyBlock value={agentCommand} label="connector command" />
-          </div>
-        </details>
-      )}
-      {isReadOnly || !agentStatusIsAvailable ? null : (
-        <ConnectionLog
-          connected={isConnected}
-          heartbeatAt={heartbeatAt}
-          events={connectionLog}
+    <div className="grid min-w-0 gap-3">
+      <ConnectionHealthCard
+        status={status}
+        heartbeatAt={heartbeatAt}
+        nowMs={currentNowMs}
+      />
+      <section aria-labelledby="agent-current-status-heading">
+        <h3
+          id="agent-current-status-heading"
+          className="m-0 mb-2 text-2xs font-bold uppercase tracking-caps text-muted"
+        >
+          Current status
+        </h3>
+        <CurrentActivityBlock
+          activity={activity}
           nowMs={currentNowMs}
+          onViewRequest={onViewRequest}
         />
+      </section>
+      {status.indicator === "error" ? (
+        <>
+          {reconnect}
+          <AgentActivityCard />
+        </>
+      ) : (
+        <>
+          <AgentActivityCard />
+          {reconnect}
+        </>
       )}
-    </section>
+      <ConnectionLog
+        connected={isConnected}
+        heartbeatAt={heartbeatAt}
+        events={connectionLog}
+        nowMs={currentNowMs}
+      />
+    </div>
   );
 };

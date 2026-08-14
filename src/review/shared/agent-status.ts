@@ -82,24 +82,64 @@ export type CurrentAgentActivity =
       readonly supporting: "The agent is connected and waiting for feedback.";
     };
 
-/** Maps current activity to the one exceptional label shown in viewer chrome. */
-export const deriveAgentHealthLabel = ({
+/**
+ * The four states the Agent Status control can be in. Each one owns a distinct
+ * glyph shape as well as a colour, so a reader who cannot separate green from
+ * amber from red still reads the state from the mark alone.
+ */
+export type AgentHealthIndicator =
+  "healthy" | "warning" | "error" | "unavailable";
+
+export type AgentHealth = {
+  readonly indicator: AgentHealthIndicator;
+  /** Names the state in words, for the control's accessible name and tooltip. */
+  readonly label: string;
+};
+
+/**
+ * Maps runtime facts to the single agent status shown in viewer chrome and at
+ * the head of the agent sidebar. It is one derivation because the chrome and
+ * the sidebar must never disagree about what state the agent is in.
+ *
+ * `isObservable` is false while the review session itself is down: agent
+ * presence is then unknown rather than bad, and claiming either would be a lie.
+ */
+export const deriveAgentHealth = ({
   activity,
   hasAgentRuntime,
   isReadOnly,
+  isObservable,
 }: {
   readonly activity: CurrentAgentActivity;
   readonly hasAgentRuntime: boolean;
   readonly isReadOnly: boolean;
-}): string | null => {
-  if (isReadOnly) return "Using read-only session";
-  if (!hasAgentRuntime) return null;
-  if (activity.state === "offline" || activity.state === "disconnected") {
-    return "Agent disconnected";
+  readonly isObservable: boolean;
+}): AgentHealth => {
+  if (!hasAgentRuntime) {
+    return { indicator: "unavailable", label: "No agent session" };
   }
-  if (activity.state === "stalled") return "Agent not responding";
-  if (activity.state === "errored") return "Agent error";
-  return null;
+  if (isReadOnly) {
+    return { indicator: "warning", label: "Using read-only session" };
+  }
+  if (!isObservable) {
+    return { indicator: "unavailable", label: "Agent status unavailable" };
+  }
+  if (activity.state === "offline" || activity.state === "disconnected") {
+    return { indicator: "error", label: "Agent disconnected" };
+  }
+  if (activity.state === "errored") {
+    return { indicator: "error", label: "Agent error" };
+  }
+  if (activity.state === "stalled") {
+    return { indicator: "warning", label: "Agent not responding" };
+  }
+  if (activity.state === "waiting") {
+    return { indicator: "warning", label: "Waiting for agent" };
+  }
+  return {
+    indicator: "healthy",
+    label: activity.state === "working" ? "Agent working" : "Agent connected",
+  };
 };
 
 const requestHeadline = (request: AgentActivityRequest): string =>

@@ -26,12 +26,19 @@ background command.
    away** to stage it with **Add Comment** instead. `Cmd/Ctrl+Enter` performs
    the visible primary action; `Escape` cancels.
 3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
-   **Chat** tab asks questions about the plan as a whole, while **Agent** shows
-   the coding-agent connection and current work for a live review session.
-   A review-session outage is reported separately and does not label the agent
-   as offline.
+   **Chat** tab asks questions about the plan as a whole.
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
+
+**Agent Status** sits beside **Feedback** for a live review session. It keeps
+one shape and width in every state and codes the state by shape as well as
+colour: a green dot when the agent is connected, an amber hazard triangle when
+it is not responding or the session is read-only, and a red square when it is
+disconnected. Choosing it swaps the sidebar to the coding-agent connection,
+current work, and connection log; choosing **Feedback**, pressing `Escape`, or
+choosing **Agent Status** again returns to the feedback you left, at the
+position you left it. A review-session outage is reported separately and does
+not label the agent as offline.
 
 Comments, replies, and plan-wide chat accept PNG, JPEG, and WebP screenshots.
 Paste an image into a composer, drop a file onto it, or choose **Choose image**.
