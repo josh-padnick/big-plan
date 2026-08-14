@@ -259,7 +259,7 @@ describe("request mailbox", () => {
       store,
       requestId: request.requestId,
       value: {
-        version: 1,
+        version: 2,
         requestId: request.requestId,
         sessionId,
         planId,
@@ -303,7 +303,7 @@ describe("request mailbox", () => {
       store,
       requestId: request.requestId,
       value: {
-        version: 1,
+        version: 2,
         requestId: request.requestId,
         sessionId,
         planId,

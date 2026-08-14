@@ -31,6 +31,14 @@ background command.
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
 
+Comments, replies, and plan-wide chat accept PNG, JPEG, and WebP screenshots.
+Paste an image into a composer, drop a file onto it, or choose **Choose image**.
+The runtime stores each image by its SHA-256 digest and inserts a Markdown
+reference into the message.
+Images are limited to four per message, 10 MiB per image, and 20 MiB total.
+The local `big-plan review` runtime is required to capture or retrieve images;
+standalone rendered files keep text drafts but do not accept image bytes.
+
 The kernel is a typed React interaction island built from token-themed
 shadcn/ui primitives. The plan content stays server-rendered HTML: React adds
 controls beside that content, and a live revision swaps in the next

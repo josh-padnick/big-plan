@@ -29,6 +29,15 @@ import {
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
+import {
+  isReviewImageId,
+  isReviewImageWithinLimits,
+  probeReviewImageDimensions,
+  reviewImageId,
+  sniffReviewImage,
+  type ReviewImageAttachment,
+  type ReviewImageDescriptor,
+} from "./shared/review-image.js";
 import { AGENT_STALL_MS } from "./shared/agent-status.js";
 import {
   isProgressState,
@@ -71,6 +80,8 @@ export type AgentConnectionEvent = {
 export type ReviewStore = {
   readonly root: string;
   readonly reviewDirectory: string;
+  readonly imagesDirectory: string;
+  readonly requestAttachmentsDirectory: string;
   readonly feedbackDirectory: string;
   readonly feedbackSubmissionDirectory: string;
   readonly agentRequestDirectory: string;
@@ -136,6 +147,11 @@ export const reviewStoreFor = ({
   return {
     root,
     reviewDirectory,
+    imagesDirectory: inside({ base: reviewDirectory, leaf: "images" }),
+    requestAttachmentsDirectory: inside({
+      base: agentDirectory,
+      leaf: "attachments",
+    }),
     feedbackDirectory: inside({ base: root, leaf: "feedback" }),
     feedbackSubmissionDirectory: inside({
       base: reviewDirectory,
@@ -228,6 +244,7 @@ const migrateLegacySnapshots = async (store: ReviewStore): Promise<void> => {
 /** Creates the review directories owner-only and keeps them out of git. */
 export const prepareStore = async (store: ReviewStore): Promise<void> => {
   await mkdir(store.reviewDirectory, { recursive: true, mode: DIRECTORY_MODE });
+  await mkdir(store.imagesDirectory, { recursive: true, mode: DIRECTORY_MODE });
   await mkdir(store.feedbackDirectory, {
     recursive: true,
     mode: DIRECTORY_MODE,
@@ -245,6 +262,10 @@ export const prepareStore = async (store: ReviewStore): Promise<void> => {
     mode: DIRECTORY_MODE,
   });
   await mkdir(store.agentDraftDirectory, {
+    recursive: true,
+    mode: DIRECTORY_MODE,
+  });
+  await mkdir(store.requestAttachmentsDirectory, {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
@@ -272,6 +293,205 @@ const readJson = async (path: string): Promise<unknown> => {
   } catch {
     // A missing, truncated, or hand-edited file means no state, never a crash.
     return undefined;
+  }
+};
+
+type StoredReviewImage = {
+  readonly descriptor: ReviewImageDescriptor;
+  readonly bytes: Uint8Array;
+};
+
+const imageDirectory = (store: ReviewStore, id: string): string => {
+  if (!isReviewImageId(id)) throw new Error("Invalid review image id");
+  return inside({ base: store.imagesDirectory, leaf: id });
+};
+
+const imageMetadataPath = (store: ReviewStore, id: string): string =>
+  inside({ base: imageDirectory(store, id), leaf: "metadata.json" });
+
+const imageBytesPath = (
+  store: ReviewStore,
+  id: string,
+  extension: string,
+): string =>
+  inside({ base: imageDirectory(store, id), leaf: `image.${extension}` });
+
+const checkedImageMetadata = (
+  value: unknown,
+): ReviewImageDescriptor | undefined => {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return undefined;
+  const candidate = value as Record<string, unknown>;
+  if (
+    !isReviewImageId(candidate.id) ||
+    typeof candidate.alt !== "string" ||
+    (candidate.mimeType !== "image/png" &&
+      candidate.mimeType !== "image/jpeg" &&
+      candidate.mimeType !== "image/webp") ||
+    typeof candidate.byteLength !== "number" ||
+    typeof candidate.width !== "number" ||
+    typeof candidate.height !== "number" ||
+    !Number.isInteger(candidate.byteLength) ||
+    !Number.isInteger(candidate.width) ||
+    !Number.isInteger(candidate.height) ||
+    !isReviewImageWithinLimits({
+      byteLength: candidate.byteLength,
+      width: candidate.width,
+      height: candidate.height,
+    })
+  )
+    return undefined;
+  return {
+    id: candidate.id,
+    alt: candidate.alt,
+    mimeType: candidate.mimeType,
+    byteLength: candidate.byteLength,
+    width: candidate.width,
+    height: candidate.height,
+  };
+};
+
+/** Reads a published image only when metadata, bytes, and MIME agree. */
+export const readReviewImage = async ({
+  store,
+  id,
+}: {
+  readonly store: ReviewStore;
+  readonly id: string;
+}): Promise<StoredReviewImage | undefined> => {
+  try {
+    const descriptor = checkedImageMetadata(
+      await readJson(imageMetadataPath(store, id)),
+    );
+    if (descriptor === undefined) return undefined;
+    const extension =
+      descriptor.mimeType === "image/jpeg"
+        ? "jpg"
+        : descriptor.mimeType.slice("image/".length);
+    const bytes = Uint8Array.from(
+      await readFile(imageBytesPath(store, id, extension)),
+    );
+    const format = sniffReviewImage(bytes);
+    const dimensions = probeReviewImageDimensions(bytes, format);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    if (
+      format?.mimeType !== descriptor.mimeType ||
+      bytes.byteLength !== descriptor.byteLength ||
+      digest !== descriptor.id ||
+      dimensions?.width !== descriptor.width ||
+      dimensions?.height !== descriptor.height
+    )
+      return undefined;
+    return { descriptor, bytes };
+  } catch {
+    return undefined;
+  }
+};
+
+/** Publishes one image under its server-derived SHA-256 digest. */
+export const publishReviewImage = async ({
+  store,
+  bytes,
+  alt,
+}: {
+  readonly store: ReviewStore;
+  readonly bytes: Uint8Array;
+  readonly alt: string;
+}): Promise<ReviewImageDescriptor> => {
+  const format = sniffReviewImage(bytes);
+  const dimensions = probeReviewImageDimensions(bytes, format);
+  if (
+    format === undefined ||
+    dimensions === undefined ||
+    !isReviewImageWithinLimits({ byteLength: bytes.byteLength, ...dimensions })
+  ) {
+    throw new Error("The image is invalid or exceeds the supported limits");
+  }
+  const id = reviewImageId(createHash("sha256").update(bytes).digest("hex"));
+  const existing = await readReviewImage({ store, id });
+  if (existing !== undefined) return existing.descriptor;
+  const descriptor: ReviewImageDescriptor = {
+    id,
+    alt,
+    mimeType: format.mimeType,
+    byteLength: bytes.byteLength,
+    ...dimensions,
+  };
+  const temporary = inside({
+    base: store.imagesDirectory,
+    leaf: `.image-${id}-${randomBytes(6).toString("hex")}`,
+  });
+  await mkdir(temporary, { recursive: true, mode: DIRECTORY_MODE });
+  try {
+    await writeFile(
+      inside({ base: temporary, leaf: `image.${format.extension}` }),
+      bytes,
+      { mode: FILE_MODE },
+    );
+    await writeJson({
+      path: inside({ base: temporary, leaf: "metadata.json" }),
+      value: descriptor,
+    });
+    await rename(temporary, imageDirectory(store, id));
+  } catch (error: unknown) {
+    await rm(temporary, { recursive: true, force: true });
+    const deduped = await readReviewImage({ store, id });
+    if (deduped !== undefined) return deduped.descriptor;
+    throw error;
+  }
+  return descriptor;
+};
+
+/** Freezes published blobs into request-owned copies before mailbox delivery. */
+export const freezeRequestAttachments = async ({
+  store,
+  requestId,
+  references,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+  readonly references: ReadonlyArray<{
+    readonly id: string;
+    readonly alt: string;
+  }>;
+}): Promise<ReadonlyArray<ReviewImageAttachment>> => {
+  if (!/^[a-f0-9]{16}$/.test(requestId)) throw new Error("Invalid request id");
+  const temporary = inside({
+    base: store.requestAttachmentsDirectory,
+    leaf: `.attachments-${requestId}-${randomBytes(6).toString("hex")}`,
+  });
+  const destination = inside({
+    base: store.requestAttachmentsDirectory,
+    leaf: requestId,
+  });
+  await mkdir(temporary, { recursive: true, mode: DIRECTORY_MODE });
+  try {
+    const attachments: Array<ReviewImageAttachment> = [];
+    for (const reference of references) {
+      const stored = await readReviewImage({ store, id: reference.id });
+      if (stored === undefined)
+        throw new Error(`Unknown or corrupt review image ${reference.id}`);
+      const format = sniffReviewImage(stored.bytes);
+      if (format === undefined)
+        throw new Error(`Unknown or corrupt review image ${reference.id}`);
+      const filename = `image-${reference.id}.${format.extension}`;
+      await writeFile(
+        inside({ base: temporary, leaf: filename }),
+        stored.bytes,
+        { mode: FILE_MODE },
+      );
+      attachments.push({
+        ...stored.descriptor,
+        alt: reference.alt,
+        sha256: stored.descriptor.id,
+        path: inside({ base: destination, leaf: filename }),
+      });
+    }
+    await rename(temporary, destination);
+    return attachments;
+  } catch (error: unknown) {
+    await rm(temporary, { recursive: true, force: true });
+    throw error;
   }
 };
 

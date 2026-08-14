@@ -203,7 +203,7 @@ describe("agent exchange response contract", () => {
         requests: [request, reply],
         responses: [
           {
-            version: 1,
+            version: 2,
             requestId: packageId,
             sessionId,
             planId,

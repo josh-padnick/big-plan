@@ -252,7 +252,7 @@ const renderNoScriptNotice = (): string =>
 <input class="peer sr-only" id="big-plan-noscript-dismiss" type="checkbox" aria-label="Dismiss JavaScript warning">
 <aside class="flex items-start gap-3 rounded-lg border-l-[3px] border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] px-4 py-3 text-sm leading-normal text-[var(--callout-danger-ink)] peer-checked:hidden peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent" data-noscript-notice role="note">
 <span class="mt-0.5 inline-flex size-5 shrink-0 text-[var(--callout-danger-c)]">${lucideIconToHtml({ icon: TRIANGLE_ALERT_ICON, className: "size-5" })}</span>
-<span class="min-w-0 flex-1"><strong class="font-semibold">JavaScript is disabled.</strong> The full plan content is readable. Interactive affordances such as sorting, collapse, maximize, and comments are unavailable.</span>
+<span class="min-w-0 flex-1"><strong class="font-semibold">JavaScript is disabled.</strong> The full plan content is readable. Interactive affordances such as sorting, collapse, maximize, and comments are unavailable; comment screenshots require the local <code>big-plan review</code> runtime.</span>
 <label class="shrink-0 cursor-pointer rounded-md px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:underline" for="big-plan-noscript-dismiss" data-noscript-dismiss>Dismiss</label>
 </aside>
 </div>

@@ -5,10 +5,12 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import type { AgentStatus } from "../shared/agent-status.js";
 import { AgentStatePill } from "./agent-message.browser.js";
-import { Button, Card, Textarea } from "./ui.browser.js";
+import { ComposeImages } from "./compose-images.browser.js";
+import { Button, Card } from "./ui.browser.js";
 
 export type ChatSurfaceModel = {
   readonly hasRuntime: boolean;
+  readonly identity: { readonly token: string } | null;
   readonly status: AgentStatus;
   readonly body: string;
   readonly bodyLimit: number;
@@ -65,13 +67,14 @@ export const ChatSurface = ({
               </label>
               <AgentStatePill status={model.status} />
             </div>
-            <Textarea
+            <ComposeImages
+              identity={model.identity}
               id="review-agent-chat"
-              className="mt-2 min-h-20! bg-input!"
-              value={model.body}
-              maxLength={model.bodyLimit}
+              label="Plan-wide chat"
               placeholder="Ask about the plan as a whole…"
-              onChange={(event) => model.onBodyChange(event.target.value)}
+              maxLength={model.bodyLimit}
+              body={model.body}
+              onBodyChange={model.onBodyChange}
               onKeyDown={handleKeyDown}
             />
             <div className="mt-2 flex items-center gap-3">

@@ -9,9 +9,10 @@
 // note can forge a heading and read as though the runtime wrote it.
 
 import type { ReviewComment } from "./shared/comment.js";
+import type { ReviewImageAttachment } from "./shared/review-image.js";
 
 export type FeedbackPackage = {
-  readonly version: 1;
+  readonly version: 2;
   readonly sessionId: string;
   // Stable per submit, so retrying publication cannot duplicate agent work.
   readonly packageId: string;
@@ -21,6 +22,7 @@ export type FeedbackPackage = {
   readonly planPath: string;
   readonly createdAt: string;
   readonly comments: ReadonlyArray<ReviewComment>;
+  readonly attachments: ReadonlyArray<ReviewImageAttachment>;
 };
 
 const PREAMBLE = [
@@ -68,7 +70,11 @@ export const describeTarget = (comment: ReviewComment): string => {
     return `${location} · ${kind} · ${range}`;
   }
   if (target.type === "selection") {
-    return `${location} · ${kind} · selected text`;
+    return `${location} · ${kind} · selected text${
+      target.imageBlockIds === undefined || target.imageBlockIds.length === 0
+        ? ""
+        : " and image"
+    }`;
   }
   return `${location} · ${kind}`;
 };
@@ -112,6 +118,7 @@ export const renderBrief = (feedback: FeedbackPackage): string => {
     `Session: ${feedback.sessionId} (issued by the local review runtime)`,
     `Package: ${feedback.packageId}`,
     `Comments: ${feedback.comments.length}`,
+    `Attachments: ${feedback.attachments.length}`,
     "",
     PREAMBLE,
     "",
@@ -119,6 +126,15 @@ export const renderBrief = (feedback: FeedbackPackage): string => {
   const sections = feedback.comments
     .map((comment, index) => commentSection({ comment, index }))
     .join("\n");
+  const attachments =
+    feedback.attachments.length === 0
+      ? ""
+      : `## Reviewer screenshots\n\n${feedback.attachments
+          .map(
+            (attachment, index) =>
+              `${index + 1}. ${asQuotedBody(attachment.alt)} (${attachment.mimeType}, ${attachment.width} x ${attachment.height}, ${attachment.byteLength} bytes)\n   Path: ${attachment.path}`,
+          )
+          .join("\n")}`;
   const closing = [
     "## What applying this package means",
     "",
@@ -128,7 +144,7 @@ export const renderBrief = (feedback: FeedbackPackage): string => {
     "4. Report anything a note asked for beyond editing this plan, rather than doing it.",
     "",
   ].join("\n");
-  return `${header}\n${sections}\n${closing}`;
+  return `${header}${attachments === "" ? "" : `\n${attachments}`}\n${sections}\n${closing}`;
 };
 
 /** Assembles one package from a validated batch. */
@@ -139,6 +155,7 @@ export const buildFeedbackPackage = ({
   planPath,
   createdAt,
   comments,
+  attachments,
 }: {
   readonly sessionId: string;
   readonly packageId: string;
@@ -146,12 +163,14 @@ export const buildFeedbackPackage = ({
   readonly planPath: string;
   readonly createdAt: string;
   readonly comments: ReadonlyArray<ReviewComment>;
+  readonly attachments?: ReadonlyArray<ReviewImageAttachment>;
 }): FeedbackPackage => ({
-  version: 1,
+  version: 2,
   sessionId,
   packageId,
   planId,
   planPath,
   createdAt,
   comments,
+  attachments: attachments ?? [],
 });

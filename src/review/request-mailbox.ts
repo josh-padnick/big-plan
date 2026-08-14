@@ -63,7 +63,7 @@ const responseMatchesRequest = ({
   value !== null &&
   !Array.isArray(value) &&
   "version" in value &&
-  value.version === 1 &&
+  value.version === 2 &&
   "requestId" in value &&
   value.requestId === request.requestId &&
   "sessionId" in value &&

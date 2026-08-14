@@ -16,6 +16,7 @@ import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import type { SnapshotDiff } from "../shared/review-wire.js";
+import { reviewerMessageLabel } from "../shared/reviewer-markdown.js";
 import { DiffLensPortal } from "./diff-lens.browser.js";
 import { tourStartIndex } from "./diff-anchor.js";
 import { Icon } from "./icon.browser.js";
@@ -295,12 +296,14 @@ export const DiffTourProvider = ({
                 <Button
                   variant="ghost"
                   size="compact"
-                  className="min-w-0 max-w-64 justify-start [&>svg]:size-4"
-                  aria-label={`Open comment thread: ${tour.thread.label}`}
+                  className="min-w-0 max-w-64 justify-start [&>svg]:size-4 [&>svg]:shrink-0"
+                  aria-label={`Open comment thread: ${reviewerMessageLabel(tour.thread.label)}`}
                   onClick={tour.thread.onOpen}
                 >
                   <Icon icon={MESSAGE_SQUARE_ICON} />
-                  <span className="truncate">{tour.thread.label}</span>
+                  <span className="min-w-0 truncate">
+                    {reviewerMessageLabel(tour.thread.label)}
+                  </span>
                 </Button>
               )}
             </div>

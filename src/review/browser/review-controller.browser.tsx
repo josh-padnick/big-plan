@@ -39,7 +39,10 @@ import {
 } from "../shared/agent-status.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { boundQuote, QUOTE_LIMIT } from "../shared/comment.js";
-import { parseCommentMarkdownLine } from "../shared/comment-markdown.js";
+import {
+  parseReviewerMarkdown,
+  type ReviewerMarkdownNode,
+} from "../shared/reviewer-markdown.js";
 import {
   reconcilePendingCancellations,
   requestIsCanceled,
@@ -92,6 +95,11 @@ import {
   type MessageSurface,
 } from "./agent-message.browser.js";
 import { Icon } from "./icon.browser.js";
+import { ComposeImages } from "./compose-images.browser.js";
+import {
+  ReviewImage,
+  runtimeReviewImageIdentity,
+} from "./review-image.browser.js";
 import { InlineComments } from "./inline-comments.browser.js";
 import { useDiffTour } from "./diff-tour.browser.js";
 import {
@@ -596,7 +604,11 @@ const targetLabel = (
   let label: string;
   if (target.type === "document") label = "Whole plan";
   else if (target.type === "selection")
-    label = `Selected text in ${target.label}`;
+    label = `Selected text${
+      target.imageBlockIds === undefined || target.imageBlockIds.length === 0
+        ? ""
+        : " and image"
+    } in ${target.label}`;
   else if (target.kind === "table" || target.kind === "data-table")
     label = [target.section, "Table"].filter(Boolean).join(" · ");
   else label = target.label;
@@ -707,6 +719,34 @@ const selectionOffsetWithin = ({
   return before.toString().length;
 };
 
+const authoredImagesIntersecting = (range: Range): ReadonlyArray<HTMLElement> =>
+  Array.from(
+    document.querySelectorAll<HTMLElement>(
+      '[data-block-kind="image"][data-authored-prose]',
+    ),
+  ).filter((image) => {
+    try {
+      return range.intersectsNode(image);
+    } catch {
+      return false;
+    }
+  });
+
+const selectionRect = (
+  range: Range,
+  images: ReadonlyArray<HTMLElement>,
+): DOMRect => {
+  const rects = [
+    range.getBoundingClientRect(),
+    ...images.map((image) => image.getBoundingClientRect()),
+  ];
+  const left = Math.min(...rects.map((rect) => rect.left));
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const right = Math.max(...rects.map((rect) => rect.right));
+  const bottom = Math.max(...rects.map((rect) => rect.bottom));
+  return new DOMRect(left, top, right - left, bottom - top);
+};
+
 const selectionControlState = (): SelectionControlState | null => {
   const selection = window.getSelection();
   if (
@@ -743,7 +783,14 @@ const selectionControlState = (): SelectionControlState | null => {
   ) {
     return null;
   }
-  const selected = selection.toString();
+  const images = authoredImagesIntersecting(range);
+  const text = selection.toString();
+  const imageEvidence = images
+    .map((image) => `[Image: ${image.dataset.blockLabel ?? "Image"}]`)
+    .join("\n");
+  const selected = [text, imageEvidence]
+    .filter((part) => part.trim() !== "")
+    .join("\n");
   if (selected.trim() === "") return null;
   // Length never withdraws the affordance. The block and offsets below are the
   // address of the highlight; the quote is only the copy carried into the
@@ -762,7 +809,7 @@ const selectionControlState = (): SelectionControlState | null => {
     offset: range.endOffset,
     edge: "end",
   });
-  const rect = range.getBoundingClientRect();
+  const rect = selectionRect(range, images);
   if (rect.width === 0 && rect.height === 0) return null;
   return {
     target: {
@@ -771,6 +818,13 @@ const selectionControlState = (): SelectionControlState | null => {
       ...(startBlock === endBlock
         ? {}
         : { endBlockId: endBlock.dataset.blockId ?? "" }),
+      ...(images.length === 0
+        ? {}
+        : {
+            imageBlockIds: images
+              .map((image) => image.dataset.blockId)
+              .filter((id): id is string => id !== undefined),
+          }),
       start,
       end,
       quote,
@@ -786,6 +840,13 @@ const blockCommentLabel = (block: HTMLElement): string =>
   block.dataset.blockKind?.startsWith("code-") === true
     ? "Comment on this code snippet"
     : `Comment on ${block.dataset.blockLabel ?? "this component"}`;
+
+const selectionCommentLabel = (target: SelectionTarget): string =>
+  `Comment on selected text${
+    target.imageBlockIds === undefined || target.imageBlockIds.length === 0
+      ? ""
+      : " and image"
+  }`;
 
 // Decoration, geometry, and containment callers treat an absent target as a
 // no-op, so this keeps the nullable shape while the resolver owns the query.
@@ -804,7 +865,12 @@ const targetAssociationElements = (
 ): ReadonlySet<HTMLElement> => {
   const element = targetElement(target);
   if (element === null) return new Set();
-  if (target.type === "block" && element.matches("[data-authored-prose]")) {
+  const isImageTarget = target.type === "block" && target.kind === "image";
+  if (
+    target.type === "block" &&
+    !isImageTarget &&
+    element.matches("[data-authored-prose]")
+  ) {
     return new Set();
   }
   const owningContainer = element.closest<HTMLElement>(
@@ -813,9 +879,19 @@ const targetAssociationElements = (
   const elements = new Set<HTMLElement>();
   if (
     target.type !== "selection" &&
-    !(element.matches("[data-authored-prose]") && owningContainer !== null)
+    !(
+      element.matches("[data-authored-prose]") &&
+      owningContainer !== null &&
+      !isImageTarget
+    )
   ) {
     elements.add(element);
+  }
+  if (target.type === "selection") {
+    for (const imageId of target.imageBlockIds ?? []) {
+      const image = foundElement(liveBlock(imageId));
+      if (image !== null) elements.add(image);
+    }
   }
   if (owningContainer !== null) elements.add(owningContainer);
   return elements;
@@ -887,7 +963,11 @@ const targetHighlightRange = (target: CommentTarget): Range | null => {
     return null;
   }
   const range = document.createRange();
-  range.selectNodeContents(element);
+  if (target.kind === "image") {
+    range.selectNode(element);
+  } else {
+    range.selectNodeContents(element);
+  }
   return range;
 };
 
@@ -936,15 +1016,52 @@ const replacePlanArticle = (nextDocument: Document): void => {
   document.dispatchEvent(new CustomEvent("bigplan:article-replaced"));
 };
 
-const inlineMarkdown = (source: string): ReadonlyArray<ReactNode> =>
-  parseCommentMarkdownLine(source).map((token, index) => {
-    const key = `${index}-${token.value}`;
-    if (token.type === "code") return <code key={key}>{token.value}</code>;
-    if (token.type === "strong")
-      return <strong key={key}>{token.value}</strong>;
-    if (token.type === "emphasis") return <em key={key}>{token.value}</em>;
-    return token.value;
-  });
+const renderReviewerNode = (
+  node: ReviewerMarkdownNode,
+  key: string,
+): ReactNode => {
+  if (node.type === "text") return node.value;
+  if (node.type === "inlineCode") return <code key={key}>{node.value}</code>;
+  if (node.type === "code") {
+    return (
+      <pre key={key}>
+        <code>{node.value}</code>
+      </pre>
+    );
+  }
+  if (node.type === "image") {
+    return (
+      <ReviewImage
+        key={key}
+        id={node.id}
+        alt={node.alt}
+        identity={runtimeReviewImageIdentity()}
+      />
+    );
+  }
+  const children = node.children.map((child, index) =>
+    renderReviewerNode(child, `${key}-${index}`),
+  );
+  if (node.type === "paragraph") return <p key={key}>{children}</p>;
+  if (node.type === "strong") return <strong key={key}>{children}</strong>;
+  if (node.type === "emphasis") return <em key={key}>{children}</em>;
+  if (node.type === "blockquote")
+    return <blockquote key={key}>{children}</blockquote>;
+  if (node.type === "listItem") return <li key={key}>{children}</li>;
+  if (node.type === "list") {
+    return node.ordered ? (
+      <ol key={key}>{children}</ol>
+    ) : (
+      <ul key={key}>{children}</ul>
+    );
+  }
+  if (node.type !== "link") return null;
+  return (
+    <a key={key} href={node.url} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  );
+};
 
 const MarkdownBody = ({
   body,
@@ -954,16 +1071,9 @@ const MarkdownBody = ({
   readonly className?: string;
 }) => (
   <div className={className}>
-    {body.split(/\n{2,}/u).map((paragraph, index) => (
-      <p key={`${index}-${paragraph}`}>
-        {paragraph
-          .split("\n")
-          .flatMap((line, lineIndex) => [
-            ...(lineIndex === 0 ? [] : [<br key={`break-${lineIndex}`} />]),
-            ...inlineMarkdown(line),
-          ])}
-      </p>
-    ))}
+    {parseReviewerMarkdown(body).map((node, index) =>
+      renderReviewerNode(node, String(index)),
+    )}
   </div>
 );
 
@@ -1001,6 +1111,7 @@ const useBlockHosts = () => {
       )
         .filter(
           (block) =>
+            block.dataset.blockKind !== "image" &&
             !PROSE_KINDS.has(block.dataset.blockKind ?? "") &&
             !TABLE_PRECISION_KINDS.has(block.dataset.blockKind ?? "") &&
             !DERIVED_KINDS.has(block.dataset.blockKind ?? "") &&
@@ -1105,6 +1216,88 @@ const useBlockHosts = () => {
     return () => {
       observer.disconnect();
       mounted.forEach(({ host }) => host.remove());
+    };
+  }, []);
+  return hosts;
+};
+
+const useImageHosts = () => {
+  const [hosts, setHosts] = useState<
+    ReadonlyArray<{
+      readonly block: HTMLElement;
+      readonly host: HTMLSpanElement;
+    }>
+  >([]);
+  useEffect(() => {
+    const mounted: Array<{
+      readonly block: HTMLElement;
+      readonly host: HTMLSpanElement;
+      readonly parent: HTMLElement;
+      readonly originalPosition: string;
+    }> = [];
+    const frameHandles: Array<number> = [];
+    const resize = new ResizeObserver(() => {
+      for (const { block, host, parent } of mounted) {
+        const parentRect = parent.getBoundingClientRect();
+        const imageRect = block.getBoundingClientRect();
+        host.style.left = `${imageRect.right - parentRect.left + 8}px`;
+        host.style.top = `${imageRect.top - parentRect.top}px`;
+      }
+    });
+    const mount = () => {
+      const next = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-block-kind="image"]:not([data-review-image-mounted])',
+        ),
+      );
+      for (const block of next) {
+        const parent = block.parentElement;
+        if (parent === null) continue;
+        const host = document.createElement("span");
+        host.dataset.reviewImageHost = "";
+        block.dataset.reviewImageMounted = "";
+        const originalPosition = parent.style.position;
+        if (getComputedStyle(parent).position === "static") {
+          parent.style.position = "relative";
+        }
+        block.after(host);
+        mounted.push({ block, host, parent, originalPosition });
+        resize.observe(block);
+        resize.observe(parent);
+        frameHandles.push(
+          requestAnimationFrame(() => {
+            const parentRect = parent.getBoundingClientRect();
+            const imageRect = block.getBoundingClientRect();
+            host.style.left = `${imageRect.right - parentRect.left + 8}px`;
+            host.style.top = `${imageRect.top - parentRect.top}px`;
+          }),
+        );
+      }
+      setHosts(mounted);
+    };
+    let article = document.querySelector("article");
+    mount();
+    const observer = new MutationObserver(() => {
+      const nextArticle = document.querySelector("article");
+      if (nextArticle === article) return;
+      mounted.splice(0).forEach(({ block, host, parent, originalPosition }) => {
+        host.remove();
+        delete block.dataset.reviewImageMounted;
+        parent.style.position = originalPosition;
+      });
+      article = nextArticle;
+      mount();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      resize.disconnect();
+      frameHandles.forEach((frame) => cancelAnimationFrame(frame));
+      mounted.forEach(({ block, host, parent, originalPosition }) => {
+        host.remove();
+        delete block.dataset.reviewImageMounted;
+        parent.style.position = originalPosition;
+      });
     };
   }, []);
   return hosts;
@@ -1426,6 +1619,7 @@ const CommentComposer = ({
   body,
   inline,
   submitRightAway,
+  identity,
   canSubmitRightAway,
   onCancel,
   onBodyChange,
@@ -1437,6 +1631,7 @@ const CommentComposer = ({
   readonly body: string;
   readonly inline: boolean;
   readonly submitRightAway: boolean;
+  readonly identity: RuntimeIdentity | null;
   readonly canSubmitRightAway: boolean;
   readonly onCancel: () => void;
   readonly onBodyChange: (body: string) => void;
@@ -1448,16 +1643,17 @@ const CommentComposer = ({
     top: compose.top,
     left: compose.left,
   });
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const composerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => inputRef.current?.focus(), []);
   useEffect(() => {
     if (inline) return;
     const frame = requestAnimationFrame(() => {
       const rect = composerRef.current?.getBoundingClientRect();
       if (rect === undefined) return;
       const obstacles = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-review-thread-side]"),
+        document.querySelectorAll<HTMLElement>(
+          '[data-review-thread-side], button[aria-label^="Comment on"]',
+        ),
         (node) => node.getBoundingClientRect(),
       ).filter((obstacle) => obstacle.width > 0 && obstacle.height > 0);
       const next = floatingComposerPosition({
@@ -1485,7 +1681,8 @@ const CommentComposer = ({
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      onCancel();
+      if (body.trim() === "") onCancel();
+      else setCloseConfirmOpen(true);
     } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       save();
@@ -1500,94 +1697,103 @@ const CommentComposer = ({
         }),
   };
   return (
-    <Card
-      ref={composerRef}
-      className={
-        inline
-          ? `review-comment-composer-inline relative z-auto mb-6 w-full max-w-lg border border-edge bg-paper! p-3 text-ink shadow-floating ${compose.target.type === "block" && compose.target.kind === "slide" ? "-mt-4" : "mt-2"}`
-          : "review-comment-composer-floating absolute z-30 w-[min(17rem,calc(100vw-2rem))] border border-edge bg-paper! p-3 text-ink shadow-floating"
-      }
-      style={style}
-      role="dialog"
-      aria-label={`Comment on ${targetLabel(compose.target)}`}
-      data-review-associated={
-        compose.target.type === "selection" ? "true" : undefined
-      }
-    >
-      <p className="review-compose-title m-0 mb-2 text-xs font-semibold text-muted">
-        Add a comment
-      </p>
-      <Textarea
-        ref={inputRef}
-        aria-label="Add a comment"
-        className="bg-input!"
-        value={body}
-        maxLength={BODY_LIMIT}
-        placeholder="What should the agent change here?"
-        onChange={(event) => onBodyChange(event.target.value)}
-        onKeyDown={handleKeyDown}
-      />
-      {(compose.target.type === "selection" ||
-        compose.target.type === "lines") &&
-      compose.target.isQuoteExcerpt ? (
-        // The whole highlight stays the comment's target; only the copy sent
-        // with it is trimmed, and the reviewer is told so rather than
-        // discovering it in the agent's reply.
-        <p className="review-compose-excerpt mt-1 mb-0 text-2xs text-subtle">
-          The agent gets the first {QUOTE_LIMIT.toLocaleString()} characters of
-          this highlight as a quote, and the whole highlight as the target.
+    <>
+      <Card
+        ref={composerRef}
+        className={
+          inline
+            ? `review-comment-composer-inline relative z-auto mb-6 w-full max-w-lg border border-edge bg-paper! p-3 text-ink shadow-floating ${compose.target.type === "block" && compose.target.kind === "slide" ? "-mt-4" : "mt-2"}`
+            : "review-comment-composer-floating absolute z-30 w-[min(17rem,calc(100vw-2rem))] border border-edge bg-paper! p-3 text-ink shadow-floating"
+        }
+        style={style}
+        role="dialog"
+        aria-label={`Comment on ${targetLabel(compose.target)}`}
+        data-review-associated={
+          compose.target.type === "selection" ? "true" : undefined
+        }
+      >
+        <p className="review-compose-title m-0 mb-2 text-xs font-semibold text-muted">
+          Add a comment
         </p>
-      ) : null}
-      <p className="review-compose-hint mt-1 mb-0 text-2xs text-subtle">
-        Escape cancels · {MODIFIER_SHORTCUT} adds
-      </p>
-      <div className="mt-2 block">
-        <button
-          type="button"
-          className="group inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-xs text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          role="switch"
-          aria-checked={submitRightAway}
-          onClick={() => onSubmitRightAwayChange(!submitRightAway)}
-        >
-          <span
-            className="relative h-5 w-8 rounded-full border border-edge bg-surface inset-shadow-well after:absolute after:top-1/2 after:left-1 after:size-3 after:-translate-y-1/2 after:rounded-full after:bg-muted after:transition-transform group-aria-checked:border-accent group-aria-checked:bg-accent-soft group-aria-checked:after:translate-x-3 group-aria-checked:after:bg-accent"
-            aria-hidden="true"
-          />
-          Submit right away
-        </button>
-        <div className="mt-2 flex items-center justify-end gap-1">
-          <Button variant="outline" size="compact" onClick={onCancel}>
-            Cancel
-          </Button>
-          <span className="group relative inline-flex">
-            <Button
-              size="micro"
-              disabled={
-                body.trim() === "" || (submitRightAway && !canSubmitRightAway)
-              }
-              onClick={save}
-            >
-              {submitRightAway ? "Submit Now" : "Add Comment"}
-            </Button>
-            <span
-              role="tooltip"
-              className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
-            >
-              {MODIFIER_SHORTCUT}
-            </span>
-          </span>
-        </div>
-        {submitRightAway && !canSubmitRightAway ? (
+        <ComposeImages
+          identity={identity}
+          autoFocus
+          label="Add a comment"
+          textareaClassName="bg-input!"
+          placeholder="What should the agent change here?"
+          body={body}
+          maxLength={BODY_LIMIT}
+          onBodyChange={onBodyChange}
+          onKeyDown={handleKeyDown}
+        />
+        {(compose.target.type === "selection" ||
+          compose.target.type === "lines") &&
+        compose.target.isQuoteExcerpt ? (
+          // The whole highlight stays the comment's target; only the copy sent
+          // with it is trimmed, and the reviewer is told so rather than
+          // discovering it in the agent's reply.
+          <p className="review-compose-excerpt mt-1 mb-0 text-2xs text-subtle">
+            The agent gets the first {QUOTE_LIMIT.toLocaleString()} characters
+            of this highlight as a quote, and the whole highlight as the target.
+          </p>
+        ) : null}
+        <p className="review-compose-hint mt-1 mb-0 text-2xs text-subtle">
+          Escape closes · {MODIFIER_SHORTCUT} adds
+        </p>
+        <div className="mt-2 block">
           <button
             type="button"
-            className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-            onClick={onShowAgent}
+            className="group inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-xs text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            role="switch"
+            aria-checked={submitRightAway}
+            onClick={() => onSubmitRightAwayChange(!submitRightAway)}
           >
-            Agent disconnected
+            <span
+              className="relative h-5 w-8 rounded-full border border-edge bg-surface inset-shadow-well after:absolute after:top-1/2 after:left-1 after:size-3 after:-translate-y-1/2 after:rounded-full after:bg-muted after:transition-transform group-aria-checked:border-accent group-aria-checked:bg-accent-soft group-aria-checked:after:translate-x-3 group-aria-checked:after:bg-accent"
+              aria-hidden="true"
+            />
+            Submit right away
           </button>
-        ) : null}
-      </div>
-    </Card>
+          <div className="mt-2 flex items-center justify-end gap-1">
+            <Button variant="outline" size="compact" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Tooltip label={MODIFIER_SHORTCUT} placement="below" asChild>
+              <Button
+                size="micro"
+                disabled={
+                  body.trim() === "" || (submitRightAway && !canSubmitRightAway)
+                }
+                onClick={save}
+              >
+                {submitRightAway ? "Submit Now" : "Add Comment"}
+              </Button>
+            </Tooltip>
+          </div>
+          {submitRightAway && !canSubmitRightAway ? (
+            <button
+              type="button"
+              className="mt-2 ml-auto block cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-danger underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+              onClick={onShowAgent}
+            >
+              Agent disconnected
+            </button>
+          ) : null}
+        </div>
+      </Card>
+      <AlertDialog
+        open={closeConfirmOpen}
+        title="Close this comment?"
+        description="Your text will be lost."
+        cancelLabel="Keep editing"
+        actionLabel="Close comment"
+        onCancel={() => setCloseConfirmOpen(false)}
+        onAction={() => {
+          setCloseConfirmOpen(false);
+          onCancel();
+        }}
+      />
+    </>
   );
 };
 
@@ -2169,7 +2375,7 @@ const StagedCard = ({
             >
               Cancel
             </Button>
-            <span className="group relative inline-flex">
+            <Tooltip label={MODIFIER_SHORTCUT} placement="below" asChild>
               <Button
                 size="micro"
                 disabled={editBody.trim() === ""}
@@ -2177,13 +2383,7 @@ const StagedCard = ({
               >
                 Save
               </Button>
-              <span
-                role="tooltip"
-                className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] right-0 z-50 w-max rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-within:visible group-focus-within:opacity-100 group-focus-within:delay-1000"
-              >
-                {MODIFIER_SHORTCUT}
-              </span>
-            </span>
+            </Tooltip>
           </div>
         </>
       ) : (
@@ -3108,13 +3308,15 @@ const SentThread = ({
                 </div>
               </section>
             )}
-            <Textarea
+            <ComposeImages
               id={`reply-${comment.id}`}
-              className="mt-1 min-h-20"
-              value={reply}
+              identity={identity}
+              label="Reply to the agent"
+              textareaClassName="mt-1 min-h-20"
+              body={reply}
               maxLength={BODY_LIMIT}
               placeholder="Reply to the agent…"
-              onChange={(event) => setReply(event.target.value)}
+              onBodyChange={setReply}
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                   event.preventDefault();
@@ -3224,6 +3426,7 @@ export const ReviewController = () => {
   const planId =
     identity?.planId ?? rootElement.getAttribute("data-plan-id") ?? "";
   const blockHosts = useBlockHosts();
+  const imageHosts = useImageHosts();
   const reviewContainerHosts = useReviewContainerHosts();
   const feedbackHost = useFeedbackHost();
   const [drafts, setDrafts] = useState<ReadonlyArray<ReviewComment>>([]);
@@ -3574,6 +3777,15 @@ export const ReviewController = () => {
     const selection =
       compose?.target.type === "selection" ? compose.target : null;
     const block = selection === null ? null : targetElement(selection);
+    const images =
+      selection === null
+        ? []
+        : (selection.imageBlockIds ?? [])
+            .map((imageId) => foundElement(liveBlock(imageId)))
+            .filter((image): image is HTMLElement => image !== null);
+    for (const image of images) {
+      image.dataset.reviewSelectionAssociated = "";
+    }
     if (block !== null) {
       block.dataset.reviewSelectionAssociated = "";
       const enter = () => setAssociationActive(true);
@@ -3584,9 +3796,16 @@ export const ReviewController = () => {
         block.removeEventListener("pointerenter", enter);
         block.removeEventListener("pointerleave", leave);
         delete block.dataset.reviewSelectionAssociated;
+        for (const image of images) {
+          delete image.dataset.reviewSelectionAssociated;
+        }
       };
     }
-    return undefined;
+    return () => {
+      for (const image of images) {
+        delete image.dataset.reviewSelectionAssociated;
+      }
+    };
   }, [articleVersion, compose]);
 
   useEffect(() => {
@@ -4525,30 +4744,22 @@ export const ReviewController = () => {
           ? "Comment on quick summary"
           : "Comment on slide";
         return createPortal(
-          <button
-            type="button"
-            // The control stands alone in a gutter, so it rests as ink only:
-            // a ground at rest would read as a chip competing with the card
-            // beside it. Hover, focus, and pressed still raise the ground.
-            className="group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent p-0 text-comment-rest hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:bg-surface aria-pressed:text-ink [&>svg]:size-3.5"
-            aria-label={label}
-            aria-pressed={pressed}
-            onClick={() =>
-              beginTarget(target, container.getBoundingClientRect())
-            }
-          >
-            <Icon icon={MESSAGE_SQUARE_ICON} />
-            <span
-              role="tooltip"
-              // The control sits in the reading column's right gutter, so the
-              // tooltip grows inward from the button's right edge. Growing
-              // rightwards would push the label past the page and give the
-              // whole document a horizontal scrollbar.
-              className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] right-0 z-50 w-max max-w-48 rounded-md bg-[var(--ink-c)] px-2 py-1 text-2xs leading-normal text-[var(--bg)] opacity-0 shadow-raised delay-1000 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
+          <Tooltip label={label} placement="below" asChild>
+            <button
+              type="button"
+              // The control stands alone in a gutter, so it rests as ink only:
+              // a ground at rest would read as a chip competing with the card
+              // beside it. Hover, focus, and pressed still raise the ground.
+              className="group relative inline-flex size-[1.4rem] cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent p-0 text-comment-rest hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:bg-surface aria-pressed:text-ink [&>svg]:size-3.5"
+              aria-label={label}
+              aria-pressed={pressed}
+              onClick={() =>
+                beginTarget(target, container.getBoundingClientRect())
+              }
             >
-              {label}
-            </span>
-          </button>,
+              <Icon icon={MESSAGE_SQUARE_ICON} />
+            </button>
+          </Tooltip>,
           host,
           target.blockId,
         );
@@ -4557,29 +4768,25 @@ export const ReviewController = () => {
         createPortal(
           block.dataset.blockKind === "data-table" ||
             block.dataset.blockKind === "table" ? (
-            <button
-              type="button"
-              className={`review-table-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 ${isStandaloneCommentHost(host) ? "text-comment-rest" : "text-muted"} hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5`}
-              aria-label="Comment on this table"
-              aria-pressed={
-                compose?.target.type === "block" &&
-                targetElement(compose.target) === block
-              }
-              onClick={() =>
-                beginTarget(
-                  targetForBlock(block),
-                  block.getBoundingClientRect(),
-                )
-              }
-            >
-              <Icon icon={MESSAGE_SQUARE_ICON} />
-              <span
-                role="tooltip"
-                className="invisible pointer-events-none absolute top-[calc(100%+0.5rem)] right-0 z-50 w-max rounded-md bg-[var(--ink-c)] px-2 py-1 text-xs text-[var(--bg)] opacity-0 group-hover:visible group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100"
+            <Tooltip label="Comment on this table" placement="below" asChild>
+              <button
+                type="button"
+                className={`review-table-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 ${isStandaloneCommentHost(host) ? "text-comment-rest" : "text-muted"} hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5`}
+                aria-label="Comment on this table"
+                aria-pressed={
+                  compose?.target.type === "block" &&
+                  targetElement(compose.target) === block
+                }
+                onClick={() =>
+                  beginTarget(
+                    targetForBlock(block),
+                    block.getBoundingClientRect(),
+                  )
+                }
               >
-                Comment on table
-              </span>
-            </button>
+                <Icon icon={MESSAGE_SQUARE_ICON} />
+              </button>
+            </Tooltip>
           ) : host.dataset.reviewToolbarHost !== undefined ? (
             <button
               type="button"
@@ -4621,31 +4828,58 @@ export const ReviewController = () => {
           block.dataset.blockId,
         ),
       )}
+      {imageHosts.map(({ block, host }) =>
+        createPortal(
+          <Tooltip label="Comment on image" placement="below" asChild>
+            <button
+              type="button"
+              className="review-image-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-comment-rest hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
+              aria-label={`Comment on ${block.dataset.blockLabel ?? "this image"}`}
+              aria-pressed={
+                compose?.target.type === "block" &&
+                targetElement(compose.target) === block
+              }
+              onClick={() =>
+                beginTarget(
+                  targetForBlock(block),
+                  block.getBoundingClientRect(),
+                )
+              }
+            >
+              <Icon icon={MESSAGE_SQUARE_ICON} />
+            </button>
+          </Tooltip>,
+          host,
+          block.dataset.blockId,
+        ),
+      )}
       {selectionControl === null ? null : (
-        <button
-          type="button"
-          className="group fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-accent bg-accent-soft px-2 py-1 text-xs text-accent shadow-raised hover:shadow-lifted focus-visible:shadow-lifted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed [&_svg]:size-3.5"
-          style={{
-            top: `${selectionControl.top}px`,
-            left: `${selectionControl.left}px`,
-          }}
-          aria-label="Comment on selected text"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            beginTarget(selectionControl.target, { top: selectionControl.top });
-            setSelectionControl(null);
-          }}
+        <Tooltip
+          label={`New comment · ${NEW_COMMENT_SHORTCUT}`}
+          placement="below"
+          asChild
+          tooltipProps={{ "data-selection-comment-tooltip": "" }}
         >
-          <Icon icon={MESSAGE_SQUARE_ICON} />
-          Comment
-          <span
-            role="tooltip"
-            data-selection-comment-tooltip=""
-            className="invisible pointer-events-none absolute top-[calc(100%+0.35rem)] left-1/2 z-50 w-max -translate-x-1/2 rounded-sm bg-[var(--ink-c)] px-2 py-1 text-2xs font-medium text-[var(--bg)] opacity-0 transition-[opacity,visibility] duration-0 group-hover:visible group-hover:opacity-100 group-hover:delay-1000 group-focus-visible:visible group-focus-visible:opacity-100 group-focus-visible:delay-1000"
+          <button
+            type="button"
+            className="group fixed z-30 inline-flex cursor-pointer items-center gap-1 rounded-full border border-accent bg-accent-soft px-2 py-1 text-xs text-accent shadow-raised hover:shadow-lifted focus-visible:shadow-lifted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:inset-shadow-pressed [&_svg]:size-3.5"
+            style={{
+              top: `${selectionControl.top}px`,
+              left: `${selectionControl.left}px`,
+            }}
+            aria-label={selectionCommentLabel(selectionControl.target)}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              beginTarget(selectionControl.target, {
+                top: selectionControl.top,
+              });
+              setSelectionControl(null);
+            }}
           >
-            New comment · {NEW_COMMENT_SHORTCUT}
-          </span>
-        </button>
+            <Icon icon={MESSAGE_SQUARE_ICON} />
+            Comment
+          </button>
+        </Tooltip>
       )}
       {feedbackHost === null
         ? null
@@ -5004,6 +5238,7 @@ export const ReviewController = () => {
             <ChatSurface
               model={{
                 hasRuntime: identity !== null,
+                identity,
                 status: agentStatus,
                 body: chatBody,
                 bodyLimit: BODY_LIMIT,
@@ -5217,6 +5452,7 @@ export const ReviewController = () => {
           inline={false}
           body={composeBody}
           submitRightAway={submitRightAway}
+          identity={identity}
           canSubmitRightAway={identity === null || canSendToAgent}
           onCancel={() => {
             setCompose(null);
@@ -5239,6 +5475,7 @@ export const ReviewController = () => {
             inline
             body={composeBody}
             submitRightAway={submitRightAway}
+            identity={identity}
             canSubmitRightAway={identity === null || canSendToAgent}
             onCancel={() => {
               setCompose(null);
