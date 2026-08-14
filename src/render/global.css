@@ -506,6 +506,11 @@ are declared, so a role or a scale step is the only thing a utility can name.
   --color-accent-soft: var(--accent-soft-c);
   --color-accent-wash: var(--accent-wash-c);
   --color-accent-ink: var(--accent-ink-c);
+  /* The three status roles are utilities, not raw custom properties, because
+     status is coded by shape and colour together at several call sites and a
+     status utility that does not exist fails silently as inherited ink. */
+  --color-success: var(--callout-tip-c);
+  --color-warning: var(--callout-warning-c);
   --color-danger: var(--callout-danger-c);
   --color-danger-ink: var(--accent-ink-c);
 
@@ -651,12 +656,11 @@ are declared, so a role or a scale step is the only thing a utility can name.
     max-width: none;
   }
 
-  /* Utility form: review-agent-active-indicator--working */
+  /* Utility form: review-agent-active-indicator--working
+     The orbit rings whatever status mark it is put on, so the mark keeps its
+     own size and this rule only establishes the ring's containing block. */
   .review-agent-active-indicator--working {
     aspect-ratio: 1;
-    flex: 0 0 0.625rem;
-    width: 0.625rem;
-    height: 0.625rem;
     position: relative;
   }
 
