@@ -127,17 +127,22 @@ export default tseslint.config(
         imports: ["**/lint/**"],
         mayImport: ["planVocabulary"],
       },
-      // React views and their never-authorable shared building blocks consume
-      // compiled models without owning static serialization.
-      ui: {
+      // Never-authorable shared React building blocks are browser-safe seams
+      // consumed by both component views and the review interaction island.
+      sharedUi: {
         files: [
           "src/components/_shared/**/*.ts",
           "src/components/_shared/**/*.tsx",
-          "src/components/*/view*.ts",
-          "src/components/*/view*.tsx",
         ],
-        imports: ["**/components/_shared/**", "**/components/*/view*.js"],
+        imports: ["**/components/_shared/**"],
         mayImport: ["model", "icons"],
+      },
+      // Component React views consume compiled models and shared visual
+      // building blocks without owning static serialization.
+      ui: {
+        files: ["src/components/*/view*.ts", "src/components/*/view*.tsx"],
+        imports: ["**/components/*/view*.js"],
+        mayImport: ["model", "icons", "sharedUi"],
       },
       components: {
         files: [
@@ -210,11 +215,12 @@ export default tseslint.config(
         blockedImportRegex: ["^\\.\\./"],
       },
       // The browser island may use only browser-owned presentation code,
-      // browser-safe review models, and framework-neutral icons.
+      // browser-safe review models, shared visual building blocks,
+      // framework-free component models, and framework-neutral icons.
       reviewBrowser: {
         files: ["src/review/browser/**/*.ts", "src/review/browser/**/*.tsx"],
         imports: ["**/review/browser/**"],
-        mayImport: ["icons", "reviewShared"],
+        mayImport: ["icons", "model", "reviewShared", "sharedUi"],
         blockedImports: ["node:*"],
         blockedImportRegex: ["^\\.\\./(?!\\.|shared/)"],
       },
@@ -245,7 +251,8 @@ export default tseslint.config(
     const TIERS = [
       ["planVocabulary", "escapeHtml", "icons", "preferences"],
       ["model", "planLint"],
-      ["page", "ui"],
+      ["page", "sharedUi"],
+      ["ui"],
       ["components"],
       ["markdown", "shell"],
       ["composer", "reviewShared"],

@@ -2482,6 +2482,8 @@ let wireFigureMaximize = () => {};
       return;
     const frame = open;
     const keyboard = openedByKeyboard;
+    event.preventDefault();
+    event.bigPlanEscapeHandled = true;
     if (!requestRestore(frame)) return;
     // Focus returns to the control the reader pressed, so Escape lands them
     // where they were rather than at the top of the document. It returns

@@ -4,6 +4,11 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  BODY_ATTRIBUTE,
+  MAXIMIZABLE_ATTRIBUTE,
+} from "../../components/_model/figure-controls/figure-controls.js";
+import { MaximizeButton } from "../../components/_shared/figure-controls/maximize-button.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
@@ -25,29 +30,6 @@ import {
   liveLensAnchor,
 } from "./live-target.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
-import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
-import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
-
-const MAXIMIZABLE_ATTRIBUTE = "data-figure-maximizable";
-const BODY_ATTRIBUTE = "data-figure-body";
-
-const DiffMaximizeButton = ({ subject }: { readonly subject: string }) => (
-  <button
-    type="button"
-    className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:bg-transparent hover:text-ink focus-visible:bg-transparent focus-visible:text-ink focus-visible:shadow-focus focus-visible:outline-none [&_svg]:size-4"
-    aria-label={`Maximize ${subject}`}
-    data-tooltip={`Maximize ${subject}`}
-    data-figure-maximize=""
-    hidden
-  >
-    <span data-lucide="maximize-2">
-      <Icon icon={MAXIMIZE_2_ICON} />
-    </span>
-    <span data-lucide="minimize-2" hidden>
-      <Icon icon={MINIMIZE_2_ICON} />
-    </span>
-  </button>
-);
 
 const placeLocations = ({
   diff,
@@ -704,17 +686,19 @@ const ComponentSnapshotComparison = ({
       for (const screen of content.querySelectorAll<HTMLElement>(
         "[data-wireframe-screen]",
       )) {
-        const selected = screen.dataset.wireframeScreen === selectedScreenId;
-        screen.hidden = !selected;
+        const selected =
+          selectedScreenId === undefined ||
+          screen.dataset.wireframeScreen === selectedScreenId;
+        screen.hidden = selectedScreenId !== undefined && !selected;
         const diff = screenDiffs.find(
           (candidate) => candidate.id === screen.dataset.wireframeScreen,
         );
-        screen.style.border =
-          selected && diff !== undefined
-            ? `10px solid ${screenStatusBorder(diff.status)}`
-            : "";
-        screen.style.borderRadius = selected ? "0.75rem" : "";
-        screen.style.padding = selected ? "1rem" : "";
+        const highlighted = selected && diff !== undefined;
+        screen.style.border = highlighted
+          ? `10px solid ${screenStatusBorder(diff.status)}`
+          : "";
+        screen.style.borderRadius = highlighted ? "0.75rem" : "";
+        screen.style.padding = highlighted ? "1rem" : "";
         const name = screen.querySelector<HTMLElement>(
           ".wireframe-screen-name",
         );
@@ -835,7 +819,7 @@ const ComponentSnapshotComparison = ({
         {...{ [MAXIMIZABLE_ATTRIBUTE]: maximizeSubject }}
       >
         <div className="mb-2 flex justify-end">
-          <DiffMaximizeButton subject={maximizeSubject} />
+          <MaximizeButton subject={maximizeSubject} size="toolbar" />
         </div>
         <div
           ref={contentRef}
@@ -1069,8 +1053,6 @@ export const DiffLensPortal = ({
           entry.element !== null,
       );
     const direct = replaced.map((entry) => entry.element);
-    const wireframeTarget =
-      anchor.element.closest<HTMLElement>("[data-wireframe]");
     const wireframeBlockIds = new Set(
       locations.flatMap((location) =>
         [location.oldBlockId, location.newBlockId].filter(
@@ -1078,34 +1060,18 @@ export const DiffLensPortal = ({
         ),
       ),
     );
-    const wireframeIds = new Set(
-      locations.flatMap((location) =>
-        [location.oldHtml, location.newHtml].flatMap((html) => {
-          if (html === undefined) return [];
-          const document = new DOMParser().parseFromString(html, "text/html");
-          return Array.from(
-            document.querySelectorAll<HTMLElement>("[data-wireframe]"),
-          )
-            .map((element) => element.dataset.wireframe)
-            .filter((id): id is string => id !== undefined);
-        }),
+    const originalWireframes = [
+      anchor.element.closest<HTMLElement>("[data-wireframe]"),
+      ...Array.from(wireframeBlockIds).map((blockId) =>
+        foundElement(liveBlock(blockId))?.closest<HTMLElement>(
+          "[data-wireframe]",
+        ),
       ),
+    ].filter(
+      (element): element is HTMLElement =>
+        element !== null && element !== undefined,
     );
-    const originalWireframes = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-wireframe]"),
-    ).filter(
-      (element) =>
-        element.closest("[data-review-diff-lens-host]") === null &&
-        (wireframeBlockIds.has(element.dataset.blockId ?? "") ||
-          wireframeIds.has(element.dataset.wireframe ?? "")),
-    );
-    const hiddenElements = [
-      ...new Set(
-        wireframeTarget === null
-          ? [...direct, ...originalWireframes]
-          : [...direct, wireframeTarget, ...originalWireframes],
-      ),
-    ];
+    const hiddenElements = [...new Set([...direct, ...originalWireframes])];
     const displayValues = hiddenElements.map(
       (element) => element.style.display,
     );

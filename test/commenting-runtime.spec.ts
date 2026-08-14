@@ -2222,6 +2222,55 @@ test("should colour a component snapshot switch as a diff", async ({
   }
 });
 
+test("should keep a root-only wireframe diff visible", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-wireframe-root-diff-"),
+  );
+  const planPath = join(directory, "wireframe.mdx");
+  const before = `# Wireframe root diff preview
+
+<Wireframe id="queue-root" title="Original queue">
+<Screen id="queue" name="Queue" device="desktop">
+<Panel title="Queue remains visible">
+<Text text="Root metadata changed without changing this screen." />
+</Panel>
+</Screen>
+</Wireframe>
+`;
+  const after = before.replace("Original queue", "Revised queue");
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const snapshot = page.locator("[data-review-component-snapshot]");
+    const currentScreen = snapshot.locator(
+      "[data-wireframe-screen][data-wireframe-current]",
+    );
+
+    await expect(snapshot).toContainText("Queue remains visible");
+    await expect(currentScreen).toBeVisible();
+    await page.getByRole("button", { name: "Was" }).click();
+    await expect(snapshot).toContainText("Queue remains visible");
+    await expect(currentScreen).toBeVisible();
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should fit a wireframe component snapshot and keep its pastel diff edge", async ({
   page,
 }) => {
@@ -2251,6 +2300,16 @@ Review the queue change in context.
 <Screen id="retired" name="Retired" device="desktop">
 <Panel title="Retired queue">
 <Text text="Legacy queue content" />
+</Panel>
+</Screen>
+</Wireframe>
+
+## Unrelated workspace
+
+<Wireframe id="queue-diff" title="Unrelated prototype">
+<Screen id="unrelated" name="Unrelated" device="desktop">
+<Panel title="Unrelated prototype remains visible">
+<Text text="This wireframe deliberately reuses the authored id." />
 </Panel>
 </Screen>
 </Wireframe>
@@ -2285,11 +2344,16 @@ Review the queue change in context.
     const isLiveWireframeVisible = async (): Promise<boolean> =>
       wireframes.evaluateAll((elements) => {
         const live = elements.find(
-          (element) => element.closest("[data-review-diff-lens-host]") === null,
+          (element) =>
+            element.closest("[data-review-diff-lens-host]") === null &&
+            element.textContent?.includes("Keep the rollback owner explicit"),
         );
         if (!(live instanceof HTMLElement)) return false;
         return getComputedStyle(live).display !== "none";
       });
+    const unrelatedWireframe = wireframes.filter({
+      hasText: "Unrelated prototype remains visible",
+    });
     await expect.poll(isLiveWireframeVisible).toBe(true);
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
     const rail = page.getByRole("complementary", { name: "Feedback" });
@@ -2306,6 +2370,7 @@ Review the queue change in context.
       name: "Prototype screens",
     });
     await expect.poll(isLiveWireframeVisible).toBe(false);
+    await expect(unrelatedWireframe).toBeVisible();
     await expect(snapshot).toHaveAttribute(
       "data-review-component-snapshot",
       "new",
@@ -2347,6 +2412,12 @@ Review the queue change in context.
     await expect(
       snapshot.getByRole("button", { name: "Restore wireframe diff size" }),
     ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
+    await expect(componentDiff).toHaveCount(1);
+    await snapshot
+      .getByRole("button", { name: "Maximize wireframe diff" })
+      .click();
     await snapshot
       .getByRole("button", { name: "Restore wireframe diff size" })
       .click();
