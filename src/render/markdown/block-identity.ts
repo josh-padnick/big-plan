@@ -34,7 +34,8 @@ import { COMPONENT_NAME_ATTRIBUTE } from "./component-pipeline/component-name.js
 // import nothing - keep this in sync with src/review/shared/review-wire.ts.
 export type BlockPresentation =
   | { readonly aspect: "callout"; readonly calloutType: CalloutType }
-  | { readonly aspect: "list"; readonly isOrdered: boolean };
+  | { readonly aspect: "list"; readonly isOrdered: boolean }
+  | { readonly aspect: "wireframe"; readonly currentScreenId: string };
 
 /** The document-order block descriptors one compile produced. */
 export type BlockDescriptor = {
@@ -434,11 +435,10 @@ const stampCodeLines = (node: Element): void => {
   });
 };
 
-// Reads the meaning-bearing presentation facts off the stamped element. The
-// callout view's data-callout attribute is its authored type contract, and a
-// value outside that contract records nothing: an unknown fact must replay
-// neutrally, never as a guessed "note". A dl also carries no fact, because a
-// definition list makes neither an ordered nor an unordered claim.
+// Reads the meaning-bearing presentation facts off the stamped element.
+// Component attributes record authored presentation only when they change
+// meaning: callout type, list ordering, and the wireframe screen presented
+// first. Unknown facts replay neutrally instead of being guessed.
 const presentationOf = ({
   node,
   kind,
@@ -455,6 +455,17 @@ const presentationOf = ({
   }
   if (kind === "list" && (node.tagName === "ol" || node.tagName === "ul")) {
     return { aspect: "list", isOrdered: node.tagName === "ol" };
+  }
+  if (kind === "wireframe") {
+    const currentScreen = findDescendant({
+      node,
+      match: (candidate) =>
+        candidate.properties["data-wireframe-current"] !== undefined,
+    });
+    const currentScreenId = currentScreen?.properties["data-wireframe-screen"];
+    if (typeof currentScreenId === "string" && currentScreenId !== "") {
+      return { aspect: "wireframe", currentScreenId };
+    }
   }
   return undefined;
 };

@@ -86,9 +86,10 @@ export type DiffRun = {
 
 // The meaning-bearing presentation facts the renderer stamped for one block,
 // carried per diff side so the lens replays each side from its own snapshot
-// instead of sniffing the live document. Only a fact that changes what the
-// plan asserts belongs here - a callout's type and a list's ordering; styling
-// and other reproducible presentation must never join this contract.
+// instead of sniffing the live document. Only a fact that changes what the plan
+// asserts belongs here - a callout's type, a list's ordering, or a wireframe's
+// initial screen. Styling and other reproducible presentation must never join
+// this contract.
 // Mirrored by hand across the reviewShared tier boundary; reviewShared may
 // import nothing - keep this in sync with src/render/markdown/block-identity.ts.
 export type BlockPresentation =
@@ -96,7 +97,8 @@ export type BlockPresentation =
       readonly aspect: "callout";
       readonly calloutType: "note" | "tip" | "warning" | "danger";
     }
-  | { readonly aspect: "list"; readonly isOrdered: boolean };
+  | { readonly aspect: "list"; readonly isOrdered: boolean }
+  | { readonly aspect: "wireframe"; readonly currentScreenId: string };
 
 export type DiffLocation = {
   readonly status: "changed" | "added" | "removed";
@@ -486,6 +488,16 @@ const decodeBlockPresentation = (
   }
   if (value.aspect === "list" && typeof value.isOrdered === "boolean") {
     return { aspect: "list", isOrdered: value.isOrdered };
+  }
+  if (
+    value.aspect === "wireframe" &&
+    typeof value.currentScreenId === "string" &&
+    value.currentScreenId !== ""
+  ) {
+    return {
+      aspect: "wireframe",
+      currentScreenId: value.currentScreenId,
+    };
   }
   return undefined;
 };

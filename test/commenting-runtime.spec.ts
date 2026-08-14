@@ -1825,10 +1825,10 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await rail.getByRole("button", { name: "Review change" }).click();
     const historicalChange = page
       .locator("main")
-      .getByRole("region", { name: "Historical change", exact: true });
+      .getByRole("region", { name: "Updated", exact: true });
     await expect(historicalChange).toContainText("Retired experiment");
     await expect(
-      rail.getByRole("region", { name: "Historical change", exact: true }),
+      rail.getByRole("region", { name: "Updated", exact: true }),
     ).toHaveCount(0);
     await page.screenshot({
       path: testInfo.outputPath("historical-change.png"),
@@ -2177,6 +2177,13 @@ test("should colour a component snapshot switch as a diff", async ({
     const now = componentDiff.getByRole("button", { name: "Now" });
     const was = componentDiff.getByRole("button", { name: "Was" });
 
+    await expect(
+      snapshot.getByRole("button", { name: "Maximize component diff" }),
+    ).toBeVisible();
+    await expect(
+      snapshot.getByRole("button", { name: "Maximize wireframe diff" }),
+    ).toHaveCount(0);
+
     await expect(snapshot).toHaveAttribute(
       "data-review-component-snapshot",
       "new",
@@ -2185,7 +2192,10 @@ test("should colour a component snapshot switch as a diff", async ({
       background: getComputedStyle(node).backgroundColor,
       color: getComputedStyle(node).color,
     }));
-    await expect(snapshot).toHaveCSS("border-top-color", added.color);
+    const addedBorder = await snapshot.evaluate(
+      (node) => getComputedStyle(node).borderTopColor,
+    );
+    expect(addedBorder).not.toBe(added.color);
 
     await was.click();
     await expect(snapshot).toHaveAttribute(
@@ -2196,12 +2206,466 @@ test("should colour a component snapshot switch as a diff", async ({
       background: getComputedStyle(node).backgroundColor,
       color: getComputedStyle(node).color,
     }));
-    await expect(snapshot).toHaveCSS("border-top-color", removed.color);
+    const removedBorder = await snapshot.evaluate(
+      (node) => getComputedStyle(node).borderTopColor,
+    );
+    expect(removedBorder).not.toBe(removed.color);
 
     // The two sides must not merely differ from the resting chrome; they must
     // differ from each other, which is what makes the switch read as a diff.
     expect(removed.color).not.toBe(added.color);
     expect(removed.background).not.toBe(added.background);
+    expect(removedBorder).not.toBe(addedBorder);
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should show each initial screen when another wireframe screen changes", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-wireframe-root-diff-"),
+  );
+  const planPath = join(directory, "wireframe.mdx");
+  const before = `# Wireframe root diff preview
+
+<Wireframe id="queue-root" title="Review queue" initialScreen="queue">
+<Screen id="queue" name="Queue" device="desktop">
+<Panel title="Queue screen">
+<Text text="The old initial screen remains visible in Was." />
+</Panel>
+</Screen>
+<Screen id="detail" name="Detail" device="desktop">
+<Panel title="Detail screen">
+<Text text="The new initial screen remains visible in Now." />
+</Panel>
+</Screen>
+<Screen id="audit" name="Audit" device="desktop">
+<Panel title="Audit screen">
+<Text text="Audit before" />
+</Panel>
+</Screen>
+</Wireframe>
+`;
+  const after = before
+    .replace('initialScreen="queue"', 'initialScreen="detail"')
+    .replace("Audit before", "Audit after");
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const screenNavigation = page.getByRole("navigation", {
+      name: "Prototype screens",
+    });
+    await expect(
+      screenNavigation.getByRole("button", {
+        name: "Queue → Detail Initial screen",
+      }),
+    ).toBeVisible();
+    const snapshot = page.locator("[data-review-component-snapshot]");
+    const queueScreen = snapshot.locator('[data-wireframe-screen="queue"]');
+    const detailScreen = snapshot.locator('[data-wireframe-screen="detail"]');
+    await expect(detailScreen).toBeVisible();
+    await expect(queueScreen).toBeHidden();
+    await page.getByRole("button", { name: "Was" }).click();
+    await expect(queueScreen).toBeVisible();
+    await expect(detailScreen).toBeHidden();
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should keep a surviving wireframe visible beside a removed snapshot", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-wireframe-removal-diff-"),
+  );
+  const planPath = join(directory, "wireframe.mdx");
+  const removedWireframe = `<Wireframe id="removed" title="Removed prototype">
+<Screen id="removed-screen" name="Removed" device="desktop">
+<Panel title="Removed prototype content">
+<Text text="This snapshot belongs only in Was." />
+</Panel>
+</Screen>
+</Wireframe>`;
+  const survivingWireframe = `<Wireframe id="survivor" title="Surviving prototype">
+<Screen id="surviving-screen" name="Surviving" device="desktop">
+<Panel title="Surviving prototype content">
+<Text text="This live wireframe must remain beside the lens." />
+</Panel>
+</Screen>
+</Wireframe>`;
+  const before = `# Wireframe removal diff
+
+${removedWireframe}
+
+${survivingWireframe}
+`;
+  const after = `# Wireframe removal diff
+
+${survivingWireframe}
+`;
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    const survivor = page.locator('article [data-wireframe="survivor"]');
+    await expect(survivor).toBeVisible();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+
+    await expect(
+      page.locator("[data-review-component-snapshot]"),
+    ).toContainText("This snapshot belongs only in Was.");
+    await expect(survivor).toBeVisible();
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should fit a wireframe component snapshot and keep its pastel diff edge", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-wireframe-diff-"));
+  const planPath = join(directory, "wireframe.mdx");
+  const overflowItems = Array.from(
+    { length: 40 },
+    (_, index) => `<ListItem label="Queue item ${index + 1}" />`,
+  ).join("\n");
+  const triageScreen = `<Screen id="triage" name="Triage" device="desktop">
+<Panel title="Triage queue">
+<Text text="Unchanged triage content" />
+</Panel>
+</Screen>`;
+  const archiveScreen = `<Screen id="archive" name="Archive" device="desktop">
+<Panel title="Archive queue">
+<Text text="Unchanged archive content" />
+</Panel>
+</Screen>`;
+  const changedWorkspace = `<Wireframe id="queue-diff" title="Review queue">
+<Screen id="queue" name="Queue" device="desktop">
+<AppShell>
+<Sidebar brand="Big Plan" mode="Review" />
+<AppContent>
+<PageHeader title="Plan review" />
+<Select label="Queue view" value="All threads" />
+<Checkbox label="Include resolved threads" checked />
+<Panel title="Threads">
+<List>
+<ListItem label="Keep the retry budget visible" selected />
+${overflowItems}
+</List>
+</Panel>
+</AppContent>
+</AppShell>
+</Screen>
+<Screen id="retired" name="Retired" device="desktop">
+<Panel title="Retired queue">
+<Text text="Legacy queue content" />
+</Panel>
+</Screen>
+${triageScreen}
+${archiveScreen}
+</Wireframe>`;
+  const unrelatedWorkspace = `<Wireframe id="queue-diff" title="Unrelated prototype">
+<Screen id="unrelated" name="Unrelated" device="desktop">
+<Panel title="Unrelated prototype remains visible">
+<Text text="This wireframe deliberately reuses the authored id." />
+</Panel>
+</Screen>
+</Wireframe>`;
+  const before = `# Wireframe diff preview
+
+Review the queue change in context.
+
+## Workspace
+
+${changedWorkspace}
+
+${unrelatedWorkspace}
+`;
+  const revisedWorkspace = changedWorkspace
+    .replace(
+      "Keep the retry budget visible",
+      "Keep the rollback owner explicit",
+    )
+    .replace(
+      `<Screen id="retired" name="Retired" device="desktop">
+<Panel title="Retired queue">
+<Text text="Legacy queue content" />
+</Panel>
+</Screen>`,
+      `<Screen id="escalations" name="Escalations" device="desktop">
+<Panel title="Escalation queue">
+<Text text="New escalation queue content" />
+</Panel>
+</Screen>`,
+    );
+  const reorderedWorkspace = revisedWorkspace.replace(
+    `${triageScreen}\n${archiveScreen}`,
+    `${archiveScreen}\n${triageScreen}`,
+  );
+  const after = `# Wireframe diff preview
+
+Review the queue change in context.
+
+## Workspace
+
+${unrelatedWorkspace}
+
+${reorderedWorkspace}
+`;
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  const wireframes = page.locator('article [data-wireframe="queue-diff"]');
+  const isLiveWireframeVisible = async (): Promise<boolean> =>
+    wireframes.evaluateAll((elements) => {
+      const live = elements.find(
+        (element) =>
+          element.closest("[data-review-diff-lens-host]") === null &&
+          element.textContent?.includes("Keep the rollback owner explicit"),
+      );
+      if (!(live instanceof HTMLElement)) return false;
+      return getComputedStyle(live).display !== "none";
+    });
+  const unrelatedWireframe = wireframes.filter({
+    hasText: "Unrelated prototype remains visible",
+  });
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const componentDiff = page.locator("[data-review-component-diff]");
+  const snapshot = componentDiff.locator("[data-review-component-snapshot]");
+  const now = componentDiff.getByRole("button", { name: "Now" });
+  const was = componentDiff.getByRole("button", { name: "Was" });
+  const screenNavigation = componentDiff.getByRole("navigation", {
+    name: "Prototype screens",
+  });
+  const maximize = snapshot.getByRole("button", {
+    name: "Maximize wireframe diff",
+  });
+  const snapshotBody = snapshot.locator(":scope > [data-figure-body]");
+  try {
+    await test.step("open the changed wireframe without hiding its duplicate", async () => {
+      await page.goto(runtime.url);
+      await expect.poll(isLiveWireframeVisible).toBe(true);
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      await rail
+        .getByRole("button", { name: /Expand thread:/u })
+        .first()
+        .click();
+      await rail.getByRole("button", { name: "Review change" }).click();
+      await expect.poll(isLiveWireframeVisible).toBe(false);
+      await expect(unrelatedWireframe).toBeVisible();
+      await expect(snapshot).toHaveAttribute(
+        "data-review-component-snapshot",
+        "new",
+      );
+      await expect(
+        screenNavigation.getByRole("button", {
+          name: "Archive Moved 4 → 3",
+        }),
+      ).toBeVisible();
+      await expect(
+        screenNavigation.getByRole("button", {
+          name: "Triage Moved 3 → 4",
+        }),
+      ).toBeVisible();
+    });
+
+    await test.step("keep every diff control touchable on a narrow screen", async () => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      const touchTargets = [
+        {
+          name: "prototype screen",
+          locator: screenNavigation.getByRole("button").first(),
+        },
+        { name: "Was", locator: was },
+        { name: "Now", locator: now },
+        { name: "maximize", locator: maximize },
+      ];
+      for (const target of touchTargets) {
+        const box = await target.locator.boundingBox();
+        if (box === null) {
+          throw new Error(`${target.name} touch target must be measurable`);
+        }
+        expect(
+          box.width,
+          `${target.name} touch target width`,
+        ).toBeGreaterThanOrEqual(44);
+        expect(
+          box.height,
+          `${target.name} touch target height`,
+        ).toBeGreaterThanOrEqual(44);
+      }
+      await page.setViewportSize({ width: 1600, height: 1000 });
+    });
+
+    await test.step("navigate added and removed prototype screens", async () => {
+      await screenNavigation
+        .getByRole("button", { name: "Escalations Added" })
+        .click();
+      await expect(was).toBeDisabled();
+      await expect(now).toBeEnabled();
+      await expect(now).toHaveAttribute("aria-pressed", "true");
+      await expect(snapshot).toContainText("New escalation queue content");
+      await expect(snapshot).not.toContainText("Legacy queue content");
+
+      await screenNavigation
+        .getByRole("button", { name: "Retired Removed" })
+        .click();
+      await expect(now).toBeDisabled();
+      await expect(was).toBeEnabled();
+      await expect(was).toHaveAttribute("aria-pressed", "true");
+      await expect(snapshot).toHaveAttribute(
+        "data-review-component-snapshot",
+        "old",
+      );
+      await expect(snapshot).toContainText("Legacy queue content");
+      await expect(snapshot).not.toContainText("New escalation queue content");
+    });
+
+    await test.step("maximize an accessible scrollable snapshot", async () => {
+      await screenNavigation
+        .getByRole("button", { name: "Queue Updated" })
+        .click();
+      await now.click();
+      await expect(snapshot).toHaveCSS("border-top-width", "10px");
+      await expect(maximize).toBeVisible();
+      await page.setViewportSize({ width: 1600, height: 600 });
+      await maximize.click();
+      await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
+      await expect(snapshotBody).toHaveAttribute("tabindex", "0");
+      expect(await snapshotBody.evaluate((node) => node.inert)).toBe(false);
+      await expect(snapshotBody).toHaveCSS("pointer-events", "auto");
+      const embeddedControl = snapshotBody.locator("button").first();
+      await expect(embeddedControl).toHaveAttribute("tabindex", "-1");
+      await expect(embeddedControl).toHaveAttribute("aria-disabled", "true");
+      expect(
+        await snapshotBody.getByLabel("Queue view").evaluate((control) => {
+          return control instanceof HTMLSelectElement && control.disabled;
+        }),
+      ).toBe(true);
+      expect(
+        await snapshotBody
+          .getByLabel("Include resolved threads")
+          .evaluate((control) => {
+            return control instanceof HTMLInputElement && control.disabled;
+          }),
+      ).toBe(true);
+      await expect
+        .poll(() =>
+          snapshotBody.evaluate(
+            (node) => node.scrollHeight > node.clientHeight,
+          ),
+        )
+        .toBe(true);
+      const snapshotBodyBox = await snapshotBody.boundingBox();
+      if (snapshotBodyBox === null) {
+        throw new Error("The maximized snapshot body must be measurable");
+      }
+      await page.mouse.move(
+        snapshotBodyBox.x + snapshotBodyBox.width / 2,
+        snapshotBodyBox.y + snapshotBodyBox.height / 2,
+      );
+      await page.mouse.wheel(0, 400);
+      await expect
+        .poll(() => snapshotBody.evaluate((node) => node.scrollTop))
+        .toBeGreaterThan(0);
+      await snapshotBody.evaluate((node) => {
+        node.scrollTop = 0;
+      });
+      await snapshotBody.focus();
+      const initialScrollTop = await snapshotBody.evaluate(
+        (node) => node.scrollTop,
+      );
+      await page.keyboard.press("PageDown");
+      await expect
+        .poll(() => snapshotBody.evaluate((node) => node.scrollTop))
+        .toBeGreaterThan(initialScrollTop);
+      await expect(
+        snapshot.getByRole("button", { name: "Restore wireframe diff size" }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
+      await expect(componentDiff).toHaveCount(1);
+      await maximize.click();
+      await snapshot
+        .getByRole("button", { name: "Restore wireframe diff size" })
+        .click();
+      await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
+    });
+
+    await test.step("preserve fitted pastel framing across sides and themes", async () => {
+      const geometry = await snapshot.evaluate((node) => {
+        const frame = node.querySelector<HTMLElement>(".wireframe-frame");
+        const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
+        if (frame === null || card === null) return null;
+        return {
+          frameRight: frame.getBoundingClientRect().right,
+          cardRight: card.getBoundingClientRect().right,
+          scrollWidth: node.scrollWidth,
+          clientWidth: node.clientWidth,
+        };
+      });
+      expect(geometry).not.toBeNull();
+      expect(geometry?.frameRight).toBeLessThanOrEqual(
+        (geometry?.cardRight ?? 0) + 0.5,
+      );
+      expect(geometry?.scrollWidth).toBe(geometry?.clientWidth);
+
+      await was.click();
+      await expect(snapshot).toHaveAttribute(
+        "data-review-component-snapshot",
+        "old",
+      );
+      await expect(snapshot).toHaveCSS("border-top-width", "10px");
+      await page.evaluate(() => {
+        document.documentElement.setAttribute("data-theme", "dark");
+      });
+      await expect(snapshot).toHaveCSS("border-top-width", "10px");
+      expect(
+        await snapshot.evaluate(
+          (node) => node.scrollWidth === node.clientWidth,
+        ),
+      ).toBe(true);
+      await rail.getByRole("button", { name: "Exit review" }).click();
+      await expect(componentDiff).toHaveCount(0);
+      await expect.poll(isLiveWireframeVisible).toBe(true);
+    });
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
@@ -2957,7 +3421,7 @@ Reviewers confirm the output by hand.
       const archive = page.locator("[data-review-historical-changes]");
       await expect(archive).toHaveCount(1);
       const lens = archive.locator("[data-review-diff-lens]");
-      await expect(lens).toContainText("Historical change");
+      await expect(lens).toContainText("Updated");
       await expect(lens).toContainText("checks before merge");
       await expect(lens.locator("ins")).toContainText("automated");
       // Every lens host must be the archive's own; none may sit beside the
@@ -2988,6 +3452,214 @@ Reviewers confirm the output by hand.
         isOutsideSlides: true,
       });
     });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("should maximize a historical component when the current plan has no slides", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-historical-component-"),
+  );
+  const planPath = join(directory, "plan.mdx");
+  const initialSource = `# Historical component plan
+
+<Slide type="desired-experience" />
+
+## Prototype
+
+<Wireframe id="historical" title="Historical prototype">
+<Screen id="queue" name="Queue" device="desktop">
+<Panel title="Manual queue">
+<Text text="Review the queue manually." />
+</Panel>
+</Screen>
+</Wireframe>
+`;
+  const revisedSource = initialSource
+    .replace("Manual queue", "Automated queue")
+    .replace("Review the queue manually.", "Review the queue automatically.");
+  const latestSource = `# Historical component plan
+
+The current plan contains no slides.
+`;
+  await writeFile(planPath, initialSource, "utf8");
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const { renderDocument: renderCompiledDocument } =
+    await import("../dist/render/render-document.js");
+  const runtime = await startCompiledReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await stageComment(page, "Automate the prototype queue.");
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+    await rail.getByRole("button", { name: "Close feedback" }).click();
+
+    const session: unknown = await page.evaluate(async () => {
+      const root = document.documentElement;
+      const response = await fetch("/api/session", {
+        headers: {
+          "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+        },
+      });
+      return response.json();
+    });
+    if (
+      typeof session !== "object" ||
+      session === null ||
+      !("sessionId" in session) ||
+      !("planId" in session) ||
+      !("plan" in session) ||
+      typeof session.sessionId !== "string" ||
+      typeof session.planId !== "string" ||
+      typeof session.plan !== "string"
+    ) {
+      throw new Error("The historical component journey requires a session");
+    }
+    const store = reviewStoreFor({
+      planPath: session.plan,
+      planId: session.planId,
+    });
+    const exchange = await readAgentExchange({
+      store,
+      sessionId: session.sessionId,
+      planId: session.planId,
+    });
+    const request = nextPendingAgentRequest(exchange);
+    if (request === undefined || request.kind !== "feedback") {
+      throw new Error("Sending did not create component feedback work");
+    }
+    const initialBlocks = renderCompiledDocument({
+      markdown: initialSource,
+      fallbackTitle: "Historical component plan",
+      identity: {},
+    }).blocks;
+    const revisedBlocks = renderCompiledDocument({
+      markdown: revisedSource,
+      fallbackTitle: "Historical component plan",
+      identity: {},
+    }).blocks;
+    const changedBlockId = diffSnapshots({
+      before: initialBlocks,
+      after: revisedBlocks,
+    }).find(
+      (location) =>
+        location.status === "changed" && location.kind === "wireframe",
+    )?.newBlockId;
+    if (changedBlockId === undefined) {
+      throw new Error("The simulated revision produced no wireframe change");
+    }
+    const revisedSnapshot = deriveSnapshotDigest(revisedSource);
+    const latestSnapshot = deriveSnapshotDigest(latestSource);
+    await writeSnapshot({
+      store,
+      snapshot: revisedSnapshot,
+      source: revisedSource,
+    });
+    await writeSnapshot({
+      store,
+      snapshot: latestSnapshot,
+      source: latestSource,
+    });
+    const answeredAt = new Date().toISOString();
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: answeredAt,
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: request.comments.map((comment) => ({
+            commentId: comment.id,
+            state: "changed",
+            message: "Automated the prototype queue.",
+            changeTargets: [changedBlockId],
+          })),
+        },
+        request: claimed,
+        commentsById: commentsFromExchange(exchange),
+        changedBlocks: new Set([changedBlockId]),
+        currentSnapshot: revisedSnapshot,
+        now: answeredAt,
+      }),
+    });
+    await writeFile(session.plan, latestSource, "utf8");
+    const revisedAgainAt = new Date(Date.parse(answeredAt) + 1).toISOString();
+    const followUp = messageAgentRequest({
+      kind: "chat",
+      requestId: randomBytes(8).toString("hex"),
+      sessionId: session.sessionId,
+      planId: session.planId,
+      premiseSnapshot: revisedSnapshot,
+      createdAt: revisedAgainAt,
+      body: "Remove the historical prototype.",
+    });
+    await writeAgentRequest({ store, request: followUp });
+    const claimedFollowUp = await claimAgentRequest({
+      store,
+      requestId: followUp.requestId,
+      baselineSnapshot: revisedSnapshot,
+      now: revisedAgainAt,
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: followUp.requestId,
+          message: "The current plan no longer contains the prototype.",
+        },
+        request: claimedFollowUp,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: latestSnapshot,
+        now: revisedAgainAt,
+      }),
+    });
+
+    await expect(page.locator("article")).toContainText(
+      "The current plan contains no slides.",
+      { timeout: 15_000 },
+    );
+    await expect(page.locator("article [data-slide]")).toHaveCount(0);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review change" }).click();
+    const archive = page.locator("[data-review-historical-changes]");
+    const snapshot = archive.locator("[data-review-component-snapshot]");
+    await expect(archive).toHaveCount(1);
+    await expect(snapshot).toContainText("Automated queue");
+    expect(
+      await archive.evaluate((element) => element.closest("article") !== null),
+    ).toBe(true);
+    await snapshot
+      .getByRole("button", { name: "Maximize wireframe diff" })
+      .click();
+    await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
+    await expect(snapshot).toHaveCSS("position", "fixed");
+    await snapshot
+      .getByRole("button", { name: "Restore wireframe diff size" })
+      .click();
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

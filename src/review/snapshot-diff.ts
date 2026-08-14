@@ -259,16 +259,20 @@ const textSimilarity = (left: string, right: string): number => {
 const samePresentation = (
   left: SnapshotBlock["presentation"],
   right: SnapshotBlock["presentation"],
-): boolean =>
-  left === undefined || right === undefined
-    ? left === right
-    : left.aspect !== right.aspect
-      ? false
-      : left.aspect === "callout" && right.aspect === "callout"
-        ? left.calloutType === right.calloutType
-        : left.aspect === "list" && right.aspect === "list"
-          ? left.isOrdered === right.isOrdered
-          : true;
+): boolean => {
+  if (left === undefined || right === undefined) return left === right;
+  if (left.aspect !== right.aspect) return false;
+  if (left.aspect === "callout" && right.aspect === "callout") {
+    return left.calloutType === right.calloutType;
+  }
+  if (left.aspect === "list" && right.aspect === "list") {
+    return left.isOrdered === right.isOrdered;
+  }
+  if (left.aspect === "wireframe" && right.aspect === "wireframe") {
+    return left.currentScreenId === right.currentScreenId;
+  }
+  return false;
+};
 
 const pairScore = ({
   oldBlock,

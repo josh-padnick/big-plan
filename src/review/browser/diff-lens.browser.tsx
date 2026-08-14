@@ -3,7 +3,19 @@
 // ownership of plan content.
 
 import { createPortal } from "react-dom";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
+import {
+  BODY_ATTRIBUTE,
+  MAXIMIZABLE_ATTRIBUTE,
+} from "../../components/_model/figure-controls/figure-controls.js";
+import { MaximizeButton } from "../../components/_shared/figure-controls/maximize-button.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
@@ -21,10 +33,18 @@ import { Icon } from "./icon.browser.js";
 import {
   foundElement,
   LENS_STAND_IN_ATTRIBUTE,
+  liveArticle,
   liveBlock,
   liveLensAnchor,
 } from "./live-target.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
+import {
+  compareWireframeScreens,
+  wireframeScreenIdForSide,
+  wireframeScreenStatusLabel,
+  type WireframeScreenDiff,
+  type WireframeScreenSnapshot,
+} from "./wireframe-screen-diff.js";
 
 const placeLocations = ({
   diff,
@@ -534,59 +554,320 @@ const SnapshotSideContent = ({
   });
 };
 
+const wireframeScreenMarkup = (
+  html: string | undefined,
+): Map<string, WireframeScreenSnapshot> => {
+  const screens = new Map<string, WireframeScreenSnapshot>();
+  if (html === undefined) return screens;
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const renderedScreens = document.querySelectorAll<HTMLElement>(
+    "[data-wireframe-screen]",
+  );
+  for (const [index, screen] of [...renderedScreens].entries()) {
+    const id = screen.dataset.wireframeScreen;
+    if (id === undefined) continue;
+    const name = (
+      screen.querySelector<HTMLElement>(".wireframe-screen-name")
+        ?.textContent ??
+      screen.getAttribute("aria-label")?.split(",")[0] ??
+      id
+    ).trim();
+    const isCurrent = screen.hasAttribute("data-wireframe-current");
+    screen.removeAttribute("data-wireframe-current");
+    screens.set(id, {
+      id,
+      isCurrent,
+      markup: screen.outerHTML,
+      name,
+      position: index + 1,
+    });
+  }
+  return screens;
+};
+
+const screenStatusClasses = (status: WireframeScreenDiff["status"]): string => {
+  if (status === "added") {
+    return "bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]";
+  }
+  if (status === "removed") {
+    return "bg-[var(--diff-remove-bg)] text-[var(--diff-remove-c)]";
+  }
+  return "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,var(--callout-warning-bg))] text-[var(--callout-warning-c)]";
+};
+
+const screenStatusBorder = (status: WireframeScreenDiff["status"]): string => {
+  if (status === "added") {
+    return "color-mix(in srgb, var(--diff-add-c) 30%, var(--diff-add-bg))";
+  }
+  if (status === "removed") {
+    return "color-mix(in srgb, var(--diff-remove-c) 30%, var(--diff-remove-bg))";
+  }
+  return "color-mix(in srgb, var(--callout-warning-c) 30%, var(--callout-warning-bg))";
+};
+
+const SNAPSHOT_CONTROL_SELECTOR =
+  'a[href], button, input, select, summary, textarea, [contenteditable]:not([contenteditable="false"]), [data-wireframe-navigate], [role="button"], [tabindex]';
+
+const sanitizeRenderedSnapshot = (html: string | undefined): string => {
+  if (html === undefined) return "";
+  const document = new DOMParser().parseFromString(html, "text/html");
+  for (const control of document.querySelectorAll<HTMLElement>(
+    SNAPSHOT_CONTROL_SELECTOR,
+  )) {
+    control.tabIndex = -1;
+    control.setAttribute("aria-disabled", "true");
+    control.removeAttribute("contenteditable");
+    if (
+      control instanceof HTMLButtonElement ||
+      control instanceof HTMLInputElement ||
+      control instanceof HTMLSelectElement ||
+      control instanceof HTMLTextAreaElement
+    ) {
+      control.disabled = true;
+    } else if (control instanceof HTMLAnchorElement) {
+      control.removeAttribute("href");
+    } else {
+      control.inert = true;
+    }
+  }
+  return document.body.innerHTML;
+};
+
+const preventSnapshotControlClick = (
+  event: ReactMouseEvent<HTMLDivElement>,
+): void => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const control = target.closest(`${SNAPSHOT_CONTROL_SELECTOR}, label`);
+  if (control === null || !event.currentTarget.contains(control)) return;
+  event.preventDefault();
+  event.stopPropagation();
+};
+
 const ComponentSnapshotComparison = ({
   location,
 }: {
   readonly location: DiffLocation;
 }) => {
   const initialSide = location.newHtml === undefined ? "old" : "new";
+  const screenDiffs = useMemo(
+    () =>
+      compareWireframeScreens({
+        oldScreens: wireframeScreenMarkup(location.oldHtml),
+        newScreens: wireframeScreenMarkup(location.newHtml),
+      }),
+    [location.oldHtml, location.newHtml],
+  );
   const [side, setSide] = useState<"old" | "new">(initialSide);
-  useEffect(() => setSide(initialSide), [initialSide, location]);
-  const html = side === "old" ? location.oldHtml : location.newHtml;
+  const [selectedScreenKey, setSelectedScreenKey] = useState(
+    screenDiffs[0]?.key,
+  );
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    setSide(initialSide);
+    setSelectedScreenKey(screenDiffs[0]?.key);
+  }, [initialSide, location.oldHtml, location.newHtml, screenDiffs]);
+  const selectedScreen = screenDiffs.find(
+    (screen) => screen.key === selectedScreenKey,
+  );
+  const canShowOld =
+    location.oldHtml !== undefined &&
+    (selectedScreen === undefined ||
+      wireframeScreenIdForSide(selectedScreen, "old") !== undefined);
+  const canShowNew =
+    location.newHtml !== undefined &&
+    (selectedScreen === undefined ||
+      wireframeScreenIdForSide(selectedScreen, "new") !== undefined);
+  const renderedSide =
+    (side === "old" && canShowOld) || !canShowNew ? "old" : "new";
+  const renderedHtml =
+    renderedSide === "old" ? location.oldHtml : location.newHtml;
+  const sanitizedRenderedHtml = useMemo(
+    () => sanitizeRenderedSnapshot(renderedHtml),
+    [renderedHtml],
+  );
+  const renderedPresentation = sidePresentation(location, renderedSide);
+  const visibleScreenId =
+    selectedScreen === undefined
+      ? renderedPresentation?.aspect === "wireframe"
+        ? renderedPresentation.currentScreenId
+        : undefined
+      : wireframeScreenIdForSide(selectedScreen, renderedSide);
+  const isWireframe = useMemo(
+    () =>
+      wireframeScreenMarkup(location.oldHtml).size > 0 ||
+      wireframeScreenMarkup(location.newHtml).size > 0,
+    [location.newHtml, location.oldHtml],
+  );
+  const maximizeSubject = isWireframe ? "wireframe diff" : "component diff";
+  useEffect(() => {
+    const content = contentRef.current;
+    if (content === null) return;
+    const fitWireframes = (): void => {
+      for (const card of content.querySelectorAll<HTMLElement>(
+        ".wireframe-frame-card",
+      )) {
+        const frame = card.querySelector<HTMLElement>(
+          ":scope > .wireframe-frame",
+        );
+        if (frame === null || card.clientWidth === 0) continue;
+        frame.style.zoom = "1";
+        const cardStyle = getComputedStyle(card);
+        const availableWidth =
+          card.clientWidth -
+          Number.parseFloat(cardStyle.paddingLeft) -
+          Number.parseFloat(cardStyle.paddingRight);
+        frame.style.zoom = String(
+          Math.min(1, availableWidth / frame.offsetWidth),
+        );
+      }
+      for (const screen of content.querySelectorAll<HTMLElement>(
+        "[data-wireframe-screen]",
+      )) {
+        const selected =
+          visibleScreenId === undefined ||
+          screen.dataset.wireframeScreen === visibleScreenId;
+        screen.hidden = visibleScreenId !== undefined && !selected;
+        const diff = selected ? selectedScreen : undefined;
+        const highlighted = diff !== undefined;
+        screen.style.border = highlighted
+          ? `10px solid ${screenStatusBorder(diff.status)}`
+          : "";
+        screen.style.borderRadius = highlighted ? "0.75rem" : "";
+        screen.style.padding = highlighted ? "1rem" : "";
+        const name = screen.querySelector<HTMLElement>(
+          ".wireframe-screen-name",
+        );
+        if (name !== null && diff?.status === "removed") {
+          name.style.textDecoration = "line-through";
+          name.style.textDecorationThickness = "2px";
+          name.style.textDecorationColor = "var(--diff-remove-c)";
+        }
+      }
+    };
+    fitWireframes();
+    // The diff edge changes the available width. Refit once after applying
+    // it so the desktop frame stays fully inside its card.
+    fitWireframes();
+    const observer = new ResizeObserver(fitWireframes);
+    observer.observe(content);
+    for (const element of content.querySelectorAll<HTMLElement>(
+      ".wireframe-frame-card, [data-wireframe-screen]",
+    )) {
+      observer.observe(element);
+    }
+    const maximizable = content.closest<HTMLElement>(
+      "[data-figure-maximizable]",
+    );
+    maximizable?.addEventListener("figure-restored", fitWireframes);
+    requestAnimationFrame(fitWireframes);
+    return () => {
+      maximizable?.removeEventListener("figure-restored", fitWireframes);
+      observer.disconnect();
+    };
+  }, [renderedHtml, selectedScreen, visibleScreenId]);
+  useEffect(() => {
+    document.dispatchEvent(new CustomEvent("bigplan:review-island-updated"));
+  }, [renderedHtml]);
   return (
     <div className="grid min-w-0 gap-2" data-review-component-diff="">
       {/* A component snapshot is a diff, not a pair of ordinary tabs, so the
           selected side and the panel it opens carry the same removed/added
           colours the word-level lens uses. The border repeats the colour at
           the edge of the content, where the reader is actually looking. */}
-      <div
-        className="flex w-fit items-center rounded-md border border-edge bg-surface p-0.5"
-        role="group"
-        aria-label="Choose component snapshot"
-      >
-        {location.oldHtml === undefined ? null : (
-          <button
-            type="button"
-            className="cursor-pointer rounded-sm px-2 py-1 text-2xs font-semibold text-muted aria-pressed:bg-[var(--diff-remove-bg)] aria-pressed:text-[var(--diff-remove-c)] aria-pressed:shadow-raised"
-            aria-pressed={side === "old"}
-            onClick={() => setSide("old")}
-          >
-            Was
-          </button>
-        )}
-        {location.newHtml === undefined ? null : (
-          <button
-            type="button"
-            className="cursor-pointer rounded-sm px-2 py-1 text-2xs font-semibold text-muted aria-pressed:bg-[var(--diff-add-bg)] aria-pressed:text-[var(--diff-add-c)] aria-pressed:shadow-raised"
-            aria-pressed={side === "new"}
-            onClick={() => setSide("new")}
-          >
-            Now
-          </button>
-        )}
+      {screenDiffs.length > 0 ? (
+        <nav
+          className="flex min-w-0 flex-wrap gap-2"
+          aria-label="Prototype screens"
+        >
+          {screenDiffs.map((screen) => (
+            <button
+              key={screen.key}
+              type="button"
+              className="inline-flex min-h-11 min-w-11 cursor-pointer items-center gap-2 rounded-md border-2 border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted hover:bg-raised aria-pressed:border-ink aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0 wide:min-w-0"
+              aria-current={
+                selectedScreenKey === screen.key ? "true" : undefined
+              }
+              aria-pressed={selectedScreenKey === screen.key}
+              onClick={() => {
+                setSelectedScreenKey(screen.key);
+                if (screen.status === "added") setSide("new");
+                if (screen.status === "removed") setSide("old");
+              }}
+            >
+              <span
+                className={
+                  screen.status === "removed" ? "line-through decoration-2" : ""
+                }
+              >
+                {screen.name}
+              </span>
+              <span
+                className={`rounded-md px-2 py-1 text-2xs font-bold ${screenStatusClasses(screen.status)}`}
+              >
+                {wireframeScreenStatusLabel(screen)}
+              </span>
+            </button>
+          ))}
+        </nav>
+      ) : null}
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <div
+          className="flex items-center gap-3"
+          role="group"
+          aria-label="Choose component snapshot"
+        >
+          {location.oldHtml === undefined ? null : (
+            <button
+              type="button"
+              className="min-h-11 min-w-11 cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-remove-c)] aria-pressed:bg-[var(--diff-remove-bg)] aria-pressed:text-[var(--diff-remove-c)] disabled:cursor-not-allowed disabled:opacity-50 wide:min-h-0 wide:min-w-0"
+              aria-pressed={renderedSide === "old"}
+              disabled={!canShowOld}
+              onClick={() => setSide("old")}
+            >
+              Was
+            </button>
+          )}
+          {location.oldHtml === undefined ||
+          location.newHtml === undefined ? null : (
+            <span className="text-xl text-ink" aria-hidden="true">
+              →
+            </span>
+          )}
+          {location.newHtml === undefined ? null : (
+            <button
+              type="button"
+              className="min-h-11 min-w-11 cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-add-c)] aria-pressed:bg-[var(--diff-add-bg)] aria-pressed:text-[var(--diff-add-c)] disabled:cursor-not-allowed disabled:opacity-50 wide:min-h-0 wide:min-w-0"
+              aria-pressed={renderedSide === "new"}
+              disabled={!canShowNew}
+              onClick={() => setSide("new")}
+            >
+              Now
+            </button>
+          )}
+        </div>
       </div>
       <div
-        className={`min-w-0 overflow-hidden rounded-lg border-2 bg-surface p-3 text-ink inset-shadow-well ${
-          side === "old"
-            ? "border-[var(--diff-remove-c)]"
-            : "border-[var(--diff-add-c)]"
+        className={`min-w-0 overflow-visible rounded-lg border-[10px] bg-surface p-3 text-ink inset-shadow-well ${
+          renderedSide === "old"
+            ? "[border-color:color-mix(in_srgb,var(--diff-remove-c)_30%,var(--diff-remove-bg))]"
+            : "[border-color:color-mix(in_srgb,var(--diff-add-c)_30%,var(--diff-add-bg))]"
         }`}
-        data-review-component-snapshot={side}
+        data-review-component-snapshot={renderedSide}
+        {...{ [MAXIMIZABLE_ATTRIBUTE]: maximizeSubject }}
       >
+        <div className="mb-2 flex justify-end">
+          <MaximizeButton subject={maximizeSubject} size="toolbar" />
+        </div>
         <div
-          className="pointer-events-none min-w-0 [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_[data-flow-controls]]:hidden"
-          inert
-          dangerouslySetInnerHTML={{ __html: html ?? "" }}
+          ref={contentRef}
+          {...{ [BODY_ATTRIBUTE]: "" }}
+          className="min-w-0 focus-visible:shadow-focus focus-visible:outline-none [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_.wireframe-switcher]:hidden [&_[data-flow-controls]]:hidden"
+          role="region"
+          aria-label={`${maximizeSubject} content`}
+          tabIndex={0}
+          onClickCapture={preventSnapshotControlClick}
+          dangerouslySetInnerHTML={{ __html: sanitizedRenderedHtml }}
         />
       </div>
     </div>
@@ -638,7 +919,7 @@ export const DiffLensContent = ({
       location.oldHtml !== undefined || location.newHtml !== undefined,
   );
   const title = isHistorical
-    ? "Historical change"
+    ? "Updated"
     : isSuperseded
       ? "What changed - plan revised again"
       : "What changed";
@@ -650,7 +931,13 @@ export const DiffLensContent = ({
       data-review-diff-note={place.note}
     >
       <div className="flex min-w-0 items-baseline gap-2">
-        <strong className="rounded-full bg-accent-soft px-2 py-0.5 text-2xs font-bold text-accent uppercase tracking-caps">
+        <strong
+          className={`rounded-full px-2 py-0.5 text-2xs font-bold uppercase tracking-caps ${
+            isHistorical
+              ? "bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"
+              : "bg-accent-soft text-accent"
+          }`}
+        >
           {title}
         </strong>
         <em className="text-2xs text-muted">{place.note}</em>
@@ -756,8 +1043,8 @@ export const DiffLensPortal = ({
     if (anchor === null) {
       setIsHistorical(true);
       setPresentation(undefined);
-      const main = document.querySelector<HTMLElement>("main");
-      if (main === null) {
+      const article = liveArticle();
+      if (article === null) {
         setHost(null);
         return;
       }
@@ -766,7 +1053,7 @@ export const DiffLensPortal = ({
       container.dataset.reviewHistoricalDiff = "";
       container.className =
         "mx-auto my-4 min-w-0 w-full max-w-[var(--measure)] px-4";
-      let archive = main.querySelector<HTMLElement>(
+      let archive = article.querySelector<HTMLElement>(
         "[data-review-historical-changes]",
       );
       const ownsArchive = archive === null;
@@ -775,9 +1062,9 @@ export const DiffLensPortal = ({
         archive.dataset.reviewHistoricalChanges = "";
         archive.className = "mx-auto my-8 w-full max-w-[var(--measure)]";
         archive.setAttribute("aria-label", "Historical changes");
-        const slides = main.querySelectorAll<HTMLElement>("[data-slide]");
+        const slides = article.querySelectorAll<HTMLElement>("[data-slide]");
         const lastSlide = slides.item(slides.length - 1);
-        if (lastSlide === null) main.append(archive);
+        if (lastSlide === null) article.append(archive);
         else lastSlide.after(archive);
       }
       archive.append(container);
@@ -807,8 +1094,22 @@ export const DiffLensPortal = ({
           entry.element !== null,
       );
     const direct = replaced.map((entry) => entry.element);
-    const displayValues = direct.map((element) => element.style.display);
-    direct.forEach((element) => {
+    const originalWireframes = [
+      anchor.placement === "replace"
+        ? anchor.element.closest<HTMLElement>("[data-wireframe]")
+        : null,
+      ...direct.map((element) =>
+        element.closest<HTMLElement>("[data-wireframe]"),
+      ),
+    ].filter(
+      (element): element is HTMLElement =>
+        element !== null && element !== undefined,
+    );
+    const hiddenElements = [...new Set([...direct, ...originalWireframes])];
+    const displayValues = hiddenElements.map(
+      (element) => element.style.display,
+    );
+    hiddenElements.forEach((element) => {
       element.style.display = "none";
     });
     const container = document.createElement("div");
@@ -845,7 +1146,7 @@ export const DiffLensPortal = ({
       }),
     );
     return () => {
-      direct.forEach((element, index) => {
+      hiddenElements.forEach((element, index) => {
         element.style.display = displayValues[index] ?? "";
       });
       removalNode.remove();

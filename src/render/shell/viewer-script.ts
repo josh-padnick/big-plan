@@ -2482,6 +2482,8 @@ let wireFigureMaximize = () => {};
       return;
     const frame = open;
     const keyboard = openedByKeyboard;
+    event.preventDefault();
+    event.bigPlanEscapeHandled = true;
     if (!requestRestore(frame)) return;
     // Focus returns to the control the reader pressed, so Escape lands them
     // where they were rather than at the top of the document. It returns
@@ -3003,5 +3005,9 @@ const wireViewer = () => {
 };
 wireViewer();
 document.addEventListener("bigplan:article-replaced", wireViewer);
+// The review island may add a maximizable Was/Now figure after the article
+// itself has loaded. Re-run the idempotent figure wiring without pretending
+// that the authoritative article was replaced.
+document.addEventListener("bigplan:review-island-updated", wireFigureMaximize);
 ${DIAGRAM_SCRIPT}
 </script>`;
