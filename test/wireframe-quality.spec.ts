@@ -4,6 +4,10 @@
 
 import { boxOf, expect, test } from "./fixtures";
 
+// How much wider the primary surface must be than any pane beside it. A third
+// is the point where the eye stops asking which one is the subject.
+const PRIMARY_DOMINANCE_RATIO = 1.3;
+
 test("should render every proof at its native device geometry", async ({
   page,
   wireframeQualityViewerUrl,
@@ -391,26 +395,27 @@ test("should keep sparse app shell chrome compact and workspace full-width", asy
   ).toBeLessThan(0.75);
 });
 
-test("should keep shipped desktop panes readable and layout regions separate", async ({
+test("should keep shipped workspace panes dominant and layout regions separate", async ({
   page,
   wireframeFormFactorsViewerUrl,
   wireframeQualityViewerUrl,
 }) => {
+  const exercisedTabletProofs = new Set<string>();
   for (const url of [
     wireframeQualityViewerUrl,
     wireframeFormFactorsViewerUrl,
   ]) {
     await page.goto(url);
-    const desktopWireframes = page.locator(
-      '[data-wireframe]:has([data-wireframe-device="desktop"])',
+    const workspaceWireframes = page.locator(
+      '[data-wireframe]:has([data-wireframe-device="desktop"]), [data-wireframe="quality-tablet-three-pane"], [data-wireframe="quality-tablet-portrait-master-detail"]',
     );
 
     for (
       let wireframeIndex = 0;
-      wireframeIndex < (await desktopWireframes.count());
+      wireframeIndex < (await workspaceWireframes.count());
       wireframeIndex += 1
     ) {
-      const wireframe = desktopWireframes.nth(wireframeIndex);
+      const wireframe = workspaceWireframes.nth(wireframeIndex);
       const switches = wireframe.locator("[data-wireframe-switch]");
       const screenCount = Math.max(await switches.count(), 1);
 
@@ -419,7 +424,7 @@ test("should keep shipped desktop panes readable and layout regions separate", a
           await switches.nth(screenIndex).click();
         }
         const screen = wireframe.locator(
-          '[data-wireframe-device="desktop"]:visible',
+          ':is([data-wireframe-device="desktop"], [data-wireframe-device="tablet"], [data-wireframe-device="tablet-portrait"]):visible',
         );
 
         await test.step(`${await wireframe.getAttribute("data-wireframe")} screen ${screenIndex + 1}`, async () => {
@@ -432,8 +437,11 @@ test("should keep shipped desktop panes readable and layout regions separate", a
                 node instanceof HTMLElement ? node.offsetWidth : 0,
               ),
             );
+          // An inspector holds labelled values and needs less width than a
+          // collection of record titles, so the floor is the narrowest pane
+          // that still reads, not the collection's width.
           expect(
-            paneWidths.every((width) => width >= 280),
+            paneWidths.every((width) => width >= 240),
             `pane widths: ${paneWidths.join(", ")}`,
           ).toBe(true);
 
@@ -469,13 +477,28 @@ test("should keep shipped desktop panes readable and layout regions separate", a
                   node instanceof HTMLElement ? node.offsetWidth : 0,
                 ),
               );
+            // Dominance is a ratio, not a comparison. Two panes a few pixels
+            // apart read as a split the designer could not decide, which is
+            // the defect this fence exists to catch; a primary that is merely
+            // wider passes an inequality and still looks wrong.
             const boundedWidths = [...masterWidths, ...railWidths];
             if (primaryWidths.length > 0 && boundedWidths.length > 0) {
-              expect(Math.max(...primaryWidths)).toBeGreaterThan(
-                Math.max(...boundedWidths),
-              );
+              const primary = Math.max(...primaryWidths);
+              const bounded = Math.max(...boundedWidths);
+              expect(
+                primary / bounded,
+                `primary ${primary}px beside a ${bounded}px secondary pane`,
+              ).toBeGreaterThanOrEqual(PRIMARY_DOMINANCE_RATIO);
+              const wireframeId =
+                await wireframe.getAttribute("data-wireframe");
+              if (wireframeId?.startsWith("quality-tablet-")) {
+                exercisedTabletProofs.add(wireframeId);
+              }
             } else if (masterWidths.length === 1 && railWidths.length === 1) {
-              expect(masterWidths[0]).toBeGreaterThan(railWidths[0]);
+              expect(
+                (masterWidths[0] ?? 0) / (railWidths[0] ?? 1),
+                `primary ${masterWidths[0]}px beside a ${railWidths[0]}px secondary pane`,
+              ).toBeGreaterThanOrEqual(PRIMARY_DOMINANCE_RATIO);
             }
           }
 
@@ -511,6 +534,87 @@ test("should keep shipped desktop panes readable and layout regions separate", a
           expect(overlaps).toEqual([]);
         });
       }
+    }
+  }
+  expect([...exercisedTabletProofs].sort()).toEqual([
+    "quality-tablet-portrait-master-detail",
+    "quality-tablet-three-pane",
+  ]);
+});
+
+// The floors are product judgement, set by looking at rendered documents, not
+// an accessibility standard: WCAG governs how text may be resized, not how
+// small a default may be. They are fenced here anyway, because a legibility
+// standard nobody measures regresses the next time a constant moves, and this
+// is the one defect a reader notices before anything else on the page.
+const PAINTED_FLOORS: ReadonlyArray<{
+  readonly role: string;
+  readonly selector: string;
+  readonly minimum: number;
+}> = [
+  // Ordinary content and controls: what the reviewer actually reads.
+  { role: "body", selector: ".wireframe-artboard", minimum: 12 },
+  { role: "list row", selector: ".wireframe-list-item", minimum: 12 },
+  { role: "button", selector: ".wireframe-button", minimum: 12 },
+  { role: "field label", selector: ".wireframe-field-label", minimum: 11 },
+  { role: "panel title", selector: ".wireframe-panel-title", minimum: 12 },
+  // Metadata and labels: scanned rather than read, so they may sit lower.
+  { role: "list metadata", selector: ".wireframe-list-meta", minimum: 10 },
+  { role: "eyebrow", selector: ".wireframe-eyebrow", minimum: 10 },
+];
+
+test("should paint every text role above its legibility floor on every device", async ({
+  page,
+  wireframeFormFactorsViewerUrl,
+  wireframeQualityViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
+  for (const url of [
+    wireframeQualityViewerUrl,
+    wireframeFormFactorsViewerUrl,
+  ]) {
+    await page.goto(url);
+    // Every device, not only the one that scales the most: a floor that holds
+    // on desktop and not on tablet is a floor the reader still falls through.
+    const screens = page.locator("[data-wireframe-screen]");
+
+    for (
+      let screenIndex = 0;
+      screenIndex < (await screens.count());
+      screenIndex += 1
+    ) {
+      const screen = screens.nth(screenIndex);
+      const screenId = await screen.getAttribute("data-wireframe-screen");
+
+      const painted = await screen.evaluate(
+        (node, floors) => {
+          const frame = node.querySelector(".wireframe-frame");
+          if (!(frame instanceof HTMLElement)) {
+            return [];
+          }
+          // The artboard is laid out at its true device width and scaled as
+          // one unit, so the size a reviewer reads is the declared size times
+          // that scale. Measuring the declared size alone measures nothing.
+          const zoom = Number.parseFloat(getComputedStyle(frame).zoom) || 1;
+          return floors.flatMap(({ role, selector, minimum }) =>
+            [...node.querySelectorAll(selector)].flatMap((element) => {
+              const declared = Number.parseFloat(
+                getComputedStyle(element).fontSize,
+              );
+              const paintedSize = declared * zoom;
+              return paintedSize < minimum
+                ? [
+                    `${role} paints ${paintedSize.toFixed(1)}px (floor ${minimum}px)`,
+                  ]
+                : [];
+            }),
+          );
+        },
+        [...PAINTED_FLOORS],
+      );
+
+      expect(painted, `screen "${screenId}"`).toEqual([]);
     }
   }
 });

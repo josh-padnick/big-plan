@@ -123,6 +123,16 @@ test("should stage and restore a slide comment through the legacy chrome", async
     dialog.getByRole("switch", { name: "Submit right away" }).locator("span"),
   ).toHaveCSS("border-top-width", "1px");
   await expect(dialog).toHaveCSS("position", "absolute");
+  await expect
+    .poll(async () => {
+      const [composerBox, commentBox] = await Promise.all([
+        dialog.boundingBox(),
+        comment.boundingBox(),
+      ]);
+      if (composerBox === null || commentBox === null) return 0;
+      return commentBox.y - (composerBox.y + composerBox.height);
+    })
+    .toBeGreaterThanOrEqual(12);
   const composerTop = await dialog.evaluate(
     (node) => node.getBoundingClientRect().top,
   );

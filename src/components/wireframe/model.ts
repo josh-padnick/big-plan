@@ -120,6 +120,26 @@ export const WIREFRAME_TONES: ReadonlyArray<WireframeTone> = [
   "danger",
 ];
 
+/**
+ * Where one item of work stands.
+ *
+ * A review surface that lists work has to say, at a glance, which lines are
+ * finished and which still want a person. Words alone make the reader read
+ * every row to find that out, and a tone alone would carry the meaning in
+ * colour. So a status draws a distinct mark, which is legible in greyscale and
+ * scannable down a column, beside copy that still says the same thing. The set
+ * is closed and small on purpose: four states a reviewer can tell apart
+ * instantly beats a palette of decorative glyphs.
+ */
+export type WireframeStatus = "done" | "attention" | "waiting" | "blocked";
+
+export const WIREFRAME_STATUSES: ReadonlyArray<WireframeStatus> = [
+  "done",
+  "attention",
+  "waiting",
+  "blocked",
+];
+
 /** One cell of a table: its text, and a chip tone when it reports state. */
 export type WireframeTableCell = {
   readonly text: string;
@@ -178,8 +198,8 @@ export const WIREFRAME_PATTERNS: ReadonlyArray<WireframePattern> = [
  *
  * The artboard lays out at this true size and scales as one unit to fit the
  * review surface. Desktop and phone use a minimum height and grow with
- * content. Tablet holds an iPad-shaped viewport; overflow stays inside the
- * device instead of stretching its bezel.
+ * content. Tablet holds an iPad-shaped viewport, and its content must fit that
+ * fixed frame without stretching the bezel or introducing internal scrolling.
  */
 export type WireframeDevicePreset = {
   readonly label: string;
@@ -241,6 +261,10 @@ export type WireframeNode =
       readonly title?: string;
       readonly eyebrow?: string;
       readonly surface: WireframeSurface;
+      // Where the group this panel holds stands as a whole. A grouped review
+      // surface is scanned by its headers first, so the header is where a
+      // "all done" or "needs you" answer belongs.
+      readonly status?: WireframeStatus;
       readonly children: ReadonlyArray<WireframeNode>;
     }
   | {
@@ -361,6 +385,9 @@ export type WireframeNode =
       readonly label: string;
       readonly meta?: string;
       readonly value?: string;
+      // Where this one row stands. Rows carrying a status read as a checklist
+      // rather than as a queue.
+      readonly status?: WireframeStatus;
       // Selected row in a master queue. Wireframe language only - not interactive.
       readonly selected: boolean;
       // Whole-row navigation (mobile lists open a record without a separate CTA).

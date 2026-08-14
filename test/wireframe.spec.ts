@@ -70,6 +70,55 @@ test("should reach every prototype action from the keyboard", async ({
   await expect(lesson).toBeVisible();
 });
 
+// A maximized figure is opened to see the whole device at once, so the fit has
+// to answer both axes. Fitting width alone leaves a short wide window scrolling
+// the frame out of view, which is what a reader sees as a scrollbar down the
+// side of a drawing that no longer fits. This shipped once and was silently
+// reverted when a long-lived branch merged its older copy of the viewer script
+// back over it, together with the assertion that would have caught it - so the
+// assertion is stated here for every device the rail can reach.
+test("should fit a maximized screen to the panel on both axes", async ({
+  page,
+  wireframeQualityViewerUrl,
+}) => {
+  // Wide and short is the shape that exposes a width-only fit: there is room
+  // to spare across, and none to spare down.
+  await page.setViewportSize({ width: 1855, height: 968 });
+  await page.goto(wireframeQualityViewerUrl);
+
+  const figure = page
+    .locator('[data-wireframe]:has([data-wireframe-device="desktop"])')
+    .first();
+  await figure.locator("[data-figure-maximize]").click();
+  await expect(figure).toHaveAttribute("data-figure-maximized", "");
+
+  const rail = figure.getByRole("navigation", { name: "Prototype screens" });
+  const screenCount = Math.max(await rail.getByRole("button").count(), 1);
+
+  for (let screenIndex = 0; screenIndex < screenCount; screenIndex += 1) {
+    if ((await rail.getByRole("button").count()) > 0) {
+      await rail.getByRole("button").nth(screenIndex).click();
+    }
+    const screen = figure.locator("[data-wireframe-screen]:visible");
+    const fit = await screen.evaluate((node) => ({
+      id: node.getAttribute("data-wireframe-screen"),
+      overflow: node.scrollHeight - node.clientHeight,
+      zoom: Number.parseFloat(
+        getComputedStyle(
+          node.querySelector(".wireframe-frame") ?? node,
+        ).zoom.toString(),
+      ),
+    }));
+    expect(
+      fit.overflow,
+      `maximized screen "${fit.id}" overflows its panel by ${fit.overflow}px`,
+    ).toBeLessThanOrEqual(0);
+    // A fit that solved the overflow by shrinking the drawing to nothing would
+    // pass the assertion above and fail the reader.
+    expect(fit.zoom, `maximized screen "${fit.id}" zoom`).toBeGreaterThan(0.5);
+  }
+});
+
 test("should maximize into a left screen rail, sequence it with arrow keys, and restore cleanly", async ({
   page,
   wireframeViewerUrl,

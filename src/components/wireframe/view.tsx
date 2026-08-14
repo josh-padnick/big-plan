@@ -3,7 +3,7 @@
 // navigation expressed as data attributes the viewer script acts on. Without
 // scripts the block degrades to a readable storyboard of every screen.
 
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import type {
   CompiledWireframe,
   WireframeAlign,
@@ -12,8 +12,15 @@ import type {
   WireframeNode,
   WireframeScreen,
   WireframeSpace,
+  WireframeStatus,
 } from "./model.js";
 import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
+import type { LucideIcon } from "../../icons/lucide-icon.js";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
+import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
+import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
+import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import {
   BODY_ATTRIBUTE,
   MAXIMIZABLE_ATTRIBUTE,
@@ -59,17 +66,50 @@ const HEADING_TAGS: Readonly<
   "3": "h5",
 };
 
+// One mark per status, and a word beside it. The marks are chosen to differ in
+// silhouette rather than only in colour, so a reviewer scanning a column of
+// them tells the states apart in greyscale, at artboard scale, and without
+// reading the labels.
+const STATUS_ICONS: Readonly<Record<WireframeStatus, LucideIcon>> = {
+  done: CHECK_ICON,
+  attention: TRIANGLE_ALERT_ICON,
+  waiting: HOURGLASS_ICON,
+  blocked: CIRCLE_X_ICON,
+};
+
+const StatusMark = ({
+  status,
+}: {
+  readonly status: WireframeStatus;
+}): JSX.Element => (
+  <span className="wireframe-status-mark" data-wireframe-status={status}>
+    {lucideIconToReact({ icon: STATUS_ICONS[status], hidden: false })}
+    <span className="sr-only">{`Status: ${status}`}</span>
+  </span>
+);
+
+const statusMarkFor = (status: WireframeStatus | undefined): ReactNode =>
+  status === undefined ? null : <StatusMark status={status} />;
+
 // A direct record collection makes its Panel the master pane. Rail is the only
 // authored width primitive; the Row owns every other workspace proportion.
-const isMasterPane = (node: WireframeNode): boolean =>
+const holdsCollection = (node: WireframeNode): boolean =>
   node.element === "Panel" &&
   node.children.some(
     (child) => child.element === "List" || child.element === "Table",
   );
 
+// Exactly one pane in a row is the collection: the first one. A detail pane
+// often holds a list too - properties, context, a checklist - and reading that
+// as a second collection is what produces two equally bounded panes with no
+// primary surface between them. Reading order decides, because the collection
+// is what the reader came through to reach the record.
+const masterIndexIn = (children: ReadonlyArray<WireframeNode>): number =>
+  children.length > 1 ? children.findIndex(holdsCollection) : -1;
+
 const isWorkspaceRow = (children: ReadonlyArray<WireframeNode>): boolean =>
   children.some((child) => child.element === "Rail") ||
-  (children.length > 1 && children.some(isMasterPane));
+  masterIndexIn(children) >= 0;
 
 // A conversation has two independently behaving regions behind the ordinary
 // Panel interface: the thread scrolls, while the mode and composer stay
@@ -101,8 +141,12 @@ const conversationPartsFor = (
 
 const WireframeElement = ({
   node,
+  isMasterPane = false,
 }: {
   readonly node: WireframeNode;
+  // Set only by the Row that owns this pane, because whether a panel is the
+  // collection is a fact about its siblings, not about the panel alone.
+  readonly isMasterPane?: boolean;
 }): JSX.Element => {
   switch (node.element) {
     case "Stack":
@@ -121,7 +165,10 @@ const WireframeElement = ({
             ? { "data-wireframe-workspace": "" }
             : {})}
         >
-          <WireframeElements nodes={node.children} />
+          <WireframeElements
+            nodes={node.children}
+            masterIndex={masterIndexIn(node.children)}
+          />
         </div>
       );
     case "Panel": {
@@ -130,7 +177,7 @@ const WireframeElement = ({
         <section
           className="wireframe-panel relative"
           data-wireframe-surface={node.surface}
-          {...(isMasterPane(node) ? { "data-wireframe-master": "" } : {})}
+          {...(isMasterPane ? { "data-wireframe-master": "" } : {})}
         >
           {node.eyebrow === undefined && node.title === undefined ? null : (
             <header className="wireframe-panel-head">
@@ -138,7 +185,10 @@ const WireframeElement = ({
                 <p className="wireframe-eyebrow">{node.eyebrow}</p>
               )}
               {node.title === undefined ? null : (
-                <h4 className="wireframe-panel-title">{node.title}</h4>
+                <h4 className="wireframe-panel-title flex min-w-0 items-center gap-2">
+                  {statusMarkFor(node.status)}
+                  <span className="min-w-0">{node.title}</span>
+                </h4>
               )}
             </header>
           )}
@@ -392,18 +442,30 @@ const WireframeElement = ({
       // Every queue/inbox row is two lines so a narrow desktop list column never
       // jams title, status, and age onto one flex line (which overflows as
       // overlapping or one-word-per-line wrapping):
-      //   line 1 - truncating title [trailing value]
-      //   line 2 - metadata
+      //   line 1 - truncating title [trailing value, when the row has no
+      //            second line to carry it]
+      //   line 2 - metadata [trailing value]
+      // The trailing value rides with the metadata whenever there is metadata,
+      // because a title competing with a timestamp for one narrow line is what
+      // truncates the only words that identify the record.
+      const valueOnMetaLine =
+        node.meta !== undefined && node.value !== undefined;
+      const value =
+        node.value === undefined ? null : (
+          <span className="wireframe-list-value">{node.value}</span>
+        );
       const rowInner = (
         <>
           <span className="wireframe-list-row-primary flex w-full min-w-0 flex-nowrap items-baseline gap-2">
+            {statusMarkFor(node.status)}
             <span className="wireframe-list-label grow">{node.label}</span>
-            {node.value === undefined ? null : (
-              <span className="wireframe-list-value">{node.value}</span>
-            )}
+            {valueOnMetaLine ? null : value}
           </span>
           {node.meta === undefined ? null : (
-            <span className="wireframe-list-meta">{node.meta}</span>
+            <span className="wireframe-list-row-secondary flex w-full min-w-0 flex-nowrap items-baseline justify-between gap-2">
+              <span className="wireframe-list-meta">{node.meta}</span>
+              {valueOnMetaLine ? value : null}
+            </span>
           )}
         </>
       );
@@ -656,12 +718,18 @@ const Field = ({
 
 const WireframeElements = ({
   nodes,
+  masterIndex = -1,
 }: {
   readonly nodes: ReadonlyArray<WireframeNode>;
+  readonly masterIndex?: number;
 }) => (
   <>
     {nodes.map((node, index) => (
-      <WireframeElement key={index} node={node} />
+      <WireframeElement
+        key={index}
+        node={node}
+        isMasterPane={index === masterIndex}
+      />
     ))}
   </>
 );

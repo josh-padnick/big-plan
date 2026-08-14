@@ -244,6 +244,70 @@ Run | State | Cost
   </Screen>
 </Wireframe>
 
+## Confirmation with grouped status
+
+*Answer "is anything still open?" before the reader reads a single line.*
+
+<Wireframe id="pattern-confirmation">
+  <Screen id="approve" name="Approve" device="desktop">
+    <AppShell>
+      <Sidebar brand="/big-plan" mode="Review">
+        <Nav label="Contents">
+          <NavItem label="The proposal" active />
+          <NavItem label="Decisions" />
+        </Nav>
+        <Text text="Josh · Workspace" role="muted" />
+      </Sidebar>
+      <AppContent>
+        <Center measure="narrow">
+          <Panel title="Approve this plan?" surface="outlined">
+            <Text
+              text="Approval pins the plan as it reads right now and records your answers into it."
+              role="helper"
+            />
+            <Panel
+              title="Answers recorded on approve"
+              surface="outlined"
+              status="done"
+            >
+              <List>
+                <ListItem
+                  label="Which release path?"
+                  value="Gradual rollout"
+                  status="done"
+                />
+                <ListItem
+                  label="Ship behind a flag?"
+                  value="Yes"
+                  status="done"
+                />
+              </List>
+            </Panel>
+            <Panel title="Open items" surface="outlined" status="attention">
+              <List>
+                <ListItem
+                  label="Rollback window"
+                  meta="Raised by Josh"
+                  status="attention"
+                />
+                <ListItem
+                  label="Load test sign-off"
+                  meta="Waiting on Priya"
+                  status="waiting"
+                />
+              </List>
+            </Panel>
+            <Row gap="sm" justify="end">
+              <Button label="Keep reviewing" emphasis="tertiary" />
+              <Button label="Approve plan" emphasis="primary" />
+            </Row>
+          </Panel>
+        </Center>
+      </AppContent>
+    </AppShell>
+  </Screen>
+</Wireframe>
+
 ## Phone list-to-detail push
 
 *Move from a full-width list into one focused mobile detail screen.*

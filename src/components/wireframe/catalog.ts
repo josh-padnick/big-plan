@@ -23,6 +23,7 @@ import {
   WIREFRAME_FIELD_KINDS,
   WIREFRAME_MEDIA_SHAPES,
   WIREFRAME_SPACES,
+  WIREFRAME_STATUSES,
   WIREFRAME_STEP_STATES,
   WIREFRAME_SURFACES,
   WIREFRAME_TONES,
@@ -90,6 +91,7 @@ const PANEL_SCHEMA = {
   title: { kind: "string", nonEmpty: true },
   eyebrow: { kind: "string", nonEmpty: true },
   surface: { kind: "enum", values: WIREFRAME_SURFACES },
+  status: { kind: "enum", values: WIREFRAME_STATUSES },
 } satisfies ComponentAttributeSchema;
 
 const HEADING_SCHEMA = {
@@ -166,6 +168,7 @@ const LIST_ITEM_SCHEMA = {
   label: { kind: "string", required: true, nonEmpty: true },
   meta: { kind: "string", nonEmpty: true },
   value: { kind: "string", nonEmpty: true },
+  status: { kind: "enum", values: WIREFRAME_STATUSES },
   selected: { kind: "booleanShorthand" },
   navigateTo: { kind: "string", nonEmpty: true },
 } satisfies ComponentAttributeSchema;
@@ -339,7 +342,7 @@ const CATALOG = {
     category: "surface",
     acceptsChildren: true,
     summary:
-      'A region that draws no box by default. A direct List or Table makes it the Row\'s master pane; surface="filled" marks a pane and surface="outlined" is for a card.',
+      'A region that draws no box by default. A direct List or Table makes it the Row\'s master pane; surface="filled" marks a pane and surface="outlined" is for a card. status marks where the whole group stands: done, attention, waiting, or blocked.',
     example: '<Panel title="Conversation">...</Panel>',
     compile: ({ attributes, children, position, diagnostics }) => {
       const validated = validateComponentAttributes({
@@ -349,6 +352,13 @@ const CATALOG = {
         diagnostics,
         schema: PANEL_SCHEMA,
       });
+      if (validated.status !== undefined && validated.title === undefined) {
+        diagnostics.add({
+          message:
+            "Panel status needs title so the state mark has a group to label",
+          position,
+        });
+      }
       return {
         element: "Panel",
         ...(validated.title === undefined ? {} : { title: validated.title }),
@@ -356,6 +366,9 @@ const CATALOG = {
           ? {}
           : { eyebrow: validated.eyebrow }),
         surface: validated.surface ?? "plain",
+        ...(validated.status === undefined || validated.title === undefined
+          ? {}
+          : { status: validated.status }),
         children,
       };
     },
@@ -799,7 +812,7 @@ const CATALOG = {
     acceptsChildren: false,
     allowedParents: ["List"],
     summary:
-      "One row: identity, context, and a trailing value. Mark selected on the active queue row; navigateTo makes the whole row open a screen.",
+      "One row: identity, context, and a trailing value. Mark selected on the active queue row; navigateTo makes the whole row open a screen. status draws a state mark (done, attention, waiting, blocked) so a checklist is scannable without reading every line.",
     example:
       '<ListItem label="Checkout freeze" meta="Northwind · Priority" value="14m · #4821" navigateTo="ticket" />',
     compile: ({ attributes, position, diagnostics }) => {
@@ -815,6 +828,7 @@ const CATALOG = {
         label: validated.label ?? "",
         ...(validated.meta === undefined ? {} : { meta: validated.meta }),
         ...(validated.value === undefined ? {} : { value: validated.value }),
+        ...(validated.status === undefined ? {} : { status: validated.status }),
         selected: validated.selected === true,
         ...(validated.navigateTo === undefined
           ? {}

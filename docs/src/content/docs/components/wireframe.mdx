@@ -5,6 +5,8 @@ description: True-size product screens with honest device proportions, safe cont
 
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
 Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1200 px logical layout within a shared 768 px painted cap.
+That cap is the figure budget every device shares, and it never widens: the reading column holds the table of contents beside it, so a screen that does not fit is simplified rather than enlarged.
+Because a desktop drawing is painted at roughly five-eighths of its declared size, desktop artboards use a deliberately larger type ramp than the product they depict, and a browser geometry test fences the painted result against role-based legibility floors.
 While maximized, the same uniform zoom is constrained by both available width and height so the complete device frame and its caption remain visible.
 Desktop pages and phone screens use realistic minimum silhouettes and grow with content.
 Desktop workspaces instead fill the 1200 × 820 silhouette, whether they use an `AppShell` or place a workspace `Row` directly after a `TopBar`: persistent panes own their overflow while the app itself never scrolls sideways.
@@ -35,7 +37,7 @@ The generated `big-plan guidance Wireframe` output groups every implementation p
 
 The generated guidance is the exact agent-facing owner of those grouped rules.
 The device table below is the syntax-level form-factor contract; the component, compiler, lint, and geometry tests own mechanical facts; LOOP in the generated guidance owns render-and-review practice.
-CRAP still governs the surrounding plan page, not product UI inside an artboard.
+The top-level guidance owns CRAP for the surrounding plan page, while the generated Wireframe guidance applies those same fundamentals to product UI inside an artboard.
 
 ### How the standards were distilled
 
@@ -50,7 +52,7 @@ CRAP still governs the surrounding plan page, not product UI inside an artboard.
 - **The CLEAR gap critique** retains all twelve gold-bar corrections: composition follows decision complexity; touch surfaces look touchable; selection uses several signals; consequential choices start unselected; child vocabulary survives selection; detail earns its place; instructions are not repeated; identity and escape stay visible; tablet space enlarges rather than shrinks; the grid quiets behind interaction; copy sounds natural; and next actions stay short.
 - **STAMP** is retired as a competing acronym, but its details remain: Space, Tiers, Align, and Minimal boxes live under Layout and mechanics; Plain state lives under Explicit change.
 - **Per-form-factor principles** live under Real device as explicit desktop/tablet/phone pass and reject criteria.
-- **Type, aspect, state, and target contracts** live under Real device and their mechanical owners: fixed type roles, fixed iPad frame, state paint, 44 px tablet/phone targets, compile diagnostics, and browser geometry tests.
+- **Type, aspect, state, and target contracts** live under Real device and their mechanical owners: the closed metadata/body/panel-title/heading hierarchy, fixed iPad frame, state paint, 44 px tablet/phone targets, compile diagnostics, and browser geometry tests.
 - **LOOP** remains only the delivery workflow; **CRAP** remains the plan-page layout standard.
 
 ## Authoring
@@ -122,7 +124,7 @@ The compiler blocks multiple `PageHeader`s on one screen, equal flexible thirds 
 A `ChoiceGroup` is the mechanically owned simple-decision path: it holds two to five `ChoiceCard`s, starts unselected on the initial screen, gives every option its own destination that visibly selects the same title and consequence, reveals a primary continuation only after selection, and cannot share a tablet row with a competing region.
 A Stepper must contain exactly one current step in `done` → `current` → `todo` order, while each Step label names only the task because the primitive draws its own number or completion mark.
 A composer's Send button counts as a filled action even when it omits `emphasis="primary"`; selected buttons inside `SegmentedControl` and `BottomBar` are mode or navigation state and do not count as filled work actions.
-On desktop, a direct workspace `Row` derives flexible minmax-style columns: a record collection becomes the bounded comparison pane, `Rail` owns secondary width, and the remaining surface becomes dominant.
+A direct workspace `Row` derives its columns rather than splitting evenly: the first pane holding a `List` or `Table` becomes the bounded record collection, `Rail` owns secondary width, and the remaining surface becomes the dominant primary. Exactly one collection is named per row, so a detail pane that also holds a list stays primary. The derivation applies on every device, and a browser geometry test requires the primary surface to be at least a third wider than any pane beside it.
 Whether the row lives in an `AppShell`'s `AppContent` or directly in the screen after a `TopBar`, it fills the workspace silhouette without app-wide horizontal scrolling; its panes scroll independently, while a conversation thread scrolls behind an anchored mode switch and composer.
 
 ## Optional screen patterns
@@ -151,9 +153,9 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `Stack`            | `gap="none\|xs\|sm\|md\|lg\|xl"` and `align="start\|center\|end\|stretch"`.                                                                       |
 | `Row`              | `gap`, `align`, and `justify="start\|center\|end\|between"`; a direct record collection derives a master pane while remaining content dominates. |
-| `Panel`            | Optional `title`, `eyebrow`, and `surface="plain\|filled\|outlined"`; defaults to a plain, unboxed region.                                    |
+| `Panel`            | Optional `title`, `eyebrow`, `surface="plain\|filled\|outlined"`, and `status="done\|attention\|waiting\|blocked"`; defaults to a plain, unboxed region.        |
 | `Rail`             | The only secondary-width primitive; owns a readable fixed width and wraps rather than squeezing the primary pane.                            |
-| `Center`           | `measure="narrow\|prose\|wide"` for centered, bounded content.                                                                            |
+| `Center`           | `measure="narrow\|prose\|wide"` for horizontally centered, bounded content; as the only direct child of a screen canvas or desktop `AppContent`, it also fills the available height and centers its content vertically. |
 | `AppShell`         | Holds only `Sidebar`, optional `TopBar`, and `AppContent`; unavailable on phone.                                                           |
 | `Sidebar`          | Optional `brand` and `mode`; valid only directly in `AppShell`.                                                                           |
 | `AppContent`       | Main product region; valid only directly in `AppShell`.                                                                                   |
@@ -179,7 +181,7 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Divider`          | Optional `label`.                                                                                                   |
 | `ImagePlaceholder` | Required `label`; optional `shape="square\|wide\|tall"`.                                                            |
 | `List`             | Holds only `ListItem`.                                                                                              |
-| `ListItem`         | Required `label`; optional `meta`, `value`, `selected`, and `navigateTo`; valid only in `List`.                      |
+| `ListItem`         | Required `label`; optional `meta`, `value`, `status="done\|attention\|waiting\|blocked"`, `selected`, and `navigateTo`; valid only in `List`. |
 | `ChoiceGroup`      | Holds two to five `ChoiceCard` options as one dominant simple-decision surface.                                     |
 | `ChoiceCard`       | Required `icon`, `title`, and one-line `description`; optional `selected` and `navigateTo`; valid only in `ChoiceGroup`. |
 | `Message`          | Required `author`, `time`, and `text`; optional `kind="customer\|agent\|internal"`.                                  |

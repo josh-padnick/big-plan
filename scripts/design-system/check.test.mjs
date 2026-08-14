@@ -2,19 +2,14 @@
 // one relative size the scales deliberately still allow.
 
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
-
-const execFileAsync = promisify(execFile);
-const CHECK = fileURLToPath(new URL("./check.mjs", import.meta.url));
+import { checkDesignSystem } from "./check.mjs";
 
 /** Runs the check against a throwaway source tree and returns its report. */
-const runAgainst = async (files) => {
+const runAgainst = async (files, { artboardStylesheet } = {}) => {
   const root = await mkdtemp(join(tmpdir(), "big-plan-design-system-"));
   try {
     const source = join(root, "src", "components", "sample");
@@ -22,24 +17,21 @@ const runAgainst = async (files) => {
     for (const [name, content] of Object.entries(files)) {
       await writeFile(join(source, name), content, "utf8");
     }
-    // The check resolves its source root from its own location, so the copy
-    // under test runs from the throwaway tree rather than the repository.
-    await mkdir(join(root, "scripts", "design-system"), { recursive: true });
-    const copy = join(root, "scripts", "design-system", "check.mjs");
-    await writeFile(
-      copy,
-      await (await import("node:fs/promises")).readFile(CHECK, "utf8"),
-      "utf8",
-    );
-    try {
-      const { stdout } = await execFileAsync(process.execPath, [copy]);
-      return { failed: false, output: stdout };
-    } catch (error) {
-      return {
-        failed: true,
-        output: `${error.stdout ?? ""}${error.stderr ?? ""}`,
-      };
+    if (artboardStylesheet !== undefined) {
+      const wireframe = join(root, "src", "components", "wireframe");
+      await mkdir(wireframe, { recursive: true });
+      await writeFile(
+        join(wireframe, "styles.css"),
+        artboardStylesheet,
+        "utf8",
+      );
     }
+    const failures = await checkDesignSystem({ sourceRoot: join(root, "src") });
+    return {
+      failed: failures.length > 0,
+      output:
+        failures.length === 0 ? "design system: passed" : failures.join("\n"),
+    };
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -85,4 +77,91 @@ test("rejects a rem type size because a step comes from the scale", async () => 
   });
   assert.equal(result.failed, true);
   assert.match(result.output, /off-scale type size "text-\[0\.8125rem\]"/);
+});
+
+const artboardStylesheet = ({ desktopTitle, effectiveOverride = "" }) =>
+  [
+    "@layer components {",
+    "  .wireframe {",
+    "    --wf-text-meta: 0.75rem;",
+    "    --wf-text-small: 0.8125rem;",
+    "    --wf-text-body: 0.875rem;",
+    "    --wf-text-title: 1.25rem;",
+    "    --wf-text-heading: 1.625rem;",
+    "  }",
+    '  .wireframe-screen[data-wireframe-device="desktop"] {',
+    "    --wf-text-meta: 1.0625rem;",
+    "    --wf-text-small: 1.1875rem;",
+    "    --wf-text-body: 1.25rem;",
+    `    --wf-text-title: ${desktopTitle};`,
+    "    --wf-text-heading: 2.125rem;",
+    "  }",
+    '  .wireframe-screen[data-wireframe-device="tablet"] {',
+    "    --wf-text-meta: 0.9375rem;",
+    "    --wf-text-small: 1rem;",
+    "    --wf-text-body: 1.0625rem;",
+    "    --wf-text-title: 1.375rem;",
+    "    --wf-text-heading: 1.75rem;",
+    "  }",
+    "  .wireframe-artboard { font-size: var(--wf-text-body); }",
+    "  .wireframe-panel-title { font-size: var(--wf-text-title); }",
+    "  .wireframe-heading { font-size: var(--wf-text-heading); }",
+    "  .wireframe-eyebrow { font-size: var(--wf-text-meta); }",
+    effectiveOverride,
+    "}",
+    "",
+  ].join("\n");
+
+test("accepts an artboard ramp whose roles are a visible step apart", async () => {
+  const result = await runAgainst(
+    {},
+    { artboardStylesheet: artboardStylesheet({ desktopTitle: "1.625rem" }) },
+  );
+  assert.equal(result.failed, false);
+  assert.match(result.output, /design system: passed/);
+});
+
+test("rejects an artboard title too close to the content beneath it", async () => {
+  const result = await runAgainst(
+    {},
+    { artboardStylesheet: artboardStylesheet({ desktopTitle: "1.3125rem" }) },
+  );
+  assert.equal(result.failed, true);
+  assert.match(
+    result.output,
+    /desktop title \(1\.3125rem\) is only 1\.05x body/,
+  );
+});
+
+test("rejects an effective device override that flattens the ramp", async () => {
+  const result = await runAgainst(
+    {},
+    {
+      artboardStylesheet: artboardStylesheet({
+        desktopTitle: "1.625rem",
+        effectiveOverride:
+          '  .wireframe-artboard[data-wireframe-device="phone"] .wireframe-heading { font-size: 1.375rem; }',
+      }),
+    },
+  );
+  assert.equal(result.failed, true);
+  assert.match(
+    result.output,
+    /phone heading \(1\.375rem\) is only 1\.10x title/,
+  );
+});
+
+test("rejects a device artboard ramp override that flattens the ramp", async () => {
+  const result = await runAgainst(
+    {},
+    {
+      artboardStylesheet: artboardStylesheet({
+        desktopTitle: "1.625rem",
+        effectiveOverride:
+          '  .wireframe-artboard[data-wireframe-device="phone"] { --wf-text-title: 1rem; }',
+      }),
+    },
+  );
+  assert.equal(result.failed, true);
+  assert.match(result.output, /phone title \(1rem\) is only 1\.14x body/);
 });

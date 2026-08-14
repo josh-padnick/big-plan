@@ -79,3 +79,7 @@ Inline code inside a table cell does not hide an otherwise table-shaped row.
 `wireframe-product-copy` keeps implementation and review notes out of product artboards.
 Within a `Wireframe`, literal attributes containing `sticky`, `remembered`, `Cmd+K`, or `J/K` are rejected; move that rationale to the surrounding plan prose and leave only language the intended product user sees inside the drawing.
 The same words in prose outside a `Wireframe` are left alone.
+
+`wireframe-envelope-fit` keeps a screen inside the device envelope it will be drawn in.
+A wireframe is scaled as one unit into a figure slot that never widens, so a `Row` laying out more columns than its device can hold does not produce a wider figure - it produces narrower, less readable columns.
+The budget is three columns per row on desktop and landscape tablet, two on portrait tablet, and one on phone; only elements that take a share of the row's width count, so a row of buttons or badges is left alone.
