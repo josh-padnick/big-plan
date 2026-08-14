@@ -222,7 +222,9 @@ export const CommentsSurface = ({
 
           {model.resolved.length === 0 &&
           model.resolvedDrafts.length === 0 ? null : (
-            <details className={first() ? "" : "border-t border-edge pt-4"}>
+            <details
+              className={`min-w-0 ${first() ? "" : "border-t border-edge pt-4"}`}
+            >
               <summary className="cursor-pointer text-xs font-bold uppercase tracking-caps text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                 Resolved ({model.resolved.length + model.resolvedDrafts.length})
               </summary>
