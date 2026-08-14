@@ -3566,6 +3566,8 @@ export const ReviewController = () => {
     nowMs: statusNowMs,
   });
   const agentPresenceIsObservable = agentProjection.state === "observable";
+  const agentStatusIsAvailable =
+    agentPresenceIsObservable || agentProjection.state === "agent-unavailable";
   const agentProjectionNowMs = agentProjection.nowMs;
   const agentConnection = projectAgentConnectionState({
     presenceConnected: agent.presence.connected,
@@ -4669,7 +4671,7 @@ export const ReviewController = () => {
       }),
     );
   }, [isOpen, threadProjections]);
-  const agentHealthLabel = agentPresenceIsObservable
+  const agentHealthLabel = agentStatusIsAvailable
     ? deriveAgentHealthLabel({
         activity: currentAgentActivity,
         hasAgentRuntime: identity !== null,
@@ -5395,7 +5397,7 @@ export const ReviewController = () => {
                 >
                   Checking agent status…
                 </p>
-              ) : !agentPresenceIsObservable ? (
+              ) : agentProjection.state === "unobservable" ? (
                 <p
                   className="m-0 text-xs text-support"
                   role="status"

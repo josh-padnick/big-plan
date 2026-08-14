@@ -540,6 +540,8 @@ export const AgentConnectionPanel = ({
 }) => {
   const currentNowMs = useSecondClock();
   const presenceIsObservable = presenceState === "observable";
+  const agentStatusIsAvailable =
+    presenceIsObservable || presenceState === "agent-unavailable";
   const isConnected =
     presenceIsObservable &&
     connected &&
@@ -553,7 +555,7 @@ export const AgentConnectionPanel = ({
       >
         Agent Connection
       </h2>
-      {presenceIsObservable ? (
+      {agentStatusIsAvailable ? (
         <>
           <ConnectionHealthCard
             connected={isConnected}
@@ -588,7 +590,7 @@ export const AgentConnectionPanel = ({
         <AgentPresenceUnavailableCard />
       )}
       <AnotherViewTip />
-      {isReadOnly || isConnected || !presenceIsObservable ? null : (
+      {isReadOnly || isConnected || !agentStatusIsAvailable ? null : (
         <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
@@ -616,7 +618,7 @@ export const AgentConnectionPanel = ({
           </div>
         </details>
       )}
-      {isReadOnly || !presenceIsObservable ? null : (
+      {isReadOnly || !agentStatusIsAvailable ? null : (
         <ConnectionLog
           connected={isConnected}
           heartbeatAt={heartbeatAt}

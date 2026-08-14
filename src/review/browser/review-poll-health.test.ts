@@ -79,10 +79,24 @@ describe("review poll health", () => {
     ).toEqual({ state: "unobservable", nowMs: 1_000 });
   });
 
+  it("should leave loading after repeated poll failures", () => {
+    const health = transition(["poll-failed", "poll-failed"]);
+
+    expect(
+      agentProjectionForReviewPoll({
+        health,
+        hasObservedAgentSnapshot: false,
+        lastObservableAtMs: 1_000,
+        nowMs: 1_000_000,
+      }),
+    ).toEqual({ state: "agent-unavailable", nowMs: 1_000_000 });
+  });
+
   it.each([
     INITIAL_REVIEW_POLL_HEALTH,
     transition(["runtime-unavailable"]),
-  ])("should preserve initial loading while runtime health is %o", (health) => {
+    transition(["poll-failed"]),
+  ])("should preserve initial loading while poll health is %o", (health) => {
     expect(
       agentProjectionForReviewPoll({
         health,
