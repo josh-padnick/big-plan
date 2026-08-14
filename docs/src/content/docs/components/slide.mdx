@@ -89,7 +89,7 @@ Apply the Wireframe component's CLEAR quality bar to every mockup.
 
 - `type` is required and accepts only the five registered ids above.
 - `Slide` is self-closing and rejects body content.
-- The marker must be top-level and immediately followed by the h2 it describes.
+- The marker must be top-level and immediately followed by the h2 or h3 it describes. On an h3 it types one journey sub-slide: the marker's name fills the kicker, and the h3 becomes that sub-slide's title.
 - `user-journey` additionally requires non-empty `name` and `toc` attributes and accepts an optional non-empty `wireframeReason`; other types reject all three.
 - Every `user-journey` section must contain a `Wireframe` with actual UI mockups, or a non-empty `wireframeReason` that explains why no UI was created. Carrying both is rejected, because the reason only explains an absent wireframe.
 - Every `user-journey` slide must sit inside a Part whose title names the journeys container, such as “User journeys” or “Reviewer journeys”.

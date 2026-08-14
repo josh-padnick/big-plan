@@ -215,6 +215,49 @@ describe("lintPlan slide-type-structure", () => {
     ]);
   });
 
+  it("should apply the journey contracts to a typed sub-slide", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Part title="User journeys" />\n\n## Merchant journeys\n\nThe merchant acts first.\n\n<Slide type="user-journey" name="Review a failed payment" toc="Review failure" />\n\n### A merchant reads why one payment failed\n\nProse alone.\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-type-structure",
+        line: 7,
+        column: 1,
+        message:
+          'User journeys slide "Review a failed payment" needs a Wireframe with actual UI mockups, or a non-empty wireframeReason explaining why no UI was created',
+      },
+    ]);
+  });
+
+  it("should accept grouped journeys nested under an actor group", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Part title="User journeys" />\n\n## Merchant journeys\n\nThe merchant acts first.\n\n<Slide type="user-journey" name="Review a failed payment" toc="Review failure" />\n\n### A merchant reads why one payment failed\n\nA.\n\n<Wireframe id="review"><Screen id="failure" name="Failure" device="desktop" /></Wireframe>\n\n<Slide type="user-journey" name="Queue a protected retry" toc="Queue retry" />\n\n### A merchant schedules the next attempt\n\nB.\n\n<Wireframe id="retry"><Screen id="schedule" name="Schedule" device="desktop" /></Wireframe>\n',
+      }),
+    ).toEqual([]);
+  });
+
+  it("should reject a grouped journey with no journeys container", () => {
+    expect(
+      lintPlan({
+        markdown:
+          '<Part title="The proposal" />\n\n## How the merchant works\n\nContext.\n\n<Slide type="user-journey" name="Review a failed payment" toc="Review failure" />\n\n### A merchant reads why one payment failed\n\nA.\n\n<Wireframe id="review"><Screen id="failure" name="Failure" device="desktop" /></Wireframe>\n',
+      }),
+    ).toEqual([
+      {
+        ruleId: "slide-type-structure",
+        line: 7,
+        column: 1,
+        message:
+          'Put User journeys sub-slide "Review a failed payment" under a container that names the journeys, such as <Part title="User journeys" /> or an actor group titled "Merchant journeys"',
+      },
+    ]);
+  });
+
   it("should leave plain-language title judgment to guidance", () => {
     expect(
       lintPlan({

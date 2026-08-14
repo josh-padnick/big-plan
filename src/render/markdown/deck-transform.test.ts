@@ -169,6 +169,38 @@ What lands where.
     expect(html).toContain(">1.2.2 / Planned changes</h3>");
   });
 
+  it("should split name from title on a typed sub-slide", () => {
+    const { html } = compile(`# Grouped plan
+
+The lede.
+
+<Part title="User journeys" />
+
+## Merchant journeys
+
+The merchant sees the failure first.
+
+<Slide type="user-journey" name="Review a failed payment" toc="Review failure" />
+
+### A merchant reads why one payment failed
+
+The merchant opens the payment.
+`);
+    // The marker names the sub-slide in its kicker, so the h3 is free to
+    // carry this plan's claim as a visible title.
+    expect(html).toContain(">1.1.1 / Review a failed payment</p>");
+    expect(html).toMatch(
+      /<h3 id="a-merchant-reads-why-one-payment-failed"[^>]*plan-subslide-title[^>]*>A merchant reads why one payment failed<\/h3>/,
+    );
+    expect(html).toContain('data-subslide="" data-slide-type="user-journey"');
+  });
+
+  it("should keep an untyped sub-slide heading as its kicker", () => {
+    const { html } = compile(SUBSLIDE_FIXTURE);
+    expect(html).not.toContain("plan-subslide-title");
+    expect(html).toContain(">1.2.2 / Planned changes</h3>");
+  });
+
   it("should keep a section without h3 headings a single slide frame", () => {
     const { html } = compile(SUBSLIDE_FIXTURE);
     expect(html).toContain(

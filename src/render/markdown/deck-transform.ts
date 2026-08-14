@@ -138,8 +138,20 @@ const SLIDE_GROUP_CLASSES = [
   "plan-slide-group",
 ] as const;
 
-// A sub-slide's kicker is its heading: the h3 keeps its anchor and outline
-// role while rendering as the numbered small-caps line.
+// A typed sub-slide's title: its marker supplies the name for the kicker, so
+// the h3 is free to state this plan's claim. One step below the slide title
+// (Contrast), which is the scale's designated sub-slide title size.
+const SUBSLIDE_TITLE_CLASSES = [
+  "plan-subslide-title",
+  "m-0",
+  "border-b-0",
+  "pb-0",
+  "text-xl",
+  ...SCROLL_CLASSES,
+] as const;
+
+// An untyped sub-slide's kicker is its heading: the h3 keeps its anchor and
+// outline role while rendering as the numbered small-caps line.
 const SUBSLIDE_KICKER_CLASSES = [
   "mt-0",
   "mb-0",
@@ -237,10 +249,14 @@ const collectSlideTypes = ({
         parent.children.splice(index, 1);
         continue;
       }
-      if (next === undefined || !isElement(next) || next.tagName !== "h2") {
+      if (
+        next === undefined ||
+        !isElement(next) ||
+        (next.tagName !== "h2" && next.tagName !== "h3")
+      ) {
         diagnostics.add({
           message:
-            "Slide must be a top-level self-closing marker immediately followed by the h2 it describes",
+            "Slide must be a top-level self-closing marker immediately followed by the h2 or h3 it describes",
           position: child.position,
         });
       } else if (
@@ -328,12 +344,14 @@ const buildSubSlides = ({
   label,
   kicker,
   slideType,
+  slideTypes,
 }: {
   readonly heading: Element;
   readonly body: ReadonlyArray<ElementContent>;
   readonly label: string;
   readonly kicker: Element;
   readonly slideType?: AssignedSlideType;
+  readonly slideTypes: Map<Element, AssignedSlideType>;
 }): Element => {
   const firstH3 = body.findIndex(
     (node) => isElement(node) && node.tagName === "h3",
@@ -371,31 +389,57 @@ const buildSubSlides = ({
     const subLabel = `${label}.${subIndex}`;
     const subId =
       typeof h3.properties.id === "string" ? h3.properties.id : subLabel;
-    // The kicker is a sub-slide's whole name, so it carries the name marker
-    // that a slide puts on its separate title (deck-collapse invariant 4).
+    // A typed sub-slide splits name from title exactly as a slide does: the
+    // marker names it in the kicker, freeing the h3 to state this plan's
+    // claim as a visible title. An untyped sub-slide has only the one
+    // string, so its h3 stays the kicker and no title is invented.
+    const subType = slideTypes.get(h3);
+    const subName =
+      subType === undefined
+        ? textOf(h3)
+        : (subType.name ?? subType.definition.name);
     const subKicker: Element = {
       type: "element",
-      tagName: "h3",
+      tagName: subType === undefined ? "h3" : "p",
       properties: {
-        ...(typeof h3.properties.id === "string"
+        ...(subType === undefined && typeof h3.properties.id === "string"
           ? { id: h3.properties.id }
           : {}),
         "data-slide-kicker": "",
-        [COLLAPSE_NAME_ATTRIBUTE]: "",
+        ...(subType === undefined ? { [COLLAPSE_NAME_ATTRIBUTE]: "" } : {}),
         className: [...SUBSLIDE_KICKER_CLASSES],
       },
-      children: [{ type: "text", value: `${subLabel} / ${textOf(h3)}` }],
+      children: [{ type: "text", value: `${subLabel} / ${subName}` }],
     };
+    const subChrome: Array<ElementContent> = [subKicker];
+    if (subType !== undefined) {
+      const existingSubClasses = Array.isArray(h3.properties.className)
+        ? h3.properties.className.map(String)
+        : [];
+      h3.properties.className = [
+        ...existingSubClasses,
+        ...SUBSLIDE_TITLE_CLASSES,
+      ];
+      h3.properties[COLLAPSE_NAME_ATTRIBUTE] = "";
+      subChrome.push(h3);
+    }
     applyContextBuilder(run);
-    // Chrome is the kicker alone; the h3 run becomes the body.
+    // Chrome is the kicker, plus the title when the marker supplied a name;
+    // the h3 run becomes the body.
     groupBody.push(
       createCollapsible({
         kind: "subslide",
         collapseId: subId,
         tagName: "section",
-        properties: { "data-slide": "", "data-subslide": "" },
+        properties: {
+          "data-slide": "",
+          "data-subslide": "",
+          ...(subType === undefined
+            ? {}
+            : { "data-slide-type": subType.definition.id }),
+        },
         className: SUBSLIDE_FRAME_CLASSES,
-        chrome: [subKicker],
+        chrome: subChrome,
         body: run,
       }),
     );
@@ -566,6 +610,7 @@ const wrapSlides = (
           body: sectionBody,
           label,
           kicker,
+          slideTypes,
           ...(slideType === undefined ? {} : { slideType }),
         }),
       );

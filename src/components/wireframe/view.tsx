@@ -759,14 +759,21 @@ const Screen = ({
       data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
-      <div className="wireframe-screen-caption mb-1.5 flex flex-wrap justify-between gap-2 text-xs text-muted">
+      {/* Named screens sit opposite their viewport note so the switcher's
+          label leads the row. With one screen there is no name, and an empty
+          spacer would strand the note on the right edge under a left-aligned
+          figure title; the note then simply starts at the same left edge
+          (Alignment). */}
+      <div
+        className={`wireframe-screen-caption mb-1.5 flex flex-wrap gap-2 text-xs text-muted${
+          named ? " justify-between" : ""
+        }`}
+      >
         {named ? (
           <span className="wireframe-screen-name font-semibold tracking-caps">
             {screen.name}
           </span>
-        ) : (
-          <span />
-        )}
+        ) : null}
         <span className="wireframe-screen-viewport">
           {preset.label} · {preset.width} × {preset.height}px{" "}
           {workspaceViewport

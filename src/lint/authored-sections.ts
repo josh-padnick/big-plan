@@ -18,6 +18,8 @@ export type AuthoredSection = {
   /** Title of the nearest preceding top-level Part marker, when the plan uses Parts. */
   readonly partTitle?: string;
   readonly partOrdinal?: number;
+  /** Title of the h2 group a typed sub-slide sits inside. */
+  readonly parentTitle?: string;
   readonly isTopLevel: boolean;
   readonly components: ReadonlyArray<string>;
   readonly content: ReadonlyArray<Node>;
@@ -58,6 +60,93 @@ const componentNamesWithin = (
   };
   nodes.forEach(visit);
   return names;
+};
+
+/**
+ * Returns typed h3 sub-slides in source order: the journeys a plan groups
+ * under an actor. Only a marked sub-slide is collected, because an unmarked
+ * h3 carries no typed identity for a rule to judge. The h2 collector stays
+ * h2-only so section-counting rules keep comparing like with like.
+ */
+export const collectAuthoredSubSections = (
+  tree: Node,
+): ReadonlyArray<AuthoredSection> => {
+  const sections: Array<AuthoredSection> = [];
+  if (!isParent(tree)) {
+    return sections;
+  }
+  let partTitle: string | undefined;
+  let partOrdinal: number | undefined;
+  let nextPartOrdinal = 0;
+  let parentTitle: string | undefined;
+  for (let index = 0; index < tree.children.length; index += 1) {
+    const child = tree.children[index];
+    if (child === undefined) {
+      continue;
+    }
+    if (isNamedFlowElement(child, "Part")) {
+      partTitle = stringAttribute({ node: child, name: "title" });
+      nextPartOrdinal += 1;
+      partOrdinal = nextPartOrdinal;
+      continue;
+    }
+    if (isHeading(child) && child.depth === 2) {
+      parentTitle = headingText(child).trim();
+      continue;
+    }
+    if (
+      !isHeading(child) ||
+      child.depth !== 3 ||
+      child.position === undefined
+    ) {
+      continue;
+    }
+    const previous = tree.children[index - 1];
+    if (previous === undefined || !isNamedFlowElement(previous, "Slide")) {
+      continue;
+    }
+    const authoredType = stringAttribute({ node: previous, name: "type" });
+    if (authoredType === undefined || !isSlideTypeId(authoredType)) {
+      continue;
+    }
+    const nextOffset = tree.children
+      .slice(index + 1)
+      .findIndex(
+        (candidate) =>
+          isHeading(candidate) &&
+          (candidate.depth === 2 || candidate.depth === 3),
+      );
+    const end =
+      nextOffset === -1 ? tree.children.length : index + 1 + nextOffset;
+    const journeyName = stringAttribute({ node: previous, name: "name" });
+    const journeyToc = stringAttribute({ node: previous, name: "toc" });
+    const wireframeReason = stringAttribute({
+      node: previous,
+      name: "wireframeReason",
+    });
+    sections.push({
+      name: journeyName ?? slideTypeFor(authoredType).name,
+      ...(journeyToc === undefined ? {} : { toc: journeyToc }),
+      ...(wireframeReason === undefined ? {} : { wireframeReason }),
+      ...(partTitle === undefined ? {} : { partTitle }),
+      ...(partOrdinal === undefined ? {} : { partOrdinal }),
+      ...(parentTitle === undefined ? {} : { parentTitle }),
+      isTopLevel: false,
+      title: headingText(child).trim(),
+      components: componentNamesWithin(tree.children.slice(index + 1, end)),
+      content: tree.children.slice(index + 1, end),
+      type: authoredType,
+      line: child.position.start.line,
+      column: child.position.start.column,
+      ...(previous.position === undefined
+        ? {}
+        : {
+            markerLine: previous.position.start.line,
+            markerColumn: previous.position.start.column,
+          }),
+    });
+  }
+  return sections;
 };
 
 /** Returns h2 sections in source order with valid top-level type markers. */

@@ -5,6 +5,7 @@
 import { SLIDE_TYPES } from "../../plan-vocabulary/slide-types/index.js";
 import {
   collectAuthoredSections,
+  collectAuthoredSubSections,
   type AuthoredSection,
 } from "../authored-sections.js";
 import type { PlanLintFinding, PlanLintRule } from "../types.js";
@@ -35,7 +36,12 @@ const positionOf = ({
 
 const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
   const sections = collectAuthoredSections(tree);
-  const typed = sections.filter((section) => section.type !== undefined);
+  const subSections = collectAuthoredSubSections(tree);
+  // A grouped journey is a typed sub-slide, so every per-journey contract
+  // below reads both shapes; only the containment walk cares which is which.
+  const typed = [...sections, ...subSections]
+    .filter((section) => section.type !== undefined)
+    .sort((left, right) => left.line - right.line);
   const findings: Array<PlanLintFinding> = [];
 
   for (const definition of SLIDE_TYPES) {
@@ -144,6 +150,23 @@ const checkSlideTypeStructure: PlanLintRule["check"] = ({ tree }) => {
     findings.push({
       ...positionOf(section),
       message: `Put User journeys slide "${section.name}" inside a Part titled "User journeys" so every journey nests under its container`,
+    });
+  }
+  // A grouped journey is nested by construction, so it only has to sit under
+  // a container that names journeys: the Part, or the actor group holding it.
+  for (const journey of subSections) {
+    if (journey.type !== "user-journey") {
+      continue;
+    }
+    const contained = [journey.partTitle, journey.parentTitle].some(
+      (title) => title !== undefined && namesJourneyContainer(title),
+    );
+    if (contained) {
+      continue;
+    }
+    findings.push({
+      ...positionOf(journey),
+      message: `Put User journeys sub-slide "${journey.name}" under a container that names the journeys, such as <Part title="User journeys" /> or an actor group titled "Merchant journeys"`,
     });
   }
   for (const slide of containerSlides) {
