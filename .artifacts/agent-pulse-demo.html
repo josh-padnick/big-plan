@@ -125,6 +125,15 @@
         width: 100%;
         accent-color: var(--green);
       }
+      input[type="color"] {
+        width: 100%;
+        height: 32px;
+        padding: 2px;
+        border: 1px solid var(--edge);
+        border-radius: 6px;
+        background: var(--surface);
+        cursor: pointer;
+      }
       output {
         color: var(--muted);
         font:
@@ -167,7 +176,7 @@
         height: auto;
         aspect-ratio: 1;
         background: conic-gradient(
-          var(--green) 0deg calc(360deg - var(--orbit-opening)),
+          var(--orbit-color) 0deg calc(360deg - var(--orbit-opening)),
           transparent calc(360deg - var(--orbit-opening)) 360deg
         );
         border-radius: 50%;
@@ -184,6 +193,7 @@
         animation: orbit-ring-spin var(--orbit-speed) linear infinite;
       }
       .orbit-a {
+        --orbit-color: var(--green);
         --orbit-padding: -4px;
         --orbit-opening: 70deg;
         --orbit-stroke: 1.5px;
@@ -322,6 +332,15 @@
             value="1.5"
           /><output id="stroke-value" for="stroke">1.5px</output>
         </div>
+        <div class="control">
+          <label for="color">Ring colour</label
+          ><input
+            id="color"
+            type="color"
+            value="#37824e"
+            aria-label="Ring colour"
+          /><output id="color-value" for="color">#37824e</output>
+        </div>
       </section>
     </main>
     <script>
@@ -342,6 +361,10 @@
           suffix: "px",
           output: document.querySelector("#stroke-value"),
         },
+        color: {
+          suffix: "",
+          output: document.querySelector("#color-value"),
+        },
       };
       const updateTuning = () => {
         const values = Object.fromEntries(
@@ -354,10 +377,11 @@
         indicator.style.setProperty("--orbit-opening", `${values.opening}deg`);
         indicator.style.setProperty("--orbit-speed", `${values.speed}s`);
         indicator.style.setProperty("--orbit-stroke", `${values.stroke}px`);
+        indicator.style.setProperty("--orbit-color", values.color);
         Object.entries(controls).forEach(([key, control]) => {
           control.output.textContent = `${values[key]}${control.suffix}`;
         });
-        summary.textContent = `${values.padding}px · ${values.opening}° · ${values.stroke}px · ${values.speed}s`;
+        summary.textContent = `${values.padding}px · ${values.opening}° · ${values.stroke}px · ${values.speed}s · ${values.color}`;
       };
       Object.keys(controls).forEach((key) =>
         document
