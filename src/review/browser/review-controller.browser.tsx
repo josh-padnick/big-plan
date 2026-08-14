@@ -109,6 +109,7 @@ import {
   liveFlowAnchor,
 } from "./live-target.browser.js";
 import {
+  agentProjectionNowForReviewPoll,
   INITIAL_REVIEW_POLL_HEALTH,
   reviewPollIsOffline,
   reviewRuntimeCanWrite,
@@ -117,6 +118,10 @@ import {
   type ReviewPollHealth,
   type ReviewPollResult,
 } from "./review-poll-health.js";
+import {
+  isReviewRuntimeUnavailable,
+  normalizeReviewRuntimeRequestError,
+} from "./review-runtime-request.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
   AlertDialog,
@@ -502,27 +507,14 @@ const requestJson = async ({
     }
     return await response.json();
   } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error("Review runtime request timed out.", { cause: error });
-    }
-    if (error instanceof TypeError) {
-      throw new ReviewRuntimeUnavailableError({ cause: error });
-    }
-    throw error;
+    throw normalizeReviewRuntimeRequestError({
+      error,
+      timedOut: controller.signal.aborted,
+    });
   } finally {
     window.clearTimeout(timeout);
   }
 };
-
-class ReviewRuntimeUnavailableError extends Error {
-  constructor({ cause }: { readonly cause: unknown }) {
-    super("The local review runtime is unavailable.", { cause });
-    this.name = "ReviewRuntimeUnavailableError";
-  }
-}
-
-const isReviewRuntimeUnavailable = (error: unknown): boolean =>
-  error instanceof ReviewRuntimeUnavailableError;
 
 const ServerGoneBanner = ({
   onRefresh,
@@ -3519,6 +3511,8 @@ export const ReviewController = () => {
     INITIAL_REVIEW_POLL_HEALTH,
   );
   const [statusNowMs, setStatusNowMs] = useState(Date.now());
+  const [lastObservableAgentAtMs, setLastObservableAgentAtMs] =
+    useState(statusNowMs);
   const [threadOpenState, setThreadOpenState] = useState<ThreadOpenState>(
     new Map(),
   );
@@ -3557,10 +3551,15 @@ export const ReviewController = () => {
   const serverGone = reviewRuntimeIsDown(pollHealth);
   const threadRuntime: ThreadRuntime =
     identity === null ? "static" : pollIsOffline ? "offline" : "online";
+  const agentProjectionNowMs = agentProjectionNowForReviewPoll({
+    health: pollHealth,
+    lastObservableAtMs: lastObservableAgentAtMs,
+    nowMs: statusNowMs,
+  });
   const agentConnection = projectAgentConnectionState({
     presenceConnected: agent.presence.connected,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
-    now: statusNowMs,
+    now: agentProjectionNowMs,
     events: agent.connectionLog,
   });
   const agentConnected = agentConnection.connected;
@@ -3997,7 +3996,9 @@ export const ReviewController = () => {
           acceptAgentSnapshot(parseAgentSnapshot(agentValue));
           setProgress(parseProgress(progressValue));
           setPollHealth(INITIAL_REVIEW_POLL_HEALTH);
-          setStatusNowMs(Date.now());
+          const now = Date.now();
+          setStatusNowMs(now);
+          setLastObservableAgentAtMs(now);
         }
       } catch (error) {
         if (current) {
@@ -4462,7 +4463,7 @@ export const ReviewController = () => {
     progressEvents: progress,
     presence: effectivePresence,
     runtime: threadRuntime,
-    nowMs: statusNowMs,
+    nowMs: agentProjectionNowMs,
     cancelPendingRequestIds,
   });
   const cancelRequestsForComment = (commentId: string) => {
@@ -4513,7 +4514,7 @@ export const ReviewController = () => {
       latestRequest?.claimedAt !== undefined || requestProgress.length > 0,
     ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
     ...(failure === undefined ? {} : { failure }),
-    nowMs: statusNowMs,
+    nowMs: agentProjectionNowMs,
   });
   const activityForRequest = (
     request: AgentRequest,
@@ -4532,7 +4533,7 @@ export const ReviewController = () => {
       presence: effectivePresence,
       runtime: threadRuntime,
       surface,
-      nowMs: statusNowMs,
+      nowMs: agentProjectionNowMs,
       cancelPendingRequestIds,
     });
   const currentAgentActivity = deriveCurrentAgentActivity({
@@ -4551,7 +4552,7 @@ export const ReviewController = () => {
     progressEvents: progress,
     agentConnected,
     runtimeOffline: pollIsOffline,
-    now: statusNowMs,
+    now: agentProjectionNowMs,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
   });
   const chatRequests = agent.requests.filter(

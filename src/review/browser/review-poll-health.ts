@@ -44,14 +44,14 @@ export const reviewRuntimeCanWrite = (health: ReviewPollHealth): boolean =>
 export const reviewPollIsOffline = (health: ReviewPollHealth): boolean =>
   health.state === "poll-failed" && health.consecutiveFailures >= 2;
 
-/** Prevents an unobservable heartbeat from changing the last known agent state. */
-export const agentConnectionForReviewPoll = ({
+/** Selects the clock used to derive the visible agent projection. */
+export const agentProjectionNowForReviewPoll = ({
   health,
-  lastKnownConnected,
-  presenceIsFresh,
+  lastObservableAtMs,
+  nowMs,
 }: {
   readonly health: ReviewPollHealth;
-  readonly lastKnownConnected: boolean;
-  readonly presenceIsFresh: boolean;
-}): boolean =>
-  health.state === "runtime-unavailable" ? lastKnownConnected : presenceIsFresh;
+  readonly lastObservableAtMs: number;
+  readonly nowMs: number;
+}): number =>
+  health.state === "runtime-unavailable" ? lastObservableAtMs : nowMs;
