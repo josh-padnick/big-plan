@@ -44,14 +44,27 @@ export const reviewRuntimeCanWrite = (health: ReviewPollHealth): boolean =>
 export const reviewPollIsOffline = (health: ReviewPollHealth): boolean =>
   health.state === "poll-failed" && health.consecutiveFailures >= 2;
 
-/** Selects the clock used to derive the visible agent projection. */
-export const agentProjectionNowForReviewPoll = ({
+export type ReviewAgentProjection =
+  | { readonly state: "unobservable"; readonly nowMs: number }
+  | { readonly state: "observable"; readonly nowMs: number };
+
+/** Selects the visibility and clock for the agent projection. */
+export const agentProjectionForReviewPoll = ({
   health,
+  hasObservedAgentSnapshot,
   lastObservableAtMs,
   nowMs,
 }: {
   readonly health: ReviewPollHealth;
+  readonly hasObservedAgentSnapshot: boolean;
   readonly lastObservableAtMs: number;
   readonly nowMs: number;
-}): number =>
-  health.state === "runtime-unavailable" ? lastObservableAtMs : nowMs;
+}): ReviewAgentProjection => {
+  if (!hasObservedAgentSnapshot) {
+    return { state: "unobservable", nowMs: lastObservableAtMs };
+  }
+  return {
+    state: "observable",
+    nowMs: health.state === "runtime-unavailable" ? lastObservableAtMs : nowMs,
+  };
+};

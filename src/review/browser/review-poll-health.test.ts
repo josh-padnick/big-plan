@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { deriveCurrentAgentActivity } from "../shared/agent-status.js";
 import {
-  agentProjectionNowForReviewPoll,
+  agentProjectionForReviewPoll,
   INITIAL_REVIEW_POLL_HEALTH,
   reviewPollIsOffline,
   reviewRuntimeCanWrite,
@@ -31,12 +31,13 @@ describe("review poll health", () => {
     expect(reviewRuntimeIsDown(second)).toBe(true);
     expect(reviewPollIsOffline(second)).toBe(false);
     expect(reviewRuntimeCanWrite(second)).toBe(false);
-    const projectionNow = agentProjectionNowForReviewPoll({
+    const projection = agentProjectionForReviewPoll({
       health: second,
+      hasObservedAgentSnapshot: true,
       lastObservableAtMs: 1_000,
       nowMs: 1_000_000,
     });
-    expect(projectionNow).toBe(1_000);
+    expect(projection).toEqual({ state: "observable", nowMs: 1_000 });
     expect(
       deriveCurrentAgentActivity({
         requests: [],
@@ -44,7 +45,7 @@ describe("review poll health", () => {
         progressEvents: [],
         agentConnected: true,
         runtimeOffline: false,
-        now: projectionNow,
+        now: projection.nowMs,
         heartbeatAt: 1_000,
       }),
     ).toMatchObject({ state: "idle", headline: "Agent connected" });
@@ -56,12 +57,26 @@ describe("review poll health", () => {
     expect(reviewPollIsOffline(health)).toBe(true);
     expect(reviewRuntimeIsDown(health)).toBe(false);
     expect(
-      agentProjectionNowForReviewPoll({
+      agentProjectionForReviewPoll({
         health,
+        hasObservedAgentSnapshot: true,
         lastObservableAtMs: 1_000,
         nowMs: 1_000_000,
       }),
-    ).toBe(1_000_000);
+    ).toEqual({ state: "observable", nowMs: 1_000_000 });
+  });
+
+  it("should keep agent presence unobservable before the first snapshot", () => {
+    const health = transition(["runtime-unavailable", "runtime-unavailable"]);
+
+    expect(
+      agentProjectionForReviewPoll({
+        health,
+        hasObservedAgentSnapshot: false,
+        lastObservableAtMs: 1_000,
+        nowMs: 1_000_000,
+      }),
+    ).toEqual({ state: "unobservable", nowMs: 1_000 });
   });
 
   it.each([

@@ -10,6 +10,7 @@ import { AgentConnectionPanel } from "./agent-connection.browser.js";
 
 export type AgentSurfaceModel = {
   readonly activity: CurrentAgentActivity;
+  readonly presenceIsObservable: boolean;
   readonly connected: boolean;
   readonly heartbeatAt: number;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -34,6 +35,7 @@ export const AgentSurface = ({
   >
     <AgentConnectionPanel
       activity={model.activity}
+      presenceIsObservable={model.presenceIsObservable}
       connected={model.connected}
       heartbeatAt={model.heartbeatAt}
       connectionLog={model.connectionLog}
