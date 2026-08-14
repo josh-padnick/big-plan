@@ -31,12 +31,12 @@ import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
 const MAXIMIZABLE_ATTRIBUTE = "data-figure-maximizable";
 const BODY_ATTRIBUTE = "data-figure-body";
 
-const DiffMaximizeButton = () => (
+const DiffMaximizeButton = ({ subject }: { readonly subject: string }) => (
   <button
     type="button"
     className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:bg-transparent hover:text-ink focus-visible:bg-transparent focus-visible:text-ink focus-visible:shadow-focus focus-visible:outline-none [&_svg]:size-4"
-    aria-label="Maximize wireframe diff"
-    data-tooltip="Maximize wireframe diff"
+    aria-label={`Maximize ${subject}`}
+    data-tooltip={`Maximize ${subject}`}
     data-figure-maximize=""
     hidden
   >
@@ -662,34 +662,27 @@ const ComponentSnapshotComparison = ({
     setSide(initialSide);
     setSelectedScreenId(screenDiffs[0]?.id);
   }, [initialSide, location, screenDiffs]);
-  const html = side === "old" ? location.oldHtml : location.newHtml;
-  const fallbackHtml = side === "old" ? location.newHtml : location.oldHtml;
+  const selectedScreen = screenDiffs.find(
+    (screen) => screen.id === selectedScreenId,
+  );
+  const canShowOld =
+    location.oldHtml !== undefined && selectedScreen?.status !== "added";
+  const canShowNew =
+    location.newHtml !== undefined && selectedScreen?.status !== "removed";
+  const renderedSide =
+    (side === "old" && canShowOld) || !canShowNew ? "old" : "new";
   const renderedHtml =
-    selectedScreenId === undefined ||
-    html?.includes(`data-wireframe-screen="${selectedScreenId}"`) === true
-      ? html
-      : fallbackHtml;
+    renderedSide === "old" ? location.oldHtml : location.newHtml;
+  const isWireframe = useMemo(
+    () =>
+      wireframeScreenMarkup(location.oldHtml).size > 0 ||
+      wireframeScreenMarkup(location.newHtml).size > 0,
+    [location.newHtml, location.oldHtml],
+  );
+  const maximizeSubject = isWireframe ? "wireframe diff" : "component diff";
   useEffect(() => {
     const content = contentRef.current;
     if (content === null) return;
-    const diffWireframeIds = new Set(
-      Array.from(content.querySelectorAll<HTMLElement>("[data-wireframe]"))
-        .map((element) => element.dataset.wireframe)
-        .filter((id): id is string => id !== undefined),
-    );
-    const originalWireframes = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-wireframe]"),
-    ).filter(
-      (element) =>
-        !content.contains(element) &&
-        diffWireframeIds.has(element.dataset.wireframe ?? ""),
-    );
-    const originalDisplayValues = originalWireframes.map(
-      (element) => element.style.display,
-    );
-    originalWireframes.forEach((element) => {
-      element.style.display = "none";
-    });
     const fitWireframes = (): void => {
       for (const card of content.querySelectorAll<HTMLElement>(
         ".wireframe-frame-card",
@@ -744,12 +737,7 @@ const ComponentSnapshotComparison = ({
       observer.observe(element);
     }
     requestAnimationFrame(fitWireframes);
-    return () => {
-      observer.disconnect();
-      originalWireframes.forEach((element, index) => {
-        element.style.display = originalDisplayValues[index] ?? "";
-      });
-    };
+    return () => observer.disconnect();
   }, [renderedHtml, screenDiffs, selectedScreenId]);
   useEffect(() => {
     document.dispatchEvent(new CustomEvent("bigplan:review-island-updated"));
@@ -772,7 +760,11 @@ const ComponentSnapshotComparison = ({
               className="inline-flex cursor-pointer items-center gap-2 rounded-md border-2 border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted hover:bg-raised aria-pressed:border-ink aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               aria-current={selectedScreenId === screen.id ? "true" : undefined}
               aria-pressed={selectedScreenId === screen.id}
-              onClick={() => setSelectedScreenId(screen.id)}
+              onClick={() => {
+                setSelectedScreenId(screen.id);
+                if (screen.status === "added") setSide("new");
+                if (screen.status === "removed") setSide("old");
+              }}
             >
               <span
                 className={
@@ -799,8 +791,9 @@ const ComponentSnapshotComparison = ({
           {location.oldHtml === undefined ? null : (
             <button
               type="button"
-              className="cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-remove-c)] aria-pressed:bg-[var(--diff-remove-bg)] aria-pressed:text-[var(--diff-remove-c)]"
-              aria-pressed={side === "old"}
+              className="cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-remove-c)] aria-pressed:bg-[var(--diff-remove-bg)] aria-pressed:text-[var(--diff-remove-c)] disabled:cursor-not-allowed disabled:opacity-50"
+              aria-pressed={renderedSide === "old"}
+              disabled={!canShowOld}
               onClick={() => setSide("old")}
             >
               Was
@@ -815,8 +808,9 @@ const ComponentSnapshotComparison = ({
           {location.newHtml === undefined ? null : (
             <button
               type="button"
-              className="cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-add-c)] aria-pressed:bg-[var(--diff-add-bg)] aria-pressed:text-[var(--diff-add-c)]"
-              aria-pressed={side === "new"}
+              className="cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-add-c)] aria-pressed:bg-[var(--diff-add-bg)] aria-pressed:text-[var(--diff-add-c)] disabled:cursor-not-allowed disabled:opacity-50"
+              aria-pressed={renderedSide === "new"}
+              disabled={!canShowNew}
               onClick={() => setSide("new")}
             >
               Now
@@ -826,15 +820,15 @@ const ComponentSnapshotComparison = ({
       </div>
       <div
         className={`min-w-0 overflow-visible rounded-lg border-[10px] bg-surface p-3 text-ink inset-shadow-well ${
-          side === "old"
+          renderedSide === "old"
             ? "[border-color:color-mix(in_srgb,var(--diff-remove-c)_30%,var(--diff-remove-bg))]"
             : "[border-color:color-mix(in_srgb,var(--diff-add-c)_30%,var(--diff-add-bg))]"
         }`}
-        data-review-component-snapshot={side}
-        {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe diff" }}
+        data-review-component-snapshot={renderedSide}
+        {...{ [MAXIMIZABLE_ATTRIBUTE]: maximizeSubject }}
       >
         <div className="mb-2 flex justify-end">
-          <DiffMaximizeButton />
+          <DiffMaximizeButton subject={maximizeSubject} />
         </div>
         <div
           ref={contentRef}

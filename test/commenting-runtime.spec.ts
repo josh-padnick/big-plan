@@ -2177,6 +2177,13 @@ test("should colour a component snapshot switch as a diff", async ({
     const now = componentDiff.getByRole("button", { name: "Now" });
     const was = componentDiff.getByRole("button", { name: "Was" });
 
+    await expect(
+      snapshot.getByRole("button", { name: "Maximize component diff" }),
+    ).toBeVisible();
+    await expect(
+      snapshot.getByRole("button", { name: "Maximize wireframe diff" }),
+    ).toHaveCount(0);
+
     await expect(snapshot).toHaveAttribute(
       "data-review-component-snapshot",
       "new",
@@ -2241,12 +2248,30 @@ Review the queue change in context.
 </AppContent>
 </AppShell>
 </Screen>
+<Screen id="retired" name="Retired" device="desktop">
+<Panel title="Retired queue">
+<Text text="Legacy queue content" />
+</Panel>
+</Screen>
 </Wireframe>
 `;
-  const after = before.replace(
-    "Keep the retry budget visible",
-    "Keep the rollback owner explicit",
-  );
+  const after = before
+    .replace(
+      "Keep the retry budget visible",
+      "Keep the rollback owner explicit",
+    )
+    .replace(
+      `<Screen id="retired" name="Retired" device="desktop">
+<Panel title="Retired queue">
+<Text text="Legacy queue content" />
+</Panel>
+</Screen>`,
+      `<Screen id="escalations" name="Escalations" device="desktop">
+<Panel title="Escalation queue">
+<Text text="New escalation queue content" />
+</Panel>
+</Screen>`,
+    );
   await writeFile(planPath, after);
   const { startReviewRuntime: startCompiledReviewRuntime } =
     await import("../dist/review/server.js");
@@ -2256,6 +2281,16 @@ Review the queue change in context.
   });
   try {
     await page.goto(runtime.url);
+    const wireframes = page.locator('article [data-wireframe="queue-diff"]');
+    const isLiveWireframeVisible = async (): Promise<boolean> =>
+      wireframes.evaluateAll((elements) => {
+        const live = elements.find(
+          (element) => element.closest("[data-review-diff-lens-host]") === null,
+        );
+        if (!(live instanceof HTMLElement)) return false;
+        return getComputedStyle(live).display !== "none";
+      });
+    await expect.poll(isLiveWireframeVisible).toBe(true);
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
     const rail = page.getByRole("complementary", { name: "Feedback" });
     await rail
@@ -2263,11 +2298,46 @@ Review the queue change in context.
       .first()
       .click();
     await rail.getByRole("button", { name: "Review change" }).click();
-    const snapshot = page.locator("[data-review-component-snapshot]");
+    const componentDiff = page.locator("[data-review-component-diff]");
+    const snapshot = componentDiff.locator(
+      "[data-review-component-snapshot]",
+    );
+    const now = componentDiff.getByRole("button", { name: "Now" });
+    const was = componentDiff.getByRole("button", { name: "Was" });
+    const screenNavigation = componentDiff.getByRole("navigation", {
+      name: "Prototype screens",
+    });
+    await expect.poll(isLiveWireframeVisible).toBe(false);
     await expect(snapshot).toHaveAttribute(
       "data-review-component-snapshot",
       "new",
     );
+    await screenNavigation
+      .getByRole("button", { name: "Escalations Added" })
+      .click();
+    await expect(was).toBeDisabled();
+    await expect(now).toBeEnabled();
+    await expect(now).toHaveAttribute("aria-pressed", "true");
+    await expect(snapshot).toContainText("New escalation queue content");
+    await expect(snapshot).not.toContainText("Legacy queue content");
+
+    await screenNavigation
+      .getByRole("button", { name: "Retired Removed" })
+      .click();
+    await expect(now).toBeDisabled();
+    await expect(was).toBeEnabled();
+    await expect(was).toHaveAttribute("aria-pressed", "true");
+    await expect(snapshot).toHaveAttribute(
+      "data-review-component-snapshot",
+      "old",
+    );
+    await expect(snapshot).toContainText("Legacy queue content");
+    await expect(snapshot).not.toContainText("New escalation queue content");
+
+    await screenNavigation
+      .getByRole("button", { name: "Queue Updated" })
+      .click();
+    await now.click();
     await expect(snapshot).toHaveCSS("border-top-width", "10px");
     await expect(
       snapshot.getByRole("button", { name: "Maximize wireframe diff" }),
@@ -2300,10 +2370,7 @@ Review the queue change in context.
     );
     expect(geometry?.scrollWidth).toBe(geometry?.clientWidth);
 
-    await page
-      .locator("[data-review-component-diff]")
-      .getByRole("button", { name: "Was" })
-      .click();
+    await was.click();
     await expect(snapshot).toHaveAttribute(
       "data-review-component-snapshot",
       "old",
@@ -2316,6 +2383,9 @@ Review the queue change in context.
     expect(
       await snapshot.evaluate((node) => node.scrollWidth === node.clientWidth),
     ).toBe(true);
+    await rail.getByRole("button", { name: "Exit review" }).click();
+    await expect(componentDiff).toHaveCount(0);
+    await expect.poll(isLiveWireframeVisible).toBe(true);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
