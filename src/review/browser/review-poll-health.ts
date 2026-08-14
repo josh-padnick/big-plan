@@ -47,6 +47,7 @@ export const reviewPollIsOffline = (health: ReviewPollHealth): boolean =>
 export type ReviewAgentProjection =
   | { readonly state: "loading"; readonly nowMs: number }
   | { readonly state: "unobservable"; readonly nowMs: number }
+  | { readonly state: "agent-unavailable"; readonly nowMs: number }
   | { readonly state: "observable"; readonly nowMs: number };
 
 /** Selects the visibility and clock for the agent projection. */
@@ -62,8 +63,11 @@ export const agentProjectionForReviewPoll = ({
   readonly nowMs: number;
 }): ReviewAgentProjection => {
   if (!hasObservedAgentSnapshot) {
-    return reviewRuntimeIsDown(health)
-      ? { state: "unobservable", nowMs: lastObservableAtMs }
+    if (reviewRuntimeIsDown(health)) {
+      return { state: "unobservable", nowMs: lastObservableAtMs };
+    }
+    return reviewPollIsOffline(health)
+      ? { state: "agent-unavailable", nowMs }
       : { state: "loading", nowMs };
   }
   return {
