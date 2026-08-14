@@ -2,6 +2,44 @@
 
 Draw product UI only when a reviewer must see a screen to judge the plan. Keep rationale outside the artboard, product copy in attributes, and fidelity rough. Prototype the shortest path that proves the decision; an actor handoff may add separate handoff, authentication, and review screens because combining them would lie about the flow. CLEAR also governs review-surface interactions shown inside a wireframe: comments, decisions, diagrams, expanded modes, and toolbars must meet the same bar as the product flow around them.
 
+## The envelope is fixed
+
+A wireframe is laid out at its device's true size and then scaled as one unit into the review document's figure slot. That slot never widens. The reading column shares its width with the reader's table of contents, and no drawing is worth taking a reader's navigation away, so **a wide figure does not exist**. Desktop, tablet, and phone are the three envelopes and there is no wider variant of any of them.
+
+What follows, and none of it is optional:
+
+- **The screen yields; the review chrome never does.** A screen that does not fit is a screen to simplify: drop a column, split it into two screens, or disclose progressively. Nothing you can author makes the drawing bigger.
+- **Column budget per Row: desktop 3, landscape tablet 3, portrait tablet 2, phone 1.** Three desktop columns means collection, primary surface, and inspector. A fourth column can only come out of the primary surface, which is the one that had to stay dominant. Lint reports a Row past its budget.
+- **Painted size is the only size that counts.** A desktop artboard is painted at roughly five-eighths of its declared size, so desktop type is drawn deliberately larger than the real product's and desktop density deliberately lower. Judge every screen at its rendered size, never in the source.
+- **Maximize is a reading aid, not a design target.** A screen that only works maximized does not work.
+
+## Visual fundamentals
+
+CLEAR says what to decide. These say how any of those decisions is executed. Two ideas cover most of what makes a drawing look amateur: the four CRAP principles (Robin Williams, _The Non-Designer's Design Book_) and information hierarchy.
+
+### Contrast, repetition, alignment, proximity
+
+- **Contrast - if two things are not the same, make them obviously different.** Almost-the-same is the failure: a panel title one step from body text, a primary action one shade from its neighbour, two panes of near-equal width where one holds the work and one holds metadata. Spend contrast on the difference that matters most and leave the rest alike. Here: `emphasis="primary"` on the one action that advances the job and `tertiary` on the way out; `surface="outlined"` only where something behaves like a card; the widest pane for the primary surface; the three type roles for the three levels of meaning.
+- **Repetition - repeat one visual decision until the screen reads as one system.** The same status mark for the same state, the same weight for every secondary action, the same gap for every peer group, the same pane order on every screen of a flow. A screen where each region solved spacing its own way reads as unfinished even when every region is fine alone.
+- **Alignment - nothing is placed arbitrarily; everything lines up with something.** Readers follow invisible edges: label left edges, value right edges, the baseline a row shares. `Stack` and `Row` with a `gap` token do the aligning for you, so an element that seems to need nudging is a sign the grouping is wrong, not the spacing.
+- **Proximity - what belongs together sits together, and what does not, does not.** Space is the primary grouping tool; a box is the last one. A field and its hint sit tighter than two field groups do; a heading sits tighter to its group than to the group above. Change a `gap` before reaching for `surface="outlined"`, because a box around everything groups nothing.
+
+The common failure is all four drawn flat: sizes close, weights close, gaps equal, every region boxed. That reads as a wall no matter how correct the content is.
+
+### Information hierarchy
+
+Rank before drawing:
+
+1. **One job per screen.** Everything else supports it.
+2. **Three levels, no more** - page title, content, metadata. A fourth level is one a reader cannot reliably separate at drawing scale, which is why the type roles stop at three.
+3. **One entry point.** Where the eye lands first (top-left in a left-to-right reading order) and the highest-contrast element on the screen should be the same place.
+4. **One reading path.** Down a column beats across three.
+5. **The action last**, where the path ends rather than where there was room.
+
+Then test the drawing against the ranking: what you ranked first should win on size, weight, position, and surrounding space at once. One signal is a suggestion; several agreeing is a hierarchy.
+
+Chunk before ranking. Seven undifferentiated rows are a wall; three labelled groups of two or three are a structure a reviewer can hold. Group by the reader's concepts, and let each group's label say what the group is for. Where a group reports a state - finished, needs you, waiting, blocked - say it with `status` on the group's `Panel` and on the rows inside it, so the answer is visible before a single line is read.
+
 ## CLEAR: the design front door
 
 CLEAR is a grouping mechanism, not a five-line substitute for design judgment. Start with the five letters, then apply every relevant implementation principle beneath them.
@@ -35,6 +73,7 @@ Compilation blocks multiple `PageHeader`s and multiple filled work actions. The 
 
 Implementation principles:
 
+- Apply the [visual fundamentals](#visual-fundamentals) here: rank the content, then execute the ranking with contrast, repetition, alignment, and proximity. Every principle below is one of those four applied to a specific situation.
 - Create one unmistakable focal point. Size, position, spacing, and contrast should answer what the user notices first.
 - Make visual hierarchy follow decision hierarchy: primary question or work first, supporting facts second, next action last. Celebrate achievement before presenting quieter reassurance.
 - For a small tablet decision, make the decision itself the dominant visual and touch surface: one centered column of complete option cards, never a left list competing with a right inspector.
@@ -68,7 +107,7 @@ Implementation principles:
 
 Reject equal-weight regions, a simple tablet choice split into columns, thin-line pseudo-selection, graph paper louder than the decision, a shrunken desktop form floating in an iPad, four squeezed full-screen panes, card walls, floating metadata or actions, cramped comparison headers, criteria styled like option titles, definitions that read as answers, comment borders crossing text, repeated anchored context, detached tray actions, unrelated dependencies, recommendation/value ambiguity, oversized empty panels, nonparallel choices, decorative filler, and anything visually louder than its importance.
 
-Defaults keep panels plain, derive dominant panes, and give secondary width to `Rail`. Compilation blocks equal desktop thirds and four-or-more outlined sibling panels; geometry tests block cramped panes, overlap, and manufactured dead bands.
+Defaults keep panels plain, derive dominant panes, and give secondary width to `Rail`. Compilation blocks equal desktop thirds and four-or-more outlined sibling panels; lint blocks a Row past its device's column budget; geometry tests block cramped panes, overlap, manufactured dead bands, and painted type below the legibility floor.
 
 ## E · Explicit change
 
@@ -102,6 +141,7 @@ Implementation principles:
 - Distinguish selection from opening. Selection uses background plus an outside indicator; unread and priority keep different signals; Enter or a clearly labeled preview route opens the record.
 - Make required-field errors appear beside the field before submission. Specific notification consent names the person and address and is never silently enabled. Cancel preserves a draft or warns before loss.
 - Settings show visible `On`/`Off` text in addition to switch position and contrast. Keep dependent controls visible-but-disabled under their parent, show integration readiness (`Connected` or `Connect Slack`), and offer a safe test action when the result cannot otherwise be verified.
+- Report where work stands with `status` on `ListItem` and on the `Panel` heading its group: `done`, `attention`, `waiting`, `blocked`. Each draws a distinct mark beside copy that already says the same thing, so a review surface answers "is anything waiting on me?" before a line is read. Keep the honest distinction: complete groups read complete and open groups read open. Never manufacture rows to make a sparse screen look busy; an empty state that explains itself is the stronger drawing.
 
 Reject preselected consequential choices, premature continuation, generic summaries after a specific choice, faint or single-signal selection, full summaries shown too early, ambiguous progress, single-signal dangerous modes, duplicate state owners, invisible comment anchors, comment clutter, highlights that cover text, stale counts, ambiguous alerts, unconfirmed deletion, silent destructive edits, awkward focus rings, stranded focus, lost scroll or selection, invalid load-state controls, unlabeled recommendations, silent persistence, scope-free settings, a heading-only handoff, mixed child/adult modes, and Face ID or PIN labeled as approval.
 
@@ -147,7 +187,7 @@ Cross-device principles:
 - Reserve element-level commenting for expanded mode: select an element, then comment. Inline viewing keeps one calm whole-screen comment area and never turns ordinary scrolling into a field of transient controls.
 - Keep the expanded toolbar stable between modes. The `Add N notes to plan feedback` action stays flush left, appears inline and expanded, and never overlaps the live note count.
 
-Desktop passes when it reads as dense professional B2B software: the application fits its viewport with no app-wide horizontal scroll; flexible minmax-style columns let the primary surface absorb remaining width; a flush 64–180px navigation rail, 280–320px list, dominant primary surface, and 280–320px inspector stay in one row; persistent panes scroll independently at viewport height while the ticket header and composer remain anchored; narrower widths collapse navigation, then the inspector, before they overflow. It also keeps tighter vertical rhythm, Linear-style settings with a settings sub-nav and one dense field column, create/edit as a route or true modal, and keyboard shortcuts for list movement, search focus, open, compose, mode switch, send, assign, and resolve that supplement visible controls. Reject equal thirds, whole-page scrolling while answering, horizontal app scrolling, four squeezed full-screen panes, a sidebar taking a third of the canvas, floating tablet navigation, two large settings cards, inflated chrome, or oversized iPad sheets.
+Desktop passes when it reads as dense professional B2B software: the application fits its viewport with no app-wide horizontal scroll; flexible minmax-style columns let the primary surface absorb remaining width; a flush 240px labelled navigation sidebar (or a deliberate 64–72px icon-only rail, which is a different design rather than a squeezed version of this one), a 280px list, a dominant primary surface, and a 280px inspector stay in one row, which is the whole 1200px canvas spent exactly once; persistent panes scroll independently at viewport height while the ticket header and composer remain anchored; narrower widths collapse navigation, then the inspector, before they overflow. It also keeps tighter vertical rhythm, Linear-style settings with a settings sub-nav and one dense field column, create/edit as a route or true modal, and keyboard shortcuts for list movement, search focus, open, compose, mode switch, send, assign, and resolve that supplement visible controls. Reject equal thirds, whole-page scrolling while answering, horizontal app scrolling, four squeezed full-screen panes, a sidebar taking a third of the canvas, floating tablet navigation, two large settings cards, inflated chrome, or oversized iPad sheets.
 
 Tablet passes when it reads as intentional iPad software: fixed 1020 × 720 landscape or 820 × 1180 portrait frame (about 1.44:1), laid out to fit that frame with no internal scroll; native frame with no browser `url`; quiet identity/escape header; touch-first type and 44px controls; wider gutters; and a composition chosen by decision complexity. Two to five simple alternatives use a dominant centered `ChoiceGroup` of tall `ChoiceCard`s with no initial selection and explicit continuation after tap. Master/detail is reserved for a genuine collection whose persistent detail adds useful context. The interaction region quiets the grid rather than shrinking its contents. A fixed-frame screen (tablet or tablet-portrait) must lay out entirely within its declared artboard; an internal scrollbar is a layout defect to fix, not a scroll affordance to keep. Reject a simple decision as list/detail or `Rail`, preselection, faint row selection, a stretched near-square bezel, compressed desktop density, browser chrome, squeezed desktop sidebars, tiny text, a desktop task flow, or content that needs an internal scrollbar to fit its fixed frame.
 

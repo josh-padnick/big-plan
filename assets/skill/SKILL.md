@@ -39,6 +39,9 @@ npx big-plan@latest guidance <Component>
 
 Example: `npx big-plan@latest guidance QuickSummary`.
 
+Before drawing any product UI, read `npx big-plan@latest guidance Wireframe`.
+It owns the fixed device envelopes a drawing must fit and the visual fundamentals a drawing is judged by.
+
 ## Install or refresh this skill shell
 
 This file is a thin shell.

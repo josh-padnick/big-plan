@@ -3,7 +3,7 @@
 // navigation expressed as data attributes the viewer script acts on. Without
 // scripts the block degrades to a readable storyboard of every screen.
 
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import type {
   CompiledWireframe,
   WireframeAlign,
@@ -12,8 +12,15 @@ import type {
   WireframeNode,
   WireframeScreen,
   WireframeSpace,
+  WireframeStatus,
 } from "./model.js";
 import { WIREFRAME_DEVICE_PRESETS } from "./model.js";
+import type { LucideIcon } from "../../icons/lucide-icon.js";
+import { CHECK_ICON } from "../../icons/lucide/check.js";
+import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
+import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
+import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
+import { lucideIconToReact } from "../_shared/lucide-icon/lucide-icon.js";
 import {
   BODY_ATTRIBUTE,
   MAXIMIZABLE_ATTRIBUTE,
@@ -58,6 +65,32 @@ const HEADING_TAGS: Readonly<
   "2": "h4",
   "3": "h5",
 };
+
+// One mark per status, and a word beside it. The marks are chosen to differ in
+// silhouette rather than only in colour, so a reviewer scanning a column of
+// them tells the states apart in greyscale, at artboard scale, and without
+// reading the labels.
+const STATUS_ICONS: Readonly<Record<WireframeStatus, LucideIcon>> = {
+  done: CHECK_ICON,
+  attention: TRIANGLE_ALERT_ICON,
+  waiting: HOURGLASS_ICON,
+  blocked: CIRCLE_X_ICON,
+};
+
+// A status is already stated in the copy it sits beside, so the mark itself is
+// decoration to a screen reader and carries no separate label.
+const StatusMark = ({
+  status,
+}: {
+  readonly status: WireframeStatus;
+}): JSX.Element => (
+  <span className="wireframe-status-mark" data-wireframe-status={status}>
+    {lucideIconToReact({ icon: STATUS_ICONS[status], hidden: false })}
+  </span>
+);
+
+const statusMarkFor = (status: WireframeStatus | undefined): ReactNode =>
+  status === undefined ? null : <StatusMark status={status} />;
 
 // A direct record collection makes its Panel the master pane. Rail is the only
 // authored width primitive; the Row owns every other workspace proportion.
@@ -138,7 +171,10 @@ const WireframeElement = ({
                 <p className="wireframe-eyebrow">{node.eyebrow}</p>
               )}
               {node.title === undefined ? null : (
-                <h4 className="wireframe-panel-title">{node.title}</h4>
+                <h4 className="wireframe-panel-title flex min-w-0 items-center gap-2">
+                  {statusMarkFor(node.status)}
+                  <span className="min-w-0">{node.title}</span>
+                </h4>
               )}
             </header>
           )}
@@ -392,18 +428,30 @@ const WireframeElement = ({
       // Every queue/inbox row is two lines so a narrow desktop list column never
       // jams title, status, and age onto one flex line (which overflows as
       // overlapping or one-word-per-line wrapping):
-      //   line 1 - truncating title [trailing value]
-      //   line 2 - metadata
+      //   line 1 - truncating title [trailing value, when the row has no
+      //            second line to carry it]
+      //   line 2 - metadata [trailing value]
+      // The trailing value rides with the metadata whenever there is metadata,
+      // because a title competing with a timestamp for one narrow line is what
+      // truncates the only words that identify the record.
+      const valueOnMetaLine =
+        node.meta !== undefined && node.value !== undefined;
+      const value =
+        node.value === undefined ? null : (
+          <span className="wireframe-list-value">{node.value}</span>
+        );
       const rowInner = (
         <>
           <span className="wireframe-list-row-primary flex w-full min-w-0 flex-nowrap items-baseline gap-2">
+            {statusMarkFor(node.status)}
             <span className="wireframe-list-label grow">{node.label}</span>
-            {node.value === undefined ? null : (
-              <span className="wireframe-list-value">{node.value}</span>
-            )}
+            {valueOnMetaLine ? null : value}
           </span>
           {node.meta === undefined ? null : (
-            <span className="wireframe-list-meta">{node.meta}</span>
+            <span className="wireframe-list-row-secondary flex w-full min-w-0 flex-nowrap items-baseline justify-between gap-2">
+              <span className="wireframe-list-meta">{node.meta}</span>
+              {valueOnMetaLine ? value : null}
+            </span>
           )}
         </>
       );

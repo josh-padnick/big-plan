@@ -186,10 +186,21 @@ it that way: a band carries primary or secondary text, never tertiary.
   --measure: 45.5rem;
   /* A card hugging standard-width content: the measure plus its own padding. */
   --card-measure: calc(var(--measure) + 2.5rem);
-  /* A card that can contain the standard 48rem desktop wireframe through
-     one nested sub-slide. The extra 6.5rem covers both cards' inline padding
-     and borders, so the drawing never has to escape either border. */
-  --card-figure: 54.5rem;
+  /* The widest a drawing may ever be.
+
+     A figure is a guest in the reading column, never a reason to rebuild the
+     page around it. The reading layout reserves a contents column beside this
+     one, so a figure that asked for more room could only get it by taking the
+     reader's table of contents away, and a plan whose own navigation vanishes
+     while a picture is on screen is a worse document than one whose picture is
+     smaller. So the budget is fixed here, every device envelope is capped to
+     it, and a screen that will not fit is a screen to simplify - fewer panes,
+     fewer columns - rather than a figure to widen. */
+  --figure-budget: 48rem;
+  /* A card that can contain the widest drawing through one nested sub-slide.
+     The extra 6.5rem covers both cards' inline padding and borders, so the
+     drawing never has to escape either border. */
+  --card-figure: calc(var(--figure-budget) + 6.5rem);
 
   /* Surfaces, ordered by distance from the page. */
   --bg: var(--grey-50);

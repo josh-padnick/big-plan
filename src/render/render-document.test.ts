@@ -131,8 +131,10 @@ describe("renderDocument affordances", () => {
     expect(html).not.toContain("@import");
     // The embedded stylesheet fetches too: a bundled typeface reaches the
     // reader through a data URI in @font-face, never through a URL.
-    const styleValues = [...html.matchAll(/url\(([^)]*)\)/g)].map(
-      (match) => match[1],
+    const styleValues = [...html.matchAll(/url\(([^)]*)\)/g)].map((match) =>
+      // A url() value may be quoted, which a data URI carrying its own
+      // apostrophes has to be; the contract is the scheme, not the quoting.
+      (match[1] ?? "").replace(/^["']|["']$/g, ""),
     );
     expect(styleValues.length).toBeGreaterThan(0);
     for (const value of styleValues) {
@@ -164,10 +166,15 @@ The lede.
     expect(deckHtml).toContain("data-collapsible");
     expect(deckHtml).toContain("data-wireframe=");
     expect(deckHtml).toContain("data-wireframe-desktop");
-    expect(deckHtml).toContain("--card-figure:54.5rem");
+    // Every device envelope is capped to one figure budget, so no drawing can
+    // widen the reading column the table of contents shares.
+    expect(deckHtml).toContain("--figure-budget:48rem");
+    expect(deckHtml).toContain(
+      "--card-figure:calc(var(--figure-budget) + 6.5rem)",
+    );
     expect(deckHtml).toContain("[data-slide]:has(.wireframe)");
     // The true 1200px layout scales into the shared desktop review cap.
-    expect(deckHtml).toContain("max-width:48rem");
+    expect(deckHtml).toContain("max-width:var(--figure-budget)");
     expect(deckHtml).not.toContain("--reading-free-inline");
   });
 

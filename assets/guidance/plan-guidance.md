@@ -111,6 +111,14 @@ Weak contrast is why a plan feels flat or confusing.
 
 These principles apply to both the authored MDX structure and the product chrome Big Plan applies when it renders the deck.
 
+**Information hierarchy.**
+Before arranging anything, rank it: one job, no more than three levels of attention, one entry point, one reading path, and the action last.
+Then check that what you ranked first wins on size, weight, position, and surrounding space at the same time; one signal is a suggestion, several agreeing is a hierarchy.
+Chunk before you rank, because seven undifferentiated items read as a wall and three labelled groups read as a structure.
+
+A drawing is judged the same way but has its own scale, envelope, and primitives.
+Before drawing UI, run `big-plan guidance Wireframe` and follow its fixed-envelope rules and visual fundamentals.
+
 ## 9. Be terse
 
 Write as tersely as the content allows.

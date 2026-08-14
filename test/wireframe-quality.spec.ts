@@ -515,6 +515,83 @@ test("should keep shipped desktop panes readable and layout regions separate", a
   }
 });
 
+// The floors are product judgement, set by looking at rendered documents, not
+// an accessibility standard: WCAG governs how text may be resized, not how
+// small a default may be. They are fenced here anyway, because a legibility
+// standard nobody measures regresses the next time a constant moves, and this
+// is the one defect a reader notices before anything else on the page.
+const PAINTED_FLOORS: ReadonlyArray<{
+  readonly role: string;
+  readonly selector: string;
+  readonly minimum: number;
+}> = [
+  // Ordinary content and controls: what the reviewer actually reads.
+  { role: "body", selector: ".wireframe-artboard", minimum: 12 },
+  { role: "list row", selector: ".wireframe-list-item", minimum: 12 },
+  { role: "button", selector: ".wireframe-button", minimum: 12 },
+  { role: "field label", selector: ".wireframe-field-label", minimum: 11 },
+  { role: "panel title", selector: ".wireframe-panel-title", minimum: 12 },
+  // Metadata and labels: scanned rather than read, so they may sit lower.
+  { role: "list metadata", selector: ".wireframe-list-meta", minimum: 10 },
+  { role: "eyebrow", selector: ".wireframe-eyebrow", minimum: 10 },
+];
+
+test("should paint every desktop text role above its legibility floor", async ({
+  page,
+  wireframeFormFactorsViewerUrl,
+  wireframeQualityViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
+  for (const url of [
+    wireframeQualityViewerUrl,
+    wireframeFormFactorsViewerUrl,
+  ]) {
+    await page.goto(url);
+    const desktopScreens = page.locator(
+      '[data-wireframe-screen][data-wireframe-device="desktop"]',
+    );
+
+    for (
+      let screenIndex = 0;
+      screenIndex < (await desktopScreens.count());
+      screenIndex += 1
+    ) {
+      const screen = desktopScreens.nth(screenIndex);
+      const screenId = await screen.getAttribute("data-wireframe-screen");
+
+      const painted = await screen.evaluate(
+        (node, floors) => {
+          const frame = node.querySelector(".wireframe-frame");
+          if (!(frame instanceof HTMLElement)) {
+            return [];
+          }
+          // The artboard is laid out at its true device width and scaled as
+          // one unit, so the size a reviewer reads is the declared size times
+          // that scale. Measuring the declared size alone measures nothing.
+          const zoom = Number.parseFloat(getComputedStyle(frame).zoom) || 1;
+          return floors.flatMap(({ role, selector, minimum }) =>
+            [...node.querySelectorAll(selector)].flatMap((element) => {
+              const declared = Number.parseFloat(
+                getComputedStyle(element).fontSize,
+              );
+              const paintedSize = declared * zoom;
+              return paintedSize < minimum
+                ? [
+                    `${role} paints ${paintedSize.toFixed(1)}px (floor ${minimum}px)`,
+                  ]
+                : [];
+            }),
+          );
+        },
+        [...PAINTED_FLOORS],
+      );
+
+      expect(painted, `screen "${screenId}"`).toEqual([]);
+    }
+  }
+});
+
 test("should keep ordinary rows content-driven instead of manufacturing dead bands", async ({
   page,
   wireframeFormFactorsViewerUrl,

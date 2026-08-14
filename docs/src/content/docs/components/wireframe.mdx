@@ -5,6 +5,8 @@ description: True-size product screens with honest device proportions, safe cont
 
 `Wireframe` draws low-fidelity product UI inside a device-appropriate frame.
 Each screen lays out at its device's true width and scales as one unit to fit the review document; desktop screens preserve their 1200 px logical layout within a shared 768 px painted cap.
+That cap is the figure budget every device shares, and it never widens: the reading column holds the table of contents beside it, so a screen that does not fit is simplified rather than enlarged.
+Because a desktop drawing is painted at roughly five-eighths of its declared size, desktop artboards use a deliberately larger type ramp than the product they depict, and a browser geometry test fences the painted result against role-based legibility floors.
 While maximized, the same uniform zoom is constrained by both available width and height so the complete device frame and its caption remain visible.
 Desktop pages and phone screens use realistic minimum silhouettes and grow with content.
 Desktop workspaces instead fill the 1200 × 820 silhouette, whether they use an `AppShell` or place a workspace `Row` directly after a `TopBar`: persistent panes own their overflow while the app itself never scrolls sideways.
@@ -151,7 +153,7 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `Stack`            | `gap="none\|xs\|sm\|md\|lg\|xl"` and `align="start\|center\|end\|stretch"`.                                                                       |
 | `Row`              | `gap`, `align`, and `justify="start\|center\|end\|between"`; a direct record collection derives a master pane while remaining content dominates. |
-| `Panel`            | Optional `title`, `eyebrow`, and `surface="plain\|filled\|outlined"`; defaults to a plain, unboxed region.                                    |
+| `Panel`            | Optional `title`, `eyebrow`, `surface="plain\|filled\|outlined"`, and `status="done\|attention\|waiting\|blocked"`; defaults to a plain, unboxed region.        |
 | `Rail`             | The only secondary-width primitive; owns a readable fixed width and wraps rather than squeezing the primary pane.                            |
 | `Center`           | `measure="narrow\|prose\|wide"` for centered, bounded content.                                                                            |
 | `AppShell`         | Holds only `Sidebar`, optional `TopBar`, and `AppContent`; unavailable on phone.                                                           |
@@ -179,7 +181,7 @@ Container elements accept nested drawing elements unless a narrower child rule i
 | `Divider`          | Optional `label`.                                                                                                   |
 | `ImagePlaceholder` | Required `label`; optional `shape="square\|wide\|tall"`.                                                            |
 | `List`             | Holds only `ListItem`.                                                                                              |
-| `ListItem`         | Required `label`; optional `meta`, `value`, `selected`, and `navigateTo`; valid only in `List`.                      |
+| `ListItem`         | Required `label`; optional `meta`, `value`, `status="done\|attention\|waiting\|blocked"`, `selected`, and `navigateTo`; valid only in `List`. |
 | `ChoiceGroup`      | Holds two to five `ChoiceCard` options as one dominant simple-decision surface.                                     |
 | `ChoiceCard`       | Required `icon`, `title`, and one-line `description`; optional `selected` and `navigateTo`; valid only in `ChoiceGroup`. |
 | `Message`          | Required `author`, `time`, and `text`; optional `kind="customer\|agent\|internal"`.                                  |

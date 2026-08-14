@@ -1116,6 +1116,84 @@ describe("WIREFRAME_COMPONENT_DEFINITION", () => {
     expect(rendered).toContain("wireframe-list-row");
   });
 
+  it("should draw a state mark on a status row and on the panel heading its group", () => {
+    const { compiled, diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "approve",
+          attributes: { device: "desktop" },
+          children: [
+            element({
+              name: "Panel",
+              attributes: {
+                title: "Open items",
+                surface: "outlined",
+                status: "attention",
+              },
+              children: [
+                element({
+                  name: "List",
+                  children: [
+                    element({
+                      name: "ListItem",
+                      attributes: {
+                        label: "Rollback window",
+                        meta: "Raised by Josh",
+                        status: "waiting",
+                      },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics).toEqual([]);
+    expect(compiled.model.screens[0]?.children[0]).toMatchObject({
+      element: "Panel",
+      status: "attention",
+      children: [
+        {
+          element: "List",
+          children: [{ element: "ListItem", status: "waiting" }],
+        },
+      ],
+    });
+    const rendered = html(render(compiled));
+    expect(rendered).toContain('"data-wireframe-status":"attention"');
+    expect(rendered).toContain('"data-wireframe-status":"waiting"');
+    // The mark differs by shape, not only by colour, so the states stay apart
+    // in greyscale and at drawing scale.
+    expect(rendered).toContain('"data-lucide":"triangle-alert"');
+    expect(rendered).toContain('"data-lucide":"hourglass"');
+  });
+
+  it("should reject a status outside the closed vocabulary", () => {
+    const { diagnostics } = compile({
+      scopedChildren: [
+        screen({
+          id: "approve",
+          children: [
+            element({
+              name: "List",
+              children: [
+                element({
+                  name: "ListItem",
+                  attributes: { label: "Rollback window", status: "urgent" },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(diagnostics.map(({ message }) => message).join("\n")).toContain(
+      "status",
+    );
+  });
+
   it("should mark a selected queue row and render timeline messages", () => {
     const { compiled, diagnostics } = compile({
       scopedChildren: [
