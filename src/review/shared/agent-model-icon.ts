@@ -5,8 +5,12 @@
 
 export type AgentModelVendor = "openai" | "claude" | "grok";
 
+// "gpt" alone is not enough: EleutherAI's GPT-J and GPT-NeoX are real,
+// unrelated models. Only OpenAI's own gpt-4* and gpt-5* naming families are
+// recognized by name; a bare or differently numbered "gpt" falls back to the
+// generic icon instead of guessing.
 const VENDOR_MARKERS: ReadonlyArray<readonly [AgentModelVendor, RegExp]> = [
-  ["openai", /openai|gpt/i],
+  ["openai", /openai|\bgpt-?[45]/i],
   ["claude", /claude/i],
   ["grok", /grok/i],
 ];
