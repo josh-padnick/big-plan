@@ -24,10 +24,24 @@
 //    script running on this runtime's own origin.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import {
+  readFile,
+  realpath,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import { basename, dirname, extname, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  relative,
+  resolve,
+} from "node:path";
 import { fromHtml } from "hast-util-from-html";
 import { toHtml } from "hast-util-to-html";
 import type { Element, Root, RootContent, ElementContent } from "hast";
@@ -89,7 +103,6 @@ import {
   writeSnapshot,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
-import { reviewPlanAssetName } from "./plan-assets.js";
 import {
   extractReviewImageReferences,
   isReviewImageId,
@@ -216,6 +229,23 @@ const renderedBlockHtml = ({
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
+// The picture file types a plan may point at, and the type each is served as.
+// The list is closed: a request for anything else is not a picture request,
+// so the review runtime never becomes a general file server for the directory
+// that holds the plan.
+const PLAN_PICTURE_TYPES: ReadonlyMap<string, string> = new Map([
+  [".png", "image/png"],
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".webp", "image/webp"],
+  [".gif", "image/gif"],
+  [".avif", "image/avif"],
+  // An SVG is served as a picture, never as a document: the response carries
+  // the same `default-src 'none'` policy and nosniff header as every other
+  // response, and a browser runs no script inside an <img> source.
+  [".svg", "image/svg+xml"],
+]);
+
 const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   "style-src 'unsafe-inline'",
@@ -917,6 +947,17 @@ export const startReviewRuntime = async ({
     }
   };
 
+  // A picture an author or an agent saved beside the plan is plan content, so
+  // the reviewer must see it. The route therefore serves the plan's own
+  // directory instead of one generated file name: a photograph named by its
+  // subject is the ordinary case, and refusing it showed alternative words
+  // where the plan promised a picture.
+  //
+  // Three rules keep that safe, and each refuses rather than repairs:
+  // only a picture file type is served at all, the resolved real path must
+  // stay inside the plan's own directory, and a dot-prefixed segment is never
+  // served, which keeps the review state under `.big-plan/` outside the reach
+  // of a document request.
   const handlePlanAsset = async ({
     response,
     pathname,
@@ -924,28 +965,54 @@ export const startReviewRuntime = async ({
     readonly response: ServerResponse;
     readonly pathname: string;
   }): Promise<boolean> => {
-    const match =
-      /^\/assets\/(review-image-[a-f0-9]{64}\.(?:png|jpg|webp))$/u.exec(
-        pathname,
-      );
-    const name = match?.[1];
-    if (name === undefined || !reviewPlanAssetName(name)) return false;
+    let requested: string;
     try {
-      const bytes = await readFile(
-        resolve(dirname(resolvedPlanPath), "assets", name),
-      );
+      requested = decodeURIComponent(pathname);
+    } catch {
+      return false;
+    }
+    const contentType = PLAN_PICTURE_TYPES.get(
+      extname(requested).toLowerCase(),
+    );
+    if (contentType === undefined || requested.includes("\0")) return false;
+    const segments = requested.split("/").filter((segment) => segment !== "");
+    if (segments.some((segment) => segment.startsWith("."))) {
+      refuse({ response, status: 404, reason: "Plan picture unavailable" });
+      return true;
+    }
+    const planDirectory = dirname(resolvedPlanPath);
+    const candidate = resolve(planDirectory, segments.join("/"));
+    // Containment is checked twice against matching roots: once on the
+    // requested path, and once on the real path, because a link inside the
+    // directory could otherwise point anywhere. Comparing a real path with a
+    // symbolic root would reject every ordinary file on a machine whose
+    // temporary or home directory is itself a link.
+    const isWithin = (root: string, path: string): boolean => {
+      const step = relative(root, path);
+      return step !== "" && !step.startsWith("..") && !isAbsolute(step);
+    };
+    if (!isWithin(planDirectory, candidate)) {
+      refuse({ response, status: 404, reason: "Plan picture unavailable" });
+      return true;
+    }
+    try {
+      const [root, real] = await Promise.all([
+        realpath(planDirectory),
+        realpath(candidate),
+      ]);
+      if (!isWithin(root, real)) {
+        refuse({ response, status: 404, reason: "Plan picture unavailable" });
+        return true;
+      }
+      const bytes = await readFile(real);
       sendBinary({
         response,
         status: 200,
-        contentType: name.endsWith(".jpg")
-          ? "image/jpeg"
-          : name.endsWith(".webp")
-            ? "image/webp"
-            : "image/png",
+        contentType,
         body: Uint8Array.from(bytes),
       });
     } catch {
-      refuse({ response, status: 404, reason: "Plan asset unavailable" });
+      refuse({ response, status: 404, reason: "Plan picture unavailable" });
     }
     return true;
   };

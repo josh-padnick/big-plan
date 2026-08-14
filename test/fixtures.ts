@@ -4,7 +4,7 @@
 // specs exercise exactly what a user runs. Specs import test/expect from here,
 // never from @playwright/test directly.
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -869,6 +869,61 @@ export const stageComment = async (page: Page, body: string): Promise<void> => {
   await expect(addComment).toBeEnabled();
   await addComment.click();
 };
+
+/**
+ * Runs one real `big-plan agent` command against a plan, so a journey can
+ * cross the same process boundary a coding agent crosses. The whole output is
+ * returned, and a non-zero exit or a hang becomes a readable failure rather
+ * than a silent one.
+ */
+export const runAgentCli = (
+  args: ReadonlyArray<string>,
+): Promise<{ readonly stdout: string; readonly stderr: string }> =>
+  new Promise((settle, fail) => {
+    const child = spawn(process.execPath, [binPath, "agent", ...args], {
+      cwd: repoRoot,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      fail(
+        new Error(
+          `Agent CLI timed out.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+        ),
+      );
+    }, 10_000);
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      fail(
+        new Error(
+          `Agent CLI could not start: ${String(error)}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+        ),
+      );
+    });
+    child.once("close", (code, signal) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        fail(
+          new Error(
+            `Agent CLI stopped with code ${String(code)} and signal ${String(signal)}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+          ),
+        );
+        return;
+      }
+      settle({ stdout, stderr });
+    });
+  });
 
 /**
  * Returns the locator's bounding box, failing the test when the element has

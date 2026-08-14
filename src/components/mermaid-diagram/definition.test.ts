@@ -129,7 +129,10 @@ describe("MermaidDiagram document delivery", () => {
     ].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
     expect(references.length).toBeGreaterThan(0);
     for (const reference of references) expect(ids).toContain(reference);
-  });
+    // Two Mermaid sources are rendered through the pinned headless browser, so
+    // this case takes the same headroom as the gallery below instead of the
+    // default per-test timeout, which it exceeded on a loaded machine.
+  }, 15000);
 
   it("reports rejected Mermaid syntax before delivery", () => {
     const markdown = `# Invalid\n\n<MermaidDiagram>\n\n\`\`\`mermaid\nflowchart LR\n  subgraph Unsupported\n    source[Source]\n  end\n\`\`\`\n\n</MermaidDiagram>\n`;

@@ -33,6 +33,15 @@ background command.
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
 
+A plan may also point at picture files of its own, such as
+`![The cabinet](./assets/cabinet.jpg)`.
+`big-plan review` serves any PNG, JPEG, WebP, GIF, AVIF, or SVG file that sits
+inside the plan's own directory, at any depth, so a photograph an author or an
+agent saves beside the plan appears in the review document.
+Nothing else in that directory is served: another file type, a dot-prefixed
+directory such as `.big-plan/`, and any path that leaves the plan's directory
+are all refused.
+
 Comments, replies, and plan-wide chat accept PNG, JPEG, and WebP screenshots.
 Paste an image into a composer, drop a file onto it, or choose **Choose image**.
 The runtime stores each image by its SHA-256 digest and inserts a Markdown

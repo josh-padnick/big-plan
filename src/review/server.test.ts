@@ -8,6 +8,7 @@ import {
   readdir,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
@@ -388,6 +389,62 @@ describe("review runtime images", () => {
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should serve an author's own picture files and refuse everything else beside the plan", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-plan-picture-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    await mkdir(join(directory, "assets", "site"), { recursive: true });
+    await writeFile(join(directory, "assets", "site", "cabinet.jpg"), TINY_PNG);
+    await writeFile(join(directory, "diagram.PNG"), TINY_PNG);
+    await writeFile(join(directory, "notes.md"), "Not a picture.");
+    await mkdir(join(directory, "inside"), { recursive: true });
+    await writeFile(join(directory, "inside", "linked-target.png"), TINY_PNG);
+    const outside = await mkdtemp(join(tmpdir(), "big-plan-outside-"));
+    await writeFile(join(outside, "secret.png"), TINY_PNG);
+    const review = await startReviewRuntime({ planPath });
+    const url = review.url.replace(/\/$/u, "");
+    try {
+      // A photograph named by its subject is the ordinary case, at any depth
+      // and with any letter case in its extension.
+      expect((await fetch(`${url}/assets/site/cabinet.jpg`)).status).toBe(200);
+      expect((await fetch(`${url}/diagram.PNG`)).status).toBe(200);
+      expect(
+        (await fetch(`${url}/assets/site/cabinet.jpg`)).headers.get(
+          "content-type",
+        ),
+      ).toBe("image/jpeg");
+
+      // Everything that is not a picture inside this plan's own directory is
+      // refused, including the plan source, the review state, an escape
+      // through a parent segment, and an escape through a link.
+      expect((await fetch(`${url}/notes.md`)).status).toBe(404);
+      expect((await fetch(`${url}/plan.mdx`)).status).toBe(404);
+      expect((await fetch(`${url}/.big-plan/review/session.png`)).status).toBe(
+        404,
+      );
+      expect(
+        (await fetch(`${url}/assets/%2e%2e/%2e%2e/escape.png`)).status,
+      ).toBe(404);
+      await symlink(
+        join(directory, "inside", "linked-target.png"),
+        join(directory, "assets", "linked.png"),
+      );
+      expect((await fetch(`${url}/assets/linked.png`)).status).toBe(200);
+      await symlink(outside, join(directory, "assets", "elsewhere"));
+      // The link resolves on disk, so only the containment check can refuse it.
+      await expect(
+        readFile(join(directory, "assets", "elsewhere", "secret.png")),
+      ).resolves.toBeDefined();
+      expect((await fetch(`${url}/assets/elsewhere/secret.png`)).status).toBe(
+        404,
+      );
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
     }
   });
 });
