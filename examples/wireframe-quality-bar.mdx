@@ -369,6 +369,51 @@ The selected queue record remains visible while the conversation dominates and p
       </AppContent>
     </AppShell>
   </Screen>
+
+  <Screen
+    id="quality-desk-workspace-settings"
+    name="Desktop · Workspace settings"
+    device="desktop"
+    url="app.harbor.team/settings/workspace"
+  >
+    <AppShell>
+      <Sidebar brand="Harbor" mode="Acme Support">
+        <Nav label="Global">
+          <NavItem label="Inbox" />
+          <NavItem label="Customers" />
+          <NavItem label="Reports" />
+          <NavItem label="Settings" active />
+        </Nav>
+      </Sidebar>
+      <AppContent>
+        <PageHeader
+          title="Workspace settings"
+          description="Applies to everyone in Acme Support"
+        />
+        <Panel title="About this workspace">
+          <Text text="Acme Support handles checkout, billing, and account tickets for the whole Northwind account team, from first response through resolution." />
+        </Panel>
+        <Panel title="Region">
+          <TextField label="Workspace name" value="Acme Support" />
+          <Select label="Data region" value="US West" />
+        </Panel>
+        <Panel title="Recent changes">
+          <List>
+            <ListItem
+              label="Data region changed to US West"
+              meta="Priya"
+              value="2d ago"
+            />
+            <ListItem
+              label="Workspace renamed to Acme Support"
+              meta="Alex"
+              value="1w ago"
+            />
+          </List>
+        </Panel>
+      </AppContent>
+    </AppShell>
+  </Screen>
 </Wireframe>
 
 ## Tablet grown-up handoff

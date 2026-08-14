@@ -101,6 +101,53 @@ test("should render every proof at its native device geometry", async ({
     ).toBeVisible();
   });
 
+  await test.step("desktop screen with no workspace row or Center reads at the default measure", async () => {
+    const wireframe = page.locator('[data-wireframe="quality-desktop"]');
+    await wireframe
+      .locator(
+        '[data-wireframe-switch]:has-text("Desktop · Workspace settings")',
+      )
+      .click();
+    const screen = wireframe.locator(
+      '[data-wireframe-screen="quality-desk-workspace-settings"]:visible',
+    );
+    const appContent = screen.locator(".wireframe-app-content");
+    const header = screen.locator(".wireframe-page-header");
+    const aboutPanel = screen.locator(".wireframe-panel", {
+      hasText: "About this workspace",
+    });
+    const recentPanel = screen.locator(".wireframe-panel", {
+      hasText: "Recent changes",
+    });
+    const regionPanel = screen.locator(".wireframe-panel", {
+      hasText: "Region",
+    });
+    const select = regionPanel.locator("select.wireframe-select");
+    const textField = regionPanel.locator("input.wireframe-input");
+
+    const appContentWidth = (await boxOf(appContent)).width;
+    const headerWidth = (await boxOf(header)).width;
+    const aboutWidth = (await boxOf(aboutPanel)).width;
+    const recentWidth = (await boxOf(recentPanel)).width;
+    const selectWidth = (await boxOf(select)).width;
+    const textFieldWidth = (await boxOf(textField)).width;
+
+    // A lone settings panel reads at the default prose measure (38rem),
+    // clearly narrower than the column it sits in, instead of stretching to
+    // fill it.
+    expect(aboutWidth).toBeLessThanOrEqual(650);
+    expect(aboutWidth).toBeLessThan(appContentWidth - 100);
+    // PageHeader is banner chrome: it keeps spanning the column.
+    expect(headerWidth).toBeGreaterThan(aboutWidth + 100);
+    // A record-collection panel (holding a List) is exempt and stays wide,
+    // rather than being squeezed to the same narrow measure as prose.
+    expect(recentWidth).toBeGreaterThan(aboutWidth + 100);
+    // A control draws the length of a plausible answer, not the column: no
+    // more 900px-wide Select for a two-word region name.
+    expect(selectWidth).toBeLessThanOrEqual(400);
+    expect(textFieldWidth).toBeLessThanOrEqual(400);
+  });
+
   await test.step("tablet holds a real iPad ratio and carries no browser shell", async () => {
     const wireframe = page.locator('[data-wireframe="quality-tablet"]');
     const switches = wireframe.locator("[data-wireframe-switch]");
