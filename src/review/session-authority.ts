@@ -201,7 +201,7 @@ const wait = async (milliseconds: number): Promise<void> => {
   });
 };
 
-/** Checks whether one matching server heartbeat is running and recent. */
+/** Returns matching server liveness and any explicit recorded stop reason. */
 export const reviewSessionIsRunning = async ({
   store,
   sessionId,

@@ -145,6 +145,7 @@ export const agentPresenceIsFresh = ({
   heartbeatAt > 0 &&
   Math.max(0, now - heartbeatAt) <= AGENT_STALL_MS;
 
+/** Reconciles persisted connection events with the current presence lease. */
 export const projectAgentConnectionState = ({
   presenceConnected,
   heartbeatAt,
