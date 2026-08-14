@@ -108,6 +108,15 @@ import {
   liveBlock,
   liveFlowAnchor,
 } from "./live-target.browser.js";
+import {
+  INITIAL_REVIEW_POLL_HEALTH,
+  reviewPollIsOffline,
+  reviewRuntimeCanWrite,
+  reviewRuntimeIsDown,
+  transitionReviewPollHealth,
+  type ReviewPollHealth,
+  type ReviewPollResult,
+} from "./review-poll-health.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
   AlertDialog,
@@ -3506,8 +3515,9 @@ export const ReviewController = () => {
   const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(
     null,
   );
-  const [pollFailures, setPollFailures] = useState(0);
-  const [serverGoneFailures, setServerGoneFailures] = useState(0);
+  const [pollHealth, setPollHealth] = useState<ReviewPollHealth>(
+    INITIAL_REVIEW_POLL_HEALTH,
+  );
   const [statusNowMs, setStatusNowMs] = useState(Date.now());
   const [threadOpenState, setThreadOpenState] = useState<ThreadOpenState>(
     new Map(),
@@ -3543,8 +3553,10 @@ export const ReviewController = () => {
     }
   }, [archivedChatRequestIds, planId]);
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
+  const pollIsOffline = reviewPollIsOffline(pollHealth);
+  const serverGone = reviewRuntimeIsDown(pollHealth);
   const threadRuntime: ThreadRuntime =
-    identity === null ? "static" : pollFailures >= 2 ? "offline" : "online";
+    identity === null ? "static" : pollIsOffline ? "offline" : "online";
   const agentConnection = projectAgentConnectionState({
     presenceConnected: agent.presence.connected,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
@@ -3555,6 +3567,7 @@ export const ReviewController = () => {
   const canSendToAgent =
     identity !== null &&
     threadRuntime === "online" &&
+    reviewRuntimeCanWrite(pollHealth) &&
     runtimeSession?.authoritative !== false;
   const unresolvedDrafts = useMemo(
     () => drafts.filter((comment) => !resolvedCommentIds.has(comment.id)),
@@ -3983,17 +3996,17 @@ export const ReviewController = () => {
           setRuntimeSession(session);
           acceptAgentSnapshot(parseAgentSnapshot(agentValue));
           setProgress(parseProgress(progressValue));
-          setPollFailures(0);
-          setServerGoneFailures(0);
+          setPollHealth(INITIAL_REVIEW_POLL_HEALTH);
           setStatusNowMs(Date.now());
         }
       } catch (error) {
         if (current) {
-          if (isReviewRuntimeUnavailable(error)) {
-            setServerGoneFailures((failures) => Math.min(2, failures + 1));
-          } else {
-            setPollFailures((failures) => Math.min(2, failures + 1));
-          }
+          const result: ReviewPollResult = isReviewRuntimeUnavailable(error)
+            ? "runtime-unavailable"
+            : "poll-failed";
+          setPollHealth((health) =>
+            transitionReviewPollHealth({ health, result }),
+          );
           setStatusNowMs(Date.now());
         }
       } finally {
@@ -4537,7 +4550,7 @@ export const ReviewController = () => {
     ]),
     progressEvents: progress,
     agentConnected,
-    runtimeOffline: pollFailures >= 2,
+    runtimeOffline: pollIsOffline,
     now: statusNowMs,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
   });
@@ -4643,7 +4656,6 @@ export const ReviewController = () => {
   const agentSessionLabel = isAgentWorking
     ? "Agent working"
     : "Agent session active";
-  const serverGone = serverGoneFailures >= 2;
   const threadIsOpen = ({
     commentId,
     kind,
