@@ -25,6 +25,29 @@ import {
   liveLensAnchor,
 } from "./live-target.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
+import { MAXIMIZE_2_ICON } from "../../icons/lucide/maximize-2.js";
+import { MINIMIZE_2_ICON } from "../../icons/lucide/minimize-2.js";
+
+const MAXIMIZABLE_ATTRIBUTE = "data-figure-maximizable";
+const BODY_ATTRIBUTE = "data-figure-body";
+
+const DiffMaximizeButton = () => (
+  <button
+    type="button"
+    className="figure-control inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:bg-transparent hover:text-ink focus-visible:bg-transparent focus-visible:text-ink focus-visible:shadow-focus focus-visible:outline-none [&_svg]:size-4"
+    aria-label="Maximize wireframe diff"
+    data-tooltip="Maximize wireframe diff"
+    data-figure-maximize=""
+    hidden
+  >
+    <span data-lucide="maximize-2">
+      <Icon icon={MAXIMIZE_2_ICON} />
+    </span>
+    <span data-lucide="minimize-2" hidden>
+      <Icon icon={MINIMIZE_2_ICON} />
+    </span>
+  </button>
+);
 
 const placeLocations = ({
   diff,
@@ -614,12 +637,12 @@ const screenStatusClasses = (status: WireframeScreenDiff["status"]): string => {
 
 const screenStatusBorder = (status: WireframeScreenDiff["status"]): string => {
   if (status === "added") {
-    return "color-mix(in srgb, var(--diff-add-c) 52%, var(--diff-add-bg))";
+    return "color-mix(in srgb, var(--diff-add-c) 30%, var(--diff-add-bg))";
   }
   if (status === "removed") {
-    return "color-mix(in srgb, var(--diff-remove-c) 52%, var(--diff-remove-bg))";
+    return "color-mix(in srgb, var(--diff-remove-c) 30%, var(--diff-remove-bg))";
   }
-  return "color-mix(in srgb, var(--callout-warning-c) 52%, var(--callout-warning-bg))";
+  return "color-mix(in srgb, var(--callout-warning-c) 30%, var(--callout-warning-bg))";
 };
 
 const ComponentSnapshotComparison = ({
@@ -646,9 +669,6 @@ const ComponentSnapshotComparison = ({
     html?.includes(`data-wireframe-screen="${selectedScreenId}"`) === true
       ? html
       : fallbackHtml;
-  const selectedScreen = screenDiffs.find(
-    (screen) => screen.id === selectedScreenId,
-  );
   useEffect(() => {
     const content = contentRef.current;
     if (content === null) return;
@@ -698,7 +718,7 @@ const ComponentSnapshotComparison = ({
         );
         screen.style.border =
           selected && diff !== undefined
-            ? `4px solid ${screenStatusBorder(diff.status)}`
+            ? `10px solid ${screenStatusBorder(diff.status)}`
             : "";
         screen.style.borderRadius = selected ? "0.75rem" : "";
         screen.style.padding = selected ? "1rem" : "";
@@ -713,6 +733,9 @@ const ComponentSnapshotComparison = ({
       }
     };
     fitWireframes();
+    // The diff edge changes the available width. Refit once after applying
+    // it so the desktop frame stays fully inside its card.
+    fitWireframes();
     const observer = new ResizeObserver(fitWireframes);
     observer.observe(content);
     return () => {
@@ -722,6 +745,9 @@ const ComponentSnapshotComparison = ({
       });
     };
   }, [renderedHtml, screenDiffs, selectedScreenId]);
+  useEffect(() => {
+    document.dispatchEvent(new CustomEvent("bigplan:review-island-updated"));
+  }, [renderedHtml]);
   return (
     <div className="grid min-w-0 gap-2" data-review-component-diff="">
       {/* A component snapshot is a diff, not a pair of ordinary tabs, so the
@@ -729,13 +755,17 @@ const ComponentSnapshotComparison = ({
           colours the word-level lens uses. The border repeats the colour at
           the edge of the content, where the reader is actually looking. */}
       {screenDiffs.length > 0 ? (
-        <nav className="wireframe-switcher" aria-label="Prototype screens">
+        <nav
+          className="flex min-w-0 flex-wrap gap-2"
+          aria-label="Prototype screens"
+        >
           {screenDiffs.map((screen) => (
             <button
               key={screen.id}
               type="button"
-              className="wireframe-switch"
+              className="cursor-pointer rounded-md border-2 border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted hover:bg-raised aria-pressed:border-ink aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               aria-current={selectedScreenId === screen.id ? "true" : undefined}
+              aria-pressed={selectedScreenId === screen.id}
               onClick={() => setSelectedScreenId(screen.id)}
             >
               <span
@@ -755,14 +785,6 @@ const ComponentSnapshotComparison = ({
         </nav>
       ) : null}
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        {selectedScreen === undefined ? null : (
-          <span
-            className={`inline-flex items-center gap-2 text-xs font-bold uppercase tracking-caps ${screenStatusClasses(selectedScreen.status)}`}
-          >
-            <span aria-hidden="true">●</span>
-            {screenStatusLabel(selectedScreen.status)}
-          </span>
-        )}
         <div
           className="flex items-center gap-3"
           role="group"
@@ -797,15 +819,20 @@ const ComponentSnapshotComparison = ({
         </div>
       </div>
       <div
-        className={`min-w-0 overflow-hidden rounded-lg border-4 bg-surface p-3 text-ink inset-shadow-well ${
+        className={`min-w-0 overflow-visible rounded-lg border-[10px] bg-surface p-3 text-ink inset-shadow-well ${
           side === "old"
-            ? "[border-color:color-mix(in_srgb,var(--diff-remove-c)_55%,var(--diff-remove-bg))]"
-            : "[border-color:color-mix(in_srgb,var(--diff-add-c)_55%,var(--diff-add-bg))]"
+            ? "[border-color:color-mix(in_srgb,var(--diff-remove-c)_30%,var(--diff-remove-bg))]"
+            : "[border-color:color-mix(in_srgb,var(--diff-add-c)_30%,var(--diff-add-bg))]"
         }`}
         data-review-component-snapshot={side}
+        {...{ [MAXIMIZABLE_ATTRIBUTE]: "wireframe diff" }}
       >
+        <div className="mb-2 flex justify-end">
+          <DiffMaximizeButton />
+        </div>
         <div
           ref={contentRef}
+          {...{ [BODY_ATTRIBUTE]: "" }}
           className="pointer-events-none min-w-0 [&_.figure-control-bar]:hidden [&_.figure-action-group]:hidden [&_[data-flow-controls]]:hidden"
           inert
           dangerouslySetInnerHTML={{ __html: renderedHtml ?? "" }}

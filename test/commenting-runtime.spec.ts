@@ -2268,7 +2268,21 @@ Review the queue change in context.
       "data-review-component-snapshot",
       "new",
     );
-    await expect(snapshot).toHaveCSS("border-top-width", "4px");
+    await expect(snapshot).toHaveCSS("border-top-width", "10px");
+    await expect(
+      snapshot.getByRole("button", { name: "Maximize wireframe diff" }),
+    ).toBeVisible();
+    await snapshot
+      .getByRole("button", { name: "Maximize wireframe diff" })
+      .click();
+    await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
+    await expect(
+      snapshot.getByRole("button", { name: "Restore wireframe diff size" }),
+    ).toBeVisible();
+    await snapshot
+      .getByRole("button", { name: "Restore wireframe diff size" })
+      .click();
+    await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
     const geometry = await snapshot.evaluate((node) => {
       const frame = node.querySelector<HTMLElement>(".wireframe-frame");
       const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
@@ -2294,11 +2308,11 @@ Review the queue change in context.
       "data-review-component-snapshot",
       "old",
     );
-    await expect(snapshot).toHaveCSS("border-top-width", "4px");
+    await expect(snapshot).toHaveCSS("border-top-width", "10px");
     await page.evaluate(() => {
       document.documentElement.setAttribute("data-theme", "dark");
     });
-    await expect(snapshot).toHaveCSS("border-top-width", "4px");
+    await expect(snapshot).toHaveCSS("border-top-width", "10px");
     expect(
       await snapshot.evaluate((node) => node.scrollWidth === node.clientWidth),
     ).toBe(true);
