@@ -4396,6 +4396,9 @@ export const ReviewController = () => {
     const refresh = async () => {
       if (pending) return;
       pending = true;
+      // Capture before the requests so a slow sibling cannot move the observed
+      // contact loss past a deadline that was still future when polling began.
+      const pollStartedAtMs = Date.now();
       try {
         const [sessionResult, agentResult, progressResult] =
           await Promise.allSettled([
@@ -4443,7 +4446,11 @@ export const ReviewController = () => {
               ? "runtime-unavailable"
               : "poll-failed";
             setPollHealth((health) =>
-              transitionReviewPollHealth({ health, result, nowMs: now }),
+              transitionReviewPollHealth({
+                health,
+                result,
+                nowMs: pollStartedAtMs,
+              }),
             );
           }
           setStatusNowMs(now);
@@ -4455,7 +4462,11 @@ export const ReviewController = () => {
             : "poll-failed";
           const now = Date.now();
           setPollHealth((health) =>
-            transitionReviewPollHealth({ health, result, nowMs: now }),
+            transitionReviewPollHealth({
+              health,
+              result,
+              nowMs: pollStartedAtMs,
+            }),
           );
           setStatusNowMs(now);
         }

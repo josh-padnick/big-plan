@@ -70,18 +70,25 @@ describe("review poll health", () => {
     expect(reviewRuntimeDownSinceMs(health)).toBeUndefined();
   });
 
-  it("should preserve the first runtime-unavailable failure time", () => {
-    const health = transition(
-      ["runtime-unavailable", "runtime-unavailable", "runtime-unavailable"],
-      2_000,
-    );
+  it("should preserve the first poll-start time across later failures", () => {
+    const firstPollStartedAtMs = 2_000;
+    const first = transitionReviewPollHealth({
+      health: INITIAL_REVIEW_POLL_HEALTH,
+      result: "runtime-unavailable",
+      nowMs: firstPollStartedAtMs,
+    });
+    const health = transitionReviewPollHealth({
+      health: first,
+      result: "runtime-unavailable",
+      nowMs: 12_000,
+    });
 
     expect(health).toEqual({
       state: "runtime-unavailable",
       consecutiveFailures: 2,
-      firstFailureAtMs: 2_000,
+      firstFailureAtMs: firstPollStartedAtMs,
     });
-    expect(reviewRuntimeDownSinceMs(health)).toBe(2_000);
+    expect(reviewRuntimeDownSinceMs(health)).toBe(firstPollStartedAtMs);
   });
 
   it("should stamp a new failure time after runtime recovery", () => {
