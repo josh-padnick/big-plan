@@ -45,15 +45,18 @@ const reviewArguments = (
     if (argument === "--idle-timeout") {
       const value = args[index + 1];
       const parsed = Number(value);
+      // A one-minute floor stays safely above the review page's fixed
+      // 1.5-second poll cadence, so an open page cannot expire between polls.
       if (
         value === undefined ||
         value.trim() === "" ||
         !Number.isFinite(parsed) ||
         parsed < 0 ||
+        (parsed > 0 && parsed < 1) ||
         !Number.isFinite(parsed * 60_000)
       ) {
         throw new AxiError(
-          "--idle-timeout must be zero or a positive number of minutes",
+          "--idle-timeout must be 0 to disable it, or at least 1 minute",
           "INVALID_INPUT",
           [USAGE],
         );

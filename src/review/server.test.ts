@@ -42,6 +42,7 @@ import { reviewSessionIsRunning } from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
 import { validateResolvedCommentIds } from "./shared/comment.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
+import { REVIEW_POLL_INTERVAL_MS } from "./shared/review-polling.js";
 import {
   readComments,
   readResolvedCommentIds,
@@ -76,16 +77,7 @@ beforeAll(async () => {
   const planPath = join(planDirectory, "plan.mdx");
   await writeFile(planPath, PLAN);
   runtime = await startReviewRuntime({ planPath });
-  const descriptor: unknown = JSON.parse(
-    await readFile(runtime.store.sessionPath, "utf8"),
-  );
-  token =
-    typeof descriptor === "object" &&
-    descriptor !== null &&
-    "token" in descriptor &&
-    typeof descriptor.token === "string"
-      ? descriptor.token
-      : "";
+  token = await readSessionToken(runtime);
 });
 
 afterAll(async () => {
@@ -440,16 +432,7 @@ describe("review runtime images", () => {
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
     const first = await startReviewRuntime({ planPath });
-    const firstDescriptor: unknown = JSON.parse(
-      await readFile(first.store.sessionPath, "utf8"),
-    );
-    const firstToken =
-      typeof firstDescriptor === "object" &&
-      firstDescriptor !== null &&
-      "token" in firstDescriptor &&
-      typeof firstDescriptor.token === "string"
-        ? firstDescriptor.token
-        : "";
+    const firstToken = await readSessionToken(first);
     const upload = await fetch(`${first.url}api/review-images`, {
       method: "POST",
       headers: {
@@ -1023,16 +1006,7 @@ describe("review runtime feedback", () => {
     await writeFile(planPath, PLAN);
     const isolated = await startReviewRuntime({ planPath });
     try {
-      const descriptor: unknown = JSON.parse(
-        await readFile(isolated.store.sessionPath, "utf8"),
-      );
-      const isolatedToken =
-        typeof descriptor === "object" &&
-        descriptor !== null &&
-        "token" in descriptor &&
-        typeof descriptor.token === "string"
-          ? descriptor.token
-          : "";
+      const isolatedToken = await readSessionToken(isolated);
       const post = () =>
         fetch(`${isolated.url}api/feedback`, {
           method: "POST",
@@ -1645,16 +1619,7 @@ The dashboard shows the retry backlog.
     await writeFile(planPath, baseline);
     const isolated = await startReviewRuntime({ planPath });
     try {
-      const descriptor: unknown = JSON.parse(
-        await readFile(isolated.store.sessionPath, "utf8"),
-      );
-      const isolatedToken =
-        typeof descriptor === "object" &&
-        descriptor !== null &&
-        "token" in descriptor &&
-        typeof descriptor.token === "string"
-          ? descriptor.token
-          : "";
+      const isolatedToken = await readSessionToken(isolated);
       const isolatedCall = ({
         path,
         body,
@@ -2170,16 +2135,7 @@ describe("review runtime shutdown", () => {
     await writeFile(planPath, restartedSource);
     const restarted = await startReviewRuntime({ planPath });
     try {
-      const descriptor: unknown = JSON.parse(
-        await readFile(restarted.store.sessionPath, "utf8"),
-      );
-      const restartedToken =
-        typeof descriptor === "object" &&
-        descriptor !== null &&
-        "token" in descriptor &&
-        typeof descriptor.token === "string"
-          ? descriptor.token
-          : "";
+      const restartedToken = await readSessionToken(restarted);
       const agentState = () =>
         fetch(`${restarted.url}api/agent`, {
           headers: { "x-big-plan-review-token": restartedToken },
@@ -2234,16 +2190,7 @@ describe("review runtime shutdown", () => {
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
     const first = await startReviewRuntime({ planPath });
-    const firstDescriptor: unknown = JSON.parse(
-      await readFile(first.store.sessionPath, "utf8"),
-    );
-    const firstToken =
-      typeof firstDescriptor === "object" &&
-      firstDescriptor !== null &&
-      "token" in firstDescriptor &&
-      typeof firstDescriptor.token === "string"
-        ? firstDescriptor.token
-        : "";
+    const firstToken = await readSessionToken(first);
     const stalled = openStalledMutation({
       target: first,
       sessionToken: firstToken,
@@ -2299,19 +2246,20 @@ describe("review runtime shutdown", () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-server-poll-"));
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
-    // Shorter than the poll window below, so a runtime that ignores reads
-    // stops answering partway through the loop instead of at its end.
-    const polling = await startReviewRuntime({ planPath, idleTimeoutMs: 600 });
+    const idleTimeoutMs = REVIEW_POLL_INTERVAL_MS * 2;
+    const polling = await startReviewRuntime({ planPath, idleTimeoutMs });
     const pollingToken = await readSessionToken(polling);
     const poll = () =>
       fetch(`${polling.url}api/session`, {
         headers: { "x-big-plan-review-token": pollingToken },
       });
     try {
-      const until = Date.now() + 1_500;
+      const until = Date.now() + idleTimeoutMs * 2;
       while (Date.now() < until) {
         await expect(poll()).resolves.toMatchObject({ status: 200 });
-        await new Promise((settle) => setTimeout(settle, 200));
+        await new Promise((settle) =>
+          setTimeout(settle, REVIEW_POLL_INTERVAL_MS),
+        );
       }
       await expect(poll()).resolves.toMatchObject({ status: 200 });
       await expect(
@@ -2324,7 +2272,7 @@ describe("review runtime shutdown", () => {
       await polling.close();
       await rm(directory, { recursive: true, force: true });
     }
-  });
+  }, 10_000);
 
   it("should publish its lifetime and deadline on the session route", async () => {
     const before = (await (await call({ path: "/api/session" })).json()) as {
@@ -2366,16 +2314,7 @@ describe("review runtime shutdown", () => {
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
     const closing = await startReviewRuntime({ planPath });
-    const descriptor: unknown = JSON.parse(
-      await readFile(closing.store.sessionPath, "utf8"),
-    );
-    const closingToken =
-      typeof descriptor === "object" &&
-      descriptor !== null &&
-      "token" in descriptor &&
-      typeof descriptor.token === "string"
-        ? descriptor.token
-        : "";
+    const closingToken = await readSessionToken(closing);
     const stalled = openStalledMutation({
       target: closing,
       sessionToken: closingToken,

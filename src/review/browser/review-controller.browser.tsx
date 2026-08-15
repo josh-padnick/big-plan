@@ -43,6 +43,7 @@ import {
   parseReviewerMarkdown,
   type ReviewerMarkdownNode,
 } from "../shared/reviewer-markdown.js";
+import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import {
   reconcilePendingCancellations,
   requestIsCanceled,
@@ -4390,7 +4391,10 @@ export const ReviewController = () => {
       }
     };
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 1_500);
+    const timer = window.setInterval(
+      () => void refresh(),
+      REVIEW_POLL_INTERVAL_MS,
+    );
     return () => {
       current = false;
       window.clearInterval(timer);

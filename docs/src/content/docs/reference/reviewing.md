@@ -15,9 +15,9 @@ Open that address, review the plan, and stop the runtime with `Ctrl+C`.
 By default, a review ends normally after 30 minutes with no page open and no
 agent working. An open review page counts as activity on its own, so a session
 never ends while you are still reading it. Set a different duration with
-`--idle-timeout <minutes>`, or pass `--idle-timeout 0` to keep the review open
-until it is stopped explicitly. A waiting agent receives that normal inactivity
-reason instead of a failed background command.
+`--idle-timeout <minutes>`; a nonzero timeout must be at least 1 minute.
+Pass `--idle-timeout 0` to keep the review open until it is stopped explicitly.
+A waiting agent receives that normal inactivity reason instead of a failed background command.
 
 ## When a session stops accepting changes
 
