@@ -2517,6 +2517,9 @@ test("should colour a component snapshot switch as a diff", async ({
     const snapshot = componentDiff.locator("[data-review-component-snapshot]");
     const now = componentDiff.getByRole("button", { name: "Now" });
     const was = componentDiff.getByRole("button", { name: "Was" });
+    const toggleThumb = componentDiff.locator(
+      "[data-review-diff-toggle-thumb]",
+    );
 
     await expect(
       snapshot.getByRole("button", { name: "Maximize component diff" }),
@@ -2530,9 +2533,11 @@ test("should colour a component snapshot switch as a diff", async ({
       "new",
     );
     const added = await now.evaluate((node) => ({
-      background: getComputedStyle(node).backgroundColor,
       color: getComputedStyle(node).color,
     }));
+    const addedThumbBackground = await toggleThumb.evaluate(
+      (node) => getComputedStyle(node).backgroundColor,
+    );
     const addedBorder = await snapshot.evaluate(
       (node) => getComputedStyle(node).borderTopColor,
     );
@@ -2544,9 +2549,11 @@ test("should colour a component snapshot switch as a diff", async ({
       "old",
     );
     const removed = await was.evaluate((node) => ({
-      background: getComputedStyle(node).backgroundColor,
       color: getComputedStyle(node).color,
     }));
+    const removedThumbBackground = await toggleThumb.evaluate(
+      (node) => getComputedStyle(node).backgroundColor,
+    );
     const removedBorder = await snapshot.evaluate(
       (node) => getComputedStyle(node).borderTopColor,
     );
@@ -2554,8 +2561,11 @@ test("should colour a component snapshot switch as a diff", async ({
 
     // The two sides must not merely differ from the resting chrome; they must
     // differ from each other, which is what makes the switch read as a diff.
+    // The toggle itself carries that difference on its sliding thumb rather
+    // than on the button chrome, so both option labels stay readable and
+    // clickable-looking in either state.
     expect(removed.color).not.toBe(added.color);
-    expect(removed.background).not.toBe(added.background);
+    expect(removedThumbBackground).not.toBe(addedThumbBackground);
     expect(removedBorder).not.toBe(addedBorder);
   } finally {
     await runtime.close();
@@ -2693,6 +2703,115 @@ ${survivingWireframe}
   }
 });
 
+test("should not grow a screen switcher for a single-screen wireframe diff, and should match the non-diff switcher for a multi-screen one", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const directory = await mkdtemp(
+    join(tmpdir(), "big-plan-wireframe-switcher-"),
+  );
+  const planPath = join(directory, "wireframe.mdx");
+  const singleScreen = (
+    copy: string,
+    screenId: string,
+  ) => `<Wireframe id="queue" title="Review queue">
+<Screen id="${screenId}" name="Failed payments" device="desktop">
+<Panel title="Failed payments">
+<Text text="${copy}" />
+</Panel>
+</Screen>
+</Wireframe>`;
+  const multiScreen = (
+    copy: string,
+  ) => `<Wireframe id="workspace" title="Plan review">
+<Screen id="triage" name="Triage" device="desktop">
+<Panel title="Triage queue">
+<Text text="${copy}" />
+</Panel>
+</Screen>
+<Screen id="archive" name="Archive" device="desktop">
+<Panel title="Archive queue">
+<Text text="Unchanged archive content" />
+</Panel>
+</Screen>
+</Wireframe>`;
+  const before = `# Wireframe switcher parity
+
+## Single screen
+
+${singleScreen("Original copy", "failed-payments")}
+
+## Multiple screens
+
+${multiScreen("Original triage copy")}
+`;
+  const after = `# Wireframe switcher parity
+
+## Single screen
+
+${singleScreen("Revised copy", "payment-failures")}
+
+## Multiple screens
+
+${multiScreen("Revised triage copy")}
+`;
+  await writeFile(planPath, after);
+  const { startReviewRuntime: startCompiledReviewRuntime } =
+    await import("../dist/review/server.js");
+  const runtime = await startCompiledReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    await rail.getByRole("button", { name: "Review changes" }).click();
+
+    await test.step("a single-screen wireframe diff shows no screen switcher", async () => {
+      const diffs = page.locator("[data-review-component-diff]");
+      const singleDiff = diffs.filter({ hasText: "Failed payments" });
+      await expect(singleDiff).toHaveCount(1);
+      await expect(
+        singleDiff.getByRole("navigation", { name: "Prototype screens" }),
+      ).toHaveCount(0);
+    });
+
+    await test.step("a multi-screen wireframe diff's switcher matches the non-diff one", async () => {
+      await rail.getByText("Triage queue").click();
+      const diffs = page.locator("[data-review-component-diff]");
+      const multiDiff = diffs.filter({ hasText: "Triage queue" });
+      const switcher = multiDiff.getByRole("navigation", {
+        name: "Prototype screens",
+      });
+      await expect(switcher).toBeVisible();
+      const entry = switcher.getByRole("button", { name: /Triage/u });
+      await expect(entry).toHaveClass(/wireframe-switch/);
+      const style = await entry.evaluate((node) => {
+        const cs = getComputedStyle(node);
+        return {
+          borderWidth: cs.borderWidth,
+          borderRadius: cs.borderRadius,
+          boxShadow: cs.boxShadow,
+        };
+      });
+      // The non-diff switcher's own resting chrome, asserted directly rather
+      // than duplicated as a second literal, so the two can never drift
+      // silently apart.
+      expect(style.borderWidth).toBe("2px");
+      expect(style.borderRadius).toBe("6px");
+      expect(style.boxShadow).not.toBe("none");
+    });
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("should fit a wireframe component snapshot and keep its pastel diff edge", async ({
   page,
 }) => {
@@ -2819,6 +2938,11 @@ ${reorderedWorkspace}
     name: "Maximize wireframe diff",
   });
   const snapshotBody = snapshot.locator(":scope > [data-figure-body]");
+  // The pastel red/green diff edge belongs to the highlighted screen itself,
+  // matching the non-diff view's own frame chrome at the outer snapshot
+  // level: a second, thicker border there would compete with this one for
+  // the reader's attention instead of carrying it.
+  const highlightedScreen = snapshot.locator("[data-wireframe-screen]:visible");
   try {
     await test.step("open the changed wireframe without hiding its duplicate", async () => {
       await page.goto(runtime.url);
@@ -2875,6 +2999,42 @@ ${reorderedWorkspace}
       await page.setViewportSize({ width: 1600, height: 1000 });
     });
 
+    await test.step("show hover feedback on both toggle options in every state and theme", async () => {
+      const visualState = async (button: typeof was) =>
+        button.evaluate((node) => {
+          const style = getComputedStyle(node);
+          return {
+            backgroundColor: style.backgroundColor,
+            color: style.color,
+          };
+        });
+      const options = [was, now];
+      for (const theme of ["light", "dark"] as const) {
+        await page.evaluate((nextTheme) => {
+          document.documentElement.setAttribute("data-theme", nextTheme);
+        }, theme);
+        for (const selected of options) {
+          await selected.click();
+          await page.mouse.move(0, 0);
+          await expect(selected).toHaveAttribute("aria-pressed", "true");
+          for (const option of options) {
+            const resting = await visualState(option);
+            await option.hover();
+            await expect
+              .poll(async () => {
+                const hovered = await visualState(option);
+                return (
+                  hovered.backgroundColor !== resting.backgroundColor &&
+                  hovered.color !== resting.color
+                );
+              })
+              .toBe(true);
+            await page.mouse.move(0, 0);
+          }
+        }
+      }
+    });
+
     await test.step("navigate added and removed prototype screens", async () => {
       await screenNavigation
         .getByRole("button", { name: "Escalations Added" })
@@ -2899,12 +3059,13 @@ ${reorderedWorkspace}
       await expect(snapshot).not.toContainText("New escalation queue content");
     });
 
-    await test.step("maximize an accessible scrollable snapshot", async () => {
+    await test.step("maximize an accessible, fitted snapshot", async () => {
       await screenNavigation
         .getByRole("button", { name: "Queue Updated" })
         .click();
       await now.click();
-      await expect(snapshot).toHaveCSS("border-top-width", "10px");
+      await expect(snapshot).toHaveCSS("border-top-width", "1px");
+      await expect(highlightedScreen).toHaveCSS("border-top-width", "10px");
       await expect(maximize).toBeVisible();
       await page.setViewportSize({ width: 1600, height: 600 });
       await maximize.click();
@@ -2927,36 +3088,17 @@ ${reorderedWorkspace}
             return control instanceof HTMLInputElement && control.disabled;
           }),
       ).toBe(true);
+      // A maximized wireframe screen fits both axes by shrinking the whole
+      // device frame - the reader opened it to see all of it at once - so a
+      // 40-item list no longer forces the panel itself to scroll the way a
+      // width-only fit once did; it shrinks the frame instead.
       await expect
         .poll(() =>
-          snapshotBody.evaluate(
-            (node) => node.scrollHeight > node.clientHeight,
+          highlightedScreen.evaluate(
+            (node) => node.scrollHeight - node.clientHeight,
           ),
         )
-        .toBe(true);
-      const snapshotBodyBox = await snapshotBody.boundingBox();
-      if (snapshotBodyBox === null) {
-        throw new Error("The maximized snapshot body must be measurable");
-      }
-      await page.mouse.move(
-        snapshotBodyBox.x + snapshotBodyBox.width / 2,
-        snapshotBodyBox.y + snapshotBodyBox.height / 2,
-      );
-      await page.mouse.wheel(0, 400);
-      await expect
-        .poll(() => snapshotBody.evaluate((node) => node.scrollTop))
-        .toBeGreaterThan(0);
-      await snapshotBody.evaluate((node) => {
-        node.scrollTop = 0;
-      });
-      await snapshotBody.focus();
-      const initialScrollTop = await snapshotBody.evaluate(
-        (node) => node.scrollTop,
-      );
-      await page.keyboard.press("PageDown");
-      await expect
-        .poll(() => snapshotBody.evaluate((node) => node.scrollTop))
-        .toBeGreaterThan(initialScrollTop);
+        .toBeLessThanOrEqual(2);
       await expect(
         snapshot.getByRole("button", { name: "Restore wireframe diff size" }),
       ).toBeVisible();
@@ -2967,6 +3109,38 @@ ${reorderedWorkspace}
       await snapshot
         .getByRole("button", { name: "Restore wireframe diff size" })
         .click();
+      await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
+    });
+
+    // A width-only fit passes a wide-and-tall viewport by coincidence - there
+    // is room to spare on both axes, so nothing exposes a missing height
+    // term. Wide-and-short is the shape that catches it: shrinking only the
+    // viewport height must shrink the frame further, the same fit
+    // test/wireframe.spec.ts already requires of the non-diff surface. This
+    // once regressed silently because the diff lens fit only the width.
+    await test.step("shrink the maximized frame by height, not just width", async () => {
+      await maximize.click();
+      await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
+      await page.setViewportSize({ width: 1855, height: 1200 });
+      const readZoom = () =>
+        highlightedScreen.evaluate((node) => {
+          const frame = node.querySelector<HTMLElement>(".wireframe-frame");
+          return Number.parseFloat(frame?.style.zoom || "1");
+        });
+      await expect.poll(readZoom).toBeGreaterThan(0);
+      const tallZoom = await readZoom();
+      await page.setViewportSize({ width: 1855, height: 700 });
+      await expect.poll(readZoom).toBeLessThan(tallZoom);
+      const shortZoom = await readZoom();
+      await expect
+        .poll(() =>
+          highlightedScreen.evaluate(
+            (node) => node.scrollHeight - node.clientHeight,
+          ),
+        )
+        .toBeLessThanOrEqual(2);
+      expect(shortZoom).toBeGreaterThan(0);
+      await page.keyboard.press("Escape");
       await expect(snapshot).not.toHaveAttribute("data-figure-maximized");
     });
 
@@ -2993,11 +3167,13 @@ ${reorderedWorkspace}
         "data-review-component-snapshot",
         "old",
       );
-      await expect(snapshot).toHaveCSS("border-top-width", "10px");
+      await expect(snapshot).toHaveCSS("border-top-width", "1px");
+      await expect(highlightedScreen).toHaveCSS("border-top-width", "10px");
       await page.evaluate(() => {
         document.documentElement.setAttribute("data-theme", "dark");
       });
-      await expect(snapshot).toHaveCSS("border-top-width", "10px");
+      await expect(snapshot).toHaveCSS("border-top-width", "1px");
+      await expect(highlightedScreen).toHaveCSS("border-top-width", "10px");
       expect(
         await snapshot.evaluate(
           (node) => node.scrollWidth === node.clientWidth,
