@@ -2332,6 +2332,73 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should let a waiting agent outlive a canceled writer's lease", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nWait for the previous writer to leave.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 400,
+    });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const blocker = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: new Date().toISOString(),
+      body: "Cancel this while its writer may still be editing.",
+    });
+    const queued = messageAgentRequest({
+      kind: "chat",
+      requestId: "cdcdcdcdcdcdcdcd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: new Date(Date.now() + 1).toISOString(),
+      body: "Pick this up after the canceled writer's lease lapses.",
+    });
+    await writeAgentRequest({ store: review.store, request: blocker });
+    await writeAgentRequest({ store: review.store, request: queued });
+    const leaseClock = Date.now() - AGENT_CLAIM_LEASE_MS + 900;
+    await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: blocker.requestId,
+      claimedBy: "aaaaaaaaaaaaaaaa",
+      baselineSnapshot: premiseSnapshot,
+      now: new Date(leaseClock).toISOString(),
+      clock: () => leaseClock,
+    });
+    await cancelAgentRequest({
+      store: review.store,
+      requestId: blocker.requestId,
+      now: new Date().toISOString(),
+    });
+
+    try {
+      // Without idle shutdown consulting the canceled live writer, the 400ms
+      // timeout ends this wait before the 900ms remaining lease lapses. That
+      // counterfactual was verified before this test passed.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: true,
+          executablePath,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: queued.requestId },
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should include complete original context when picking up an old reply", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-history-"));
     const planPath = join(directory, "plan.mdx");

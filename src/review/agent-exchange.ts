@@ -1095,10 +1095,12 @@ export const readAgentExchange = async ({
   store,
   sessionId,
   planId,
+  nowMs = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly planId: string;
+  readonly nowMs?: number;
 }): Promise<AgentExchangeSnapshot> => {
   const complete = await readCompleteAgentExchange({
     store,
@@ -1109,8 +1111,13 @@ export const readAgentExchange = async ({
       const terminal = requests
         .filter((request) => requestIsTerminal(request))
         .slice(-EXCHANGE_LIMIT);
+      const pickupBlockers = requests.filter((request) =>
+        requestBlocksPlanPickup({ request, nowMs }),
+      );
       return new Set(
-        [...pending, ...terminal].map((request) => request.requestId),
+        [...pending, ...terminal, ...pickupBlockers].map(
+          (request) => request.requestId,
+        ),
       );
     },
   });
@@ -1121,8 +1128,13 @@ export const readAgentExchange = async ({
   const terminal = complete.requests
     .filter((request) => !pendingRequestIds.has(request.requestId))
     .slice(-EXCHANGE_LIMIT);
+  const pickupBlockers = complete.requests.filter((request) =>
+    requestBlocksPlanPickup({ request, nowMs }),
+  );
   const retainedRequestIds = new Set(
-    [...pending, ...terminal].map((request) => request.requestId),
+    [...pending, ...terminal, ...pickupBlockers].map(
+      (request) => request.requestId,
+    ),
   );
   const requests = complete.requests.filter((request) =>
     retainedRequestIds.has(request.requestId),

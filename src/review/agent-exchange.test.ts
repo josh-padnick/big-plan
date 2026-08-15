@@ -602,7 +602,6 @@ describe("agent exchange filesystem", () => {
     const store = reviewStoreFor({ planPath, planId });
     await prepareStore(store);
     const startedAt = Date.parse("2026-08-02T12:00:00.000Z");
-    await writeAgentRequest({ store, request });
     for (let index = 1; index < 400; index += 1) {
       await writeAgentRequest({
         store,
@@ -662,13 +661,52 @@ describe("agent exchange filesystem", () => {
       response,
       now: new Date(startedAt + 403).toISOString(),
     });
+    const nowMs = Date.now();
+    const blocker = validateAgentRequest({
+      ...request,
+      baselineSnapshot: request.premiseSnapshot,
+      claimedAt: new Date(nowMs - 1_000).toISOString(),
+      claimedBy: agentSessionId,
+      claimExpiresAtMs: nowMs + AGENT_CLAIM_LEASE_MS,
+      canceledAt: new Date(nowMs - 500).toISOString(),
+    });
+    const queued = messageAgentRequest({
+      kind: "chat",
+      requestId: "eeeeeeeeeeeeeeee",
+      sessionId,
+      planId,
+      premiseSnapshot: deriveSnapshotDigest(before),
+      createdAt: new Date(startedAt + 404).toISOString(),
+      body: "Wait for the canceled writer to leave.",
+    });
+    await writeAgentRequest({ store, request: blocker });
+    await writeAgentRequest({ store, request: queued });
 
-    const bounded = await readAgentExchange({ store, sessionId, planId });
-    expect(bounded.requests).toHaveLength(401);
-    expect(bounded.requests[0]?.requestId).toBe(request.requestId);
+    const bounded = await readAgentExchange({
+      store,
+      sessionId,
+      planId,
+      nowMs,
+    });
+    expect(bounded.requests).toHaveLength(402);
+    expect(bounded.requests[0]?.requestId).toBe(blocker.requestId);
     expect(bounded.requests[1]?.requestId).toBe("0000000000000001");
-    expect(bounded.requests.at(-1)?.requestId).toBe(reply.requestId);
+    expect(bounded.requests.at(-1)?.requestId).toBe(queued.requestId);
     expect(bounded.responses).toEqual([response]);
-    expect(nextPendingAgentRequest(bounded, viewer())).toEqual(request);
+    // Without retaining live blockers outside the presentation cap, the queue
+    // offers `queued` while the mailbox still rejects it. That counterfactual
+    // was verified before this test passed.
+    expect(
+      nextPendingAgentRequest(bounded, {
+        claimedBy: "cccc0000cccc0000",
+        nowMs,
+      }),
+    ).toBeUndefined();
+    expect(
+      nextPendingAgentRequest(bounded, {
+        claimedBy: "cccc0000cccc0000",
+        nowMs: (blocker.claimExpiresAtMs ?? nowMs) + 1,
+      }),
+    ).toEqual(queued);
   });
 });

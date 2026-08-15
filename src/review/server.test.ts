@@ -2729,8 +2729,8 @@ describe("review runtime queued messages", () => {
       nextPendingAgentRequest(busy, {
         claimedBy: queued.sessionId,
         nowMs: Date.now(),
-      })?.requestId,
-    ).toBe(firstId);
+      }),
+    ).toBeUndefined();
 
     await commitRequestTerminal({
       store: queued.store,
@@ -2788,13 +2788,15 @@ describe("review runtime queued messages", () => {
     const requestId = await sendChat("Waht about the timeout?");
     const request = await storedRequest(requestId);
     if (request === undefined) throw new Error("The message was lost");
-    await claimAgentRequest({
+    const expiredClaimAt = Date.now() - 100_000;
+    const claimed = await claimAgentRequest({
       store: queued.store,
       activeSessionId: queued.sessionId,
       requestId,
       claimedBy: queued.sessionId,
       baselineSnapshot: request.premiseSnapshot,
-      now: new Date().toISOString(),
+      now: new Date(expiredClaimAt).toISOString(),
+      clock: () => expiredClaimAt,
     });
 
     const response = await ask({
@@ -2808,6 +2810,20 @@ describe("review runtime queued messages", () => {
     });
     expect(await storedRequest(requestId)).toMatchObject({
       body: "Waht about the timeout?",
+    });
+    await commitRequestTerminal({
+      store: queued.store,
+      response: validateAgentResponseDraft({
+        value: { requestId, message: "Answered after revision was refused." },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: claimed.premiseSnapshot,
+        now: new Date(expiredClaimAt + 1).toISOString(),
+      }),
+      claimedBy: queued.sessionId,
+      now: new Date(expiredClaimAt + 1).toISOString(),
+      clock: () => expiredClaimAt + 1,
     });
   });
 
@@ -2974,13 +2990,15 @@ describe("review runtime queued messages", () => {
     const requestId = await sendChat("Keep this one after all.");
     const request = await storedRequest(requestId);
     if (request === undefined) throw new Error("The message was lost");
+    const expiredClaimAt = Date.now() - 100_000;
     await claimAgentRequest({
       store: queued.store,
       activeSessionId: queued.sessionId,
       requestId,
       claimedBy: queued.sessionId,
       baselineSnapshot: request.premiseSnapshot,
-      now: new Date().toISOString(),
+      now: new Date(expiredClaimAt).toISOString(),
+      clock: () => expiredClaimAt,
     });
 
     const response = await ask({
