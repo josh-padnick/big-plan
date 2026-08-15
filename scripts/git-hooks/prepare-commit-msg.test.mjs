@@ -159,6 +159,60 @@ test("an editor-authored subject is normalized after the editor closes", () => {
   }
 });
 
+test("should abort an editor commit when no subject is supplied", () => {
+  const dir = makeScratchRepo();
+  try {
+    assert.throws(
+      () =>
+        execFileSync("git", ["commit", "--allow-empty"], {
+          cwd: dir,
+          encoding: "utf8",
+          env: { ...process.env, GIT_EDITOR: "true" },
+        }),
+      (error) => error && typeof error === "object" && error.status === 1,
+    );
+    assert.throws(() => git(dir, ["rev-parse", "--verify", "HEAD"]));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("should preserve a marker-prefixed subject supplied with -m", () => {
+  const dir = makeScratchRepo();
+  try {
+    git(dir, ["commit", "--allow-empty", "-m", "#123 fix"]);
+    const message = commitMessage(dir);
+
+    assert.match(message, /^#123 fix\n/);
+    assert.ok(message.includes(GENERATED_BODY_NOTE));
+    assert.match(
+      message,
+      /Signed-off-by: Scratch Committer <scratch@example\.com>/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("should preserve marker-prefixed content supplied with -F", () => {
+  const dir = makeScratchRepo();
+  try {
+    const messageFile = join(dir, "authored-commit-message");
+    writeFileSync(messageFile, "#123 file fix\n\n# authored body\n");
+    git(dir, ["commit", "--allow-empty", "-F", messageFile]);
+    const message = commitMessage(dir);
+
+    assert.match(message, /^#123 file fix\n\n# authored body\n/);
+    assert.ok(!message.includes(GENERATED_BODY_NOTE));
+    assert.match(
+      message,
+      /Signed-off-by: Scratch Committer <scratch@example\.com>/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a worktree hooks override composes compliance with existing hooks", () => {
   const alternateHooksPath = "alternate-hooks";
   let unrelatedDir = null;
@@ -283,6 +337,41 @@ test("should resolve compliance from the active linked worktree when hooks are s
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
+    rmSync(sharedDirectory, { recursive: true, force: true });
+  }
+});
+
+test("should reject a managed hooks path owned by another repository", () => {
+  const sharedDirectory = mkdtempSync(
+    join(tmpdir(), "big-plan-foreign-hooks-"),
+  );
+  const hooksDirectory = join(sharedDirectory, "hooks");
+  mkdirSync(hooksDirectory);
+  let secondDir = null;
+  const firstDir = makeScratchRepo((scratchRepo) => {
+    git(scratchRepo, ["config", "core.hooksPath", hooksDirectory]);
+  });
+
+  try {
+    assert.throws(
+      () =>
+        makeScratchRepo((scratchRepo) => {
+          secondDir = scratchRepo;
+          git(scratchRepo, ["config", "core.hooksPath", hooksDirectory]);
+        }),
+      /managed dispatcher belongs to a different repository/,
+    );
+
+    git(firstDir, ["commit", "--allow-empty", "-m", "original owner"]);
+    const message = commitMessage(firstDir);
+    assert.ok(message.includes(GENERATED_BODY_NOTE));
+    assert.match(
+      message,
+      /Signed-off-by: Scratch Committer <scratch@example\.com>/,
+    );
+  } finally {
+    if (secondDir) rmSync(secondDir, { recursive: true, force: true });
+    rmSync(firstDir, { recursive: true, force: true });
     rmSync(sharedDirectory, { recursive: true, force: true });
   }
 });

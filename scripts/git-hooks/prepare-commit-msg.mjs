@@ -32,6 +32,11 @@ const splitCommentBlock = (rawMessage, commentMarker) => {
   return { contentLines: lines, commentLines: [] };
 };
 
+const hasSubject = (rawMessage, commentMarker) =>
+  splitCommentBlock(rawMessage, commentMarker).contentLines.some(
+    (line) => line.trim() !== "",
+  );
+
 const trailerLinePattern = /^[^\s:=]+[=:][ \t]*\S/;
 
 const findTrailerBlockStart = (lines, subjectIndex) => {
@@ -114,6 +119,13 @@ const currentCommitterIdent = () => {
 
 const automaticCommentMarkers = "#;@!$%^&|:";
 
+const unusedCommentMarker = (rawMessage) => {
+  const lines = rawMessage.split("\n");
+  let marker = "BIG_PLAN_UNUSED_COMMENT";
+  while (lines.some((line) => line.startsWith(marker))) marker += "_";
+  return marker;
+};
+
 /** Finds the marker Git selected for an auto-configured trailing comment block. */
 const inferAutomaticCommentMarker = (rawMessage) => {
   const lines = rawMessage.split("\n");
@@ -131,6 +143,14 @@ const inferAutomaticCommentMarker = (rawMessage) => {
 /** Reads the last configured spelling because commentChar and commentString
  * are aliases whose effective value follows Git's config order. */
 const currentCommentMarker = (rawMessage, source) => {
+  if (
+    source !== undefined &&
+    source !== "template" &&
+    source !== "merge" &&
+    source !== "squash"
+  ) {
+    return null;
+  }
   try {
     const configured = execFileSync(
       "git",
@@ -149,9 +169,7 @@ const currentCommentMarker = (rawMessage, source) => {
     if (valueSeparator === -1) return "#";
     const marker = effectiveEntry.slice(valueSeparator + 1);
     if (marker !== "auto") return marker;
-    return source === "message"
-      ? null
-      : inferAutomaticCommentMarker(rawMessage);
+    return inferAutomaticCommentMarker(rawMessage);
   } catch (error) {
     if (error && typeof error === "object" && error.status === 1) return "#";
     throw error;
@@ -169,7 +187,11 @@ const addSignoffTrailer = (messageFile, ident, commentMarker) => {
   if (commentLines.length > 0) {
     writeFileSync(messageFile, contentLines.join("\n"), "utf8");
   }
+  const trailerConfig = commentMarker
+    ? []
+    : ["-c", `core.commentString=${unusedCommentMarker(rawMessage)}`];
   execFileSync("git", [
+    ...trailerConfig,
     "interpret-trailers",
     "--in-place",
     "--if-exists",
@@ -196,6 +218,7 @@ export const run = (argv) => {
 
   const raw = readFileSync(messageFile, "utf8");
   const commentMarker = currentCommentMarker(raw, source);
+  if (!hasSubject(raw, commentMarker)) return;
   const withBody = ensureBody(raw, commentMarker);
   if (withBody !== raw) writeFileSync(messageFile, withBody, "utf8");
 

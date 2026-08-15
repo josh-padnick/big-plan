@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 const hookNames = ["prepare-commit-msg", "commit-msg"];
 const managedHookPrefix = "#!/bin/sh\nBIG_PLAN_COMPLIANCE_HOOK=1\n";
 const managedBackupPattern = /^BIG_PLAN_ORIGINAL_HOOK=([A-Za-z0-9.-]*)$/m;
+const managedOwnerPrefix = "BIG_PLAN_COMMON_DIR=";
 
 const readEffectiveHooksPath = (repoRoot) => {
   try {
@@ -100,6 +101,15 @@ const deployCompositeHook = (
       const backupMatch = existingHook.match(managedBackupPattern);
       if (!backupMatch) {
         throw new Error(`invalid managed hook: ${hookPath}`);
+      }
+      const expectedOwner = `${managedOwnerPrefix}${shellQuote(commonDirectory)}`;
+      const existingOwner = existingHook
+        .split("\n")
+        .find((line) => line.startsWith(managedOwnerPrefix));
+      if (existingOwner !== expectedOwner) {
+        throw new Error(
+          `cannot install Big Plan hook at ${hookPath}: the managed dispatcher belongs to a different repository`,
+        );
       }
       backupName = backupMatch[1] || null;
     } else {
