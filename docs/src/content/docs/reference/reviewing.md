@@ -83,10 +83,10 @@ server-rendered article without client-rendering or gating the plan.
 
 ## Persistence
 
-Runtime-backed drafts live under `.big-plan/review/<plan-id>/` beside the plan.
-The review id comes from the resolved source path, so it survives the plan
-revision the agent creates in response to feedback. Static `big-plan render`
-documents use browser storage as a draft-only fallback.
+Runtime-backed staged comments live under `.big-plan/review/<plan-id>/` beside the plan.
+The review id comes from the resolved source path, so staged comments survive the plan revision the agent creates in response to feedback.
+Text currently being typed in the plan-wide **Chat** composer exists only in the current page and does not survive a reload.
+Static `big-plan render` documents use browser storage for their document-level comment draft.
 
 The `.big-plan/` directory is created for the reviewer only and ignored by
 version control. Feedback packages and their Markdown briefs live under
@@ -111,7 +111,7 @@ outcome and shows the agent's message. A warning leaves the plan unchanged,
 shows its short one-line summary directly under the **Warning** badge,
 explains the standard or template the request would cross, and lets the
 reviewer explicitly choose **Do it anyway**. A changed result updates the plan
-in place without discarding drafts, open threads, or scroll position.
+in place without discarding staged comments, open threads, or scroll position.
 
 Set `BIG_PLAN_AGENT_MODEL` before starting the coding-agent session to name
 which model is connected, for example `Grok 4.6` or `GPT-5.6-Luna`. The

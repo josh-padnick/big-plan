@@ -626,6 +626,7 @@ describe("review runtime feedback", () => {
   });
 
   it("should hold an anchored draft alongside state another vintage left behind", async () => {
+    await fetch(runtime.url);
     // A reviewer resuming a review that an earlier runtime persisted: the
     // browser still names a whole-plan composer field, and the file that
     // backed it is still on disk. Both are state this runtime does not own,
