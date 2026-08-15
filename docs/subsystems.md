@@ -12,8 +12,9 @@ You cannot change diff semantics without changing thread semantics, so both live
 
 The session runtime is a different subsystem from either.
 `src/review/server.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, and `src/review/agent-work-loop.ts` render and serve the document, authorize requests, and keep the browser, server, and agent connected.
-None of this knows what a thread means or what a diff shows.
-Its failure modes are lifecycle and atomicity: disconnects, hangs, lost or double-processed messages, not conversation or diff correctness.
+Those are Session Reliability responsibilities, distinct from thread and diff semantics.
+Today `src/review/server.ts` also concentrates cross-subsystem route orchestration for comment resolution and deletion, agent exchanges, and snapshot diffs; that orchestration should delegate semantic decisions to their owning subsystems rather than define them at the runtime boundary.
+Session Reliability's own failure modes are lifecycle and atomicity: disconnects, hangs, and lost or double-processed messages, not conversation or diff correctness.
 
 The commenting chrome is a third subsystem again.
 Comment width, composer growth, tooltips, and Escape-key layering live in browser presentation modules and can change without touching either the thread data model or the runtime.
@@ -47,7 +48,8 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 - This subsystem owns lifecycle and atomicity: session liveness, replacement, recovery, and locked mutation of stored agent requests.
   It does not own what a thread means or what a diff shows.
-- Idle expiry is a single runtime policy, not a per-feature concern: the idle timeout constant lives once, at `src/review/server.ts` (`idleTimeoutMs`, defaulted in `src/cli/review/command.ts`), and the agent work loop exits when the session heartbeat it follows dies.
+- Idle expiry is a single runtime policy, not a per-feature concern: `src/cli/review/command.ts` chooses the public command's ten-minute default and converts it to milliseconds, while `src/review/server.ts` independently supplies the same API-level default and enforces `idleTimeoutMs`.
+  Keep those boundary defaults aligned unless the policy is centralized; the agent work loop exits when the session heartbeat it follows dies.
   Symptoms that look unrelated (an agent disconnecting, a preview expiring) can share this one cause.
 - A thread-resolution action that conflicts with a queued or in-flight message for that thread is a request-lifecycle invariant, enforced where request claims and terminal states land (`request-mailbox.ts`), not a thread-semantics concern.
 
@@ -67,11 +69,11 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 **Problem set.** Anything the reader can point at, including one element inside a wireframe or diagram, has a stable address a comment can attach to.
 
-**Code anchors.** `src/render/markdown/block-identity.ts` (mints every stable `data-block-id` address today, deliberately stopping at component roots), `src/review/shared/comment.ts` (validates targets against the block map), component markup in `src/components/wireframe/` and `src/components/mermaid-diagram/`, host resolution in `src/review/browser/inline-comments.browser.tsx`.
+**Code anchors.** `src/render/markdown/block-identity.ts` (mints stable `data-block-id` addresses for Markdown blocks, component roots, table rows, columns, and cells, and component-declared semantic subtargets such as summary facets through `data-commentable-kind` and `ownerId`), `src/review/shared/comment.ts` (validates targets against the block map), component markup in `src/components/wireframe/` and `src/components/mermaid-diagram/`, host resolution in `src/review/browser/inline-comments.browser.tsx`.
 
 **Boundary rules.**
 
-- This subsystem extends the renderer's identity layer into component internals; it does not redefine what a comment target is at the thread level (that stays with the Change Engine).
+- This subsystem extends the renderer's existing declared-subtarget mechanism into component internals that do not yet expose a stable semantic address; it does not redefine what a comment target is at the thread level (that stays with the Change Engine).
 - It should not start ahead of the Change Engine settling what a comment target is, since it builds directly on that model.
 
 ### E. Renderer Fidelity
