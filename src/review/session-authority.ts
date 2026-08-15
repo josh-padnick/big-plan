@@ -49,6 +49,8 @@ type ReviewSessionHeartbeat = {
   readonly stopReason?: string;
 };
 
+type Clock = () => number;
+
 export type SessionAuthorityErrorCode =
   "invalid" | "missing" | "wrong-plan" | "stopped";
 
@@ -95,6 +97,24 @@ const validateReviewSessionHeartbeat = (
     ...(value.stopReason === undefined ? {} : { stopReason: value.stopReason }),
   };
 };
+
+const heartbeatIsFresh = ({
+  heartbeat,
+  sessionId,
+  observedAtMs,
+  maximumAgeMs = SESSION_MAXIMUM_AGE_MS,
+}: {
+  readonly heartbeat: ReviewSessionHeartbeat | undefined;
+  readonly sessionId: string;
+  readonly observedAtMs: number;
+  readonly maximumAgeMs?: number;
+}): boolean =>
+  heartbeat !== undefined &&
+  heartbeat.sessionId === sessionId &&
+  heartbeat.running &&
+  Number.isFinite(observedAtMs) &&
+  observedAtMs - heartbeat.updatedAtMs >= 0 &&
+  observedAtMs - heartbeat.updatedAtMs <= maximumAgeMs;
 
 /** Checks one session descriptor read from the owner-only review store. */
 export const validateReviewSessionDescriptor = (
@@ -228,10 +248,12 @@ export const withRunningReviewSessionAuthority = async <TResult>({
   store,
   sessionId,
   change,
+  clock = Date.now,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly change: () => Promise<TResult>;
+  readonly clock?: Clock;
 }): Promise<ReviewSessionAuthorityResult<TResult>> =>
   withReviewStoreLock({
     lockPath: store.sessionLockPath,
@@ -242,8 +264,11 @@ export const withRunningReviewSessionAuthority = async <TResult>({
       ]);
       if (
         session?.sessionId !== sessionId ||
-        heartbeat?.sessionId !== sessionId ||
-        !heartbeat.running
+        !heartbeatIsFresh({
+          heartbeat,
+          sessionId,
+          observedAtMs: clock(),
+        })
       ) {
         return { authoritative: false };
       }
@@ -331,13 +356,7 @@ export const reviewSessionIsRunning = async ({
   const heartbeat = validateReviewSessionHeartbeat(value);
   if (heartbeat === undefined) return { running: false };
   const observedAtMs = now ?? Date.now();
-  const updatedAtMs = heartbeat.updatedAtMs;
-  if (
-    heartbeat.sessionId !== sessionId ||
-    !heartbeat.running ||
-    observedAtMs - updatedAtMs < 0 ||
-    observedAtMs - updatedAtMs > maximumAgeMs
-  ) {
+  if (!heartbeatIsFresh({ heartbeat, sessionId, observedAtMs, maximumAgeMs })) {
     return {
       running: false,
       ...(heartbeat.sessionId === sessionId &&

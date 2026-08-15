@@ -31,11 +31,13 @@ import {
   nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
+  readSnapshot,
   ReviewStorePathRejected,
   withReviewStoreLock,
   writeAgentRequestValue,
   writeAgentResponseValue,
 } from "./store.js";
+import { diffWords } from "./snapshot-diff.js";
 import {
   claimIsHeldByAnother,
   claimIsLive,
@@ -268,6 +270,141 @@ const acceptedSnapshotAfterClaim = async ({
     acceptedSnapshot = response.resultSnapshot;
   }
   return acceptedSnapshot;
+};
+
+type TextRange = {
+  readonly start: number;
+  readonly end: number;
+};
+
+const changedRanges = ({
+  before,
+  after,
+}: {
+  readonly before: string;
+  readonly after: string;
+}): {
+  readonly deleted: ReadonlyArray<TextRange>;
+  readonly inserted: ReadonlyArray<TextRange>;
+} => {
+  const deleted: Array<TextRange> = [];
+  const inserted: Array<TextRange> = [];
+  let beforeOffset = 0;
+  let afterOffset = 0;
+  for (const run of diffWords({ before, after })) {
+    if (run.op === "same") {
+      beforeOffset += run.text.length;
+      afterOffset += run.text.length;
+    } else if (run.op === "del") {
+      deleted.push({
+        start: beforeOffset,
+        end: beforeOffset + run.text.length,
+      });
+      beforeOffset += run.text.length;
+    } else {
+      inserted.push({
+        start: afterOffset,
+        end: afterOffset + run.text.length,
+      });
+      afterOffset += run.text.length;
+    }
+  }
+  return { deleted, inserted };
+};
+
+const survivingRanges = ({
+  before,
+  after,
+}: {
+  readonly before: string;
+  readonly after: string;
+}): ReadonlyArray<TextRange> => {
+  const ranges: Array<TextRange> = [];
+  let offset = 0;
+  for (const run of diffWords({ before, after })) {
+    if (run.op === "same") {
+      ranges.push({ start: offset, end: offset + run.text.length });
+      offset += run.text.length;
+    } else if (run.op === "del") {
+      offset += run.text.length;
+    }
+  }
+  return ranges;
+};
+
+const rangeIsCovered = ({
+  range,
+  coverage,
+}: {
+  readonly range: TextRange;
+  readonly coverage: ReadonlyArray<TextRange>;
+}): boolean => {
+  let coveredThrough = range.start;
+  for (const candidate of coverage) {
+    if (candidate.end <= coveredThrough) continue;
+    if (candidate.start > coveredThrough) return false;
+    coveredThrough = candidate.end;
+    if (coveredThrough >= range.end) return true;
+  }
+  return coveredThrough >= range.end;
+};
+
+const rangesOverlap = (left: TextRange, right: TextRange): boolean =>
+  left.start < right.end && right.start < left.end;
+
+const candidateIncludesAcceptedChanges = ({
+  baseline,
+  accepted,
+  candidate,
+}: {
+  readonly baseline: string;
+  readonly accepted: string;
+  readonly candidate: string;
+}): boolean => {
+  if (candidate === accepted || baseline === accepted) return true;
+  const acceptedChanges = changedRanges({ before: baseline, after: accepted });
+  const acceptedSurvivors = survivingRanges({
+    before: accepted,
+    after: candidate,
+  });
+  if (
+    acceptedChanges.inserted.some(
+      (range) => !rangeIsCovered({ range, coverage: acceptedSurvivors }),
+    )
+  ) {
+    return false;
+  }
+  const baselineSurvivors = survivingRanges({
+    before: baseline,
+    after: candidate,
+  });
+  return !acceptedChanges.deleted.some((deleted) =>
+    baselineSurvivors.some((surviving) => rangesOverlap(deleted, surviving)),
+  );
+};
+
+const responseIncludesAcceptedSnapshot = async ({
+  store,
+  baselineSnapshot,
+  acceptedSnapshot,
+  candidateSnapshot,
+}: {
+  readonly store: ReviewStore;
+  readonly baselineSnapshot: string;
+  readonly acceptedSnapshot: string;
+  readonly candidateSnapshot: string;
+}): Promise<boolean> => {
+  if (baselineSnapshot === acceptedSnapshot) return true;
+  try {
+    const [baseline, accepted, candidate] = await Promise.all([
+      readSnapshot({ store, snapshot: baselineSnapshot }),
+      readSnapshot({ store, snapshot: acceptedSnapshot }),
+      readSnapshot({ store, snapshot: candidateSnapshot }),
+    ]);
+    return candidateIncludesAcceptedChanges({ baseline, accepted, candidate });
+  } catch {
+    return false;
+  }
 };
 
 export const ensureAgentRequest = async ({
@@ -535,20 +672,17 @@ export const commitRequestTerminal = async ({
             readCurrentSnapshot === undefined
               ? response.resultSnapshot
               : await readCurrentSnapshot();
+          const includesAcceptedSnapshot =
+            await responseIncludesAcceptedSnapshot({
+              store: lockedStore,
+              baselineSnapshot: request.baselineSnapshot,
+              acceptedSnapshot,
+              candidateSnapshot: response.resultSnapshot,
+            });
           if (
-            acceptedSnapshot !== request.baselineSnapshot ||
+            !includesAcceptedSnapshot ||
             currentSnapshot !== response.resultSnapshot
           ) {
-            if (acceptedSnapshot !== request.baselineSnapshot) {
-              await writeAgentRequestValue({
-                store: lockedStore,
-                requestId: request.requestId,
-                value: validateAgentRequest({
-                  ...request,
-                  baselineSnapshot: acceptedSnapshot,
-                }),
-              });
-            }
             throw new AgentResponseConflict({
               baselineSnapshot: request.baselineSnapshot,
               committedSnapshot: acceptedSnapshot,

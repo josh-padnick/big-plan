@@ -534,13 +534,23 @@ describe("agent work loop lifecycle", () => {
           (candidate) => candidate.requestId === secondRequest.requestId,
         ),
       ).toMatchObject({
-        baselineSnapshot: deriveSnapshotDigest(firstRevision),
+        baselineSnapshot: premiseSnapshot,
       });
       expect(
         exchange.requests.find(
           (candidate) => candidate.requestId === secondRequest.requestId,
         ),
       ).not.toHaveProperty("answeredAt");
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: secondPickup.response_file,
+          executablePath,
+          agentToken: secondPickup.agent_token,
+        }),
+      ).rejects.toThrow(/baseline is stale|changed underneath/i);
 
       const reconciledRevision = `${source}\nAgent A accepted edit.\n\nAgent B reconciled edit.\n`;
       await writeFile(planPath, reconciledRevision);

@@ -292,6 +292,7 @@ describe("session authority", () => {
     const claim = withRunningReviewSessionAuthority({
       store,
       sessionId: current.sessionId,
+      clock: () => 11_000,
       change: async () => {
         claimStarted();
         await released;
@@ -320,5 +321,33 @@ describe("session authority", () => {
         now: 12_000,
       }),
     ).resolves.toMatchObject({ running: true });
+  });
+
+  it("should refuse session authority after its heartbeat becomes stale", async () => {
+    const store = await preparedStore();
+    const current = descriptor({
+      sessionId: "3333333333333333",
+      url: "http://127.0.0.1:61001/",
+    });
+    await activateReviewSession({ store, descriptor: current });
+    await refreshReviewSessionHeartbeat({
+      store,
+      sessionId: current.sessionId,
+      running: true,
+      now: 10_000,
+    });
+    let changed = false;
+
+    await expect(
+      withRunningReviewSessionAuthority({
+        store,
+        sessionId: current.sessionId,
+        clock: () => 13_001,
+        change: async () => {
+          changed = true;
+        },
+      }),
+    ).resolves.toEqual({ authoritative: false });
+    expect(changed).toBe(false);
   });
 });
