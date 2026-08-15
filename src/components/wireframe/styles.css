@@ -118,6 +118,39 @@ marks and a plan diff never jitters.
     min-width: 0;
   }
 
+  /* Maximized, a live wireframe's own `.wireframe-content` is the promoted
+     figure's direct `[data-figure-body]` child, so the shared maximize
+     contract already gives it a bounded, definite height; `.wireframe-screens`
+     inherits that bound through its own `flex: 1 1 auto` above, and the
+     visible `.wireframe-screen` in turn flex-shrinks to fit it (every
+     `.wireframe-screen` already computes a non-visible `overflow-y` from its
+     own `overflow-x-auto`, which is what lets a flex item shrink below its
+     content size instead of only growing to it, rather than only grow to
+     match it). The Was/Now diff lens wraps a copy of that same figure markup
+     two levels deeper - its own `[data-figure-body]` holds the embedded
+     `.wireframe` figure, which holds `.wireframe-content` - so neither
+     intermediate level receives a bound on its own. Propagating the same
+     `flex: 1 1 auto; min-height: 0` down through both bridges that gap, so a
+     maximized wireframe fits both axes identically in the diff lens and in
+     place. */
+  [data-figure-maximized] [data-figure-body]:has(.wireframe-content) {
+    display: flex;
+    flex-direction: column;
+  }
+  [data-figure-maximized] [data-figure-body] > .wireframe {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  [data-figure-maximized] [data-figure-body] .wireframe-content {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  [data-figure-maximized] [data-figure-body] .wireframe-screens {
+    min-height: 0;
+  }
+
   /* The switcher only means something once a script can act on it, so it
      stays hidden in an inert document where every screen is already shown. */
   .wireframe-switcher {
@@ -128,6 +161,21 @@ marks and a plan diff never jitters.
   }
   [data-wireframe-interactive] .wireframe-switcher {
     display: flex;
+  }
+  /* The Was/Now diff lens reuses this exact switcher so its own screen
+     selector reads as the same control as the non-diff view's, but it sits
+     outside a `.wireframe` root (the switcher belongs to review chrome, not
+     the snapshot markup it selects between), so the hand-drawn fill and
+     stroke tokens `.wireframe` normally provides are redeclared here at the
+     same values, and the interactive-only display gate does not apply - the
+     diff lens is always interactive React, never the inert script-free
+     page. The direct-child combinator keeps this from also revealing the
+     embedded snapshot's own original switcher, which diff-lens.browser.tsx
+     still hides on purpose so the two switchers never both show. */
+  [data-review-component-diff] > .wireframe-switcher {
+    display: flex;
+    --wf-fill: color-mix(in srgb, var(--color-ink) 6%, transparent);
+    --wf-stroke: color-mix(in srgb, var(--color-ink) 55%, transparent);
   }
   /* A conventional rectangle, not the hand-drawn sketch radius: the switcher
      is big-plan review chrome, the same call already made for its keyboard

@@ -16,6 +16,7 @@ import {
   MAXIMIZABLE_ATTRIBUTE,
 } from "../../components/_model/figure-controls/figure-controls.js";
 import { MaximizeButton } from "../../components/_shared/figure-controls/maximize-button.js";
+import { fitWireframeScreen } from "../../components/wireframe/wireframe-fit.js";
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { INFO_ICON } from "../../icons/lucide/info.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
@@ -695,13 +696,24 @@ const ComponentSnapshotComparison = ({
   readonly location: DiffLocation;
 }) => {
   const initialSide = location.newHtml === undefined ? "old" : "new";
+  const oldScreens = useMemo(
+    () => wireframeScreenMarkup(location.oldHtml),
+    [location.oldHtml],
+  );
+  const newScreens = useMemo(
+    () => wireframeScreenMarkup(location.newHtml),
+    [location.newHtml],
+  );
   const screenDiffs = useMemo(
-    () =>
-      compareWireframeScreens({
-        oldScreens: wireframeScreenMarkup(location.oldHtml),
-        newScreens: wireframeScreenMarkup(location.newHtml),
-      }),
-    [location.oldHtml, location.newHtml],
+    () => compareWireframeScreens({ oldScreens, newScreens }),
+    [oldScreens, newScreens],
+  );
+  // A wireframe with only one screen, ever, has nothing to switch between -
+  // the non-diff view never draws a switcher for it either, so the diff view
+  // does not grow one just because that lone screen changed.
+  const totalScreenCount = useMemo(
+    () => new Set([...oldScreens.keys(), ...newScreens.keys()]).size,
+    [oldScreens, newScreens],
   );
   const [side, setSide] = useState<"old" | "new">(initialSide);
   const [selectedScreenKey, setSelectedScreenKey] = useState(
@@ -749,22 +761,10 @@ const ComponentSnapshotComparison = ({
     const content = contentRef.current;
     if (content === null) return;
     const fitWireframes = (): void => {
-      for (const card of content.querySelectorAll<HTMLElement>(
-        ".wireframe-frame-card",
+      for (const screen of content.querySelectorAll<HTMLElement>(
+        "[data-wireframe-screen]",
       )) {
-        const frame = card.querySelector<HTMLElement>(
-          ":scope > .wireframe-frame",
-        );
-        if (frame === null || card.clientWidth === 0) continue;
-        frame.style.zoom = "1";
-        const cardStyle = getComputedStyle(card);
-        const availableWidth =
-          card.clientWidth -
-          Number.parseFloat(cardStyle.paddingLeft) -
-          Number.parseFloat(cardStyle.paddingRight);
-        frame.style.zoom = String(
-          Math.min(1, availableWidth / frame.offsetWidth),
-        );
+        fitWireframeScreen(screen);
       }
       for (const screen of content.querySelectorAll<HTMLElement>(
         "[data-wireframe-screen]",
@@ -773,17 +773,24 @@ const ComponentSnapshotComparison = ({
           visibleScreenId === undefined ||
           screen.dataset.wireframeScreen === visibleScreenId;
         screen.hidden = visibleScreenId !== undefined && !selected;
-        const diff = selected ? selectedScreen : undefined;
-        const highlighted = diff !== undefined;
-        screen.style.border = highlighted
-          ? `10px solid ${screenStatusBorder(diff.status)}`
+        // The border always names the side currently shown - remove tones on
+        // Was, add tones on Now - because that is the emphasis the Was/Now
+        // toggle promises: which state the reader is looking at. A
+        // three-way added/removed/updated palette would wash the border to
+        // an unrelated warning amber for the common case of a screen whose
+        // content simply changed, which is exactly the "border competes
+        // with the diff" the border must not do; the switcher badge still
+        // names that three-way status, since which kind of change this
+        // screen represents is useful there.
+        screen.style.border = selected
+          ? `10px solid ${screenStatusBorder(renderedSide === "old" ? "removed" : "added")}`
           : "";
-        screen.style.borderRadius = highlighted ? "0.75rem" : "";
-        screen.style.padding = highlighted ? "1rem" : "";
+        screen.style.borderRadius = selected ? "0.75rem" : "";
+        screen.style.padding = selected ? "1rem" : "";
         const name = screen.querySelector<HTMLElement>(
           ".wireframe-screen-name",
         );
-        if (name !== null && diff?.status === "removed") {
+        if (name !== null && selectedScreen?.status === "removed") {
           name.style.textDecoration = "line-through";
           name.style.textDecorationThickness = "2px";
           name.style.textDecorationColor = "var(--diff-remove-c)";
@@ -810,30 +817,27 @@ const ComponentSnapshotComparison = ({
       maximizable?.removeEventListener("figure-restored", fitWireframes);
       observer.disconnect();
     };
-  }, [renderedHtml, selectedScreen, visibleScreenId]);
+  }, [renderedHtml, renderedSide, selectedScreen, visibleScreenId]);
   useEffect(() => {
     document.dispatchEvent(new CustomEvent("bigplan:review-island-updated"));
   }, [renderedHtml]);
   return (
     <div className="grid min-w-0 gap-2" data-review-component-diff="">
-      {/* A component snapshot is a diff, not a pair of ordinary tabs, so the
-          selected side and the panel it opens carry the same removed/added
-          colours the word-level lens uses. The border repeats the colour at
-          the edge of the content, where the reader is actually looking. */}
-      {screenDiffs.length > 0 ? (
-        <nav
-          className="flex min-w-0 flex-wrap gap-2"
-          aria-label="Prototype screens"
-        >
+      {/* A single-screen wireframe has no switcher in the non-diff view
+          either - there is nothing to switch between - so the diff view
+          only grows one once a second screen makes it meaningful. The
+          selected entry reuses the non-diff screen switcher's own classes so
+          the two read as the same control. */}
+      {totalScreenCount > 1 && screenDiffs.length > 0 ? (
+        <nav className="wireframe-switcher" aria-label="Prototype screens">
           {screenDiffs.map((screen) => (
             <button
               key={screen.key}
               type="button"
-              className="inline-flex min-h-11 min-w-11 cursor-pointer items-center gap-2 rounded-md border-2 border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted hover:bg-raised aria-pressed:border-ink aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0 wide:min-w-0"
+              className="wireframe-switch inline-flex min-h-11 min-w-11 items-center gap-2 wide:min-h-0 wide:min-w-0"
               aria-current={
                 selectedScreenKey === screen.key ? "true" : undefined
               }
-              aria-pressed={selectedScreenKey === screen.key}
               onClick={() => {
                 setSelectedScreenKey(screen.key);
                 if (screen.status === "added") setSide("new");
@@ -848,7 +852,7 @@ const ComponentSnapshotComparison = ({
                 {screen.name}
               </span>
               <span
-                className={`rounded-md px-2 py-1 text-2xs font-bold ${screenStatusClasses(screen.status)}`}
+                className={`rounded-md px-2 py-0.5 text-2xs font-bold ${screenStatusClasses(screen.status)}`}
               >
                 {wireframeScreenStatusLabel(screen)}
               </span>
@@ -857,47 +861,68 @@ const ComponentSnapshotComparison = ({
         </nav>
       ) : null}
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <div
-          className="flex items-center gap-3"
-          role="group"
-          aria-label="Choose component snapshot"
-        >
-          {location.oldHtml === undefined ? null : (
+        {/* A toggle, not two ordinary buttons: both options always look
+            clickable (hover, focus, and press feedback on either one), and a
+            sliding fill shows which side is showing without needing the
+            unselected option to look disabled. */}
+        {location.oldHtml === undefined || location.newHtml === undefined ? (
+          <span className="rounded-full border border-edge bg-surface px-4 py-1.5 text-xs font-semibold text-ink">
+            {location.oldHtml === undefined ? "Now" : "Was"}
+          </span>
+        ) : (
+          <div
+            className="relative inline-grid grid-cols-2 rounded-full border border-edge bg-surface p-0.5"
+            role="group"
+            aria-label="Choose Was or Now"
+          >
+            <span
+              aria-hidden="true"
+              data-review-diff-toggle-thumb=""
+              className={`pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-full transition-transform duration-150 ease-out ${
+                renderedSide === "old"
+                  ? "translate-x-0 bg-[var(--diff-remove-bg)]"
+                  : "translate-x-[calc(100%+2px)] bg-[var(--diff-add-bg)]"
+              }`}
+            />
             <button
               type="button"
-              className="min-h-11 min-w-11 cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-remove-c)] aria-pressed:bg-[var(--diff-remove-bg)] aria-pressed:text-[var(--diff-remove-c)] disabled:cursor-not-allowed disabled:opacity-50 wide:min-h-0 wide:min-w-0"
+              className={`relative z-10 min-h-11 min-w-11 cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 wide:min-h-0 wide:min-w-0 ${
+                renderedSide === "old"
+                  ? "text-[var(--diff-remove-c)]"
+                  : "text-muted hover:bg-raised hover:text-ink"
+              }`}
               aria-pressed={renderedSide === "old"}
               disabled={!canShowOld}
               onClick={() => setSide("old")}
             >
               Was
             </button>
-          )}
-          {location.oldHtml === undefined ||
-          location.newHtml === undefined ? null : (
-            <span className="text-xl text-ink" aria-hidden="true">
-              →
-            </span>
-          )}
-          {location.newHtml === undefined ? null : (
             <button
               type="button"
-              className="min-h-11 min-w-11 cursor-pointer rounded-md border border-edge bg-surface px-3 py-2 text-xs font-semibold text-muted aria-pressed:border-[var(--diff-add-c)] aria-pressed:bg-[var(--diff-add-bg)] aria-pressed:text-[var(--diff-add-c)] disabled:cursor-not-allowed disabled:opacity-50 wide:min-h-0 wide:min-w-0"
+              className={`relative z-10 min-h-11 min-w-11 cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 wide:min-h-0 wide:min-w-0 ${
+                renderedSide === "new"
+                  ? "text-[var(--diff-add-c)]"
+                  : "text-muted hover:bg-raised hover:text-ink"
+              }`}
               aria-pressed={renderedSide === "new"}
               disabled={!canShowNew}
               onClick={() => setSide("new")}
             >
               Now
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       <div
-        className={`min-w-0 overflow-visible rounded-lg border-[10px] bg-surface p-3 text-ink inset-shadow-well ${
-          renderedSide === "old"
-            ? "[border-color:color-mix(in_srgb,var(--diff-remove-c)_30%,var(--diff-remove-bg))]"
-            : "[border-color:color-mix(in_srgb,var(--diff-add-c)_30%,var(--diff-add-bg))]"
-        }`}
+        className={
+          isWireframe
+            ? "min-w-0 overflow-visible rounded-lg border border-edge bg-surface p-3 text-ink"
+            : `min-w-0 overflow-visible rounded-lg border-[10px] bg-surface p-3 text-ink inset-shadow-well ${
+                renderedSide === "old"
+                  ? "[border-color:color-mix(in_srgb,var(--diff-remove-c)_30%,var(--diff-remove-bg))]"
+                  : "[border-color:color-mix(in_srgb,var(--diff-add-c)_30%,var(--diff-add-bg))]"
+              }`
+        }
         data-review-component-snapshot={renderedSide}
         {...{ [MAXIMIZABLE_ATTRIBUTE]: maximizeSubject }}
       >
