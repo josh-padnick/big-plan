@@ -1226,6 +1226,15 @@ test("should restore and submit staged comments through the local review runtime
     throw new Error("Sending did not create a pending feedback request");
   }
   expect(request.comments).toHaveLength(3);
+  // An agent starts work by taking the claim, and only then narrates. Progress
+  // alone no longer implies pickup, so this journey seeds the real thing.
+  await claimAgentRequest({
+    store,
+    requestId: request.requestId,
+    claimedBy: agentSessionId,
+    baselineSnapshot: request.premiseSnapshot,
+    now: new Date().toISOString(),
+  });
   await writeAgentHeartbeat({
     store,
     sessionId: session.sessionId,

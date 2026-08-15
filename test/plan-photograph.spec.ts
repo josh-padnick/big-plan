@@ -131,7 +131,13 @@ test("should render a photograph a real agent adds during the review", async ({
     expect(claim.stdout).toContain("pending: true");
     const requestId = /requestId: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
     const commentId = /- id: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
-    if (requestId === undefined || commentId === undefined) {
+    // Pickup mints the token proving this process holds the request.
+    const agentToken = /agent_token: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
+    if (
+      requestId === undefined ||
+      commentId === undefined ||
+      agentToken === undefined
+    ) {
       throw new Error(`The claim named no work: ${claim.stdout}`);
     }
 
@@ -165,7 +171,13 @@ test("should render a photograph a real agent adds during the review", async ({
         }),
         "utf8",
       );
-      const response = await runAgentCli(["respond", planPath, responsePath]);
+      const response = await runAgentCli([
+        "respond",
+        planPath,
+        responsePath,
+        "--agent",
+        agentToken,
+      ]);
       expect(response.stdout).toContain(`responded: ${requestId}`);
     });
 

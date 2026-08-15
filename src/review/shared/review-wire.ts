@@ -25,6 +25,9 @@ export type AgentRequest = {
   readonly premiseSnapshot: string;
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
+  readonly claimedBy?: string;
+  readonly claimExpiresAtMs?: number;
+  readonly answeredAt?: string;
   readonly canceledAt?: string;
   readonly createdAt: string;
   readonly kind: "feedback" | "reply" | "chat";
@@ -276,6 +279,17 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
               : {}),
             ...(typeof request.claimedAt === "string"
               ? { claimedAt: request.claimedAt }
+              : {}),
+            // The browser derives "picked up" from the live claim, so the
+            // lease has to cross the wire or every request reads as waiting.
+            ...(typeof request.claimedBy === "string"
+              ? { claimedBy: request.claimedBy }
+              : {}),
+            ...(typeof request.claimExpiresAtMs === "number"
+              ? { claimExpiresAtMs: request.claimExpiresAtMs }
+              : {}),
+            ...(typeof request.answeredAt === "string"
+              ? { answeredAt: request.answeredAt }
               : {}),
             ...(typeof request.canceledAt === "string"
               ? { canceledAt: request.canceledAt }
