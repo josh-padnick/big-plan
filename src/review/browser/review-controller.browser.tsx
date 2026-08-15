@@ -125,8 +125,10 @@ import {
   type ReviewPollHealth,
   type ReviewPollResult,
 } from "./review-poll-health.js";
-import { reviewEndReason, type ReviewEndReason } from "./review-expiry.js";
-import { reviewIdleDurationLabel } from "../shared/review-lifetime.js";
+import {
+  reviewEndObservation,
+  type ReviewEndObservation,
+} from "./review-expiry.js";
 import { quoteShellArgument } from "../shared/agent-command.js";
 import {
   isReviewRuntimeUnavailable,
@@ -698,30 +700,29 @@ const RuntimeAlertBanner = ({
   </div>
 );
 
-// Two wordings, because "the server stopped responding" is true and useless to
-// a reader who left this page open overnight. When the deadline the page was
-// last told has since gone by, the session ended on its own and the page can
-// say so without asking the runtime that is no longer there.
+// Distinguishes a passed remembered deadline from an unexplained outage without
+// claiming why the runtime ended. Another page or agent can extend the actual
+// deadline without this page seeing it.
 const ServerGoneBanner = ({
   canRefresh,
   onRefresh,
-  endReason,
+  endObservation,
   restartCommand,
 }: {
   readonly canRefresh: boolean;
   readonly onRefresh: () => void;
-  readonly endReason: ReviewEndReason;
+  readonly endObservation: ReviewEndObservation;
   readonly restartCommand: string;
 }) => {
   const unsavedInputWarning = canRefresh
     ? ""
     : " Keep this tab open because the latest review input has not reached the local review server.";
-  if (endReason.kind === "expired") {
+  if (endObservation.kind === "deadline-passed") {
     return (
       <RuntimeAlertBanner
         scope="data-review-server-gone"
-        heading="This review session ended on its own"
-        detail={`This review session ended after ${reviewIdleDurationLabel(endReason.idleTimeoutMs)} of inactivity. Restart it with ${restartCommand}, then open the new address it prints to continue reviewing.${unsavedInputWarning}`}
+        heading="This review session ended while this tab was out of contact"
+        detail={`This tab lost contact with the local review server, and the deadline it last knew has passed. Restart it with ${restartCommand}, then open the new address it prints to continue reviewing.${unsavedInputWarning}`}
       />
     );
   }
@@ -3779,11 +3780,11 @@ export const ReviewController = () => {
   // with the banner for a runtime that has gone entirely.
   const writesStalled =
     !serverGone && runtimeSession?.writesStalledMs !== undefined;
-  // Decide the diagnosis once, from when contact was actually lost. The live
-  // status clock advances on every failed poll and would otherwise turn a
-  // stopped runtime into a false idle expiry after its stale deadline passes.
+  // Evaluate the remembered deadline from when contact was actually lost. The
+  // live status clock would otherwise change this observation after the banner
+  // appeared by advancing past a deadline that was still future at contact loss.
   const runtimeDownSinceMs = reviewRuntimeDownSinceMs(pollHealth);
-  const endReason = reviewEndReason({
+  const endObservation = reviewEndObservation({
     expiresAtMs: runtimeSession?.expiresAtMs,
     idleTimeoutMs: runtimeSession?.idleTimeoutMs,
     nowMs: runtimeDownSinceMs ?? statusNowMs,
@@ -5165,7 +5166,7 @@ export const ReviewController = () => {
         <ServerGoneBanner
           canRefresh={canRefreshReview}
           onRefresh={() => window.location.reload()}
-          endReason={endReason}
+          endObservation={endObservation}
           restartCommand={restartReviewCommand}
         />
       ) : null}
