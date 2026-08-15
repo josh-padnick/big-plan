@@ -65,6 +65,7 @@ export const ReviewImage = ({
   readonly alt: string;
 }) => {
   const [isBroken, setIsBroken] = useState(false);
+  const [isLightboxBroken, setIsLightboxBroken] = useState(false);
   const [open, setOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -73,6 +74,7 @@ export const ReviewImage = ({
   const source = reviewImageSource(id);
   const close = () => {
     setOpen(false);
+    setIsLightboxBroken(false);
     setZoom(1);
     requestAnimationFrame(() => trigger.current?.focus());
   };
@@ -180,15 +182,20 @@ export const ReviewImage = ({
               </Button>
             </div>
             <div className="grid min-h-0 flex-1 place-items-center overflow-auto">
-              <img
-                src={source}
-                alt={alt}
-                className="max-h-full max-w-full rounded-md object-contain shadow-floating motion-reduce:transition-none"
-                style={{
-                  transform: `scale(${zoom})`,
-                  transformOrigin: "center",
-                }}
-              />
+              {isLightboxBroken ? (
+                <UnavailableImage alt={alt} />
+              ) : (
+                <img
+                  src={source}
+                  alt={alt}
+                  className="max-h-full max-w-full rounded-md object-contain shadow-floating motion-reduce:transition-none"
+                  style={{
+                    transform: `scale(${zoom})`,
+                    transformOrigin: "center",
+                  }}
+                  onError={() => setIsLightboxBroken(true)}
+                />
+              )}
             </div>
           </div>,
           document.body,
@@ -202,7 +209,10 @@ export const ReviewImage = ({
         type="button"
         className="mt-2 block cursor-zoom-in rounded border border-edge p-0.5 transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-accent"
         aria-label={`Open ${alt}`}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setIsLightboxBroken(false);
+          setOpen(true);
+        }}
       >
         <img
           src={source}

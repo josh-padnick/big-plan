@@ -24,7 +24,9 @@
 //    script running on this runtime's own origin.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { constants } from "node:fs";
 import {
+  open,
   readFile,
   realpath,
   rename,
@@ -41,6 +43,7 @@ import {
   isAbsolute,
   relative,
   resolve,
+  sep,
 } from "node:path";
 import { fromHtml } from "hast-util-from-html";
 import { toHtml } from "hast-util-to-html";
@@ -999,20 +1002,55 @@ export const startReviewRuntime = async ({
         realpath(planDirectory),
         realpath(candidate),
       ]);
-      if (!isWithin(root, real)) {
+      const realStep = relative(root, real);
+      const realContentType = PLAN_PICTURE_TYPES.get(
+        extname(real).toLowerCase(),
+      );
+      if (
+        !isWithin(root, real) ||
+        realContentType === undefined ||
+        realStep.split(sep).some((segment) => segment.startsWith("."))
+      ) {
         refuse({ response, status: 404, reason: "Plan picture unavailable" });
         return true;
       }
-      const metadata = await stat(real);
-      if (!metadata.isFile() || metadata.size > MAX_IMAGE_BYTES) {
+      const file = await open(
+        real,
+        constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
+      );
+      const bytes = await (async (): Promise<Uint8Array | undefined> => {
+        try {
+          const metadata = await file.stat();
+          if (!metadata.isFile() || metadata.size > MAX_IMAGE_BYTES) {
+            return undefined;
+          }
+          const buffer = Buffer.alloc(metadata.size + 1);
+          let length = 0;
+          while (length < buffer.length) {
+            const { bytesRead } = await file.read(
+              buffer,
+              length,
+              buffer.length - length,
+              length,
+            );
+            if (bytesRead === 0) break;
+            length += bytesRead;
+          }
+          return length === metadata.size
+            ? buffer.subarray(0, length)
+            : undefined;
+        } finally {
+          await file.close();
+        }
+      })();
+      if (bytes === undefined) {
         refuse({ response, status: 404, reason: "Plan picture unavailable" });
         return true;
       }
-      const bytes = await readFile(real);
       sendBinary({
         response,
         status: 200,
-        contentType,
+        contentType: realContentType,
         body: bytes,
       });
     } catch {

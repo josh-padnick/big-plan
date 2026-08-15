@@ -447,6 +447,21 @@ describe("review runtime images", () => {
         join(directory, "assets", "linked.png"),
       );
       expect((await fetch(`${url}/assets/linked.png`)).status).toBe(200);
+      await symlink(
+        join(directory, "notes.md"),
+        join(directory, "assets", "notes.png"),
+      );
+      expect((await fetch(`${url}/assets/notes.png`)).status).toBe(404);
+      const protectedPicture = join(
+        review.store.reviewDirectory,
+        "protected.png",
+      );
+      await writeFile(protectedPicture, TINY_PNG);
+      await symlink(
+        protectedPicture,
+        join(directory, "assets", "protected.png"),
+      );
+      expect((await fetch(`${url}/assets/protected.png`)).status).toBe(404);
       await symlink(outside, join(directory, "assets", "elsewhere"));
       // The link resolves on disk, so only the containment check can refuse it.
       await expect(

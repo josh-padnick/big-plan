@@ -861,6 +861,21 @@ test("should restore and submit staged comments through the local review runtime
     await expect(
       rail.getByRole("button", { name: "Open Screenshot" }).first(),
     ).toBeFocused();
+    await page.route("**/review-images/*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: "not an image",
+      }),
+    );
+    await rail.getByRole("button", { name: "Open Screenshot" }).first().click();
+    await expect(lightbox).toBeVisible();
+    await expect(
+      lightbox.locator("[data-review-image-unavailable]"),
+    ).toContainText("Image unavailable");
+    await page.unroute("**/review-images/*");
+    await page.keyboard.press("Escape");
+    await expect(lightbox).toHaveCount(0);
   });
 
   const responsePromise = page.waitForResponse(
