@@ -1,15 +1,15 @@
-// Proves an unreachable page distinguishes a passed remembered deadline from
-// an unexplained outage without treating that observation as a cause.
+// Proves a page that lost contact distinguishes a passed remembered deadline
+// from an unexplained outage without inferring the runtime's current state.
 
 import { describe, expect, it } from "vitest";
-import { reviewEndObservation } from "./review-expiry.js";
+import { reviewContactLossObservation } from "./review-expiry.js";
 
 const THIRTY_MINUTES_MS = 30 * 60 * 1_000;
 
-describe("review end observation", () => {
+describe("review contact loss observation", () => {
   it("should report when the last known deadline passed", () => {
     expect(
-      reviewEndObservation({
+      reviewContactLossObservation({
         expiresAtMs: 1_000,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
@@ -17,9 +17,9 @@ describe("review end observation", () => {
     ).toEqual({ kind: "deadline-passed" });
   });
 
-  it("should not infer why the runtime stopped from a passed remembered deadline", () => {
+  it("should not infer the runtime state from a passed remembered deadline", () => {
     expect(
-      reviewEndObservation({
+      reviewContactLossObservation({
         expiresAtMs: 30_000,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 45_000,
@@ -29,7 +29,7 @@ describe("review end observation", () => {
 
   it("should remain unexplained when the deadline is still in the future", () => {
     expect(
-      reviewEndObservation({
+      reviewContactLossObservation({
         expiresAtMs: 5_000,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
@@ -39,7 +39,7 @@ describe("review end observation", () => {
 
   it("should remain unexplained when no deadline was ever published", () => {
     expect(
-      reviewEndObservation({
+      reviewContactLossObservation({
         expiresAtMs: undefined,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
@@ -49,14 +49,14 @@ describe("review end observation", () => {
 
   it("should remain unexplained when the idle timeout is disabled", () => {
     expect(
-      reviewEndObservation({
+      reviewContactLossObservation({
         expiresAtMs: 1_000,
         idleTimeoutMs: 0,
         nowMs: 2_000,
       }),
     ).toEqual({ kind: "unexplained" });
     expect(
-      reviewEndObservation({
+      reviewContactLossObservation({
         expiresAtMs: 1_000,
         idleTimeoutMs: undefined,
         nowMs: 2_000,
@@ -66,14 +66,14 @@ describe("review end observation", () => {
 
   it("should report the exact deadline as passed but not one ms before it", () => {
     expect(
-      reviewEndObservation({
+      reviewContactLossObservation({
         expiresAtMs: 2_000,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
       }),
     ).toEqual({ kind: "deadline-passed" });
     expect(
-      reviewEndObservation({
+      reviewContactLossObservation({
         expiresAtMs: 2_001,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,

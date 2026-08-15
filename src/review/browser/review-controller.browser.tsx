@@ -126,8 +126,8 @@ import {
   type ReviewPollResult,
 } from "./review-poll-health.js";
 import {
-  reviewEndObservation,
-  type ReviewEndObservation,
+  reviewContactLossObservation,
+  type ReviewContactLossObservation,
 } from "./review-expiry.js";
 import {
   isReviewRuntimeUnavailable,
@@ -700,23 +700,23 @@ const RuntimeAlertBanner = ({
 );
 
 // Distinguishes a passed remembered deadline from an unexplained outage without
-// claiming why the runtime ended. Another page or agent can extend the actual
-// deadline without this page seeing it.
+// inferring the runtime's current state. Another page or agent can extend the
+// actual deadline without this page seeing it.
 const ServerGoneBanner = ({
   canRefresh,
   onRefresh,
-  endObservation,
+  contactLossObservation,
   restartCommand,
 }: {
   readonly canRefresh: boolean;
   readonly onRefresh: () => void;
-  readonly endObservation: ReviewEndObservation;
+  readonly contactLossObservation: ReviewContactLossObservation;
   readonly restartCommand: string | undefined;
 }) => {
   const unsavedInputWarning = canRefresh
     ? ""
     : " Keep this tab open because the latest review input has not reached the local review server.";
-  if (endObservation.kind === "deadline-passed") {
+  if (contactLossObservation.kind === "deadline-passed") {
     const restartInstruction =
       restartCommand === undefined
         ? "Restart the review runtime for this plan, then open the new address it prints to continue reviewing."
@@ -724,7 +724,7 @@ const ServerGoneBanner = ({
     return (
       <RuntimeAlertBanner
         scope="data-review-server-gone"
-        heading="This review session ended while this tab was out of contact"
+        heading="This tab lost contact with this review session"
         detail={`This tab lost contact with the local review server, and the deadline it last knew has passed. ${restartInstruction}${unsavedInputWarning}`}
       />
     );
@@ -3787,7 +3787,7 @@ export const ReviewController = () => {
   // live status clock would otherwise change this observation after the banner
   // appeared by advancing past a deadline that was still future at contact loss.
   const runtimeDownSinceMs = reviewRuntimeDownSinceMs(pollHealth);
-  const endObservation = reviewEndObservation({
+  const contactLossObservation = reviewContactLossObservation({
     expiresAtMs: runtimeSession?.expiresAtMs,
     idleTimeoutMs: runtimeSession?.idleTimeoutMs,
     nowMs: runtimeDownSinceMs ?? statusNowMs,
@@ -5163,7 +5163,7 @@ export const ReviewController = () => {
         <ServerGoneBanner
           canRefresh={canRefreshReview}
           onRefresh={() => window.location.reload()}
-          endObservation={endObservation}
+          contactLossObservation={contactLossObservation}
           restartCommand={runtimeSession?.restartCommand}
         />
       ) : null}
