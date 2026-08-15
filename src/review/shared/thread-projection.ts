@@ -5,7 +5,10 @@
 import { deriveAgentStatus, type AgentStatus } from "./agent-status.js";
 import { requestIsCanceled, type CancelableRequest } from "./cancel-pending.js";
 import type { ReviewComment } from "./comment.js";
+import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
+import { requestIsOutstanding } from "./request-lifecycle.js";
+import { agentOwnsRequest } from "./request-ownership.js";
 
 export type ThreadRequest = CancelableRequest & {
   readonly premiseSnapshot: string;
@@ -70,6 +73,10 @@ export type ProjectedThreadExchange<
   readonly status: AgentStatus;
   readonly canceled: boolean;
   readonly baselineSnapshot: string;
+  /** Whether the reviewer may still edit this waiting message. */
+  readonly canReviseMessage: boolean;
+  /** Whether the reviewer may still remove this waiting message. */
+  readonly canDeleteMessage: boolean;
 };
 
 export type CommentThreadProjection<
@@ -108,7 +115,143 @@ export const projectRequestActivity = ({
   readonly request: ThreadRequest;
   readonly progressEvents: ReadonlyArray<ThreadProgress>;
 }): ReadonlyArray<ThreadProgress> =>
-  progressEvents.filter((event) => event.requestId === request.requestId);
+  progressEvents.filter(
+    (event) =>
+      event.requestId === request.requestId &&
+      progressStepCodeIsAgentOwned(event.stepCode),
+  );
+
+/**
+ * Mirrors the mailbox guard on editing a message that still waits. It is a fact
+ * about one message, not about its thread: a thread the agent already answered
+ * can still hold a follow-up nobody has started.
+ */
+export const canReviseQueuedMessage = ({
+  request,
+  response,
+  canceled,
+}: {
+  readonly request: ThreadRequest;
+  readonly response: ThreadResponse | undefined;
+  readonly canceled: boolean;
+}): boolean =>
+  request.kind !== "feedback" &&
+  !canceled &&
+  response === undefined &&
+  !agentOwnsRequest(request);
+
+/**
+ * Mirrors the mailbox guard on removing a message the agent never started. A
+ * canceled message is still removable, which is how a reviewer clears a turn
+ * they never meant to send.
+ */
+export const canDeleteQueuedMessage = ({
+  request,
+  response,
+}: {
+  readonly request: ThreadRequest;
+  readonly response: ThreadResponse | undefined;
+}): boolean =>
+  request.kind !== "feedback" &&
+  response === undefined &&
+  !agentOwnsRequest(request);
+
+/**
+ * Counts the unanswered work an agent delivers before one request. Requests
+ * arrive in delivery order, so position in the list is the queue position the
+ * agent's work loop will honour.
+ */
+export const queuedRequestsAhead = ({
+  request,
+  requests,
+  responses,
+  cancelPendingRequestIds,
+}: {
+  readonly request: ThreadRequest;
+  readonly requests: ReadonlyArray<ThreadRequest>;
+  readonly responses: ReadonlyArray<ThreadResponse>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+}): number => {
+  const answered = new Set(responses.map((response) => response.requestId));
+  const position = requests.findIndex(
+    (candidate) => candidate.requestId === request.requestId,
+  );
+  if (position < 0) return 0;
+  return requests.slice(0, position).filter((candidate) =>
+    requestIsOutstanding({
+      request: candidate,
+      answeredRequestIds: answered,
+      cancelPendingRequestIds,
+    }),
+  ).length;
+};
+
+/**
+ * Derives the one review-wide status from the newest request. It is the second
+ * derivation site beside projectRequestStatus, and it lives here so both reach
+ * agent activity through projectRequestActivity: a reviewer queue event carries
+ * a requestId, and counting it as pickup would report a message the agent has
+ * not started as work in progress.
+ */
+export const projectLatestAgentStatus = ({
+  requests,
+  responses,
+  progressEvents,
+  presence,
+  runtime,
+  agentConnected,
+  nowMs,
+  cancelPendingRequestIds,
+}: {
+  readonly requests: ReadonlyArray<ThreadRequest>;
+  readonly responses: ReadonlyArray<ThreadResponse>;
+  readonly progressEvents: ReadonlyArray<ThreadProgress>;
+  readonly presence: ThreadPresence;
+  readonly runtime: ThreadRuntime;
+  readonly agentConnected: boolean;
+  readonly nowMs: number;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+}): AgentStatus => {
+  const request = requests.at(-1);
+  const response = responses.find(
+    (candidate) => candidate.requestId === request?.requestId,
+  );
+  const activity =
+    request === undefined
+      ? []
+      : projectRequestActivity({ request, progressEvents });
+  const failure = [...activity]
+    .reverse()
+    .find((event) => event.state === "failed")?.detail;
+  const claimedAtMs =
+    request?.claimedAt === undefined ? 0 : Date.parse(request.claimedAt);
+  const lastAgentSignalAtMs = Math.max(
+    0,
+    ...activity.map((event) => event.atMs ?? 0),
+    Number.isNaN(claimedAtMs) ? 0 : claimedAtMs,
+    presence.requestId === request?.requestId ? (presence.updatedAtMs ?? 0) : 0,
+  );
+  return deriveAgentStatus({
+    runtime,
+    request:
+      request === undefined
+        ? "none"
+        : response === undefined &&
+            !requestIsCanceled({
+              request,
+              pendingRequestIds: cancelPendingRequestIds,
+            })
+          ? "pending"
+          : "answered",
+    agentConnected,
+    pickedUp:
+      (request !== undefined && agentOwnsRequest(request)) ||
+      activity.length > 0,
+    ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
+    ...(failure === undefined ? {} : { failure }),
+    nowMs,
+  });
+};
 
 export const projectRequestStatus = ({
   request,
@@ -119,6 +262,7 @@ export const projectRequestStatus = ({
   surface,
   nowMs,
   cancelPendingRequestIds,
+  queuedAhead,
 }: {
   readonly request: ThreadRequest;
   readonly response: ThreadResponse | undefined;
@@ -128,6 +272,7 @@ export const projectRequestStatus = ({
   readonly surface: ThreadSurface;
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly queuedAhead?: number;
 }): AgentStatus => {
   if (
     requestIsCanceled({
@@ -159,9 +304,10 @@ export const projectRequestStatus = ({
     runtime,
     request: response === undefined ? "pending" : "answered",
     agentConnected: presence.connected,
-    pickedUp: request.claimedAt !== undefined || activity.length > 0,
+    pickedUp: agentOwnsRequest(request) || activity.length > 0,
     sessionBusy:
       presence.state === "working" && presence.requestId !== request.requestId,
+    ...(queuedAhead === undefined ? {} : { queuedAhead }),
     surface,
     ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
     ...(failed === undefined ? {} : { failure: failed.detail ?? failed.step }),
@@ -200,6 +346,10 @@ export const projectCommentThread = <
       const outcome = response?.outcomes?.find(
         (candidate) => candidate.commentId === comment.id,
       );
+      const canceled = requestIsCanceled({
+        request,
+        pendingRequestIds: cancelPendingRequestIds,
+      });
       return {
         request,
         ...(response === undefined ? {} : { response }),
@@ -214,12 +364,21 @@ export const projectCommentThread = <
           surface: "thread",
           nowMs,
           cancelPendingRequestIds,
+          queuedAhead: queuedRequestsAhead({
+            request,
+            requests,
+            responses,
+            cancelPendingRequestIds,
+          }),
         }),
-        canceled: requestIsCanceled({
-          request,
-          pendingRequestIds: cancelPendingRequestIds,
-        }),
+        canceled,
         baselineSnapshot: request.baselineSnapshot ?? request.premiseSnapshot,
+        canReviseMessage: canReviseQueuedMessage({
+          request,
+          response,
+          canceled,
+        }),
+        canDeleteMessage: canDeleteQueuedMessage({ request, response }),
       };
     });
   const latestExchange = exchanges.at(-1);
@@ -260,7 +419,7 @@ export const projectCommentThread = <
       exchanges.every(
         (exchange) =>
           exchange.response === undefined &&
-          exchange.request.claimedAt === undefined,
+          !agentOwnsRequest(exchange.request),
       ),
     group,
   };

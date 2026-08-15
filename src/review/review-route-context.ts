@@ -163,6 +163,10 @@ export type ReviewRouteContext = {
   readonly readerProgress: ReaderProgress;
   readonly writeGate: WriteGate;
   readonly activityClock: ActivityClock;
+  readonly reportDiagnostic: (diagnostic: {
+    readonly message: string;
+    readonly error: unknown;
+  }) => void;
 };
 
 export const createPlanRenderer = ({

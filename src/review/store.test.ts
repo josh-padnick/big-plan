@@ -4,8 +4,11 @@ import {
   mkdtemp,
   open,
   readFile,
+  realpath,
+  rename,
   rm,
   stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,6 +19,7 @@ import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import {
   appendAgentConnectionEvent,
   appendProgressValue,
+  anchorReviewStore,
   deriveReviewPlanId,
   prepareStore,
   readAgentConnectionEvents,
@@ -67,6 +71,7 @@ describe("review store placement", () => {
   it("should put every artifact under one .big-plan beside the plan", async () => {
     const { directory, planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    const canonicalDirectory = await realpath(directory);
     for (const path of [
       store.reviewDirectory,
       store.feedbackDirectory,
@@ -86,7 +91,7 @@ describe("review store placement", () => {
       store.sessionLockPath,
       store.agentHeartbeatPath,
     ]) {
-      expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
+      expect(path.startsWith(join(canonicalDirectory, ".big-plan"))).toBe(true);
     }
   });
 
@@ -104,6 +109,23 @@ describe("review store placement", () => {
     expect(() =>
       reviewStoreFor({ planPath, planId: "../../../../etc" }),
     ).toThrow(/outside/);
+  });
+
+  it("should reject a symlinked review directory below the plan anchor", async () => {
+    const { directory, planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const outsideDirectory = join(directory, "outside-review");
+    await rename(store.reviewDirectory, outsideDirectory);
+    await symlink(outsideDirectory, store.reviewDirectory, "dir");
+    try {
+      await expect(anchorReviewStore(store)).rejects.toMatchObject({
+        reason: "outside",
+      });
+    } finally {
+      await rm(store.reviewDirectory, { force: true });
+      await rename(outsideDirectory, store.reviewDirectory);
+    }
   });
 });
 

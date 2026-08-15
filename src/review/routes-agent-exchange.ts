@@ -16,14 +16,22 @@ import {
   readAgentExchange,
   writeAgentRequest,
 } from "./agent-exchange.js";
-import { appendProgressEvent, cancelAgentRequest } from "./request-mailbox.js";
 import {
+  appendProgressEvent,
+  cancelAgentRequest,
+  deleteQueuedRequest,
+  reviseQueuedRequest,
+  type ProgressEventDraft,
+} from "./request-mailbox.js";
+import {
+  anchorReviewStore,
   freezeRequestAttachments,
   randomId,
   readAgentConnectionEvents,
   readAgentPresence,
   readProgress,
   writeSnapshot,
+  type AgentRequestDeletionResult,
 } from "./store.js";
 import {
   imageReferencesForBodies,
@@ -31,6 +39,22 @@ import {
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
+
+const appendProgressBestEffort = async ({
+  context,
+  event,
+  failureMessage,
+}: {
+  readonly context: ReviewRouteContext;
+  readonly event: ProgressEventDraft;
+  readonly failureMessage: string;
+}): Promise<void> => {
+  try {
+    await appendProgressEvent({ store: context.store, event });
+  } catch (error: unknown) {
+    context.reportDiagnostic({ message: failureMessage, error });
+  }
+};
 
 /**
  * Reading the exchange is also how the runtime learns that a response arrived,
@@ -84,7 +108,8 @@ export const sendAgentRequest = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
-  const { store, planId, sessionId, resolvedPlanPath, planRenderer } = context;
+  const { planId, sessionId, resolvedPlanPath, planRenderer } = context;
+  let { store } = context;
   const payload = payloadOf(body);
   const kind = payload.kind;
   if (kind !== "reply" && kind !== "chat") {
@@ -98,6 +123,56 @@ export const sendAgentRequest = async (
   if (messageBody === "") {
     return refusal({ status: 400, reason: "An agent request needs a body" });
   }
+  // A requestId turns the same submission into an edit of the message already
+  // waiting, so an edit rides the validation of the send it replaces and can
+  // never create a second message.
+  if (payload.requestId !== undefined) {
+    const requestId = payload.requestId;
+    if (typeof requestId !== "string") {
+      return refusal({ status: 400, reason: "A request id is required" });
+    }
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    const existing = exchange.requests.find(
+      (candidate) => candidate.requestId === requestId,
+    );
+    if (existing === undefined) {
+      return refusal({ status: 404, reason: "No such agent request" });
+    }
+    if (existing.kind !== kind) {
+      return refusal({
+        status: 409,
+        reason: "A revision cannot change the kind of a message",
+      });
+    }
+    let revised;
+    try {
+      revised = await reviseQueuedRequest({
+        store,
+        requestId,
+        body: messageBody,
+      });
+    } catch (error: unknown) {
+      if (!(error instanceof AgentExchangeRejected)) throw error;
+      return refusal({ status: 409, reason: error.message });
+    }
+    await appendProgressBestEffort({
+      context,
+      event: {
+        sessionId,
+        requestId,
+        atMs: Date.now(),
+        stepCode: "queued-message-revised",
+        step: "Queued message edited by reviewer",
+        state: "waiting",
+      },
+      failureMessage: `Review progress update failed after revising request ${requestId}`,
+    });
+    return jsonResponse({
+      status: 200,
+      value: { requestId, kind: revised.kind, request: revised },
+    });
+  }
+  store = await (await anchorReviewStore(store)).resolveStore();
   const source = await readFile(resolvedPlanPath, "utf8");
   const premiseSnapshot = deriveSnapshotDigest(source);
   await writeSnapshot({ store, snapshot: premiseSnapshot, source });
@@ -159,8 +234,8 @@ export const sendAgentRequest = async (
     }
   }
   await writeAgentRequest({ store, request: agentRequest });
-  await appendProgressEvent({
-    store,
+  await appendProgressBestEffort({
+    context,
     event: {
       sessionId,
       atMs: Date.now(),
@@ -171,6 +246,7 @@ export const sendAgentRequest = async (
           : "Plan question sent to agent",
       state: "waiting",
     },
+    failureMessage: `Review progress update failed after queuing request ${agentRequest.requestId}`,
   });
   return jsonResponse({
     status: 200,
@@ -180,6 +256,55 @@ export const sendAgentRequest = async (
       request: agentRequest,
     },
   });
+};
+
+/** Deletes a request the agent has not started. */
+export const deleteQueuedAgentRequest = async (
+  context: ReviewRouteContext,
+  { body }: ReviewRouteRequest,
+): Promise<ReviewRouteResponse> => {
+  const { store, planId, sessionId } = context;
+  const payload = payloadOf(body);
+  const requestId = payload.requestId;
+  if (typeof requestId !== "string") {
+    return refusal({ status: 400, reason: "A request id is required" });
+  }
+  const exchange = await readAgentExchange({ store, sessionId, planId });
+  if (
+    !exchange.requests.some((candidate) => candidate.requestId === requestId)
+  ) {
+    return refusal({ status: 404, reason: "No such agent request" });
+  }
+  let deletion: AgentRequestDeletionResult;
+  try {
+    deletion = await deleteQueuedRequest({
+      store,
+      requestId,
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
+  if (deletion.attachmentCleanup === "failed") {
+    context.reportDiagnostic({
+      message: `Review attachment cleanup failed after deleting request ${requestId}`,
+      error: deletion.cleanupError,
+    });
+  }
+  // The request is gone, so the event belongs to the session rather than to a
+  // requestId no reader can resolve.
+  await appendProgressBestEffort({
+    context,
+    event: {
+      sessionId,
+      atMs: Date.now(),
+      stepCode: "queued-message-deleted",
+      step: "Queued message deleted",
+      state: "done",
+    },
+    failureMessage: `Review progress update failed after deleting request ${requestId}`,
+  });
+  return jsonResponse({ status: 200, value: { requestId } });
 };
 
 /** Withdraws a request the agent has not answered yet. */
@@ -221,8 +346,8 @@ export const cancelPendingAgentRequest = async (
     if (!(error instanceof AgentExchangeRejected)) throw error;
     return refusal({ status: 409, reason: error.message });
   }
-  await appendProgressEvent({
-    store,
+  await appendProgressBestEffort({
+    context,
     event: {
       sessionId,
       requestId: canceled.requestId,
@@ -231,6 +356,7 @@ export const cancelPendingAgentRequest = async (
       step: "Request canceled by reviewer",
       state: "done",
     },
+    failureMessage: `Review progress update failed after canceling request ${requestId}`,
   });
   return jsonResponse({ status: 200, value: { request: canceled } });
 };

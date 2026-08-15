@@ -1,8 +1,18 @@
 // Covers the review-owned coding-agent loop through its one action interface.
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildFeedbackPackage } from "./feedback-package.js";
@@ -15,9 +25,16 @@ import {
   writeAgentRequest,
 } from "./agent-exchange.js";
 import { runAgentWorkLoopAction } from "./agent-work-loop.js";
-import { claimAgentRequest, publishAgentResponse } from "./request-mailbox.js";
+import {
+  cancelAgentRequest,
+  claimAgentRequest,
+  deleteQueuedRequest,
+  publishAgentResponse,
+  reviseQueuedRequest,
+} from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
+import { reviewImageId } from "./shared/review-image.js";
 import { readProgress } from "./store.js";
 import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
@@ -209,6 +226,647 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should leave a request reviewer-owned when its attachment cannot be opened", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-claim-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const imageId = reviewImageId("a".repeat(64));
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments: [
+        {
+          id: imageId,
+          sha256: imageId,
+          alt: "Capture",
+          mimeType: "image/png",
+          byteLength: 1,
+          width: 1,
+          height: 1,
+          path: join(
+            review.store.requestAttachmentsDirectory,
+            "cccccccccccccccc",
+            `image-${imageId}.png`,
+          ),
+        },
+      ],
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/could not be opened during agent pickup/);
+      await expect(
+        reviseQueuedRequest({
+          store: review.store,
+          requestId: request.requestId,
+          body: "Please inspect this later.",
+        }),
+      ).resolves.toMatchObject({ body: "Please inspect this later." });
+      await expect(
+        deleteQueuedRequest({
+          store: review.store,
+          requestId: request.requestId,
+        }),
+      ).resolves.toEqual({ attachmentCleanup: "complete" });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse an attachment path that escapes its request directory", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-escape-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const imageId = reviewImageId("b".repeat(64));
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments: [
+        {
+          id: imageId,
+          sha256: imageId,
+          alt: "Capture",
+          mimeType: "image/png",
+          byteLength: 1,
+          width: 1,
+          height: 1,
+          // Lexically under the request directory, but `..` walks back out of
+          // it. A prefix test accepts this; a resolved comparison must not.
+          // Built by concatenation because join() would normalize the escape.
+          path: `${review.store.requestAttachmentsDirectory}/cccccccccccccccc/../../escaped.png`,
+        },
+      ],
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/outside the request attachment directory/);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a symlinked attachment target outside its request directory", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-symlink-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    const bytes = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+      0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+    ]);
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes,
+      alt: "Capture",
+    });
+    const requestId = "cccccccccccccccc";
+    const attachments = await reviewStore.freezeRequestAttachments({
+      store: review.store,
+      requestId,
+      references: [{ id: descriptor.id, alt: descriptor.alt }],
+    });
+    const attachment = attachments[0];
+    const outsidePath = join(directory, "outside.png");
+    await writeFile(outsidePath, bytes);
+    await rm(attachment.path);
+    await symlink(outsidePath, attachment.path);
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId,
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments,
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/outside the request attachment directory/);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a symlinked request attachment directory", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-root-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    const bytes = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+      0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+    ]);
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes,
+      alt: "Capture",
+    });
+    const requestId = "cccccccccccccccc";
+    const attachments = await reviewStore.freezeRequestAttachments({
+      store: review.store,
+      requestId,
+      references: [{ id: descriptor.id, alt: descriptor.alt }],
+    });
+    const attachmentRoot = join(
+      review.store.requestAttachmentsDirectory,
+      requestId,
+    );
+    const outsideRoot = join(directory, "outside-request");
+    await rm(attachmentRoot, { recursive: true });
+    await mkdir(outsideRoot);
+    await writeFile(join(outsideRoot, basename(attachments[0].path)), bytes);
+    await symlink(outsideRoot, attachmentRoot, "dir");
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId,
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments,
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/outside the request attachment directory/);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a symlinked attachment store segment", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-store-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    const bytes = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+      0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+    ]);
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes,
+      alt: "Capture",
+    });
+    const requestId = "cccccccccccccccc";
+    const attachments = await reviewStore.freezeRequestAttachments({
+      store: review.store,
+      requestId,
+      references: [{ id: descriptor.id, alt: descriptor.alt }],
+    });
+    const attachmentDirectory = review.store.requestAttachmentsDirectory;
+    const displacedDirectory = `${attachmentDirectory}.displaced`;
+    const outsideDirectory = join(directory, "outside-attachments");
+    await rename(attachmentDirectory, displacedDirectory);
+    await mkdir(join(outsideDirectory, requestId), { recursive: true });
+    await writeFile(
+      join(outsideDirectory, requestId, basename(attachments[0].path)),
+      bytes,
+    );
+    await symlink(outsideDirectory, attachmentDirectory, "dir");
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId,
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments,
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/outside the request attachment directory/);
+    } finally {
+      await rm(attachmentDirectory, { force: true });
+      await rename(displacedDirectory, attachmentDirectory);
+      await rm(outsideDirectory, { recursive: true, force: true });
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should reverify attachments when claimed work is resumed", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    const bytes = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+      0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+    ]);
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes,
+      alt: "Capture",
+    });
+    const requestId = "cccccccccccccccc";
+    const attachments = await reviewStore.freezeRequestAttachments({
+      store: review.store,
+      requestId,
+      references: [{ id: descriptor.id, alt: descriptor.alt }],
+    });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId,
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments,
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      const canonicalAttachmentPath = await realpath(attachments[0].path);
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: {
+          requestId,
+          attachments: [{ path: canonicalAttachmentPath }],
+          attachmentManifest: [{ path: canonicalAttachmentPath }],
+        },
+      });
+      await rm(attachments[0].path);
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/could not be opened during agent pickup/);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should leave a message revisable when its baseline cannot be stored", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-baseline-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Answer once the baseline is storable.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    // Pickup snapshots the plan as it reads it, so a later edit gives the
+    // baseline a digest nothing has stored yet.
+    const editedSource = "# Plan\n\nEdited after the runtime started.\n";
+    await writeFile(planPath, editedSource);
+    // A directory where the snapshot file belongs makes persistence fail.
+    await mkdir(
+      join(
+        review.store.snapshotDirectory,
+        `${deriveSnapshotDigest(editedSource)}.mdx`,
+      ),
+      { recursive: true },
+    );
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow();
+      // The claim never happened, so the reviewer still owns the message.
+      await expect(
+        deleteQueuedRequest({
+          store: review.store,
+          requestId: request.requestId,
+        }),
+      ).resolves.toEqual({ attachmentCleanup: "complete" });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse pickup before writing through a symlinked snapshot store", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-snapshot-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Keep the pickup snapshot inside the review store.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    const displacedDirectory = `${review.store.snapshotDirectory}.displaced`;
+    const outsideDirectory = join(directory, "outside-snapshots");
+    const sentinelPath = join(outsideDirectory, "sentinel.txt");
+    await rename(review.store.snapshotDirectory, displacedDirectory);
+    await mkdir(outsideDirectory);
+    await writeFile(sentinelPath, "untouched\n");
+    await symlink(outsideDirectory, review.store.snapshotDirectory);
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/anchored directory/);
+      await expect(readdir(outsideDirectory)).resolves.toEqual([
+        "sentinel.txt",
+      ]);
+      await expect(
+        deleteQueuedRequest({
+          store: review.store,
+          requestId: request.requestId,
+        }),
+      ).resolves.toEqual({ attachmentCleanup: "complete" });
+    } finally {
+      await rm(review.store.snapshotDirectory, { force: true });
+      await rename(displacedDirectory, review.store.snapshotDirectory);
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should select the next request when deletion wins before claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-delete-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes: Uint8Array.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+        0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+      ]),
+      alt: "Capture",
+    });
+    const firstId = "cccccccccccccccc";
+    const attachments = await reviewStore.freezeRequestAttachments({
+      store: review.store,
+      requestId: firstId,
+      references: [{ id: descriptor.id, alt: descriptor.alt }],
+    });
+    const first = messageAgentRequest({
+      kind: "chat",
+      requestId: firstId,
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments,
+    });
+    const second = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "What should happen next?",
+    });
+    await writeAgentRequest({ store: review.store, request: first });
+    await writeAgentRequest({ store: review.store, request: second });
+
+    const selectedValues = await reviewStore.readAgentRequestValues(
+      review.store,
+    );
+    const readRequests = vi
+      .spyOn(reviewStore, "readAgentRequestValues")
+      .mockImplementationOnce(async () => {
+        await deleteQueuedRequest({
+          store: review.store,
+          requestId: first.requestId,
+        });
+        return selectedValues;
+      });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: second.requestId },
+      });
+    } finally {
+      readRequests.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should select the next request when cancellation wins before claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-cancel-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const first = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Cancel before pickup.",
+    });
+    const second = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "What should happen next?",
+    });
+    await writeAgentRequest({ store: review.store, request: first });
+    await writeAgentRequest({ store: review.store, request: second });
+
+    const selectedValues = await reviewStore.readAgentRequestValues(
+      review.store,
+    );
+    const readRequests = vi
+      .spyOn(reviewStore, "readAgentRequestValues")
+      .mockImplementationOnce(async () => {
+        await cancelAgentRequest({
+          store: review.store,
+          requestId: first.requestId,
+          now: "2026-08-12T12:00:02.000Z",
+        });
+        return selectedValues;
+      });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: second.requestId },
+      });
+    } finally {
+      readRequests.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should select the next request when an answer wins before claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-answer-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    const snapshot = deriveSnapshotDigest(source);
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const first = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Answer before pickup resumes.",
+    });
+    const second = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "What should happen next?",
+    });
+    await writeAgentRequest({ store: review.store, request: first });
+    await writeAgentRequest({ store: review.store, request: second });
+    const claimed = await claimAgentRequest({
+      store: review.store,
+      requestId: first.requestId,
+      baselineSnapshot: snapshot,
+      now: "2026-08-12T12:00:02.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: { requestId: first.requestId, message: "Answered elsewhere." },
+      request: claimed,
+      commentsById: new Map(),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-12T12:00:03.000Z",
+    });
+    const selectedValues = await reviewStore.readAgentRequestValues(
+      review.store,
+    );
+    const readRequests = vi
+      .spyOn(reviewStore, "readAgentRequestValues")
+      .mockImplementationOnce(async () => {
+        await publishAgentResponse({ store: review.store, response });
+        return selectedValues;
+      });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: second.requestId },
+      });
+    } finally {
+      readRequests.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should materialize reviewer images before publishing a changed plan", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-assets-"));
     const planPath = join(directory, "plan.mdx");

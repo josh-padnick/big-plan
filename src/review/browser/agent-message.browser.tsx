@@ -359,9 +359,16 @@ export const RequestStatusStrip = ({
       <div className="flex items-center gap-1.5 [&>svg]:size-[0.85rem] [&>svg]:shrink-0">
         {isWorking ? <Spinner /> : icon}
         <strong className="min-w-0 flex-1 font-bold">
-          {isWorking && commentCount > 1
-            ? `Agent is working on ${commentCount} comments`
-            : status.headline}
+          {isWorking && commentCount > 1 ? (
+            `Agent is working on ${commentCount} comments`
+          ) : status.stage === "waiting" && status.label !== "Waiting" ? (
+            <>
+              <span className="block">{status.label}</span>
+              <span className="block font-medium">{status.headline}</span>
+            </>
+          ) : (
+            status.headline
+          )}
         </strong>
       </div>
       {status.detail === "" ? null : (

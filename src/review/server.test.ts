@@ -9,6 +9,7 @@ import {
   open,
   readdir,
   readFile,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -16,7 +17,7 @@ import {
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   commentsFromExchange,
   deriveSnapshotDigest,
@@ -48,6 +49,7 @@ import {
   readResolvedCommentIds,
   readSessionHeartbeatValue,
   publishReviewImage,
+  readProgress,
   writeComments,
   writeResolvedCommentIds,
   writeSnapshot,
@@ -2531,4 +2533,357 @@ describe("review runtime write gate", () => {
       await wedged.release();
     }
   }, 20_000);
+});
+
+// A message sent while the agent is busy is the reported loss in BIG-84: it
+// must survive the wait, stay editable, and still be deliverable afterwards.
+describe("review runtime queued messages", () => {
+  let queued: ReviewRuntime;
+  let queuedToken: string;
+  let queuedDirectory: string;
+
+  beforeAll(async () => {
+    queuedDirectory = await mkdtemp(join(tmpdir(), "big-plan-queued-"));
+    const planPath = join(queuedDirectory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    queued = await startReviewRuntime({ planPath });
+    const descriptor: unknown = JSON.parse(
+      await readFile(queued.store.sessionPath, "utf8"),
+    );
+    queuedToken =
+      typeof descriptor === "object" &&
+      descriptor !== null &&
+      "token" in descriptor &&
+      typeof descriptor.token === "string"
+        ? descriptor.token
+        : "";
+  });
+
+  afterAll(async () => {
+    await queued.close();
+    await rm(queuedDirectory, { recursive: true, force: true });
+  });
+
+  const ask = ({
+    path,
+    body,
+  }: {
+    readonly path: string;
+    readonly body: unknown;
+  }) =>
+    fetch(`${queued.url.replace(/\/$/, "")}${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": queuedToken,
+        "sec-fetch-site": "same-origin",
+        origin: queued.url.replace(/\/$/, ""),
+      },
+      body: JSON.stringify(body),
+    });
+
+  const sendChat = async (body: string): Promise<string> => {
+    const response = await ask({
+      path: "/api/agent-requests",
+      body: { kind: "chat", body },
+    });
+    expect(response.status).toBe(200);
+    const answer: unknown = await response.json();
+    if (
+      typeof answer !== "object" ||
+      answer === null ||
+      !("requestId" in answer) ||
+      typeof answer.requestId !== "string"
+    ) {
+      throw new Error("The runtime did not return a request id");
+    }
+    return answer.requestId;
+  };
+
+  const exchangeNow = () =>
+    readAgentExchange({
+      store: queued.store,
+      sessionId: queued.sessionId,
+      planId: queued.planId,
+    });
+
+  const storedRequest = async (requestId: string) => {
+    const exchange = await exchangeNow();
+    return exchange.requests.find((request) => request.requestId === requestId);
+  };
+
+  it("should queue and deliver a message sent while a request is claimed", async () => {
+    const firstId = await sendChat("What drives the retry boundary?");
+    const first = await storedRequest(firstId);
+    if (first === undefined) throw new Error("The first message was lost");
+    const claimed = await claimAgentRequest({
+      store: queued.store,
+      requestId: firstId,
+      baselineSnapshot: first.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+
+    const secondId = await sendChat("And what happens on the third retry?");
+
+    const busy = await exchangeNow();
+    expect(
+      busy.requests.find((request) => request.requestId === secondId),
+    ).toMatchObject({
+      kind: "chat",
+      body: "And what happens on the third retry?",
+    });
+    expect(nextPendingAgentRequest(busy)?.requestId).toBe(firstId);
+
+    await publishAgentResponse({
+      store: queued.store,
+      response: validateAgentResponseDraft({
+        value: { requestId: firstId, message: "Three attempts, then stop." },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: claimed.premiseSnapshot,
+        now: new Date().toISOString(),
+      }),
+    });
+
+    expect(nextPendingAgentRequest(await exchangeNow())?.requestId).toBe(
+      secondId,
+    );
+  });
+
+  it("should revise a queued message without creating another one", async () => {
+    const requestId = await sendChat("Waht is the retry boundary?");
+    const before = (await exchangeNow()).requests.length;
+
+    const response = await ask({
+      path: "/api/agent-requests",
+      body: { kind: "chat", requestId, body: "What is the retry boundary?" },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      requestId,
+      request: { requestId, body: "What is the retry boundary?" },
+    });
+    const after = await exchangeNow();
+    expect(after.requests).toHaveLength(before);
+    expect(
+      after.requests.find((request) => request.requestId === requestId),
+    ).toMatchObject({ body: "What is the retry boundary?" });
+    const events = await readProgress({
+      store: queued.store,
+      sessionId: queued.sessionId,
+    });
+    expect(events.at(-1)).toMatchObject({
+      stepCode: "queued-message-revised",
+      requestId,
+      state: "waiting",
+    });
+  });
+
+  it("should refuse to revise a message the agent already started", async () => {
+    const requestId = await sendChat("Waht about the timeout?");
+    const request = await storedRequest(requestId);
+    if (request === undefined) throw new Error("The message was lost");
+    await claimAgentRequest({
+      store: queued.store,
+      requestId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+
+    const response = await ask({
+      path: "/api/agent-requests",
+      body: { kind: "chat", requestId, body: "What about the timeout?" },
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "The agent already started on this message",
+    });
+    expect(await storedRequest(requestId)).toMatchObject({
+      body: "Waht about the timeout?",
+    });
+  });
+
+  it("should refuse to revise a message this session never stored", async () => {
+    const response = await ask({
+      path: "/api/agent-requests",
+      body: {
+        kind: "chat",
+        requestId: "abcdefabcdefabcd",
+        body: "Revise a message that does not exist.",
+      },
+    });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("should delete a queued message", async () => {
+    const requestId = await sendChat("Never mind this question.");
+
+    const response = await ask({
+      path: "/api/agent-request-delete",
+      body: { requestId },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ requestId });
+    expect(await storedRequest(requestId)).toBeUndefined();
+  });
+
+  it("should report cleanup failure without failing a committed deletion", async () => {
+    const requestId = await sendChat("Delete even if cleanup fails.");
+    const attachmentsDirectory = queued.store.requestAttachmentsDirectory;
+    const displacedDirectory = `${attachmentsDirectory}.displaced`;
+    await rename(attachmentsDirectory, displacedDirectory);
+    await writeFile(attachmentsDirectory, "Blocks attachment cleanup.");
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    try {
+      const response = await ask({
+        path: "/api/agent-request-delete",
+        body: { requestId },
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ requestId });
+      expect(await storedRequest(requestId)).toBeUndefined();
+      await expect(readdir(displacedDirectory)).resolves.toContain(requestId);
+      expect(
+        stderr.mock.calls.map(([chunk]) => String(chunk)).join(""),
+      ).toContain(
+        `Review attachment cleanup failed after deleting request ${requestId}`,
+      );
+    } finally {
+      stderr.mockRestore();
+      await rm(attachmentsDirectory, { force: true });
+      await rename(displacedDirectory, attachmentsDirectory);
+    }
+  });
+
+  it("should refuse attachment cleanup through a symlinked store directory", async () => {
+    const requestId = await sendChat("Keep outside files during cleanup.");
+    const attachmentsDirectory = queued.store.requestAttachmentsDirectory;
+    const displacedDirectory = `${attachmentsDirectory}.symlink-displaced`;
+    const outsideDirectory = join(
+      queuedDirectory,
+      `outside-attachments-${requestId}`,
+    );
+    const outsideRequestDirectory = join(outsideDirectory, requestId);
+    const sentinelPath = join(outsideRequestDirectory, "keep.txt");
+    await rename(attachmentsDirectory, displacedDirectory);
+    await mkdir(outsideRequestDirectory, { recursive: true });
+    await writeFile(sentinelPath, "Keep this file.");
+    await symlink(outsideDirectory, attachmentsDirectory, "dir");
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    try {
+      const response = await ask({
+        path: "/api/agent-request-delete",
+        body: { requestId },
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ requestId });
+      expect(await storedRequest(requestId)).toBeUndefined();
+      await expect(readFile(sentinelPath, "utf8")).resolves.toBe(
+        "Keep this file.",
+      );
+      expect(
+        stderr.mock.calls.map(([chunk]) => String(chunk)).join(""),
+      ).toContain(
+        `Review attachment cleanup failed after deleting request ${requestId}`,
+      );
+    } finally {
+      stderr.mockRestore();
+      await rm(attachmentsDirectory, { force: true });
+      await rename(displacedDirectory, attachmentsDirectory);
+      await rm(outsideDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("should report progress failures without failing committed queue mutations", async () => {
+    const revisedId = await sendChat("Waht is the retry boundary?");
+    const deletedId = await sendChat("Delete after committing.");
+    const canceledId = await sendChat("Cancel after committing.");
+    const progress = await readFile(queued.store.progressPath, "utf8");
+    await rm(queued.store.progressPath);
+    await mkdir(queued.store.progressPath);
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    try {
+      const revised = await ask({
+        path: "/api/agent-requests",
+        body: {
+          kind: "chat",
+          requestId: revisedId,
+          body: "What is the retry boundary?",
+        },
+      });
+      const deleted = await ask({
+        path: "/api/agent-request-delete",
+        body: { requestId: deletedId },
+      });
+      const canceled = await ask({
+        path: "/api/agent-cancel",
+        body: { requestId: canceledId },
+      });
+      const queuedId = await sendChat("Queue despite progress failure.");
+
+      expect(revised.status).toBe(200);
+      expect(deleted.status).toBe(200);
+      expect(canceled.status).toBe(200);
+      expect(await storedRequest(revisedId)).toMatchObject({
+        body: "What is the retry boundary?",
+      });
+      expect(await storedRequest(deletedId)).toBeUndefined();
+      expect(await storedRequest(canceledId)).toMatchObject({
+        canceledAt: expect.any(String),
+      });
+      expect(await storedRequest(queuedId)).toMatchObject({
+        body: "Queue despite progress failure.",
+      });
+      const diagnostics = stderr.mock.calls
+        .map(([chunk]) => String(chunk))
+        .join("");
+      for (const message of [
+        `Review progress update failed after revising request ${revisedId}`,
+        `Review progress update failed after deleting request ${deletedId}`,
+        `Review progress update failed after canceling request ${canceledId}`,
+        `Review progress update failed after queuing request ${queuedId}`,
+      ]) {
+        expect(diagnostics).toContain(message);
+      }
+    } finally {
+      stderr.mockRestore();
+      await rm(queued.store.progressPath, { recursive: true, force: true });
+      await writeFile(queued.store.progressPath, progress);
+    }
+  });
+
+  it("should refuse to delete a message the agent already started", async () => {
+    const requestId = await sendChat("Keep this one after all.");
+    const request = await storedRequest(requestId);
+    if (request === undefined) throw new Error("The message was lost");
+    await claimAgentRequest({
+      store: queued.store,
+      requestId,
+      baselineSnapshot: request.premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+
+    const response = await ask({
+      path: "/api/agent-request-delete",
+      body: { requestId },
+    });
+
+    expect(response.status).toBe(409);
+    expect(await storedRequest(requestId)).toMatchObject({
+      body: "Keep this one after all.",
+    });
+  });
 });

@@ -6,6 +6,8 @@ export const PROGRESS_STEP_CODES = [
   "queued-comment-deleted",
   "reply-sent",
   "chat-sent",
+  "queued-message-revised",
+  "queued-message-deleted",
   "request-canceled",
   "request-picked-up",
   "response-ready",
@@ -14,6 +16,19 @@ export const PROGRESS_STEP_CODES = [
 
 export type ProgressStepCode = (typeof PROGRESS_STEP_CODES)[number];
 export type ProgressState = "waiting" | "live" | "done" | "failed";
+
+const PROGRESS_STEP_OWNERS = {
+  "feedback-received": "reviewer",
+  "queued-comment-deleted": "reviewer",
+  "reply-sent": "reviewer",
+  "chat-sent": "reviewer",
+  "queued-message-revised": "reviewer",
+  "queued-message-deleted": "reviewer",
+  "request-canceled": "reviewer",
+  "request-picked-up": "agent",
+  "response-ready": "agent",
+  "agent-note": "agent",
+} as const satisfies Readonly<Record<ProgressStepCode, "reviewer" | "agent">>;
 
 const PROGRESS_STATES: ReadonlySet<string> = new Set([
   "waiting",
@@ -29,6 +44,10 @@ const PROGRESS_STEP_CODE_SET: ReadonlySet<string> = new Set(
 /** Narrows untrusted progress data to the stable semantic vocabulary. */
 export const isProgressStepCode = (value: unknown): value is ProgressStepCode =>
   typeof value === "string" && PROGRESS_STEP_CODE_SET.has(value);
+
+export const progressStepCodeIsAgentOwned = (
+  value: ProgressStepCode,
+): boolean => PROGRESS_STEP_OWNERS[value] === "agent";
 
 /** Narrows untrusted progress data to its lifecycle state vocabulary. */
 export const isProgressState = (value: unknown): value is ProgressState =>

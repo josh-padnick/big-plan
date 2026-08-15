@@ -32,7 +32,6 @@ import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
   AGENT_STALL_MS,
   deriveAgentHealthLabel,
-  deriveAgentStatus,
   deriveCurrentAgentActivity,
   projectAgentConnectionState,
   type AgentStatus,
@@ -48,6 +47,7 @@ import {
   reconcilePendingCancellations,
   requestIsCanceled,
 } from "../shared/cancel-pending.js";
+import { agentOwnsRequest } from "../shared/request-ownership.js";
 import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
   clearThreadOpenOverlay,
@@ -60,8 +60,10 @@ import {
 } from "../shared/thread-open-state.js";
 import {
   projectCommentThreads,
+  projectLatestAgentStatus,
   projectRequestActivity,
   projectRequestStatus,
+  queuedRequestsAhead,
   requestCommentIds,
   type CommentThreadProjection,
   type ThreadGroup,
@@ -3352,8 +3354,7 @@ const SentThread = ({
                       }
                       createdAt={request.createdAt}
                       delivery={
-                        response !== undefined ||
-                        request.claimedAt !== undefined
+                        response !== undefined || agentOwnsRequest(request)
                           ? "Sent"
                           : "Queued"
                       }
@@ -3633,7 +3634,7 @@ const ChatExchange = ({
         body={request.body ?? ""}
         createdAt={request.createdAt}
         delivery={
-          response !== undefined || request.claimedAt !== undefined
+          response !== undefined || agentOwnsRequest(request)
             ? "Sent"
             : "Queued"
         }
@@ -4857,45 +4858,15 @@ export const ReviewController = () => {
     nowMs: agentProjectionNowMs,
     cancelPendingRequestIds,
   });
-  const latestRequest = agent.requests.at(-1);
-  const latestResponse = agent.responses.find(
-    (response) => response.requestId === latestRequest?.requestId,
-  );
-  const requestProgress =
-    latestRequest === undefined
-      ? []
-      : progress.filter((event) => event.requestId === latestRequest.requestId);
-  const failure = [...requestProgress]
-    .reverse()
-    .find((event) => event.state === "failed")?.detail;
-  const lastAgentSignalAtMs = Math.max(
-    0,
-    ...requestProgress.map((event) => event.atMs ?? 0),
-    latestRequest?.claimedAt === undefined
-      ? 0
-      : Date.parse(latestRequest.claimedAt),
-    agent.presence.requestId === latestRequest?.requestId
-      ? (agent.presence.updatedAtMs ?? 0)
-      : 0,
-  );
-  const agentStatus: AgentStatus = deriveAgentStatus({
+  const agentStatus: AgentStatus = projectLatestAgentStatus({
+    requests: agent.requests,
+    responses: agent.responses,
+    progressEvents: progress,
+    presence: effectivePresence,
     runtime: threadRuntime,
-    request:
-      latestRequest === undefined
-        ? "none"
-        : latestResponse === undefined &&
-            !requestIsCanceled({
-              request: latestRequest,
-              pendingRequestIds: cancelPendingRequestIds,
-            })
-          ? "pending"
-          : "answered",
     agentConnected,
-    pickedUp:
-      latestRequest?.claimedAt !== undefined || requestProgress.length > 0,
-    ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
-    ...(failure === undefined ? {} : { failure }),
     nowMs: agentProjectionNowMs,
+    cancelPendingRequestIds,
   });
   const activityForRequest = (
     request: AgentRequest,
@@ -4916,6 +4887,12 @@ export const ReviewController = () => {
       surface,
       nowMs: agentProjectionNowMs,
       cancelPendingRequestIds,
+      queuedAhead: queuedRequestsAhead({
+        request,
+        requests: agent.requests,
+        responses: agent.responses,
+        cancelPendingRequestIds,
+      }),
     });
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,

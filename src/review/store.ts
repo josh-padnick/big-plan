@@ -15,20 +15,23 @@
 //    re-checked on read exactly as if they had arrived over the wire.
 
 import { createHash, randomBytes } from "node:crypto";
+import { lstatSync, realpathSync } from "node:fs";
 import {
   appendFile,
   chmod,
+  lstat,
   mkdir,
   open,
   rename,
   readdir,
   readFile,
+  realpath,
   rm,
   stat,
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { readBoundedRegularFile } from "./bounded-regular-file.js";
 import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
@@ -84,6 +87,8 @@ export type AgentConnectionEvent = {
 
 /** Where one plan's review state lives. */
 export type ReviewStore = {
+  readonly planDirectory: string;
+  readonly planId: string;
   readonly root: string;
   readonly reviewDirectory: string;
   readonly imagesDirectory: string;
@@ -139,6 +144,283 @@ const inside = ({
   return candidate;
 };
 
+const hasCode = (
+  error: unknown,
+  code: string,
+): error is Error & { readonly code: string } =>
+  error instanceof Error && "code" in error && error.code === code;
+
+export type ReviewStorePathRejection = "outside" | "unavailable";
+
+export class ReviewStorePathRejected extends Error {
+  readonly reason: ReviewStorePathRejection;
+
+  constructor(reason: ReviewStorePathRejection, cause?: unknown) {
+    super(
+      reason === "outside"
+        ? "Refusing a review store path outside its anchored chain"
+        : "The anchored review store path is unavailable",
+      { cause },
+    );
+    this.name = "ReviewStorePathRejected";
+    this.reason = reason;
+  }
+}
+
+type AnchoredStorePath = {
+  readonly path: string;
+  readonly exists: boolean;
+};
+
+export type ReviewStoreDirectoryKey = {
+  [Key in keyof ReviewStore]: Key extends "root" | `${string}Directory`
+    ? Key
+    : never;
+}[keyof ReviewStore];
+
+type ReviewStorePathKey = {
+  [Key in keyof ReviewStore]: Key extends `${string}Path` ? Key : never;
+}[keyof ReviewStore];
+
+type ReviewStoreLocationKey = ReviewStoreDirectoryKey | ReviewStorePathKey;
+
+export type AnchoredReviewStore = {
+  readonly resolveStore: () => Promise<ReviewStore>;
+  readonly resolveDirectoryPath: (options: {
+    readonly directory: ReviewStoreDirectoryKey;
+    readonly requestId?: string;
+    readonly targetPath?: string;
+    readonly allowMissingRequestDirectory?: boolean;
+  }) => Promise<AnchoredStorePath>;
+};
+
+const isReviewStoreDirectoryKey = (
+  key: string,
+): key is ReviewStoreDirectoryKey =>
+  key === "root" || key.endsWith("Directory");
+
+const isReviewStoreLocationKey = (key: string): key is ReviewStoreLocationKey =>
+  isReviewStoreDirectoryKey(key) || key.endsWith("Path");
+
+const reviewStoreLocationKeys = (
+  store: ReviewStore,
+): ReadonlyArray<ReviewStoreLocationKey> =>
+  Object.keys(store).filter(isReviewStoreLocationKey);
+
+/** Resolves one constructed store location without requiring absent state. */
+const resolveConstructedSegments = ({
+  base,
+  segments,
+  directory,
+}: {
+  readonly base: string;
+  readonly segments: ReadonlyArray<string>;
+  readonly directory: boolean;
+}): string => {
+  let current = base;
+  for (const [index, segment] of segments.entries()) {
+    const expected = inside({ base: current, leaf: segment });
+    try {
+      const entry = lstatSync(expected);
+      if (
+        entry.isSymbolicLink() ||
+        ((index < segments.length - 1 || directory) && !entry.isDirectory())
+      ) {
+        throw new ReviewStorePathRejected("outside");
+      }
+      const canonical = realpathSync(expected);
+      if (canonical !== expected) {
+        throw new ReviewStorePathRejected("outside");
+      }
+      current = canonical;
+    } catch (error: unknown) {
+      if (error instanceof ReviewStorePathRejected) throw error;
+      if (hasCode(error, "ENOENT")) {
+        return resolve(current, ...segments.slice(index));
+      }
+      throw new ReviewStorePathRejected("unavailable", error);
+    }
+  }
+  return current;
+};
+
+/** Canonicalizes every location represented by a ReviewStore value. */
+const canonicalReviewStore = (store: ReviewStore): ReviewStore => {
+  const lexicalPlanDirectory = resolve(store.planDirectory);
+  let planDirectory: string;
+  try {
+    planDirectory = realpathSync(lexicalPlanDirectory);
+  } catch (error: unknown) {
+    throw new ReviewStorePathRejected("unavailable", error);
+  }
+  const locations: Record<string, string> = {};
+  for (const location of reviewStoreLocationKeys(store)) {
+    const lexicalLocation = resolve(store[location]);
+    const step = relative(lexicalPlanDirectory, lexicalLocation);
+    if (
+      step.startsWith("..") ||
+      resolve(lexicalPlanDirectory, step) !== lexicalLocation
+    ) {
+      throw new ReviewStorePathRejected("outside");
+    }
+    locations[location] = resolveConstructedSegments({
+      base: planDirectory,
+      segments: step === "" ? [] : step.split(sep),
+      directory: isReviewStoreDirectoryKey(location),
+    });
+  }
+  return { ...store, ...locations };
+};
+
+const resolveAnchoredSegments = async ({
+  base,
+  segments,
+  allowMissingLast = false,
+}: {
+  readonly base: string;
+  readonly segments: ReadonlyArray<string>;
+  readonly allowMissingLast?: boolean;
+}): Promise<AnchoredStorePath> => {
+  let current = base;
+  for (const [index, segment] of segments.entries()) {
+    const expected = inside({ base: current, leaf: segment });
+    try {
+      const canonical = await realpath(expected);
+      if (canonical !== expected) {
+        throw new ReviewStorePathRejected("outside");
+      }
+      current = canonical;
+    } catch (error: unknown) {
+      if (error instanceof ReviewStorePathRejected) throw error;
+      if (
+        allowMissingLast &&
+        index === segments.length - 1 &&
+        hasCode(error, "ENOENT")
+      ) {
+        return { path: expected, exists: false };
+      }
+      throw new ReviewStorePathRejected("unavailable", error);
+    }
+  }
+  return { path: current, exists: true };
+};
+
+export const anchorReviewStore = async (
+  store: ReviewStore,
+): Promise<AnchoredReviewStore> => {
+  const lexicalPlanDirectory = resolve(store.planDirectory);
+  let planDirectory: string;
+  try {
+    planDirectory = await realpath(store.planDirectory);
+  } catch (error: unknown) {
+    throw new ReviewStorePathRejected("unavailable", error);
+  }
+  const directories = new Map<
+    ReviewStoreDirectoryKey,
+    Promise<AnchoredStorePath>
+  >();
+  const resolveDirectory = (
+    directory: ReviewStoreDirectoryKey,
+  ): Promise<AnchoredStorePath> => {
+    const existing = directories.get(directory);
+    if (existing !== undefined) return existing;
+    const lexicalDirectory = resolve(store[directory]);
+    const step = [lexicalPlanDirectory, planDirectory]
+      .map((base) => ({ base, step: relative(base, lexicalDirectory) }))
+      .find(
+        (candidate) =>
+          !candidate.step.startsWith("..") &&
+          resolve(candidate.base, candidate.step) === lexicalDirectory,
+      )?.step;
+    if (step === undefined) {
+      return Promise.reject(new ReviewStorePathRejected("outside"));
+    }
+    const resolved = resolveAnchoredSegments({
+      base: planDirectory,
+      segments: step === "" ? [] : step.split(sep),
+    });
+    directories.set(directory, resolved);
+    return resolved;
+  };
+  await resolveDirectory("reviewDirectory");
+  return {
+    resolveStore: async () => {
+      const resolvedLocations: Record<string, string> = {};
+      await Promise.all(
+        reviewStoreLocationKeys(store).map(async (location) => {
+          if (isReviewStoreDirectoryKey(location)) {
+            resolvedLocations[location] = (
+              await resolveDirectory(location)
+            ).path;
+            return;
+          }
+          const lexicalLocation = resolve(store[location]);
+          const step = relative(lexicalPlanDirectory, lexicalLocation);
+          if (
+            step.startsWith("..") ||
+            resolve(lexicalPlanDirectory, step) !== lexicalLocation
+          ) {
+            throw new ReviewStorePathRejected("outside");
+          }
+          resolvedLocations[location] = (
+            await resolveAnchoredSegments({
+              base: planDirectory,
+              segments: step === "" ? [] : step.split(sep),
+              allowMissingLast: true,
+            })
+          ).path;
+        }),
+      );
+      return { ...store, ...resolvedLocations };
+    },
+    resolveDirectoryPath: async ({
+      directory,
+      requestId,
+      targetPath,
+      allowMissingRequestDirectory = false,
+    }) => {
+      if (requestId !== undefined && !/^[a-f0-9]{16}$/.test(requestId)) {
+        throw new ReviewStorePathRejected("outside");
+      }
+      const areaPath = await resolveDirectory(directory);
+      if (requestId === undefined) {
+        if (targetPath !== undefined) {
+          throw new ReviewStorePathRejected("outside");
+        }
+        return areaPath;
+      }
+      let targetSegments: ReadonlyArray<string> | undefined;
+      if (targetPath !== undefined) {
+        if (directory !== "requestAttachmentsDirectory") {
+          throw new ReviewStorePathRejected("outside");
+        }
+        const lexicalRequestPath = resolve(store[directory], requestId);
+        const lexicalTargetPath = resolve(targetPath);
+        const step = relative(lexicalRequestPath, lexicalTargetPath);
+        if (
+          step === "" ||
+          step.startsWith("..") ||
+          resolve(lexicalRequestPath, step) !== lexicalTargetPath
+        ) {
+          throw new ReviewStorePathRejected("outside");
+        }
+        targetSegments = step.split(sep);
+      }
+      const requestPath = await resolveAnchoredSegments({
+        base: areaPath.path,
+        segments: [requestId],
+        allowMissingLast: allowMissingRequestDirectory,
+      });
+      if (targetSegments === undefined || !requestPath.exists)
+        return requestPath;
+      return resolveAnchoredSegments({
+        base: requestPath.path,
+        segments: targetSegments,
+      });
+    },
+  };
+};
+
 /** Describes where one plan's review state lives, without creating anything. */
 export const reviewStoreFor = ({
   planPath,
@@ -147,10 +429,13 @@ export const reviewStoreFor = ({
   readonly planPath: string;
   readonly planId: string;
 }): ReviewStore => {
-  const root = join(dirname(resolve(planPath)), ".big-plan");
+  const planDirectory = dirname(resolve(planPath));
+  const root = join(planDirectory, ".big-plan");
   const reviewDirectory = inside({ base: root, leaf: join("review", planId) });
   const agentDirectory = inside({ base: reviewDirectory, leaf: "agent" });
-  return {
+  return canonicalReviewStore({
+    planDirectory,
+    planId,
     root,
     reviewDirectory,
     imagesDirectory: inside({ base: reviewDirectory, leaf: "images" }),
@@ -211,7 +496,7 @@ export const reviewStoreFor = ({
       base: agentDirectory,
       leaf: "agent-heartbeat.json",
     }),
-  };
+  });
 };
 
 const IGNORE_ALL =
@@ -523,12 +808,6 @@ type StoreLockOwner = {
   readonly token: string;
 };
 
-const hasCode = (
-  error: unknown,
-  code: string,
-): error is Error & { readonly code: string } =>
-  error instanceof Error && "code" in error && error.code === code;
-
 const processIsRunning = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
@@ -649,7 +928,16 @@ const clearAbandonedLock = async (lockPath: string): Promise<void> => {
 /** Creates one fully initialized lock generation before publishing it. */
 const acquireStoreLock = async (
   lockPath: string,
+  invalidLockError: () => Error,
 ): Promise<StoreLockOwner | undefined> => {
+  try {
+    const generation = await lstat(lockPath);
+    if (generation.isSymbolicLink() || !generation.isDirectory()) {
+      throw invalidLockError();
+    }
+  } catch (error: unknown) {
+    if (!hasCode(error, "ENOENT")) throw error;
+  }
   const owner = { pid: process.pid, token: randomBytes(16).toString("hex") };
   const candidatePath = `${lockPath}.candidate.${process.pid}.${owner.token}`;
   try {
@@ -664,6 +952,16 @@ const acquireStoreLock = async (
   } catch (error: unknown) {
     await rm(candidatePath, { recursive: true, force: true });
     if (hasCode(error, "EEXIST") || hasCode(error, "ENOTEMPTY")) {
+      const generation = await lstat(lockPath).catch((cause: unknown) => {
+        if (hasCode(cause, "ENOENT")) return undefined;
+        throw cause;
+      });
+      if (
+        generation !== undefined &&
+        (generation.isSymbolicLink() || !generation.isDirectory())
+      ) {
+        throw invalidLockError();
+      }
       await clearAbandonedLock(lockPath);
       return undefined;
     }
@@ -737,14 +1035,16 @@ export const withReviewStoreLock = async <TResult>({
   lockPath,
   change,
   timeoutError,
+  invalidLockError = () => new Error("The review store lock is unavailable"),
 }: {
   readonly lockPath: string;
   readonly change: () => Promise<TResult>;
   readonly timeoutError: () => Error;
+  readonly invalidLockError?: () => Error;
 }): Promise<TResult> => {
   const startedAtMs = Date.now();
   for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
-    const owner = await acquireStoreLock(lockPath);
+    const owner = await acquireStoreLock(lockPath, invalidLockError);
     if (owner === undefined) {
       await waitForLock();
       continue;
@@ -1197,6 +1497,47 @@ export const writeAgentRequestValue = async ({
     }),
     value,
   });
+};
+
+export type AgentRequestDeletionResult =
+  | { readonly attachmentCleanup: "complete" }
+  | {
+      readonly attachmentCleanup: "failed";
+      readonly cleanupError: unknown;
+    };
+
+/**
+ * Removes one request the agent never started, together with the blobs frozen
+ * for it. The request file goes first, so a failed blob cleanup leaves orphaned
+ * bytes rather than a message the reviewer believes they deleted.
+ */
+export const deleteAgentRequestValue = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<AgentRequestDeletionResult> => {
+  const anchoredStore = await anchorReviewStore(store);
+  const requestDirectory = await anchoredStore.resolveDirectoryPath({
+    directory: "agentRequestDirectory",
+  });
+  await rm(exchangePath({ directory: requestDirectory.path, requestId }), {
+    force: true,
+  });
+  try {
+    const attachmentDirectory = await anchoredStore.resolveDirectoryPath({
+      directory: "requestAttachmentsDirectory",
+      requestId,
+      allowMissingRequestDirectory: true,
+    });
+    if (attachmentDirectory.exists) {
+      await rm(attachmentDirectory.path, { recursive: true, force: true });
+    }
+    return { attachmentCleanup: "complete" };
+  } catch (cleanupError: unknown) {
+    return { attachmentCleanup: "failed", cleanupError };
+  }
 };
 
 /** Writes one validated agent response under the request it answers. */

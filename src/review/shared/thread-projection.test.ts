@@ -3,7 +3,9 @@ import type { ReviewComment } from "./comment.js";
 import {
   projectCommentThread,
   projectConversationHistory,
+  projectLatestAgentStatus,
   projectRequestStatus,
+  queuedRequestsAhead,
   requestCommentIds,
   type ThreadRequest,
   type ThreadResponse,
@@ -77,6 +79,7 @@ describe("thread projection", () => {
           {
             requestId: "aaaaaaaaaaaaaaaa",
             seq: 1,
+            stepCode: "agent-note",
             step: "Reading the plan",
             state: "live" as const,
             atMs: NOW,
@@ -166,6 +169,146 @@ describe("thread projection", () => {
     });
   });
 
+  it("should allow editing and deleting a queued follow-up in an answered thread", () => {
+    const queuedReply = request({
+      requestId: "cccccccccccccccc",
+      kind: "reply",
+      commentId: comment.id,
+      commentIds: undefined,
+      createdAt: "2026-08-10T19:03:00Z",
+    });
+    const projection = projectCommentThread({
+      comment,
+      requests: [request(), queuedReply],
+      responses: [response("changed")],
+      progressEvents: [],
+      presence,
+      runtime: "online",
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set<string>(),
+    });
+    expect(projection.latestExchange).toMatchObject({
+      canReviseMessage: true,
+      canDeleteMessage: true,
+    });
+    // The answered comment itself stays history; only its follow-up goes.
+    expect(projection.canDeleteQueued).toBe(false);
+  });
+
+  it("should stop offering edit and delete once the agent picks a message up", () => {
+    const claimedReply = request({
+      requestId: "cccccccccccccccc",
+      kind: "reply",
+      commentId: comment.id,
+      commentIds: undefined,
+      createdAt: "2026-08-10T19:03:00Z",
+      claimedAt: "2026-08-10T19:03:30Z",
+    });
+    expect(
+      projectCommentThread({
+        comment,
+        requests: [request(), claimedReply],
+        responses: [response("changed")],
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set<string>(),
+      }).latestExchange,
+    ).toMatchObject({ canReviseMessage: false, canDeleteMessage: false });
+  });
+
+  it("should keep a canceled message deletable but no longer editable", () => {
+    const canceledReply = request({
+      requestId: "cccccccccccccccc",
+      kind: "reply",
+      commentId: comment.id,
+      commentIds: undefined,
+      createdAt: "2026-08-10T19:03:00Z",
+      canceledAt: "2026-08-10T19:03:30Z",
+    });
+    expect(
+      projectCommentThread({
+        comment,
+        requests: [canceledReply],
+        responses: [],
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set<string>(),
+      }).latestExchange,
+    ).toMatchObject({ canReviseMessage: false, canDeleteMessage: true });
+  });
+
+  it("should never offer message edit or delete on a feedback request", () => {
+    expect(
+      projectCommentThread({
+        comment,
+        requests: [request()],
+        responses: [],
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set<string>(),
+      }).latestExchange,
+    ).toMatchObject({ canReviseMessage: false, canDeleteMessage: false });
+  });
+
+  it("should count only the pending work delivered before one request", () => {
+    const first = request({ requestId: "1111111111111111" });
+    const second = request({ requestId: "2222222222222222" });
+    const third = request({ requestId: "3333333333333333" });
+    const canceled = request({
+      requestId: "4444444444444444",
+      canceledAt: "2026-08-10T19:01:30Z",
+    });
+    expect(
+      queuedRequestsAhead({
+        request: third,
+        requests: [first, canceled, second, third],
+        responses: [{ ...response("changed"), requestId: first.requestId }],
+        cancelPendingRequestIds: new Set<string>(),
+      }),
+    ).toBe(1);
+    expect(
+      queuedRequestsAhead({
+        request: first,
+        requests: [first, second, third],
+        responses: [],
+        cancelPendingRequestIds: new Set<string>(),
+      }),
+    ).toBe(0);
+  });
+
+  it("should tell a queued thread how many messages are ahead of it", () => {
+    const ahead = request({ requestId: "1111111111111111" });
+    const queued = request({
+      requestId: "cccccccccccccccc",
+      kind: "reply",
+      commentId: comment.id,
+      commentIds: undefined,
+      createdAt: "2026-08-10T19:03:00Z",
+    });
+    expect(
+      projectCommentThread({
+        comment,
+        requests: [ahead, queued],
+        responses: [],
+        progressEvents: [],
+        presence: { ...presence, state: "working", requestId: ahead.requestId },
+        runtime: "online",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set<string>(),
+      }).latestStatus,
+    ).toMatchObject({
+      stage: "waiting",
+      label: "Queued, 1 ahead",
+      tone: "neutral",
+    });
+  });
+
   it("should derive one request status from progress and presence", () => {
     expect(
       projectRequestStatus({
@@ -175,6 +318,7 @@ describe("thread projection", () => {
           {
             requestId: "aaaaaaaaaaaaaaaa",
             seq: 1,
+            stepCode: "agent-note",
             step: "Checking the retry state",
             state: "live",
             atMs: NOW,
@@ -189,6 +333,30 @@ describe("thread projection", () => {
     ).toBe("working");
   });
 
+  it("should keep a reviewer queue edit waiting before agent pickup", () => {
+    expect(
+      projectRequestStatus({
+        request: request({ kind: "chat", commentIds: undefined }),
+        response: undefined,
+        progressEvents: [
+          {
+            requestId: "aaaaaaaaaaaaaaaa",
+            seq: 1,
+            stepCode: "queued-message-revised",
+            step: "Queued message edited by reviewer",
+            state: "waiting",
+            atMs: NOW,
+          },
+        ],
+        presence,
+        runtime: "online",
+        surface: "chat",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({ stage: "waiting", tone: "neutral" });
+  });
+
   it("should ignore an invalid claimed timestamp when valid activity exists", () => {
     expect(
       projectRequestStatus({
@@ -198,6 +366,7 @@ describe("thread projection", () => {
           {
             requestId: "aaaaaaaaaaaaaaaa",
             seq: 1,
+            stepCode: "agent-note",
             step: "Checking the retry state",
             state: "live",
             atMs: NOW,
@@ -291,5 +460,76 @@ describe("conversation history", () => {
         createdAt: "2026-08-10T19:02:00Z",
       },
     ]);
+  });
+});
+
+describe("review-wide agent status", () => {
+  const base = {
+    responses: [],
+    presence,
+    runtime: "online" as const,
+    agentConnected: true,
+    nowMs: NOW,
+    cancelPendingRequestIds: new Set<string>(),
+  };
+
+  it("should keep an edited queued message out of the working state", () => {
+    const queued = request({ claimedAt: undefined });
+    expect(
+      projectLatestAgentStatus({
+        ...base,
+        requests: [queued],
+        progressEvents: [
+          {
+            requestId: queued.requestId,
+            seq: 1,
+            stepCode: "queued-message-revised",
+            step: "Queued message edited by reviewer",
+            state: "waiting",
+            atMs: NOW,
+          },
+        ],
+      }),
+    ).toMatchObject({ stage: "waiting", tone: "neutral" });
+  });
+
+  it("should report working once the agent owns the message", () => {
+    const claimed = request({ claimedAt: new Date(NOW).toISOString() });
+    expect(
+      projectLatestAgentStatus({
+        ...base,
+        requests: [claimed],
+        progressEvents: [
+          {
+            requestId: claimed.requestId,
+            seq: 1,
+            stepCode: "request-picked-up",
+            step: "Picked up by the agent",
+            state: "live",
+            atMs: NOW,
+          },
+        ],
+      }).stage,
+    ).toBe("working");
+  });
+
+  it("should ignore a reviewer queue event when timing agent silence", () => {
+    const queued = request({ claimedAt: undefined });
+    expect(
+      projectLatestAgentStatus({
+        ...base,
+        requests: [queued],
+        progressEvents: [
+          {
+            requestId: queued.requestId,
+            seq: 1,
+            stepCode: "queued-message-deleted",
+            step: "Queued message deleted",
+            state: "done",
+            atMs: NOW,
+          },
+        ],
+      }).stage,
+    ).not.toBe("stalled");
   });
 });

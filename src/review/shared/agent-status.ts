@@ -2,7 +2,9 @@
 // It derives presentation facts from runtime input. It stores no state and
 // does not depend on the browser or Node.
 
+import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
+import { agentOwnsRequest } from "./request-ownership.js";
 import type { BrowserConnectionEvent } from "./review-wire.js";
 import { compactDurationLabel } from "./time-label.js";
 
@@ -44,9 +46,11 @@ export type CurrentAgentActivity =
       readonly latestStep: string;
       readonly updatedAtMs: number;
     } & ActivityRequestFacts)
+  // A queue position is ordinary, not a problem, so it stays out of the
+  // warning register the stalled and errored states own.
   | ({
       readonly state: "waiting";
-      readonly tone: "warning";
+      readonly tone: "neutral";
       readonly headline: "Waiting for agent";
       readonly supporting: "Feedback is queued and will start when the agent is available.";
     } & ActivityRequestFacts)
@@ -123,8 +127,7 @@ const meaningfulWork = (
 ): boolean =>
   event.requestId === requestId &&
   (event.state === "live" || event.state === "waiting") &&
-  event.stepCode !== "reply-sent" &&
-  event.stepCode !== "chat-sent";
+  progressStepCodeIsAgentOwned(event.stepCode);
 
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This updates by itself once the agent resumes.";
@@ -296,14 +299,14 @@ export const deriveCurrentAgentActivity = ({
   );
   const latest = meaningful.at(-1);
   if (
-    request.claimedAt === undefined &&
+    !agentOwnsRequest(request) &&
     request.baselineSnapshot === undefined &&
     latest === undefined
   ) {
     return {
       ...facts,
       state: "waiting",
-      tone: "warning",
+      tone: "neutral",
       headline: "Waiting for agent",
       supporting:
         "Feedback is queued and will start when the agent is available.",
@@ -360,6 +363,8 @@ export type AgentStatusInput = {
   readonly agentConnected: boolean;
   readonly pickedUp: boolean;
   readonly sessionBusy?: boolean;
+  /** How many unanswered messages the agent delivers before this one. */
+  readonly queuedAhead?: number;
   readonly surface?: "thread" | "chat";
   readonly lastAgentSignalAtMs?: number;
   readonly failure?: string;
@@ -429,9 +434,12 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     };
   }
   if (!input.pickedUp) {
+    // The position is what makes a queue feel like a queue rather than a
+    // stall, so it replaces the bare label whenever anything is ahead.
+    const ahead = input.queuedAhead ?? 0;
     return {
       stage: "waiting",
-      label: "Waiting",
+      label: ahead > 0 ? `Queued, ${ahead} ahead` : "Waiting",
       headline:
         input.sessionBusy === true
           ? "Waiting - the agent is working on another request"

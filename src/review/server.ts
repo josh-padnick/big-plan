@@ -117,6 +117,7 @@ import {
 } from "./routes-assets.js";
 import {
   cancelPendingAgentRequest,
+  deleteQueuedAgentRequest,
   readAgentSnapshot,
   readProgressEvents,
   sendAgentRequest,
@@ -187,6 +188,11 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
   },
   { method: "GET", path: "/api/agent", handler: readAgentSnapshot },
   { method: "POST", path: "/api/agent-requests", handler: sendAgentRequest },
+  {
+    method: "POST",
+    path: "/api/agent-request-delete",
+    handler: deleteQueuedAgentRequest,
+  },
   {
     method: "POST",
     path: "/api/agent-cancel",
@@ -632,6 +638,15 @@ export const startReviewRuntime = async ({
     }),
     writeGate: createWriteGate({ mutations, stallMs: writeStallMs }),
     activityClock: createActivityClock(idleTimeoutMs),
+    reportDiagnostic: ({ message, error }) => {
+      try {
+        process.stderr.write(
+          `${message} for session ${sessionId}:\n${describeRuntimeFailure({ error, secrets: [token] })}\n`,
+        );
+      } catch {
+        // A diagnostic sink failure must not fail the review request.
+      }
+    },
   };
   const { planRenderer } = context;
 
