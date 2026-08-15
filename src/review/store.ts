@@ -19,10 +19,12 @@ import {
   appendFile,
   chmod,
   mkdir,
+  open,
   rename,
   readdir,
   readFile,
   rm,
+  stat,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -792,10 +794,9 @@ export const reviewStoreGrowth = async ({
 }: {
   readonly store: ReviewStore;
 }): Promise<ReviewStoreGrowth> => {
-  const progressLines = await readFile(store.progressPath, "utf8").then(
-    (raw) => raw.split("\n").filter((line) => line.trim() !== "").length,
-    () => 0,
-  );
+  // Counted through the same cache the read paths use, so asking how large the
+  // log has grown does not itself re-read it every minute.
+  const progressLines = (await readProgressValues(store.progressPath)).length;
   const [agentRequests, agentResponses] = await Promise.all([
     publishedJsonFileNames(store.agentRequestDirectory).then(
       (names) => names.length,
@@ -805,6 +806,28 @@ export const reviewStoreGrowth = async ({
     ),
   ]);
   return { progressLines, agentRequests, agentResponses };
+};
+
+/** Replaces one file's whole contents without ever showing a partial one. */
+const writeFileAtomically = async ({
+  path,
+  contents,
+}: {
+  readonly path: string;
+  readonly contents: string;
+}): Promise<void> => {
+  const temporaryPath = join(
+    dirname(path),
+    `.${basename(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`,
+  );
+  try {
+    await writeFile(temporaryPath, contents, { flag: "wx", mode: FILE_MODE });
+    await chmod(temporaryPath, FILE_MODE);
+    await rename(temporaryPath, path);
+  } catch (error: unknown) {
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
 };
 
 const writeJson = async ({
@@ -1292,6 +1315,120 @@ const asProgressEvent = ({
   };
 };
 
+// The parsed progress log, per file, for this process. The browser polls the
+// progress route about forty times a minute and every appended event used to
+// reparse the whole history under a lock, so the cost of one event grew with
+// the length of the session it belonged to.
+//
+// The log is append-only apart from compaction, which only ever shrinks it, so
+// a file that is longer than what this process parsed has been appended to and
+// only those bytes need parsing. Any other change - a shorter file, a
+// different modification time at the same length - drops the cache and starts
+// over, because the one thing this must never do is answer from a history that
+// is no longer on disk.
+type ProgressLogCache = {
+  readonly sizeBytes: number;
+  readonly mtimeMs: number;
+  /** Bytes ending at the last complete line, which is all that was parsed. */
+  readonly parsedBytes: number;
+  readonly values: ReadonlyArray<unknown>;
+};
+
+const progressLogCaches = new Map<string, ProgressLogCache>();
+
+const parseProgressLines = (raw: string): ReadonlyArray<unknown> => {
+  const values: Array<unknown> = [];
+  for (const line of raw.split("\n")) {
+    if (line.trim() === "") continue;
+    try {
+      values.push(JSON.parse(line));
+    } catch {
+      // A line this process cannot parse is state some other writer left
+      // behind, and it is skipped on every read rather than repaired.
+    }
+  }
+  return values;
+};
+
+/** Reads bytes `[from, to)` so an append costs only the appended bytes. */
+const readAppendedProgressBytes = async ({
+  path,
+  from,
+  to,
+}: {
+  readonly path: string;
+  readonly from: number;
+  readonly to: number;
+}): Promise<Buffer> => {
+  const handle = await open(path, "r");
+  try {
+    const buffer = Buffer.alloc(to - from);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, from);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+};
+
+/** Returns every parsed line of one progress log, reusing what it can. */
+const readProgressValues = async (
+  path: string,
+): Promise<ReadonlyArray<unknown>> => {
+  let info;
+  try {
+    info = await stat(path);
+  } catch {
+    progressLogCaches.delete(path);
+    return [];
+  }
+  const cached = progressLogCaches.get(path);
+  if (
+    cached !== undefined &&
+    cached.sizeBytes === info.size &&
+    cached.mtimeMs === info.mtimeMs
+  ) {
+    return cached.values;
+  }
+  if (cached !== undefined && info.size > cached.sizeBytes) {
+    const appended = await readAppendedProgressBytes({
+      path,
+      from: cached.parsedBytes,
+      to: info.size,
+    });
+    // A reader can arrive between a writer's append and its flush, so only
+    // whole lines are parsed and the rest is left for the next read.
+    const lastBreak = appended.lastIndexOf(0x0a);
+    const complete =
+      lastBreak === -1 ? Buffer.alloc(0) : appended.subarray(0, lastBreak + 1);
+    const values = [
+      ...cached.values,
+      ...parseProgressLines(complete.toString("utf8")),
+    ];
+    progressLogCaches.set(path, {
+      sizeBytes: info.size,
+      mtimeMs: info.mtimeMs,
+      parsedBytes: cached.parsedBytes + complete.length,
+      values,
+    });
+    return values;
+  }
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf8");
+  } catch {
+    progressLogCaches.delete(path);
+    return [];
+  }
+  const values = parseProgressLines(raw);
+  progressLogCaches.set(path, {
+    sizeBytes: info.size,
+    mtimeMs: info.mtimeMs,
+    parsedBytes: raw.lastIndexOf("\n") === -1 ? 0 : Buffer.byteLength(raw),
+    values,
+  });
+  return values;
+};
+
 /**
  * Relays the agent's status channel: line-delimited events, kept only when
  * they belong to the running session and advance its sequence. A foreign or
@@ -1307,25 +1444,10 @@ const readProgressHistory = async ({
   readonly events: ReadonlyArray<ProgressEvent>;
   readonly highestSequence: number;
 }> => {
-  let raw: string;
-  try {
-    raw = await readFile(store.progressPath, "utf8");
-  } catch {
-    return { events: [], highestSequence: 0 };
-  }
   const accepted: Array<ProgressEvent> = [];
   let highest = 0;
-  for (const line of raw.split("\n")) {
-    if (line.trim() === "") {
-      continue;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const event = asProgressEvent({ value: parsed, sessionId });
+  for (const value of await readProgressValues(store.progressPath)) {
+    const event = asProgressEvent({ value, sessionId });
     if (event === undefined || event.seq <= highest) {
       continue;
     }
@@ -1346,6 +1468,20 @@ export const readProgress = async ({
   return history.events.slice(-PROGRESS_EVENT_LIMIT);
 };
 
+/**
+ * The sequence one session's next event takes. Callers hold the progress lock
+ * across this and the append that follows it, so the number they receive is
+ * still theirs when they use it.
+ */
+export const nextProgressSequence = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<number> =>
+  (await readProgressHistory({ store, sessionId })).highestSequence + 1;
+
 /** Appends one checked event for the mailbox mutation owner. */
 export const appendProgressValue = async ({
   store,
@@ -1358,6 +1494,53 @@ export const appendProgressValue = async ({
     mode: FILE_MODE,
   });
   await chmod(store.progressPath, FILE_MODE);
+};
+
+// Past this many lines the log is rewritten. The bound is a multiple of the
+// window a reader sees, so an ordinary session never pays for compaction and a
+// long one pays for it rarely.
+const PROGRESS_COMPACTION_LIMIT = PROGRESS_EVENT_LIMIT * 5;
+
+/**
+ * Rewrites the log as the tail every reader would already have been given:
+ * `readProgress` returns at most the last `PROGRESS_EVENT_LIMIT` events of the
+ * asking session, so keeping that many per session present in the file changes
+ * nothing any reader can observe, and drops what nothing can reach.
+ *
+ * The caller must hold the progress lock, because this replaces the file that
+ * every appender is appending to.
+ */
+export const compactProgressLog = async ({
+  store,
+}: {
+  readonly store: ReviewStore;
+}): Promise<boolean> => {
+  const values = await readProgressValues(store.progressPath);
+  if (values.length <= PROGRESS_COMPACTION_LIMIT) return false;
+  const kept = new Map<string, Array<unknown>>();
+  for (const value of values) {
+    const sessionId =
+      typeof value === "object" &&
+      value !== null &&
+      "sessionId" in value &&
+      typeof value.sessionId === "string"
+        ? value.sessionId
+        : undefined;
+    if (sessionId === undefined) continue;
+    const forSession = kept.get(sessionId) ?? [];
+    forSession.push(value);
+    kept.set(sessionId, forSession.slice(-PROGRESS_EVENT_LIMIT));
+  }
+  const retained = new Set(
+    [...kept.values()].flatMap((forSession) => forSession),
+  );
+  const compacted = values.filter((value) => retained.has(value));
+  await writeFileAtomically({
+    path: store.progressPath,
+    contents: compacted.map((value) => `${JSON.stringify(value)}\n`).join(""),
+  });
+  progressLogCaches.delete(store.progressPath);
+  return true;
 };
 
 /** Writes one checked session value for the authority module. */

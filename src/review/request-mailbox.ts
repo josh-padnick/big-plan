@@ -17,9 +17,10 @@ import type {
 import {
   appendAgentConnectionEvent,
   appendProgressValue,
+  compactProgressLog,
+  nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
-  readProgress,
   withReviewStoreLock,
   writeAgentRequestValue,
   writeAgentResponseValue,
@@ -350,14 +351,20 @@ export const appendProgressEvent = async ({
       "A session id must be 16 hexadecimal characters",
     );
   }
+  // The lock names the file, not the session writing to it. A per-session lock
+  // let two sessions append to one log at once, and it could not make
+  // compaction safe, because compaction replaces the file every appender
+  // shares.
   return withReviewStoreLock({
-    lockPath: join(store.reviewDirectory, `.${event.sessionId}.progress.lock`),
+    lockPath: join(store.reviewDirectory, ".progress.lock"),
     change: async () => {
-      const events = await readProgress({ store, sessionId: event.sessionId });
-      const seq =
-        events.reduce((highest, entry) => Math.max(highest, entry.seq), 0) + 1;
+      const seq = await nextProgressSequence({
+        store,
+        sessionId: event.sessionId,
+      });
       const checked = { ...event, seq };
       await appendProgressValue({ store, event: checked });
+      await compactProgressLog({ store });
       return checked;
     },
     timeoutError: () =>
