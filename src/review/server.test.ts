@@ -31,7 +31,7 @@ import {
 import {
   appendProgressEvent,
   claimAgentRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
 } from "./request-mailbox.js";
 import { materializeReviewImages } from "./plan-assets.js";
 import {
@@ -1682,7 +1682,7 @@ The dashboard shows the retry backlog.
         snapshot: resultSnapshot,
         source: revised,
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
         store: isolated.store,
         response: validateAgentResponseDraft({
           value: {
@@ -1702,6 +1702,7 @@ The dashboard shows the retry backlog.
           currentSnapshot: resultSnapshot,
           now: new Date().toISOString(),
         }),
+        now: new Date().toISOString(),
       });
 
       const reverted = await isolatedCall({
@@ -1781,7 +1782,7 @@ The dashboard shows the retry backlog.
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store: runtime.store,
       response: validateAgentResponseDraft({
         value: {
@@ -1798,9 +1799,10 @@ The dashboard shows the retry backlog.
         commentsById: commentsFromExchange(exchange),
         changedBlocks: new Set(),
         currentSnapshot: request.premiseSnapshot,
+          now: new Date().toISOString(),
+        }),
         now: new Date().toISOString(),
-      }),
-    });
+      });
     const answeredAt = Date.parse(request.createdAt);
     for (let index = 0; index < 400; index += 1) {
       await writeAgentRequest({
@@ -2129,7 +2131,7 @@ describe("review runtime shutdown", () => {
       baselineSnapshot: oldRevision,
       now: "2026-08-10T12:00:01.000Z",
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store: first.store,
       response: validateAgentResponseDraft({
         value: { requestId: oldRequest.requestId, message: "The old answer." },
@@ -2139,6 +2141,7 @@ describe("review runtime shutdown", () => {
         currentSnapshot: oldRevision,
         now: "2026-08-10T12:00:02.000Z",
       }),
+      now: "2026-08-10T12:00:02.000Z",
     });
     await first.close();
 
@@ -2174,7 +2177,7 @@ describe("review runtime shutdown", () => {
       });
       const acceptedSource = `${restartedSource}\nThe agent accepted this revision.\n`;
       await writeFile(planPath, acceptedSource);
-      await publishAgentResponse({
+      await commitRequestTerminal({
         store: restarted.store,
         response: validateAgentResponseDraft({
           value: {
@@ -2187,6 +2190,7 @@ describe("review runtime shutdown", () => {
           currentSnapshot: deriveSnapshotDigest(acceptedSource),
           now: "2026-08-10T12:01:02.000Z",
         }),
+        now: "2026-08-10T12:01:02.000Z",
       });
       await expect(agentState()).resolves.toMatchObject({
         currentSnapshot: deriveSnapshotDigest(acceptedSource),
@@ -2644,7 +2648,7 @@ describe("review runtime queued messages", () => {
     });
     expect(nextPendingAgentRequest(busy)?.requestId).toBe(firstId);
 
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store: queued.store,
       response: validateAgentResponseDraft({
         value: { requestId: firstId, message: "Three attempts, then stop." },
@@ -2654,6 +2658,7 @@ describe("review runtime queued messages", () => {
         currentSnapshot: claimed.premiseSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
 
     expect(nextPendingAgentRequest(await exchangeNow())?.requestId).toBe(

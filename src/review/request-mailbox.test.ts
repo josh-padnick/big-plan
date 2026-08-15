@@ -21,6 +21,7 @@ import {
   deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
+  nextPendingAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
   writeAgentRequest,
@@ -32,7 +33,7 @@ import {
   cancelAgentRequest,
   claimAgentRequest,
   deleteQueuedRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
   recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
   reviseQueuedRequest,
@@ -271,7 +272,11 @@ describe("request mailbox", () => {
 
     try {
       await expect(
-        publishAgentResponse({ store, response }),
+        commitRequestTerminal({
+          store,
+          response,
+          now: "2026-08-10T12:00:02.500Z",
+        }),
       ).rejects.toMatchObject({
         name: "AgentExchangeRejected",
         message: "The request mailbox is unavailable",
@@ -456,7 +461,11 @@ describe("request mailbox", () => {
     });
 
     const results = await Promise.allSettled([
-      publishAgentResponse({ store, response }),
+      commitRequestTerminal({
+        store,
+        response,
+        now: "2026-08-10T12:00:02.500Z",
+      }),
       cancelAgentRequest({
         store,
         requestId: request.requestId,
@@ -472,6 +481,65 @@ describe("request mailbox", () => {
       Number(exchange.requests[0]?.canceledAt !== undefined) +
         Number(exchange.responses.length > 0),
     ).toBe(1);
+  });
+
+  it("should mark a request terminal in the same commit as its response", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Answer this once.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+
+    await commitRequestTerminal({
+      store,
+      response,
+      now: "2026-08-10T12:00:02.500Z",
+    });
+
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests[0]).toMatchObject({
+      answeredAt: "2026-08-10T12:00:02.500Z",
+    });
+    expect(exchange.responses).toHaveLength(1);
+    expect(
+      nextPendingAgentRequest(exchange, {
+        claimedBy: agentA,
+        nowMs: Date.parse("2026-08-10T12:00:03.000Z"),
+      }),
+    ).toBeUndefined();
+    await expect(
+      commitRequestTerminal({
+        store,
+        response,
+        now: "2026-08-10T12:00:04.000Z",
+      }),
+    ).rejects.toThrow(/already answered/);
   });
 
   it("should reject a response until its request is claimed", async () => {
@@ -500,9 +568,13 @@ describe("request mailbox", () => {
       now: "2026-08-10T12:00:02.000Z",
     });
 
-    await expect(publishAgentResponse({ store, response })).rejects.toThrow(
-      /must be claimed/,
-    );
+    await expect(
+      commitRequestTerminal({
+        store,
+        response,
+        now: "2026-08-10T12:00:02.500Z",
+      }),
+    ).rejects.toThrow(/must be claimed/);
   });
 
   it("should replace a malformed stored response after claim", async () => {
@@ -549,7 +621,11 @@ describe("request mailbox", () => {
       now: "2026-08-10T12:00:02.000Z",
     });
 
-    await publishAgentResponse({ store, response });
+    await commitRequestTerminal({
+      store,
+      response,
+      now: "2026-08-10T12:00:02.500Z",
+    });
     await expect(
       readAgentExchange({ store, sessionId, planId }),
     ).resolves.toMatchObject({ responses: [response] });
@@ -699,7 +775,7 @@ describe("request mailbox", () => {
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -718,6 +794,7 @@ describe("request mailbox", () => {
         currentSnapshot: snapshot,
         now: "2026-08-10T12:00:02.000Z",
       }),
+      now: "2026-08-10T12:00:02.500Z",
     });
 
     await expect(

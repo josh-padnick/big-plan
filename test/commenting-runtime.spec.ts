@@ -18,7 +18,7 @@ import {
 import {
   appendProgressEvent,
   claimAgentRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
 } from "../src/review/request-mailbox.js";
 import { diffSnapshots } from "../src/review/snapshot-diff.js";
 import { startReviewRuntime } from "../src/review/server.js";
@@ -437,7 +437,11 @@ test("should pause a nonstandard request behind an explicit warning", async ({
     currentSnapshot: deriveSnapshotDigest(source),
     now: new Date().toISOString(),
   });
-  await publishAgentResponse({ store, response });
+  await commitRequestTerminal({
+    store,
+    response,
+    now: new Date().toISOString(),
+  });
 
   await rail
     .getByRole("button", { name: "Expand thread", exact: true })
@@ -555,7 +559,7 @@ test("should contain working comments when resolved threads expand", async ({
     baselineSnapshot: firstRequest.premiseSnapshot,
     now: new Date().toISOString(),
   });
-  await publishAgentResponse({
+  await commitRequestTerminal({
     store,
     response: validateAgentResponseDraft({
       value: {
@@ -573,6 +577,7 @@ test("should contain working comments when resolved threads expand", async ({
       currentSnapshot: resultSnapshot,
       now: new Date().toISOString(),
     }),
+    now: new Date().toISOString(),
   });
 
   for (let index = 0; index < 6; index += 1) {
@@ -1518,7 +1523,7 @@ test("should restore and submit staged comments through the local review runtime
     baselineSnapshot: request.premiseSnapshot,
     now: new Date().toISOString(),
   });
-  await publishAgentResponse({
+  await commitRequestTerminal({
     store,
     response: validateAgentResponseDraft({
       value: {
@@ -1536,6 +1541,7 @@ test("should restore and submit staged comments through the local review runtime
       currentSnapshot: resultSnapshot,
       now: new Date().toISOString(),
     }),
+    now: new Date().toISOString(),
   });
 
   await expect(kernel).toContainText("Changed");
@@ -3602,7 +3608,7 @@ test("should keep shell interactions wired after an agent revision refreshes the
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -3620,6 +3626,7 @@ test("should keep shell interactions wired after an agent revision refreshes the
         currentSnapshot: resultSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
 
     await test.step("the revision refreshes the article in place", async () => {
@@ -4026,7 +4033,7 @@ Reviewers confirm the output by hand.
         baselineSnapshot: request.premiseSnapshot,
         now: answeredAt,
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -4044,6 +4051,7 @@ Reviewers confirm the output by hand.
           currentSnapshot: revisedSnapshot,
           now: answeredAt,
         }),
+        now: answeredAt,
       });
       await writeFile(session.plan, latestSource, "utf8");
       const revisedAgainAt = new Date(Date.parse(answeredAt) + 1).toISOString();
@@ -4064,7 +4072,7 @@ Reviewers confirm the output by hand.
         baselineSnapshot: revisedSnapshot,
         now: revisedAgainAt,
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -4077,6 +4085,7 @@ Reviewers confirm the output by hand.
           currentSnapshot: latestSnapshot,
           now: revisedAgainAt,
         }),
+        now: revisedAgainAt,
       });
     });
 
@@ -4261,7 +4270,7 @@ The current plan contains no slides.
       baselineSnapshot: request.premiseSnapshot,
       now: answeredAt,
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4279,6 +4288,7 @@ The current plan contains no slides.
         currentSnapshot: revisedSnapshot,
         now: answeredAt,
       }),
+      now: answeredAt,
     });
     await writeFile(session.plan, latestSource, "utf8");
     const revisedAgainAt = new Date(Date.parse(answeredAt) + 1).toISOString();
@@ -4299,7 +4309,7 @@ The current plan contains no slides.
       baselineSnapshot: revisedSnapshot,
       now: revisedAgainAt,
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4312,6 +4322,7 @@ The current plan contains no slides.
         currentSnapshot: latestSnapshot,
         now: revisedAgainAt,
       }),
+      now: revisedAgainAt,
     });
 
     await expect(page.locator("article")).toContainText(
@@ -4499,7 +4510,7 @@ The rollout waits for a green build.
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4512,6 +4523,7 @@ The rollout waits for a green build.
         currentSnapshot: revisedSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
 
     await refreshStarted;
@@ -4682,7 +4694,7 @@ test("should open a digest entry in the slide its section header names", async (
       baselineSnapshot: request.premiseSnapshot,
       now: answeredAt,
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4700,6 +4712,7 @@ test("should open a digest entry in the slide its section header names", async (
         currentSnapshot: revisedSnapshot,
         now: answeredAt,
       }),
+      now: answeredAt,
     });
 
     await expect(page.locator("article")).toContainText(
@@ -4866,7 +4879,7 @@ ${lowerContent}
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4884,6 +4897,7 @@ ${lowerContent}
         currentSnapshot: resultSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
 
     await expect(page.locator("article")).toContainText(
@@ -5045,7 +5059,7 @@ const verification = "first";
       baselineSnapshot: firstRequest.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -5065,6 +5079,7 @@ const verification = "first";
         currentSnapshot: firstSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
     await expect(page.locator("article")).toContainText(
       'const delivery = "revised";',
@@ -5126,7 +5141,7 @@ const verification = "first";
       baselineSnapshot: secondRequest.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -5146,6 +5161,7 @@ const verification = "first";
         currentSnapshot: secondSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
     await expect(page.locator("article")).toContainText(
       'const verification = "revised";',
@@ -5316,7 +5332,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
         baselineSnapshot: request.premiseSnapshot,
         now: answeredAt,
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -5334,6 +5350,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
           currentSnapshot: revisedSnapshot,
           now: answeredAt,
         }),
+        now: answeredAt,
       });
       await expect(page.locator("article")).toContainText("automated checks", {
         timeout: 15_000,
@@ -5383,7 +5400,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
         baselineSnapshot: revisedSnapshot,
         now: revisedAgainAt,
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -5396,6 +5413,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
           currentSnapshot: latestSnapshot,
           now: revisedAgainAt,
         }),
+        now: revisedAgainAt,
       });
       await expect(page.locator("article")).toContainText("signed release", {
         timeout: 15_000,

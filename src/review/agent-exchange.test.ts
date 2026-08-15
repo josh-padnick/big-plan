@@ -24,7 +24,7 @@ import { buildFeedbackPackage } from "./feedback-package.js";
 import {
   cancelAgentRequest,
   claimAgentRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
 } from "./request-mailbox.js";
 import { prepareStore, reviewStoreFor } from "./store.js";
 
@@ -204,7 +204,12 @@ describe("agent exchange response contract", () => {
     expect(
       nextPendingAgentRequest(
         {
-          requests: [request, reply],
+          // The first request carries its own terminal mark. A reader never
+          // infers that from the response beside it.
+          requests: [
+            { ...request, answeredAt: "2026-08-02T12:01:00.000Z" },
+            reply,
+          ],
           responses: [
             {
               version: 2,
@@ -370,7 +375,12 @@ describe("agent exchange filesystem", () => {
       currentSnapshot: deriveSnapshotDigest(after),
       now: "2026-08-02T12:01:00.000Z",
     });
-    await publishAgentResponse({ store, response });
+    const answered = await commitRequestTerminal({
+      store,
+      response,
+      now: "2026-08-02T12:01:01.000Z",
+    });
+    expect(answered).toMatchObject({ answeredAt: "2026-08-02T12:01:01.000Z" });
     expect(
       await readAgentExchange({
         store,
@@ -378,7 +388,7 @@ describe("agent exchange filesystem", () => {
         planId,
       }),
     ).toEqual({
-      requests: [claimed],
+      requests: [answered],
       responses: [response],
     });
   });
@@ -530,7 +540,11 @@ describe("agent exchange filesystem", () => {
       currentSnapshot: claimed.premiseSnapshot,
       now: new Date(startedAt + 402).toISOString(),
     });
-    await publishAgentResponse({ store, response });
+    await commitRequestTerminal({
+      store,
+      response,
+      now: new Date().toISOString(),
+    });
 
     const bounded = await readAgentExchange({ store, sessionId, planId });
     expect(bounded.requests).toHaveLength(401);

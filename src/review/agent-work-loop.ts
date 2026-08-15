@@ -24,7 +24,7 @@ import type { AgentRequest } from "./agent-exchange.js";
 import {
   appendProgressEvent,
   claimAgentRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
 } from "./request-mailbox.js";
 import {
   anchorReviewStore,
@@ -660,7 +660,11 @@ const respond = async ({
     now: new Date().toISOString(),
   });
   try {
-    await publishAgentResponse({ store: session.store, response });
+    await commitRequestTerminal({
+      store: session.store,
+      response,
+      now: new Date().toISOString(),
+    });
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;
     return fail(error.message);

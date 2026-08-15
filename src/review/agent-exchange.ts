@@ -45,6 +45,7 @@ type AgentRequestBase = {
   readonly claimedAt?: string;
   readonly claimedBy?: string;
   readonly claimExpiresAtMs?: number;
+  readonly answeredAt?: string;
   readonly canceledAt?: string;
   readonly attachmentManifest: ReadonlyArray<ReviewImageAttachment>;
   readonly attachments: ReadonlyArray<ReviewImageAttachment>;
@@ -421,8 +422,15 @@ const requestBase = (
     value.claimExpiresAtMs === undefined
       ? undefined
       : epochMilliseconds(value.claimExpiresAtMs, "claimExpiresAtMs");
+  const answeredAt =
+    value.answeredAt === undefined ? undefined : timestamp(value.answeredAt);
   const canceledAt =
     value.canceledAt === undefined ? undefined : timestamp(value.canceledAt);
+  if (answeredAt !== undefined && canceledAt !== undefined) {
+    throw new AgentExchangeRejected(
+      "A request cannot be both answered and canceled",
+    );
+  }
   const claimFields = [
     baselineSnapshot,
     claimedAt,
@@ -455,6 +463,7 @@ const requestBase = (
     ...(baselineSnapshot === undefined
       ? {}
       : { baselineSnapshot, claimedAt, claimedBy, claimExpiresAtMs }),
+    ...(answeredAt === undefined ? {} : { answeredAt }),
     ...(canceledAt === undefined ? {} : { canceledAt }),
     ...requestAttachments,
   };
@@ -888,7 +897,11 @@ const readCompleteAgentExchange = async ({
   const responseRequestIds = new Set<string>();
   const readable = retainedRequests
     .map((request) => request.requestId)
-    .filter((requestId) => answeredRequestIds.has(requestId));
+    .filter(
+      (requestId) =>
+        answeredRequestIds.has(requestId) &&
+        requestById.get(requestId)?.answeredAt !== undefined,
+    );
   for (const value of await readAgentResponseValuesFor({
     store,
     requestIds: readable,
@@ -919,7 +932,9 @@ export const outstandingAgentRequests = (
   snapshot: AgentExchangeSnapshot,
 ): ReadonlyArray<AgentRequest> => {
   const answered = new Set(
-    snapshot.responses.map((response) => response.requestId),
+    snapshot.requests
+      .filter((request) => request.answeredAt !== undefined)
+      .map((request) => request.requestId),
   );
   const cancelPendingRequestIds = new Set<string>();
   return snapshot.requests.filter((request) =>
@@ -930,6 +945,10 @@ export const outstandingAgentRequests = (
     }),
   );
 };
+
+/** True once a request has had its one terminal write. */
+export const requestIsTerminal = (request: AgentRequest): boolean =>
+  request.answeredAt !== undefined || request.canceledAt !== undefined;
 
 /** A source digest shared by request creation, response validation, and polling. */
 export const deriveSnapshotDigest = (source: string): string =>
@@ -1036,22 +1055,10 @@ export const readAgentExchange = async ({
     store,
     sessionId,
     planId,
-    // Cancellation or any response file is the only terminal signal available
-    // before response validation. Every request with neither is retained. An
-    // invalid response inside the window is later ignored; an older one can age
-    // out with terminal history rather than appear outstanding indefinitely.
-    retain: ({ requests, answeredRequestIds }) => {
-      const pending = requests.filter(
-        (request) =>
-          request.canceledAt === undefined &&
-          !answeredRequestIds.has(request.requestId),
-      );
+    retain: ({ requests }) => {
+      const pending = requests.filter((request) => !requestIsTerminal(request));
       const terminal = requests
-        .filter(
-          (request) =>
-            request.canceledAt !== undefined ||
-            answeredRequestIds.has(request.requestId),
-        )
+        .filter((request) => requestIsTerminal(request))
         .slice(-EXCHANGE_LIMIT);
       return new Set(
         [...pending, ...terminal].map((request) => request.requestId),

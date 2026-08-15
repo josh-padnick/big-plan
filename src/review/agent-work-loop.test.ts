@@ -29,7 +29,7 @@ import {
   cancelAgentRequest,
   claimAgentRequest,
   deleteQueuedRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
   reviseQueuedRequest,
 } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
@@ -899,7 +899,11 @@ describe("agent work loop lifecycle", () => {
     const readRequests = vi
       .spyOn(reviewStore, "readAgentRequestValues")
       .mockImplementationOnce(async () => {
-        await publishAgentResponse({ store: review.store, response });
+        await commitRequestTerminal({
+          store: review.store,
+          response,
+          now: "2026-08-12T12:00:03.000Z",
+        });
         return selectedValues;
       });
     try {
@@ -1190,7 +1194,7 @@ describe("agent work loop lifecycle", () => {
         baselineSnapshot: revision,
         now: "2026-08-10T12:00:00.500Z",
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
         store: review.store,
         response: validateAgentResponseDraft({
           value: {
@@ -1209,6 +1213,7 @@ describe("agent work loop lifecycle", () => {
           currentSnapshot: revision,
           now: "2026-08-10T12:00:01.000Z",
         }),
+        now: "2026-08-10T12:00:01.000Z",
       });
       for (let index = 1; index < 400; index += 1) {
         const chat = messageAgentRequest({

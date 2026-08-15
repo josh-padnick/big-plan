@@ -38,7 +38,7 @@ const {
   writeAgentRequest,
 } = await import("./agent-exchange.js");
 const { buildFeedbackPackage } = await import("./feedback-package.js");
-const { claimAgentRequest, publishAgentResponse } =
+const { claimAgentRequest, commitRequestTerminal } =
   await import("./request-mailbox.js");
 
 const SESSION = "a".repeat(16);
@@ -118,6 +118,7 @@ const answer = async ({
   const claimed = await claimAgentRequest({
     store,
     requestId: id,
+    claimedBy: SESSION,
     baselineSnapshot: SNAPSHOT,
     now: new Date(1_800_000_500_000).toISOString(),
   });
@@ -126,7 +127,7 @@ const answer = async ({
     sessionId: SESSION,
     planId: PLAN_ID,
   });
-  await publishAgentResponse({
+  await commitRequestTerminal({
     store,
     response: validateAgentResponseDraft({
       value: {
@@ -141,6 +142,7 @@ const answer = async ({
       currentSnapshot: SNAPSHOT,
       now: new Date(1_800_000_600_000).toISOString(),
     }),
+    now: new Date(1_800_000_600_000).toISOString(),
   });
 };
 

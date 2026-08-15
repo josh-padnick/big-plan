@@ -59,7 +59,7 @@ import {
 } from "./agent-exchange.js";
 import {
   claimAgentRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
   recordAgentConnectionState,
 } from "./request-mailbox.js";
 import {
@@ -498,7 +498,7 @@ export const startReviewRuntime = async ({
       baselineSnapshot: premiseSnapshot,
       now: createdAt,
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -526,6 +526,7 @@ export const startReviewRuntime = async ({
         currentSnapshot: initialSnapshot,
         now: createdAt,
       }),
+      now: createdAt,
     });
     const historicalSource = `${diffPreviewSource.trimEnd()}\n\n## Retired experiment\n\nThis temporary policy is removed by the next revision.\n`;
     const historicalSnapshot = deriveSnapshotDigest(historicalSource);
@@ -551,7 +552,7 @@ export const startReviewRuntime = async ({
       baselineSnapshot: premiseSnapshot,
       now: new Date(Date.parse(createdAt) + 1).toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -565,6 +566,7 @@ export const startReviewRuntime = async ({
         currentSnapshot: historicalSnapshot,
         now: new Date(Date.parse(createdAt) + 1).toISOString(),
       }),
+      now: new Date(Date.parse(createdAt) + 1).toISOString(),
     });
     const chatRequest = messageAgentRequest({
       kind: "chat",
@@ -583,7 +585,7 @@ export const startReviewRuntime = async ({
       baselineSnapshot: premiseSnapshot,
       now: new Date(Date.parse(createdAt) + 2).toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -597,6 +599,7 @@ export const startReviewRuntime = async ({
         currentSnapshot: initialSnapshot,
         now: new Date(Date.parse(createdAt) + 2).toISOString(),
       }),
+      now: new Date(Date.parse(createdAt) + 2).toISOString(),
     });
     if (previewBlock !== undefined) {
       await writeComments({

@@ -6,7 +6,6 @@ import {
   AgentExchangeRejected,
   outstandingAgentRequests,
   readAgentCommentHistory,
-  readValidatedAgentResponse,
   validateAgentRequest,
 } from "./agent-exchange.js";
 import type {
@@ -224,12 +223,7 @@ export const claimAgentRequest = async ({
           "The request was canceled by the reviewer",
         );
       }
-      if (
-        (await readValidatedAgentResponse({
-          store: lockedStore,
-          request,
-        })) !== undefined
-      ) {
+      if (request.answeredAt !== undefined) {
         throw new AgentExchangeRejected(
           "The agent has already answered this request",
         );
@@ -308,12 +302,7 @@ export const cancelAgentRequest = async ({
         requestId,
       });
       if (request.canceledAt !== undefined) return request;
-      if (
-        (await readValidatedAgentResponse({
-          store: lockedStore,
-          request,
-        })) !== undefined
-      ) {
+      if (request.answeredAt !== undefined) {
         throw new AgentExchangeRejected(
           "The agent has already answered this request",
         );
@@ -328,14 +317,16 @@ export const cancelAgentRequest = async ({
     },
   });
 
-/** Publishes one response only while its request remains answerable. */
-export const publishAgentResponse = async ({
+/** Answers one request and marks it terminal as a single commit. */
+export const commitRequestTerminal = async ({
   store,
   response,
+  now,
 }: {
   readonly store: ReviewStore;
   readonly response: AgentResponse;
-}): Promise<void> =>
+  readonly now: string;
+}): Promise<AgentRequest> =>
   withRequestLock({
     store,
     requestId: response.requestId,
@@ -362,21 +353,23 @@ export const publishAgentResponse = async ({
           "The agent response does not match its request",
         );
       }
-      if (
-        (await readValidatedAgentResponse({
-          store: lockedStore,
-          request,
-        })) !== undefined
-      ) {
+      if (request.answeredAt !== undefined) {
         throw new AgentExchangeRejected(
           "The agent has already answered this request",
         );
       }
+      const answered = validateAgentRequest({ ...request, answeredAt: now });
       await writeAgentResponseValue({
         store: lockedStore,
         requestId: response.requestId,
         value: response,
       });
+      await writeAgentRequestValue({
+        store: lockedStore,
+        requestId: response.requestId,
+        value: answered,
+      });
+      return answered;
     },
   });
 
@@ -410,7 +403,7 @@ const readQueuedMessage = async ({
   if (agentOwnsRequest(request)) {
     throw new AgentExchangeRejected(AGENT_STARTED);
   }
-  if ((await readValidatedAgentResponse({ store, request })) !== undefined) {
+  if (request.answeredAt !== undefined) {
     throw new AgentExchangeRejected(
       "The agent has already answered this request",
     );
