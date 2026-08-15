@@ -304,21 +304,27 @@ export const resolveReviewRecoveryConflict = ({
   };
 };
 
-export const advanceReviewRecoveryBase = ({
+export const reviewRecoveryBaseAfterConflictAnswers = ({
   base,
   runtime,
-  conflict,
+  answeredConflicts,
+  remainingConflicts,
 }: {
   readonly base: ReviewRecoveryBase;
   readonly runtime: ReviewRecoveryState;
-  readonly conflict: ReviewRecoveryConflict;
+  readonly answeredConflicts: ReadonlyArray<ReviewRecoveryConflict>;
+  readonly remainingConflicts: ReadonlyArray<ReviewRecoveryConflict>;
 }): ReviewRecoveryBase => {
+  if (remainingConflicts.length === 0) return reviewRecoveryBase(runtime);
   const draftBodies = new Map(base.draftBodies);
-  const runtimeDraft = runtime.drafts.find(
-    (draft) => draft.id === conflict.commentId,
+  const runtimeDrafts = new Map(
+    runtime.drafts.map((draft) => [draft.id, draft.body]),
   );
-  if (runtimeDraft === undefined) draftBodies.delete(conflict.commentId);
-  else draftBodies.set(conflict.commentId, runtimeDraft.body);
+  for (const conflict of answeredConflicts) {
+    const runtimeBody = runtimeDrafts.get(conflict.commentId);
+    if (runtimeBody === undefined) draftBodies.delete(conflict.commentId);
+    else draftBodies.set(conflict.commentId, runtimeBody);
+  }
   return {
     draftBodies,
     resolvedCommentIds: new Set(runtime.resolvedCommentIds),

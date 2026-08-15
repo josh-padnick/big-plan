@@ -152,12 +152,12 @@ import {
 } from "./review-runtime-request.js";
 import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import {
-  advanceReviewRecoveryBase,
   mergeLiveReviewRecovery,
   refreshReviewRecoveryConflicts,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
   reviewRecoveryBase,
+  reviewRecoveryBaseAfterConflictAnswers,
 } from "./review-recovery-merge.js";
 import type {
   ReviewRecoveryBase,
@@ -4377,10 +4377,13 @@ export const ReviewController = () => {
             conflict,
             keep: "runtime",
           });
-          recoveryBaseRef.current = advanceReviewRecoveryBase({
+        }
+        if (refreshed.settledConflicts.length > 0) {
+          recoveryBaseRef.current = reviewRecoveryBaseAfterConflictAnswers({
             base: recoveryBaseRef.current,
             runtime: conflictRuntimeState,
-            conflict,
+            answeredConflicts: refreshed.settledConflicts,
+            remainingConflicts: refreshed.conflicts,
           });
         }
       }
@@ -5461,10 +5464,11 @@ export const ReviewController = () => {
           : {}),
       });
       applyReviewState(next);
-      recoveryBaseRef.current = advanceReviewRecoveryBase({
+      recoveryBaseRef.current = reviewRecoveryBaseAfterConflictAnswers({
         base: recoveryBaseRef.current,
         runtime: conflictRuntimeState,
-        conflict,
+        answeredConflicts: [conflict],
+        remainingConflicts: remaining,
       });
     }
     recoveryConflictsRef.current = remaining;

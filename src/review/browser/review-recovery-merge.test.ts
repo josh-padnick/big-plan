@@ -6,6 +6,7 @@ import {
   repliesForSentComments,
   resolveReviewRecoveryConflict,
   reviewRecoveryBase,
+  reviewRecoveryBaseAfterConflictAnswers,
 } from "./review-recovery-merge.js";
 
 const comment = (id: string, body: string): ReviewComment => ({
@@ -43,6 +44,93 @@ describe("live review recovery merge", () => {
     ]);
     expect(merged.state.drafts.map((draft) => draft.body)).toEqual([
       "typed here",
+    ]);
+  });
+
+  it("should not mistake an adopted sibling runtime change for a local edit", () => {
+    const base = reviewRecoveryBase(
+      state([comment("x", "agreed x"), comment("y", "agreed y")]),
+    );
+    const runtime = state([
+      comment("x", "runtime x"),
+      comment("y", "runtime y"),
+    ]);
+    const merged = mergeLiveReviewRecovery({
+      base,
+      local: state([comment("x", "agreed x"), comment("y", "local y")]),
+      runtime,
+    });
+    const conflict = merged.conflicts[0];
+    if (conflict === undefined) throw new Error("expected one conflict");
+    const afterAnswer = resolveReviewRecoveryConflict({
+      state: merged.state,
+      runtime,
+      conflict,
+      keep: "local",
+    });
+    const baseAfterAnswer = reviewRecoveryBaseAfterConflictAnswers({
+      base,
+      runtime,
+      answeredConflicts: [conflict],
+      remainingConflicts: [],
+    });
+
+    const reconciled = mergeLiveReviewRecovery({
+      base: baseAfterAnswer,
+      local: afterAnswer,
+      runtime: state([
+        comment("x", "later runtime x"),
+        comment("y", "runtime y"),
+      ]),
+    });
+
+    expect(reconciled.conflicts).toEqual([]);
+    expect(reconciled.state.drafts).toEqual([
+      comment("x", "later runtime x"),
+      comment("y", "local y"),
+    ]);
+  });
+
+  it("should preserve an answer while another conflict remains", () => {
+    const base = reviewRecoveryBase(
+      state([comment("x", "agreed x"), comment("y", "agreed y")]),
+    );
+    const runtime = state([
+      comment("x", "runtime x"),
+      comment("y", "runtime y"),
+    ]);
+    const merged = mergeLiveReviewRecovery({
+      base,
+      local: state([comment("x", "local x"), comment("y", "local y")]),
+      runtime,
+    });
+    const [answered, remaining] = merged.conflicts;
+    if (answered === undefined || remaining === undefined) {
+      throw new Error("expected two conflicts");
+    }
+    const afterAnswer = resolveReviewRecoveryConflict({
+      state: merged.state,
+      runtime,
+      conflict: answered,
+      keep: "local",
+    });
+    const baseAfterAnswer = reviewRecoveryBaseAfterConflictAnswers({
+      base,
+      runtime,
+      answeredConflicts: [answered],
+      remainingConflicts: [remaining],
+    });
+
+    const recovered = mergeLiveReviewRecovery({
+      base: baseAfterAnswer,
+      local: afterAnswer,
+      runtime,
+    });
+
+    expect(recovered.conflicts).toEqual([remaining]);
+    expect(recovered.state.drafts).toEqual([
+      comment("x", "local x"),
+      comment("y", "local y"),
     ]);
   });
 
