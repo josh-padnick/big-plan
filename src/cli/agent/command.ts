@@ -30,6 +30,7 @@ const executablePath = (): string =>
   resolve(process.argv[1] ?? "bin/big-plan.mjs");
 
 const RESERVED_ACTIONS = new Set(["next", "note", "respond"]);
+const AGENT_TOKEN = /^[a-f0-9]{16}$/;
 
 // The connector's own report of which model is running it, e.g. "Grok 4.6".
 // Read once per process so the reviewer sees a name only when the launching
@@ -49,10 +50,16 @@ const connectorModelName = (): string | undefined => {
 const takeAgentToken = (
   args: ReadonlyArray<string>,
 ): { readonly rest: ReadonlyArray<string>; readonly agentToken?: string } => {
-  const flag = args.indexOf("--agent");
-  if (flag === -1) return { rest: args };
+  const flags = args.flatMap((argument, index) =>
+    argument === "--agent" ? [index] : [],
+  );
+  if (flags.length === 0) return { rest: args };
+  if (flags.length !== 1) return invalidArguments();
+  const flag = flags[0] ?? -1;
   const agentToken = args[flag + 1];
-  if (agentToken === undefined) return invalidArguments();
+  if (agentToken === undefined || !AGENT_TOKEN.test(agentToken)) {
+    return invalidArguments();
+  }
   return {
     rest: [...args.slice(0, flag), ...args.slice(flag + 2)],
     agentToken,
@@ -64,7 +71,11 @@ const parseAction = (
   args: ReadonlyArray<string>,
   agentToken: string | undefined,
 ): AgentWorkLoopAction => {
-  if (args.length === 1 && !RESERVED_ACTIONS.has(args[0] ?? "")) {
+  if (
+    args.length === 1 &&
+    agentToken === undefined &&
+    !RESERVED_ACTIONS.has(args[0] ?? "")
+  ) {
     return {
       kind: "prompt",
       planPath: args[0] ?? "",
@@ -111,10 +122,11 @@ const parseAction = (
 export const agentCommand = async (
   args: ReadonlyArray<string>,
 ): Promise<Record<string, unknown>> => {
-  const { rest, agentToken } = takeAgentToken(args);
   try {
+    const { rest, agentToken } = takeAgentToken(args);
     return await runAgentWorkLoopAction(parseAction(rest, agentToken));
   } catch (error: unknown) {
+    if (error instanceof AxiError) throw error;
     if (!(error instanceof AgentWorkLoopRejected)) throw error;
     throw new AxiError(
       error.message,

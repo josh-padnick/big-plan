@@ -51,6 +51,74 @@ describe("agent command adapter", () => {
       agentCommand(["note", "plan.mdx", "Reading the request", "--agent"]),
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
   });
+
+  it.each([
+    { label: "a missing value", tail: ["--agent"] },
+    { label: "another flag as its value", tail: ["--agent", "--wait"] },
+    { label: "a malformed value", tail: ["--agent", "not-a-token"] },
+    {
+      label: "a repeated flag",
+      tail: ["--agent", "aaaaaaaaaaaaaaaa", "--agent", "bbbbbbbbbbbbbbbb"],
+    },
+  ])(
+    "should reject --agent with $label without claiming work",
+    async ({ tail }) => {
+      const directory = await mkdtemp(
+        join(tmpdir(), "big-plan-cli-agent-token-"),
+      );
+      const planPath = join(directory, "plan.mdx");
+      const source = "# Plan\n\nAnswer this question.\n";
+      try {
+        await writeFile(planPath, source);
+        const review = await startReviewRuntime({ planPath });
+        try {
+          await writeAgentRequest({
+            store: review.store,
+            request: messageAgentRequest({
+              kind: "chat",
+              requestId: "dddddddddddddddd",
+              sessionId: review.sessionId,
+              planId: review.planId,
+              premiseSnapshot: deriveSnapshotDigest(source),
+              createdAt: "2026-08-12T12:00:00.000Z",
+              body: "What should we prioritize?",
+            }),
+          });
+          const outcome = await agentCommand(["next", planPath, ...tail]).then(
+            () => ({ status: "fulfilled" as const, code: undefined }),
+            (error: unknown) => ({
+              status: "rejected" as const,
+              code:
+                typeof error === "object" &&
+                error !== null &&
+                "code" in error &&
+                typeof error.code === "string"
+                  ? error.code
+                  : undefined,
+            }),
+          );
+          const exchange = await readAgentExchange({
+            store: review.store,
+            sessionId: review.sessionId,
+            planId: review.planId,
+          });
+
+          expect({
+            ...outcome,
+            claimedBy: exchange.requests[0]?.claimedBy,
+          }).toEqual({
+            status: "rejected",
+            code: "INVALID_INPUT",
+            claimedBy: undefined,
+          });
+        } finally {
+          await review.close();
+        }
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 describe("agent command connector model identity", () => {
