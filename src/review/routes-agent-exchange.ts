@@ -16,7 +16,12 @@ import {
   readAgentExchange,
   writeAgentRequest,
 } from "./agent-exchange.js";
-import { appendProgressEvent, cancelAgentRequest } from "./request-mailbox.js";
+import {
+  appendProgressEvent,
+  cancelAgentRequest,
+  deleteQueuedRequest,
+  reviseQueuedRequest,
+} from "./request-mailbox.js";
 import {
   freezeRequestAttachments,
   randomId,
@@ -97,6 +102,54 @@ export const sendAgentRequest = async (
     typeof payload.body === "string" ? payload.body.trim() : "";
   if (messageBody === "") {
     return refusal({ status: 400, reason: "An agent request needs a body" });
+  }
+  // A requestId turns the same submission into an edit of the message already
+  // waiting, so an edit rides the validation of the send it replaces and can
+  // never create a second message.
+  if (payload.requestId !== undefined) {
+    const requestId = payload.requestId;
+    if (typeof requestId !== "string") {
+      return refusal({ status: 400, reason: "A request id is required" });
+    }
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    const existing = exchange.requests.find(
+      (candidate) => candidate.requestId === requestId,
+    );
+    if (existing === undefined) {
+      return refusal({ status: 404, reason: "No such agent request" });
+    }
+    if (existing.kind !== kind) {
+      return refusal({
+        status: 409,
+        reason: "A revision cannot change the kind of a message",
+      });
+    }
+    let revised;
+    try {
+      revised = await reviseQueuedRequest({
+        store,
+        requestId,
+        body: messageBody,
+      });
+    } catch (error: unknown) {
+      if (!(error instanceof AgentExchangeRejected)) throw error;
+      return refusal({ status: 409, reason: error.message });
+    }
+    await appendProgressEvent({
+      store,
+      event: {
+        sessionId,
+        requestId,
+        atMs: Date.now(),
+        stepCode: "queued-message-revised",
+        step: "Queued message edited by reviewer",
+        state: "waiting",
+      },
+    });
+    return jsonResponse({
+      status: 200,
+      value: { requestId, kind: revised.kind, request: revised },
+    });
   }
   const source = await readFile(resolvedPlanPath, "utf8");
   const premiseSnapshot = deriveSnapshotDigest(source);
@@ -180,6 +233,44 @@ export const sendAgentRequest = async (
       request: agentRequest,
     },
   });
+};
+
+/** Deletes a request the agent has not started. */
+export const deleteQueuedAgentRequest = async (
+  context: ReviewRouteContext,
+  { body }: ReviewRouteRequest,
+): Promise<ReviewRouteResponse> => {
+  const { store, planId, sessionId } = context;
+  const payload = payloadOf(body);
+  const requestId = payload.requestId;
+  if (typeof requestId !== "string") {
+    return refusal({ status: 400, reason: "A request id is required" });
+  }
+  const exchange = await readAgentExchange({ store, sessionId, planId });
+  if (
+    !exchange.requests.some((candidate) => candidate.requestId === requestId)
+  ) {
+    return refusal({ status: 404, reason: "No such agent request" });
+  }
+  try {
+    await deleteQueuedRequest({ store, requestId });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
+  // The request is gone, so the event belongs to the session rather than to a
+  // requestId no reader can resolve.
+  await appendProgressEvent({
+    store,
+    event: {
+      sessionId,
+      atMs: Date.now(),
+      stepCode: "queued-message-deleted",
+      step: "Queued message deleted",
+      state: "done",
+    },
+  });
+  return jsonResponse({ status: 200, value: { requestId } });
 };
 
 /** Withdraws a request the agent has not answered yet. */

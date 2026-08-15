@@ -6,6 +6,8 @@ export const PROGRESS_STEP_CODES = [
   "queued-comment-deleted",
   "reply-sent",
   "chat-sent",
+  "queued-message-revised",
+  "queued-message-deleted",
   "request-canceled",
   "request-picked-up",
   "response-ready",
