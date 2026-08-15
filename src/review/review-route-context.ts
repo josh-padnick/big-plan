@@ -50,6 +50,15 @@ export type ReviewRouteRequest = {
   readonly binaryBody?: Uint8Array;
 };
 
+/**
+ * Reads a mutating request body as a record without trusting its shape. Every
+ * field is still validated by the route; this only says the body was an object.
+ */
+export const payloadOf = (body: unknown): Readonly<Record<string, unknown>> =>
+  typeof body === "object" && body !== null
+    ? (body as Readonly<Record<string, unknown>>)
+    : {};
+
 export type ReviewRouteHandler = (
   context: ReviewRouteContext,
   request: ReviewRouteRequest,

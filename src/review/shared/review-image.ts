@@ -74,6 +74,24 @@ export const extractReviewImageReferences = (
     alt: match[1] ?? "Screenshot",
   }));
 
+/**
+ * Collects the distinct images one outgoing message carries. The same picture
+ * pasted twice is one attachment, so the message limits count what is stored
+ * rather than how often the author referred to it.
+ */
+export const imageReferencesForBodies = (
+  bodies: ReadonlyArray<string>,
+): ReadonlyArray<{ readonly id: ReviewImageId; readonly alt: string }> => {
+  const seen = new Set<string>();
+  return bodies
+    .flatMap((body) => extractReviewImageReferences(body))
+    .filter((reference) => {
+      if (seen.has(reference.id)) return false;
+      seen.add(reference.id);
+      return true;
+    });
+};
+
 /** Returns the supported image format identified by its magic bytes. */
 export const sniffReviewImage = (
   bytes: Uint8Array,

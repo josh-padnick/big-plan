@@ -20,7 +20,7 @@ You cannot change diff semantics without changing thread semantics, so both live
 The session runtime is a different subsystem from either.
 `src/review/server.ts`, `src/review/review-route-context.ts`, the sibling `src/review/routes-*.ts` modules, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, and `src/review/agent-work-loop.ts` render and serve the document, authorize requests, and keep the browser, server, and agent connected.
 Those are Session Reliability responsibilities, distinct from thread and diff semantics.
-`src/review/server.ts` owns request security, dispatch, and the mutating handlers that remain inline; `src/review/review-route-context.ts` owns the named state shared across handlers, and the sibling route modules own the extracted session, review-state, agent-exchange, snapshot-diff, and asset handlers.
+`src/review/server.ts` owns request security, the route allow-list, dispatch, and the runtime lifecycle; `src/review/review-route-context.ts` owns the named state shared across handlers, and the sibling route modules own every API and asset route handler, grouped as session, review-state, agent-exchange, snapshot-diff, and assets.
 These runtime-boundary modules delegate semantic decisions to their owning subsystems rather than define them at the delivery boundary.
 Session Reliability's own failure modes are lifecycle and atomicity: disconnects, hangs, and lost or double-processed messages, not conversation or diff correctness.
 
