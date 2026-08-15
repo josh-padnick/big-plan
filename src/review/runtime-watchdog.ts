@@ -2,7 +2,7 @@
 // running. A review session that stops answering writes while it keeps
 // answering reads (BIG-44) looks alive from every angle a reviewer can see, so
 // the runtime has to name the stall itself: which mutation is stuck, how long
-// it has been stuck, and how large the append-only review state has grown.
+// it has been stuck, and how much persistent review state is currently retained.
 //
 // Every decision here is pure and clock-injected. The runtime supplies the
 // clock and the I/O; the CLI owns writing the result to stderr.

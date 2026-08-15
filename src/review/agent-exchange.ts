@@ -761,7 +761,7 @@ const readAcceptedAgentRequests = async ({
 
 /**
  * Reads validated history, reading only the response files the caller will
- * keep. Which requests have an answer at all comes from the response directory
+ * keep. Which requests have a response file comes from the response directory
  * listing, so choosing the window costs one listing rather than the reads it
  * exists to avoid.
  *
@@ -948,9 +948,10 @@ export const readAgentExchange = async ({
     store,
     sessionId,
     planId,
-    // Terminality for windowing comes from cancellation state and the response
-    // directory, before any response is read. Pending requests remain unbounded
-    // while only the newest terminal requests reach the snapshot.
+    // Cancellation or any response file is the only terminal signal available
+    // before response validation. Every request with neither is retained. An
+    // invalid response inside the window is later ignored; an older one can age
+    // out with terminal history rather than appear outstanding indefinitely.
     retain: ({ requests, answeredRequestIds }) => {
       const pending = requests.filter(
         (request) =>

@@ -769,7 +769,7 @@ export const withReviewStoreLock = async <TResult>({
   });
 };
 
-/** How much append-only state one review session has accumulated. */
+/** How much persistent state one review session currently retains. */
 export type ReviewStoreGrowth = {
   readonly progressLines: number;
   readonly agentRequests: number;
@@ -784,18 +784,18 @@ const publishedJsonFileNames = async (
     .sort();
 
 /**
- * Counts the state that only ever grows during a session. Both the progress
- * log and the agent exchange directories are re-read in full by request paths
- * the browser polls, so their size is what turns a long session slow; a
- * suspected long-session stall needs these as numbers, not as a hypothesis.
+ * Counts persistent review state for long-session diagnostics. The progress
+ * log is compacted, while agent exchange files continue to accumulate, so a
+ * suspected long-session stall needs the current retained sizes as numbers,
+ * not as a hypothesis.
  */
 export const reviewStoreGrowth = async ({
   store,
 }: {
   readonly store: ReviewStore;
 }): Promise<ReviewStoreGrowth> => {
-  // Counted through the same cache the read paths use, so asking how large the
-  // log has grown does not itself re-read it every minute.
+  // Counted through the same cache the read paths use, so asking how much of
+  // the log remains does not itself re-read it every minute.
   const progressLines = (await readProgressValues(store.progressPath)).length;
   const [agentRequests, agentResponses] = await Promise.all([
     publishedJsonFileNames(store.agentRequestDirectory).then(

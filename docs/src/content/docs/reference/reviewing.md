@@ -31,7 +31,7 @@ Already persisted review data remains available, and a newly staged comment stay
 Keep the terminal running the review open when the page stops answering.
 The runtime gives up on waiting for a write that has run for 30 seconds, reports it once with its route and age, and lets the next write run.
 The unfinished work is not cancelled and may still hold the review store's lock, so later writes are answered promptly with the same refusal rather than served.
-It also reports progress-history and agent-exchange counts as append-only state crosses each 1,000-entry milestone.
+It also reports current progress-history and agent-exchange counts when retained state crosses each 1,000-entry milestone.
 Request failures that reach the runtime's generic error boundary leave their safe error type and stack in that terminal while keeping the reviewer-facing message and sensitive details out of the log.
 
 Before stopping an unresponsive runtime on macOS or Linux, ask it for an immediate diagnostic dump:
