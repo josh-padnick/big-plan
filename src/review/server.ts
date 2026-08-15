@@ -1043,6 +1043,10 @@ export const startReviewRuntime = async ({
             context.activityClock.touch();
             return;
           }
+          // The presence read awaits filesystem I/O, so a page poll can touch
+          // the clock during it; confirm expiry again before closing.
+          if (closed || context.activityClock.idleForMs() < idleTimeoutMs)
+            return;
           const minutes = idleTimeoutMs / 60_000;
           const duration = Number.isInteger(minutes)
             ? `${minutes} minute${minutes === 1 ? "" : "s"}`
