@@ -47,6 +47,8 @@ import type {
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
 
+export class AgentClaimContended extends AgentExchangeRejected {}
+
 /** Runs one request change while the request file is locked. */
 const withRequestLock = async <TResult>({
   store,
@@ -234,7 +236,7 @@ export const claimAgentRequest = async ({
       }
       await verifyBeforeClaim?.(request);
       if (claimIsHeldByAnother({ request, claimedBy, nowMs })) {
-        throw new AgentExchangeRejected(
+        throw new AgentClaimContended(
           "Another agent session is working on this request",
         );
       }

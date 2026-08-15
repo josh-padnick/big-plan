@@ -2,8 +2,17 @@
 // threads. The browser and coding-agent loop consume this view instead of
 // joining requests, responses, outcomes, progress, and comments themselves.
 
-import { deriveAgentStatus, type AgentStatus } from "./agent-status.js";
-import { claimIsLive, type ClaimedRequest } from "./agent-claim.js";
+import {
+  deriveAgentStatus,
+  selectActiveAgentRequest,
+  selectPendingAgentRequest,
+  type AgentStatus,
+} from "./agent-status.js";
+import {
+  claimIsLive,
+  claimSignalAtMs,
+  type ClaimedRequest,
+} from "./agent-claim.js";
 import {
   requestIsTerminal,
   type TerminalAgentRequest,
@@ -252,44 +261,41 @@ export const projectLatestAgentStatus = ({
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
 }): AgentStatus => {
-  const request = requests.at(-1);
-  const response = responses.find(
-    (candidate) => candidate.requestId === request?.requestId,
-  );
-  const activity =
-    request === undefined
-      ? []
-      : projectRequestActivity({ request, progressEvents });
-  const failure = [...activity]
-    .reverse()
-    .find((event) => event.state === "failed")?.detail;
-  const claimedAtMs =
-    request?.claimedAt === undefined ? 0 : Date.parse(request.claimedAt);
-  const lastAgentSignalAtMs = Math.max(
-    0,
-    ...activity.map((event) => event.atMs ?? 0),
-    Number.isNaN(claimedAtMs) ? 0 : claimedAtMs,
-    presence.requestId === request?.requestId ? (presence.updatedAtMs ?? 0) : 0,
-  );
-  return deriveAgentStatus({
+  const activeRequest = selectActiveAgentRequest({
+    requests,
+    cancelPendingRequestIds,
+    now: nowMs,
+  });
+  const request =
+    selectPendingAgentRequest({
+      requests,
+      cancelPendingRequestIds,
+      now: nowMs,
+    }) ?? requests.at(-1);
+  if (request === undefined) {
+    return deriveAgentStatus({
+      runtime,
+      request: "none",
+      agentConnected,
+      pickedUp: false,
+      nowMs,
+    });
+  }
+  return projectRequestStatus({
+    request,
+    progressEvents,
+    presence: { ...presence, connected: agentConnected },
     runtime,
-    request:
-      request === undefined
-        ? "none"
-        : response === undefined &&
-            !requestIsCanceled({
-              request,
-              pendingRequestIds: cancelPendingRequestIds,
-            })
-          ? "pending"
-          : "answered",
-    agentConnected,
-    pickedUp:
-      (request !== undefined && agentOwnsRequest(request)) ||
-      activity.length > 0,
-    ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
-    ...(failure === undefined ? {} : { failure }),
+    surface: "chat",
     nowMs,
+    cancelPendingRequestIds,
+    activeRequestId: activeRequest?.requestId,
+    queuedAhead: queuedRequestsAhead({
+      request,
+      requests,
+      responses,
+      cancelPendingRequestIds,
+    }),
   });
 };
 
@@ -301,6 +307,7 @@ export const projectRequestStatus = ({
   surface,
   nowMs,
   cancelPendingRequestIds,
+  activeRequestId,
   queuedAhead,
 }: {
   readonly request: ThreadRequest;
@@ -310,6 +317,7 @@ export const projectRequestStatus = ({
   readonly surface: ThreadSurface;
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly activeRequestId: string | undefined;
   readonly queuedAhead?: number;
 }): AgentStatus => {
   if (
@@ -330,21 +338,14 @@ export const projectRequestStatus = ({
   const failed = [...activity]
     .reverse()
     .find((event) => event.state === "failed");
-  const claimedAtMs =
-    request.claimedAt === undefined ? 0 : Date.parse(request.claimedAt);
-  const lastSignalAtMs = Math.max(
-    0,
-    ...activity.map((event) => event.atMs ?? 0),
-    Number.isNaN(claimedAtMs) ? 0 : claimedAtMs,
-    presence.requestId === request.requestId ? (presence.updatedAtMs ?? 0) : 0,
-  );
+  const lastSignalAtMs = claimSignalAtMs(request) ?? 0;
   return deriveAgentStatus({
     runtime,
     request: requestIsTerminal(request) ? "answered" : "pending",
     agentConnected: presence.connected,
     pickedUp: claimIsLive({ request, nowMs }),
     sessionBusy:
-      presence.state === "working" && presence.requestId !== request.requestId,
+      activeRequestId !== undefined && activeRequestId !== request.requestId,
     ...(queuedAhead === undefined ? {} : { queuedAhead }),
     surface,
     ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
@@ -375,6 +376,11 @@ export const projectCommentThread = <
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
 }): CommentThreadProjection<Request, Response> => {
+  const activeRequest = selectActiveAgentRequest({
+    requests,
+    cancelPendingRequestIds,
+    now: nowMs,
+  });
   const exchanges = requests
     .filter((request) => requestCommentIds(request).includes(comment.id))
     .map((request): ProjectedThreadExchange<Request, Response> => {
@@ -401,6 +407,7 @@ export const projectCommentThread = <
           surface: "thread",
           nowMs,
           cancelPendingRequestIds,
+          activeRequestId: activeRequest?.requestId,
           queuedAhead: queuedRequestsAhead({
             request,
             requests,

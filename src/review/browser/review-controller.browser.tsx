@@ -34,6 +34,7 @@ import {
   deriveAgentHealthLabel,
   deriveCurrentAgentActivity,
   projectAgentConnectionState,
+  selectActiveAgentRequest,
   type AgentStatus,
 } from "../shared/agent-status.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
@@ -4845,6 +4846,11 @@ export const ReviewController = () => {
   };
 
   const effectivePresence = { ...agent.presence, connected: agentConnected };
+  const activeRequest = selectActiveAgentRequest({
+    requests: agent.requests,
+    cancelPendingRequestIds,
+    now: agentProjectionNowMs,
+  });
   const threadProjections = projectCommentThreads({
     comments: sent,
     requests: agent.requests,
@@ -4881,6 +4887,7 @@ export const ReviewController = () => {
       surface,
       nowMs: agentProjectionNowMs,
       cancelPendingRequestIds,
+      activeRequestId: activeRequest?.requestId,
       queuedAhead: queuedRequestsAhead({
         request,
         requests: agent.requests,
@@ -5116,11 +5123,6 @@ export const ReviewController = () => {
       });
     });
   };
-  const activeRequest = agentConnected
-    ? agent.requests.find(
-        (request) => request.requestId === agent.presence.requestId,
-      )
-    : undefined;
   const activeRequestLink =
     activeRequest === undefined
       ? undefined

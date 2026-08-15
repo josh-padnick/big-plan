@@ -6,6 +6,7 @@ import {
   deriveAgentHealthLabel,
   deriveCurrentAgentActivity,
   projectAgentConnectionState,
+  selectActiveAgentRequest,
   type AgentActivityRequest,
 } from "./agent-status.js";
 
@@ -162,7 +163,7 @@ describe("current agent activity", () => {
     });
   });
 
-  it("should let disconnection override fresh claimed work", () => {
+  it("should keep fresh claimed work visible when presence is stale", () => {
     const activity = deriveCurrentAgentActivity({
       requests: [{ ...request(), ...liveClaim() }],
       cancelPendingRequestIds: new Set(),
@@ -181,8 +182,8 @@ describe("current agent activity", () => {
       heartbeatAt: 0,
     });
     expect(activity).toMatchObject({
-      state: "disconnected",
-      headline: "The agent is disconnected",
+      state: "working",
+      headline: "Responding to a comment",
     });
     expect(
       deriveAgentHealthLabel({
@@ -190,7 +191,7 @@ describe("current agent activity", () => {
         hasAgentRuntime: true,
         isReadOnly: false,
       }),
-    ).toBe("Agent disconnected");
+    ).toBeNull();
   });
 
   it.each([
@@ -309,6 +310,57 @@ describe("current agent activity", () => {
       requestId: "2222222222222222",
       headline: "Answering a plan question",
     });
+  });
+
+  it("should keep renewed claimed work current when side channels are stale", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [
+          {
+            ...request(),
+            claimedAt: new Date(NOW - AGENT_STALL_MS * 2).toISOString(),
+            claimedBy: "aaaa0000aaaa0000",
+            claimExpiresAtMs: NOW + AGENT_STALL_MS,
+          },
+        ],
+        cancelPendingRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: false,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW - AGENT_STALL_MS - 1,
+      }),
+    ).toMatchObject({
+      state: "working",
+      requestId: "1111111111111111",
+      updatedAtMs: NOW,
+    });
+  });
+
+  it("should select only live nonterminal claims as active work", () => {
+    expect(
+      selectActiveAgentRequest({
+        requests: [
+          {
+            ...request(),
+            ...liveClaim(),
+            answeredAt: new Date(NOW).toISOString(),
+          },
+          {
+            ...request("reply"),
+            requestId: "2222222222222222",
+            ...liveClaim(NOW - AGENT_STALL_MS - 1),
+          },
+          {
+            ...request("chat"),
+            requestId: "3333333333333333",
+            ...liveClaim(),
+          },
+        ],
+        cancelPendingRequestIds: new Set(),
+        now: NOW,
+      }),
+    ).toMatchObject({ requestId: "3333333333333333" });
   });
 });
 
@@ -470,7 +522,7 @@ describe("agent request status", () => {
     expect(status.detail).toContain("Nothing is lost");
   });
 
-  it("should show disconnected claimed work as blocked", () => {
+  it("should keep claimed work active when presence is disconnected", () => {
     const status = deriveAgentStatus({
       runtime: "online",
       request: "pending",
@@ -479,8 +531,8 @@ describe("agent request status", () => {
       lastAgentSignalAtMs: NOW,
       nowMs: NOW,
     });
-    expect(status.stage).toBe("blocked");
-    expect(status.headline).toBe("Blocked - no agent connected");
+    expect(status.stage).toBe("working");
+    expect(status.headline).toBe("Agent is working on this");
   });
 
   it("should heal stalled work when a fresh agent signal arrives", () => {

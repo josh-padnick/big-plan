@@ -398,6 +398,7 @@ describe("thread projection", () => {
           surface,
           nowMs: NOW,
           cancelPendingRequestIds: new Set(),
+          activeRequestId: undefined,
         }),
       ).toMatchObject({
         stage: "answered",
@@ -430,7 +431,7 @@ describe("thread projection", () => {
     });
   });
 
-  it("should derive one request status from progress and presence", () => {
+  it("should derive one request status from its live claim", () => {
     expect(
       projectRequestStatus({
         request: request(liveClaim()),
@@ -449,6 +450,7 @@ describe("thread projection", () => {
         surface: "thread",
         nowMs: NOW,
         cancelPendingRequestIds: new Set(),
+        activeRequestId: "aaaaaaaaaaaaaaaa",
       }).stage,
     ).toBe("working");
   });
@@ -495,6 +497,7 @@ describe("thread projection", () => {
         surface: "thread",
         nowMs: NOW,
         cancelPendingRequestIds: new Set(),
+        activeRequestId: undefined,
       }).stage,
     ).toBe("waiting");
   });
@@ -509,11 +512,12 @@ describe("thread projection", () => {
         surface: "thread",
         nowMs: NOW + AGENT_CLAIM_LEASE_MS + 1,
         cancelPendingRequestIds: new Set(),
+        activeRequestId: undefined,
       }).stage,
     ).toBe("waiting");
   });
 
-  it("should ignore an invalid claimed timestamp when valid activity exists", () => {
+  it("should ignore an invalid claimed timestamp when its lease is live", () => {
     expect(
       projectRequestStatus({
         request: request({ ...liveClaim(), claimedAt: "not-a-timestamp" }),
@@ -532,8 +536,56 @@ describe("thread projection", () => {
         surface: "thread",
         nowMs: NOW,
         cancelPendingRequestIds: new Set(),
+        activeRequestId: "aaaaaaaaaaaaaaaa",
       }).stage,
     ).toBe("working");
+  });
+
+  it("should derive work recency from the renewed claim", () => {
+    expect(
+      projectRequestStatus({
+        request: request({
+          claimedAt: new Date(NOW - AGENT_CLAIM_LEASE_MS * 2).toISOString(),
+          claimedBy: "aaaa0000aaaa0000",
+          claimExpiresAtMs: NOW + AGENT_CLAIM_LEASE_MS,
+        }),
+        progressEvents: [],
+        presence: {
+          connected: false,
+          state: "working",
+          requestId: "aaaaaaaaaaaaaaaa",
+          updatedAtMs: NOW - AGENT_CLAIM_LEASE_MS - 1,
+        },
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+        activeRequestId: "aaaaaaaaaaaaaaaa",
+      }),
+    ).toMatchObject({ stage: "working" });
+  });
+
+  it("should not treat terminal heartbeat work as session busy", () => {
+    expect(
+      projectRequestStatus({
+        request: request(),
+        progressEvents: [],
+        presence: {
+          connected: true,
+          state: "working",
+          requestId: "bbbbbbbbbbbbbbbb",
+          updatedAtMs: NOW,
+        },
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+        activeRequestId: undefined,
+      }),
+    ).toMatchObject({
+      stage: "waiting",
+      headline: "Waiting for an agent",
+    });
   });
 });
 

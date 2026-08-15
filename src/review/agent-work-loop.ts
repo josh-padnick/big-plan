@@ -23,6 +23,7 @@ import {
 } from "./agent-exchange.js";
 import type { AgentRequest } from "./agent-exchange.js";
 import {
+  AgentClaimContended,
   appendProgressEvent,
   claimAgentRequest,
   commitRequestTerminal,
@@ -377,6 +378,7 @@ const nextWork = async ({
   }
   let claimedBy = randomId(8);
   let resumeToken = agentToken;
+  let resumingClaim = false;
   while (true) {
     let snapshot = await readAgentExchange({
       store: session.store,
@@ -393,6 +395,7 @@ const nextWork = async ({
           );
     if (resumedRequest !== undefined && resumeToken !== undefined) {
       claimedBy = resumeToken;
+      resumingClaim = true;
     }
     resumeToken = undefined;
     let request =
@@ -510,6 +513,13 @@ const nextWork = async ({
         },
       });
     } catch (error: unknown) {
+      if (error instanceof AgentClaimContended) {
+        if (resumingClaim) {
+          claimedBy = randomId(8);
+          resumingClaim = false;
+        }
+        continue;
+      }
       if (!(error instanceof AgentExchangeRejected)) throw error;
       const current = await readAgentExchange({
         store: session.store,
@@ -720,7 +730,7 @@ const respond = async ({
               response.outcomes.length === 1 ? "" : "s"
             }`,
     },
-  });
+  }).catch(() => undefined);
   return {
     responded: request.requestId,
     kind: response.kind,
@@ -799,14 +809,14 @@ const note = async ({
       step: message,
       state: "live",
     },
-  });
+  }).catch(() => undefined);
   await writeAgentHeartbeat({
     store: session.store,
     sessionId: session.sessionId,
     state: "working",
     requestId: renewed.requestId,
     ...(model === undefined ? {} : { model }),
-  });
+  }).catch(() => undefined);
   return { noted: message, requestId: renewed.requestId };
 };
 

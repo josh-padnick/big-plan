@@ -991,6 +991,70 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should move concurrent waiting pickups to distinct requests", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-race-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nTwo agents can work in parallel.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const firstRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Answer this request first.",
+    });
+    const secondRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "cdcdcdcdcdcdcdcd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "Answer this request in parallel.",
+    });
+    await writeAgentRequest({ store: review.store, request: firstRequest });
+    await writeAgentRequest({ store: review.store, request: secondRequest });
+
+    try {
+      const pickups = await Promise.all([
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: true,
+          executablePath,
+        }),
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: true,
+          executablePath,
+        }),
+      ]);
+      expect(pickups).toEqual([
+        expect.objectContaining({ pending: true }),
+        expect.objectContaining({ pending: true }),
+      ]);
+      expect(
+        new Set(
+          pickups.map((pickup) =>
+            typeof pickup.work === "object" &&
+            pickup.work !== null &&
+            "requestId" in pickup.work
+              ? pickup.work.requestId
+              : undefined,
+          ),
+        ),
+      ).toEqual(new Set([firstRequest.requestId, secondRequest.requestId]));
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should mint a new token when an old pickup is already terminal", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
     const planPath = join(directory, "plan.mdx");
@@ -1113,7 +1177,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should return a usable token when pickup progress cannot be stored", async () => {
+  it("should keep claims usable when progress cannot be stored", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-pickup-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nDo not strand this pickup.\n";
@@ -1161,7 +1225,6 @@ describe("agent work loop lifecycle", () => {
         claimedBy: pickup.agent_token,
       });
 
-      appendProgress.mockRestore();
       await expect(
         runAgentWorkLoopAction({
           kind: "note",
@@ -1170,6 +1233,20 @@ describe("agent work loop lifecycle", () => {
           agentToken: pickup.agent_token,
         }),
       ).resolves.toMatchObject({ requestId: request.requestId });
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [
+          expect.objectContaining({
+            requestId: request.requestId,
+            claimedBy: pickup.agent_token,
+          }),
+        ],
+      });
     } finally {
       appendProgress.mockRestore();
       await review.close();

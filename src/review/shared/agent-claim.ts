@@ -21,6 +21,13 @@ export type ClaimedRequest = {
 export const claimLeaseExpiryMs = (nowMs: number): number =>
   nowMs + AGENT_CLAIM_LEASE_MS;
 
+/** The durable signal time encoded by the lease's expiry. */
+export const claimSignalAtMs = (request: ClaimedRequest): number | undefined =>
+  request.claimExpiresAtMs === undefined ||
+  !Number.isFinite(request.claimExpiresAtMs)
+    ? undefined
+    : request.claimExpiresAtMs - AGENT_CLAIM_LEASE_MS;
+
 /** True while a request carries a claim that has not yet lapsed. */
 export const claimIsLive = ({
   request,
@@ -29,7 +36,8 @@ export const claimIsLive = ({
   readonly request: ClaimedRequest;
   readonly nowMs: number;
 }): boolean =>
-  request.claimExpiresAtMs !== undefined && request.claimExpiresAtMs > nowMs;
+  claimSignalAtMs(request) !== undefined &&
+  (request.claimExpiresAtMs ?? 0) > nowMs;
 
 /** True when a live claim belongs to some agent session other than this one. */
 export const claimIsHeldByAnother = ({

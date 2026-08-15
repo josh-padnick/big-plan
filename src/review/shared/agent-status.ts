@@ -4,7 +4,11 @@
 
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
-import { claimIsLive, type ClaimedRequest } from "./agent-claim.js";
+import {
+  claimIsLive,
+  claimSignalAtMs,
+  type ClaimedRequest,
+} from "./agent-claim.js";
 import {
   requestIsTerminal,
   type TerminalAgentRequest,
@@ -235,6 +239,23 @@ const disconnectedSupporting = ({
     : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
 };
 
+/** Selects the first live, nonterminal claim. */
+export const selectActiveAgentRequest = <Request extends AgentActivityRequest>({
+  requests,
+  cancelPendingRequestIds,
+  now,
+}: {
+  readonly requests: ReadonlyArray<Request>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly now: number;
+}): Request | undefined =>
+  requests.find(
+    (request) =>
+      !requestIsTerminal(request) &&
+      !cancelPendingRequestIds.has(request.requestId) &&
+      claimIsLive({ request, nowMs: now }),
+  );
+
 /** Selects live work before falling back to the oldest queued request. */
 export const selectPendingAgentRequest = <
   Request extends AgentActivityRequest,
@@ -246,17 +267,13 @@ export const selectPendingAgentRequest = <
   readonly requests: ReadonlyArray<Request>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly now: number;
-}): Request | undefined => {
-  const pending = requests.filter(
+}): Request | undefined =>
+  selectActiveAgentRequest({ requests, cancelPendingRequestIds, now }) ??
+  requests.find(
     (request) =>
       !requestIsTerminal(request) &&
       !cancelPendingRequestIds.has(request.requestId),
   );
-  return (
-    pending.find((request) => claimIsLive({ request, nowMs: now })) ??
-    pending[0]
-  );
-};
 
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({
@@ -285,6 +302,44 @@ export const deriveCurrentAgentActivity = ({
         "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
     };
   }
+  const request = selectPendingAgentRequest({
+    requests,
+    cancelPendingRequestIds,
+    now,
+  });
+  if (request !== undefined && claimIsLive({ request, nowMs: now })) {
+    const facts = requestFacts(request);
+    const failed = progressEvents
+      .filter(
+        (event) =>
+          event.requestId === request.requestId && event.state === "failed",
+      )
+      .at(-1);
+    if (failed !== undefined) {
+      return {
+        ...facts,
+        state: "errored",
+        tone: "danger",
+        headline: "The agent reported a problem",
+        supporting:
+          failed.step +
+          (failed.detail === undefined ? "" : ` - ${failed.detail}`),
+      };
+    }
+    const meaningful = progressEvents.filter((event) =>
+      meaningfulWork(event, request.requestId),
+    );
+    const latest = meaningful.at(-1);
+    return {
+      ...facts,
+      state: "working",
+      tone: "working",
+      headline: requestHeadline(request),
+      latestStep: latest?.step ?? "Picked up by the agent",
+      updatedAtMs: claimSignalAtMs(request) ?? 0,
+    };
+  }
+
   if (!agentPresenceIsFresh({ connected: agentConnected, heartbeatAt, now })) {
     return {
       state: "disconnected",
@@ -293,12 +348,6 @@ export const deriveCurrentAgentActivity = ({
       supporting: disconnectedSupporting({ heartbeatAt, now }),
     };
   }
-
-  const request = selectPendingAgentRequest({
-    requests,
-    cancelPendingRequestIds,
-    now,
-  });
   if (request === undefined) {
     return {
       state: "idle",
@@ -307,63 +356,13 @@ export const deriveCurrentAgentActivity = ({
       supporting: "The agent is connected and waiting for feedback.",
     };
   }
-
-  const facts = requestFacts(request);
-  if (!claimIsLive({ request, nowMs: now })) {
-    return {
-      ...facts,
-      state: "waiting",
-      tone: "neutral",
-      headline: "Waiting for agent",
-      supporting:
-        "Feedback is queued and will start when the agent is available.",
-    };
-  }
-  const failed = progressEvents
-    .filter(
-      (event) =>
-        event.requestId === request.requestId && event.state === "failed",
-    )
-    .at(-1);
-  if (failed !== undefined) {
-    return {
-      ...facts,
-      state: "errored",
-      tone: "danger",
-      headline: "The agent reported a problem",
-      supporting:
-        failed.step +
-        (failed.detail === undefined ? "" : ` - ${failed.detail}`),
-    };
-  }
-
-  const meaningful = progressEvents.filter((event) =>
-    meaningfulWork(event, request.requestId),
-  );
-  const latest = meaningful.at(-1);
-  const observedAt = Math.max(
-    0,
-    latest?.atMs ?? 0,
-    Date.parse(request.claimedAt ?? request.createdAt) || 0,
-  );
-  if (now - observedAt > AGENT_STALL_MS) {
-    return {
-      ...facts,
-      state: "stalled",
-      tone: "warning",
-      headline: "Agent may be stalled",
-      supporting: stalledHint,
-      updatedAtMs: observedAt,
-    };
-  }
-
   return {
-    ...facts,
-    state: "working",
-    tone: "working",
-    headline: requestHeadline(request),
-    latestStep: latest?.step ?? "Picked up by the agent",
-    updatedAtMs: observedAt,
+    ...requestFacts(request),
+    state: "waiting",
+    tone: "neutral",
+    headline: "Waiting for agent",
+    supporting:
+      "Feedback is queued and will start when the agent is available.",
   };
 };
 
@@ -451,17 +450,17 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
       tone: input.agentConnected ? "positive" : "neutral",
     };
   }
-  if (!input.agentConnected) {
-    return {
-      stage: "blocked",
-      label: "Blocked",
-      headline: "Blocked - no agent connected",
-      detail:
-        "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.",
-      tone: "warning",
-    };
-  }
   if (!input.pickedUp) {
+    if (!input.agentConnected) {
+      return {
+        stage: "blocked",
+        label: "Blocked",
+        headline: "Blocked - no agent connected",
+        detail:
+          "Your comment is saved and sends itself as soon as an agent reconnects. Nothing is lost.",
+        tone: "warning",
+      };
+    }
     // The position is what makes a queue feel like a queue rather than a
     // stall, so it replaces the bare label whenever anything is ahead.
     const ahead = input.queuedAhead ?? 0;
