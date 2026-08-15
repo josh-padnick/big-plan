@@ -185,13 +185,15 @@ Run those strings as returned rather than composing the commands yourself.
 The token is what proves this agent process holds the request, so a second
 agent working the same review cannot narrate over or answer another agent's
 work.
+No request is ever claimed or answered twice; a lapsed lease during a long edit can still interleave plan writes until write fencing exists.
+When a lapsed lease is taken over, the reviewer is warned that the previous agent's partial plan edits may be present.
 
 Set the `BIG_PLAN_AGENT_MODEL` environment variable before running `agent
 next` or `agent note` to report which model is connected, for example `Grok
 4.6`.
 Use a non-empty model name of at most 80 characters.
-Every heartbeat that command sends carries the reported name; the reviewer's
-browser never guesses it.
+`agent next` stores the reported name with the durable per-pickup claim, and `agent note` preserves or refreshes that claim identity.
+The reviewer's browser reads the model from the live claim, so a waiting agent's heartbeat cannot relabel another agent's active request.
 
 A `changed` outcome is accepted only when the result snapshot differs and every
 named target belongs to the computed snapshot diff. Other outcomes are

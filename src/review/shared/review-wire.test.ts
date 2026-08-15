@@ -144,15 +144,27 @@ describe("review wire contract", () => {
     ).toEqual([]);
   });
 
-  it("should carry the connector's reported model identity to the browser", () => {
+  it("should carry model identity with the claim instead of presence", () => {
     const encoded = encodeAgentSnapshot({
       currentSnapshot: "a".repeat(16),
       presence: {
         connected: true,
         state: "working",
-        model: { name: "Grok 4.6" },
+        model: { name: "Wrong waiting agent" },
       },
-      requests: [],
+      requests: [
+        {
+          requestId: "1".repeat(16),
+          premiseSnapshot: "a".repeat(16),
+          baselineSnapshot: "a".repeat(16),
+          claimedAt: "2026-08-10T12:00:00.000Z",
+          claimedBy: "b".repeat(16),
+          claimedModel: { name: "Grok 4.6" },
+          claimExpiresAtMs: 1_775_000_000_000,
+          createdAt: "2026-08-10T11:59:00.000Z",
+          kind: "chat",
+        },
+      ],
       responses: [],
       connectionLog: [],
       plan: "/tmp/plan.mdx",
@@ -160,17 +172,30 @@ describe("review wire contract", () => {
       recoveryPrompt: "Reconnect this review",
     });
 
-    expect(decodeAgentSnapshot(encoded).presence).toMatchObject({
-      connected: true,
-      model: { name: "Grok 4.6" },
+    const decoded = decodeAgentSnapshot(encoded);
+    expect(decoded.requests[0]).toMatchObject({
+      claimedModel: { name: "Grok 4.6" },
     });
+    expect(decoded.presence).not.toHaveProperty("model");
   });
 
-  it("should degrade to an unknown identity instead of trusting a malformed model", () => {
+  it("should reject a malformed model on a claim", () => {
     const encoded = encodeAgentSnapshot({
       currentSnapshot: "a".repeat(16),
-      presence: { connected: true, state: "working", model: { name: "" } },
-      requests: [],
+      presence: { connected: true, state: "working" },
+      requests: [
+        {
+          requestId: "1".repeat(16),
+          premiseSnapshot: "a".repeat(16),
+          baselineSnapshot: "a".repeat(16),
+          claimedAt: "2026-08-10T12:00:00.000Z",
+          claimedBy: "b".repeat(16),
+          claimedModel: { name: "" },
+          claimExpiresAtMs: 1_775_000_000_000,
+          createdAt: "2026-08-10T11:59:00.000Z",
+          kind: "chat",
+        },
+      ],
       responses: [],
       connectionLog: [],
       plan: "/tmp/plan.mdx",
@@ -178,7 +203,7 @@ describe("review wire contract", () => {
       recoveryPrompt: "Reconnect this review",
     });
 
-    expect(decodeAgentSnapshot(encoded).presence).not.toHaveProperty("model");
+    expect(decodeAgentSnapshot(encoded).requests).toEqual([]);
   });
 
   it("should round-trip per-side presentation facts through a snapshot diff", () => {

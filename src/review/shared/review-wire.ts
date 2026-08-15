@@ -2,6 +2,10 @@
 // encoders and browser decoders meet here so transport changes cannot drift.
 
 import type { ReviewComment } from "./comment.js";
+import {
+  decodeAgentModelIdentity,
+  type AgentModelIdentity,
+} from "./agent-model.js";
 import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
 
@@ -27,6 +31,7 @@ export type AgentRequest = TerminalAgentRequest & {
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly claimedBy?: string;
+  readonly claimedModel?: AgentModelIdentity;
   readonly claimExpiresAtMs?: number;
   readonly createdAt: string;
   readonly kind: "feedback" | "reply" | "chat";
@@ -45,16 +50,11 @@ export type AgentResponse = {
   readonly message?: string;
 };
 
-export type AgentModelIdentity = {
-  readonly name: string;
-};
-
 export type AgentPresence = {
   readonly connected: boolean;
   readonly state: "waiting" | "working";
   readonly requestId?: string;
   readonly updatedAtMs?: number;
-  readonly model?: AgentModelIdentity;
 };
 
 export type BrowserConnectionEvent = {
@@ -286,6 +286,7 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           typeof request.claimExpiresAtMs === "number" &&
           Number.isSafeInteger(request.claimExpiresAtMs) &&
           request.claimExpiresAtMs > 0;
+        const claimedModel = decodeAgentModelIdentity(request.claimedModel);
         const answeredAt = isWireTimestamp(request.answeredAt)
           ? request.answeredAt
           : undefined;
@@ -294,6 +295,8 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           : undefined;
         if (
           (hasAnyClaim && !hasCompleteClaim) ||
+          (request.claimedModel !== undefined &&
+            (claimedModel === undefined || !hasCompleteClaim)) ||
           (request.answeredAt !== undefined && answeredAt === undefined) ||
           (request.canceledAt !== undefined && canceledAt === undefined) ||
           (answeredAt !== undefined && canceledAt !== undefined) ||
@@ -313,6 +316,7 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
                   claimedAt: request.claimedAt as string,
                   claimedBy: request.claimedBy as string,
                   claimExpiresAtMs: request.claimExpiresAtMs as number,
+                  ...(claimedModel === undefined ? {} : { claimedModel }),
                 }
               : {}),
             ...(answeredAt === undefined ? {} : { answeredAt }),
@@ -417,11 +421,6 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           : {}),
         ...(typeof value.presence.updatedAtMs === "number"
           ? { updatedAtMs: value.presence.updatedAtMs }
-          : {}),
-        ...(isReviewWireRecord(value.presence.model) &&
-        typeof value.presence.model.name === "string" &&
-        value.presence.model.name.trim() !== ""
-          ? { model: { name: value.presence.model.name } }
           : {}),
       }
     : { connected: false, state: "waiting" as const };

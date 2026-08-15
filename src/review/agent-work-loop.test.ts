@@ -1083,8 +1083,20 @@ describe("agent work loop lifecycle", () => {
           ).toMatchObject({
             state: "working",
             requestId: firstRequest.requestId,
-            model: { name: "Race agent one" },
           });
+        },
+        { timeout: 5_000 },
+      );
+      const firstPresence = await reviewStore.readAgentPresence({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      if (firstPresence.updatedAtMs === undefined) {
+        throw new Error("The first pickup did not persist its heartbeat time");
+      }
+      await vi.waitFor(
+        () => {
+          expect(Date.now()).toBeGreaterThan(firstPresence.updatedAtMs ?? 0);
         },
         { timeout: 5_000 },
       );
@@ -1105,8 +1117,16 @@ describe("agent work loop lifecycle", () => {
           ).toMatchObject({
             state: "working",
             requestId: firstRequest.requestId,
-            model: { name: "Race agent two" },
+            updatedAtMs: expect.any(Number),
           });
+          expect(
+            (
+              await reviewStore.readAgentPresence({
+                store: review.store,
+                sessionId: review.sessionId,
+              })
+            ).updatedAtMs,
+          ).toBeGreaterThan(firstPresence.updatedAtMs ?? 0);
         },
         { timeout: 5_000 },
       );
@@ -1191,7 +1211,6 @@ describe("agent work loop lifecycle", () => {
             ).toMatchObject({
               state: "working",
               requestId: staleRequest.requestId,
-              model: { name: "Stale selection agent" },
             });
           },
           { timeout: 5_000 },
@@ -1472,7 +1491,9 @@ describe("agent work loop lifecycle", () => {
           expect.objectContaining({
             requestId: request.requestId,
             stepCode: "request-reclaimed",
-            detail: "The previous agent session stopped responding",
+            detail: expect.stringContaining(
+              "partial plan edits may interleave with this takeover",
+            ),
           }),
         ]),
       );
@@ -1834,7 +1855,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should carry the connector's reported model identity onto the working heartbeat", async () => {
+  it("should carry the connector's model identity on the pickup claim", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-model-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nAnswer this question.\n";
@@ -1859,14 +1880,25 @@ describe("agent work loop lifecycle", () => {
         modelName: "Grok 4.6",
       });
       await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [
+          expect.objectContaining({
+            requestId: request.requestId,
+            claimedModel: { name: "Grok 4.6" },
+          }),
+        ],
+      });
+      await expect(
         reviewStore.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         }),
-      ).resolves.toMatchObject({
-        connected: true,
-        model: { name: "Grok 4.6" },
-      });
+      ).resolves.not.toHaveProperty("model");
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

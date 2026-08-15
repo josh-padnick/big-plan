@@ -25,6 +25,10 @@ import {
   isReviewImageWithinLimits,
   type ReviewImageAttachment,
 } from "./shared/review-image.js";
+import {
+  decodeAgentModelIdentity,
+  type AgentModelIdentity,
+} from "./shared/agent-model.js";
 import { agentOwnsRequest } from "./shared/request-ownership.js";
 import { requestIsOutstanding } from "./shared/request-lifecycle.js";
 
@@ -48,6 +52,7 @@ type AgentRequestBase = TerminalAgentRequest & {
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly claimedBy?: string;
+  readonly claimedModel?: AgentModelIdentity;
   readonly claimExpiresAtMs?: number;
   readonly attachmentManifest: ReadonlyArray<ReviewImageAttachment>;
   readonly attachments: ReadonlyArray<ReviewImageAttachment>;
@@ -420,6 +425,15 @@ const requestBase = (
     value.claimedBy === undefined
       ? undefined
       : id(value.claimedBy, "claimedBy");
+  const claimedModel =
+    value.claimedModel === undefined
+      ? undefined
+      : decodeAgentModelIdentity(value.claimedModel);
+  if (value.claimedModel !== undefined && claimedModel === undefined) {
+    throw new AgentExchangeRejected(
+      '"claimedModel" must contain a non-empty model name of at most 80 characters',
+    );
+  }
   const claimExpiresAtMs =
     value.claimExpiresAtMs === undefined
       ? undefined
@@ -452,6 +466,9 @@ const requestBase = (
       "An answered request must carry a complete claim",
     );
   }
+  if (claimedModel !== undefined && baselineSnapshot === undefined) {
+    throw new AgentExchangeRejected('"claimedModel" requires a complete claim');
+  }
   const requestAttachments = validateRequestAttachments({
     attachmentManifest: value.attachmentManifest,
     attachments: value.attachments,
@@ -469,7 +486,13 @@ const requestBase = (
     createdAt: timestamp(value.createdAt),
     ...(baselineSnapshot === undefined
       ? {}
-      : { baselineSnapshot, claimedAt, claimedBy, claimExpiresAtMs }),
+      : {
+          baselineSnapshot,
+          claimedAt,
+          claimedBy,
+          claimExpiresAtMs,
+          ...(claimedModel === undefined ? {} : { claimedModel }),
+        }),
     ...(answeredAt === undefined ? {} : { answeredAt }),
     ...(canceledAt === undefined ? {} : { canceledAt }),
     ...requestAttachments,

@@ -59,6 +59,7 @@ import {
   sniffReviewImage,
   type ReviewImageAttachment,
 } from "./shared/review-image.js";
+import { decodeAgentModelIdentity } from "./shared/agent-model.js";
 import { materializeReviewImages, replacePlanSource } from "./plan-assets.js";
 
 export type AgentWorkLoopAction =
@@ -363,7 +364,9 @@ const nextWork = async ({
   readonly modelName?: string;
   readonly agentToken?: string;
 }): Promise<Record<string, unknown>> => {
-  const model = modelName === undefined ? undefined : { name: modelName };
+  const model = decodeAgentModelIdentity(
+    modelName === undefined ? undefined : { name: modelName },
+  );
   let session: Awaited<ReturnType<typeof readPlanSession>>;
   try {
     session = await readPlanSession(planPath);
@@ -411,7 +414,6 @@ const nextWork = async ({
         store: session.store,
         sessionId: session.sessionId,
         state: "waiting",
-        ...(model === undefined ? {} : { model }),
       });
       const liveness = await reviewSessionIsAvailable({
         store: session.store,
@@ -497,7 +499,6 @@ const nextWork = async ({
       sessionId: session.sessionId,
       state: "working",
       requestId: request.requestId,
-      ...(model === undefined ? {} : { model }),
     });
     try {
       request = await claimAgentRequest({
@@ -505,6 +506,7 @@ const nextWork = async ({
         activeSessionId: session.sessionId,
         requestId: selectedRequestId,
         claimedBy,
+        ...(model === undefined ? {} : { model }),
         baselineSnapshot: claimedSnapshot,
         now: new Date().toISOString(),
         verifyBeforeClaim: async (candidate) => {
@@ -760,7 +762,9 @@ const note = async ({
   readonly modelName?: string;
   readonly agentToken: string;
 }): Promise<Record<string, unknown>> => {
-  const model = modelName === undefined ? undefined : { name: modelName };
+  const model = decodeAgentModelIdentity(
+    modelName === undefined ? undefined : { name: modelName },
+  );
   const message = detail.trim();
   if (message === "" || message.length > 160) {
     return fail("Progress must be between 1 and 160 characters");
@@ -794,6 +798,7 @@ const note = async ({
       activeSessionId: session.sessionId,
       requestId: request.requestId,
       claimedBy: agentToken,
+      ...(model === undefined ? {} : { model }),
       baselineSnapshot: requestBaselineSnapshot(request),
       now: new Date().toISOString(),
     });
@@ -817,7 +822,6 @@ const note = async ({
     sessionId: session.sessionId,
     state: "working",
     requestId: renewed.requestId,
-    ...(model === undefined ? {} : { model }),
   }).catch(() => undefined);
   return { noted: message, requestId: renewed.requestId };
 };

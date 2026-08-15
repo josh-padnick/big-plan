@@ -273,7 +273,7 @@ test("should expire a held connected snapshot when the reviewer returns", async 
   await expect(rail).toContainText("No agent signal for 6h 00m");
 });
 
-test("should show the connector's reported model identity, or none, on the agent status card", async ({
+test("should show the active claim's model despite a competing heartbeat", async ({
   page,
   reviewRuntimeUrl,
 }) => {
@@ -283,76 +283,62 @@ test("should show the connector's reported model identity, or none, on the agent
     planPath: session.plan,
     planId: session.planId,
   });
-  await writeAgentHeartbeat({
-    store,
+  const source = await readFile(session.plan, "utf8");
+  const request = messageAgentRequest({
+    kind: "chat",
+    requestId: "abcdabcdabcdabcd",
     sessionId: session.sessionId,
-    state: "waiting",
-    model: { name: "Grok 4.6" },
+    planId: session.planId,
+    premiseSnapshot: deriveSnapshotDigest(source),
+    createdAt: new Date().toISOString(),
+    body: "Which model is answering this request?",
   });
-  await page.getByRole("button", { name: "Agent session active" }).click();
+  await writeAgentRequest({ store, request });
+  await claimAgentRequest({
+    store,
+    activeSessionId: session.sessionId,
+    requestId: request.requestId,
+    claimedBy: "abababababababab",
+    model: { name: "Grok 4.6" },
+    baselineSnapshot: request.premiseSnapshot,
+    now: new Date().toISOString(),
+  });
+  await writeFile(
+    store.agentHeartbeatPath,
+    JSON.stringify({
+      sessionId: session.sessionId,
+      state: "waiting",
+      model: { name: "Wrong waiting agent" },
+      updatedAtMs: Date.now(),
+    }),
+  );
+  await expect
+    .poll(async () => {
+      const snapshot = await readAgentExchange({
+        store,
+        sessionId: session.sessionId,
+        planId: session.planId,
+      });
+      return snapshot.requests[0]?.claimedModel?.name;
+    })
+    .toBe("Grok 4.6");
+  await page.getByRole("button", { name: "Agent working" }).click();
   const rail = page.getByRole("complementary", { name: "Feedback" });
   const modelBadge = rail.locator("[data-review-agent-model]");
   await expect(modelBadge).toBeVisible();
   await expect(modelBadge).toContainText("Grok 4.6");
+  await expect(modelBadge).not.toContainText("Wrong waiting agent");
   await expect(modelBadge.locator("svg")).toHaveAttribute(
     "viewBox",
     "0 0 34 33",
   );
 
-  await page.emulateMedia({ colorScheme: "dark" });
-  await expect(modelBadge).toBeVisible();
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
   await expect(modelBadge).toContainText("Grok 4.6");
-  await page.emulateMedia({ colorScheme: "light" });
-
-  await writeAgentHeartbeat({
-    store,
-    sessionId: session.sessionId,
-    state: "waiting",
-    model: { name: "GPT-5.6-Luna" },
-  });
-  await expect(modelBadge).toContainText("GPT-5.6-Luna");
-  await expect(modelBadge.locator("svg")).toHaveAttribute(
-    "viewBox",
-    "0 0 512 512",
-  );
-  const openAiPath = await modelBadge.locator("svg path").getAttribute("d");
-
-  await writeAgentHeartbeat({
-    store,
-    sessionId: session.sessionId,
-    state: "waiting",
-    model: { name: "Claude Sonnet 5" },
-  });
-  await expect(modelBadge).toContainText("Claude Sonnet 5");
-  await expect(modelBadge.locator("svg")).toHaveAttribute(
-    "viewBox",
-    "0 0 512 512",
-  );
-  await expect(modelBadge.locator("svg path")).not.toHaveAttribute(
-    "d",
-    openAiPath ?? "",
-  );
-
-  await writeAgentHeartbeat({
-    store,
-    sessionId: session.sessionId,
-    state: "waiting",
-    model: { name: "A model this badge does not recognize" },
-  });
-  await expect(modelBadge.locator("svg")).toHaveAttribute(
-    "viewBox",
-    "0 0 24 24",
-  );
-
-  await writeAgentHeartbeat({
-    store,
-    sessionId: session.sessionId,
-    state: "waiting",
-  });
-  await expect(rail.locator("[data-review-agent-model]")).toHaveCount(0);
-  await expect(
-    rail.locator("[data-review-current-activity='idle']"),
-  ).toContainText("Agent connected");
 });
 
 test("should keep progress-only requests waiting in chat and agent status", async ({

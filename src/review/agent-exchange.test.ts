@@ -252,6 +252,15 @@ describe("agent exchange response contract", () => {
     ).toThrow(/answered request must carry a complete claim/);
   });
 
+  it("should reject claim model identity without a complete claim", () => {
+    expect(() =>
+      validateAgentRequest({
+        ...request,
+        claimedModel: { name: "Grok 4.6" },
+      }),
+    ).toThrow(/claimedModel.*complete claim/);
+  });
+
   it("should collect original comments as reply validation context", () => {
     expect(commentsFromExchange(snapshot()).get(commentId)).toEqual(comment);
   });

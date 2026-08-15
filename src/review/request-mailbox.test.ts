@@ -351,6 +351,7 @@ describe("request mailbox", () => {
       activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
+      model: { name: "Grok 4.6" },
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:00.000Z",
     });
@@ -368,7 +369,10 @@ describe("request mailbox", () => {
     ).rejects.toThrow(/Another agent session is working on this request/);
 
     const exchange = await readAgentExchange({ store, sessionId, planId });
-    expect(exchange.requests[0]).toMatchObject({ claimedBy: agentA });
+    expect(exchange.requests[0]).toMatchObject({
+      claimedBy: agentA,
+      claimedModel: { name: "Grok 4.6" },
+    });
   });
 
   it("should let the same session refresh its own claim", async () => {
@@ -382,6 +386,7 @@ describe("request mailbox", () => {
       activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
+      model: { name: "Grok 4.6" },
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:00.000Z",
     });
@@ -399,6 +404,7 @@ describe("request mailbox", () => {
 
     expect(renewed).toMatchObject({
       claimedBy: agentA,
+      claimedModel: { name: "Grok 4.6" },
       claimedAt: claimed.claimedAt,
       baselineSnapshot: claimed.baselineSnapshot,
     });
@@ -418,6 +424,7 @@ describe("request mailbox", () => {
       activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
+      model: { name: "Grok 4.6" },
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:00.000Z",
     });
@@ -427,6 +434,7 @@ describe("request mailbox", () => {
       activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentB,
+      model: { name: "Claude Sonnet 5" },
       baselineSnapshot: snapshot,
       // Past the 75-second lease the reviewer has already been shown as stalled.
       now: "2026-08-10T12:01:20.000Z",
@@ -434,11 +442,17 @@ describe("request mailbox", () => {
 
     expect(takenOver).toMatchObject({
       claimedBy: agentB,
+      claimedModel: { name: "Claude Sonnet 5" },
       claimedAt: "2026-08-10T12:01:20.000Z",
     });
     const events = await readProgress({ store, sessionId });
-    expect(events.map((event) => event.stepCode)).toContain(
-      "request-reclaimed",
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stepCode: "request-reclaimed",
+          detail: expect.stringContaining("partial plan edits may interleave"),
+        }),
+      ]),
     );
   });
 
@@ -636,12 +650,12 @@ describe("request mailbox", () => {
       now: "2026-08-10T12:00:01.000Z",
     });
 
-    await expect(
-      ensureAgentRequest({ store, request }),
-    ).resolves.toMatchObject({
-      requestId: request.requestId,
-      answeredAt: "2026-08-10T12:00:01.000Z",
-    });
+    await expect(ensureAgentRequest({ store, request })).resolves.toMatchObject(
+      {
+        requestId: request.requestId,
+        answeredAt: "2026-08-10T12:00:01.000Z",
+      },
+    );
   });
 
   it("should commit either cancellation or response when they race", async () => {

@@ -39,6 +39,7 @@ import {
   claimIsLive,
   claimLeaseExpiryMs,
 } from "./shared/agent-claim.js";
+import type { AgentModelIdentity } from "./shared/agent-model.js";
 import type {
   AgentRequestDeletionResult,
   ProgressEvent,
@@ -146,6 +147,7 @@ const requestCreation = (request: AgentRequest): string => {
   delete created.baselineSnapshot;
   delete created.claimedAt;
   delete created.claimedBy;
+  delete created.claimedModel;
   delete created.claimExpiresAtMs;
   delete created.answeredAt;
   delete created.canceledAt;
@@ -201,6 +203,7 @@ export const claimAgentRequest = async ({
   activeSessionId,
   requestId,
   claimedBy,
+  model,
   baselineSnapshot,
   now,
   verifyBeforeClaim,
@@ -209,6 +212,7 @@ export const claimAgentRequest = async ({
   readonly activeSessionId: string;
   readonly requestId: string;
   readonly claimedBy: string;
+  readonly model?: AgentModelIdentity;
   readonly baselineSnapshot: string;
   readonly now: string;
   readonly verifyBeforeClaim?: (request: AgentRequest) => Promise<void>;
@@ -247,6 +251,7 @@ export const claimAgentRequest = async ({
       if (request.claimedBy === claimedBy) {
         const renewed = validateAgentRequest({
           ...request,
+          claimedModel: model ?? request.claimedModel,
           claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
         });
         await writeAgentRequestValue({
@@ -261,6 +266,7 @@ export const claimAgentRequest = async ({
         baselineSnapshot,
         claimedAt: now,
         claimedBy,
+        claimedModel: model,
         claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
       });
       await writeAgentRequestValue({
@@ -286,7 +292,8 @@ export const claimAgentRequest = async ({
         stepCode: "request-reclaimed",
         step: "Restarting with a new agent session",
         state: "live",
-        detail: "The previous agent session stopped responding",
+        detail:
+          "The previous agent stopped responding; its partial plan edits may interleave with this takeover until write fencing exists",
       },
     }).catch(() => undefined);
   }
