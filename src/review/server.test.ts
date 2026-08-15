@@ -1086,6 +1086,74 @@ describe("review runtime feedback", () => {
     }
   });
 
+  it("should never create an agent request without its feedback package", async () => {
+    // The queue must not learn about work whose package the reviewer's own
+    // record does not yet hold. Package and snapshot are written before the
+    // request, so a failure there leaves nothing half-created for an agent to
+    // pick up. This pins that order against a future reshuffle.
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-package-first-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const isolated = await startReviewRuntime({ planPath });
+    try {
+      const descriptor: unknown = JSON.parse(
+        await readFile(isolated.store.sessionPath, "utf8"),
+      );
+      const isolatedToken =
+        typeof descriptor === "object" &&
+        descriptor !== null &&
+        "token" in descriptor &&
+        typeof descriptor.token === "string"
+          ? descriptor.token
+          : "";
+
+      // Blocks the package write the way the resume test blocks the sent
+      // comments: the directory cannot hold the files the package needs.
+      await rm(isolated.store.feedbackDirectory, {
+        recursive: true,
+        force: true,
+      });
+      await writeFile(isolated.store.feedbackDirectory, "not a directory");
+
+      const sent = await fetch(`${isolated.url}api/feedback`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-big-plan-review-token": isolatedToken,
+          "sec-fetch-site": "same-origin",
+          origin: isolated.url.replace(/\/$/, ""),
+        },
+        body: JSON.stringify({
+          comments: [
+            {
+              id: "ab12cd34",
+              body: "This must not reach the queue without its package.",
+              premiseSnapshot: PLAN_SNAPSHOT,
+              target: { type: "document" },
+            },
+          ],
+        }),
+      });
+      expect(sent.status).toBe(500);
+
+      const exchange = await readAgentExchange({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+      });
+      expect(
+        exchange.requests.filter(
+          (request) =>
+            request.kind === "feedback" &&
+            request.comments.some((comment) => comment.id === "ab12cd34"),
+        ),
+      ).toHaveLength(0);
+    } finally {
+      await isolated.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should preserve feedback sent by overlapping requests", async () => {
     const comments = [
       {
