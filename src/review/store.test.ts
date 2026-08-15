@@ -18,14 +18,12 @@ import {
   appendProgressValue,
   deriveReviewPlanId,
   prepareStore,
-  readActiveDraft,
   readAgentConnectionEvents,
   readAgentPresence,
   readProgress,
   readResolvedCommentIds,
   readSnapshot,
   reviewStoreFor,
-  writeActiveDraft,
   writeAgentHeartbeat,
   writeResolvedCommentIds,
   writeSnapshot,
@@ -79,7 +77,6 @@ describe("review store placement", () => {
       store.agentPromptPath,
       store.snapshotDirectory,
       store.draftsPath,
-      store.activeDraftPath,
       store.sentPath,
       store.progressPath,
       store.agentConnectionDirectory,
@@ -381,24 +378,6 @@ describe("review store revision history", () => {
   });
 });
 
-describe("review store active draft", () => {
-  it("should round-trip the unfinished whole-plan field without trimming", async () => {
-    const { planPath } = await temporaryPlan();
-    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
-    await prepareStore(store);
-    await writeActiveDraft({
-      path: store.activeDraftPath,
-      value: "  Unfinished thought.\n",
-    });
-    expect(
-      await readActiveDraft({
-        path: store.activeDraftPath,
-        validate: (value) => (typeof value === "string" ? value : ""),
-      }),
-    ).toBe("  Unfinished thought.\n");
-  });
-});
-
 describe("review store creation", () => {
   it("should create the review directories readable only by their owner", async () => {
     const { planPath } = await temporaryPlan();
@@ -421,10 +400,10 @@ describe("review store creation", () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
-    await writeFile(store.activeDraftPath, '"exposed"\n');
-    await chmod(store.activeDraftPath, 0o644);
-    await writeActiveDraft({ path: store.activeDraftPath, value: "private" });
-    expect((await stat(store.activeDraftPath)).mode & 0o777).toBe(0o600);
+    await writeFile(store.resolvedPath, '["exposed"]\n');
+    await chmod(store.resolvedPath, 0o644);
+    await writeResolvedCommentIds({ store, ids: ["aabbccdd"] });
+    expect((await stat(store.resolvedPath)).mode & 0o777).toBe(0o600);
   });
 });
 

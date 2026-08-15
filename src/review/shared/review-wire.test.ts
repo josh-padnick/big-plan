@@ -6,6 +6,7 @@ import {
   decodeAgentSnapshot,
   decodeProgress,
   decodeRuntimeSession,
+  decodeReviewSnapshot,
   decodeSnapshotDiff,
   encodeAgentSnapshot,
   encodeProgress,
@@ -15,6 +16,30 @@ import {
 } from "./review-wire.js";
 
 describe("review wire contract", () => {
+  it("should load reviewer state a runtime of another vintage stored", () => {
+    const decoded = decodeReviewSnapshot({
+      drafts: [
+        {
+          id: "aabbccdd",
+          body: "Anchored and unsent.",
+          createdAt: "2026-08-10T12:00:00.000Z",
+          premiseSnapshot: "a".repeat(16),
+          target: { type: "document" },
+        },
+      ],
+      sent: [],
+      // A field this contract no longer names, as an earlier runtime wrote it.
+      activeDraft: "Text no composer will ever read back.",
+      resolvedCommentIds: ["11223344"],
+    });
+
+    expect(decoded).toEqual({
+      drafts: [expect.objectContaining({ id: "aabbccdd" })],
+      sent: [],
+      resolvedCommentIds: ["11223344"],
+    });
+  });
+
   it("should round-trip a server agent snapshot into the browser projection", () => {
     const encoded = encodeAgentSnapshot({
       currentSnapshot: "a".repeat(16),

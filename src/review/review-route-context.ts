@@ -13,17 +13,12 @@ import { basename, extname } from "node:path";
 import { renderDocument } from "../render/render-document.js";
 import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
 import {
-  validateActiveDraft,
   validateCommentUpdates,
   validateResolvedCommentIds,
   validateStoredComments,
 } from "./shared/comment.js";
 import { deriveSnapshotDigest, readAgentExchange } from "./agent-exchange.js";
-import {
-  readActiveDraft,
-  readComments,
-  readResolvedCommentIds,
-} from "./store.js";
+import { readComments, readResolvedCommentIds } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import {
   MUTATION_STALL_MS,
@@ -220,10 +215,6 @@ export const createPlanRenderer = ({
       ...encodeReviewSnapshot({
         drafts: await readStoredComments(store.draftsPath),
         sent: await readStoredComments(store.sentPath),
-        activeDraft: await readActiveDraft({
-          path: store.activeDraftPath,
-          validate: validateActiveDraft,
-        }),
         resolvedCommentIds: await readResolvedCommentIds({
           store,
           validate: validateResolvedCommentIds,

@@ -617,12 +617,49 @@ describe("review runtime feedback", () => {
         await call({
           path: "/api/drafts",
           method: "PUT",
-          body: { drafts, activeDraft: "", resolvedCommentIds: [] },
+          body: { drafts, resolvedCommentIds: [] },
         })
       ).status,
     ).toBe(200);
     const answer: unknown = await (await call({ path: "/api/drafts" })).json();
     expect(answer).toMatchObject({ drafts: [{ id: "aabbccdd" }] });
+  });
+
+  it("should hold an anchored draft alongside state another vintage left behind", async () => {
+    // A reviewer resuming a review that an earlier runtime persisted: the
+    // browser still names a whole-plan composer field, and the file that
+    // backed it is still on disk. Both are state this runtime does not own,
+    // and neither may cost the reviewer an anchored comment.
+    await writeFile(
+      join(runtime.store.reviewDirectory, "active-draft.json"),
+      '"Text no composer will ever read back."\n',
+    );
+    const drafts = [
+      {
+        id: "dd44ee55",
+        body: "Anchored, unsent, and not the composer's business.",
+        premiseSnapshot: PLAN_SNAPSHOT,
+        target: { type: "block", blockId },
+      },
+    ];
+    expect(
+      (
+        await call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: {
+            drafts,
+            activeDraft: "Text no composer will ever read back.",
+            resolvedCommentIds: [],
+          },
+        })
+      ).status,
+    ).toBe(200);
+    const snapshot: unknown = await (
+      await call({ path: "/api/drafts" })
+    ).json();
+    expect(snapshot).toMatchObject({ drafts: [{ id: "dd44ee55" }] });
+    expect(snapshot).not.toHaveProperty("activeDraft");
   });
 
   it("should remove only submitted comments from persisted drafts", async () => {
@@ -645,7 +682,7 @@ describe("review runtime feedback", () => {
         await call({
           path: "/api/drafts",
           method: "PUT",
-          body: { drafts, activeDraft: "", resolvedCommentIds: [] },
+          body: { drafts, resolvedCommentIds: [] },
         })
       ).status,
     ).toBe(200);
@@ -672,7 +709,7 @@ describe("review runtime feedback", () => {
         await call({
           path: "/api/drafts",
           method: "PUT",
-          body: { drafts, activeDraft: "", resolvedCommentIds: [] },
+          body: { drafts, resolvedCommentIds: [] },
         })
       ).json(),
     ).resolves.toEqual({ drafts: 1 });
@@ -1101,7 +1138,7 @@ describe("review runtime feedback", () => {
         call({
           path: "/api/drafts",
           method: "PUT",
-          body: { drafts: [], activeDraft: "", resolvedCommentIds: [] },
+          body: { drafts: [], resolvedCommentIds: [] },
         }),
         new Promise<"timeout">((settle) =>
           setTimeout(() => settle("timeout"), 500),
@@ -1562,11 +1599,7 @@ The dashboard shows the retry backlog.
         await call({
           path: "/api/drafts",
           method: "PUT",
-          body: {
-            drafts: [comment],
-            activeDraft: "",
-            resolvedCommentIds: [],
-          },
+          body: { drafts: [comment], resolvedCommentIds: [] },
         })
       ).status,
     ).toBe(200);
@@ -1924,7 +1957,7 @@ describe("review runtime resolve invariant", () => {
     isolatedCall({
       path: "/api/drafts",
       method: "PUT",
-      body: { drafts: [], activeDraft: "", resolvedCommentIds: [commentId] },
+      body: { drafts: [], resolvedCommentIds: [commentId] },
     });
 
   it("should refuse a drafts write that resolves a comment with a queued message", async () => {
@@ -2206,9 +2239,7 @@ describe("review runtime shutdown", () => {
     await new Promise((settle) => setTimeout(settle, 20));
     const replacement = await startReviewRuntime({ planPath });
     try {
-      stalled.request.end(
-        '"drafts":[],"activeDraft":"","resolvedCommentIds":[]}',
-      );
+      stalled.request.end('"drafts":[],"resolvedCommentIds":[]}');
       await expect(stalled.status).resolves.toBe(409);
       expect(
         await reviewSessionIsRunning({

@@ -4,7 +4,6 @@ import {
   boundQuote,
   CommentRejected,
   QUOTE_LIMIT,
-  validateActiveDraft,
   validateComments,
   validateResolvedCommentIds,
   validateStoredComments,
@@ -290,20 +289,6 @@ describe("validateComments target resolution", () => {
     expect(() =>
       validate([{ id: "aabbccdd", body: "A note.", target: "document" }]),
     ).toThrow('"target" must be an object');
-  });
-});
-
-describe("validateActiveDraft", () => {
-  it("should preserve exact whitespace in an unfinished whole-plan field", () => {
-    expect(validateActiveDraft("  Still thinking.\n")).toBe(
-      "  Still thinking.\n",
-    );
-  });
-
-  it("should refuse an unfinished field beyond the comment body limit", () => {
-    expect(() => validateActiveDraft("x".repeat(4001))).toThrow(
-      CommentRejected,
-    );
   });
 });
 

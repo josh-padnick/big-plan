@@ -163,7 +163,6 @@ test("should merge an outage-time draft with newer runtime state", async ({
           target: { type: "document" },
         },
       ],
-      activeDraft: "",
       resolvedCommentIds: [],
     }),
   });
@@ -176,7 +175,12 @@ test("should merge an outage-time draft with newer runtime state", async ({
       response.ok(),
   );
   await page.reload();
-  await replayed;
+  // The browser's sync body is anchored drafts and resolved ids. A plan-wide
+  // composer field is not part of it, and a browser that reintroduced one
+  // would blank it on this very write.
+  expect((await replayed).request().postData() ?? "").not.toContain(
+    "activeDraft",
+  );
   await expect(banner).toBeHidden();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   await expect(
