@@ -144,10 +144,12 @@ export type WriteGate = {
   readonly stalledForMs: () => number | undefined;
 };
 
-/** How long the review has gone without reviewer activity. */
+/** The review's one lifetime policy and its current activity. */
 export type ActivityClock = {
+  readonly idleTimeoutMs: number;
   readonly touch: () => void;
   readonly idleForMs: () => number;
+  readonly expiresAtMs: () => number | undefined;
 };
 
 export type ReviewRouteContext = {
@@ -347,12 +349,15 @@ export const createWriteGate = ({
   };
 };
 
-export const createActivityClock = (): ActivityClock => {
+export const createActivityClock = (idleTimeoutMs: number): ActivityClock => {
   let lastActivityAt = Date.now();
   return {
+    idleTimeoutMs,
     touch: () => {
       lastActivityAt = Date.now();
     },
     idleForMs: () => Date.now() - lastActivityAt,
+    expiresAtMs: () =>
+      idleTimeoutMs > 0 ? lastActivityAt + idleTimeoutMs : undefined,
   };
 };

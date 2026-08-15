@@ -33,7 +33,10 @@ import {
   publishAgentResponse,
 } from "./request-mailbox.js";
 import { materializeReviewImages } from "./plan-assets.js";
-import { startReviewRuntime } from "./server.js";
+import {
+  DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
+  startReviewRuntime,
+} from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
@@ -112,6 +115,18 @@ const call = ({
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+
+const readSessionToken = async (target: ReviewRuntime): Promise<string> => {
+  const descriptor: unknown = JSON.parse(
+    await readFile(target.store.sessionPath, "utf8"),
+  );
+  return typeof descriptor === "object" &&
+    descriptor !== null &&
+    "token" in descriptor &&
+    typeof descriptor.token === "string"
+    ? descriptor.token
+    : "";
+};
 
 const uploadImage = (bytes: Uint8Array = TINY_PNG) =>
   fetch(`${runtime.url.replace(/\/$/u, "")}/api/review-images`, {
@@ -2276,6 +2291,72 @@ describe("review runtime shutdown", () => {
       await closing.close();
       await expect(fetch(closing.url)).rejects.toThrow();
     } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should stay open while a page does nothing but poll", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-poll-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    // Shorter than the poll window below, so a runtime that ignores reads
+    // stops answering partway through the loop instead of at its end.
+    const polling = await startReviewRuntime({ planPath, idleTimeoutMs: 600 });
+    const pollingToken = await readSessionToken(polling);
+    const poll = () =>
+      fetch(`${polling.url}api/session`, {
+        headers: { "x-big-plan-review-token": pollingToken },
+      });
+    try {
+      const until = Date.now() + 1_500;
+      while (Date.now() < until) {
+        await expect(poll()).resolves.toMatchObject({ status: 200 });
+        await new Promise((settle) => setTimeout(settle, 200));
+      }
+      await expect(poll()).resolves.toMatchObject({ status: 200 });
+      await expect(
+        reviewSessionIsRunning({
+          store: polling.store,
+          sessionId: polling.sessionId,
+        }),
+      ).resolves.toMatchObject({ running: true });
+    } finally {
+      await polling.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should publish its lifetime and deadline on the session route", async () => {
+    const before = (await (await call({ path: "/api/session" })).json()) as {
+      readonly idleTimeoutMs?: unknown;
+      readonly expiresAtMs?: unknown;
+    };
+    expect(before.idleTimeoutMs).toBe(DEFAULT_REVIEW_IDLE_TIMEOUT_MS);
+    expect(before.expiresAtMs).toBeGreaterThan(Date.now());
+    await new Promise((settle) => setTimeout(settle, 5));
+    const after = (await (await call({ path: "/api/session" })).json()) as {
+      readonly expiresAtMs?: unknown;
+    };
+    expect(after.expiresAtMs).toBeGreaterThan(Number(before.expiresAtMs));
+  });
+
+  it("should publish no deadline when the idle timeout is disabled", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-forever-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const endless = await startReviewRuntime({ planPath, idleTimeoutMs: 0 });
+    const endlessToken = await readSessionToken(endless);
+    try {
+      const response = await fetch(`${endless.url}api/session`, {
+        headers: { "x-big-plan-review-token": endlessToken },
+      });
+      const payload = (await response.json()) as Readonly<
+        Record<string, unknown>
+      >;
+      expect(payload.idleTimeoutMs).toBe(0);
+      expect(payload).not.toHaveProperty("expiresAtMs");
+    } finally {
+      await endless.close();
       await rm(directory, { recursive: true, force: true });
     }
   });

@@ -154,6 +154,10 @@ export type RuntimeSession = {
    * the only fact that can tell the reader the session went one-way.
    */
   readonly writesStalledMs?: number;
+  /** How long this session survives with nobody reading and nobody working. */
+  readonly idleTimeoutMs?: number;
+  /** When it ends unless something touches it. Absent when nothing expires. */
+  readonly expiresAtMs?: number;
 };
 
 export type ReviewSnapshotSource = ReviewSnapshot;
@@ -176,6 +180,8 @@ export type RuntimeSessionSource = {
   readonly authoritative: boolean;
   readonly latestReviewUrl?: string;
   readonly writesStalledMs?: number;
+  readonly idleTimeoutMs?: number;
+  readonly expiresAtMs?: number;
 };
 
 export const isReviewWireRecord = (
@@ -458,6 +464,9 @@ export const decodeProgress = (
   });
 };
 
+const isUsableTimeValue = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0;
+
 /** Encodes the server's browser-safe session-authority projection. */
 export const encodeRuntimeSession = (
   value: RuntimeSessionSource,
@@ -490,6 +499,14 @@ export const decodeRuntimeSession = ({
     Number.isFinite(value.writesStalledMs) &&
     value.writesStalledMs > 0
       ? { writesStalledMs: value.writesStalledMs }
+      : {}),
+    // A lifetime fact the page cannot trust is worse than none: dropping it
+    // leaves the reader with no promise instead of a wrong one.
+    ...(isUsableTimeValue(value.idleTimeoutMs)
+      ? { idleTimeoutMs: value.idleTimeoutMs }
+      : {}),
+    ...(isUsableTimeValue(value.expiresAtMs)
+      ? { expiresAtMs: value.expiresAtMs }
       : {}),
   };
 };

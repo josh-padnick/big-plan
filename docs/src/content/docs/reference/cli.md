@@ -212,7 +212,7 @@ Usage: big-plan compile <input.mdx> [output.json]
 Usage: big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
 ```
 
-`validate`, `render`, `compile`, and `skill` reject any dash-prefixed command argument as an unknown option. `review` additionally accepts `--diff-preview` and `--idle-timeout <minutes>`; zero disables the idle timeout.
+`validate`, `render`, `compile`, and `skill` reject any dash-prefixed command argument as an unknown option. `review` additionally accepts `--diff-preview` and `--idle-timeout <minutes>`; it defaults to 30 minutes, and zero disables the idle timeout.
 `validate` and `review` reject a second positional argument; `render` and `compile` reject a third.
 Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 An empty, non-numeric, negative, or overflowing `review --idle-timeout` value raises a structured `INVALID_INPUT` error.

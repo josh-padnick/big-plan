@@ -21,7 +21,10 @@ import {
   describeRuntimeDiagnostics,
   describeRuntimeGrowth,
 } from "../../review/runtime-watchdog.js";
-import { startReviewRuntime } from "../../review/server.js";
+import {
+  DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
+  startReviewRuntime,
+} from "../../review/server.js";
 import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { renderDocument } from "../../render/render-document.js";
 
@@ -35,7 +38,7 @@ const reviewArguments = (
   readonly idleTimeoutMs: number;
 } => {
   const positional: Array<string> = [];
-  let idleMinutes = 10;
+  let idleMinutes = DEFAULT_REVIEW_IDLE_TIMEOUT_MS / 60_000;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--diff-preview") continue;
@@ -157,7 +160,7 @@ export const reviewCommand = async (
       "Press Ctrl+C to stop the review runtime",
       parsedArguments.idleTimeoutMs === 0
         ? "Idle timeout is disabled"
-        : `The session ends after ${parsedArguments.idleTimeoutMs / 60_000} minutes without reviewer activity; configure with --idle-timeout`,
+        : `This review ends after ${parsedArguments.idleTimeoutMs / 60_000} minutes with no page open and no agent working; configure with --idle-timeout`,
     ],
   };
 };
