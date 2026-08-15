@@ -121,7 +121,7 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 | `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                                                       |
 | `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                                                        |
 | `test/`                  | Critical browser journeys over complete rendered documents. Keep pure behavior in colocated unit tests.                                                                                                                                                                 |
-| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. The subsystem definitions and boundary rules live in `docs/subsystems.md`; otherwise, docs do not own internal source-placement rules.                  |
+| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. The subsystem definitions and boundary rules live in `docs/subsystems.md`; otherwise, docs do not own internal source-placement rules.                   |
 
 Use these placement tests:
 
