@@ -160,6 +160,10 @@ ${validation}printf x >> default-${hookName}-ran
   });
 
   try {
+    assert.equal(
+      git(dir, ["config", "--get", "core.hooksPath"]).trim(),
+      ".githooks",
+    );
     git(dir, ["commit", "--allow-empty", "-m", "default hooks commit"]);
     const message = commitMessage(dir);
     assert.ok(message.includes(GENERATED_BODY_NOTE));
@@ -175,6 +179,50 @@ ${validation}printf x >> default-${hookName}-ran
       readFileSync(join(dir, "default-commit-msg-ran"), "utf8"),
       "x",
     );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("should ignore a stale managed default dispatcher", () => {
+  let hooksDirectory;
+  const dir = makeScratchRepo((scratchRepo) => {
+    hooksDirectory = join(
+      git(scratchRepo, [
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+      ]).trim(),
+      "hooks",
+    );
+    for (const hookName of ["prepare-commit-msg", "commit-msg"]) {
+      writeFileSync(
+        join(hooksDirectory, hookName),
+        `#!/bin/sh\nprintf x >> stale-${hookName}-ran\n`,
+        { mode: 0o755 },
+      );
+    }
+  });
+
+  try {
+    for (const hookName of ["prepare-commit-msg", "commit-msg"]) {
+      const hookPath = join(hooksDirectory, hookName);
+      const hook = readFileSync(hookPath, "utf8").replace(
+        /^BIG_PLAN_COMMON_DIR=.*$/m,
+        "BIG_PLAN_COMMON_DIR='/foreign/repository'",
+      );
+      writeFileSync(hookPath, hook, { mode: 0o755 });
+    }
+
+    git(dir, ["commit", "--allow-empty", "-m", "stale dispatcher commit"]);
+    const message = commitMessage(dir);
+    assert.ok(message.includes(GENERATED_BODY_NOTE));
+    assert.match(
+      message,
+      /Signed-off-by: Scratch Committer <scratch@example\.com>/,
+    );
+    assert.equal(existsSync(join(dir, "stale-prepare-commit-msg-ran")), false);
+    assert.equal(existsSync(join(dir, "stale-commit-msg-ran")), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

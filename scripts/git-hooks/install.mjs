@@ -2,7 +2,7 @@
 // effective hooks path or hook that another worktree tool already owns.
 // Run automatically by `bun install` via package.json's "prepare" script.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -19,6 +19,7 @@ const hookNames = ["prepare-commit-msg", "commit-msg"];
 const managedHookPrefix = "#!/bin/sh\nBIG_PLAN_COMPLIANCE_HOOK=1\n";
 const managedBackupPattern = /^BIG_PLAN_ORIGINAL_HOOK=([A-Za-z0-9.-]*)$/m;
 const managedOwnerPrefix = "BIG_PLAN_COMMON_DIR=";
+const compositeEnvironmentVariable = "BIG_PLAN_COMPOSITE_HOOK";
 
 const readEffectiveHooksPath = (repoRoot) => {
   try {
@@ -53,6 +54,13 @@ const nextBackupName = (hooksDirectory, hookName) => {
 
 const shellQuote = (value) => `'${value.replaceAll("'", `'"'"'`)}'`;
 
+const isManagedHookOwnedBy = (hook, commonDirectory) =>
+  hook.startsWith(managedHookPrefix) &&
+  hook
+    .split("\n")
+    .find((line) => line.startsWith(managedOwnerPrefix)) ===
+    `${managedOwnerPrefix}${shellQuote(commonDirectory)}`;
+
 const compositeHook = (
   hookName,
   backupName,
@@ -77,7 +85,7 @@ compliance_hook="$current_worktree_root/.githooks/${hookName}"
 ${
   hookName === "commit-msg" && backupName
     ? `if [ -f "$compliance_hook" ]; then
-  node "$compliance_hook" "$@"
+  ${compositeEnvironmentVariable}=1 node "$compliance_hook" "$@"
 fi
 `
     : ""
@@ -90,10 +98,30 @@ fi
     : ""
 }
 if [ -f "$compliance_hook" ]; then
-  exec node "$compliance_hook" "$@"
+  exec env ${compositeEnvironmentVariable}=1 node "$compliance_hook" "$@"
 fi
 exit 0
 `;
+
+export const runManagedDefaultHook = (hookName, argv) => {
+  if (process.env[compositeEnvironmentVariable] === "1") return false;
+  const commonDirectory = execFileSync(
+    "git",
+    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    { encoding: "utf8" },
+  ).trim();
+  const hookPath = join(commonDirectory, "hooks", hookName);
+  if (!existsSync(hookPath)) return false;
+  const hook = readFileSync(hookPath, "utf8");
+  if (!isManagedHookOwnedBy(hook, commonDirectory)) return false;
+  const result = spawnSync(hookPath, argv, {
+    env: { ...process.env, [compositeEnvironmentVariable]: "1" },
+    stdio: "inherit",
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) process.exitCode = result.status ?? 1;
+  return true;
+};
 
 const deployCompositeHook = (
   hooksDirectory,
@@ -109,11 +137,7 @@ const deployCompositeHook = (
       if (!backupMatch) {
         throw new Error(`invalid managed hook: ${hookPath}`);
       }
-      const expectedOwner = `${managedOwnerPrefix}${shellQuote(commonDirectory)}`;
-      const existingOwner = existingHook
-        .split("\n")
-        .find((line) => line.startsWith(managedOwnerPrefix));
-      if (existingOwner !== expectedOwner) {
+      if (!isManagedHookOwnedBy(existingHook, commonDirectory)) {
         throw new Error(
           `cannot install Big Plan hook at ${hookPath}: the managed dispatcher belongs to a different repository`,
         );
@@ -152,10 +176,9 @@ export const installGitHooks = (repoRoot) => {
   ).trim();
   const effectiveHooksPath = readEffectiveHooksPath(repoRoot);
   const defaultHooksDirectory = effectiveHooksPath
-    ? null
+    ? join(commonDirectory, "hooks")
     : readDefaultHooksDirectory(repoRoot);
   const hasDefaultHooks =
-    defaultHooksDirectory !== null &&
     hookNames.some((hookName) =>
       existsSync(join(defaultHooksDirectory, hookName)),
     );
@@ -166,6 +189,18 @@ export const installGitHooks = (repoRoot) => {
       : committedHooksDirectory;
 
   if (effectiveHooksDirectory === committedHooksDirectory) {
+    const hasManagedDefaultHooks = hookNames.some((hookName) => {
+      const hookPath = join(defaultHooksDirectory, hookName);
+      return (
+        existsSync(hookPath) &&
+        readFileSync(hookPath, "utf8").startsWith(managedHookPrefix)
+      );
+    });
+    if (hasManagedDefaultHooks) {
+      for (const hookName of hookNames) {
+        deployCompositeHook(defaultHooksDirectory, hookName, commonDirectory);
+      }
+    }
     execFileSync("git", ["config", "core.hooksPath", ".githooks"], {
       cwd: repoRoot,
     });
@@ -179,6 +214,16 @@ export const installGitHooks = (repoRoot) => {
   mkdirSync(effectiveHooksDirectory, { recursive: true });
   for (const hookName of hookNames) {
     deployCompositeHook(effectiveHooksDirectory, hookName, commonDirectory);
+  }
+  if (!effectiveHooksPath) {
+    execFileSync("git", ["config", "core.hooksPath", ".githooks"], {
+      cwd: repoRoot,
+    });
+    for (const hookName of hookNames) {
+      const hookPath = join(committedHooksDirectory, hookName);
+      if (existsSync(hookPath)) chmodSync(hookPath, 0o755);
+    }
+    return ".githooks";
   }
   return effectiveHooksPath ?? effectiveHooksDirectory;
 };

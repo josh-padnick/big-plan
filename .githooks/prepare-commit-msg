@@ -2,5 +2,7 @@
 // Thin git-invoked entry point; logic lives in scripts/git-hooks/prepare-commit-msg.mjs
 // so it stays unit-testable outside of a real git hook invocation.
 import { run } from "../scripts/git-hooks/prepare-commit-msg.mjs";
+import { runManagedDefaultHook } from "../scripts/git-hooks/install.mjs";
 
-run(process.argv.slice(2));
+const argv = process.argv.slice(2);
+if (!runManagedDefaultHook("prepare-commit-msg", argv)) run(argv);
