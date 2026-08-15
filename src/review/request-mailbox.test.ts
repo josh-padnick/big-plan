@@ -2,7 +2,16 @@
 // request-lifecycle invariants reject contradictory review state.
 
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -143,6 +152,43 @@ const runRequestWorker = async ({
 };
 
 describe("request mailbox", () => {
+  it("should refuse a symlinked request mailbox before touching its lock", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Do not touch an outside lock.");
+    const displacedDirectory = `${store.agentRequestDirectory}.displaced`;
+    const outsideDirectory = join(store.planDirectory, "outside-requests");
+    const outsideLockDirectory = join(
+      outsideDirectory,
+      `.${request.requestId}.lock`,
+    );
+    const sentinelPath = join(outsideLockDirectory, "sentinel.txt");
+    await rename(store.agentRequestDirectory, displacedDirectory);
+    await mkdir(outsideLockDirectory, { recursive: true });
+    await writeFile(sentinelPath, "untouched\n");
+    await symlink(outsideDirectory, store.agentRequestDirectory);
+
+    try {
+      await expect(
+        claimAgentRequest({
+          store,
+          requestId: request.requestId,
+          baselineSnapshot: snapshot,
+          now: "2026-08-10T12:00:01.000Z",
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentExchangeRejected",
+        message: "The request mailbox is unavailable",
+      });
+      await expect(readFile(sentinelPath, "utf8")).resolves.toBe("untouched\n");
+      await expect(readdir(outsideLockDirectory)).resolves.toEqual([
+        "sentinel.txt",
+      ]);
+    } finally {
+      await rm(store.agentRequestDirectory, { force: true });
+      await rename(displacedDirectory, store.agentRequestDirectory);
+    }
+  });
+
   it("should preserve claim and cancel fields when two processes race", async () => {
     const { planPath, store } = await preparedReview();
     const request = requestWith([

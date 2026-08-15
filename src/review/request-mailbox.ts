@@ -22,6 +22,7 @@ import {
 } from "./shared/review-image.js";
 import { agentOwnsRequest } from "./shared/request-ownership.js";
 import {
+  anchorReviewStore,
   appendAgentConnectionEvent,
   appendProgressValue,
   compactProgressLog,
@@ -29,6 +30,7 @@ import {
   nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
+  ReviewStorePathRejected,
   withReviewStoreLock,
   writeAgentRequestValue,
   writeAgentResponseValue,
@@ -49,16 +51,27 @@ const withRequestLock = async <TResult>({
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
-  readonly change: () => Promise<TResult>;
+  readonly change: (store: ReviewStore) => Promise<TResult>;
 }): Promise<TResult> => {
   if (!REQUEST_ID.test(requestId)) {
     throw new AgentExchangeRejected(
       "A request id must be 16 hexadecimal characters",
     );
   }
+  let requestDirectory: string;
+  try {
+    const anchoredStore = await anchorReviewStore(store);
+    requestDirectory = (
+      await anchoredStore.resolveAgentPath({ area: "requests" })
+    ).path;
+  } catch (error: unknown) {
+    if (!(error instanceof ReviewStorePathRejected)) throw error;
+    throw new AgentExchangeRejected("The request mailbox is unavailable");
+  }
+  const lockedStore = { ...store, agentRequestDirectory: requestDirectory };
   return withReviewStoreLock({
-    lockPath: join(store.agentRequestDirectory, `.${requestId}.lock`),
-    change,
+    lockPath: join(requestDirectory, `.${requestId}.lock`),
+    change: () => change(lockedStore),
     timeoutError: () =>
       new AgentExchangeRejected(
         "Another process is changing this request. Try again.",
@@ -126,14 +139,14 @@ export const ensureAgentRequest = async ({
   return withRequestLock({
     store,
     requestId: intended.requestId,
-    change: async () => {
+    change: async (lockedStore) => {
       const value = await readAgentRequestValue({
-        store,
+        store: lockedStore,
         requestId: intended.requestId,
       });
       if (value === undefined) {
         await writeAgentRequestValue({
-          store,
+          store: lockedStore,
           requestId: intended.requestId,
           value: intended,
         });
@@ -175,15 +188,21 @@ export const claimAgentRequest = async ({
   withRequestLock({
     store,
     requestId,
-    change: async () => {
-      const request = await readCurrentRequest({ store, requestId });
+    change: async (lockedStore) => {
+      const request = await readCurrentRequest({
+        store: lockedStore,
+        requestId,
+      });
       if (request.canceledAt !== undefined) {
         throw new AgentExchangeRejected(
           "The request was canceled by the reviewer",
         );
       }
       if (
-        (await readValidatedAgentResponse({ store, request })) !== undefined
+        (await readValidatedAgentResponse({
+          store: lockedStore,
+          request,
+        })) !== undefined
       ) {
         throw new AgentExchangeRejected(
           "The agent has already answered this request",
@@ -196,7 +215,11 @@ export const claimAgentRequest = async ({
         baselineSnapshot,
         claimedAt: now,
       });
-      await writeAgentRequestValue({ store, requestId, value: claimed });
+      await writeAgentRequestValue({
+        store: lockedStore,
+        requestId,
+        value: claimed,
+      });
       return claimed;
     },
   });
@@ -214,18 +237,28 @@ export const cancelAgentRequest = async ({
   withRequestLock({
     store,
     requestId,
-    change: async () => {
-      const request = await readCurrentRequest({ store, requestId });
+    change: async (lockedStore) => {
+      const request = await readCurrentRequest({
+        store: lockedStore,
+        requestId,
+      });
       if (request.canceledAt !== undefined) return request;
       if (
-        (await readValidatedAgentResponse({ store, request })) !== undefined
+        (await readValidatedAgentResponse({
+          store: lockedStore,
+          request,
+        })) !== undefined
       ) {
         throw new AgentExchangeRejected(
           "The agent has already answered this request",
         );
       }
       const canceled = validateAgentRequest({ ...request, canceledAt: now });
-      await writeAgentRequestValue({ store, requestId, value: canceled });
+      await writeAgentRequestValue({
+        store: lockedStore,
+        requestId,
+        value: canceled,
+      });
       return canceled;
     },
   });
@@ -241,9 +274,9 @@ export const publishAgentResponse = async ({
   withRequestLock({
     store,
     requestId: response.requestId,
-    change: async () => {
+    change: async (lockedStore) => {
       const request = await readCurrentRequest({
-        store,
+        store: lockedStore,
         requestId: response.requestId,
       });
       if (request.canceledAt !== undefined) {
@@ -265,14 +298,17 @@ export const publishAgentResponse = async ({
         );
       }
       if (
-        (await readValidatedAgentResponse({ store, request })) !== undefined
+        (await readValidatedAgentResponse({
+          store: lockedStore,
+          request,
+        })) !== undefined
       ) {
         throw new AgentExchangeRejected(
           "The agent has already answered this request",
         );
       }
       await writeAgentResponseValue({
-        store,
+        store: lockedStore,
         requestId: response.requestId,
         value: response,
       });
@@ -334,9 +370,9 @@ export const reviseQueuedRequest = async ({
   withRequestLock({
     store,
     requestId,
-    change: async () => {
+    change: async (lockedStore) => {
       const request = await readQueuedMessage({
-        store,
+        store: lockedStore,
         requestId,
         verb: "revised",
         allowCanceled: false,
@@ -364,7 +400,11 @@ export const reviseQueuedRequest = async ({
           "Revising this message changed the request kind",
         );
       }
-      await writeAgentRequestValue({ store, requestId, value: revised });
+      await writeAgentRequestValue({
+        store: lockedStore,
+        requestId,
+        value: revised,
+      });
       return revised;
     },
   });
@@ -384,14 +424,14 @@ export const deleteQueuedRequest = async ({
   withRequestLock({
     store,
     requestId,
-    change: async () => {
+    change: async (lockedStore) => {
       await readQueuedMessage({
-        store,
+        store: lockedStore,
         requestId,
         verb: "deleted",
         allowCanceled: true,
       });
-      return deleteAgentRequestValue({ store, requestId });
+      return deleteAgentRequestValue({ store: lockedStore, requestId });
     },
   });
 
@@ -410,8 +450,11 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
   withRequestLock({
     store,
     requestId,
-    change: async () => {
-      const request = await readCurrentRequest({ store, requestId });
+    change: async (lockedStore) => {
+      const request = await readCurrentRequest({
+        store: lockedStore,
+        requestId,
+      });
       if (request.kind !== "feedback") {
         throw new AgentExchangeRejected(
           "Only a feedback request can remove a queued comment",
@@ -441,7 +484,11 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
           "Removing a queued comment changed the request kind",
         );
       }
-      await writeAgentRequestValue({ store, requestId, value: updated });
+      await writeAgentRequestValue({
+        store: lockedStore,
+        requestId,
+        value: updated,
+      });
       return updated;
     },
   });
