@@ -1053,6 +1053,7 @@ describe("review runtime feedback", () => {
       const claimedAt = new Date().toISOString();
       await claimAgentRequest({
         store: isolated.store,
+        activeSessionId: isolated.sessionId,
         requestId: created.requestId,
         claimedBy: isolated.sessionId,
         baselineSnapshot: created.premiseSnapshot,
@@ -1738,6 +1739,7 @@ The dashboard shows the retry backlog.
       if (request === undefined) throw new Error("Feedback was not queued");
       const claimed = await claimAgentRequest({
         store: isolated.store,
+        activeSessionId: isolated.sessionId,
         requestId: request.requestId,
         claimedBy: isolated.sessionId,
         baselineSnapshot: request.premiseSnapshot,
@@ -1846,6 +1848,7 @@ The dashboard shows the retry backlog.
       throw new Error("The feedback request was not stored");
     const claimed = await claimAgentRequest({
       store: runtime.store,
+      activeSessionId: runtime.sessionId,
       requestId: request.requestId,
       claimedBy: runtime.sessionId,
       baselineSnapshot: request.premiseSnapshot,
@@ -2196,6 +2199,7 @@ describe("review runtime shutdown", () => {
     await writeAgentRequest({ store: first.store, request: oldRequest });
     const oldClaim = await claimAgentRequest({
       store: first.store,
+      activeSessionId: first.sessionId,
       requestId: oldRequest.requestId,
       claimedBy: first.sessionId,
       baselineSnapshot: oldRevision,
@@ -2241,6 +2245,7 @@ describe("review runtime shutdown", () => {
       await writeAgentRequest({ store: restarted.store, request: newRequest });
       const newClaim = await claimAgentRequest({
         store: restarted.store,
+        activeSessionId: restarted.sessionId,
         requestId: newRequest.requestId,
         claimedBy: restarted.sessionId,
         baselineSnapshot: newRequest.premiseSnapshot,

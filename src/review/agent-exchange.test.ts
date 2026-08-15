@@ -318,6 +318,7 @@ describe("agent exchange filesystem", () => {
     await writeAgentRequest({ store, request });
     const firstClaim = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: "aaaaaaaaaaaaaaaa",
@@ -325,6 +326,7 @@ describe("agent exchange filesystem", () => {
     });
     const repeatedClaim = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: firstClaim.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: "bbbbbbbbbbbbbbbb",
@@ -352,6 +354,7 @@ describe("agent exchange filesystem", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
@@ -454,6 +457,7 @@ describe("agent exchange filesystem", () => {
     await expect(
       claimAgentRequest({
         store,
+        activeSessionId: sessionId,
         requestId: request.requestId,
         claimedBy: agentSessionId,
         baselineSnapshot: "aaaaaaaaaaaaaaaa",
@@ -519,6 +523,7 @@ describe("agent exchange filesystem", () => {
     await writeAgentRequest({ store, request: reply });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: reply.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: reply.premiseSnapshot,

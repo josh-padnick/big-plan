@@ -192,6 +192,7 @@ export const ensureAgentRequest = async ({
 /** Takes or renews one agent session's exclusive claim on a request. */
 export const claimAgentRequest = async ({
   store,
+  activeSessionId,
   requestId,
   claimedBy,
   baselineSnapshot,
@@ -199,6 +200,7 @@ export const claimAgentRequest = async ({
   verifyBeforeClaim,
 }: {
   readonly store: ReviewStore;
+  readonly activeSessionId: string;
   readonly requestId: string;
   readonly claimedBy: string;
   readonly baselineSnapshot: string;
@@ -272,7 +274,7 @@ export const claimAgentRequest = async ({
     await appendProgressEvent({
       store,
       event: {
-        sessionId: takeover.request.sessionId,
+        sessionId: activeSessionId,
         requestId,
         atMs: nowMs,
         stepCode: "request-reclaimed",

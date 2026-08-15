@@ -316,6 +316,7 @@ describe("agent work loop lifecycle", () => {
     await writeAgentRequest({ store: review.store, request: free });
     await claimAgentRequest({
       store: review.store,
+      activeSessionId: review.sessionId,
       requestId: leased.requestId,
       claimedBy: "ffff2222ffff2222",
       baselineSnapshot: premiseSnapshot,
@@ -1130,6 +1131,7 @@ describe("agent work loop lifecycle", () => {
     await writeAgentRequest({ store: review.store, request });
     await claimAgentRequest({
       store: review.store,
+      activeSessionId: review.sessionId,
       requestId: request.requestId,
       claimedBy: "eeeeeeeeeeeeeeee",
       baselineSnapshot: request.premiseSnapshot,
@@ -1175,6 +1177,68 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should expose a takeover after the review runtime restarts", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-restart-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nContinue this review after a restart.\n";
+    await writeFile(planPath, source);
+    const firstReview = await startReviewRuntime({ planPath });
+    let currentReview: ReviewRuntime | undefined;
+    try {
+      const request = messageAgentRequest({
+        kind: "chat",
+        requestId: "abababababababab",
+        sessionId: firstReview.sessionId,
+        planId: firstReview.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Please continue with a new agent session.",
+      });
+      await writeAgentRequest({ store: firstReview.store, request });
+      await claimAgentRequest({
+        store: firstReview.store,
+        activeSessionId: firstReview.sessionId,
+        requestId: request.requestId,
+        claimedBy: "cdcdcdcdcdcdcdcd",
+        baselineSnapshot: request.premiseSnapshot,
+        now: new Date(Date.now() - AGENT_CLAIM_LEASE_MS - 1).toISOString(),
+      });
+      await firstReview.close();
+
+      currentReview = await startReviewRuntime({ planPath });
+      expect(currentReview.sessionId).not.toBe(firstReview.sessionId);
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: request.requestId },
+      });
+      await expect(
+        readProgress({
+          store: currentReview.store,
+          sessionId: currentReview.sessionId,
+        }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestId: request.requestId,
+            stepCode: "request-reclaimed",
+            detail: "The previous agent session stopped responding",
+          }),
+        ]),
+      );
+    } finally {
+      await currentReview?.close();
+      await firstReview.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should materialize reviewer images before publishing a changed plan", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-assets-"));
     const planPath = join(directory, "plan.mdx");
@@ -1201,6 +1265,7 @@ describe("agent work loop lifecycle", () => {
     await writeAgentRequest({ store: review.store, request });
     await claimAgentRequest({
       store: review.store,
+      activeSessionId: review.sessionId,
       requestId: request.requestId,
       claimedBy: review.sessionId,
       baselineSnapshot: deriveSnapshotDigest(source),
@@ -1440,6 +1505,7 @@ describe("agent work loop lifecycle", () => {
       });
       const originalClaim = await claimAgentRequest({
         store: review.store,
+        activeSessionId: review.sessionId,
         requestId: originalRequest.requestId,
         claimedBy: review.sessionId,
         baselineSnapshot: revision,

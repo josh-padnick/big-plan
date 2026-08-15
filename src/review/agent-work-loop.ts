@@ -497,6 +497,7 @@ const nextWork = async ({
     try {
       request = await claimAgentRequest({
         store: session.store,
+        activeSessionId: session.sessionId,
         requestId: selectedRequestId,
         claimedBy,
         baselineSnapshot: claimedSnapshot,
@@ -778,6 +779,7 @@ const note = async ({
   try {
     renewed = await claimAgentRequest({
       store: session.store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
       claimedBy: agentToken,
       baselineSnapshot: requestBaselineSnapshot(request),

@@ -499,6 +499,7 @@ test("should not keep an answered feedback batch active without its response", a
   const source = await readFile(session.plan, "utf8");
   const claimed = await claimAgentRequest({
     store,
+    activeSessionId: session.sessionId,
     requestId: request.requestId,
     claimedBy: agentSessionId,
     baselineSnapshot: deriveSnapshotDigest(source),
@@ -583,6 +584,7 @@ test("should pause a nonstandard request behind an explicit warning", async ({
   const source = await readFile(session.plan, "utf8");
   const claimed = await claimAgentRequest({
     store,
+    activeSessionId: session.sessionId,
     requestId: request.requestId,
     claimedBy: agentSessionId,
     baselineSnapshot: deriveSnapshotDigest(source),
@@ -726,6 +728,7 @@ test("should contain working comments when resolved threads expand", async ({
   });
   const firstClaimed = await claimAgentRequest({
     store,
+    activeSessionId: session.sessionId,
     requestId: firstRequest.requestId,
     claimedBy: agentSessionId,
     baselineSnapshot: firstRequest.premiseSnapshot,
@@ -792,6 +795,7 @@ test("should contain working comments when resolved threads expand", async ({
   }
   const secondClaimed = await claimAgentRequest({
     store,
+    activeSessionId: session.sessionId,
     requestId: secondRequest.requestId,
     claimedBy: agentSessionId,
     baselineSnapshot: secondRequest.premiseSnapshot,
@@ -1401,6 +1405,7 @@ test("should restore and submit staged comments through the local review runtime
   // alone no longer implies pickup, so this journey seeds the real thing.
   await claimAgentRequest({
     store,
+    activeSessionId: session.sessionId,
     requestId: request.requestId,
     claimedBy: agentSessionId,
     baselineSnapshot: request.premiseSnapshot,
@@ -1700,6 +1705,7 @@ test("should restore and submit staged comments through the local review runtime
   });
   const claimed = await claimAgentRequest({
     store,
+    activeSessionId: session.sessionId,
     requestId: request.requestId,
     claimedBy: agentSessionId,
     baselineSnapshot: request.premiseSnapshot,
@@ -3786,6 +3792,7 @@ test("should keep shell interactions wired after an agent revision refreshes the
     });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
@@ -4212,6 +4219,7 @@ Reviewers confirm the output by hand.
       const answeredAt = new Date().toISOString();
       const claimed = await claimAgentRequest({
         store,
+        activeSessionId: session.sessionId,
         requestId: request.requestId,
         claimedBy: agentSessionId,
         baselineSnapshot: request.premiseSnapshot,
@@ -4252,6 +4260,7 @@ Reviewers confirm the output by hand.
       await writeAgentRequest({ store, request: followUp });
       const claimedFollowUp = await claimAgentRequest({
         store,
+        activeSessionId: session.sessionId,
         requestId: followUp.requestId,
         claimedBy: agentSessionId,
         baselineSnapshot: revisedSnapshot,
@@ -4451,6 +4460,7 @@ The current plan contains no slides.
     const answeredAt = new Date().toISOString();
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
@@ -4491,6 +4501,7 @@ The current plan contains no slides.
     await writeAgentRequest({ store, request: followUp });
     const claimedFollowUp = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: followUp.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: revisedSnapshot,
@@ -4693,6 +4704,7 @@ The rollout waits for a green build.
     await writeFile(session.plan, revisedSource, "utf8");
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
@@ -4878,6 +4890,7 @@ test("should open a digest entry in the slide its section header names", async (
     const answeredAt = new Date().toISOString();
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
@@ -5064,6 +5077,7 @@ ${lowerContent}
     await writeFile(session.plan, revisedSource, "utf8");
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
@@ -5245,6 +5259,7 @@ const verification = "first";
     await writeFile(session.plan, firstSource, "utf8");
     const firstClaimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: firstRequest.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: firstRequest.premiseSnapshot,
@@ -5328,6 +5343,7 @@ const verification = "first";
     await writeFile(session.plan, secondSource, "utf8");
     const secondClaimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: secondRequest.requestId,
       claimedBy: agentSessionId,
       baselineSnapshot: secondRequest.premiseSnapshot,
@@ -5520,6 +5536,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
       await writeFile(session.plan, revisedSource, "utf8");
       const claimed = await claimAgentRequest({
         store,
+        activeSessionId: session.sessionId,
         requestId: request.requestId,
         claimedBy: agentSessionId,
         baselineSnapshot: request.premiseSnapshot,
@@ -5589,6 +5606,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
       await writeFile(session.plan, latestSource, "utf8");
       const claimedFollowUp = await claimAgentRequest({
         store,
+        activeSessionId: session.sessionId,
         requestId: followUp.requestId,
         claimedBy: agentSessionId,
         baselineSnapshot: revisedSnapshot,

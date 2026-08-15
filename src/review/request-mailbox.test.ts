@@ -70,7 +70,7 @@ const { claimAgentRequest, cancelAgentRequest } = await import(process.env.BP_MA
 const store = reviewStoreFor({ planPath: process.env.BP_PLAN_PATH, planId: process.env.BP_PLAN_ID });
 const delay = Number(process.env.BP_START_AT) - Date.now();
 if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
-const common = { store, requestId: process.env.BP_REQUEST_ID, now: process.env.BP_NOW };
+const common = { store, activeSessionId: process.env.BP_SESSION_ID, requestId: process.env.BP_REQUEST_ID, now: process.env.BP_NOW };
 if (process.env.BP_OPERATION === "claim") {
   await claimAgentRequest({ ...common, claimedBy: process.env.BP_CLAIMED_BY, baselineSnapshot: "aaaaaaaaaaaaaaaa" });
 } else {
@@ -152,6 +152,7 @@ const runRequestWorker = async ({
       BP_OPERATION: operation,
       BP_PLAN_PATH: planPath,
       BP_PLAN_ID: planId,
+      BP_SESSION_ID: sessionId,
       BP_REQUEST_ID: requestId,
       BP_START_AT: String(startAt),
       BP_NOW: now,
@@ -246,6 +247,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
@@ -346,6 +348,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
@@ -355,6 +358,7 @@ describe("request mailbox", () => {
     await expect(
       claimAgentRequest({
         store,
+        activeSessionId: sessionId,
         requestId: request.requestId,
         claimedBy: agentB,
         baselineSnapshot: snapshot,
@@ -375,6 +379,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
@@ -383,6 +388,7 @@ describe("request mailbox", () => {
 
     const renewed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       // A renewal must never move the frozen baseline, even when the caller
@@ -409,6 +415,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
@@ -417,6 +424,7 @@ describe("request mailbox", () => {
 
     const takenOver = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentB,
       baselineSnapshot: snapshot,
@@ -444,6 +452,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
@@ -498,6 +507,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
@@ -544,6 +554,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
@@ -576,6 +587,7 @@ describe("request mailbox", () => {
     await expect(
       claimAgentRequest({
         store,
+        activeSessionId: sessionId,
         requestId: request.requestId,
         claimedBy: agentB,
         baselineSnapshot: snapshot,
@@ -594,6 +606,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
@@ -641,6 +654,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
@@ -698,6 +712,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
       claimedBy: agentA,
       baselineSnapshot: snapshot,
@@ -883,6 +898,7 @@ describe("request mailbox", () => {
     const results = await Promise.allSettled([
       claimAgentRequest({
         store,
+        activeSessionId: sessionId,
         requestId: request.requestId,
         claimedBy: agentA,
         baselineSnapshot: "aaaaaaaaaaaaaaaa",

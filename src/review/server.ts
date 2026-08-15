@@ -493,6 +493,7 @@ export const startReviewRuntime = async ({
     await writeAgentRequest({ store, request: feedbackRequest });
     const claimedFeedbackRequest = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: feedbackRequest.requestId,
       claimedBy: sessionId,
       baselineSnapshot: premiseSnapshot,
@@ -548,6 +549,7 @@ export const startReviewRuntime = async ({
     await writeAgentRequest({ store, request: historicalRequest });
     const claimedHistoricalRequest = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: historicalRequest.requestId,
       claimedBy: sessionId,
       baselineSnapshot: premiseSnapshot,
@@ -582,6 +584,7 @@ export const startReviewRuntime = async ({
     await writeAgentRequest({ store, request: chatRequest });
     const claimedChatRequest = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: chatRequest.requestId,
       claimedBy: sessionId,
       baselineSnapshot: premiseSnapshot,
