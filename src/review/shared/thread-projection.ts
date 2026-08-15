@@ -3,6 +3,7 @@
 // joining requests, responses, outcomes, progress, and comments themselves.
 
 import { deriveAgentStatus, type AgentStatus } from "./agent-status.js";
+import { claimIsLive, type ClaimedRequest } from "./agent-claim.js";
 import { requestIsCanceled, type CancelableRequest } from "./cancel-pending.js";
 import type { ReviewComment } from "./comment.js";
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
@@ -10,17 +11,18 @@ import type { ProgressStepCode } from "./progress-code.js";
 import { requestIsOutstanding } from "./request-lifecycle.js";
 import { agentOwnsRequest } from "./request-ownership.js";
 
-export type ThreadRequest = CancelableRequest & {
-  readonly premiseSnapshot: string;
-  readonly baselineSnapshot?: string;
-  readonly claimedAt?: string;
-  readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat";
-  readonly body?: string;
-  readonly commentId?: string;
-  readonly commentIds?: ReadonlyArray<string>;
-  readonly comments?: ReadonlyArray<ReviewComment>;
-};
+export type ThreadRequest = CancelableRequest &
+  ClaimedRequest & {
+    readonly premiseSnapshot: string;
+    readonly baselineSnapshot?: string;
+    readonly claimedAt?: string;
+    readonly createdAt: string;
+    readonly kind: "feedback" | "reply" | "chat";
+    readonly body?: string;
+    readonly commentId?: string;
+    readonly commentIds?: ReadonlyArray<string>;
+    readonly comments?: ReadonlyArray<ReviewComment>;
+  };
 
 export type ThreadOutcome = {
   readonly commentId: string;
@@ -304,7 +306,7 @@ export const projectRequestStatus = ({
     runtime,
     request: response === undefined ? "pending" : "answered",
     agentConnected: presence.connected,
-    pickedUp: agentOwnsRequest(request) || activity.length > 0,
+    pickedUp: claimIsLive({ request, nowMs }),
     sessionBusy:
       presence.state === "working" && presence.requestId !== request.requestId,
     ...(queuedAhead === undefined ? {} : { queuedAhead }),

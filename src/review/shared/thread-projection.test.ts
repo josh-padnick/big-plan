@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./comment.js";
+import { AGENT_CLAIM_LEASE_MS } from "./agent-claim.js";
 import {
   projectCommentThread,
   projectConversationHistory,
@@ -24,6 +25,11 @@ const presence = {
   state: "waiting" as const,
   updatedAtMs: NOW,
 };
+const liveClaim = (atMs = NOW) => ({
+  claimedAt: new Date(atMs).toISOString(),
+  claimedBy: "aaaa0000aaaa0000",
+  claimExpiresAtMs: atMs + AGENT_CLAIM_LEASE_MS,
+});
 const request = (overrides: Partial<ThreadRequest> = {}): ThreadRequest => ({
   requestId: "aaaaaaaaaaaaaaaa",
   premiseSnapshot: "1111111111111111",
@@ -74,7 +80,7 @@ describe("thread projection", () => {
     expect(
       projectCommentThread({
         ...base,
-        requests: [request({ claimedAt: new Date(NOW).toISOString() })],
+        requests: [request(liveClaim())],
         progressEvents: [
           {
             requestId: "aaaaaaaaaaaaaaaa",
@@ -202,7 +208,7 @@ describe("thread projection", () => {
       commentId: comment.id,
       commentIds: undefined,
       createdAt: "2026-08-10T19:03:00Z",
-      claimedAt: "2026-08-10T19:03:30Z",
+      ...liveClaim(Date.parse("2026-08-10T19:03:30Z")),
     });
     expect(
       projectCommentThread({
@@ -312,7 +318,7 @@ describe("thread projection", () => {
   it("should derive one request status from progress and presence", () => {
     expect(
       projectRequestStatus({
-        request: request({ claimedAt: new Date(NOW).toISOString() }),
+        request: request(liveClaim()),
         response: undefined,
         progressEvents: [
           {
@@ -357,10 +363,48 @@ describe("thread projection", () => {
     ).toMatchObject({ stage: "waiting", tone: "neutral" });
   });
 
+  it("should not report a request as picked up from progress events alone", () => {
+    expect(
+      projectRequestStatus({
+        request: request(),
+        response: undefined,
+        progressEvents: [
+          {
+            requestId: "aaaaaaaaaaaaaaaa",
+            seq: 1,
+            step: "Checking the retry state",
+            state: "live",
+            atMs: NOW,
+          },
+        ],
+        presence: { ...presence, state: "working" },
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }).stage,
+    ).toBe("waiting");
+  });
+
+  it("should stop reporting a request as picked up once its lease lapses", () => {
+    expect(
+      projectRequestStatus({
+        request: request(liveClaim()),
+        response: undefined,
+        progressEvents: [],
+        presence: { ...presence, state: "working" },
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW + AGENT_CLAIM_LEASE_MS + 1,
+        cancelPendingRequestIds: new Set(),
+      }).stage,
+    ).toBe("waiting");
+  });
+
   it("should ignore an invalid claimed timestamp when valid activity exists", () => {
     expect(
       projectRequestStatus({
-        request: request({ claimedAt: "not-a-timestamp" }),
+        request: request({ ...liveClaim(), claimedAt: "not-a-timestamp" }),
         response: undefined,
         progressEvents: [
           {
@@ -494,7 +538,7 @@ describe("review-wide agent status", () => {
   });
 
   it("should report working once the agent owns the message", () => {
-    const claimed = request({ claimedAt: new Date(NOW).toISOString() });
+    const claimed = request(liveClaim());
     expect(
       projectLatestAgentStatus({
         ...base,
