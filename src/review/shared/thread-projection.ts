@@ -186,6 +186,73 @@ export const queuedRequestsAhead = ({
   ).length;
 };
 
+/**
+ * Derives the one review-wide status from the newest request. It is the second
+ * derivation site beside projectRequestStatus, and it lives here so both reach
+ * agent activity through projectRequestActivity: a reviewer queue event carries
+ * a requestId, and counting it as pickup would report a message the agent has
+ * not started as work in progress.
+ */
+export const projectLatestAgentStatus = ({
+  requests,
+  responses,
+  progressEvents,
+  presence,
+  runtime,
+  agentConnected,
+  nowMs,
+  cancelPendingRequestIds,
+}: {
+  readonly requests: ReadonlyArray<ThreadRequest>;
+  readonly responses: ReadonlyArray<ThreadResponse>;
+  readonly progressEvents: ReadonlyArray<ThreadProgress>;
+  readonly presence: ThreadPresence;
+  readonly runtime: ThreadRuntime;
+  readonly agentConnected: boolean;
+  readonly nowMs: number;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+}): AgentStatus => {
+  const request = requests.at(-1);
+  const response = responses.find(
+    (candidate) => candidate.requestId === request?.requestId,
+  );
+  const activity =
+    request === undefined
+      ? []
+      : projectRequestActivity({ request, progressEvents });
+  const failure = [...activity]
+    .reverse()
+    .find((event) => event.state === "failed")?.detail;
+  const claimedAtMs =
+    request?.claimedAt === undefined ? 0 : Date.parse(request.claimedAt);
+  const lastAgentSignalAtMs = Math.max(
+    0,
+    ...activity.map((event) => event.atMs ?? 0),
+    Number.isNaN(claimedAtMs) ? 0 : claimedAtMs,
+    presence.requestId === request?.requestId ? (presence.updatedAtMs ?? 0) : 0,
+  );
+  return deriveAgentStatus({
+    runtime,
+    request:
+      request === undefined
+        ? "none"
+        : response === undefined &&
+            !requestIsCanceled({
+              request,
+              pendingRequestIds: cancelPendingRequestIds,
+            })
+          ? "pending"
+          : "answered",
+    agentConnected,
+    pickedUp:
+      (request !== undefined && agentOwnsRequest(request)) ||
+      activity.length > 0,
+    ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
+    ...(failure === undefined ? {} : { failure }),
+    nowMs,
+  });
+};
+
 export const projectRequestStatus = ({
   request,
   response,

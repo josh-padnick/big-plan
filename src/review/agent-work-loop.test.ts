@@ -1,6 +1,6 @@
 // Covers the review-owned coding-agent loop through its one action interface.
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -262,6 +262,103 @@ describe("agent work loop lifecycle", () => {
           requestId: request.requestId,
         }),
       ).rejects.toThrow("The agent already started on this message");
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse an attachment path that escapes its request directory", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-escape-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const imageId = reviewImageId("b".repeat(64));
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments: [
+        {
+          id: imageId,
+          sha256: imageId,
+          alt: "Capture",
+          mimeType: "image/png",
+          byteLength: 1,
+          width: 1,
+          height: 1,
+          // Lexically under the request directory, but `..` walks back out of
+          // it. A prefix test accepts this; a resolved comparison must not.
+          // Built by concatenation because join() would normalize the escape.
+          path: `${review.store.requestAttachmentsDirectory}/cccccccccccccccc/../../escaped.png`,
+        },
+      ],
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/outside the request attachment directory/);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should leave a message revisable when its baseline cannot be stored", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-baseline-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Answer once the baseline is storable.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    // Pickup snapshots the plan as it reads it, so a later edit gives the
+    // baseline a digest nothing has stored yet.
+    const editedSource = "# Plan\n\nEdited after the runtime started.\n";
+    await writeFile(planPath, editedSource);
+    // A directory where the snapshot file belongs makes persistence fail.
+    await mkdir(
+      join(
+        review.store.snapshotDirectory,
+        `${deriveSnapshotDigest(editedSource)}.mdx`,
+      ),
+      { recursive: true },
+    );
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow();
+      // The claim never happened, so the reviewer still owns the message.
+      await expect(
+        deleteQueuedRequest({
+          store: review.store,
+          requestId: request.requestId,
+        }),
+      ).resolves.toBeUndefined();
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

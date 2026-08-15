@@ -32,7 +32,6 @@ import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
   AGENT_STALL_MS,
   deriveAgentHealthLabel,
-  deriveAgentStatus,
   deriveCurrentAgentActivity,
   projectAgentConnectionState,
   type AgentStatus,
@@ -61,6 +60,7 @@ import {
 } from "../shared/thread-open-state.js";
 import {
   projectCommentThreads,
+  projectLatestAgentStatus,
   projectRequestActivity,
   projectRequestStatus,
   queuedRequestsAhead,
@@ -4858,46 +4858,15 @@ export const ReviewController = () => {
     nowMs: agentProjectionNowMs,
     cancelPendingRequestIds,
   });
-  const latestRequest = agent.requests.at(-1);
-  const latestResponse = agent.responses.find(
-    (response) => response.requestId === latestRequest?.requestId,
-  );
-  const requestProgress =
-    latestRequest === undefined
-      ? []
-      : progress.filter((event) => event.requestId === latestRequest.requestId);
-  const failure = [...requestProgress]
-    .reverse()
-    .find((event) => event.state === "failed")?.detail;
-  const lastAgentSignalAtMs = Math.max(
-    0,
-    ...requestProgress.map((event) => event.atMs ?? 0),
-    latestRequest?.claimedAt === undefined
-      ? 0
-      : Date.parse(latestRequest.claimedAt),
-    agent.presence.requestId === latestRequest?.requestId
-      ? (agent.presence.updatedAtMs ?? 0)
-      : 0,
-  );
-  const agentStatus: AgentStatus = deriveAgentStatus({
+  const agentStatus: AgentStatus = projectLatestAgentStatus({
+    requests: agent.requests,
+    responses: agent.responses,
+    progressEvents: progress,
+    presence: effectivePresence,
     runtime: threadRuntime,
-    request:
-      latestRequest === undefined
-        ? "none"
-        : latestResponse === undefined &&
-            !requestIsCanceled({
-              request: latestRequest,
-              pendingRequestIds: cancelPendingRequestIds,
-            })
-          ? "pending"
-          : "answered",
     agentConnected,
-    pickedUp:
-      (latestRequest !== undefined && agentOwnsRequest(latestRequest)) ||
-      requestProgress.length > 0,
-    ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
-    ...(failure === undefined ? {} : { failure }),
     nowMs: agentProjectionNowMs,
+    cancelPendingRequestIds,
   });
   const activityForRequest = (
     request: AgentRequest,

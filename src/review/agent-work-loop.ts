@@ -4,7 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, extname, join, resolve, sep } from "node:path";
 import { lintPlan } from "../lint/lint-plan.js";
 import { renderDocument } from "../render/render-document.js";
 import {
@@ -323,6 +323,15 @@ const nextWork = async ({
     const claimedSource = await readFile(session.planPath, "utf8");
     const claimedSnapshot = deriveSnapshotDigest(claimedSource);
     const selectedRequestId = request.requestId;
+    // The baseline is persisted before the claim records it. A snapshot is
+    // addressed by its own digest, so writing one the claim never references
+    // is harmless, while a claim whose baseline was never stored is not: the
+    // request is frozen, unrevisable, undeletable, and unreadable.
+    await writeSnapshot({
+      store: session.store,
+      snapshot: claimedSnapshot,
+      source: claimedSource,
+    });
     try {
       request = await claimAgentRequest({
         store: session.store,
@@ -346,21 +355,21 @@ const nextWork = async ({
       }
       return fail(error.message);
     }
-    await writeSnapshot({
-      store: session.store,
-      snapshot: claimedSnapshot,
-      source: claimedSource,
-    });
     for (const attachment of request.attachments) {
-      const attachmentRoot = `${join(session.store.requestAttachmentsDirectory, request.requestId)}${"/"}`;
-      if (!attachment.path.startsWith(attachmentRoot)) {
+      // Compare resolved paths: a raw prefix test accepts `<root>/../../secret`,
+      // which would let a hand-edited request read outside its own directory.
+      const attachmentRoot = resolve(
+        join(session.store.requestAttachmentsDirectory, request.requestId),
+      );
+      const attachmentPath = resolve(attachment.path);
+      if (!attachmentPath.startsWith(`${attachmentRoot}${sep}`)) {
         return fail(
           `Attachment ${attachment.id} is outside the request attachment directory`,
         );
       }
       let bytes: Uint8Array;
       try {
-        bytes = Uint8Array.from(await readFile(attachment.path));
+        bytes = Uint8Array.from(await readFile(attachmentPath));
       } catch {
         return fail(
           `Attachment ${attachment.id} could not be opened during agent pickup`,

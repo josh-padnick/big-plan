@@ -3,6 +3,7 @@ import type { ReviewComment } from "./comment.js";
 import {
   projectCommentThread,
   projectConversationHistory,
+  projectLatestAgentStatus,
   projectRequestStatus,
   queuedRequestsAhead,
   requestCommentIds,
@@ -459,5 +460,76 @@ describe("conversation history", () => {
         createdAt: "2026-08-10T19:02:00Z",
       },
     ]);
+  });
+});
+
+describe("review-wide agent status", () => {
+  const base = {
+    responses: [],
+    presence,
+    runtime: "online" as const,
+    agentConnected: true,
+    nowMs: NOW,
+    cancelPendingRequestIds: new Set<string>(),
+  };
+
+  it("should keep an edited queued message out of the working state", () => {
+    const queued = request({ claimedAt: undefined });
+    expect(
+      projectLatestAgentStatus({
+        ...base,
+        requests: [queued],
+        progressEvents: [
+          {
+            requestId: queued.requestId,
+            seq: 1,
+            stepCode: "queued-message-revised",
+            step: "Queued message edited by reviewer",
+            state: "waiting",
+            atMs: NOW,
+          },
+        ],
+      }),
+    ).toMatchObject({ stage: "waiting", tone: "neutral" });
+  });
+
+  it("should report working once the agent owns the message", () => {
+    const claimed = request({ claimedAt: new Date(NOW).toISOString() });
+    expect(
+      projectLatestAgentStatus({
+        ...base,
+        requests: [claimed],
+        progressEvents: [
+          {
+            requestId: claimed.requestId,
+            seq: 1,
+            stepCode: "request-picked-up",
+            step: "Picked up by the agent",
+            state: "live",
+            atMs: NOW,
+          },
+        ],
+      }).stage,
+    ).toBe("working");
+  });
+
+  it("should ignore a reviewer queue event when timing agent silence", () => {
+    const queued = request({ claimedAt: undefined });
+    expect(
+      projectLatestAgentStatus({
+        ...base,
+        requests: [queued],
+        progressEvents: [
+          {
+            requestId: queued.requestId,
+            seq: 1,
+            stepCode: "queued-message-deleted",
+            step: "Queued message deleted",
+            state: "done",
+            atMs: NOW,
+          },
+        ],
+      }).stage,
+    ).not.toBe("stalled");
   });
 });
