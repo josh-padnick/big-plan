@@ -365,9 +365,10 @@ test("should retain detached selection text until the reviewer discards it", asy
       window.localStorage.setItem(
         key,
         JSON.stringify({
-          version: 9,
+          version: 10,
           ownerId,
           updatedAtMs: Date.now(),
+          pendingAdoption: null,
           drafts: [],
           resolvedCommentIds: [],
           reconciliation: {
@@ -984,9 +985,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 9,
+            version: 10,
             ownerId,
             updatedAtMs: Date.now(),
+            pendingAdoption: null,
             drafts: [
               {
                 id: "orphan-comment",
@@ -1096,9 +1098,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 9,
+            version: 10,
             ownerId,
             updatedAtMs: Date.now(),
+            pendingAdoption: null,
             drafts: [],
             resolvedCommentIds: [],
             reconciliation: {
@@ -1160,9 +1163,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 9,
+            version: 10,
             ownerId,
             updatedAtMs: Date.now(),
+            pendingAdoption: null,
             drafts: [
               {
                 id: "later-orphan-comment",
@@ -1220,7 +1224,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
       .not.toContain(null);
   });
 
-  test("should offer an orphaned resolution change before applying it", async ({
+  test("should clear an orphaned resolution conflict when local state converges", async ({
     page,
     reviewRuntimeUrl,
   }) => {
@@ -1249,9 +1253,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 9,
+            version: 10,
             ownerId: storedOwnerId,
             updatedAtMs: Date.now(),
+            pendingAdoption: null,
             drafts: [storedDraft],
             resolvedCommentIds: [storedDraft.id],
             reconciliation: {
@@ -1280,14 +1285,19 @@ test.describe("a drafts write prepared against content the store moved past", ()
     expect(
       (await readRuntimeDrafts(reviewRuntimeUrl, token)).resolvedCommentIds,
     ).toEqual([]);
-    await choice.getByRole("button", { name: "Keep resolved" }).click();
+    await page.keyboard.press("Escape");
     await expect(choice).toBeHidden();
-    await expect
-      .poll(
-        async () =>
-          (await readRuntimeDrafts(reviewRuntimeUrl, token)).resolvedCommentIds,
-      )
-      .toEqual([draft.id]);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail.getByText("Resolved (1)").click();
+    await rail.getByRole("button", { name: "Unresolve thread" }).click();
+    await expect(
+      rail.getByRole("button", { name: "Review comment versions" }),
+    ).toHaveCount(0);
+    await expect(choice).toBeHidden();
+    expect(
+      (await readRuntimeDrafts(reviewRuntimeUrl, token)).resolvedCommentIds,
+    ).toEqual([]);
   });
 
   test("should defer an orphaned deletion until runtime state is authoritative", async ({
@@ -1321,9 +1331,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 9,
+            version: 10,
             ownerId,
             updatedAtMs: Date.now(),
+            pendingAdoption: null,
             drafts: [],
             resolvedCommentIds: [],
             reconciliation: {
@@ -1395,9 +1406,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 9,
+            version: 10,
             ownerId: storedOwnerId,
             updatedAtMs: Date.now() - 8 * 24 * 60 * 60 * 1000,
+            pendingAdoption: null,
             drafts: [
               {
                 id: "expired-comment",
@@ -1656,9 +1668,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 9,
+            version: 10,
             ownerId: storedOwnerId,
             updatedAtMs: Date.now(),
+            pendingAdoption: null,
             drafts: [localDraft, other],
             resolvedCommentIds: [],
             reconciliation: {
@@ -2483,9 +2496,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 9,
+            version: 10,
             ownerId,
             updatedAtMs: Date.now(),
+            pendingAdoption: null,
             drafts: [
               {
                 id,
@@ -2593,9 +2607,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 9,
+            version: 10,
             ownerId,
             updatedAtMs: Date.now(),
+            pendingAdoption: null,
             drafts: [
               {
                 id,

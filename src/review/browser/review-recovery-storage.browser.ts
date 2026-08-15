@@ -1,6 +1,7 @@
 // Owns browser persistence policy for live review recovery so storage keys,
-// validation, expiry, tab ownership, and adoption history cannot drift across
-// the review controller's orchestration paths.
+// validation, tab ownership, orphan-candidate expiry, and adoption history
+// cannot drift across the review controller's orchestration paths. Returning
+// owners keep their work indefinitely; only records without their owner expire.
 
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { isStoredCommentTarget } from "../shared/comment.js";
@@ -14,7 +15,7 @@ import type {
   ReviewRecoveryState,
 } from "./review-recovery-merge.js";
 
-const LIVE_RECOVERY_SNAPSHOT_VERSION = 9;
+const LIVE_RECOVERY_SNAPSHOT_VERSION = 10;
 const LIVE_RECOVERY_ADOPTIONS_VERSION = 1;
 export const LIVE_RECOVERY_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -40,10 +41,16 @@ export const EMPTY_RECOVERED_COMPOSER: RecoveredComposer = {
   replies: new Map(),
 };
 
+export type PendingLiveRecoveryAdoption = {
+  readonly ownerId: string;
+  readonly updatedAtMs: number;
+};
+
 export type StoredLiveReviewRecovery = LiveReviewRecovery & {
   readonly ownerId: string;
   readonly updatedAtMs: number;
   readonly composer: RecoveredComposer;
+  readonly pendingAdoption: PendingLiveRecoveryAdoption | null;
 };
 
 type StoredLiveRecoveryAdoptions = {
@@ -168,6 +175,15 @@ const readRecoveredComposer = (value: unknown): RecoveredComposer => {
   };
 };
 
+const readPendingAdoption = (
+  value: unknown,
+): PendingLiveRecoveryAdoption | null =>
+  isRecord(value) &&
+  typeof value.ownerId === "string" &&
+  typeof value.updatedAtMs === "number"
+    ? { ownerId: value.ownerId, updatedAtMs: value.updatedAtMs }
+    : null;
+
 /** Reads one tab-owned recovery snapshot without accepting partial data. */
 export const readLiveReviewRecovery = (
   key: string,
@@ -176,6 +192,9 @@ export const readLiveReviewRecovery = (
     const raw = localStorage.getItem(key);
     const parsed: unknown = raw === null ? null : JSON.parse(raw);
     const reviewState = readStoredReviewState(parsed);
+    const pendingAdoption = isRecord(parsed)
+      ? readPendingAdoption(parsed.pendingAdoption)
+      : null;
     if (
       !isRecord(parsed) ||
       parsed.version !== LIVE_RECOVERY_SNAPSHOT_VERSION ||
@@ -190,7 +209,8 @@ export const readLiveReviewRecovery = (
         (value): value is string => typeof value === "string",
       ) ||
       !Array.isArray(parsed.reconciliation.conflicts) ||
-      !parsed.reconciliation.conflicts.every(isStoredReviewRecoveryConflict)
+      !parsed.reconciliation.conflicts.every(isStoredReviewRecoveryConflict) ||
+      (parsed.pendingAdoption !== null && pendingAdoption === null)
     ) {
       return null;
     }
@@ -209,6 +229,7 @@ export const readLiveReviewRecovery = (
       ownerId: parsed.ownerId,
       updatedAtMs: parsed.updatedAtMs,
       composer: readRecoveredComposer(parsed.composer),
+      pendingAdoption,
       reconciliation: {
         base: {
           draftBodies: new Map(
@@ -235,6 +256,7 @@ const serializedLiveReviewRecovery = (
     version: LIVE_RECOVERY_SNAPSHOT_VERSION,
     ownerId: recovery.ownerId,
     updatedAtMs: recovery.updatedAtMs,
+    pendingAdoption: recovery.pendingAdoption,
     drafts: recovery.drafts,
     resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
     reconciliation: {
@@ -436,6 +458,8 @@ export const selectLiveReviewRecovery = ({
       }
       candidates.push(recovery);
     }
+    // A returning owner never loses its own unsynchronized work to a timer.
+    // Expiry applies only when a record is being considered as an orphan.
     if (owned !== null) {
       return { recovery: owned, source: "owned", recoveryAvailable: true };
     }
@@ -486,6 +510,7 @@ export const clearLiveReviewRecovery = ({
   if (
     recovery === null ||
     recovery.reconciliation.conflicts.length > 0 ||
+    recovery.pendingAdoption !== null ||
     recovery.composer.comment !== null ||
     recovery.composer.replies.size > 0 ||
     persistedReviewFingerprint(recovery) !== fingerprint

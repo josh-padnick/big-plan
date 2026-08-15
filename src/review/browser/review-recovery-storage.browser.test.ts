@@ -1,9 +1,12 @@
 // Proves the persisted recovery contract rejects corrupt data and applies its
-// expiry and adoption-selection policy without depending on the review UI.
+// orphan expiry and adoption-selection policy without depending on the review
+// UI.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  clearLiveReviewRecovery,
   LIVE_RECOVERY_EXPIRY_MS,
+  persistedReviewFingerprint,
   readLiveReviewRecovery,
   recordLiveRecoveryAdoption,
   selectLiveReviewRecovery,
@@ -11,6 +14,7 @@ import {
 
 class MemoryStorage implements Storage {
   readonly #values = new Map<string, string>();
+  failWritesMatching: ((key: string) => boolean) | null = null;
 
   get length(): number {
     return this.#values.size;
@@ -33,6 +37,9 @@ class MemoryStorage implements Storage {
   }
 
   setItem(key: string, value: string): void {
+    if (this.failWritesMatching?.(key) === true) {
+      throw new DOMException("Storage is blocked", "SecurityError");
+    }
     this.#values.set(key, value);
   }
 }
@@ -46,15 +53,18 @@ const recoveryRecord = ({
   ownerId,
   updatedAtMs,
   composer = { comment: null, replies: {} },
+  pendingAdoption = null,
 }: {
   readonly ownerId: string;
   readonly updatedAtMs: number;
   readonly composer?: unknown;
+  readonly pendingAdoption?: unknown;
 }): string =>
   JSON.stringify({
-    version: 9,
+    version: 10,
     ownerId,
     updatedAtMs,
+    pendingAdoption,
     drafts: [],
     resolvedCommentIds: [],
     reconciliation: {
@@ -78,9 +88,10 @@ describe("live review recovery storage", () => {
     localStorage.setItem(
       recoveryKey("corrupt-state"),
       JSON.stringify({
-        version: 9,
+        version: 10,
         ownerId: "corrupt-state",
         updatedAtMs: 1,
+        pendingAdoption: null,
         drafts: "not-drafts",
       }),
     );
@@ -117,7 +128,7 @@ describe("live review recovery storage", () => {
     ).toBeNull();
   });
 
-  it("should prefer owned recovery and expire stale orphan candidates", () => {
+  it("should preserve stale owned recovery while expiring stale orphan candidates", () => {
     const nowMs = LIVE_RECOVERY_EXPIRY_MS + 1_000;
     localStorage.setItem(
       recoveryKey("owned"),
@@ -166,12 +177,9 @@ describe("live review recovery storage", () => {
       }).recovery,
     ).toBeNull();
 
-    vi.stubGlobal("localStorage", {
-      ...new MemoryStorage(),
-      setItem: (): never => {
-        throw new DOMException("Storage is blocked", "SecurityError");
-      },
-    });
+    const blockedStorage = new MemoryStorage();
+    blockedStorage.failWritesMatching = () => true;
+    vi.stubGlobal("localStorage", blockedStorage);
     expect(
       recordLiveRecoveryAdoption({
         scope,
@@ -181,5 +189,53 @@ describe("live review recovery storage", () => {
         nowMs,
       }),
     ).toBe(false);
+  });
+
+  it("should retain pending adoption provenance until its ledger is durable", () => {
+    const storage = new MemoryStorage();
+    vi.stubGlobal("localStorage", storage);
+    const pendingAdoption = { ownerId: "orphan", updatedAtMs: 5_000 };
+    localStorage.setItem(
+      recoveryKey("current"),
+      recoveryRecord({
+        ownerId: "current",
+        updatedAtMs: 10_000,
+        pendingAdoption,
+      }),
+    );
+    localStorage.setItem(
+      recoveryKey("orphan"),
+      recoveryRecord({ ownerId: "orphan", updatedAtMs: 5_000 }),
+    );
+    storage.failWritesMatching = (key) => key.includes(":adoptions:");
+
+    expect(
+      recordLiveRecoveryAdoption({
+        scope,
+        ownerId: "current",
+        recoveryOwnerId: pendingAdoption.ownerId,
+        recoveryUpdatedAtMs: pendingAdoption.updatedAtMs,
+        nowMs: 10_000,
+      }),
+    ).toBe(false);
+
+    const reloaded = selectLiveReviewRecovery({
+      scope,
+      owner: { ownerId: "current", recoveryAvailable: true },
+      nowMs: 11_000,
+    });
+    expect(reloaded.source).toBe("owned");
+    expect(reloaded.recovery?.pendingAdoption).toEqual(pendingAdoption);
+    expect(
+      clearLiveReviewRecovery({
+        scope,
+        ownerId: "current",
+        fingerprint: persistedReviewFingerprint({
+          drafts: [],
+          resolvedCommentIds: new Set(),
+        }),
+      }),
+    ).toBe(false);
+    expect(localStorage.getItem(recoveryKey("current"))).not.toBeNull();
   });
 });

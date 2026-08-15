@@ -172,6 +172,7 @@ import {
   recordLiveRecoveryAdoption,
   selectLiveReviewRecovery,
   writeLiveReviewRecovery,
+  type PendingLiveRecoveryAdoption,
   type RecoveredComposer,
   type StoredLiveReviewRecovery,
 } from "./review-recovery-storage.browser.js";
@@ -3951,10 +3952,8 @@ export const ReviewController = () => {
     null,
   );
   const [isLiveRecoveryAvailable, setIsLiveRecoveryAvailable] = useState(true);
-  const pendingRecoveryAdoptionRef = useRef<{
-    readonly ownerId: string;
-    readonly updatedAtMs: number;
-  } | null>(null);
+  const [pendingRecoveryAdoption, setPendingRecoveryAdoption] =
+    useState<PendingLiveRecoveryAdoption | null>(null);
   const isOrphanRecoveryDeferredRef = useRef(false);
   // The version the next conditional write must carry.
   const runtimeVersionRef = useRef("");
@@ -4000,16 +3999,6 @@ export const ReviewController = () => {
     setDrafts(state.drafts);
     setResolvedCommentIds(state.resolvedCommentIds);
   }, []);
-  const stageReviewComment = useCallback(
-    (comment: ReviewComment): void => {
-      const current = latestReviewStateRef.current.state;
-      applyReviewState({
-        drafts: [...current.drafts, comment],
-        resolvedCommentIds: current.resolvedCommentIds,
-      });
-    },
-    [applyReviewState],
-  );
   const canRefreshReview =
     persistedReviewState === currentReviewState &&
     composeBody === "" &&
@@ -4207,6 +4196,16 @@ export const ReviewController = () => {
       }
     },
     [applyReviewState, replaceRecoveryReconciliation],
+  );
+  const stageReviewComment = useCallback(
+    (comment: ReviewComment): void => {
+      const current = latestReviewStateRef.current.state;
+      applyLocalReviewState({
+        drafts: [...current.drafts, comment],
+        resolvedCommentIds: current.resolvedCommentIds,
+      });
+    },
+    [applyLocalReviewState],
   );
   const changeReplyDraft = useCallback((commentId: string, body: string) => {
     const current = replyDraftsRef.current;
@@ -4585,7 +4584,11 @@ export const ReviewController = () => {
       setIsLiveRecoveryAvailable(selection.recoveryAvailable);
       isOrphanRecoveryDeferredRef.current = selection.source === "orphan";
       const recovery = selection.recovery;
-      pendingRecoveryAdoptionRef.current = null;
+      setPendingRecoveryAdoption(
+        selection.source === "owned"
+          ? (recovery?.pendingAdoption ?? null)
+          : null,
+      );
       const recoveredComposer = recovery?.composer ?? EMPTY_RECOVERED_COMPOSER;
       try {
         const sessionSequence = runtimeSessionOrder.issueRequest();
@@ -4624,10 +4627,10 @@ export const ReviewController = () => {
                   });
             isOrphanRecoveryDeferredRef.current = false;
             if (selection.source === "orphan") {
-              pendingRecoveryAdoptionRef.current = {
+              setPendingRecoveryAdoption({
                 ownerId: recovery.ownerId,
                 updatedAtMs: recovery.updatedAtMs,
-              };
+              });
             }
             restoredReviewState = merged.state;
             conflicted = merged.conflicts.length > 0;
@@ -4733,6 +4736,7 @@ export const ReviewController = () => {
       ownerId: liveRecoveryOwnerId,
       updatedAtMs: Date.now(),
       composer: composerRecovery,
+      pendingAdoption: pendingRecoveryAdoption,
       reconciliation: recoveryReconciliation,
     };
     const didPersist = writeLiveReviewRecovery({
@@ -4745,7 +4749,7 @@ export const ReviewController = () => {
       setStatus(LIVE_RECOVERY_UNAVAILABLE_STATUS);
       return;
     }
-    const pendingAdoption = pendingRecoveryAdoptionRef.current;
+    const pendingAdoption = pendingRecoveryAdoption;
     if (pendingAdoption !== null) {
       const didRecordAdoption = recordLiveRecoveryAdoption({
         scope: identity,
@@ -4755,7 +4759,8 @@ export const ReviewController = () => {
         nowMs: Date.now(),
       });
       if (didRecordAdoption) {
-        pendingRecoveryAdoptionRef.current = null;
+        setPendingRecoveryAdoption(null);
+        return;
       } else {
         return;
       }
@@ -4777,6 +4782,7 @@ export const ReviewController = () => {
     isHydrated,
     isLiveRecoveryAvailable,
     liveRecoveryOwnerId,
+    pendingRecoveryAdoption,
     persistedReviewState,
     recoveryReconciliation,
     resolvedCommentIds,
@@ -5787,10 +5793,11 @@ export const ReviewController = () => {
   // refusal is what the reviewer sees.
   const toggleResolvedComment = (commentId: string) => {
     setResolveRefusal(null);
-    if (!resolvedCommentIds.has(commentId)) {
+    const current = latestReviewStateRef.current.state;
+    if (!current.resolvedCommentIds.has(commentId)) {
       closeTour();
       if (selectedCommentId === commentId) setSelectedCommentId(null);
-      const comment = [...drafts, ...sent].find(
+      const comment = [...current.drafts, ...sent].find(
         (candidate) => candidate.id === commentId,
       );
       if (
@@ -5813,11 +5820,15 @@ export const ReviewController = () => {
         );
       }
     }
-    setResolvedCommentIds((current) => {
-      const next = new Set(current);
-      if (next.has(commentId)) next.delete(commentId);
-      else next.add(commentId);
-      return next;
+    const nextResolvedCommentIds = new Set(current.resolvedCommentIds);
+    if (nextResolvedCommentIds.has(commentId)) {
+      nextResolvedCommentIds.delete(commentId);
+    } else {
+      nextResolvedCommentIds.add(commentId);
+    }
+    applyLocalReviewState({
+      drafts: current.drafts,
+      resolvedCommentIds: nextResolvedCommentIds,
     });
   };
   const viewAgentRequest = (requestId: string, kind: string) => {
@@ -6377,10 +6388,12 @@ export const ReviewController = () => {
                     />
                   );
                 },
-                onResolveAll: () =>
-                  setResolvedCommentIds(
-                    new Set([
-                      ...resolvedCommentIds,
+                onResolveAll: () => {
+                  const current = latestReviewStateRef.current.state;
+                  applyLocalReviewState({
+                    drafts: current.drafts,
+                    resolvedCommentIds: new Set([
+                      ...current.resolvedCommentIds,
                       ...unresolvedSent
                         .filter(
                           (comment) =>
@@ -6389,7 +6402,8 @@ export const ReviewController = () => {
                         )
                         .map((comment) => comment.id),
                     ]),
-                  ),
+                  });
+                },
                 onDeleteAll: () =>
                   setPendingDelete({
                     kind: "all",
