@@ -35,6 +35,7 @@ import {
   writeAgentHeartbeat,
   writeSnapshot,
 } from "./store.js";
+import type { ReviewStore } from "./store.js";
 import { diffSnapshots } from "./snapshot-diff.js";
 import {
   liveReviewSessionForPlan,
@@ -121,6 +122,62 @@ const pickupProgress = (
     return { step: "Reviewing feedback", detail: "Whole plan" };
   }
   return { step: "Reviewing feedback", detail: comment.body };
+};
+
+const verifyRequestAttachments = async ({
+  store,
+  request,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+}): Promise<void> => {
+  for (const attachment of request.attachments) {
+    const resolvedAttachmentRoot = resolve(
+      join(store.requestAttachmentsDirectory, request.requestId),
+    );
+    const resolvedAttachmentPath = resolve(attachment.path);
+    if (!resolvedAttachmentPath.startsWith(`${resolvedAttachmentRoot}${sep}`)) {
+      fail(
+        `Attachment ${attachment.id} is outside the request attachment directory`,
+      );
+    }
+    let attachmentRoot: string;
+    let attachmentPath: string;
+    try {
+      [attachmentRoot, attachmentPath] = await Promise.all([
+        realpath(resolvedAttachmentRoot),
+        realpath(resolvedAttachmentPath),
+      ]);
+    } catch {
+      fail(
+        `Attachment ${attachment.id} could not be opened during agent pickup`,
+      );
+    }
+    if (!attachmentPath.startsWith(`${attachmentRoot}${sep}`)) {
+      fail(
+        `Attachment ${attachment.id} is outside the request attachment directory`,
+      );
+    }
+    let bytes: Uint8Array;
+    try {
+      bytes = Uint8Array.from(await readFile(attachmentPath));
+    } catch {
+      fail(
+        `Attachment ${attachment.id} could not be opened during agent pickup`,
+      );
+    }
+    const format = sniffReviewImage(bytes);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    if (
+      format?.mimeType !== attachment.mimeType ||
+      bytes.byteLength !== attachment.byteLength ||
+      digest !== attachment.sha256
+    ) {
+      fail(
+        `Attachment ${attachment.id} failed byte, type, or SHA-256 verification during agent pickup`,
+      );
+    }
+  }
 };
 
 const wait = (milliseconds: number): Promise<void> =>
@@ -338,6 +395,11 @@ const nextWork = async ({
         requestId: selectedRequestId,
         baselineSnapshot: claimedSnapshot,
         now: new Date().toISOString(),
+        verifyBeforeClaim: (candidate) =>
+          verifyRequestAttachments({
+            store: session.store,
+            request: candidate,
+          }),
       });
     } catch (error: unknown) {
       if (!(error instanceof AgentExchangeRejected)) throw error;
@@ -354,55 +416,6 @@ const nextWork = async ({
         continue;
       }
       return fail(error.message);
-    }
-    for (const attachment of request.attachments) {
-      const resolvedAttachmentRoot = resolve(
-        join(session.store.requestAttachmentsDirectory, request.requestId),
-      );
-      const resolvedAttachmentPath = resolve(attachment.path);
-      if (
-        !resolvedAttachmentPath.startsWith(`${resolvedAttachmentRoot}${sep}`)
-      ) {
-        return fail(
-          `Attachment ${attachment.id} is outside the request attachment directory`,
-        );
-      }
-      let attachmentRoot: string;
-      let attachmentPath: string;
-      try {
-        [attachmentRoot, attachmentPath] = await Promise.all([
-          realpath(resolvedAttachmentRoot),
-          realpath(resolvedAttachmentPath),
-        ]);
-      } catch {
-        return fail(
-          `Attachment ${attachment.id} could not be opened during agent pickup`,
-        );
-      }
-      if (!attachmentPath.startsWith(`${attachmentRoot}${sep}`)) {
-        return fail(
-          `Attachment ${attachment.id} is outside the request attachment directory`,
-        );
-      }
-      let bytes: Uint8Array;
-      try {
-        bytes = Uint8Array.from(await readFile(attachmentPath));
-      } catch {
-        return fail(
-          `Attachment ${attachment.id} could not be opened during agent pickup`,
-        );
-      }
-      const format = sniffReviewImage(bytes);
-      const digest = createHash("sha256").update(bytes).digest("hex");
-      if (
-        format?.mimeType !== attachment.mimeType ||
-        bytes.byteLength !== attachment.byteLength ||
-        digest !== attachment.sha256
-      ) {
-        return fail(
-          `Attachment ${attachment.id} failed byte, type, or SHA-256 verification during agent pickup`,
-        );
-      }
     }
     await writeAgentHeartbeat({
       store: session.store,

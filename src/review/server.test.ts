@@ -2675,9 +2675,9 @@ describe("review runtime queued messages", () => {
     });
     expect(events.at(-1)).toMatchObject({
       stepCode: "queued-message-revised",
+      requestId,
       state: "waiting",
     });
-    expect(events.at(-1)).not.toHaveProperty("requestId");
   });
 
   it("should refuse to revise a message the agent already started", async () => {

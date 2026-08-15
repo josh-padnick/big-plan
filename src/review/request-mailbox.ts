@@ -160,11 +160,13 @@ export const claimAgentRequest = async ({
   requestId,
   baselineSnapshot,
   now,
+  verifyBeforeClaim,
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
   readonly baselineSnapshot: string;
   readonly now: string;
+  readonly verifyBeforeClaim?: (request: AgentRequest) => Promise<void>;
 }): Promise<AgentRequest> =>
   withRequestLock({
     store,
@@ -176,6 +178,7 @@ export const claimAgentRequest = async ({
           "The request was canceled by the reviewer",
         );
       }
+      await verifyBeforeClaim?.(request);
       if (request.baselineSnapshot !== undefined) return request;
       const claimed = validateAgentRequest({
         ...request,
