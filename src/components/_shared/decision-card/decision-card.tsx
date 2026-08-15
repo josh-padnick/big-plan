@@ -144,9 +144,9 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
 // why beside themselves. It appears twice because both states can be reached in
 // a read-only session: an unanswered card that cannot be answered, and an
 // answered one whose answer cannot be changed.
-const ReadOnlyNote = () => (
+const ReadOnlyNote = ({ className = "" }: { readonly className?: string }) => (
   <p
-    className="decision-locked-note m-0 flex min-w-0 items-center gap-1.5 text-xs font-medium text-[var(--callout-warning-c)]"
+    className={`decision-locked-note m-0 flex min-w-0 items-center gap-1.5 text-xs font-medium text-[var(--callout-warning-c)] ${className}`}
     data-decision-locked-note=""
     hidden
   >
@@ -253,8 +253,11 @@ const AnswerControls = () => (
         >
           {"Noted for this reading session."}
         </p>
+        {/* Under the caption rather than beside it: the strip already carries a
+            mark, a record, and a control, and a fourth column squeezes all
+            three at the reading width. */}
+        <ReadOnlyNote className="mt-1" />
       </div>
-      <ReadOnlyNote />
       <button
         className="decision-change shrink-0"
         type="button"
