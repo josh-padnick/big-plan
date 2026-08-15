@@ -3,8 +3,8 @@
 // response publication, progress, and the agent's continuing work loop.
 
 import { createHash } from "node:crypto";
-import { readFile, realpath } from "node:fs/promises";
-import { basename, extname, join, resolve, sep } from "node:path";
+import { readFile } from "node:fs/promises";
+import { basename, extname, resolve } from "node:path";
 import { lintPlan } from "../lint/lint-plan.js";
 import { renderDocument } from "../render/render-document.js";
 import {
@@ -17,6 +17,7 @@ import {
   requestBaselineSnapshot,
   readAgentExchange,
   responseTemplateFor,
+  validateAgentRequest,
   validateAgentResponseDraft,
 } from "./agent-exchange.js";
 import type { AgentRequest } from "./agent-exchange.js";
@@ -26,6 +27,7 @@ import {
   publishAgentResponse,
 } from "./request-mailbox.js";
 import {
+  anchorReviewStore,
   agentResponseDraftPath,
   deriveReviewPlanId,
   prepareStore,
@@ -35,6 +37,7 @@ import {
   writeAgentPrompt,
   writeAgentHeartbeat,
   writeSnapshot,
+  ReviewStorePathRejected,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import { diffSnapshots } from "./snapshot-diff.js";
@@ -48,7 +51,10 @@ import {
   quoteShellArgument,
 } from "./shared/agent-command.js";
 import { projectConversationHistory } from "./shared/thread-projection.js";
-import { sniffReviewImage } from "./shared/review-image.js";
+import {
+  sniffReviewImage,
+  type ReviewImageAttachment,
+} from "./shared/review-image.js";
 import { materializeReviewImages, replacePlanSource } from "./plan-assets.js";
 
 export type AgentWorkLoopAction =
@@ -131,49 +137,47 @@ const verifyRequestAttachments = async ({
 }: {
   readonly store: ReviewStore;
   readonly request: AgentRequest;
-}): Promise<void> => {
+}): Promise<ReadonlyArray<ReviewImageAttachment>> => {
   const firstAttachment = request.attachments[0];
-  if (firstAttachment === undefined) return;
-  let attachmentParent: string;
+  if (firstAttachment === undefined) return [];
+  let anchoredStore: Awaited<ReturnType<typeof anchorReviewStore>>;
   try {
-    attachmentParent = await realpath(
-      resolve(store.requestAttachmentsDirectory),
-    );
-  } catch {
+    anchoredStore = await anchorReviewStore(store);
+  } catch (error: unknown) {
+    if (
+      error instanceof ReviewStorePathRejected &&
+      error.reason === "outside"
+    ) {
+      fail(
+        `Attachment ${firstAttachment.id} is outside the request attachment directory`,
+      );
+    }
     fail(
       `Attachment ${firstAttachment.id} could not be opened during agent pickup`,
     );
   }
+  const verified: Array<ReviewImageAttachment> = [];
   for (const attachment of request.attachments) {
-    const resolvedAttachmentRoot = resolve(
-      join(store.requestAttachmentsDirectory, request.requestId),
-    );
-    const resolvedAttachmentPath = resolve(attachment.path);
-    if (!resolvedAttachmentPath.startsWith(`${resolvedAttachmentRoot}${sep}`)) {
-      fail(
-        `Attachment ${attachment.id} is outside the request attachment directory`,
-      );
-    }
-    let attachmentRoot: string;
     let attachmentPath: string;
     try {
-      [attachmentRoot, attachmentPath] = await Promise.all([
-        realpath(resolvedAttachmentRoot),
-        realpath(resolvedAttachmentPath),
-      ]);
-    } catch {
+      attachmentPath = (
+        await anchoredStore.resolveAgentPath({
+          area: "attachments",
+          requestId: request.requestId,
+          targetPath: attachment.path,
+        })
+      ).path;
+    } catch (error: unknown) {
+      if (
+        error instanceof ReviewStorePathRejected &&
+        error.reason === "outside"
+      ) {
+        fail(
+          `Attachment ${attachment.id} is outside the request attachment directory`,
+        );
+      }
       fail(
         `Attachment ${attachment.id} could not be opened during agent pickup`,
-      );
-    }
-    if (attachmentRoot !== join(attachmentParent, request.requestId)) {
-      fail(
-        `Attachment ${attachment.id} is outside the request attachment directory`,
-      );
-    }
-    if (!attachmentPath.startsWith(`${attachmentRoot}${sep}`)) {
-      fail(
-        `Attachment ${attachment.id} is outside the request attachment directory`,
       );
     }
     let bytes: Uint8Array;
@@ -195,7 +199,9 @@ const verifyRequestAttachments = async ({
         `Attachment ${attachment.id} failed byte, type, or SHA-256 verification during agent pickup`,
       );
     }
+    verified.push({ ...attachment, path: attachmentPath });
   }
+  return verified;
 };
 
 const wait = (milliseconds: number): Promise<void> =>
@@ -398,6 +404,7 @@ const nextWork = async ({
     const claimedSource = await readFile(session.planPath, "utf8");
     const claimedSnapshot = deriveSnapshotDigest(claimedSource);
     const selectedRequestId = request.requestId;
+    let verifiedAttachments = request.attachments;
     // The baseline is persisted before the claim records it. A snapshot is
     // addressed by its own digest, so writing one the claim never references
     // is harmless, while a claim whose baseline was never stored is not: the
@@ -413,11 +420,12 @@ const nextWork = async ({
         requestId: selectedRequestId,
         baselineSnapshot: claimedSnapshot,
         now: new Date().toISOString(),
-        verifyBeforeClaim: (candidate) =>
-          verifyRequestAttachments({
+        verifyBeforeClaim: async (candidate) => {
+          verifiedAttachments = await verifyRequestAttachments({
             store: session.store,
             request: candidate,
-          }),
+          });
+        },
       });
     } catch (error: unknown) {
       if (!(error instanceof AgentExchangeRejected)) throw error;
@@ -435,6 +443,11 @@ const nextWork = async ({
       }
       return fail(error.message);
     }
+    request = validateAgentRequest({
+      ...request,
+      attachmentManifest: verifiedAttachments,
+      attachments: verifiedAttachments,
+    });
     await writeAgentHeartbeat({
       store: session.store,
       sessionId: session.sessionId,

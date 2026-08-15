@@ -4,6 +4,8 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -439,6 +441,66 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should refuse a symlinked attachment store segment", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-store-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    const bytes = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+      0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+    ]);
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes,
+      alt: "Capture",
+    });
+    const requestId = "cccccccccccccccc";
+    const attachments = await reviewStore.freezeRequestAttachments({
+      store: review.store,
+      requestId,
+      references: [{ id: descriptor.id, alt: descriptor.alt }],
+    });
+    const attachmentDirectory = review.store.requestAttachmentsDirectory;
+    const displacedDirectory = `${attachmentDirectory}.displaced`;
+    const outsideDirectory = join(directory, "outside-attachments");
+    await rename(attachmentDirectory, displacedDirectory);
+    await mkdir(join(outsideDirectory, requestId), { recursive: true });
+    await writeFile(
+      join(outsideDirectory, requestId, basename(attachments[0].path)),
+      bytes,
+    );
+    await symlink(outsideDirectory, attachmentDirectory, "dir");
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId,
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments,
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/outside the request attachment directory/);
+    } finally {
+      await rm(attachmentDirectory, { force: true });
+      await rename(displacedDirectory, attachmentDirectory);
+      await rm(outsideDirectory, { recursive: true, force: true });
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should reverify attachments when claimed work is resumed", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
     const planPath = join(directory, "plan.mdx");
@@ -472,6 +534,7 @@ describe("agent work loop lifecycle", () => {
     });
     await writeAgentRequest({ store: review.store, request });
     try {
+      const canonicalAttachmentPath = await realpath(attachments[0].path);
       await expect(
         runAgentWorkLoopAction({
           kind: "next",
@@ -481,7 +544,11 @@ describe("agent work loop lifecycle", () => {
         }),
       ).resolves.toMatchObject({
         pending: true,
-        work: { requestId },
+        work: {
+          requestId,
+          attachments: [{ path: canonicalAttachmentPath }],
+          attachmentManifest: [{ path: canonicalAttachmentPath }],
+        },
       });
       await rm(attachments[0].path);
       await expect(
