@@ -657,7 +657,10 @@ const requestJson = async ({
   }
 };
 
-/** The one place a runtime failure interrupts reading, whatever the failure. */
+/**
+ * The one place a runtime failure interrupts reading, whatever the failure.
+ * Its action and link are independent and may appear together.
+ */
 const RuntimeAlertBanner = ({
   scope,
   heading,
@@ -679,7 +682,7 @@ const RuntimeAlertBanner = ({
   };
 }) => (
   <div
-    className="fixed top-14 right-3 left-3 z-50 mx-auto flex max-w-2xl min-w-0 items-start gap-3 rounded-lg border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-sm text-[var(--callout-danger-c)] shadow-floating"
+    className="fixed top-14 right-3 left-3 z-50 mx-auto flex max-w-2xl min-w-0 flex-wrap items-start gap-3 rounded-lg border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-sm text-[var(--callout-danger-c)] shadow-floating"
     role="alert"
     aria-live="assertive"
     {...{ [scope]: "" }}
@@ -691,24 +694,29 @@ const RuntimeAlertBanner = ({
         {detail}
       </p>
     </div>
-    {link !== undefined ? (
-      <a
-        className="shrink-0 rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        href={link.href}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        {link.label}
-      </a>
-    ) : action === undefined ? null : (
-      <button
-        type="button"
-        className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--callout-danger-c)]"
-        onClick={action.onAct}
-        disabled={!action.enabled}
-      >
-        {action.label}
-      </button>
+    {link === undefined && action === undefined ? null : (
+      <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2 max-sm:basis-full">
+        {link === undefined ? null : (
+          <a
+            className="shrink-0 rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {link.label}
+          </a>
+        )}
+        {action === undefined ? null : (
+          <button
+            type="button"
+            className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--callout-danger-c)]"
+            onClick={action.onAct}
+            disabled={!action.enabled}
+          >
+            {action.label}
+          </button>
+        )}
+      </div>
     )}
   </div>
 );
@@ -746,6 +754,7 @@ const ServerGoneBanner = ({
           heading="This tab lost contact with this review session"
           detail={`This tab lost contact with the local review server, and the deadline it last knew has passed. This review continues at the latest address.${unsavedInputWarning}`}
           link={{ href: latestReviewUrl, label: "Open latest review" }}
+          action={refreshAction}
         />
       );
     }
