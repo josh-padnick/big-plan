@@ -48,6 +48,7 @@ import {
   readResolvedCommentIds,
   readSessionHeartbeatValue,
   publishReviewImage,
+  readProgress,
   writeComments,
   writeResolvedCommentIds,
   writeSnapshot,
@@ -2668,6 +2669,15 @@ describe("review runtime queued messages", () => {
     expect(
       after.requests.find((request) => request.requestId === requestId),
     ).toMatchObject({ body: "What is the retry boundary?" });
+    const events = await readProgress({
+      store: queued.store,
+      sessionId: queued.sessionId,
+    });
+    expect(events.at(-1)).toMatchObject({
+      stepCode: "queued-message-revised",
+      state: "waiting",
+    });
+    expect(events.at(-1)).not.toHaveProperty("requestId");
   });
 
   it("should refuse to revise a message the agent already started", async () => {

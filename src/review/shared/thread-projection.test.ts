@@ -78,6 +78,7 @@ describe("thread projection", () => {
           {
             requestId: "aaaaaaaaaaaaaaaa",
             seq: 1,
+            stepCode: "agent-note",
             step: "Reading the plan",
             state: "live" as const,
             atMs: NOW,
@@ -316,6 +317,7 @@ describe("thread projection", () => {
           {
             requestId: "aaaaaaaaaaaaaaaa",
             seq: 1,
+            stepCode: "agent-note",
             step: "Checking the retry state",
             state: "live",
             atMs: NOW,
@@ -330,6 +332,30 @@ describe("thread projection", () => {
     ).toBe("working");
   });
 
+  it("should keep a reviewer queue edit waiting before agent pickup", () => {
+    expect(
+      projectRequestStatus({
+        request: request({ kind: "chat", commentIds: undefined }),
+        response: undefined,
+        progressEvents: [
+          {
+            requestId: "aaaaaaaaaaaaaaaa",
+            seq: 1,
+            stepCode: "queued-message-revised",
+            step: "Queued message edited by reviewer",
+            state: "waiting",
+            atMs: NOW,
+          },
+        ],
+        presence,
+        runtime: "online",
+        surface: "chat",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({ stage: "waiting", tone: "neutral" });
+  });
+
   it("should ignore an invalid claimed timestamp when valid activity exists", () => {
     expect(
       projectRequestStatus({
@@ -339,6 +365,7 @@ describe("thread projection", () => {
           {
             requestId: "aaaaaaaaaaaaaaaa",
             seq: 1,
+            stepCode: "agent-note",
             step: "Checking the retry state",
             state: "live",
             atMs: NOW,

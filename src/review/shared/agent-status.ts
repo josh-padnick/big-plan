@@ -2,6 +2,7 @@
 // It derives presentation facts from runtime input. It stores no state and
 // does not depend on the browser or Node.
 
+import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
 import type { BrowserConnectionEvent } from "./review-wire.js";
 import { compactDurationLabel } from "./time-label.js";
@@ -125,8 +126,7 @@ const meaningfulWork = (
 ): boolean =>
   event.requestId === requestId &&
   (event.state === "live" || event.state === "waiting") &&
-  event.stepCode !== "reply-sent" &&
-  event.stepCode !== "chat-sent";
+  progressStepCodeIsAgentOwned(event.stepCode);
 
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This updates by itself once the agent resumes.";

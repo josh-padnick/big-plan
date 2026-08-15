@@ -331,18 +331,21 @@ export const reviseQueuedRequest = async ({
         verb: "revised",
         allowCanceled: false,
       });
-      const frozen = new Set(
-        request.attachments.map((attachment) => attachment.id),
+      const frozen = new Map(
+        request.attachments.map((attachment) => [attachment.id, attachment]),
       );
-      const introduced = extractReviewImageReferences(body).find(
-        (reference) => !frozen.has(reference.id),
+      const attachments = extractReviewImageReferences(body).map(
+        (reference) => {
+          const attachment = frozen.get(reference.id);
+          if (attachment === undefined) {
+            throw new AgentExchangeRejected(
+              "A waiting message cannot gain a new image. Delete it and send a new one.",
+            );
+          }
+          return { ...attachment, alt: reference.alt };
+        },
       );
-      if (introduced !== undefined) {
-        throw new AgentExchangeRejected(
-          "A waiting message cannot gain a new image. Delete it and send a new one.",
-        );
-      }
-      const revised = validateAgentRequest({ ...request, body });
+      const revised = validateAgentRequest({ ...request, body, attachments });
       if (revised.kind === "feedback") {
         throw new AgentExchangeRejected(
           "Revising this message changed the request kind",

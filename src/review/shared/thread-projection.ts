@@ -5,6 +5,7 @@
 import { deriveAgentStatus, type AgentStatus } from "./agent-status.js";
 import { requestIsCanceled, type CancelableRequest } from "./cancel-pending.js";
 import type { ReviewComment } from "./comment.js";
+import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
 
 export type ThreadRequest = CancelableRequest & {
@@ -112,7 +113,11 @@ export const projectRequestActivity = ({
   readonly request: ThreadRequest;
   readonly progressEvents: ReadonlyArray<ThreadProgress>;
 }): ReadonlyArray<ThreadProgress> =>
-  progressEvents.filter((event) => event.requestId === request.requestId);
+  progressEvents.filter(
+    (event) =>
+      event.requestId === request.requestId &&
+      progressStepCodeIsAgentOwned(event.stepCode),
+  );
 
 /**
  * Mirrors the mailbox guard on editing a message that still waits. It is a fact

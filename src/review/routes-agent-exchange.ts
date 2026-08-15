@@ -139,7 +139,6 @@ export const sendAgentRequest = async (
       store,
       event: {
         sessionId,
-        requestId,
         atMs: Date.now(),
         stepCode: "queued-message-revised",
         step: "Queued message edited by reviewer",

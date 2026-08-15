@@ -116,6 +116,7 @@ describe("current agent activity", () => {
       progressEvents: [
         {
           requestId: "1111111111111111",
+          stepCode: "agent-note",
           step: "Reading the current plan",
           state: "live",
           atMs: NOW,
@@ -153,6 +154,7 @@ describe("current agent activity", () => {
         progressEvents: [
           {
             requestId: "1111111111111111",
+            stepCode: "agent-note",
             step: "Reading the current plan",
             state: "live",
             atMs: NOW,
@@ -172,6 +174,32 @@ describe("current agent activity", () => {
         requests: [request()],
         responseRequestIds: new Set(),
         progressEvents: [],
+        agentConnected: true,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW,
+      }),
+    ).toMatchObject({
+      state: "waiting",
+      tone: "neutral",
+      headline: "Waiting for agent",
+    });
+  });
+
+  it("should keep a reviewer queue edit waiting before agent pickup", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [request("chat")],
+        responseRequestIds: new Set(),
+        progressEvents: [
+          {
+            requestId: "1111111111111111",
+            stepCode: "queued-message-revised",
+            step: "Queued message edited by reviewer",
+            state: "waiting",
+            atMs: NOW,
+          },
+        ],
         agentConnected: true,
         runtimeOffline: false,
         now: NOW,

@@ -35,6 +35,11 @@ import {
   reviewStoreFor,
   writeAgentResponseValue,
 } from "./store.js";
+import {
+  buildReviewImageReference,
+  reviewImageId,
+  type ReviewImageAttachment,
+} from "./shared/review-image.js";
 
 const sessionId = "1111111111111111";
 const planId = "2222222222222222";
@@ -85,7 +90,10 @@ const requestWith = (comments: ReadonlyArray<ReviewComment>) =>
     premiseSnapshot: snapshot,
   });
 
-const chatRequest = (body: string) =>
+const chatRequest = (
+  body: string,
+  attachments: ReadonlyArray<ReviewImageAttachment> = [],
+) =>
   messageAgentRequest({
     kind: "chat",
     requestId: "6666666666666666",
@@ -94,6 +102,7 @@ const chatRequest = (body: string) =>
     premiseSnapshot: snapshot,
     createdAt: "2026-08-10T12:00:00.000Z",
     body,
+    attachments,
   });
 
 const preparedReview = async () => {
@@ -515,6 +524,54 @@ describe("request mailbox", () => {
     expect(exchange.requests).toMatchObject([
       { requestId: request.requestId, body: "What is the retry boundary?" },
     ]);
+  });
+
+  it("should retain only referenced attachment metadata when revising a queued request", async () => {
+    const { store } = await preparedReview();
+    const keptId = reviewImageId("a".repeat(64));
+    const droppedId = reviewImageId("b".repeat(64));
+    const attachment = (
+      id: typeof keptId,
+      alt: string,
+    ): ReviewImageAttachment => ({
+      id,
+      sha256: id,
+      alt,
+      mimeType: "image/png",
+      byteLength: 1,
+      width: 1,
+      height: 1,
+      path: join(
+        store.requestAttachmentsDirectory,
+        "6666666666666666",
+        `image-${id}.png`,
+      ),
+    });
+    const kept = attachment(keptId, "Old retry graph");
+    const dropped = attachment(droppedId, "Timeout graph");
+    const request = chatRequest(
+      [
+        buildReviewImageReference({ alt: kept.alt, id: keptId }),
+        buildReviewImageReference({ alt: dropped.alt, id: droppedId }),
+      ].join("\n"),
+      [kept, dropped],
+    );
+    await writeAgentRequest({ store, request });
+
+    const revised = await reviseQueuedRequest({
+      store,
+      requestId: request.requestId,
+      body: buildReviewImageReference({
+        alt: "Updated retry graph",
+        id: keptId,
+      }),
+    });
+
+    expect(revised.attachments).toEqual([
+      { ...kept, alt: "Updated retry graph" },
+    ]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests[0]?.attachments).toEqual(revised.attachments);
   });
 
   it("should refuse to revise a claimed request", async () => {
