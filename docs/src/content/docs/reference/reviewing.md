@@ -20,8 +20,9 @@ Pass `--idle-timeout 0` to keep the review open until it is stopped explicitly.
 A waiting agent receives that normal inactivity reason instead of a failed background command.
 When an already-open page loses contact with its review runtime, it reports that loss rather than claiming the server stopped, because a request that merely timed out can happen while the runtime is still running.
 If the deadline the page last knew has also passed, it reports that observation too.
-Refresh is offered in either case so you can check whether the review is still running.
-It does not say why the session went away, because a page that has lost contact cannot tell an idle expiry from a runtime someone stopped, or from one that is still serving another tab.
+When the page has no unsaved browser-only input, Refresh is offered in either case so you can check whether the review is still running.
+If it does have unsaved input, Refresh stays disabled and the page asks you to keep the tab open instead.
+It does not say why contact was lost, because a page that has lost contact cannot tell an idle expiry from a runtime someone stopped, or from one that is still serving another tab.
 For the same reason it never tells you to start a new review runtime: doing so takes custody of the plan and would make a still-running review and its connected agent read-only.
 When a newer review session for that plan was recorded before contact was lost, the page also links to it as **Open latest review**.
 Opening an old address after its runtime has already ended still reaches the browser's connection-error page; giving shared links an explicit lifetime remains a separate product decision.

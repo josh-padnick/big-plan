@@ -293,8 +293,7 @@ test("should preserve deadline recovery when a sibling poll fails", async ({
           : fetchFromRuntime(input, init);
       }
       const headers = new Headers(
-        init?.headers ??
-          (input instanceof Request ? input.headers : undefined),
+        init?.headers ?? (input instanceof Request ? input.headers : undefined),
       );
       headers.set("x-big-plan-test-poll-phase", "fresh-session");
       const phasedInit = { ...init, headers };
