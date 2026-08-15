@@ -15,9 +15,14 @@ import {
   writeAgentRequest,
 } from "./agent-exchange.js";
 import { runAgentWorkLoopAction } from "./agent-work-loop.js";
-import { claimAgentRequest, publishAgentResponse } from "./request-mailbox.js";
+import {
+  claimAgentRequest,
+  deleteQueuedRequest,
+  publishAgentResponse,
+} from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
+import { reviewImageId } from "./shared/review-image.js";
 import { readProgress } from "./store.js";
 import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
@@ -209,6 +214,133 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should claim a request before opening its attachments", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-claim-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const imageId = reviewImageId("a".repeat(64));
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments: [
+        {
+          id: imageId,
+          sha256: imageId,
+          alt: "Capture",
+          mimeType: "image/png",
+          byteLength: 1,
+          width: 1,
+          height: 1,
+          path: join(
+            review.store.requestAttachmentsDirectory,
+            "cccccccccccccccc",
+            `image-${imageId}.png`,
+          ),
+        },
+      ],
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/could not be opened during agent pickup/);
+      await expect(
+        deleteQueuedRequest({
+          store: review.store,
+          requestId: request.requestId,
+        }),
+      ).rejects.toThrow("The agent already started on this message");
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should select the next request when deletion wins before claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-delete-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes: Uint8Array.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+        0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+      ]),
+      alt: "Capture",
+    });
+    const firstId = "cccccccccccccccc";
+    const attachments = await reviewStore.freezeRequestAttachments({
+      store: review.store,
+      requestId: firstId,
+      references: [{ id: descriptor.id, alt: descriptor.alt }],
+    });
+    const first = messageAgentRequest({
+      kind: "chat",
+      requestId: firstId,
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments,
+    });
+    const second = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "What should happen next?",
+    });
+    await writeAgentRequest({ store: review.store, request: first });
+    await writeAgentRequest({ store: review.store, request: second });
+
+    const selectedValues = await reviewStore.readAgentRequestValues(
+      review.store,
+    );
+    const readRequests = vi
+      .spyOn(reviewStore, "readAgentRequestValues")
+      .mockImplementationOnce(async () => {
+        await deleteQueuedRequest({
+          store: review.store,
+          requestId: first.requestId,
+        });
+        return selectedValues;
+      });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: second.requestId },
+      });
+    } finally {
+      readRequests.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should materialize reviewer images before publishing a changed plan", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-assets-"));
     const planPath = join(directory, "plan.mdx");

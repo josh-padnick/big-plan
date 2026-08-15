@@ -31,6 +31,11 @@ export type ReviewImageAttachment = ReviewImageDescriptor & {
   readonly path: string;
 };
 
+export type ReviewImageReference = {
+  readonly id: ReviewImageId;
+  readonly alt: string;
+};
+
 const IMAGE_ID = /^[a-f0-9]{64}$/;
 
 /** Validates a complete lowercase SHA-256 image id. */
@@ -68,11 +73,23 @@ const REFERENCE = /!\[([^\]\n]*)\]\(review-image:([a-f0-9]{64})\)/gu;
 /** Extracts valid image references in source order, preserving duplicates. */
 export const extractReviewImageReferences = (
   body: string,
-): ReadonlyArray<{ readonly id: ReviewImageId; readonly alt: string }> =>
+): ReadonlyArray<ReviewImageReference> =>
   Array.from(body.matchAll(REFERENCE), (match) => ({
     id: reviewImageId(match[2] ?? ""),
     alt: match[1] ?? "Screenshot",
   }));
+
+/** Keeps the first reference to each image in authored order. */
+export const deduplicateReviewImageReferences = (
+  references: ReadonlyArray<ReviewImageReference>,
+): ReadonlyArray<ReviewImageReference> => {
+  const seen = new Set<ReviewImageId>();
+  return references.filter((reference) => {
+    if (seen.has(reference.id)) return false;
+    seen.add(reference.id);
+    return true;
+  });
+};
 
 /**
  * Collects the distinct images one outgoing message carries. The same picture
@@ -81,16 +98,10 @@ export const extractReviewImageReferences = (
  */
 export const imageReferencesForBodies = (
   bodies: ReadonlyArray<string>,
-): ReadonlyArray<{ readonly id: ReviewImageId; readonly alt: string }> => {
-  const seen = new Set<string>();
-  return bodies
-    .flatMap((body) => extractReviewImageReferences(body))
-    .filter((reference) => {
-      if (seen.has(reference.id)) return false;
-      seen.add(reference.id);
-      return true;
-    });
-};
+): ReadonlyArray<ReviewImageReference> =>
+  deduplicateReviewImageReferences(
+    bodies.flatMap((body) => extractReviewImageReferences(body)),
+  );
 
 /** Returns the supported image format identified by its magic bytes. */
 export const sniffReviewImage = (

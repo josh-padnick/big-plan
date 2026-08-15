@@ -561,10 +561,16 @@ describe("request mailbox", () => {
     const revised = await reviseQueuedRequest({
       store,
       requestId: request.requestId,
-      body: buildReviewImageReference({
-        alt: "Updated retry graph",
-        id: keptId,
-      }),
+      body: [
+        buildReviewImageReference({
+          alt: "Updated retry graph",
+          id: keptId,
+        }),
+        buildReviewImageReference({
+          alt: "Ignored duplicate graph",
+          id: keptId,
+        }),
+      ].join("\n"),
     });
 
     expect(revised.attachments).toEqual([

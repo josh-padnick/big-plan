@@ -16,7 +16,10 @@ import type {
   AgentRequest,
   AgentResponse,
 } from "./agent-exchange.js";
-import { extractReviewImageReferences } from "./shared/review-image.js";
+import {
+  deduplicateReviewImageReferences,
+  extractReviewImageReferences,
+} from "./shared/review-image.js";
 import {
   appendAgentConnectionEvent,
   appendProgressValue,
@@ -334,17 +337,17 @@ export const reviseQueuedRequest = async ({
       const frozen = new Map(
         request.attachments.map((attachment) => [attachment.id, attachment]),
       );
-      const attachments = extractReviewImageReferences(body).map(
-        (reference) => {
-          const attachment = frozen.get(reference.id);
-          if (attachment === undefined) {
-            throw new AgentExchangeRejected(
-              "A waiting message cannot gain a new image. Delete it and send a new one.",
-            );
-          }
-          return { ...attachment, alt: reference.alt };
-        },
-      );
+      const attachments = deduplicateReviewImageReferences(
+        extractReviewImageReferences(body),
+      ).map((reference) => {
+        const attachment = frozen.get(reference.id);
+        if (attachment === undefined) {
+          throw new AgentExchangeRejected(
+            "A waiting message cannot gain a new image. Delete it and send a new one.",
+          );
+        }
+        return { ...attachment, alt: reference.alt };
+      });
       const revised = validateAgentRequest({ ...request, body, attachments });
       if (revised.kind === "feedback") {
         throw new AgentExchangeRejected(
