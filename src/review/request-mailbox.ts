@@ -6,7 +6,7 @@ import {
   outstandingAgentRequests,
   readAgentCommentHistory,
   readValidatedAgentRequests,
-  requestIsTerminal,
+  requestBlocksPlanPickup,
   validateAgentRequest,
 } from "./agent-exchange.js";
 import type {
@@ -331,8 +331,7 @@ export const claimAgentRequest = async ({
             requests.some(
               (candidate) =>
                 candidate.requestId !== requestId &&
-                !requestIsTerminal(candidate) &&
-                claimIsLive({ request: candidate, nowMs }),
+                requestBlocksPlanPickup({ request: candidate, nowMs }),
             )
           ) {
             throw new AgentClaimContended(

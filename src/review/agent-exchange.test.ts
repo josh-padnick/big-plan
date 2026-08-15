@@ -284,8 +284,35 @@ describe("agent exchange response contract", () => {
         nowMs,
       }),
     ).toBeUndefined();
-    // Without the plan-wide live-claim check, this returns `request` before
-    // the active request is terminal. That counterfactual was verified.
+    // Without the writer-release rule, cancellation releases the plan while
+    // its writer still holds a live lease. That counterfactual was verified.
+    expect(
+      nextPendingAgentRequest(
+        {
+          requests: [
+            { ...active, canceledAt: "2026-08-02T12:00:31.000Z" },
+            request,
+          ],
+          responses: [],
+        },
+        { claimedBy: "cccc0000cccc0000", nowMs },
+      ),
+    ).toBeUndefined();
+    expect(
+      nextPendingAgentRequest(
+        {
+          requests: [
+            { ...active, canceledAt: "2026-08-02T12:00:31.000Z" },
+            request,
+          ],
+          responses: [],
+        },
+        {
+          claimedBy: "cccc0000cccc0000",
+          nowMs: (active.claimExpiresAtMs ?? nowMs) + 1,
+        },
+      ),
+    ).toBe(request);
     expect(
       nextPendingAgentRequest(
         {

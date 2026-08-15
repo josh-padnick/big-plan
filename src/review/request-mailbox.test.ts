@@ -500,6 +500,74 @@ describe("request mailbox", () => {
     });
   });
 
+  it("should keep a canceled writer blocking until its lease expires", async () => {
+    const { store } = await preparedReview();
+    const firstRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "4444444444444444",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      body: "Cancel this while its writer is active.",
+    });
+    const secondRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "5555555555555555",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:01.000Z",
+      body: "Wait until the canceled writer is gone.",
+    });
+    await writeAgentRequest({ store, request: firstRequest });
+    await writeAgentRequest({ store, request: secondRequest });
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: firstRequest.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:02.000Z",
+      clock: clockAt("2026-08-10T12:00:02.000Z"),
+    });
+    await cancelAgentRequest({
+      store,
+      requestId: firstRequest.requestId,
+      now: "2026-08-10T12:00:03.000Z",
+    });
+
+    // Without the writer-release rule, this second claim resolves immediately
+    // while the canceled request's writer still has a live lease. That
+    // counterfactual was verified before this test passed.
+    await expect(
+      claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: secondRequest.requestId,
+        claimedBy: agentB,
+        baselineSnapshot: snapshot,
+        now: "2026-08-10T12:00:04.000Z",
+        clock: clockAt("2026-08-10T12:00:04.000Z"),
+      }),
+    ).rejects.toThrow(/another agent session is working on this plan/i);
+
+    await expect(
+      claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: secondRequest.requestId,
+        claimedBy: agentB,
+        baselineSnapshot: snapshot,
+        now: "2026-08-10T12:01:18.000Z",
+        clock: clockAt("2026-08-10T12:01:18.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      requestId: secondRequest.requestId,
+      claimedBy: agentB,
+    });
+  });
+
   it("should let the same session refresh its own claim", async () => {
     const { store } = await preparedReview();
     const request = requestWith([

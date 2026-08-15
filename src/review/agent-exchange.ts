@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import type { CommentTarget, ReviewComment } from "./shared/comment.js";
 import { QUOTE_LIMIT } from "./shared/comment.js";
-import { claimIsHeldByAnother } from "./shared/agent-claim.js";
+import { claimIsHeldByAnother, claimIsLive } from "./shared/agent-claim.js";
 import {
   requestIsTerminal,
   type TerminalAgentRequest,
@@ -1071,6 +1071,21 @@ export const writeAgentRequest = async ({
 };
 
 /**
+ * A plan-wide pickup block releases only when its writer is provably gone.
+ * An answer proves the agent finished, but cancellation is a reviewer action
+ * the agent may not see until its next note or response, so a canceled live
+ * claim keeps blocking new work until its lease lapses.
+ */
+export const requestBlocksPlanPickup = ({
+  request,
+  nowMs,
+}: {
+  readonly request: AgentRequest;
+  readonly nowMs: number;
+}): boolean =>
+  request.answeredAt === undefined && claimIsLive({ request, nowMs });
+
+/**
  * Reads the whole plan exchange through the contract. A review-server restart
  * creates a new transport session, but the plan identity continues to own its
  * threads and outcomes. Invalid, foreign-plan, duplicate, and orphaned files
@@ -1181,23 +1196,15 @@ export const readValidatedAgentResponse = async ({
 };
 
 /**
- * Returns the oldest request this agent session may work. A live foreign claim
- * anywhere on the plan makes new work unavailable until that holder finishes
- * or its lease lapses.
+ * Returns the oldest request available for a new plan-wide claim.
  */
 export const nextPendingAgentRequest = (
   snapshot: AgentExchangeSnapshot,
   viewer: { readonly claimedBy: string; readonly nowMs: number },
 ): AgentRequest | undefined => {
   if (
-    snapshot.requests.some(
-      (request) =>
-        !requestIsTerminal(request) &&
-        claimIsHeldByAnother({
-          request,
-          claimedBy: viewer.claimedBy,
-          nowMs: viewer.nowMs,
-        }),
+    snapshot.requests.some((request) =>
+      requestBlocksPlanPickup({ request, nowMs: viewer.nowMs }),
     )
   ) {
     return undefined;
