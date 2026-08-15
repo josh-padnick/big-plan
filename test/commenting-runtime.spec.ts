@@ -101,6 +101,34 @@ test("should hydrate when browser recovery storage is blocked", async ({
     .toEqual([body]);
 });
 
+test("should disclose a recovery write failure after hydration", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await page.getByRole("button", { name: "Feedback" }).click();
+  await page.evaluate(() => {
+    Object.defineProperty(Storage.prototype, "setItem", {
+      configurable: true,
+      value: (): never => {
+        throw new DOMException("Storage is blocked", "SecurityError");
+      },
+    });
+  });
+
+  await page.getByRole("button", { name: "Comment on slide" }).first().click();
+  await page
+    .getByRole("dialog", { name: /Comment on/u })
+    .getByLabel("Add a comment")
+    .fill("This text no longer has durable browser recovery.");
+
+  await expect(
+    page.getByText(
+      "Browser recovery is unavailable. The live review remains usable, but browser-only drafts cannot be recovered after a reload.",
+    ),
+  ).toBeVisible();
+});
+
 test("should keep unsent comment text through a reload", async ({
   page,
   reviewRuntimeUrl,
