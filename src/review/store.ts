@@ -102,6 +102,7 @@ export type ReviewStore = {
   readonly sessionPath: string;
   readonly heartbeatPath: string;
   readonly sessionLockPath: string;
+  readonly heartbeatLockPath: string;
   readonly agentHeartbeatPath: string;
 };
 
@@ -201,6 +202,13 @@ export const reviewStoreFor = ({
     sessionLockPath: inside({
       base: reviewDirectory,
       leaf: ".session-authority.lock",
+    }),
+    // The heartbeat is deliberately not serialized against mutations: a
+    // mutation that never settles must not be able to stop the session from
+    // reporting that it is still alive.
+    heartbeatLockPath: inside({
+      base: reviewDirectory,
+      leaf: ".session-heartbeat.lock",
     }),
     agentHeartbeatPath: inside({
       base: agentDirectory,

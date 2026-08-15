@@ -5,9 +5,11 @@ import { describe, expect, it } from "vitest";
 import {
   decodeAgentSnapshot,
   decodeProgress,
+  decodeRuntimeSession,
   decodeSnapshotDiff,
   encodeAgentSnapshot,
   encodeProgress,
+  encodeRuntimeSession,
   encodeSnapshotDiff,
   type SnapshotDiff,
 } from "./review-wire.js";
@@ -245,5 +247,39 @@ describe("review wire contract", () => {
         events: [{ ...event, stepCode: "wording-dependent-guess" }],
       }),
     ).toEqual([]);
+  });
+  it("should carry a stalled write age to the browser as a present fact", () => {
+    const sessionId = "a".repeat(16);
+    const encoded = encodeRuntimeSession({
+      sessionId,
+      planId: "b".repeat(16),
+      plan: "/plans/plan.mdx",
+      authoritative: true,
+      writesStalledMs: 42_000,
+    });
+
+    expect(decodeRuntimeSession({ value: encoded, sessionId })).toMatchObject({
+      authoritative: true,
+      writesStalledMs: 42_000,
+    });
+  });
+
+  it("should treat an absent, zero, or malformed stall as no stall at all", () => {
+    const sessionId = "a".repeat(16);
+    const base = {
+      sessionId,
+      planId: "b".repeat(16),
+      plan: "/plans/plan.mdx",
+      authoritative: true,
+    };
+
+    for (const writesStalledMs of [undefined, 0, -1, Number.NaN, "30000"]) {
+      const decoded = decodeRuntimeSession({
+        value: { ...base, writesStalledMs },
+        sessionId,
+      });
+      expect(decoded).not.toBeNull();
+      expect(decoded?.writesStalledMs).toBeUndefined();
+    }
   });
 });

@@ -80,6 +80,8 @@ import {
   describeRuntimeFailure,
   describeStalledMutation,
   growthMilestone,
+  MUTATION_STALL_MS,
+  ReviewWriteStalled,
   stalledMutations,
 } from "./runtime-watchdog.js";
 import type { ReviewRuntimeDiagnostics } from "./runtime-watchdog.js";
@@ -133,10 +135,6 @@ const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const SHUTDOWN_GRACE_MS = 100;
 
-// A mutation is expected to finish in milliseconds. The store's own lock gives
-// up after roughly two seconds, so anything still running after thirty is not
-// slow, it is stuck, and the session it belongs to is degraded.
-const MUTATION_STALL_MS = 30_000;
 const STALL_CHECK_INTERVAL_MS = 5_000;
 const GROWTH_CHECK_INTERVAL_MS = 60_000;
 // Both polled read paths re-read their whole history, so growth is reported on
@@ -346,10 +344,13 @@ export const startReviewRuntime = async ({
   planPath,
   diffPreviewSource,
   idleTimeoutMs = 10 * 60 * 1_000,
+  writeStallMs = MUTATION_STALL_MS,
 }: {
   readonly planPath: string;
   readonly diffPreviewSource?: string;
   readonly idleTimeoutMs?: number;
+  /** How long one mutation may run before this runtime gives up on it. */
+  readonly writeStallMs?: number;
 }): Promise<ReviewRuntime> => {
   const resolvedPlanPath = resolve(planPath);
   const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
@@ -621,7 +622,7 @@ export const startReviewRuntime = async ({
         (response) => response.requestId,
       ),
     }),
-    writeGate: createWriteGate({ mutations }),
+    writeGate: createWriteGate({ mutations, stallMs: writeStallMs }),
     activityClock: createActivityClock(),
   };
   const { planRenderer } = context;
@@ -681,6 +682,7 @@ export const startReviewRuntime = async ({
     readonly response: ServerResponse;
   }): Promise<void> => {
     let requestLabel = `${request.method ?? "?"} request`;
+    let isMutation = false;
     try {
       const address = server.address();
       const port =
@@ -728,6 +730,7 @@ export const startReviewRuntime = async ({
         return;
       }
       requestLabel = `${matched.method} ${matched.path}`;
+      isMutation = matched.method !== "GET";
 
       // No CORS allowance is ever sent, so a browser hides the response - but
       // a simple cross-origin POST still arrives, and would still be executed
@@ -804,6 +807,18 @@ export const startReviewRuntime = async ({
         refuse({ response, status: 400, reason: error.message });
         return;
       }
+      // A write the runtime gave up on answers rather than hanging, and it is
+      // not reported here: the stall watchdog already names the route and its
+      // age once, and repeating it for every later write would bury it.
+      if (error instanceof ReviewWriteStalled) {
+        refuse({
+          response,
+          status: 503,
+          reason:
+            "This review session has stopped accepting changes. Restart the review runtime to continue.",
+        });
+        return;
+      }
       // The outer boundary is the only place with both the route and the
       // cause. A refused request the reviewer sees as a generic failure has to
       // leave a specific line behind, or a session that starts failing every
@@ -814,6 +829,19 @@ export const startReviewRuntime = async ({
         process.stderr.write(
           `Review request ${requestLabel} failed for session ${sessionId}:\n${describeRuntimeFailure({ error, secrets: [token] })}\n`,
         );
+      }
+      // A write that failed while another one is stalled failed because of it:
+      // the abandoned work holds the store's custody lock until it settles. The
+      // cause is already in the log above, so the reviewer gets the one thing
+      // they can act on instead of a generic failure they cannot.
+      if (isMutation && context.writeGate.stalledForMs() !== undefined) {
+        refuse({
+          response,
+          status: 503,
+          reason:
+            "This review session has stopped accepting changes. Restart the review runtime to continue.",
+        });
+        return;
       }
       refuse({ response, status: 500, reason: "The review runtime failed" });
     }
@@ -918,7 +946,7 @@ export const startReviewRuntime = async ({
     for (const mutation of stalledMutations({
       inFlight: mutations.inFlight(),
       nowMs: Date.now(),
-      boundMs: MUTATION_STALL_MS,
+      boundMs: writeStallMs,
     })) {
       if (reportedStalls.has(mutation.id)) continue;
       reportedStalls.add(mutation.id);
@@ -958,7 +986,7 @@ export const startReviewRuntime = async ({
       stalled: stalledMutations({
         inFlight,
         nowMs,
-        boundMs: MUTATION_STALL_MS,
+        boundMs: writeStallMs,
       }),
     };
   };

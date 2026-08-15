@@ -9,6 +9,37 @@
 
 import type { ReviewStoreGrowth } from "./store.js";
 
+/**
+ * How long one mutation may run before the runtime stops waiting for it. A
+ * mutation is expected to finish in milliseconds, and the store's own lock
+ * gives up after roughly two seconds, so anything still running after thirty
+ * is not slow: it is stuck, and the session it belongs to is degraded.
+ */
+export const MUTATION_STALL_MS = 30_000;
+
+/**
+ * Raised when the write gate stops waiting for one mutation. The mutation
+ * itself is not cancelled - nothing can cancel a filesystem call that never
+ * returns - so this says the session gave up on it, not that it was undone.
+ */
+export class ReviewWriteStalled extends Error {
+  readonly route: string;
+  readonly boundMs: number;
+
+  constructor({
+    route,
+    boundMs,
+  }: {
+    readonly route: string;
+    readonly boundMs: number;
+  }) {
+    super(`${route} did not settle within ${boundMs}ms`);
+    this.name = "ReviewWriteStalled";
+    this.route = route;
+    this.boundMs = boundMs;
+  }
+}
+
 /** One mutation the write gate has started and not yet seen settle. */
 export type InFlightMutation = {
   readonly id: string;

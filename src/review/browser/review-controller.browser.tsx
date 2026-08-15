@@ -114,6 +114,7 @@ import {
   agentProjectionForReviewPoll,
   INITIAL_REVIEW_POLL_HEALTH,
   reviewPollIsOffline,
+  reviewRuntimeAcceptsWrites,
   reviewRuntimeCanWrite,
   reviewRuntimeIsDown,
   transitionReviewPollHealth,
@@ -648,6 +649,48 @@ const requestJson = async ({
   }
 };
 
+/** The one place a runtime failure interrupts reading, whatever the failure. */
+const RuntimeAlertBanner = ({
+  scope,
+  heading,
+  detail,
+  action,
+}: {
+  readonly scope: string;
+  readonly heading: string;
+  readonly detail: string;
+  readonly action?: {
+    readonly label: string;
+    readonly onAct: () => void;
+    readonly enabled: boolean;
+  };
+}) => (
+  <div
+    className="fixed top-14 right-3 left-3 z-50 mx-auto flex max-w-2xl min-w-0 items-start gap-3 rounded-lg border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-sm text-[var(--callout-danger-c)] shadow-floating"
+    role="alert"
+    aria-live="assertive"
+    {...{ [scope]: "" }}
+  >
+    <Icon icon={CIRCLE_X_ICON} />
+    <div className="min-w-0 flex-1">
+      <strong className="block text-ink">{heading}</strong>
+      <p className="m-0 mt-1 text-xs text-ink [overflow-wrap:anywhere]">
+        {detail}
+      </p>
+    </div>
+    {action === undefined ? null : (
+      <button
+        type="button"
+        className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--callout-danger-c)]"
+        onClick={action.onAct}
+        disabled={!action.enabled}
+      >
+        {action.label}
+      </button>
+    )}
+  </div>
+);
+
 const ServerGoneBanner = ({
   canRefresh,
   onRefresh,
@@ -655,32 +698,28 @@ const ServerGoneBanner = ({
   readonly canRefresh: boolean;
   readonly onRefresh: () => void;
 }) => (
-  <div
-    className="fixed top-14 right-3 left-3 z-50 mx-auto flex max-w-2xl min-w-0 items-start gap-3 rounded-lg border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-sm text-[var(--callout-danger-c)] shadow-floating"
-    role="alert"
-    aria-live="assertive"
-    data-review-server-gone=""
-  >
-    <Icon icon={CIRCLE_X_ICON} />
-    <div className="min-w-0 flex-1">
-      <strong className="block text-ink">
-        This review session is no longer online
-      </strong>
-      <p className="m-0 mt-1 text-xs text-ink [overflow-wrap:anywhere]">
-        {canRefresh
-          ? "The local review server stopped responding. Refresh when it is running again to continue reviewing. This is separate from the agent connection."
-          : "The local review server stopped responding. Keep this tab open because the latest review input has not reached the local review server. This is separate from the agent connection."}
-      </p>
-    </div>
-    <button
-      type="button"
-      className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--callout-danger-c)]"
-      onClick={onRefresh}
-      disabled={!canRefresh}
-    >
-      Refresh
-    </button>
-  </div>
+  <RuntimeAlertBanner
+    scope="data-review-server-gone"
+    heading="This review session is no longer online"
+    detail={
+      canRefresh
+        ? "The local review server stopped responding. Refresh when it is running again to continue reviewing. This is separate from the agent connection."
+        : "The local review server stopped responding. Keep this tab open because the latest review input has not reached the local review server. This is separate from the agent connection."
+    }
+    action={{ label: "Refresh", onAct: onRefresh, enabled: canRefresh }}
+  />
+);
+
+// The failure this exists for answers reads perfectly: the server is up, so
+// nothing else on the page looks wrong, and a reviewer would keep writing
+// comments that can no longer be saved. Refreshing cannot help, because the
+// runtime itself has to be restarted.
+const WritesStalledBanner = () => (
+  <RuntimeAlertBanner
+    scope="data-review-writes-stalled"
+    heading="This review session has stopped accepting changes"
+    detail="The local review server is still answering, but a change it started never finished, so nothing new can be saved. Keep this tab open, then stop the review runtime and start it again on this plan to continue."
+  />
 );
 
 type CachedSnapshotDiff =
@@ -3725,6 +3764,10 @@ export const ReviewController = () => {
   const currentSnapshot = agent.currentSnapshot || displayedSnapshot;
   const pollIsOffline = reviewPollIsOffline(pollHealth);
   const serverGone = reviewRuntimeIsDown(pollHealth);
+  // Only a runtime that is answering can report this, so it never competes
+  // with the banner for a runtime that has gone entirely.
+  const writesStalled =
+    !serverGone && runtimeSession?.writesStalledMs !== undefined;
   const threadRuntime: ThreadRuntime =
     identity === null ? "static" : pollIsOffline ? "offline" : "online";
   const agentProjection = agentProjectionForReviewPoll({
@@ -3745,14 +3788,22 @@ export const ReviewController = () => {
   });
   const agentConnected = agentConnection.connected;
   const runtimeCanWrite = reviewRuntimeCanWrite(pollHealth);
+  // Reachability and acceptance are different questions once a runtime can
+  // stall: every write path asks this one, so the page stops sending changes
+  // the runtime has already reported it will refuse.
+  const runtimeAcceptsWrites = reviewRuntimeAcceptsWrites({
+    health: pollHealth,
+    writesStalledMs: runtimeSession?.writesStalledMs,
+  });
   const canSendToAgent =
     identity !== null &&
     threadRuntime === "online" &&
-    runtimeCanWrite &&
+    runtimeAcceptsWrites &&
     runtimeSession?.authoritative !== false;
   const commentSubmitAvailability = deriveReviewCommentSubmitAvailability({
     canSubmit: identity === null || canSendToAgent,
     runtimeCanWrite,
+    writesStalled: !runtimeAcceptsWrites && runtimeCanWrite,
   });
   const unresolvedDrafts = useMemo(
     () => drafts.filter((comment) => !resolvedCommentIds.has(comment.id)),
@@ -4201,7 +4252,9 @@ export const ReviewController = () => {
       recovery: { drafts, resolvedCommentIds },
       baseFingerprint: recoveryBaseFingerprint,
     });
-    if (!runtimeCanWrite) return;
+    // The recovery snapshot above is written first and unconditionally, so a
+    // runtime that cannot take this change still cannot lose it.
+    if (!runtimeAcceptsWrites) return;
     void serializeRuntimeWrite(async () => {
       const runtimeSnapshot = parseSnapshot(
         await requestJson({ path: "/api/drafts", identity }),
@@ -4287,7 +4340,7 @@ export const ReviewController = () => {
     pollHealth.state,
     persistedReviewState,
     resolvedCommentIds,
-    runtimeCanWrite,
+    runtimeAcceptsWrites,
     runtimeSession?.authoritative,
     serializeRuntimeWrite,
   ]);
@@ -4485,6 +4538,7 @@ export const ReviewController = () => {
         const availability = deriveReviewCommentSubmitAvailability({
           canSubmit: false,
           runtimeCanWrite,
+          writesStalled: !runtimeAcceptsWrites && runtimeCanWrite,
         });
         if (availability.state === "unavailable") {
           setStatus(availability.status);
@@ -4523,7 +4577,14 @@ export const ReviewController = () => {
         setIsSending(false);
       }
     },
-    [canSendToAgent, identity, isOpen, runtimeCanWrite, serializeRuntimeWrite],
+    [
+      canSendToAgent,
+      identity,
+      isOpen,
+      runtimeAcceptsWrites,
+      runtimeCanWrite,
+      serializeRuntimeWrite,
+    ],
   );
 
   useEffect(() => {
@@ -5130,6 +5191,7 @@ export const ReviewController = () => {
           onRefresh={() => window.location.reload()}
         />
       ) : null}
+      {writesStalled ? <WritesStalledBanner /> : null}
       {reviewContainerHosts.map(({ container, host }) => {
         const target = targetForReviewContainer(container);
         if (target === null) return null;

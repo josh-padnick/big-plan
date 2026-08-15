@@ -1,5 +1,7 @@
 // The route that reports which runtime currently owns this review, so the
-// browser can tell a live session from one a newer runtime has replaced.
+// browser can tell a live session from one a newer runtime has replaced - and,
+// because this is the only route the page polls that the runtime answers about
+// itself, whether that runtime has stopped accepting changes.
 
 import { jsonResponse } from "./review-route-context.js";
 import type {
@@ -18,8 +20,12 @@ export const readRuntimeSession = async (
     planId: context.planId,
     plan: context.resolvedPlanPath,
   });
+  const writesStalledMs = context.writeGate.stalledForMs();
   return jsonResponse({
     status: 200,
-    value: encodeRuntimeSession(sessionView),
+    value: encodeRuntimeSession({
+      ...sessionView,
+      ...(writesStalledMs === undefined ? {} : { writesStalledMs }),
+    }),
   });
 };
