@@ -132,6 +132,7 @@ import {
   reviewRuntimeRefusal,
   reviewRuntimeRefusalStatus,
 } from "./review-runtime-request.js";
+import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
   AlertDialog,
@@ -3758,6 +3759,16 @@ export const ReviewController = () => {
   const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(
     null,
   );
+  const runtimeSessionOrder = useMemo(createRuntimeSessionOrder, []);
+  const acceptRuntimeSession = useCallback(
+    ({ sequence, session }: { sequence: number; session: RuntimeSession }) => {
+      const decision = runtimeSessionOrder.decide({ sequence, session });
+      if (decision.kind === "apply") {
+        setRuntimeSession(decision.session);
+      }
+    },
+    [runtimeSessionOrder],
+  );
   const [pollHealth, setPollHealth] = useState<ReviewPollHealth>(
     INITIAL_REVIEW_POLL_HEALTH,
   );
@@ -4200,6 +4211,7 @@ export const ReviewController = () => {
         return;
       }
       try {
+        const sessionSequence = runtimeSessionOrder.issueRequest();
         const session = parseRuntimeSession({
           value: await requestJson({ path: "/api/session", identity }),
           sessionId: identity.sessionId,
@@ -4207,7 +4219,9 @@ export const ReviewController = () => {
         if (session === null) {
           throw new Error("This page is not connected to its review runtime.");
         }
-        setRuntimeSession(session);
+        if (current) {
+          acceptRuntimeSession({ sequence: sessionSequence, session });
+        }
         const snapshot = parseSnapshot(
           await requestJson({ path: "/api/drafts", identity }),
         );
@@ -4275,7 +4289,7 @@ export const ReviewController = () => {
     return () => {
       current = false;
     };
-  }, [identity, planId]);
+  }, [acceptRuntimeSession, identity, planId, runtimeSessionOrder]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -4393,14 +4407,13 @@ export const ReviewController = () => {
     if (identity === null) return;
     let current = true;
     let pending = false;
-    let latestPollSequence = 0;
     const refresh = async () => {
       if (pending) return;
       pending = true;
-      const pollSequence = ++latestPollSequence;
+      const sessionSequence = runtimeSessionOrder.issueRequest();
       // Stamp before requests so aggregate latency cannot move contact loss past
-      // a remembered deadline. Commit only the latest session response
-      // independently as soon as it arrives; aggregate health still waits for all.
+      // a remembered deadline. The shared order owner applies only the latest
+      // session response immediately; aggregate health still waits for all.
       const pollStartedAtMs = Date.now();
       try {
         const sessionPromise = requestJson({
@@ -4416,8 +4429,8 @@ export const ReviewController = () => {
               "This page is not connected to its review runtime.",
             );
           }
-          if (current && pollSequence === latestPollSequence) {
-            setRuntimeSession(session);
+          if (current) {
+            acceptRuntimeSession({ sequence: sessionSequence, session });
           }
           return session;
         });
@@ -4490,7 +4503,12 @@ export const ReviewController = () => {
       current = false;
       window.clearInterval(timer);
     };
-  }, [acceptAgentSnapshot, identity]);
+  }, [
+    acceptAgentSnapshot,
+    acceptRuntimeSession,
+    identity,
+    runtimeSessionOrder,
+  ]);
 
   useEffect(() => {
     if (identity === null) return;
