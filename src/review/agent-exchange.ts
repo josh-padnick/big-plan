@@ -989,18 +989,27 @@ export const readValidatedAgentResponse = async ({
   }
 };
 
-/** Returns the oldest request that does not yet have a validated response. */
-export const nextPendingAgentRequest = (
+/**
+ * The requests the agent still owes an answer, oldest first. This is the one
+ * definition of outstanding work: every caller that must not contradict a
+ * queued message reads it from here rather than re-deriving terminality.
+ */
+export const outstandingAgentRequests = (
   snapshot: AgentExchangeSnapshot,
-): AgentRequest | undefined => {
+): ReadonlyArray<AgentRequest> => {
   const answered = new Set(
     snapshot.responses.map((response) => response.requestId),
   );
-  return snapshot.requests.find(
+  return snapshot.requests.filter(
     (request) =>
       request.canceledAt === undefined && !answered.has(request.requestId),
   );
 };
+
+/** Returns the oldest request that does not yet have a validated response. */
+export const nextPendingAgentRequest = (
+  snapshot: AgentExchangeSnapshot,
+): AgentRequest | undefined => outstandingAgentRequests(snapshot)[0];
 
 /** Collects the original comments needed to validate a reply response. */
 export const commentsFromExchange = (
