@@ -47,6 +47,9 @@ import {
   type WireframeScreenSnapshot,
 } from "./wireframe-screen-diff.js";
 
+const DIFF_TOGGLE_OPTION_CLASSES =
+  "relative z-10 min-h-11 min-w-11 cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 wide:min-h-0 wide:min-w-0";
+
 const placeLocations = ({
   diff,
   place,
@@ -711,8 +714,8 @@ const ComponentSnapshotComparison = ({
   // A wireframe with only one screen, ever, has nothing to switch between -
   // the non-diff view never draws a switcher for it either, so the diff view
   // does not grow one just because that lone screen changed.
-  const totalScreenCount = useMemo(
-    () => new Set([...oldScreens.keys(), ...newScreens.keys()]).size,
+  const hasMultipleScreens = useMemo(
+    () => oldScreens.size > 1 || newScreens.size > 1,
     [oldScreens, newScreens],
   );
   const [side, setSide] = useState<"old" | "new">(initialSide);
@@ -828,7 +831,7 @@ const ComponentSnapshotComparison = ({
           only grows one once a second screen makes it meaningful. The
           selected entry reuses the non-diff screen switcher's own classes so
           the two read as the same control. */}
-      {totalScreenCount > 1 && screenDiffs.length > 0 ? (
+      {hasMultipleScreens && screenDiffs.length > 0 ? (
         <nav className="wireframe-switcher" aria-label="Prototype screens">
           {screenDiffs.map((screen) => (
             <button
@@ -886,10 +889,10 @@ const ComponentSnapshotComparison = ({
             />
             <button
               type="button"
-              className={`relative z-10 min-h-11 min-w-11 cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 wide:min-h-0 wide:min-w-0 ${
+              className={`${DIFF_TOGGLE_OPTION_CLASSES} ${
                 renderedSide === "old"
                   ? "text-[var(--diff-remove-c)]"
-                  : "text-muted hover:bg-raised hover:text-ink"
+                  : "text-muted"
               }`}
               aria-pressed={renderedSide === "old"}
               disabled={!canShowOld}
@@ -899,10 +902,10 @@ const ComponentSnapshotComparison = ({
             </button>
             <button
               type="button"
-              className={`relative z-10 min-h-11 min-w-11 cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 wide:min-h-0 wide:min-w-0 ${
+              className={`${DIFF_TOGGLE_OPTION_CLASSES} ${
                 renderedSide === "new"
                   ? "text-[var(--diff-add-c)]"
-                  : "text-muted hover:bg-raised hover:text-ink"
+                  : "text-muted"
               }`}
               aria-pressed={renderedSide === "new"}
               disabled={!canShowNew}

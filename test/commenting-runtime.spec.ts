@@ -2713,8 +2713,9 @@ test("should not grow a screen switcher for a single-screen wireframe diff, and 
   const planPath = join(directory, "wireframe.mdx");
   const singleScreen = (
     copy: string,
+    screenId: string,
   ) => `<Wireframe id="queue" title="Review queue">
-<Screen id="queue" name="Failed payments" device="desktop">
+<Screen id="${screenId}" name="Failed payments" device="desktop">
 <Panel title="Failed payments">
 <Text text="${copy}" />
 </Panel>
@@ -2738,7 +2739,7 @@ test("should not grow a screen switcher for a single-screen wireframe diff, and 
 
 ## Single screen
 
-${singleScreen("Original copy")}
+${singleScreen("Original copy", "failed-payments")}
 
 ## Multiple screens
 
@@ -2748,7 +2749,7 @@ ${multiScreen("Original triage copy")}
 
 ## Single screen
 
-${singleScreen("Revised copy")}
+${singleScreen("Revised copy", "payment-failures")}
 
 ## Multiple screens
 
@@ -2996,6 +2997,42 @@ ${reorderedWorkspace}
         ).toBeGreaterThanOrEqual(44);
       }
       await page.setViewportSize({ width: 1600, height: 1000 });
+    });
+
+    await test.step("show hover feedback on both toggle options in every state and theme", async () => {
+      const visualState = async (button: typeof was) =>
+        button.evaluate((node) => {
+          const style = getComputedStyle(node);
+          return {
+            backgroundColor: style.backgroundColor,
+            color: style.color,
+          };
+        });
+      const options = [was, now];
+      for (const theme of ["light", "dark"] as const) {
+        await page.evaluate((nextTheme) => {
+          document.documentElement.setAttribute("data-theme", nextTheme);
+        }, theme);
+        for (const selected of options) {
+          await selected.click();
+          await page.mouse.move(0, 0);
+          await expect(selected).toHaveAttribute("aria-pressed", "true");
+          for (const option of options) {
+            const resting = await visualState(option);
+            await option.hover();
+            await expect
+              .poll(async () => {
+                const hovered = await visualState(option);
+                return (
+                  hovered.backgroundColor !== resting.backgroundColor &&
+                  hovered.color !== resting.color
+                );
+              })
+              .toBe(true);
+            await page.mouse.move(0, 0);
+          }
+        }
+      }
     });
 
     await test.step("navigate added and removed prototype screens", async () => {
