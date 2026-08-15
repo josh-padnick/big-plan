@@ -35,37 +35,18 @@
 //    script running on this runtime's own origin.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import {
-  readFile,
-  realpath,
-  rename,
-  stat,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import {
-  basename,
-  dirname,
-  extname,
-  isAbsolute,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
-import { fromHtml } from "hast-util-from-html";
-import { toHtml } from "hast-util-to-html";
-import type { Element, Root, RootContent, ElementContent } from "hast";
+import { basename, extname, resolve } from "node:path";
 import {
   renderDocument,
   MarkdownDiagnosticsError,
 } from "../render/render-document.js";
-import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
+import type { ReviewComment } from "./shared/comment.js";
 import {
   CommentRejected,
   validateActiveDraft,
-  validateCommentUpdates,
   validateResolvedCommentIds,
   validateStoredComments,
 } from "./shared/comment.js";
@@ -95,14 +76,9 @@ import {
   deriveReviewPlanId,
   prepareStore,
   randomId,
-  readActiveDraft,
-  readAgentConnectionEvents,
   readAgentPresence,
   readComments,
-  readProgress,
   freezeRequestAttachments,
-  publishReviewImage,
-  readReviewImage,
   readFeedbackSubmissionValue,
   readResolvedCommentIds,
   readSnapshot,
@@ -117,149 +93,52 @@ import {
 import type { ReviewStore } from "./store.js";
 import {
   extractReviewImageReferences,
-  isReviewImageId,
-  MAX_IMAGE_BYTES,
   MAX_IMAGES_PER_MESSAGE,
   MAX_MESSAGE_IMAGE_BYTES,
   RAW_IMAGE_BODY_LIMIT,
-  REVIEW_IMAGE_ROUTE,
 } from "./shared/review-image.js";
-import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
-import {
-  readBoundedRegularFile,
-  regularFileIdentity,
-} from "./bounded-regular-file.js";
+import { buildSnapshotDiff } from "./snapshot-diff.js";
 import {
   agentConnectCommand,
   agentRecoveryPrompt,
 } from "./shared/agent-command.js";
 import {
-  encodeAgentSnapshot,
-  encodeSnapshotDiff,
-  encodeProgress,
-  encodeReviewSnapshot,
-  encodeRuntimeSession,
-} from "./shared/review-wire.js";
-import {
   activateReviewSession,
   REVIEW_HEARTBEAT_INTERVAL_MS,
   readCurrentReviewSession,
   refreshReviewSessionHeartbeat,
-  reviewSessionView,
   withReviewSessionAuthority,
 } from "./session-authority.js";
+import {
+  createActivityClock,
+  createPlanRenderer,
+  createReaderProgress,
+  createWriteGate,
+} from "./review-route-context.js";
+import type {
+  ReviewAssetHandler,
+  ReviewRouteContext,
+  ReviewRouteHandler,
+  ReviewRouteResponse,
+} from "./review-route-context.js";
+import {
+  planAssetResponse,
+  publishImage,
+  reviewImageResponse,
+} from "./routes-assets.js";
+import {
+  readAgentSnapshot,
+  readProgressEvents,
+} from "./routes-agent-exchange.js";
+import { readSnapshotDiff } from "./routes-diff.js";
+import { readReviewState } from "./routes-review-state.js";
+import { readRuntimeSession } from "./routes-session.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const SHUTDOWN_GRACE_MS = 100;
-const isHastElement = (node: RootContent | ElementContent): node is Element =>
-  node.type === "element";
-
-const findRenderedBlock = ({
-  node,
-  blockId,
-}: {
-  readonly node: Root | Element;
-  readonly blockId: string;
-}): Element | null => {
-  for (const child of node.children) {
-    if (!isHastElement(child)) continue;
-    if (child.properties.dataBlockId === blockId) return child;
-    const nested = findRenderedBlock({ node: child, blockId });
-    if (nested !== null) return nested;
-  }
-  return null;
-};
-
-/** Extracts trusted inert component markup so historical snapshots keep their real presentation. */
-const renderedBlockHtml = ({
-  html,
-  blockId,
-  namespace,
-}: {
-  readonly html: string;
-  readonly blockId: string | undefined;
-  readonly namespace: string;
-}): string | undefined => {
-  if (blockId === undefined) return undefined;
-  const root = fromHtml(html);
-  const block = findRenderedBlock({ node: root, blockId });
-  if (block === null) return undefined;
-  const idPrefix = `review-diff-${namespace.replaceAll(/[^a-z0-9_-]/giu, "-")}-${blockId.replaceAll(/[^a-z0-9_-]/giu, "-")}-`;
-  const identifiers = new Map<string, string>();
-  const collectIdentifiers = (node: Element): void => {
-    if (typeof node.properties.id === "string") {
-      identifiers.set(node.properties.id, `${idPrefix}${node.properties.id}`);
-    }
-    for (const child of node.children) {
-      if (isHastElement(child)) collectIdentifiers(child);
-    }
-  };
-  collectIdentifiers(block);
-  const rewriteReferences = (value: string): string => {
-    const exactReplacement = identifiers.get(value);
-    if (exactReplacement !== undefined) return exactReplacement;
-    const tokens = value.split(/\s+/u);
-    if (tokens.length > 1 && tokens.every((token) => identifiers.has(token))) {
-      return tokens.map((token) => identifiers.get(token) ?? token).join(" ");
-    }
-    return value.replace(
-      /url\(#([^)]+)\)|#([A-Za-z][A-Za-z0-9_:-]*)/gu,
-      (
-        match,
-        urlIdentifier: string | undefined,
-        hashIdentifier: string | undefined,
-      ) => {
-        const identifier = urlIdentifier ?? hashIdentifier;
-        if (identifier === undefined) return match;
-        const replacement = identifiers.get(identifier);
-        if (replacement === undefined) return match;
-        return urlIdentifier === undefined
-          ? `#${replacement}`
-          : `url(#${replacement})`;
-      },
-    );
-  };
-  const scrubReviewIdentity = (node: Element): void => {
-    delete node.properties.dataBlockId;
-    delete node.properties.dataReviewSlideSelectable;
-    delete node.properties.dataReviewSlideSelected;
-    for (const [property, value] of Object.entries(node.properties)) {
-      if (typeof value === "string") {
-        node.properties[property] = rewriteReferences(value);
-      } else if (Array.isArray(value)) {
-        node.properties[property] = value.map((entry) =>
-          typeof entry === "string" ? rewriteReferences(entry) : entry,
-        );
-      }
-    }
-    for (const child of node.children) {
-      if (isHastElement(child)) scrubReviewIdentity(child);
-      else if (node.tagName === "style" && child.type === "text") {
-        child.value = rewriteReferences(child.value);
-      }
-    }
-  };
-  scrubReviewIdentity(block);
-  return toHtml(block, { allowDangerousHtml: false });
-};
-
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
-// The picture file types a plan may point at, and the type each is served as.
-// The list is closed: a request for anything else is not a picture request,
-// so the review runtime never becomes a general file server for the directory
-// that holds the plan.
-const PLAN_PICTURE_TYPES: ReadonlyMap<string, string> = new Map([
-  [".png", "image/png"],
-  [".jpg", "image/jpeg"],
-  [".jpeg", "image/jpeg"],
-  [".webp", "image/webp"],
-  [".gif", "image/gif"],
-  [".avif", "image/avif"],
-  [".svg", "image/svg+xml"],
-]);
-
 const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   "style-src 'unsafe-inline'",
@@ -277,26 +156,46 @@ const ASSET_CONTENT_SECURITY_POLICY = "default-src 'none'; sandbox";
 type Route = {
   readonly method: "GET" | "PUT" | "POST";
   readonly path: string;
+};
+
+// An extracted entry names its own handler so the allow-list and dispatch table
+// stay together. The handler remains optional while the six mutating routes use
+// the residual if-chain below; PR 2 makes it required when that chain is deleted,
+// so a route with no handler becomes a compile error then.
+type ApiRoute = Route & {
   readonly binary?: boolean;
+  readonly handler?: ReviewRouteHandler;
 };
 
 const DOCUMENT_ROUTE: Route = { method: "GET", path: "/" };
 
 // The whole surface. A request that does not match one of these pairs exactly
 // is refused before anything else looks at it.
-const API_ROUTES: ReadonlyArray<Route> = [
-  { method: "GET", path: "/api/session" },
-  { method: "GET", path: "/api/drafts" },
+const API_ROUTES: ReadonlyArray<ApiRoute> = [
+  { method: "GET", path: "/api/session", handler: readRuntimeSession },
+  { method: "GET", path: "/api/drafts", handler: readReviewState },
   { method: "PUT", path: "/api/drafts" },
   { method: "POST", path: "/api/feedback" },
   { method: "POST", path: "/api/comments-delete" },
   { method: "POST", path: "/api/revert-agent-changes" },
-  { method: "GET", path: "/api/agent" },
+  { method: "GET", path: "/api/agent", handler: readAgentSnapshot },
   { method: "POST", path: "/api/agent-requests" },
   { method: "POST", path: "/api/agent-cancel" },
-  { method: "GET", path: "/api/progress" },
-  { method: "GET", path: "/api/snapshot-diff" },
-  { method: "POST", path: "/api/review-images", binary: true },
+  { method: "GET", path: "/api/progress", handler: readProgressEvents },
+  { method: "GET", path: "/api/snapshot-diff", handler: readSnapshotDiff },
+  {
+    method: "POST",
+    path: "/api/review-images",
+    binary: true,
+    handler: publishImage,
+  },
+];
+
+// The pathname-addressed asset routes, tried in order after the document
+// route. Each answers with `undefined` when the pathname is not its own.
+const ASSET_HANDLERS: ReadonlyArray<ReviewAssetHandler> = [
+  planAssetResponse,
+  reviewImageResponse,
 ];
 
 /** A running review runtime. */
@@ -847,93 +746,55 @@ export const startReviewRuntime = async ({
     }
   }
 
-  // The current render map authorizes newly created targets. Stored comments
-  // carry their already-validated target metadata across later revisions.
-  const blocks = new Map<string, BlockMapEntry>();
-  let blockMapMarkdown: string | undefined;
   const initialExchange = await readAgentExchange({ store, sessionId, planId });
-  const observedResponseIds = new Set(
-    initialExchange.responses.map((response) => response.requestId),
-  );
-  let acceptedSnapshot = initialSnapshot;
 
-  const validateStored = (value: unknown): ReadonlyArray<ReviewComment> =>
-    validateStoredComments({
-      value,
-      now: new Date().toISOString(),
-      fallbackPremiseSnapshot: initialSnapshot,
-    });
-
-  const readStoredComments = (
-    path: string,
-  ): Promise<ReadonlyArray<ReviewComment>> =>
-    readComments({ path, validate: validateStored });
-
-  const validateUpdates = async (
-    value: unknown,
-  ): Promise<ReadonlyArray<ReviewComment>> =>
-    validateCommentUpdates({
-      value,
-      blocks,
-      existing: [
-        ...(await readStoredComments(store.draftsPath)),
-        ...(await readStoredComments(store.sentPath)),
-      ],
-      now: new Date().toISOString(),
-    });
-
-  const readBootstrap = async (markdown: string): Promise<string> =>
-    JSON.stringify({
-      ...encodeReviewSnapshot({
-        drafts: await readStoredComments(store.draftsPath),
-        sent: await readStoredComments(store.sentPath),
-        activeDraft: await readActiveDraft({
-          path: store.activeDraftPath,
-          validate: validateActiveDraft,
-        }),
-        resolvedCommentIds: await readResolvedCommentIds({
-          store,
-          validate: validateResolvedCommentIds,
-        }),
-      }),
-      agent: await readAgentExchange({ store, sessionId, planId }),
-      currentSnapshot: deriveSnapshotDigest(markdown),
-      diffPreview: diffPreviewSource !== undefined,
-    });
-
-  const renderPlan = async (): Promise<string> => {
-    const markdown = await readFile(resolvedPlanPath, "utf8");
-    if (blockMapMarkdown !== markdown) {
-      const blockMapRender = renderDocument({
-        markdown,
-        fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
-        identity: { planId, reviewSessionId: sessionId, reviewToken: token },
-      });
-      blocks.clear();
-      for (const block of blockMapRender.blocks) {
-        blocks.set(block.id, block);
-      }
-      blockMapMarkdown = markdown;
-    }
-    return renderDocument({
-      markdown,
-      fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
-      identity: {
-        planId,
-        reviewSessionId: sessionId,
-        reviewToken: token,
-        reviewBootstrap: await readBootstrap(markdown),
-      },
-    }).html;
+  // Every piece of state the routes share is built once, here, and named after
+  // what it means. Anything a route may read travels through this record.
+  const context: ReviewRouteContext = {
+    store,
+    planId,
+    sessionId,
+    resolvedPlanPath,
+    agentCommand,
+    recoveryPrompt,
+    planRenderer: createPlanRenderer({
+      store,
+      planId,
+      sessionId,
+      token,
+      resolvedPlanPath,
+      initialSnapshot,
+      isDiffPreview: diffPreviewSource !== undefined,
+    }),
+    readerProgress: createReaderProgress({
+      initialSnapshot,
+      observedResponseIds: initialExchange.responses.map(
+        (response) => response.requestId,
+      ),
+    }),
+    writeGate: createWriteGate(),
+    activityClock: createActivityClock(),
   };
+  const { planRenderer, readerProgress } = context;
 
-  // Mutating requests share filesystem-backed state. Keep each full mutation
-  // atomic so overlapping browser requests cannot lose one another's writes.
-  let writeGate: Promise<unknown> = Promise.resolve();
-  const exclusively = <T>(work: () => Promise<T>): Promise<T> => {
-    const next = writeGate.then(work, work);
-    writeGate = next.catch(() => undefined);
-    return next;
+  /** Writes a route's decided response with the headers its kind carries. */
+  const sendRouteResponse = ({
+    response,
+    value,
+  }: {
+    readonly response: ServerResponse;
+    readonly value: ReviewRouteResponse;
+  }): void => {
+    if (value.kind === "binary") {
+      sendBinary({
+        response,
+        status: value.status,
+        contentType: value.contentType,
+        body: value.body,
+      });
+      return;
+    }
+    sendJson({ response, status: value.status, value: value.value });
   };
 
   const handleDocument = async (response: ServerResponse): Promise<void> => {
@@ -942,7 +803,7 @@ export const startReviewRuntime = async ({
         response,
         status: 200,
         contentType: "text/html; charset=utf-8",
-        body: await renderPlan(),
+        body: await planRenderer.renderPlan(),
       });
     } catch (error: unknown) {
       const detail =
@@ -963,131 +824,6 @@ export const startReviewRuntime = async ({
     }
   };
 
-  // A picture an author or an agent saved beside the plan is plan content, so
-  // the reviewer must see it. The route therefore serves the plan's own
-  // directory instead of one generated file name: a photograph named by its
-  // subject is the ordinary case, and refusing it showed alternative words
-  // where the plan promised a picture.
-  //
-  // The route serves only a bounded regular picture file whose requested and
-  // real paths stay inside the plan's own directory. A dot-prefixed segment is
-  // never served, which keeps the review state under `.big-plan/` outside the
-  // reach of a document request.
-  const handlePlanAsset = async ({
-    response,
-    pathname,
-  }: {
-    readonly response: ServerResponse;
-    readonly pathname: string;
-  }): Promise<boolean> => {
-    let requested: string;
-    try {
-      requested = decodeURIComponent(pathname);
-    } catch {
-      return false;
-    }
-    const contentType = PLAN_PICTURE_TYPES.get(
-      extname(requested).toLowerCase(),
-    );
-    if (contentType === undefined || requested.includes("\0")) return false;
-    const segments = requested.split("/").filter((segment) => segment !== "");
-    if (segments.some((segment) => segment.startsWith("."))) {
-      refuse({ response, status: 404, reason: "Plan picture unavailable" });
-      return true;
-    }
-    const planDirectory = dirname(resolvedPlanPath);
-    const candidate = resolve(planDirectory, segments.join("/"));
-    // Containment is checked twice against matching roots: once on the
-    // requested path, and once on the real path, because a link inside the
-    // directory could otherwise point anywhere. Comparing a real path with a
-    // symbolic root would reject every ordinary file on a machine whose
-    // temporary or home directory is itself a link.
-    const isWithin = (root: string, path: string): boolean => {
-      const step = relative(root, path);
-      return step !== "" && !step.startsWith("..") && !isAbsolute(step);
-    };
-    if (!isWithin(planDirectory, candidate)) {
-      refuse({ response, status: 404, reason: "Plan picture unavailable" });
-      return true;
-    }
-    try {
-      const [root, real] = await Promise.all([
-        realpath(planDirectory),
-        realpath(candidate),
-      ]);
-      const realStep = relative(root, real);
-      const realContentType = PLAN_PICTURE_TYPES.get(
-        extname(real).toLowerCase(),
-      );
-      if (
-        !isWithin(root, real) ||
-        realContentType === undefined ||
-        realStep.split(sep).some((segment) => segment.startsWith("."))
-      ) {
-        refuse({ response, status: 404, reason: "Plan picture unavailable" });
-        return true;
-      }
-      const expectedIdentity = await regularFileIdentity({
-        path: real,
-        maxBytes: MAX_IMAGE_BYTES,
-      });
-      if (expectedIdentity === undefined) {
-        refuse({ response, status: 404, reason: "Plan picture unavailable" });
-        return true;
-      }
-      const bytes = await readBoundedRegularFile({
-        path: real,
-        maxBytes: MAX_IMAGE_BYTES,
-        expectedIdentity,
-      });
-      if (bytes === undefined) {
-        refuse({ response, status: 404, reason: "Plan picture unavailable" });
-        return true;
-      }
-      sendBinary({
-        response,
-        status: 200,
-        contentType: realContentType,
-        body: bytes,
-      });
-    } catch {
-      refuse({ response, status: 404, reason: "Plan picture unavailable" });
-    }
-    return true;
-  };
-
-  // An uploaded picture is plan state, not session state: it is stored beside
-  // the plan under its content digest and served from that digest alone, like
-  // a materialized plan asset. That is what keeps a reference minted in one
-  // review readable in every later one, including after a restart that creates
-  // a new session.
-  const handleReviewImage = async ({
-    response,
-    pathname,
-  }: {
-    readonly response: ServerResponse;
-    readonly pathname: string;
-  }): Promise<boolean> => {
-    if (!pathname.startsWith(REVIEW_IMAGE_ROUTE)) return false;
-    const id = pathname.slice(REVIEW_IMAGE_ROUTE.length);
-    if (!isReviewImageId(id)) {
-      refuse({ response, status: 404, reason: "Unknown review image" });
-      return true;
-    }
-    const image = await readReviewImage({ store, id });
-    if (image === undefined) {
-      refuse({ response, status: 404, reason: "Image unavailable" });
-      return true;
-    }
-    sendBinary({
-      response,
-      status: 200,
-      contentType: image.descriptor.mimeType,
-      body: image.bytes,
-    });
-    return true;
-  };
-
   const handleApi = async ({
     route,
     response,
@@ -1095,70 +831,20 @@ export const startReviewRuntime = async ({
     body,
     binaryBody,
   }: {
-    readonly route: Route;
+    readonly route: ApiRoute;
     readonly response: ServerResponse;
     readonly query: URLSearchParams;
     readonly body?: unknown;
     readonly binaryBody?: Uint8Array;
   }): Promise<void> => {
-    if (route.path === "/api/review-images" && route.method === "POST") {
-      if (binaryBody === undefined || binaryBody.byteLength === 0) {
-        refuse({ response, status: 400, reason: "An image body is required" });
-        return;
-      }
-      const altHeader = response.req.headers["x-big-plan-image-alt"];
-      const alt =
-        typeof altHeader === "string" && altHeader.trim() !== ""
-          ? altHeader.trim().slice(0, 200)
-          : "Screenshot";
-      try {
-        sendJson({
-          response,
-          status: 200,
-          value: await publishReviewImage({ store, bytes: binaryBody, alt }),
-        });
-      } catch (error: unknown) {
-        refuse({
-          response,
-          status: 400,
-          reason:
-            error instanceof Error ? error.message : "The image is invalid",
-        });
-      }
-      return;
-    }
-    if (route.path === "/api/session") {
-      const sessionView = await reviewSessionView({
-        store,
-        sessionId,
-        planId,
-        plan: resolvedPlanPath,
-      });
-      sendJson({
+    if (route.handler !== undefined) {
+      sendRouteResponse({
         response,
-        status: 200,
-        value: encodeRuntimeSession(sessionView),
-      });
-      return;
-    }
-    if (route.path === "/api/drafts" && route.method === "GET") {
-      // The document must exist before drafts can be resolved, because the
-      // block map is what makes a stored target meaningful.
-      await renderPlan();
-      sendJson({
-        response,
-        status: 200,
-        value: encodeReviewSnapshot({
-          drafts: await readStoredComments(store.draftsPath),
-          sent: await readStoredComments(store.sentPath),
-          activeDraft: await readActiveDraft({
-            path: store.activeDraftPath,
-            validate: validateActiveDraft,
-          }),
-          resolvedCommentIds: await readResolvedCommentIds({
-            store,
-            validate: validateResolvedCommentIds,
-          }),
+        value: await route.handler(context, {
+          query,
+          headers: response.req.headers,
+          body,
+          binaryBody,
         }),
       });
       return;
@@ -1168,13 +854,15 @@ export const startReviewRuntime = async ({
         typeof body === "object" && body !== null
           ? (body as Readonly<Record<string, unknown>>)
           : {};
-      const drafts = await validateUpdates(payload.drafts);
+      const drafts = await planRenderer.validateUpdates(payload.drafts);
       const activeDraft = validateActiveDraft(payload.activeDraft);
       const resolvedCommentIds = validateResolvedCommentIds(
         payload.resolvedCommentIds,
       );
       const sentIds = new Set(
-        (await readStoredComments(store.sentPath)).map((comment) => comment.id),
+        (await planRenderer.readStoredComments(store.sentPath)).map(
+          (comment) => comment.id,
+        ),
       );
       const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
       await writeComments({ path: store.draftsPath, comments: unsentDrafts });
@@ -1195,12 +883,12 @@ export const startReviewRuntime = async ({
         typeof body === "object" && body !== null
           ? (body as Readonly<Record<string, unknown>>)
           : {};
-      const comments = await validateUpdates(payload.comments);
+      const comments = await planRenderer.validateUpdates(payload.comments);
       if (comments.length === 0) {
         refuse({ response, status: 400, reason: "Nothing to send" });
         return;
       }
-      const alreadySent = await readStoredComments(store.sentPath);
+      const alreadySent = await planRenderer.readStoredComments(store.sentPath);
       const sentById = new Map(
         alreadySent.map((comment) => [comment.id, comment]),
       );
@@ -1223,7 +911,7 @@ export const startReviewRuntime = async ({
       const newlySent = comments.filter((comment) => !sentById.has(comment.id));
       const submittedIds = new Set(comments.map((comment) => comment.id));
       const remainingDrafts = (
-        await readStoredComments(store.draftsPath)
+        await planRenderer.readStoredComments(store.draftsPath)
       ).filter((comment) => !submittedIds.has(comment.id));
       if (newlySent.length === 0) {
         await writeComments({
@@ -1453,7 +1141,7 @@ export const startReviewRuntime = async ({
         path: resolvedPlanPath,
         source: baselineSource,
       });
-      acceptedSnapshot = request.baselineSnapshot;
+      readerProgress.accept(request.baselineSnapshot);
       sendJson({
         response,
         status: 200,
@@ -1475,7 +1163,7 @@ export const startReviewRuntime = async ({
         refuse({ response, status: 400, reason: "A comment id is required" });
         return;
       }
-      const sent = await readStoredComments(store.sentPath);
+      const sent = await planRenderer.readStoredComments(store.sentPath);
       if (!sent.some((comment) => comment.id === commentId)) {
         refuse({ response, status: 404, reason: "No such sent comment" });
         return;
@@ -1599,39 +1287,6 @@ export const startReviewRuntime = async ({
       sendJson({ response, status: 200, value: { commentId } });
       return;
     }
-    if (route.path === "/api/agent") {
-      const exchange = await readAgentExchange({ store, sessionId, planId });
-      for (const agentResponse of exchange.responses) {
-        if (!observedResponseIds.has(agentResponse.requestId)) {
-          acceptedSnapshot = agentResponse.resultSnapshot;
-        }
-        observedResponseIds.add(agentResponse.requestId);
-      }
-      const presence = await readAgentPresence({ store, sessionId });
-      const connectionLog = await readAgentConnectionEvents({
-        store,
-        sessionId,
-      });
-      sendJson({
-        response,
-        status: 200,
-        value: encodeAgentSnapshot({
-          // The browser reloads only revisions the response command has
-          // rendered, linted, and accepted. Watching the raw file here would
-          // navigate the reviewer onto a transient parse error while an agent
-          // is midway through editing the authoritative MDX.
-          currentSnapshot: acceptedSnapshot,
-          presence,
-          connectionLog,
-          plan: resolvedPlanPath,
-          agentCommand,
-          recoveryPrompt,
-          requests: exchange.requests,
-          responses: exchange.responses,
-        }),
-      });
-      return;
-    }
     if (route.path === "/api/agent-requests") {
       const payload =
         typeof body === "object" && body !== null
@@ -1714,7 +1369,7 @@ export const startReviewRuntime = async ({
           : {}),
       });
       if (agentRequest.kind === "reply") {
-        const sent = await readStoredComments(store.sentPath);
+        const sent = await planRenderer.readStoredComments(store.sentPath);
         if (!sent.some((comment) => comment.id === agentRequest.commentId)) {
           refuse({
             response,
@@ -1805,91 +1460,9 @@ export const startReviewRuntime = async ({
       sendJson({ response, status: 200, value: { request: canceled } });
       return;
     }
-    if (route.path === "/api/snapshot-diff") {
-      const from = query.get("from") ?? "";
-      const to = query.get("to") ?? "";
-      if (!/^[a-f0-9]{16,64}$/.test(from) || !/^[a-f0-9]{16,64}$/.test(to)) {
-        refuse({
-          response,
-          status: 400,
-          reason: "Snapshot diff requires hexadecimal from and to snapshots",
-        });
-        return;
-      }
-      let beforeSource: string;
-      let afterSource: string;
-      try {
-        [beforeSource, afterSource] = await Promise.all([
-          readSnapshot({ store, snapshot: from }),
-          readSnapshot({ store, snapshot: to }),
-        ]);
-      } catch {
-        refuse({
-          response,
-          status: 404,
-          reason: "This diff's baseline or result snapshot is unavailable",
-        });
-        return;
-      }
-      const fallbackTitle = basename(
-        resolvedPlanPath,
-        extname(resolvedPlanPath),
-      );
-      const before = renderDocument({
-        markdown: beforeSource,
-        fallbackTitle,
-        identity: {},
-      });
-      const after = renderDocument({
-        markdown: afterSource,
-        fallbackTitle,
-        identity: {},
-      });
-      const snapshotDiff = buildSnapshotDiff({
-        from,
-        to,
-        before: before.blocks,
-        after: after.blocks,
-      });
-      sendJson({
-        response,
-        status: 200,
-        value: encodeSnapshotDiff({
-          ...snapshotDiff,
-          locations: snapshotDiff.locations.map((location) =>
-            usesRenderedSnapshot(location)
-              ? (() => {
-                  const oldHtml = renderedBlockHtml({
-                    html: before.html,
-                    blockId: location.oldBlockId,
-                    namespace: `was-${from}`,
-                  });
-                  const newHtml = renderedBlockHtml({
-                    html: after.html,
-                    blockId: location.newBlockId,
-                    namespace: `now-${to}`,
-                  });
-                  return {
-                    ...location,
-                    ...(oldHtml === undefined ? {} : { oldHtml }),
-                    ...(newHtml === undefined ? {} : { newHtml }),
-                  };
-                })()
-              : location,
-          ),
-        }),
-      });
-      return;
-    }
-    if (route.path === "/api/progress") {
-      const events = await readProgress({ store, sessionId });
-      sendJson({ response, status: 200, value: encodeProgress({ events }) });
-      return;
-    }
     throw new Error(`Unhandled review route ${route.path}`);
   };
 
-  let lastReviewActivityAt = Date.now();
   const handle = async ({
     request,
     response,
@@ -1916,21 +1489,18 @@ export const startReviewRuntime = async ({
       const method = request.method ?? "GET";
 
       if (method === DOCUMENT_ROUTE.method && target.pathname === "/") {
-        lastReviewActivityAt = Date.now();
+        context.activityClock.touch();
         await handleDocument(response);
         return;
       }
-      if (
-        method === DOCUMENT_ROUTE.method &&
-        (await handlePlanAsset({ response, pathname: target.pathname }))
-      ) {
-        return;
-      }
-      if (
-        method === DOCUMENT_ROUTE.method &&
-        (await handleReviewImage({ response, pathname: target.pathname }))
-      ) {
-        return;
+      if (method === DOCUMENT_ROUTE.method) {
+        for (const asset of ASSET_HANDLERS) {
+          const value = await asset(context, { pathname: target.pathname });
+          if (value !== undefined) {
+            sendRouteResponse({ response, value });
+            return;
+          }
+        }
       }
 
       const onPath = API_ROUTES.filter(
@@ -1992,12 +1562,12 @@ export const startReviewRuntime = async ({
       if (matched.method === "GET") {
         await dispatch();
       } else {
-        await exclusively(async () => {
+        await context.writeGate.exclusively(async () => {
           const authority = await withReviewSessionAuthority({
             store,
             sessionId,
             change: async () => {
-              lastReviewActivityAt = Date.now();
+              context.activityClock.touch();
               await dispatch();
             },
           });
@@ -2141,11 +1711,11 @@ export const startReviewRuntime = async ({
     idleTimer = setInterval(
       () => {
         void (async () => {
-          if (closed || Date.now() - lastReviewActivityAt < idleTimeoutMs)
+          if (closed || context.activityClock.idleForMs() < idleTimeoutMs)
             return;
           const presence = await readAgentPresence({ store, sessionId });
           if (presence.connected && presence.state === "working") {
-            lastReviewActivityAt = Date.now();
+            context.activityClock.touch();
             return;
           }
           const minutes = idleTimeoutMs / 60_000;
