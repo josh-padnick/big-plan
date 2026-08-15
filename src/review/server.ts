@@ -17,16 +17,18 @@
 //  - No CORS allowance is ever sent, and a foreign Origin or a Sec-Fetch-Site
 //    other than same-origin is refused outright. CORS hides a response; it
 //    does not stop a write, so it is not the control here.
-//  - A fixed route-and-method allow-list. No static passthrough, no directory
-//    listing, and no path segment that reaches the filesystem.
+//  - A fixed route-and-method allow-list. There is no general static file route
+//    and no directory listing. The plan-picture route serves only supported
+//    picture file types. The requested path and the real path must stay inside
+//    the plan directory, and neither path can contain a dot-prefixed segment.
+//    The opened file must match the accepted path, must be a regular file, and
+//    must stay inside the image size limit.
 //  - The document is always rendered in-process from the authoritative MDX. A
 //    pre-existing .html is never served, because arbitrary HTML is arbitrary
 //    script running on this runtime's own origin.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { constants } from "node:fs";
 import {
-  open,
   readFile,
   realpath,
   rename,
@@ -116,6 +118,10 @@ import {
   REVIEW_IMAGE_ROUTE,
 } from "./shared/review-image.js";
 import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
+import {
+  readBoundedRegularFile,
+  regularFileIdentity,
+} from "./bounded-regular-file.js";
 import {
   agentConnectCommand,
   agentRecoveryPrompt,
@@ -1014,35 +1020,19 @@ export const startReviewRuntime = async ({
         refuse({ response, status: 404, reason: "Plan picture unavailable" });
         return true;
       }
-      const file = await open(
-        real,
-        constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
-      );
-      const bytes = await (async (): Promise<Uint8Array | undefined> => {
-        try {
-          const metadata = await file.stat();
-          if (!metadata.isFile() || metadata.size > MAX_IMAGE_BYTES) {
-            return undefined;
-          }
-          const buffer = Buffer.alloc(metadata.size + 1);
-          let length = 0;
-          while (length < buffer.length) {
-            const { bytesRead } = await file.read(
-              buffer,
-              length,
-              buffer.length - length,
-              length,
-            );
-            if (bytesRead === 0) break;
-            length += bytesRead;
-          }
-          return length === metadata.size
-            ? buffer.subarray(0, length)
-            : undefined;
-        } finally {
-          await file.close();
-        }
-      })();
+      const expectedIdentity = await regularFileIdentity({
+        path: real,
+        maxBytes: MAX_IMAGE_BYTES,
+      });
+      if (expectedIdentity === undefined) {
+        refuse({ response, status: 404, reason: "Plan picture unavailable" });
+        return true;
+      }
+      const bytes = await readBoundedRegularFile({
+        path: real,
+        maxBytes: MAX_IMAGE_BYTES,
+        expectedIdentity,
+      });
       if (bytes === undefined) {
         refuse({ response, status: 404, reason: "Plan picture unavailable" });
         return true;

@@ -1154,7 +1154,16 @@ export const DiffLensPortal = ({
       (element): element is HTMLElement =>
         element !== null && element !== undefined,
     );
-    const hiddenElements = [...new Set([...direct, ...originalWireframes])];
+    const pictureHosts = direct
+      .map((element) => element.nextElementSibling)
+      .filter(
+        (element): element is HTMLElement =>
+          element instanceof HTMLElement &&
+          element.dataset.reviewImageHost !== undefined,
+      );
+    const hiddenElements = [
+      ...new Set([...direct, ...originalWireframes, ...pictureHosts]),
+    ];
     const displayValues = hiddenElements.map(
       (element) => element.style.display,
     );

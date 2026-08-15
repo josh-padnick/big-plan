@@ -3487,11 +3487,13 @@ The dashboard shows the retry backlog.
   try {
     await page.goto(runtime.url);
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-    await page
-      .getByRole("complementary", { name: "Feedback" })
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
       .getByRole("button", { name: /Expand thread:/u })
       .first()
       .click();
+    const pictureHost = page.locator("article [data-review-image-host]");
+    await expect(pictureHost).toBeVisible();
     await page.getByRole("button", { name: "Review change" }).click();
     const lens = page.locator("[data-review-diff-lens]");
     // A picture carries no words, so a text-only lens would report the swap
@@ -3501,9 +3503,13 @@ The dashboard shows the retry backlog.
     await expect(pictures.first()).toHaveAttribute("src", WIDE_PNG_DATA_URI);
     await expect(pictures.nth(1)).toHaveAttribute("src", TALL_PNG_DATA_URI);
     await expect(lens).toContainText("replaced");
+    await expect(pictureHost).toBeHidden();
     // The lens replays a copy of the plan, so its picture never collects the
     // comment affordance that belongs to the picture in the article.
     await expect(lens.locator("[data-review-image-host]")).toHaveCount(0);
+    await rail.getByRole("button", { name: "Exit review" }).click();
+    await expect(lens).toHaveCount(0);
+    await expect(pictureHost).toBeVisible();
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

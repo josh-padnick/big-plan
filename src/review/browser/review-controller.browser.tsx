@@ -1409,6 +1409,7 @@ const placeImageHost = ({
   readonly host: HTMLSpanElement;
   readonly parent: HTMLElement;
 }): void => {
+  if (block.getClientRects().length === 0) return;
   const parentRect = parent.getBoundingClientRect();
   const imageRect = block.getBoundingClientRect();
   const canvas = block.closest<HTMLElement>(CANVAS_SELECTOR);

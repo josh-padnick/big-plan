@@ -27,11 +27,13 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { readBoundedRegularFile } from "./bounded-regular-file.js";
 import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
   isReviewImageId,
   isReviewImageWithinLimits,
+  MAX_IMAGE_BYTES,
   probeReviewImageDimensions,
   reviewImageId,
   sniffReviewImage,
@@ -54,6 +56,7 @@ const FILE_MODE = 0o600;
 const PROGRESS_TEXT_LIMIT = 160;
 const PROGRESS_EVENT_LIMIT = 200;
 const REVIEW_PLAN_ID_LENGTH = 16;
+const REVIEW_IMAGE_METADATA_BYTES = 4096;
 
 /** One relayed agent progress event, after checking. */
 export type ProgressEvent = {
@@ -360,17 +363,26 @@ export const readReviewImage = async ({
   readonly id: string;
 }): Promise<StoredReviewImage | undefined> => {
   try {
+    const metadataBytes = await readBoundedRegularFile({
+      path: imageMetadataPath(store, id),
+      maxBytes: REVIEW_IMAGE_METADATA_BYTES,
+      expectedIdentity: null,
+    });
+    if (metadataBytes === undefined) return undefined;
     const descriptor = checkedImageMetadata(
-      await readJson(imageMetadataPath(store, id)),
+      JSON.parse(new TextDecoder().decode(metadataBytes)),
     );
     if (descriptor === undefined) return undefined;
     const extension =
       descriptor.mimeType === "image/jpeg"
         ? "jpg"
         : descriptor.mimeType.slice("image/".length);
-    const bytes = Uint8Array.from(
-      await readFile(imageBytesPath(store, id, extension)),
-    );
+    const bytes = await readBoundedRegularFile({
+      path: imageBytesPath(store, id, extension),
+      maxBytes: Math.min(descriptor.byteLength, MAX_IMAGE_BYTES),
+      expectedIdentity: null,
+    });
+    if (bytes === undefined) return undefined;
     const format = sniffReviewImage(bytes);
     const dimensions = probeReviewImageDimensions(bytes, format);
     const digest = createHash("sha256").update(bytes).digest("hex");
