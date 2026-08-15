@@ -94,8 +94,14 @@ server-rendered article without client-rendering or gating the plan.
 
 Runtime-backed staged comments live under `.big-plan/review/<plan-id>/` beside the plan.
 The review id comes from the resolved source path, so staged comments survive the plan revision the agent creates in response to feedback.
+Comment text that is typed but not yet staged or sent is kept in the browser for the open review session, so reloading the page gives back the open comment composer and any half-written thread replies.
+A composer whose place in the plan no longer exists is not reattached, and the review says so instead.
 Text currently being typed in the plan-wide **Chat** composer exists only in the current page and does not survive a reload.
 Static `big-plan render` documents use browser storage for their document-level comment draft.
+
+Every write of the reviewer's own state is conditional on the state the page last read, so a second tab or the runtime itself cannot have its work replaced without notice.
+When a write finds the state has moved on, the page reconciles comment by comment.
+If the same comment really was changed in two places, the review shows both versions and asks which one to keep.
 
 The `.big-plan/` directory is created for the reviewer only and ignored by
 version control. Feedback packages and their Markdown briefs live under
