@@ -25,6 +25,11 @@ import {
   readResolvedCommentIds,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
+import {
+  MUTATION_STALL_MS,
+  ReviewWriteStalled,
+  stalledMutations,
+} from "./runtime-watchdog.js";
 import type { MutationRegistry } from "./runtime-watchdog.js";
 import { encodeReviewSnapshot } from "./shared/review-wire.js";
 
@@ -135,6 +140,13 @@ export type WriteGate = {
     readonly route: string;
     readonly work: () => Promise<T>;
   }) => Promise<T>;
+  /**
+   * How long the oldest mutation past its bound has been running, or
+   * `undefined` while every write is inside it. This is the session's own
+   * answer to "are changes still being accepted", and it stays answered while
+   * the abandoned work is still out there.
+   */
+  readonly stalledForMs: () => number | undefined;
 };
 
 /** How long the review has gone without reviewer activity. */
@@ -283,11 +295,19 @@ export const createReaderProgress = ({
 /**
  * Mutating requests share filesystem-backed state. Keep each full mutation
  * atomic so overlapping browser requests cannot lose one another's writes.
+ *
+ * The gate is bounded, because an unbounded one is what made BIG-44 fatal: a
+ * single mutation that never settled disabled every later write for the life
+ * of the process while reads kept answering, so the session looked healthy and
+ * was not. Past its bound the gate stops waiting for that mutation, refuses it
+ * so its own request gets an answer, and hands the gate to the next one.
  */
 export const createWriteGate = ({
   mutations,
+  stallMs = MUTATION_STALL_MS,
 }: {
   readonly mutations: MutationRegistry;
+  readonly stallMs?: number;
 }): WriteGate => {
   let gate: Promise<unknown> = Promise.resolve();
   return {
@@ -302,16 +322,37 @@ export const createWriteGate = ({
       // waiting behind another mutation is not time spent doing its own work.
       const run = async (): Promise<T> => {
         const settled = mutations.begin({ route, atMs: Date.now() });
+        // Abandoning a mutation does not stop it. It stays registered until it
+        // really settles, which is what keeps the session reporting itself as
+        // degraded, and nothing is left to read its result or its failure.
+        const running = work().finally(settled);
+        running.catch(() => undefined);
+        let bound: ReturnType<typeof setTimeout> | undefined;
         try {
-          return await work();
+          return await Promise.race([
+            running,
+            new Promise<never>((_, giveUp) => {
+              bound = setTimeout(
+                () =>
+                  giveUp(new ReviewWriteStalled({ route, boundMs: stallMs })),
+                stallMs,
+              );
+            }),
+          ]);
         } finally {
-          settled();
+          if (bound !== undefined) clearTimeout(bound);
         }
       };
       const next = gate.then(run, run);
       gate = next.catch(() => undefined);
       return next;
     },
+    stalledForMs: () =>
+      stalledMutations({
+        inFlight: mutations.inFlight(),
+        nowMs: Date.now(),
+        boundMs: stallMs,
+      })[0]?.ageMs,
   };
 };
 

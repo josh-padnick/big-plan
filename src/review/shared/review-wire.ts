@@ -148,6 +148,13 @@ export type RuntimeSession = {
   readonly plan: string;
   readonly authoritative: boolean;
   readonly latestReviewUrl?: string;
+  /**
+   * How long this runtime's oldest stalled write has been stuck, present only
+   * while one is. Every route the page polls is a read, and reads keep
+   * answering through a runtime that has stopped accepting changes, so this is
+   * the only fact that can tell the reader the session went one-way.
+   */
+  readonly writesStalledMs?: number;
 };
 
 export type ReviewSnapshotSource = ReviewSnapshot;
@@ -169,6 +176,7 @@ export type RuntimeSessionSource = {
   readonly plan: string;
   readonly authoritative: boolean;
   readonly latestReviewUrl?: string;
+  readonly writesStalledMs?: number;
 };
 
 export const isReviewWireRecord = (
@@ -473,6 +481,13 @@ export const decodeRuntimeSession = ({
     authoritative: value.authoritative !== false,
     ...(typeof value.latestReviewUrl === "string"
       ? { latestReviewUrl: value.latestReviewUrl }
+      : {}),
+    // A stall is only ever reported as a positive age. Anything else is not a
+    // smaller stall, it is an absent one, and must not raise the banner.
+    ...(typeof value.writesStalledMs === "number" &&
+    Number.isFinite(value.writesStalledMs) &&
+    value.writesStalledMs > 0
+      ? { writesStalledMs: value.writesStalledMs }
       : {}),
   };
 };

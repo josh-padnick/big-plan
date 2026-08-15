@@ -242,7 +242,16 @@ export const reviewSessionIsRunning = async ({
   return { running: true };
 };
 
-/** Writes a heartbeat only while the same session still owns the mailbox. */
+/**
+ * Writes a heartbeat only while the same session still owns the mailbox.
+ *
+ * This takes the heartbeat's own lock rather than the custody lock every
+ * mutation holds. Sharing that lock made liveness a hostage of the write path:
+ * one mutation that never settled (BIG-44) held custody for the life of the
+ * process, so the heartbeat could not renew and the agent concluded the
+ * session had stopped, while the browser was still being served. Custody is
+ * still checked here; it is only the waiting that is no longer shared.
+ */
 export const refreshReviewSessionHeartbeat = async ({
   store,
   sessionId,
@@ -255,11 +264,11 @@ export const refreshReviewSessionHeartbeat = async ({
   readonly running: boolean;
   readonly stopReason?: string;
   readonly now?: number;
-}): Promise<boolean> => {
-  const result = await withReviewSessionAuthority({
-    store,
-    sessionId,
+}): Promise<boolean> =>
+  withReviewStoreLock({
+    lockPath: store.heartbeatLockPath,
     change: async () => {
+      if (!(await reviewSessionOwnsMailbox({ store, sessionId }))) return false;
       await writeSessionHeartbeatValue({
         store,
         value: {
@@ -269,10 +278,10 @@ export const refreshReviewSessionHeartbeat = async ({
           ...(stopReason === undefined ? {} : { stopReason }),
         },
       });
+      return true;
     },
+    timeoutError: () => new Error("Another process is writing this heartbeat"),
   });
-  return result.authoritative;
-};
 
 /** Returns the current live session for one exact plan or a stable reason. */
 export const liveReviewSessionForPlan = async ({

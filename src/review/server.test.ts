@@ -42,6 +42,7 @@ import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import {
   readComments,
   readResolvedCommentIds,
+  readSessionHeartbeatValue,
   publishReviewImage,
   writeComments,
   writeResolvedCommentIds,
@@ -207,11 +208,14 @@ const sessionTokenFor = async (target: ReviewRuntime): Promise<string> => {
  * writer, so the readFile() inside PUT /api/drafts blocks until a writer
  * appears. That path reads drafts.json exactly once, so one write releases it.
  */
-const startWedgedRuntime = async (prefix: string) => {
+const startWedgedRuntime = async (
+  prefix: string,
+  options: { readonly writeStallMs?: number } = {},
+) => {
   const directory = await mkdtemp(join(tmpdir(), prefix));
   const planPath = join(directory, "plan.mdx");
   await writeFile(planPath, PLAN);
-  const wedged = await startReviewRuntime({ planPath });
+  const wedged = await startReviewRuntime({ planPath, ...options });
   const wedgedToken = await sessionTokenFor(wedged);
   await rm(wedged.store.draftsPath, { force: true });
   execFileSync("mkfifo", [wedged.store.draftsPath]);
@@ -241,12 +245,12 @@ const startWedgedRuntime = async (prefix: string) => {
     token: wedgedToken,
     stuck,
     write: () => put(wedged.url),
-    /** Waits for the wedging request to reach the gate rather than sleeping. */
-    waitForInFlight: async () => {
+    /** Waits for that many requests to reach the gate rather than sleeping. */
+    waitForInFlight: async (count = 1) => {
       const deadline = Date.now() + 5_000;
       for (;;) {
         const { inFlight } = wedged.diagnostics();
-        if (inFlight.length > 0) return inFlight;
+        if (inFlight.length >= count) return inFlight;
         if (Date.now() > deadline) return inFlight;
         await new Promise((settle) => setTimeout(settle, 10));
       }
@@ -264,6 +268,15 @@ const startWedgedRuntime = async (prefix: string) => {
         await handle.close();
       }
       await stuck;
+      // Work the gate gave up on keeps running once it is unblocked, so the
+      // plan directory cannot be removed until it has finished writing.
+      const deadline = Date.now() + 5_000;
+      while (
+        wedged.diagnostics().inFlight.length > 0 &&
+        Date.now() < deadline
+      ) {
+        await new Promise((settle) => setTimeout(settle, 20));
+      }
       await wedged.close();
       await rm(directory, { recursive: true, force: true });
     },
@@ -2367,4 +2380,107 @@ describe("review runtime diagnostics", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+});
+
+// The fix BIG-44's evidence names: one mutation that never settles must cost
+// its own request, not the session. The bound is shortened here because the
+// behavior under test is what happens after it, not how long it is.
+describe("review runtime write gate", () => {
+  it("should keep serving writes when one mutation never settles", async () => {
+    const wedged = await startWedgedRuntime("big-plan-server-gate-", {
+      writeStallMs: 300,
+    });
+    try {
+      await expect(wedged.stuck).resolves.toBe(503);
+
+      // The whole fix: the gate hands the next write its turn instead of
+      // queueing it behind a mutation that will never settle.
+      const answering = wedged.write();
+      expect(await wedged.waitForInFlight(2)).toHaveLength(2);
+
+      const answered = await Promise.race([
+        answering.then(async (response) => {
+          await expect(response.json()).resolves.toEqual({
+            error:
+              "This review session has stopped accepting changes. Restart the review runtime to continue.",
+          });
+          return response.status;
+        }),
+        new Promise<"hung">((settle) =>
+          setTimeout(() => settle("hung"), 10_000),
+        ),
+      ]);
+      // It is answered, not served: the abandoned work still holds the store's
+      // custody lock until it settles. Which refusal arrives depends on which
+      // bound is shorter - here the gate's, in production the store's own
+      // two-second lock ceiling - and either way the reviewer gets an answer.
+      expect(answered).not.toBe("hung");
+      expect(answered).toBe(503);
+    } finally {
+      await wedged.release();
+    }
+  }, 20_000);
+
+  it("should report a stalled write on the session route", async () => {
+    const wedged = await startWedgedRuntime("big-plan-server-stalled-", {
+      writeStallMs: 300,
+    });
+    try {
+      await expect(wedged.stuck).resolves.toBe(503);
+
+      const session: unknown = await fetch(`${wedged.runtime.url}api/session`, {
+        headers: { "x-big-plan-review-token": wedged.token },
+      }).then((response) => response.json());
+      expect(session).toMatchObject({ authoritative: true });
+      expect(
+        typeof session === "object" &&
+          session !== null &&
+          "writesStalledMs" in session
+          ? session.writesStalledMs
+          : undefined,
+      ).toBeGreaterThanOrEqual(300);
+    } finally {
+      await wedged.release();
+    }
+  }, 20_000);
+
+  it("should keep renewing the session heartbeat while one mutation is stalled", async () => {
+    const wedged = await startWedgedRuntime("big-plan-server-hb-", {
+      writeStallMs: 300,
+    });
+    try {
+      await expect(wedged.stuck).resolves.toBe(503);
+
+      // A heartbeat that shares the custody lock with mutations can never
+      // renew while one is stuck holding it, so the agent reads a session that
+      // is serving requests as stopped. Renewal, not mere freshness, is the
+      // fact under test: a beat written before the wedge stays fresh for
+      // seconds afterwards.
+      const beatAtMs = async (): Promise<number> => {
+        const value = await readSessionHeartbeatValue(wedged.runtime.store);
+        return typeof value === "object" &&
+          value !== null &&
+          "updatedAtMs" in value &&
+          typeof value.updatedAtMs === "number"
+          ? value.updatedAtMs
+          : 0;
+      };
+      const before = await beatAtMs();
+      const deadline = Date.now() + 5_000;
+      let renewed = before;
+      while (renewed <= before && Date.now() < deadline) {
+        await new Promise((settle) => setTimeout(settle, 50));
+        renewed = await beatAtMs();
+      }
+      expect(renewed).toBeGreaterThan(before);
+      await expect(
+        reviewSessionIsRunning({
+          store: wedged.runtime.store,
+          sessionId: wedged.runtime.sessionId,
+        }),
+      ).resolves.toMatchObject({ running: true });
+    } finally {
+      await wedged.release();
+    }
+  }, 20_000);
 });

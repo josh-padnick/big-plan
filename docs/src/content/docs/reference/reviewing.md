@@ -18,10 +18,17 @@ activity. Set a different duration with `--idle-timeout <minutes>`, or pass
 waiting agent receives that normal inactivity reason instead of a failed
 background command.
 
+## When a session stops accepting changes
+
+A review session can stay online and stop saving anything: reading the plan keeps working, while one change that never finished blocks the rest.
+The page says so directly, with a **This review session has stopped accepting changes** alert, and every further change is refused with the same message instead of waiting.
+Reading, navigating, and the agent's own work continue.
+Nothing already written is lost, and unsent input stays in the page, so keep the tab open, stop the runtime, and start it again on the same plan.
+
 ## Diagnose an unresponsive session
 
 Keep the terminal running the review open when the page stops answering.
-The runtime reports a write that has run for at least 30 seconds once, naming its route and age without timing it out.
+The runtime gives up on a write that has run for 30 seconds, reports it once with its route and age, and hands the session to the next write.
 It also reports progress-history and agent-exchange counts as append-only state crosses each 1,000-entry milestone.
 Request failures that reach the runtime's generic error boundary leave their safe error type and stack in that terminal while keeping the reviewer-facing message and sensitive details out of the log.
 
