@@ -18,7 +18,8 @@ never ends while you are still reading it. Set a different duration with
 `--idle-timeout <minutes>`; a nonzero timeout must be at least 1 minute.
 Pass `--idle-timeout 0` to keep the review open until it is stopped explicitly.
 A waiting agent receives that normal inactivity reason instead of a failed background command.
-If an already-open page loses contact while its tab is suspended or the computer is asleep, it reports that the deadline it last knew has passed rather than only saying the server stopped responding, offers the ordinary Refresh recovery, and links to the latest review when a newer session for that plan was recorded.
+If an already-open page loses contact after the deadline it last knew, it explains that the review ended after the configured inactivity duration and shows the exact command that restarts the plan.
+If contact is lost before that deadline, the page keeps the generic stopped-responding message and offers Refresh instead of guessing that the session expired.
 Opening an old address after its runtime has already ended still reaches the browser's connection-error page; giving shared links an explicit lifetime remains a separate product decision.
 
 ## When a session stops accepting changes
