@@ -120,6 +120,7 @@ Do not add speculative coverage for a non-critical screen.
 Do not use a browser test to test a framework or to repeat a lower-rung assertion.
 
 Use the repository fixture in every browser spec.
+A journey that deliberately provokes a browser-level message, such as the 404 a missing picture logs while the document proves it says so, names that one message through the fixture's `allowedConsoleErrors` option; every other console error still fails the test.
 Use user-facing roles, accessible names, and stable domain identifiers.
 Use Playwright auto-waiting actions and web-first assertions.
 Do not use arbitrary sleeps.

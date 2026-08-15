@@ -92,9 +92,9 @@ export type DiffRun = {
 // The meaning-bearing presentation facts the renderer stamped for one block,
 // carried per diff side so the lens replays each side from its own snapshot
 // instead of sniffing the live document. Only a fact that changes what the plan
-// asserts belongs here - a callout's type, a list's ordering, or a wireframe's
-// initial screen. Styling and other reproducible presentation must never join
-// this contract.
+// asserts belongs here - a callout's type, a list's ordering, a wireframe's
+// initial screen, or a picture's source and alternative words. Styling and
+// other reproducible presentation must never join this contract.
 // Mirrored by hand across the reviewShared tier boundary; reviewShared may
 // import nothing - keep this in sync with src/render/markdown/block-identity.ts.
 export type BlockPresentation =
@@ -103,7 +103,8 @@ export type BlockPresentation =
       readonly calloutType: "note" | "tip" | "warning" | "danger";
     }
   | { readonly aspect: "list"; readonly isOrdered: boolean }
-  | { readonly aspect: "wireframe"; readonly currentScreenId: string };
+  | { readonly aspect: "wireframe"; readonly currentScreenId: string }
+  | { readonly aspect: "image"; readonly source: string; readonly alt: string };
 
 export type DiffLocation = {
   readonly status: "changed" | "added" | "removed";
@@ -132,7 +133,7 @@ export type DiffPlace = {
   readonly status: "changed" | "added" | "removed";
   readonly label: string;
   readonly section: string;
-  readonly note: "reworded" | "rewritten" | "added" | "removed";
+  readonly note: "reworded" | "rewritten" | "replaced" | "added" | "removed";
   readonly locationIndexes: ReadonlyArray<number>;
 };
 
@@ -509,6 +510,13 @@ const decodeBlockPresentation = (
       currentScreenId: value.currentScreenId,
     };
   }
+  if (
+    value.aspect === "image" &&
+    typeof value.source === "string" &&
+    typeof value.alt === "string"
+  ) {
+    return { aspect: "image", source: value.source, alt: value.alt };
+  }
   return undefined;
 };
 
@@ -607,6 +615,7 @@ export const decodeSnapshotDiff = (value: unknown): SnapshotDiff | null => {
       typeof place.section !== "string" ||
       (place.note !== "reworded" &&
         place.note !== "rewritten" &&
+        place.note !== "replaced" &&
         place.note !== "added" &&
         place.note !== "removed") ||
       !Array.isArray(place.locationIndexes)

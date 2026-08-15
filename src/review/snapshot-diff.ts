@@ -75,6 +75,12 @@ const TEXT_DIFF_COMPONENT_KINDS: ReadonlySet<string> = new Set([
   "database-table-schema",
 ]);
 
+// An authored picture is the same case as a wireframe and the strongest one:
+// its extracted text is the alt words, so a text-only lens says a picture
+// changed while showing none of it, and a change a reviewer cannot see is a
+// change a reviewer cannot review.
+const RENDERED_SNAPSHOT_KINDS: ReadonlySet<string> = new Set(["image"]);
+
 /** Whether a block's change is evidenced by its compiled rendering. */
 export const usesRenderedSnapshot = ({
   kind,
@@ -82,7 +88,9 @@ export const usesRenderedSnapshot = ({
 }: {
   readonly kind: string;
   readonly isComponentRoot: boolean;
-}): boolean => isComponentRoot && !TEXT_DIFF_COMPONENT_KINDS.has(kind);
+}): boolean =>
+  RENDERED_SNAPSHOT_KINDS.has(kind) ||
+  (isComponentRoot && !TEXT_DIFF_COMPONENT_KINDS.has(kind));
 
 const runsFor = ({
   kind,
@@ -268,6 +276,9 @@ const samePresentation = (
   if (left.aspect === "list" && right.aspect === "list") {
     return left.isOrdered === right.isOrdered;
   }
+  if (left.aspect === "image" && right.aspect === "image") {
+    return left.source === right.source && left.alt === right.alt;
+  }
   if (left.aspect === "wireframe" && right.aspect === "wireframe") {
     return left.currentScreenId === right.currentScreenId;
   }
@@ -316,9 +327,17 @@ const pairScore = ({
 const locationAnchor = (location: SnapshotDiffLocation): string | undefined =>
   location.newBlockId ?? location.beforeBlockId ?? location.afterBlockId;
 
-/** Groups globally exact kind/text counterparts before bounded fuzzy scoring. */
-const exactAlignmentKey = (block: SnapshotBlock): string =>
-  JSON.stringify([block.kind, normalizedAlignmentText(block.text)]);
+/** Groups globally exact counterparts before bounded fuzzy scoring. */
+const exactAlignmentKey = (block: SnapshotBlock): string => {
+  const presentation = block.presentation;
+  return JSON.stringify([
+    block.kind,
+    normalizedAlignmentText(block.text),
+    ...(presentation?.aspect === "image"
+      ? [presentation.source, presentation.alt]
+      : []),
+  ]);
+};
 
 /** Aligns blocks by stable identity, exact content, then guarded similarity. */
 export const diffSnapshots = ({
@@ -532,6 +551,13 @@ const placeNote = (
     return "added";
   if (locations.every((location) => location.status === "removed"))
     return "removed";
+  // A picture carries no words, so the word-survival measure below would call
+  // every swap a rewording. Say what actually happened instead.
+  if (
+    locations.every((location) => RENDERED_SNAPSHOT_KINDS.has(location.kind))
+  ) {
+    return "replaced";
+  }
   const oldLength = locations.reduce(
     (total, location) => total + location.oldText.replace(/\s/g, "").length,
     0,

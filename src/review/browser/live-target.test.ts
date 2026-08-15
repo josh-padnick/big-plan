@@ -1,9 +1,10 @@
-// Covers the pure half of live-target: which match a name resolves to, and
-// which reason a lens anchor reports when no match survives. The DOM half is
-// proven by the commenting browser journeys, per the testing ladder.
+// Covers the pure half of live-target: which match a name resolves to, whether
+// its content identity still matches, and which miss reason wins. The DOM half
+// is proven by the commenting browser journeys, per the testing ladder.
 
 import { describe, expect, it } from "vitest";
 import {
+  candidateMatchesLivePicture,
   lensMissReason,
   pickLiveCandidate,
   type LiveCandidate,
@@ -78,5 +79,41 @@ describe("lensMissReason", () => {
 
   it("should propagate a clone-only match over a plain absence", () => {
     expect(lensMissReason(["unknown-id", "clone-only"])).toBe("clone-only");
+  });
+});
+
+describe("candidateMatchesLivePicture", () => {
+  const historicalCandidate = {
+    blockId: "approach/image-1",
+    placement: "replace" as const,
+    expectedPicture: {
+      aspect: "image" as const,
+      source: "./assets/b.png",
+      alt: "Map",
+    },
+  };
+
+  it("should reject a live picture from a later revision", () => {
+    expect(
+      candidateMatchesLivePicture({
+        candidate: historicalCandidate,
+        livePicture: { source: "./assets/c.png", alt: "Map" },
+      }),
+    ).toBe(false);
+    expect(
+      candidateMatchesLivePicture({
+        candidate: historicalCandidate,
+        livePicture: { source: "./assets/b.png", alt: "Updated map" },
+      }),
+    ).toBe(false);
+  });
+
+  it("should trust the picture recorded by the historical candidate", () => {
+    expect(
+      candidateMatchesLivePicture({
+        candidate: historicalCandidate,
+        livePicture: { source: "./assets/b.png", alt: "Map" },
+      }),
+    ).toBe(true);
   });
 });

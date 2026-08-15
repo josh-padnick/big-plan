@@ -479,6 +479,21 @@ describe("block identity boundaries", () => {
     expect(paragraph?.presentation).toBeUndefined();
   });
 
+  it("should record a picture's source and alternative words as presentation facts", () => {
+    const { blocks } = compile(
+      "## Evidence\n\n![Retry dashboard](./assets/retries.png)\n",
+    );
+    const picture = blocks.find((block) => block.kind === "image");
+    // A picture contributes no text at all, so these two facts are the only
+    // evidence a later snapshot has that the picture changed.
+    expect(picture?.text).toBe("");
+    expect(picture?.presentation).toEqual({
+      aspect: "image",
+      source: "./assets/retries.png",
+      alt: "Retry dashboard",
+    });
+  });
+
   it("should keep block boundaries apart when component text is flattened", () => {
     const { blocks } = compile(
       "## Summary\n\n<QuickSummary>\n\n<Why>\n\n- Value.\n\n</Why>\n\n<What>\n\n- Build it.\n\n</What>\n\n<How>\n\n- Move retries out.\n- Record every attempt.\n\n</How>\n\n</QuickSummary>\n",

@@ -21,7 +21,6 @@ import { readReviewImage } from "./store.js";
 import type { ReviewStore } from "./store.js";
 
 const PLAN_ASSET_DIRECTORY = "assets";
-const REVIEW_IMAGE_NAME = /^review-image-[a-f0-9]{64}\.(png|jpg|webp)$/u;
 const REVIEW_IMAGE_REFERENCE =
   /!\[([^\]\n]*)\]\(review-image:([a-f0-9]{64})\)/gu;
 const DIRECTORY_MODE = 0o755;
@@ -143,7 +142,3 @@ export const replacePlanSource = async ({
     await unlink(temporary).catch(() => undefined);
   }
 };
-
-/** Recognizes the only asset paths exposed by the live review server. */
-export const reviewPlanAssetName = (value: string): boolean =>
-  REVIEW_IMAGE_NAME.test(value);

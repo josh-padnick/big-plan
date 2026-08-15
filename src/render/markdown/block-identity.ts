@@ -26,16 +26,19 @@ import { COMPONENT_NAME_ATTRIBUTE } from "./component-pipeline/component-name.js
 // The meaning-bearing presentation facts a snapshot must record so a diff can
 // replay a block without consulting the live document. Only a fact that
 // changes what the plan asserts belongs here: a callout's type, because danger
-// replayed as note misstates risk, and a list's ordering, because numbers
-// replayed as bullets misstate whether sequence matters. Styling and layout
-// stay out - they are reproducible presentation, and carrying them would grow
-// this into a second rendering contract.
+// replayed as note misstates risk, a list's ordering, because numbers replayed
+// as bullets misstate whether sequence matters, and a picture's source and
+// alternative words, because a picture carries no extracted text at all and a
+// swapped one would otherwise read as no change. Styling and layout stay out -
+// they are reproducible presentation, and carrying them would grow this into a
+// second rendering contract.
 // Mirrored by hand across the reviewShared tier boundary; reviewShared may
 // import nothing - keep this in sync with src/review/shared/review-wire.ts.
 export type BlockPresentation =
   | { readonly aspect: "callout"; readonly calloutType: CalloutType }
   | { readonly aspect: "list"; readonly isOrdered: boolean }
-  | { readonly aspect: "wireframe"; readonly currentScreenId: string };
+  | { readonly aspect: "wireframe"; readonly currentScreenId: string }
+  | { readonly aspect: "image"; readonly source: string; readonly alt: string };
 
 /** The document-order block descriptors one compile produced. */
 export type BlockDescriptor = {
@@ -466,6 +469,15 @@ const presentationOf = ({
     if (typeof currentScreenId === "string" && currentScreenId !== "") {
       return { aspect: "wireframe", currentScreenId };
     }
+  }
+  if (kind === "image") {
+    const source = node.properties.src;
+    const alt = node.properties.alt;
+    return {
+      aspect: "image",
+      source: typeof source === "string" ? source : "",
+      alt: typeof alt === "string" ? alt : "",
+    };
   }
   return undefined;
 };

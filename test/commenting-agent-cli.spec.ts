@@ -1,72 +1,19 @@
 // Minimal process-boundary journey: one real agent CLI claim and response
 // crosses the same mailbox that the browser chat surface reads.
 
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { readAgentExchange } from "../src/review/agent-exchange.js";
 import { startReviewRuntime } from "../src/review/server.js";
 import { agentResponseDraftPath, readProgress } from "../src/review/store.js";
-import { expect, test } from "./fixtures";
+import { expect, runAgentCli, test } from "./fixtures";
 
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const binPath = join(repoRoot, "bin", "big-plan.mjs");
 const PASTED_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
-
-const runAgentCli = (
-  args: ReadonlyArray<string>,
-): Promise<{ readonly stdout: string; readonly stderr: string }> =>
-  new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [binPath, "agent", ...args], {
-      cwd: repoRoot,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      reject(
-        new Error(
-          `Agent CLI timed out.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
-        ),
-      );
-    }, 10_000);
-    child.once("error", (error) => {
-      clearTimeout(timer);
-      reject(
-        new Error(
-          `Agent CLI could not start: ${String(error)}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
-        ),
-      );
-    });
-    child.once("close", (code, signal) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(
-          new Error(
-            `Agent CLI stopped with code ${String(code)} and signal ${String(signal)}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
-          ),
-        );
-        return;
-      }
-      resolve({ stdout, stderr });
-    });
-  });
 
 test("should carry one plan-wide chat through the real agent CLI", async ({
   page,
@@ -100,18 +47,26 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
     await expect(rail.getByRole("img", { name: "Screenshot" })).toBeVisible();
     const thumbnail = rail.getByRole("button", { name: "Open Screenshot" });
     await thumbnail.click();
+    // The lightbox covers the whole document rather than the rail it was
+    // opened from, so it is never trapped inside a composer's own layer.
+    const lightbox = page.getByRole("dialog", { name: "Screenshot" });
+    await expect(lightbox).toBeVisible();
+    await expect(rail.getByRole("dialog", { name: "Screenshot" })).toHaveCount(
+      0,
+    );
     await expect(
-      rail.getByRole("dialog", { name: "Screenshot" }),
+      lightbox.getByRole("button", { name: "Zoom out" }),
     ).toBeVisible();
-    await expect(rail.getByRole("button", { name: "Zoom out" })).toBeVisible();
-    await expect(rail.getByRole("button", { name: "Fit image" })).toBeVisible();
-    await expect(rail.getByRole("button", { name: "Zoom in" })).toBeVisible();
-    await rail.getByRole("button", { name: "Zoom in" }).click();
-    await rail.getByRole("button", { name: "Fit image" }).click();
-    await page.keyboard.press("Escape");
     await expect(
-      rail.getByRole("dialog", { name: "Screenshot" }),
-    ).not.toBeVisible();
+      lightbox.getByRole("button", { name: "Fit image" }),
+    ).toBeVisible();
+    await expect(
+      lightbox.getByRole("button", { name: "Zoom in" }),
+    ).toBeVisible();
+    await lightbox.getByRole("button", { name: "Zoom in" }).click();
+    await lightbox.getByRole("button", { name: "Fit image" }).click();
+    await page.keyboard.press("Escape");
+    await expect(lightbox).toHaveCount(0);
     await expect(thumbnail).toBeFocused();
     await rail.getByRole("button", { name: "Send", exact: true }).click();
 

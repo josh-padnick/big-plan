@@ -13,6 +13,7 @@ import type { DiffLocation } from "../shared/review-wire.js";
 import {
   candidateMatchesLiveText,
   lensAnchorCandidates,
+  type LensAnchorCandidate,
   type LensPlacement,
 } from "./diff-anchor.js";
 
@@ -152,6 +153,19 @@ export const displayedStandIn = (element: HTMLElement): HTMLElement | null => {
   return null;
 };
 
+/**
+ * Lists the pictures the reader is reading. A lens now replays a changed
+ * picture as a scrubbed copy, so decorating every match in the document would
+ * hang a comment affordance on a snapshot of the plan rather than the plan.
+ */
+export const livePictures = (): ReadonlyArray<HTMLElement> => {
+  const article = liveArticle();
+  if (article === null) return [];
+  return Array.from(
+    article.querySelectorAll<HTMLElement>('[data-block-kind="image"]'),
+  ).filter((element) => !isLensCopy(element));
+};
+
 /** Resolves a block id to the block the reader is reading. */
 export const liveBlock = (blockId: string): LiveTargetResult => {
   const article = liveArticle();
@@ -169,6 +183,38 @@ export const liveFlowAnchor = (anchor: string): LiveTargetResult => {
   if (article === null) return { missing: "no-article" };
   return resolveWithin(article, `[data-flow-anchor="${CSS.escape(anchor)}"]`);
 };
+
+type LivePictureIdentity = {
+  readonly source: string | null;
+  readonly alt: string | null;
+};
+
+const livePictureIdentity = (
+  element: HTMLElement,
+): LivePictureIdentity | undefined => {
+  const picture = element.matches("img")
+    ? element
+    : element.querySelector<HTMLElement>("img");
+  return picture === null
+    ? undefined
+    : {
+        source: picture.getAttribute("src"),
+        alt: picture.getAttribute("alt"),
+      };
+};
+
+/** Whether a live block presents the picture identity its candidate records. */
+export const candidateMatchesLivePicture = ({
+  candidate,
+  livePicture,
+}: {
+  readonly candidate: LensAnchorCandidate;
+  readonly livePicture: LivePictureIdentity | undefined;
+}): boolean =>
+  candidate.expectedPicture === undefined ||
+  (livePicture !== undefined &&
+    candidate.expectedPicture.source === livePicture.source &&
+    candidate.expectedPicture.alt === livePicture.alt);
 
 /**
  * Reads the text a live block presents to the reader, mirroring what
@@ -212,6 +258,10 @@ export const liveLensAnchor = (
       !candidateMatchesLiveText({
         candidate,
         liveText: liveBlockText(resolved.found),
+      }) ||
+      !candidateMatchesLivePicture({
+        candidate,
+        livePicture: livePictureIdentity(resolved.found),
       })
     ) {
       misses.push("drifted-content");

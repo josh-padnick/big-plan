@@ -8,6 +8,7 @@ import {
   readdir,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
@@ -30,6 +31,7 @@ import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
+import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import {
   readComments,
   readResolvedCommentIds,
@@ -288,17 +290,25 @@ describe("review runtime images", () => {
       id: descriptor.id,
     });
     const image = await fetch(
-      `${runtime.url.replace(/\/$/u, "")}/api/review-images?id=${descriptor.id}`,
-      {
-        headers: {
-          "x-big-plan-review-token": token,
-          "sec-fetch-site": "same-origin",
-          origin: runtime.url.replace(/\/$/u, ""),
-        },
-      },
+      `${runtime.url.replace(/\/$/u, "")}/review-images/${descriptor.id}`,
     );
     expect(image.status).toBe(200);
+    expect(image.headers.get("content-type")).toBe("image/png");
+    expect(image.headers.get("content-security-policy")).toBe(
+      "default-src 'none'; sandbox",
+    );
     expect(new Uint8Array(await image.arrayBuffer())).toEqual(TINY_PNG);
+  });
+
+  it("should refuse a review image path that names no stored picture", async () => {
+    const missing = await fetch(
+      `${runtime.url.replace(/\/$/u, "")}/review-images/${"a".repeat(64)}`,
+    );
+    expect(missing.status).toBe(404);
+    const malformed = await fetch(
+      `${runtime.url.replace(/\/$/u, "")}/review-images/not-a-digest`,
+    );
+    expect(malformed.status).toBe(404);
   });
 
   it("should reject image publication without the review token", async () => {
@@ -343,15 +353,10 @@ describe("review runtime images", () => {
 
     const restarted = await startReviewRuntime({ planPath });
     try {
+      // No token, and a different port: the picture belongs to the plan, so
+      // the reference minted in the first session still resolves in this one.
       const image = await fetch(
-        `${restarted.url}api/review-images?id=${descriptor.id}`,
-        {
-          headers: {
-            "x-big-plan-review-token": firstToken,
-            "sec-fetch-site": "same-origin",
-            origin: restarted.url.replace(/\/$/u, ""),
-          },
-        },
+        `${restarted.url}review-images/${descriptor.id}`,
       );
       expect(image.status).toBe(200);
       expect(new Uint8Array(await image.arrayBuffer())).toEqual(TINY_PNG);
@@ -385,6 +390,107 @@ describe("review runtime images", () => {
       );
       expect(asset.status).toBe(200);
       expect(new Uint8Array(await asset.arrayBuffer())).toEqual(TINY_PNG);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should serve an author's own picture files and refuse everything else beside the plan", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-plan-picture-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    await mkdir(join(directory, "assets", "site"), { recursive: true });
+    await writeFile(join(directory, "assets", "site", "cabinet.jpg"), TINY_PNG);
+    await writeFile(join(directory, "diagram.PNG"), TINY_PNG);
+    await writeFile(
+      join(directory, "scripted.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/")</script></svg>',
+    );
+    await writeFile(join(directory, "notes.md"), "Not a picture.");
+    await mkdir(join(directory, "inside"), { recursive: true });
+    await writeFile(join(directory, "inside", "linked-target.png"), TINY_PNG);
+    const outside = await mkdtemp(join(tmpdir(), "big-plan-outside-"));
+    await writeFile(join(outside, "secret.png"), TINY_PNG);
+    const review = await startReviewRuntime({ planPath });
+    const url = review.url.replace(/\/$/u, "");
+    try {
+      // A photograph named by its subject is the ordinary case, at any depth
+      // and with any letter case in its extension.
+      expect((await fetch(`${url}/assets/site/cabinet.jpg`)).status).toBe(200);
+      expect((await fetch(`${url}/diagram.PNG`)).status).toBe(200);
+      expect(
+        (await fetch(`${url}/assets/site/cabinet.jpg`)).headers.get(
+          "content-type",
+        ),
+      ).toBe("image/jpeg");
+      const svg = await fetch(`${url}/scripted.svg`);
+      expect(svg.status).toBe(200);
+      expect(svg.headers.get("content-type")).toBe("image/svg+xml");
+      expect(svg.headers.get("content-security-policy")).toBe(
+        "default-src 'none'; sandbox",
+      );
+
+      // Everything that is not a picture inside this plan's own directory is
+      // refused, including the plan source, the review state, an escape
+      // through a parent segment, and an escape through a link.
+      expect((await fetch(`${url}/notes.md`)).status).toBe(404);
+      expect((await fetch(`${url}/plan.mdx`)).status).toBe(404);
+      expect((await fetch(`${url}/.big-plan/review/session.png`)).status).toBe(
+        404,
+      );
+      expect(
+        (await fetch(`${url}/assets/%2e%2e/%2e%2e/escape.png`)).status,
+      ).toBe(404);
+      await symlink(
+        join(directory, "inside", "linked-target.png"),
+        join(directory, "assets", "linked.png"),
+      );
+      expect((await fetch(`${url}/assets/linked.png`)).status).toBe(200);
+      await symlink(
+        join(directory, "notes.md"),
+        join(directory, "assets", "notes.png"),
+      );
+      expect((await fetch(`${url}/assets/notes.png`)).status).toBe(404);
+      const protectedPicture = join(
+        review.store.reviewDirectory,
+        "protected.png",
+      );
+      await writeFile(protectedPicture, TINY_PNG);
+      await symlink(
+        protectedPicture,
+        join(directory, "assets", "protected.png"),
+      );
+      expect((await fetch(`${url}/assets/protected.png`)).status).toBe(404);
+      await symlink(outside, join(directory, "assets", "elsewhere"));
+      // The link resolves on disk, so only the containment check can refuse it.
+      await expect(
+        readFile(join(directory, "assets", "elsewhere", "secret.png")),
+      ).resolves.toBeDefined();
+      expect((await fetch(`${url}/assets/elsewhere/secret.png`)).status).toBe(
+        404,
+      );
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse oversized and non-regular plan pictures", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-plan-picture-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    await writeFile(
+      join(directory, "oversized.png"),
+      new Uint8Array(MAX_IMAGE_BYTES + 1),
+    );
+    await mkdir(join(directory, "directory.png"));
+    const review = await startReviewRuntime({ planPath });
+    const url = review.url.replace(/\/$/u, "");
+    try {
+      expect((await fetch(`${url}/oversized.png`)).status).toBe(404);
+      expect((await fetch(`${url}/directory.png`)).status).toBe(404);
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
@@ -1147,6 +1253,49 @@ Restores the selected snapshot as a new current plan.
     // including the Mermaid renderer, so it needs the same headroom the
     // renderer's own suites take rather than the default per-test timeout.
   }, 15000);
+
+  it("should carry both pictures when a snapshot swaps one", async () => {
+    const before = `# Pictures
+
+## Evidence
+
+![Retry dashboard](./assets/before.png)
+
+The dashboard shows the retry backlog.
+`;
+    const after = before
+      .replace("./assets/before.png", "./assets/after.png")
+      .replace("retry backlog", "retry backlog and its age");
+    const from = deriveSnapshotDigest(before);
+    const to = deriveSnapshotDigest(after);
+    await writeSnapshot({
+      store: runtime.store,
+      snapshot: from,
+      source: before,
+    });
+    await writeSnapshot({ store: runtime.store, snapshot: to, source: after });
+
+    const response = await call({
+      path: `/api/snapshot-diff?from=${from}&to=${to}`,
+    });
+    const value = (await response.json()) as {
+      readonly locations: ReadonlyArray<{
+        readonly kind: string;
+        readonly oldHtml?: string;
+        readonly newHtml?: string;
+      }>;
+      readonly places: ReadonlyArray<{ readonly note: string }>;
+    };
+    const picture = value.locations.find(
+      (location) => location.kind === "image",
+    );
+    // A picture carries no words, so its compiled markup is the only evidence
+    // the lens can show the reviewer.
+    expect(picture?.oldHtml).toContain("./assets/before.png");
+    expect(picture?.newHtml).toContain("./assets/after.png");
+    expect(picture?.oldHtml).not.toContain("data-block-id");
+    expect(value.places.map((place) => place.note)).toContain("replaced");
+  });
 
   it("should reject malformed snapshot names at the diff boundary", async () => {
     expect(

@@ -33,11 +33,21 @@ background command.
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
 
+A plan may also point at picture files of its own, such as
+`![The cabinet](./assets/cabinet.jpg)`.
+`big-plan review` serves any PNG, JPEG, WebP, GIF, AVIF, or SVG file up to 10 MiB that sits inside the plan's own directory, at any depth, so a photograph an author or an agent saves beside the plan appears in the review document.
+Nothing else in that directory is served: another file type, a dot-prefixed
+directory such as `.big-plan/`, and any path that leaves the plan's directory
+are all refused.
+
 Comments, replies, and plan-wide chat accept PNG, JPEG, and WebP screenshots.
 Paste an image into a composer, drop a file onto it, or choose **Choose image**.
 The runtime stores each image by its SHA-256 digest and inserts a Markdown
 reference into the message.
 Images are limited to four per message, 10 MiB per image, and 20 MiB total.
+Each stored image belongs to the plan rather than to one review session, so a
+picture pasted today still appears after the review runtime is restarted.
+A stored picture that cannot load is shown as an **Image unavailable** placeholder that explains itself on demand.
 The local `big-plan review` runtime is required to capture or retrieve images;
 standalone rendered files keep text drafts but do not accept image bytes.
 
@@ -98,6 +108,8 @@ larger rewrites, additions, removals, tables, and code. Decision, diagram, and
 file-tree changes retain their compiled component presentation behind a
 **Was**/**Now** switch instead of flattening their structure into prose.
 Wireframe changes add a per-screen selector for **Added**, **Removed**, **Updated**, **Moved**, and **Initial screen** changes, keep the full device frame visible behind interactive **Was**/**Now** controls, and carry the shared maximize control into the diff lens.
+An added or replaced picture shows the picture itself in its band, because a
+picture carries no words for a text comparison to show.
 Changes inside `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`, `GrpcMethod`,
 and `DatabaseTableSchema` are compared field by field.
 The change navigator tours several places without losing reading context.
@@ -118,17 +130,29 @@ fuzzy matching or silently attach it to nearby prose.
 
 ## Trust boundaries
 
-Loopback is not an authentication boundary. The runtime therefore:
+Loopback is not an authentication boundary.
+The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed route-and-method allow-list.
+It checks the `Host` header on every request and refuses a value that is not its own address.
 
-- binds only `127.0.0.1` on an ephemeral port;
-- requires a per-session token in a request header;
-- refuses an unexpected `Host`, foreign `Origin`, or cross-site request;
-- exposes a fixed route-and-method allow-list;
-- renders the selected MDX itself instead of serving arbitrary HTML;
-- validates every agent response against its pending request and the computed
-  snapshot diff; and
-- keeps requests, responses, heartbeats, and source snapshots in the
-  owner-only ignored review store.
+Three types of read-only GET request do not use the per-session token, `Origin`, or `Sec-Fetch-Site` checks:
+
+- the document route `/`, which renders the selected MDX instead of serving arbitrary HTML;
+- plan-picture requests, which accept only supported picture file types; and
+- stored review-image requests at `/review-images/<digest>`, which use a validated content digest.
+
+For a plan-picture request, both the requested path and its real path must stay in the plan's own directory.
+Neither path can contain a dot-prefixed segment.
+The opened target must be a regular file and must stay inside the image size limit.
+The file-identity check is best effort.
+An attacker who can already write in the reviewer's plan directory can replace an ancestor directory between path validation and file open.
+The attacker can then make the plan-picture route open a file outside the plan directory.
+The runtime accepts this limit because the attacker already has access to the reviewer's local files, and the server listens only on loopback.
+For a stored review-image request, the metadata and picture must be regular files and must stay inside their explicit size limits.
+
+All API routes require the per-session token in a request header.
+They refuse a foreign `Origin` or a cross-site request.
+The runtime also validates every agent response against its pending request and the computed snapshot diff.
+It keeps requests, responses, heartbeats, and source snapshots in the owner-only ignored review store.
 
 Reviewer and plan text remain plain, untrusted data in the browser and in the
 agent brief. Sending a package grants only authority to consider the notes

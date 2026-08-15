@@ -27,10 +27,17 @@ import {
   writeSnapshot,
 } from "../src/review/store.js";
 import { renderDocument } from "../src/render/render-document.js";
-import { expect, stageComment, test, type Page } from "./fixtures";
+import { boxOf, expect, stageComment, test, type Page } from "./fixtures";
 
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+// Two distinct authored pictures, so a swap between them is visible in the
+// diff as two different sources rather than as identical alternative words.
+const WIDE_PNG_DATA_URI =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAEElEQVR4nGMQqTgBRwzIHACEmgqhmuCM0QAAAABJRU5ErkJggg==";
+const TALL_PNG_DATA_URI =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAAECAIAAAArjXluAAAAEElEQVR4nGO4E6UBRAzYKACe3Arxvs3ORQAAAABJRU5ErkJggg==";
 
 test("should keep one staged comment after reloading the live review", async ({
   page,
@@ -814,7 +821,84 @@ test("should restore and submit staged comments through the local review runtime
       name: /Expand staged comment:.*review-image:/u,
     })
     .click();
-  await expect(rail.getByRole("img", { name: "Screenshot" })).toBeVisible();
+  const pastedPicture = rail.getByRole("img", { name: "Screenshot" }).first();
+  await expect(pastedPicture).toBeVisible();
+  // The picture is addressed by its digest alone, so it belongs to the plan
+  // rather than to the session that accepted it and still resolves after this
+  // reload - and after a restart, which the runtime suite proves directly.
+  await expect(pastedPicture).toHaveAttribute(
+    "src",
+    /^\/review-images\/[a-f0-9]{64}$/u,
+  );
+
+  await test.step("the lightbox keeps every control inside the viewport and touchable", async () => {
+    await rail.getByRole("button", { name: "Open Screenshot" }).first().click();
+    const lightbox = page.getByRole("dialog", { name: "Screenshot" });
+    const zoom = lightbox.getByRole("group", { name: "Image zoom" });
+    const closeImage = lightbox.getByRole("button", { name: "Close image" });
+    await expect(closeImage).toBeFocused();
+    const viewport = page.viewportSize();
+    if (viewport === null) throw new Error("The journey has no viewport");
+    const zoomBox = await boxOf(zoom);
+    const closeBox = await boxOf(closeImage);
+    for (const box of [zoomBox, closeBox]) {
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+    }
+    // Top centre, as the captain placed it: the zoom group's own centre is the
+    // viewport centre, and it sits above the picture rather than over it.
+    expect(
+      Math.abs(zoomBox.x + zoomBox.width / 2 - viewport.width / 2),
+    ).toBeLessThanOrEqual(1);
+    await lightbox.getByRole("button", { name: "Zoom in" }).click();
+    await expect(zoom).toContainText("125%");
+    await lightbox.getByRole("button", { name: "Fit image" }).click();
+    await expect(zoom).toContainText("100%");
+    await page.keyboard.press("Escape");
+    await expect(lightbox).toHaveCount(0);
+    await expect(
+      rail.getByRole("button", { name: "Open Screenshot" }).first(),
+    ).toBeFocused();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await rail.getByRole("button", { name: "Open Screenshot" }).first().click();
+    await expect(lightbox).toBeVisible();
+    for (const name of ["Zoom out", "Zoom in", "Fit image", "Close image"]) {
+      const controlBox = await boxOf(lightbox.getByRole("button", { name }));
+      expect(controlBox.width).toBeGreaterThanOrEqual(44);
+      expect(controlBox.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.keyboard.press("Escape");
+    await expect(lightbox).toHaveCount(0);
+    await page.route("**/review-images/*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: "not an image",
+      }),
+    );
+    await rail.getByRole("button", { name: "Open Screenshot" }).first().click();
+    await expect(lightbox).toBeVisible();
+    await expect(
+      lightbox.locator("[data-review-image-unavailable]"),
+    ).toContainText("Image unavailable");
+    const disclosure = lightbox.getByText("What happened");
+    const detail = lightbox.getByText(/could not load/u);
+    await expect(detail).toBeHidden();
+    const disclosureBox = await boxOf(disclosure);
+    expect(disclosureBox.width).toBeGreaterThanOrEqual(44);
+    expect(disclosureBox.height).toBeGreaterThanOrEqual(44);
+    await page.keyboard.press("Tab");
+    await expect(disclosure).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(detail).toBeVisible();
+    await page.unroute("**/review-images/*");
+    await page.keyboard.press("Escape");
+    await expect(lightbox).toHaveCount(0);
+    await page.setViewportSize(viewport);
+  });
+
   const responsePromise = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/feedback") &&
@@ -3395,6 +3479,89 @@ test("should highlight only changed words inside a revised list", async ({
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("should show both pictures when a change swaps one", async ({ page }) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-picture-diff-"));
+  const planPath = join(directory, "picture.mdx");
+  const before = `# Picture diff
+
+## Evidence
+
+![Retry dashboard](${WIDE_PNG_DATA_URI})
+
+The dashboard shows the retry backlog.
+`;
+  const after = before.replace(WIDE_PNG_DATA_URI, TALL_PNG_DATA_URI);
+  await writeFile(planPath, after);
+  const runtime = await startReviewRuntime({
+    planPath,
+    diffPreviewSource: before,
+  });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand thread:/u })
+      .first()
+      .click();
+    const pictureHost = page.locator("article [data-review-image-host]");
+    await expect(pictureHost).toBeVisible();
+    await page.getByRole("button", { name: "Review change" }).click();
+    const lens = page.locator("[data-review-diff-lens]");
+    // A picture carries no words, so a text-only lens would report the swap
+    // with nothing to look at. Each side shows its own compiled picture.
+    const pictures = lens.locator("[data-review-diff-content] img");
+    await expect(pictures).toHaveCount(2);
+    await expect(pictures.first()).toHaveAttribute("src", WIDE_PNG_DATA_URI);
+    await expect(pictures.nth(1)).toHaveAttribute("src", TALL_PNG_DATA_URI);
+    await expect(lens).toContainText("replaced");
+    await expect(pictureHost).toBeHidden();
+    // The lens replays a copy of the plan, so its picture never collects the
+    // comment affordance that belongs to the picture in the article.
+    await expect(lens.locator("[data-review-image-host]")).toHaveCount(0);
+    await rail.getByRole("button", { name: "Exit review" }).click();
+    await expect(lens).toHaveCount(0);
+    await expect(pictureHost).toBeVisible();
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test.describe("a picture the plan no longer holds", () => {
+  // The browser reports the missing picture as a failed resource load, which
+  // is the very condition this journey renders an answer for.
+  test.use({
+    allowedConsoleErrors: [/Failed to load resource:.*404/u],
+  });
+
+  test("should say when a pasted picture cannot be loaded", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    // An upload the plan no longer holds: the reference is well formed, so the
+    // reader has to be told what happened instead of shown an empty box.
+    await stageComment(page, `![Capture](review-image:${"b".repeat(64)})`);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: /Expand staged comment:.*review-image:/u })
+      .click();
+    const unavailable = rail.locator("[data-review-image-unavailable]");
+    await expect(unavailable).toContainText("Image unavailable");
+    await expect(rail.getByRole("img", { name: "Capture" })).toHaveCount(0);
+    // The reason is available on demand rather than crowding the message, and
+    // it names the possible causes instead of asserting one, because a single
+    // load failure covers a stopped runtime as well as a missing picture.
+    const reason = unavailable.getByText(/could not load/u);
+    await expect(reason).toBeHidden();
+    await unavailable.getByText("What happened").click();
+    await expect(reason).toBeVisible();
+    await expect(reason).toContainText("runtime may be stopped");
+  });
 });
 
 test("should turn diagram notes and decision proposals into review comments", async ({

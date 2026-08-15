@@ -17,17 +17,43 @@
 //  - No CORS allowance is ever sent, and a foreign Origin or a Sec-Fetch-Site
 //    other than same-origin is refused outright. CORS hides a response; it
 //    does not stop a write, so it is not the control here.
-//  - A fixed route-and-method allow-list. No static passthrough, no directory
-//    listing, and no path segment that reaches the filesystem.
+//  - A fixed route-and-method allow-list. There is no general static file route
+//    and no directory listing. The plan-picture route serves only supported
+//    picture file types. The requested path and the real path must stay inside
+//    the plan directory, and neither path can contain a dot-prefixed segment.
+//    The opened file must match the accepted path, must be a regular file, and
+//    must stay inside the image size limit.
+//  - One local filesystem limit is accepted. Node does not provide a file-open
+//    operation relative to an already-open directory handle. An attacker who
+//    can write in the reviewer's plan directory can replace an ancestor
+//    directory between path validation and file open. The attacker can then
+//    make the plan-picture route open a file outside the plan directory. This
+//    limit is accepted because the attacker already has access to the
+//    reviewer's local files, and this server listens only on loopback.
 //  - The document is always rendered in-process from the authoritative MDX. A
 //    pre-existing .html is never served, because arbitrary HTML is arbitrary
 //    script running on this runtime's own origin.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import {
+  readFile,
+  realpath,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import { basename, dirname, extname, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fromHtml } from "hast-util-from-html";
 import { toHtml } from "hast-util-to-html";
 import type { Element, Root, RootContent, ElementContent } from "hast";
@@ -89,14 +115,20 @@ import {
   writeSnapshot,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
-import { reviewPlanAssetName } from "./plan-assets.js";
 import {
   extractReviewImageReferences,
+  isReviewImageId,
+  MAX_IMAGE_BYTES,
   MAX_IMAGES_PER_MESSAGE,
   MAX_MESSAGE_IMAGE_BYTES,
   RAW_IMAGE_BODY_LIMIT,
+  REVIEW_IMAGE_ROUTE,
 } from "./shared/review-image.js";
 import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
+import {
+  readBoundedRegularFile,
+  regularFileIdentity,
+} from "./bounded-regular-file.js";
 import {
   agentConnectCommand,
   agentRecoveryPrompt,
@@ -214,6 +246,20 @@ const renderedBlockHtml = ({
 
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
+// The picture file types a plan may point at, and the type each is served as.
+// The list is closed: a request for anything else is not a picture request,
+// so the review runtime never becomes a general file server for the directory
+// that holds the plan.
+const PLAN_PICTURE_TYPES: ReadonlyMap<string, string> = new Map([
+  [".png", "image/png"],
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".webp", "image/webp"],
+  [".gif", "image/gif"],
+  [".avif", "image/avif"],
+  [".svg", "image/svg+xml"],
+]);
+
 const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   "style-src 'unsafe-inline'",
@@ -225,6 +271,8 @@ const CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'",
   "base-uri 'none'",
 ].join("; ");
+
+const ASSET_CONTENT_SECURITY_POLICY = "default-src 'none'; sandbox";
 
 type Route = {
   readonly method: "GET" | "PUT" | "POST";
@@ -249,7 +297,6 @@ const API_ROUTES: ReadonlyArray<Route> = [
   { method: "GET", path: "/api/progress" },
   { method: "GET", path: "/api/snapshot-diff" },
   { method: "POST", path: "/api/review-images", binary: true },
-  { method: "GET", path: "/api/review-images" },
 ];
 
 /** A running review runtime. */
@@ -375,7 +422,7 @@ const sendBinary = ({
 }): void => {
   response.writeHead(status, {
     "content-type": contentType,
-    "content-security-policy": CONTENT_SECURITY_POLICY,
+    "content-security-policy": ASSET_CONTENT_SECURITY_POLICY,
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
     "cache-control": "no-store",
@@ -572,9 +619,9 @@ export const startReviewRuntime = async ({
   const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
   await prepareStore(store);
   const previousSession = await readCurrentReviewSession({ store });
-  // The token protects the durable image store as well as the live mailbox.
-  // Reuse it for this plan so a browser page can reconnect after a runtime
-  // restart without turning already-sent images into missing references.
+  // The token protects API requests that write the durable image store or use
+  // the live mailbox. Keep it stable when a later runtime takes custody of the
+  // same plan; the session id, not the token, identifies write authority.
   const token = previousSession?.token ?? randomBytes(32).toString("base64url");
   const initialSource = await readFile(resolvedPlanPath, "utf8");
   renderDocument({
@@ -916,6 +963,16 @@ export const startReviewRuntime = async ({
     }
   };
 
+  // A picture an author or an agent saved beside the plan is plan content, so
+  // the reviewer must see it. The route therefore serves the plan's own
+  // directory instead of one generated file name: a photograph named by its
+  // subject is the ordinary case, and refusing it showed alternative words
+  // where the plan promised a picture.
+  //
+  // The route serves only a bounded regular picture file whose requested and
+  // real paths stay inside the plan's own directory. A dot-prefixed segment is
+  // never served, which keeps the review state under `.big-plan/` outside the
+  // reach of a document request.
   const handlePlanAsset = async ({
     response,
     pathname,
@@ -923,29 +980,111 @@ export const startReviewRuntime = async ({
     readonly response: ServerResponse;
     readonly pathname: string;
   }): Promise<boolean> => {
-    const match =
-      /^\/assets\/(review-image-[a-f0-9]{64}\.(?:png|jpg|webp))$/u.exec(
-        pathname,
-      );
-    const name = match?.[1];
-    if (name === undefined || !reviewPlanAssetName(name)) return false;
+    let requested: string;
     try {
-      const bytes = await readFile(
-        resolve(dirname(resolvedPlanPath), "assets", name),
+      requested = decodeURIComponent(pathname);
+    } catch {
+      return false;
+    }
+    const contentType = PLAN_PICTURE_TYPES.get(
+      extname(requested).toLowerCase(),
+    );
+    if (contentType === undefined || requested.includes("\0")) return false;
+    const segments = requested.split("/").filter((segment) => segment !== "");
+    if (segments.some((segment) => segment.startsWith("."))) {
+      refuse({ response, status: 404, reason: "Plan picture unavailable" });
+      return true;
+    }
+    const planDirectory = dirname(resolvedPlanPath);
+    const candidate = resolve(planDirectory, segments.join("/"));
+    // Containment is checked twice against matching roots: once on the
+    // requested path, and once on the real path, because a link inside the
+    // directory could otherwise point anywhere. Comparing a real path with a
+    // symbolic root would reject every ordinary file on a machine whose
+    // temporary or home directory is itself a link.
+    const isWithin = (root: string, path: string): boolean => {
+      const step = relative(root, path);
+      return step !== "" && !step.startsWith("..") && !isAbsolute(step);
+    };
+    if (!isWithin(planDirectory, candidate)) {
+      refuse({ response, status: 404, reason: "Plan picture unavailable" });
+      return true;
+    }
+    try {
+      const [root, real] = await Promise.all([
+        realpath(planDirectory),
+        realpath(candidate),
+      ]);
+      const realStep = relative(root, real);
+      const realContentType = PLAN_PICTURE_TYPES.get(
+        extname(real).toLowerCase(),
       );
+      if (
+        !isWithin(root, real) ||
+        realContentType === undefined ||
+        realStep.split(sep).some((segment) => segment.startsWith("."))
+      ) {
+        refuse({ response, status: 404, reason: "Plan picture unavailable" });
+        return true;
+      }
+      const expectedIdentity = await regularFileIdentity({
+        path: real,
+        maxBytes: MAX_IMAGE_BYTES,
+      });
+      if (expectedIdentity === undefined) {
+        refuse({ response, status: 404, reason: "Plan picture unavailable" });
+        return true;
+      }
+      const bytes = await readBoundedRegularFile({
+        path: real,
+        maxBytes: MAX_IMAGE_BYTES,
+        expectedIdentity,
+      });
+      if (bytes === undefined) {
+        refuse({ response, status: 404, reason: "Plan picture unavailable" });
+        return true;
+      }
       sendBinary({
         response,
         status: 200,
-        contentType: name.endsWith(".jpg")
-          ? "image/jpeg"
-          : name.endsWith(".webp")
-            ? "image/webp"
-            : "image/png",
-        body: Uint8Array.from(bytes),
+        contentType: realContentType,
+        body: bytes,
       });
     } catch {
-      refuse({ response, status: 404, reason: "Plan asset unavailable" });
+      refuse({ response, status: 404, reason: "Plan picture unavailable" });
     }
+    return true;
+  };
+
+  // An uploaded picture is plan state, not session state: it is stored beside
+  // the plan under its content digest and served from that digest alone, like
+  // a materialized plan asset. That is what keeps a reference minted in one
+  // review readable in every later one, including after a restart that creates
+  // a new session.
+  const handleReviewImage = async ({
+    response,
+    pathname,
+  }: {
+    readonly response: ServerResponse;
+    readonly pathname: string;
+  }): Promise<boolean> => {
+    if (!pathname.startsWith(REVIEW_IMAGE_ROUTE)) return false;
+    const id = pathname.slice(REVIEW_IMAGE_ROUTE.length);
+    if (!isReviewImageId(id)) {
+      refuse({ response, status: 404, reason: "Unknown review image" });
+      return true;
+    }
+    const image = await readReviewImage({ store, id });
+    if (image === undefined) {
+      refuse({ response, status: 404, reason: "Image unavailable" });
+      return true;
+    }
+    sendBinary({
+      response,
+      status: 200,
+      contentType: image.descriptor.mimeType,
+      body: image.bytes,
+    });
     return true;
   };
 
@@ -986,25 +1125,6 @@ export const startReviewRuntime = async ({
             error instanceof Error ? error.message : "The image is invalid",
         });
       }
-      return;
-    }
-    if (route.path === "/api/review-images" && route.method === "GET") {
-      const id = query.get("id");
-      if (id === null) {
-        refuse({ response, status: 400, reason: "An image id is required" });
-        return;
-      }
-      const image = await readReviewImage({ store, id });
-      if (image === undefined) {
-        refuse({ response, status: 404, reason: "Image unavailable" });
-        return;
-      }
-      sendBinary({
-        response,
-        status: 200,
-        contentType: image.descriptor.mimeType,
-        body: image.bytes,
-      });
       return;
     }
     if (route.path === "/api/session") {
@@ -1803,6 +1923,12 @@ export const startReviewRuntime = async ({
       if (
         method === DOCUMENT_ROUTE.method &&
         (await handlePlanAsset({ response, pathname: target.pathname }))
+      ) {
+        return;
+      }
+      if (
+        method === DOCUMENT_ROUTE.method &&
+        (await handleReviewImage({ response, pathname: target.pathname }))
       ) {
         return;
       }

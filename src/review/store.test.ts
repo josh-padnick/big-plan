@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AGENT_STALL_MS } from "./shared/agent-status.js";
+import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import {
   appendAgentConnectionEvent,
   appendProgressValue,
@@ -156,6 +157,39 @@ describe("review image store", () => {
     await expect(
       stat(join(store.requestAttachmentsDirectory, "2222222222222222")),
     ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("should refuse oversized and non-regular stored image files", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const descriptor = await publishReviewImage({
+      store,
+      bytes: tinyPng,
+      alt: "Capture",
+    });
+    const directory = join(store.imagesDirectory, descriptor.id);
+    const imagePath = join(directory, "image.png");
+    const metadataPath = join(directory, "metadata.json");
+
+    await writeFile(imagePath, new Uint8Array(MAX_IMAGE_BYTES + 1));
+    await expect(
+      readReviewImage({ store, id: descriptor.id }),
+    ).resolves.toBeUndefined();
+
+    await rm(imagePath);
+    await mkdir(imagePath);
+    await expect(
+      readReviewImage({ store, id: descriptor.id }),
+    ).resolves.toBeUndefined();
+
+    await rm(imagePath, { recursive: true });
+    await writeFile(imagePath, tinyPng);
+    await rm(metadataPath);
+    await mkdir(metadataPath);
+    await expect(
+      readReviewImage({ store, id: descriptor.id }),
+    ).resolves.toBeUndefined();
   });
 });
 
