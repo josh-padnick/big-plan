@@ -24,6 +24,8 @@ export const agentNextCommand = ({
 }): string =>
   `node ${quoteShellArgument(executablePath)} agent next ${quoteShellArgument(planPath)} --wait`;
 
+export const AGENT_NOTE_INITIAL_PROGRESS = "Working on the request";
+
 /**
  * Narrates progress and renews the claim taken at pickup.
  *
@@ -41,7 +43,7 @@ export const agentNoteCommand = ({
   readonly planPath: string;
   readonly agentToken: string;
 }): string =>
-  `node ${quoteShellArgument(executablePath)} agent note ${quoteShellArgument(planPath)} --agent ${agentToken}`;
+  `node ${quoteShellArgument(executablePath)} agent note ${quoteShellArgument(planPath)} ${quoteShellArgument(AGENT_NOTE_INITIAL_PROGRESS)} --agent ${agentToken}`;
 
 /** Publishes the drafted response under the claim taken at pickup. */
 export const agentRespondCommand = ({

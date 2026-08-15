@@ -17,8 +17,9 @@ const USAGE = [
   "  big-plan agent respond <input.mdx> <response.json> --agent <token>",
   "",
   "The agent token is minted by `next` and returned with the work item.",
-  "Run the note_command and respond_command it hands back rather than",
-  "composing these yourself.",
+  'The returned note_command records "Working on the request" and renews',
+  "the claim; run it and respond_command exactly as returned.",
+  'Use `agent note <input.mdx> "<progress>" --agent <token>` for later updates.',
 ].join("\n");
 
 const invalidArguments = (): never => {

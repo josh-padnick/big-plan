@@ -180,8 +180,10 @@ a model provider itself. The launched coding-agent session uses:
 `agent next` mints the `--agent` token when it hands out a request, and returns
 it as `agent_token` together with ready-to-run `note_command` and
 `respond_command` strings.
+The returned `note_command` includes the progress text `"Working on the request"`, so running it unchanged records that update and renews the claim.
+For later meaningful steps, use `agent note <input.mdx> "<progress>" --agent <token>` with a short, specific progress line.
 If the agent process restarts while that request remains open, pass the returned token back with `agent next <input.mdx> --agent <token>` to resume the same pickup.
-Run those strings as returned rather than composing the commands yourself.
+Run the returned `note_command` and `respond_command` strings unchanged.
 The token is what proves this agent process holds the request, so a second
 agent working the same review cannot narrate over or answer another agent's
 work.

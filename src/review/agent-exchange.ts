@@ -851,7 +851,7 @@ const commentsFromRequests = (
   return comments;
 };
 
-const readAcceptedAgentRequests = async ({
+export const readValidatedAgentRequests = async ({
   store,
   sessionId,
   planId,
@@ -911,7 +911,7 @@ const readCompleteAgentExchange = async ({
     readonly answeredRequestIds: ReadonlySet<string>;
   }) => ReadonlySet<string>;
 }): Promise<AgentExchangeSnapshot> => {
-  const requests = await readAcceptedAgentRequests({
+  const requests = await readValidatedAgentRequests({
     store,
     sessionId,
     planId,
@@ -1161,7 +1161,7 @@ export const readValidatedAgentResponse = async ({
   readonly store: ReviewStore;
   readonly request: AgentRequest;
 }): Promise<AgentResponse | undefined> => {
-  const requests = await readAcceptedAgentRequests({
+  const requests = await readValidatedAgentRequests({
     store,
     sessionId: request.sessionId,
     planId: request.planId,
