@@ -1872,10 +1872,10 @@ The dashboard shows the retry backlog.
         commentsById: commentsFromExchange(exchange),
         changedBlocks: new Set(),
         currentSnapshot: request.premiseSnapshot,
-          now: new Date().toISOString(),
-        }),
         now: new Date().toISOString(),
-      });
+      }),
+      now: new Date().toISOString(),
+    });
     const answeredAt = Date.parse(request.createdAt);
     for (let index = 0; index < 400; index += 1) {
       await writeAgentRequest({
@@ -2709,7 +2709,9 @@ describe("review runtime queued messages", () => {
     if (first === undefined) throw new Error("The first message was lost");
     const claimed = await claimAgentRequest({
       store: queued.store,
+      activeSessionId: queued.sessionId,
       requestId: firstId,
+      claimedBy: queued.sessionId,
       baselineSnapshot: first.premiseSnapshot,
       now: new Date().toISOString(),
     });
@@ -2723,7 +2725,12 @@ describe("review runtime queued messages", () => {
       kind: "chat",
       body: "And what happens on the third retry?",
     });
-    expect(nextPendingAgentRequest(busy)?.requestId).toBe(firstId);
+    expect(
+      nextPendingAgentRequest(busy, {
+        claimedBy: queued.sessionId,
+        nowMs: Date.now(),
+      })?.requestId,
+    ).toBe(firstId);
 
     await commitRequestTerminal({
       store: queued.store,
@@ -2735,12 +2742,16 @@ describe("review runtime queued messages", () => {
         currentSnapshot: claimed.premiseSnapshot,
         now: new Date().toISOString(),
       }),
+      claimedBy: queued.sessionId,
       now: new Date().toISOString(),
     });
 
-    expect(nextPendingAgentRequest(await exchangeNow())?.requestId).toBe(
-      secondId,
-    );
+    expect(
+      nextPendingAgentRequest(await exchangeNow(), {
+        claimedBy: queued.sessionId,
+        nowMs: Date.now(),
+      })?.requestId,
+    ).toBe(secondId);
   });
 
   it("should revise a queued message without creating another one", async () => {
@@ -2779,7 +2790,9 @@ describe("review runtime queued messages", () => {
     if (request === undefined) throw new Error("The message was lost");
     await claimAgentRequest({
       store: queued.store,
+      activeSessionId: queued.sessionId,
       requestId,
+      claimedBy: queued.sessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
@@ -2963,7 +2976,9 @@ describe("review runtime queued messages", () => {
     if (request === undefined) throw new Error("The message was lost");
     await claimAgentRequest({
       store: queued.store,
+      activeSessionId: queued.sessionId,
       requestId,
+      claimedBy: queued.sessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });

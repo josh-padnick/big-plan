@@ -391,14 +391,19 @@ const nextWork = async ({
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const resumedRequest =
+    const ownedRequest =
       resumeToken === undefined
         ? undefined
         : snapshot.requests.find(
-            (candidate) =>
-              candidate.claimedBy === resumeToken &&
-              !requestIsTerminal(candidate),
+            (candidate) => candidate.claimedBy === resumeToken,
           );
+    if (ownedRequest?.canceledAt !== undefined) {
+      return fail("The reviewer canceled this agent request");
+    }
+    const resumedRequest =
+      ownedRequest === undefined || requestIsTerminal(ownedRequest)
+        ? undefined
+        : ownedRequest;
     if (resumedRequest !== undefined && resumeToken !== undefined) {
       claimedBy = resumeToken;
       resumingClaim = true;

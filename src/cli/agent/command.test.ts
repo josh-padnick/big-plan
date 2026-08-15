@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   deriveSnapshotDigest,
   messageAgentRequest,
+  readAgentExchange,
   writeAgentRequest,
 } from "../../review/agent-exchange.js";
 import { startReviewRuntime } from "../../review/server.js";
@@ -107,10 +108,18 @@ describe("agent command connector model identity", () => {
           sessionId: review.sessionId,
         });
         expect(presence).toMatchObject({ connected: true });
+        expect(presence).not.toHaveProperty("model");
+        const exchange = await readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        });
         if (expectedModel === undefined) {
-          expect(presence).not.toHaveProperty("model");
+          expect(exchange.requests[0]).not.toHaveProperty("claimedModel");
         } else {
-          expect(presence).toMatchObject({ model: expectedModel });
+          expect(exchange.requests[0]).toMatchObject({
+            claimedModel: expectedModel,
+          });
         }
       } finally {
         await review.close();

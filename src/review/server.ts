@@ -85,6 +85,7 @@ import {
   stalledMutations,
 } from "./runtime-watchdog.js";
 import type { ReviewRuntimeDiagnostics } from "./runtime-watchdog.js";
+import { selectActiveAgentRequest } from "./shared/agent-status.js";
 import { RAW_IMAGE_BODY_LIMIT } from "./shared/review-image.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
 import {
@@ -135,13 +136,13 @@ import { readRuntimeSession } from "./routes-session.js";
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const SHUTDOWN_GRACE_MS = 100;
-
 const STALL_CHECK_INTERVAL_MS = 5_000;
 const GROWTH_CHECK_INTERVAL_MS = 60_000;
 // Persistent review state is reported on a ladder rather than every minute, so
 // operators can correlate a long-session stall with the retained state size
 // without filling the terminal with repetitive diagnostics.
 const GROWTH_MILESTONE = 1_000;
+const NO_CANCEL_PENDING_REQUEST_IDS = new Set<string>();
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
 const CONTENT_SECURITY_POLICY = [
@@ -1065,8 +1066,17 @@ export const startReviewRuntime = async ({
         void (async () => {
           if (closed || context.activityClock.idleForMs() < idleTimeoutMs)
             return;
-          const presence = await readAgentPresence({ store, sessionId });
-          if (presence.connected && presence.state === "working") {
+          const exchange = await readAgentExchange({
+            store,
+            sessionId,
+            planId,
+          });
+          const activeRequest = selectActiveAgentRequest({
+            requests: exchange.requests,
+            cancelPendingRequestIds: NO_CANCEL_PENDING_REQUEST_IDS,
+            now: Date.now(),
+          });
+          if (activeRequest !== undefined) {
             context.activityClock.touch();
             return;
           }
