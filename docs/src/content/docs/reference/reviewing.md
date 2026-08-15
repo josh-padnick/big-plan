@@ -20,15 +20,16 @@ background command.
 
 ## When a session stops accepting changes
 
-A review session can stay online and stop saving anything: reading the plan keeps working, while one change that never finished blocks the rest.
-The page says so directly, with a **This review session has stopped accepting changes** alert, and every further change is refused with the same message instead of waiting.
-Reading, navigating, and the agent's own work continue.
-Nothing already written is lost, and unsent input stays in the page, so keep the tab open, stop the runtime, and start it again on the same plan.
+A review session can stay online after one change never finishes: reading the plan keeps working, but the runtime stops accepting changes.
+After 30 seconds, the page shows a **This review session has stopped accepting changes** alert, and the unfinished change and every later change are refused instead of waiting indefinitely.
+The runtime keeps renewing its heartbeat, so the coding agent still sees the session as live, but it cannot save changes through that runtime.
+Already persisted review data remains available, and unsent input stays in the page, so keep the tab open, stop the runtime, and start it again on the same plan.
 
 ## Diagnose an unresponsive session
 
 Keep the terminal running the review open when the page stops answering.
-The runtime gives up on a write that has run for 30 seconds, reports it once with its route and age, and hands the session to the next write.
+The runtime gives up on waiting for a write that has run for 30 seconds, reports it once with its route and age, and lets the next write run.
+The unfinished work is not cancelled and may still hold the review store's lock, so later writes are answered promptly with the same refusal rather than served.
 It also reports progress-history and agent-exchange counts as append-only state crosses each 1,000-entry milestone.
 Request failures that reach the runtime's generic error boundary leave their safe error type and stack in that terminal while keeping the reviewer-facing message and sensitive details out of the log.
 
