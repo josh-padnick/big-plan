@@ -119,10 +119,14 @@ test("should keep unsent comment text through a reload", async ({
   ).toHaveValue(replyBody);
 });
 
-test("should detach recovered selection text when its full range no longer resolves", async ({
+test("should retain detached selection text until the reviewer discards it", async ({
+  context,
   page,
   reviewRuntimeUrl,
 }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: new URL(reviewRuntimeUrl).origin,
+  });
   await page.goto(reviewRuntimeUrl);
   const recovery = await page
     .locator("[data-block-kind='paragraph']")
@@ -186,11 +190,67 @@ test("should detach recovered selection text when its full range no longer resol
     0,
   );
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-  await expect(
-    page.getByRole("complementary", { name: "Feedback" }),
-  ).toContainText(
+  const feedback = page.getByRole("complementary", { name: "Feedback" });
+  const detachedNotice = feedback.getByRole("status").filter({
+    hasText:
+      "The comment you were writing could not be reattached: its place in the plan is gone.",
+  });
+  await expect(detachedNotice).toContainText(
     "The comment you were writing could not be reattached: its place in the plan is gone.",
   );
+  await expect(detachedNotice).toContainText(body);
+  await detachedNotice.getByRole("button", { name: "Copy text" }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe(body);
+
+  await page.reload();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const restoredNotice = page
+    .getByRole("complementary", { name: "Feedback" })
+    .getByRole("status")
+    .filter({ hasText: body });
+  await expect(restoredNotice).toContainText(body);
+  await expect
+    .poll(() =>
+      page.evaluate((key) => {
+        const raw = window.localStorage.getItem(key);
+        if (raw === null) return null;
+        const parsed: unknown = JSON.parse(raw);
+        return typeof parsed === "object" &&
+          parsed !== null &&
+          "composer" in parsed &&
+          typeof parsed.composer === "object" &&
+          parsed.composer !== null &&
+          "comment" in parsed.composer &&
+          typeof parsed.composer.comment === "object" &&
+          parsed.composer.comment !== null &&
+          "body" in parsed.composer.comment &&
+          typeof parsed.composer.comment.body === "string"
+          ? parsed.composer.comment.body
+          : null;
+      }, recovery.key),
+    )
+    .toBe(body);
+
+  await restoredNotice.getByRole("button", { name: "Discard text" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate((key) => {
+        const raw = window.localStorage.getItem(key);
+        if (raw === null) return null;
+        const parsed: unknown = JSON.parse(raw);
+        return typeof parsed === "object" &&
+          parsed !== null &&
+          "composer" in parsed &&
+          typeof parsed.composer === "object" &&
+          parsed.composer !== null &&
+          "comment" in parsed.composer
+          ? parsed.composer.comment
+          : null;
+      }, recovery.key),
+    )
+    .toBeNull();
 });
 
 test("should share pending reply state across the rail and inline thread", async ({
@@ -553,6 +613,104 @@ test.describe("a drafts write prepared against content the store moved past", ()
         ),
       )
       .toEqual([latestLocalBody]);
+  });
+
+  test("should not submit a captured body after queued reconciliation", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const capturedBody = "Do not send this body after reconciliation.";
+    const unrelatedBody = "Edit this draft to start the queued write.";
+    await stageComment(page, capturedBody);
+    await stageComment(page, unrelatedBody);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts
+          .map((draft) => draft.body)
+          .sort(),
+      )
+      .toEqual([capturedBody, unrelatedBody].sort());
+
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const capturedDraft = stored.drafts.find(
+      (draft) => draft.body === capturedBody,
+    );
+    const unrelatedDraft = stored.drafts.find(
+      (draft) => draft.body === unrelatedBody,
+    );
+    if (capturedDraft === undefined || unrelatedDraft === undefined) {
+      throw new Error("Expected both staged comments in the runtime");
+    }
+    const reconciledBody = "Keep this newer runtime body as a draft.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: stored.version,
+      drafts: [{ ...capturedDraft, body: reconciledBody }, unrelatedDraft],
+    });
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    for (const body of [capturedBody, unrelatedBody]) {
+      const expand = rail.getByRole("button", {
+        name: `Expand staged comment: ${body}`,
+      });
+      if (await expand.isVisible()) await expand.click();
+    }
+
+    let releaseResponse = (): void => undefined;
+    const responseMayFinish = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    let markStaleResponse = (): void => undefined;
+    const staleResponseReachedBrowser = new Promise<void>((resolve) => {
+      markStaleResponse = resolve;
+    });
+    await page.route(
+      "**/api/drafts",
+      async (route) => {
+        const response = await route.fetch();
+        markStaleResponse();
+        await responseMayFinish;
+        await route.fulfill({ response });
+      },
+      { times: 1 },
+    );
+
+    const unrelatedCard = rail
+      .locator(".review-staged-card")
+      .filter({ hasText: unrelatedBody });
+    await unrelatedCard
+      .getByRole("button", { name: "Edit staged comment" })
+      .click();
+    const latestUnrelatedBody = "Persist this unrelated browser edit.";
+    await rail.getByLabel("Edit comment").fill(latestUnrelatedBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    await staleResponseReachedBrowser;
+
+    const capturedCard = rail
+      .locator(".review-staged-card")
+      .filter({ hasText: capturedBody });
+    await capturedCard.getByRole("button", { name: "Send this" }).click();
+    releaseResponse();
+
+    await expect(rail).toContainText(
+      "The review changed before submission. Review the latest comments and send again.",
+    );
+    await expect
+      .poll(async () => {
+        const snapshot = await readRuntimeDrafts(reviewRuntimeUrl, token);
+        return {
+          drafts: snapshot.drafts.map((draft) => draft.body).sort(),
+          sent: snapshot.sent.map((comment) => comment.body),
+        };
+      })
+      .toEqual({
+        drafts: [latestUnrelatedBody, reconciledBody].sort(),
+        sent: [],
+      });
   });
 
   test("should adopt other submitted comments after sending one draft", async ({

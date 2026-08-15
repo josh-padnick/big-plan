@@ -515,6 +515,14 @@ const persistedReviewFingerprint = ({
     resolvedCommentIds: Array.from(resolvedCommentIds).sort(),
   });
 
+const sameReviewComment = (
+  left: ReviewComment,
+  right: ReviewComment,
+): boolean => JSON.stringify(left) === JSON.stringify(right);
+
+const STALE_SUBMISSION_STATUS =
+  "The review changed before submission. Review the latest comments and send again.";
+
 /** Comment text a reviewer typed that no comment holds yet. */
 type RecoveredComposer = {
   /** The comment being written, with the target it was opened against. */
@@ -772,6 +780,32 @@ const removeLiveReviewRecoveryReply = ({
       resolvedCommentIds: recovery.resolvedCommentIds,
       base: recovery.base,
       composer: { ...recovery.composer, replies },
+    },
+  });
+};
+
+const removeLiveReviewRecoveryComment = ({
+  identity,
+  comment,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly comment: NonNullable<RecoveredComposer["comment"]>;
+}): void => {
+  const recovery = readLiveReviewRecovery(identity);
+  if (
+    recovery === null ||
+    recovery.composer.comment === null ||
+    JSON.stringify(recovery.composer.comment) !== JSON.stringify(comment)
+  ) {
+    return;
+  }
+  writeLiveReviewRecovery({
+    identity,
+    recovery: {
+      drafts: recovery.drafts,
+      resolvedCommentIds: recovery.resolvedCommentIds,
+      base: recovery.base,
+      composer: { ...recovery.composer, comment: null },
     },
   });
 };
@@ -3909,9 +3943,8 @@ export const ReviewController = () => {
   const [resolveRefusal, setResolveRefusal] = useState<string | null>(null);
   const [compose, setCompose] = useState<ComposeState | null>(null);
   const [composeBody, setComposeBody] = useState("");
-  const [composerRecoveryNotice, setComposerRecoveryNotice] = useState<
-    string | null
-  >(null);
+  const [detachedComposer, setDetachedComposer] =
+    useState<RecoveredComposer["comment"]>(null);
   const [pendingCompose, setPendingCompose] = useState<ComposeState | null>(
     null,
   );
@@ -4128,6 +4161,16 @@ export const ReviewController = () => {
     setDrafts(state.drafts);
     setResolvedCommentIds(state.resolvedCommentIds);
   }, []);
+  const stageReviewComment = useCallback(
+    (comment: ReviewComment): void => {
+      const current = latestReviewStateRef.current.state;
+      applyReviewState({
+        drafts: [...current.drafts, comment],
+        resolvedCommentIds: current.resolvedCommentIds,
+      });
+    },
+    [applyReviewState],
+  );
   const canRefreshReview =
     persistedReviewState === currentReviewState &&
     composeBody === "" &&
@@ -4151,7 +4194,7 @@ export const ReviewController = () => {
     () => ({
       comment:
         compose === null || composeBody === ""
-          ? null
+          ? detachedComposer
           : {
               target: compose.target,
               premiseSnapshot: compose.premiseSnapshot,
@@ -4159,7 +4202,7 @@ export const ReviewController = () => {
             },
       replies: replyDrafts,
     }),
-    [compose, composeBody, replyDrafts],
+    [compose, composeBody, detachedComposer, replyDrafts],
   );
   /** Gives back typed comment text, and says when it had nowhere to go. */
   const restoreComposer = useCallback(
@@ -4176,12 +4219,12 @@ export const ReviewController = () => {
         (recovered.target.type === "selection" &&
           !selectionTargetResolves(recovered.target))
       ) {
-        setComposerRecoveryNotice(
-          "The comment you were writing could not be reattached: its place in the plan is gone.",
-        );
+        setCompose(null);
+        setComposeBody("");
+        setDetachedComposer(recovered);
         return "detached";
       }
-      setComposerRecoveryNotice(null);
+      setDetachedComposer(null);
       setCompose({
         target: recovered.target,
         premiseSnapshot: recovered.premiseSnapshot,
@@ -5034,7 +5077,11 @@ export const ReviewController = () => {
         setTab("agent");
         return;
       }
-      setComposerRecoveryNotice(null);
+      if (detachedComposer !== null) {
+        setIsOpen(true);
+        setTab("comments");
+        return;
+      }
       if (
         compose !== null &&
         targetAddress(compose.target) === targetAddress(target)
@@ -5053,7 +5100,13 @@ export const ReviewController = () => {
       }
       setPendingCompose(next);
     },
-    [compose, composeBody, displayedSnapshot, runtimeSession?.authoritative],
+    [
+      compose,
+      composeBody,
+      detachedComposer,
+      displayedSnapshot,
+      runtimeSession?.authoritative,
+    ],
   );
 
   useEffect(() => {
@@ -5100,13 +5153,28 @@ export const ReviewController = () => {
               local: latestReviewStateRef.current.state,
             });
             if (preflight.conflicts.length > 0) {
-              return { submitted: false, conflicted: true };
+              return { submitted: false, conflicted: true, comments: [] };
             }
             base = recoveryBaseRef.current;
           }
+          const latestDraftsById = new Map(
+            latestReviewStateRef.current.state.drafts.map((comment) => [
+              comment.id,
+              comment,
+            ]),
+          );
+          const preparedComments = comments.flatMap((requested) => {
+            const latest = latestDraftsById.get(requested.id);
+            return latest !== undefined && sameReviewComment(latest, requested)
+              ? [latest]
+              : [];
+          });
+          if (preparedComments.length !== comments.length) {
+            return { submitted: false, conflicted: false, comments: [] };
+          }
           const preparedGeneration = latestReviewStateRef.current.generation;
           const submittedBodies = new Map(
-            comments.map((comment) => [comment.id, comment.body]),
+            preparedComments.map((comment) => [comment.id, comment.body]),
           );
           try {
             const snapshot = parseSnapshot(
@@ -5115,7 +5183,7 @@ export const ReviewController = () => {
                 identity,
                 method: "POST",
                 body: {
-                  comments,
+                  comments: preparedComments,
                   version: runtimeVersionRef.current,
                 },
               }),
@@ -5125,7 +5193,7 @@ export const ReviewController = () => {
               snapshot,
               base,
               local: latest.state,
-              preferredSent: comments,
+              preferredSent: preparedComments,
               submittedBodies:
                 latest.generation === preparedGeneration
                   ? undefined
@@ -5134,6 +5202,7 @@ export const ReviewController = () => {
             return {
               submitted: true,
               conflicted: merged.conflicts.length > 0,
+              comments: preparedComments,
             };
           } catch (error) {
             if (!isReviewRuntimeRefusal(error, STALE_REVIEW_STATE_CODE)) {
@@ -5147,23 +5216,21 @@ export const ReviewController = () => {
               base,
               local: latestReviewStateRef.current.state,
             });
-            return { submitted: false, conflicted: false };
+            return { submitted: false, conflicted: false, comments: [] };
           }
         });
         if (!result.submitted) {
-          setStatus(
-            "The review changed before submission. Review the latest comments and send again.",
-          );
+          setStatus(STALE_SUBMISSION_STATUS);
           return;
         }
-        const ids = new Set(comments.map((comment) => comment.id));
+        const ids = new Set(result.comments.map((comment) => comment.id));
         justSubmittedCommentIds.current = new Set([
           ...justSubmittedCommentIds.current,
           ...ids,
         ]);
         if (!result.conflicted) {
           setStatus(
-            `${comments.length} comment${comments.length === 1 ? "" : "s"} submitted.`,
+            `${result.comments.length} comment${result.comments.length === 1 ? "" : "s"} submitted.`,
           );
         }
       } catch (error) {
@@ -5222,7 +5289,7 @@ export const ReviewController = () => {
           premiseSnapshot: displayedSnapshot,
           target: block === null ? { type: "document" } : targetForBlock(block),
         };
-        setDrafts((current) => [...current, comment]);
+        stageReviewComment(comment);
         setIsOpen(true);
         setTab("comments");
         setStatus(
@@ -5245,7 +5312,7 @@ export const ReviewController = () => {
       };
       if (previous === undefined) delete feedbackWindow.bigPlan.feedback;
     };
-  }, [displayedSnapshot, isHydrated, sendComments]);
+  }, [displayedSnapshot, isHydrated, sendComments, stageReviewComment]);
 
   const saveComment = (body: string, submitRightAway: boolean) => {
     if (compose === null) return;
@@ -5256,7 +5323,7 @@ export const ReviewController = () => {
       premiseSnapshot: compose.premiseSnapshot,
       target: compose.target,
     };
-    setDrafts((current) => [...current, comment]);
+    stageReviewComment(comment);
     setCompose(null);
     setComposeBody("");
     setTab("comments");
@@ -6371,14 +6438,62 @@ export const ReviewController = () => {
               >
                 {isSending ? "Sending…" : "Send all comments to agent"}
               </Button>
-              {composerRecoveryNotice === null ? null : (
+              {detachedComposer === null ? null : (
+                <div
+                  className="rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]"
+                  role="status"
+                >
+                  <p className="m-0">
+                    The comment you were writing could not be reattached: its
+                    place in the plan is gone.
+                  </p>
+                  <p className="mt-2 mb-0 whitespace-pre-wrap rounded-sm bg-paper/60 p-2 text-ink [overflow-wrap:anywhere]">
+                    {detachedComposer.body}
+                  </p>
+                  <div className="mt-2 flex justify-end gap-1">
+                    <Button
+                      variant="outline"
+                      size="micro"
+                      onClick={() => {
+                        void navigator.clipboard
+                          .writeText(detachedComposer.body)
+                          .then(
+                            () => setStatus("Recovered comment text copied."),
+                            () =>
+                              setStatus(
+                                "The recovered comment text could not be copied. Select and copy it from the notice.",
+                              ),
+                          );
+                      }}
+                    >
+                      Copy text
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="micro"
+                      onClick={() => {
+                        if (identity !== null) {
+                          removeLiveReviewRecoveryComment({
+                            identity,
+                            comment: detachedComposer,
+                          });
+                        }
+                        setDetachedComposer(null);
+                      }}
+                    >
+                      Discard text
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {identity !== null && status === STALE_SUBMISSION_STATUS ? (
                 <p
                   className="m-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]"
                   role="status"
                 >
-                  {composerRecoveryNotice}
+                  {status}
                 </p>
-              )}
+              ) : null}
               {identity === null ? (
                 <p className="m-0 text-xs text-support" role="status">
                   {status}
