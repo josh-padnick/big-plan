@@ -11,12 +11,12 @@
 // running while two requests merely timed out. Every explanation of why is
 // therefore unknowable from here, and the page says only what it observed.
 //
-// This still earns its place: "the local review server stopped responding"
-// leaves a reader who returns to a tab after lunch unable to tell a runtime
-// that just died from one that went away while they were gone (BIG-65). It
-// covers an already-open page whose polling stopped. A first navigation to an
-// address whose runtime is gone never loads this code at all, and giving
-// shared addresses an explicit lifetime remains a separate decision.
+// This still earns its place: a generic contact-loss message leaves a reader
+// who returns to a tab after lunch unable to tell a runtime that just died from
+// one that went away while they were gone (BIG-65). It covers an already-open
+// page whose polling stopped. A first navigation to an address whose runtime
+// is gone never loads this code at all, and giving shared addresses an explicit
+// lifetime remains a separate decision.
 
 export type ReviewEndReason =
   { readonly kind: "stopped" } | { readonly kind: "deadline-passed" };
