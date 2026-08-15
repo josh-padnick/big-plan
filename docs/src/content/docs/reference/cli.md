@@ -17,9 +17,9 @@ big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
 big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
 big-plan agent <input.mdx>
-big-plan agent next <input.mdx> [--wait]
-big-plan agent note <input.mdx> "<progress>"
-big-plan agent respond <input.mdx> <response.json>
+big-plan agent next <input.mdx> [--wait] [--agent <token>]
+big-plan agent note <input.mdx> "<progress>" --agent <token>
+big-plan agent respond <input.mdx> <response.json> --agent <token>
 big-plan update [--check]
 ```
 
@@ -41,9 +41,9 @@ npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
 npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
 npx big-plan agent <input.mdx>
-npx big-plan agent next <input.mdx> --wait
-npx big-plan agent note <input.mdx> "<progress>"
-npx big-plan agent respond <input.mdx> <response.json>
+npx big-plan agent next <input.mdx> --wait [--agent <token>]
+npx big-plan agent note <input.mdx> "<progress>" --agent <token>
+npx big-plan agent respond <input.mdx> <response.json> --agent <token>
 npx big-plan update --check
 ```
 
@@ -169,20 +169,36 @@ source snapshots.
 prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
 a model provider itself. The launched coding-agent session uses:
 
-- `agent next <input.mdx> --wait` to receive the oldest pending feedback,
+- `agent next <input.mdx> --wait [--agent <token>]` to receive the oldest pending feedback,
   thread reply, or plan-wide chat question, its prior conversation, a validated
   response template, and the exact publish command;
-- `agent note <input.mdx> "<progress>"` to keep the reviewer informed as each
-  meaningful work step begins; and
-- `agent respond <input.mdx> <response.json>` to publish one complete answer
-  after the current MDX has rendered and passed lint.
+- `agent note <input.mdx> "<progress>" --agent <token>` to keep the reviewer
+  informed as each meaningful work step begins; and
+- `agent respond <input.mdx> <response.json> --agent <token>` to publish one
+  complete answer after the current MDX has rendered and passed lint.
+
+`agent next` mints the `--agent` token when it hands out a request, and returns
+it as `agent_token` together with ready-to-run `note_command` and
+`respond_command` strings.
+The returned `note_command` includes the progress text `"Working on the request"`, so running it unchanged records that update and renews the claim.
+For later meaningful steps, use `agent note <input.mdx> "<progress>" --agent <token>` with a short, specific progress line.
+If the agent process restarts while that request remains open, pass the returned token back with `agent next <input.mdx> --agent <token>` to resume the same pickup.
+Run the returned `note_command` and `respond_command` strings unchanged.
+The token is what proves this agent process holds the request, so a second
+agent working the same review cannot narrate over or answer another agent's
+work.
+Only one request on a plan may hold a live claim, so a second agent waits rather than editing the plan in parallel.
+Without `--wait`, `agent next` reports that no work is available while another claim is live.
+With `--wait`, it continues once the holder answers or its lease lapses.
+This serialization prevents ordinary concurrent unfenced plan writers; a lapsed lease during a long edit can still interleave plan writes until write fencing exists.
+When a lapsed lease is taken over, the reviewer is warned that the previous agent's partial plan edits may be present.
 
 Set the `BIG_PLAN_AGENT_MODEL` environment variable before running `agent
 next` or `agent note` to report which model is connected, for example `Grok
 4.6`.
 Use a non-empty model name of at most 80 characters.
-Every heartbeat that command sends carries the reported name; the reviewer's
-browser never guesses it.
+`agent next` stores the reported name with the durable per-pickup claim, and `agent note` preserves or refreshes that claim identity.
+The reviewer's browser reads the model from the live claim, so a waiting agent's heartbeat cannot relabel another agent's active request.
 
 A `changed` outcome is accepted only when the result snapshot differs and every
 named target belongs to the computed snapshot diff. Other outcomes are

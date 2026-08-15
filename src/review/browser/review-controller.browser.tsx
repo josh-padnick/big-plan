@@ -34,6 +34,7 @@ import {
   deriveAgentHealthLabel,
   deriveCurrentAgentActivity,
   projectAgentConnectionState,
+  selectActiveAgentRequest,
   type AgentStatus,
 } from "../shared/agent-status.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
@@ -43,11 +44,7 @@ import {
   type ReviewerMarkdownNode,
 } from "../shared/reviewer-markdown.js";
 import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
-import {
-  reconcilePendingCancellations,
-  requestIsCanceled,
-} from "../shared/cancel-pending.js";
-import { agentOwnsRequest } from "../shared/request-ownership.js";
+import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
 import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
   clearThreadOpenOverlay,
@@ -62,10 +59,13 @@ import {
   projectCommentThreads,
   projectLatestAgentStatus,
   projectRequestActivity,
+  projectRequestDelivery,
   projectRequestStatus,
   queuedRequestsAhead,
   requestCommentIds,
+  selectActiveFeedbackBatch,
   type CommentThreadProjection,
+  type RequestDelivery,
   type ThreadGroup,
   type ThreadRuntime,
 } from "../shared/thread-projection.js";
@@ -2881,7 +2881,6 @@ const SentThread = ({
   onAssociate,
   onReplySent,
   onShowAgent,
-  activeRequestLink,
   onCancelRequest,
   onDelete,
   onRevert,
@@ -2906,10 +2905,6 @@ const SentThread = ({
   readonly onAssociate: (target: CommentTarget | null) => void;
   readonly onReplySent: (message: string) => void;
   readonly onShowAgent: () => void;
-  readonly activeRequestLink?: {
-    readonly label: string;
-    readonly onClick: () => void;
-  };
   readonly onCancelRequest: (requestId: string) => void;
   readonly onDelete: () => void;
   readonly onRevert: (requestId: string, commentId: string) => void;
@@ -3029,14 +3024,14 @@ const SentThread = ({
           status={
             resolved
               ? "Resolved"
-              : group === "working"
-                ? "Working"
-                : group === "ready"
-                  ? "Ready for review"
-                  : group === "needs-input"
-                    ? "Respond"
-                    : latestCanceled
-                      ? "Canceled"
+              : latestCanceled
+                ? "Canceled"
+                : group === "working"
+                  ? "Working"
+                  : group === "ready"
+                    ? "Ready for review"
+                    : group === "needs-input"
+                      ? "Respond"
                       : "Queued"
           }
           statusSpinner={group === "working"}
@@ -3336,6 +3331,7 @@ const SentThread = ({
                 response,
                 outcome: requestOutcome,
                 status: requestStatus,
+                delivery,
                 activity,
               }) => {
                 const sharedConnectionState =
@@ -3353,11 +3349,7 @@ const SentThread = ({
                           : (request.body ?? "")
                       }
                       createdAt={request.createdAt}
-                      delivery={
-                        response !== undefined || agentOwnsRequest(request)
-                          ? "Sent"
-                          : "Queued"
-                      }
+                      delivery={delivery}
                     >
                       {response === undefined ? (
                         <StalePremiseNotice
@@ -3388,7 +3380,6 @@ const SentThread = ({
                               : 1
                           }
                           onShowAgent={onShowAgent}
-                          activeRequestLink={activeRequestLink}
                           onCancelRequest={() =>
                             onCancelRequest(request.requestId)
                           }
@@ -3599,26 +3590,23 @@ const SentThread = ({
 const ChatExchange = ({
   request,
   response,
+  delivery,
   identity,
   status,
   activity,
   onStatus,
   onShowAgent,
-  activeRequestLink,
   onCancelRequest,
   currentSnapshot,
 }: {
   readonly request: AgentRequest;
   readonly response: AgentResponse | undefined;
+  readonly delivery: RequestDelivery;
   readonly identity: RuntimeIdentity;
   readonly status: AgentStatus;
   readonly activity: ReadonlyArray<MessageActivity>;
   readonly onStatus: (message: string) => void;
   readonly onShowAgent: () => void;
-  readonly activeRequestLink?: {
-    readonly label: string;
-    readonly onClick: () => void;
-  };
   readonly onCancelRequest: (requestId: string) => void;
   readonly currentSnapshot: string;
 }) => {
@@ -3633,11 +3621,7 @@ const ChatExchange = ({
         surface="chat"
         body={request.body ?? ""}
         createdAt={request.createdAt}
-        delivery={
-          response !== undefined || agentOwnsRequest(request)
-            ? "Sent"
-            : "Queued"
-        }
+        delivery={delivery}
       />
       {response === undefined ? (
         <div className="min-w-0 w-[calc(100%_-_1.5rem)] rounded-lg border border-dashed border-edge bg-paper px-2 py-2 text-muted">
@@ -3646,7 +3630,6 @@ const ChatExchange = ({
             activity={activity}
             surface="chat"
             onShowAgent={onShowAgent}
-            activeRequestLink={activeRequestLink}
             onCancelRequest={() => onCancelRequest(request.requestId)}
           />
         </div>
@@ -4848,6 +4831,11 @@ export const ReviewController = () => {
   };
 
   const effectivePresence = { ...agent.presence, connected: agentConnected };
+  const activeRequest = selectActiveAgentRequest({
+    requests: agent.requests,
+    cancelPendingRequestIds,
+    now: agentProjectionNowMs,
+  });
   const threadProjections = projectCommentThreads({
     comments: sent,
     requests: agent.requests,
@@ -4878,9 +4866,6 @@ export const ReviewController = () => {
   ): AgentStatus =>
     projectRequestStatus({
       request,
-      response: agent.responses.find(
-        (candidate) => candidate.requestId === request.requestId,
-      ),
       progressEvents: progress,
       presence: effectivePresence,
       runtime: threadRuntime,
@@ -4896,17 +4881,7 @@ export const ReviewController = () => {
     });
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
-    responseRequestIds: new Set([
-      ...agent.responses.map((response) => response.requestId),
-      ...agent.requests.flatMap((request) =>
-        requestIsCanceled({
-          request,
-          pendingRequestIds: cancelPendingRequestIds,
-        })
-          ? [request.requestId]
-          : [],
-      ),
-    ]),
+    cancelPendingRequestIds,
     progressEvents: progress,
     agentConnected,
     runtimeOffline: pollIsOffline,
@@ -4933,12 +4908,15 @@ export const ReviewController = () => {
         key={request.requestId}
         request={request}
         response={response}
+        delivery={projectRequestDelivery({
+          request,
+          nowMs: agentProjectionNowMs,
+        })}
         identity={identity}
         status={statusForRequest(request, "chat")}
         activity={activityForRequest(request)}
         onStatus={setStatus}
         onShowAgent={showAgentSetup}
-        activeRequestLink={activeRequestLink}
         onCancelRequest={(requestId) => void cancelRequest(requestId)}
         currentSnapshot={currentSnapshot}
       />
@@ -5128,34 +5106,10 @@ export const ReviewController = () => {
       });
     });
   };
-  const activeRequest = agentConnected
-    ? agent.requests.find(
-        (request) => request.requestId === agent.presence.requestId,
-      )
-    : undefined;
-  const activeRequestLink =
-    activeRequest === undefined
-      ? undefined
-      : {
-          label:
-            activeRequest.kind === "chat"
-              ? "View active chat"
-              : "View active comment",
-          onClick: () =>
-            viewAgentRequest(activeRequest.requestId, activeRequest.kind),
-        };
-  const activeBatchRequest = [...agent.requests].reverse().find(
-    (request) =>
-      request.kind === "feedback" &&
-      requestCommentIds(request).length > 1 &&
-      !requestIsCanceled({
-        request,
-        pendingRequestIds: cancelPendingRequestIds,
-      }) &&
-      !agent.responses.some(
-        (response) => response.requestId === request.requestId,
-      ),
-  );
+  const activeBatchRequest = selectActiveFeedbackBatch({
+    requests: agent.requests,
+    cancelPendingRequestIds,
+  });
   const activeBatchCommentIds =
     activeBatchRequest === undefined
       ? []
@@ -5495,7 +5449,6 @@ export const ReviewController = () => {
                               surface="thread"
                               commentCount={activeBatchCommentIds.length}
                               onShowAgent={showAgentSetup}
-                              activeRequestLink={activeRequestLink}
                               onCancelRequest={() =>
                                 void cancelRequest(activeBatchRequest.requestId)
                               }
@@ -5636,7 +5589,6 @@ export const ReviewController = () => {
                       onAssociate={setAssociatedTarget}
                       onReplySent={setStatus}
                       onShowAgent={showAgentSetup}
-                      activeRequestLink={activeRequestLink}
                       onCancelRequest={(requestId) =>
                         void cancelRequest(requestId)
                       }
@@ -5720,9 +5672,7 @@ export const ReviewController = () => {
                 presenceState: agentProjection.state,
                 connected: agentConnected,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
-                modelName: agentConnected
-                  ? agent.presence.model?.name
-                  : undefined,
+                modelName: activeRequest?.claimedModel?.name,
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 agentCommand: agent.agentCommand,
@@ -5892,7 +5842,6 @@ export const ReviewController = () => {
                 onAssociate={setAssociatedTarget}
                 onReplySent={setStatus}
                 onShowAgent={showAgentSetup}
-                activeRequestLink={activeRequestLink}
                 onCancelRequest={(requestId) => void cancelRequest(requestId)}
                 onDelete={() =>
                   setPendingDelete({

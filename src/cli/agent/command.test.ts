@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   deriveSnapshotDigest,
   messageAgentRequest,
+  readAgentExchange,
   writeAgentRequest,
 } from "../../review/agent-exchange.js";
 import { startReviewRuntime } from "../../review/server.js";
@@ -29,6 +30,93 @@ describe("agent command adapter", () => {
         code: "INVALID_INPUT",
         message: expect.stringContaining("big-plan agent"),
       });
+    },
+  );
+
+  // Without the token these two cannot say which agent process is speaking,
+  // so accepting them untokened would quietly reopen the double-claim they
+  // exist to prevent.
+  it.each([
+    { action: "note", args: ["note", "plan.mdx", "Reading the request"] },
+    { action: "respond", args: ["respond", "plan.mdx", "response.json"] },
+  ])("should reject $action without an agent token", async ({ args }) => {
+    await expect(agentCommand(args)).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+      message: expect.stringContaining("--agent"),
+    });
+  });
+
+  it("should reject an agent flag with no token after it", async () => {
+    await expect(
+      agentCommand(["note", "plan.mdx", "Reading the request", "--agent"]),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
+
+  it.each([
+    { label: "a missing value", tail: ["--agent"] },
+    { label: "another flag as its value", tail: ["--agent", "--wait"] },
+    { label: "a malformed value", tail: ["--agent", "not-a-token"] },
+    {
+      label: "a repeated flag",
+      tail: ["--agent", "aaaaaaaaaaaaaaaa", "--agent", "bbbbbbbbbbbbbbbb"],
+    },
+  ])(
+    "should reject --agent with $label without claiming work",
+    async ({ tail }) => {
+      const directory = await mkdtemp(
+        join(tmpdir(), "big-plan-cli-agent-token-"),
+      );
+      const planPath = join(directory, "plan.mdx");
+      const source = "# Plan\n\nAnswer this question.\n";
+      try {
+        await writeFile(planPath, source);
+        const review = await startReviewRuntime({ planPath });
+        try {
+          await writeAgentRequest({
+            store: review.store,
+            request: messageAgentRequest({
+              kind: "chat",
+              requestId: "dddddddddddddddd",
+              sessionId: review.sessionId,
+              planId: review.planId,
+              premiseSnapshot: deriveSnapshotDigest(source),
+              createdAt: "2026-08-12T12:00:00.000Z",
+              body: "What should we prioritize?",
+            }),
+          });
+          const outcome = await agentCommand(["next", planPath, ...tail]).then(
+            () => ({ status: "fulfilled" as const, code: undefined }),
+            (error: unknown) => ({
+              status: "rejected" as const,
+              code:
+                typeof error === "object" &&
+                error !== null &&
+                "code" in error &&
+                typeof error.code === "string"
+                  ? error.code
+                  : undefined,
+            }),
+          );
+          const exchange = await readAgentExchange({
+            store: review.store,
+            sessionId: review.sessionId,
+            planId: review.planId,
+          });
+
+          expect({
+            ...outcome,
+            claimedBy: exchange.requests[0]?.claimedBy,
+          }).toEqual({
+            status: "rejected",
+            code: "INVALID_INPUT",
+            claimedBy: undefined,
+          });
+        } finally {
+          await review.close();
+        }
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
     },
   );
 });
@@ -88,10 +176,18 @@ describe("agent command connector model identity", () => {
           sessionId: review.sessionId,
         });
         expect(presence).toMatchObject({ connected: true });
+        expect(presence).not.toHaveProperty("model");
+        const exchange = await readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        });
         if (expectedModel === undefined) {
-          expect(presence).not.toHaveProperty("model");
+          expect(exchange.requests[0]).not.toHaveProperty("claimedModel");
         } else {
-          expect(presence).toMatchObject({ model: expectedModel });
+          expect(exchange.requests[0]).toMatchObject({
+            claimedModel: expectedModel,
+          });
         }
       } finally {
         await review.close();

@@ -6,7 +6,9 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import type { ReviewComment } from "./shared/comment.js";
+import { projectCommentThread } from "./shared/thread-projection.js";
 import {
   AgentExchangeRejected,
   commentsFromExchange,
@@ -17,6 +19,7 @@ import {
   readAgentExchange,
   requestBaselineSnapshot,
   validateAgentResponseDraft,
+  validateAgentRequest,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import type { AgentExchangeSnapshot } from "./agent-exchange.js";
@@ -24,13 +27,16 @@ import { buildFeedbackPackage } from "./feedback-package.js";
 import {
   cancelAgentRequest,
   claimAgentRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
 } from "./request-mailbox.js";
 import { prepareStore, reviewStoreFor } from "./store.js";
 
 const sessionId = "1111111111111111";
 const planId = "2222222222222222";
 const packageId = "3333333333333333";
+const agentSessionId = "aaaa0000aaaa0000";
+// The agent asking what to work next, at a time when nothing else holds a lease.
+const viewer = () => ({ claimedBy: agentSessionId, nowMs: Date.now() });
 const commentId = "4444444444444444";
 const blockId = "section/approach/paragraph-1";
 const before = "# Plan\n\n## Approach\n\nKeep the first version.\n";
@@ -199,29 +205,144 @@ describe("agent exchange response contract", () => {
       commentId,
     });
     expect(
-      nextPendingAgentRequest({
-        requests: [request, reply],
-        responses: [
-          {
-            version: 2,
-            requestId: packageId,
-            sessionId,
-            planId,
-            resultSnapshot: deriveSnapshotDigest(after),
-            createdAt: "2026-08-02T12:01:00.000Z",
-            kind: "feedback",
-            outcomes: [
-              {
-                commentId,
-                state: "changed",
-                message: "Revised the approach.",
-                changeTargets: [blockId],
-              },
-            ],
-          },
-        ],
-      }),
+      nextPendingAgentRequest(
+        {
+          // The first request carries its own terminal mark. A reader never
+          // infers that from the response beside it.
+          requests: [
+            {
+              ...request,
+              baselineSnapshot: request.premiseSnapshot,
+              claimedAt: "2026-08-02T12:00:30.000Z",
+              claimedBy: agentSessionId,
+              claimExpiresAtMs: 1_775_000_000_000,
+              answeredAt: "2026-08-02T12:01:00.000Z",
+            },
+            reply,
+          ],
+          responses: [
+            {
+              version: 2,
+              requestId: packageId,
+              sessionId,
+              planId,
+              resultSnapshot: deriveSnapshotDigest(after),
+              createdAt: "2026-08-02T12:01:00.000Z",
+              kind: "feedback",
+              outcomes: [
+                {
+                  commentId,
+                  state: "changed",
+                  message: "Revised the approach.",
+                  changeTargets: [blockId],
+                },
+              ],
+            },
+          ],
+        },
+        viewer(),
+      ),
     ).toEqual(reply);
+  });
+
+  it("should keep queued work unavailable while another claim is live", () => {
+    const nowMs = Date.parse("2026-08-02T12:00:30.000Z");
+    const active = validateAgentRequest({
+      ...messageAgentRequest({
+        kind: "chat",
+        requestId: "5555555555555555",
+        sessionId,
+        planId,
+        premiseSnapshot: deriveSnapshotDigest(before),
+        createdAt: "2026-08-02T11:59:00.000Z",
+        body: "What is already being handled?",
+      }),
+      baselineSnapshot: deriveSnapshotDigest(before),
+      claimedAt: new Date(nowMs).toISOString(),
+      claimedBy: "bbbb0000bbbb0000",
+      claimExpiresAtMs: nowMs + AGENT_CLAIM_LEASE_MS,
+    });
+    const exchange = { requests: [active, request], responses: [] };
+
+    expect(
+      projectCommentThread({
+        comment,
+        ...exchange,
+        progressEvents: [],
+        presence: { connected: true, state: "working" },
+        runtime: "online",
+        nowMs,
+        cancelPendingRequestIds: new Set(),
+      }).latestStatus,
+    ).toMatchObject({
+      stage: "waiting",
+      headline: "Waiting for an agent",
+    });
+    expect(
+      nextPendingAgentRequest(exchange, {
+        claimedBy: "cccc0000cccc0000",
+        nowMs,
+      }),
+    ).toBeUndefined();
+    // Without the writer-release rule, cancellation releases the plan while
+    // its writer still holds a live lease. That counterfactual was verified.
+    expect(
+      nextPendingAgentRequest(
+        {
+          requests: [
+            { ...active, canceledAt: "2026-08-02T12:00:31.000Z" },
+            request,
+          ],
+          responses: [],
+        },
+        { claimedBy: "cccc0000cccc0000", nowMs },
+      ),
+    ).toBeUndefined();
+    expect(
+      nextPendingAgentRequest(
+        {
+          requests: [
+            { ...active, canceledAt: "2026-08-02T12:00:31.000Z" },
+            request,
+          ],
+          responses: [],
+        },
+        {
+          claimedBy: "cccc0000cccc0000",
+          nowMs: (active.claimExpiresAtMs ?? nowMs) + 1,
+        },
+      ),
+    ).toBe(request);
+    expect(
+      nextPendingAgentRequest(
+        {
+          requests: [
+            { ...active, answeredAt: "2026-08-02T12:00:31.000Z" },
+            request,
+          ],
+          responses: [],
+        },
+        { claimedBy: "cccc0000cccc0000", nowMs },
+      ),
+    ).toBe(request);
+  });
+
+  it("should reject an answered request without a complete claim", () => {
+    expect(() =>
+      validateAgentRequest({
+        ...request,
+        answeredAt: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toThrow(/answered request must carry a complete claim/);
+  });
+
+  it("should reject claim model identity without a complete claim", () => {
+    expect(() =>
+      validateAgentRequest({
+        ...request,
+        claimedModel: { name: "Grok 4.6" },
+      }),
+    ).toThrow(/claimedModel.*complete claim/);
   });
 
   it("should collect original comments as reply validation context", () => {
@@ -307,13 +428,17 @@ describe("agent exchange filesystem", () => {
     await writeAgentRequest({ store, request });
     const firstClaim = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: "aaaaaaaaaaaaaaaa",
       now: "2026-08-02T12:00:30.000Z",
     });
     const repeatedClaim = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: firstClaim.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: "bbbbbbbbbbbbbbbb",
       now: "2026-08-02T12:01:00.000Z",
     });
@@ -339,7 +464,9 @@ describe("agent exchange filesystem", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: "2026-08-02T12:00:30.000Z",
     });
@@ -361,7 +488,13 @@ describe("agent exchange filesystem", () => {
       currentSnapshot: deriveSnapshotDigest(after),
       now: "2026-08-02T12:01:00.000Z",
     });
-    await publishAgentResponse({ store, response });
+    const answered = await commitRequestTerminal({
+      store,
+      response,
+      claimedBy: agentSessionId,
+      now: "2026-08-02T12:01:01.000Z",
+    });
+    expect(answered).toMatchObject({ answeredAt: "2026-08-02T12:01:01.000Z" });
     expect(
       await readAgentExchange({
         store,
@@ -369,7 +502,7 @@ describe("agent exchange filesystem", () => {
         planId,
       }),
     ).toEqual({
-      requests: [claimed],
+      requests: [answered],
       responses: [response],
     });
   });
@@ -430,11 +563,13 @@ describe("agent exchange filesystem", () => {
       planId,
     });
     expect(canceled.canceledAt).toBe("2026-08-02T12:00:45.000Z");
-    expect(nextPendingAgentRequest(canceledSnapshot)).toBeUndefined();
+    expect(nextPendingAgentRequest(canceledSnapshot, viewer())).toBeUndefined();
     await expect(
       claimAgentRequest({
         store,
+        activeSessionId: sessionId,
         requestId: request.requestId,
+        claimedBy: agentSessionId,
         baselineSnapshot: "aaaaaaaaaaaaaaaa",
         now: "2026-08-02T12:00:50.000Z",
       }),
@@ -467,7 +602,6 @@ describe("agent exchange filesystem", () => {
     const store = reviewStoreFor({ planPath, planId });
     await prepareStore(store);
     const startedAt = Date.parse("2026-08-02T12:00:00.000Z");
-    await writeAgentRequest({ store, request });
     for (let index = 1; index < 400; index += 1) {
       await writeAgentRequest({
         store,
@@ -498,7 +632,9 @@ describe("agent exchange filesystem", () => {
     await writeAgentRequest({ store, request: reply });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: reply.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: reply.premiseSnapshot,
       now: new Date(startedAt + 401).toISOString(),
     });
@@ -519,14 +655,58 @@ describe("agent exchange filesystem", () => {
       currentSnapshot: claimed.premiseSnapshot,
       now: new Date(startedAt + 402).toISOString(),
     });
-    await publishAgentResponse({ store, response });
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
+      store,
+      response,
+      now: new Date(startedAt + 403).toISOString(),
+    });
+    const nowMs = Date.now();
+    const blocker = validateAgentRequest({
+      ...request,
+      baselineSnapshot: request.premiseSnapshot,
+      claimedAt: new Date(nowMs - 1_000).toISOString(),
+      claimedBy: agentSessionId,
+      claimExpiresAtMs: nowMs + AGENT_CLAIM_LEASE_MS,
+      canceledAt: new Date(nowMs - 500).toISOString(),
+    });
+    const queued = messageAgentRequest({
+      kind: "chat",
+      requestId: "eeeeeeeeeeeeeeee",
+      sessionId,
+      planId,
+      premiseSnapshot: deriveSnapshotDigest(before),
+      createdAt: new Date(startedAt + 404).toISOString(),
+      body: "Wait for the canceled writer to leave.",
+    });
+    await writeAgentRequest({ store, request: blocker });
+    await writeAgentRequest({ store, request: queued });
 
-    const bounded = await readAgentExchange({ store, sessionId, planId });
-    expect(bounded.requests).toHaveLength(401);
-    expect(bounded.requests[0]?.requestId).toBe(request.requestId);
+    const bounded = await readAgentExchange({
+      store,
+      sessionId,
+      planId,
+      nowMs,
+    });
+    expect(bounded.requests).toHaveLength(402);
+    expect(bounded.requests[0]?.requestId).toBe(blocker.requestId);
     expect(bounded.requests[1]?.requestId).toBe("0000000000000001");
-    expect(bounded.requests.at(-1)?.requestId).toBe(reply.requestId);
+    expect(bounded.requests.at(-1)?.requestId).toBe(queued.requestId);
     expect(bounded.responses).toEqual([response]);
-    expect(nextPendingAgentRequest(bounded)).toEqual(request);
+    // Without retaining live blockers outside the presentation cap, the queue
+    // offers `queued` while the mailbox still rejects it. That counterfactual
+    // was verified before this test passed.
+    expect(
+      nextPendingAgentRequest(bounded, {
+        claimedBy: "cccc0000cccc0000",
+        nowMs,
+      }),
+    ).toBeUndefined();
+    expect(
+      nextPendingAgentRequest(bounded, {
+        claimedBy: "cccc0000cccc0000",
+        nowMs: (blocker.claimExpiresAtMs ?? nowMs) + 1,
+      }),
+    ).toEqual(queued);
   });
 });

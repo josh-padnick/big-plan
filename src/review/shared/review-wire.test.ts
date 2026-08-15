@@ -101,15 +101,70 @@ describe("review wire contract", () => {
     });
   });
 
-  it("should carry the connector's reported model identity to the browser", () => {
+  it.each([
+    {
+      name: "partial claim",
+      state: { claimExpiresAtMs: 1_775_000_000_000 },
+    },
+    {
+      name: "answer without a claim",
+      state: { answeredAt: "2026-08-10T12:01:00.000Z" },
+    },
+    {
+      name: "two terminal states",
+      state: {
+        answeredAt: "2026-08-10T12:01:00.000Z",
+        canceledAt: "2026-08-10T12:01:01.000Z",
+        baselineSnapshot: "a".repeat(16),
+        claimedAt: "2026-08-10T12:00:30.000Z",
+        claimedBy: "b".repeat(16),
+        claimExpiresAtMs: 1_775_000_000_000,
+      },
+    },
+  ])("should reject a $name at the browser boundary", ({ state }) => {
+    expect(
+      decodeAgentSnapshot({
+        currentSnapshot: "a".repeat(16),
+        presence: { connected: false, state: "waiting" },
+        requests: [
+          {
+            requestId: "1".repeat(16),
+            premiseSnapshot: "a".repeat(16),
+            createdAt: "2026-08-10T12:00:00.000Z",
+            kind: "chat",
+            ...state,
+          },
+        ],
+        responses: [],
+        connectionLog: [],
+        plan: "/tmp/plan.mdx",
+        agentCommand: "big-plan agent /tmp/plan.mdx",
+        recoveryPrompt: "Reconnect this review",
+      }).requests,
+    ).toEqual([]);
+  });
+
+  it("should carry model identity with the claim instead of presence", () => {
     const encoded = encodeAgentSnapshot({
       currentSnapshot: "a".repeat(16),
       presence: {
         connected: true,
         state: "working",
-        model: { name: "Grok 4.6" },
+        model: { name: "Wrong waiting agent" },
       },
-      requests: [],
+      requests: [
+        {
+          requestId: "1".repeat(16),
+          premiseSnapshot: "a".repeat(16),
+          baselineSnapshot: "a".repeat(16),
+          claimedAt: "2026-08-10T12:00:00.000Z",
+          claimedBy: "b".repeat(16),
+          claimedModel: { name: "Grok 4.6" },
+          claimExpiresAtMs: 1_775_000_000_000,
+          createdAt: "2026-08-10T11:59:00.000Z",
+          kind: "chat",
+        },
+      ],
       responses: [],
       connectionLog: [],
       plan: "/tmp/plan.mdx",
@@ -117,17 +172,30 @@ describe("review wire contract", () => {
       recoveryPrompt: "Reconnect this review",
     });
 
-    expect(decodeAgentSnapshot(encoded).presence).toMatchObject({
-      connected: true,
-      model: { name: "Grok 4.6" },
+    const decoded = decodeAgentSnapshot(encoded);
+    expect(decoded.requests[0]).toMatchObject({
+      claimedModel: { name: "Grok 4.6" },
     });
+    expect(decoded.presence).not.toHaveProperty("model");
   });
 
-  it("should degrade to an unknown identity instead of trusting a malformed model", () => {
+  it("should reject a malformed model on a claim", () => {
     const encoded = encodeAgentSnapshot({
       currentSnapshot: "a".repeat(16),
-      presence: { connected: true, state: "working", model: { name: "" } },
-      requests: [],
+      presence: { connected: true, state: "working" },
+      requests: [
+        {
+          requestId: "1".repeat(16),
+          premiseSnapshot: "a".repeat(16),
+          baselineSnapshot: "a".repeat(16),
+          claimedAt: "2026-08-10T12:00:00.000Z",
+          claimedBy: "b".repeat(16),
+          claimedModel: { name: "" },
+          claimExpiresAtMs: 1_775_000_000_000,
+          createdAt: "2026-08-10T11:59:00.000Z",
+          kind: "chat",
+        },
+      ],
       responses: [],
       connectionLog: [],
       plan: "/tmp/plan.mdx",
@@ -135,7 +203,7 @@ describe("review wire contract", () => {
       recoveryPrompt: "Reconnect this review",
     });
 
-    expect(decodeAgentSnapshot(encoded).presence).not.toHaveProperty("model");
+    expect(decodeAgentSnapshot(encoded).requests).toEqual([]);
   });
 
   it("should round-trip per-side presentation facts through a snapshot diff", () => {

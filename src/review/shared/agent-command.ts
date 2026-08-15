@@ -24,6 +24,41 @@ export const agentNextCommand = ({
 }): string =>
   `node ${quoteShellArgument(executablePath)} agent next ${quoteShellArgument(planPath)} --wait`;
 
+export const AGENT_NOTE_INITIAL_PROGRESS = "Working on the request";
+
+/**
+ * Narrates progress and renews the claim taken at pickup.
+ *
+ * The agent token is minted per pickup and must be handed back, because it is
+ * the only thing that distinguishes two agent processes attached to one review
+ * session. Callers never compose this string themselves; `agent next` returns
+ * it ready to run so the token cannot be dropped or mistyped.
+ */
+export const agentNoteCommand = ({
+  executablePath,
+  planPath,
+  agentToken,
+}: {
+  readonly executablePath: string;
+  readonly planPath: string;
+  readonly agentToken: string;
+}): string =>
+  `node ${quoteShellArgument(executablePath)} agent note ${quoteShellArgument(planPath)} ${quoteShellArgument(AGENT_NOTE_INITIAL_PROGRESS)} --agent ${agentToken}`;
+
+/** Publishes the drafted response under the claim taken at pickup. */
+export const agentRespondCommand = ({
+  executablePath,
+  planPath,
+  responsePath,
+  agentToken,
+}: {
+  readonly executablePath: string;
+  readonly planPath: string;
+  readonly responsePath: string;
+  readonly agentToken: string;
+}): string =>
+  `node ${quoteShellArgument(executablePath)} agent respond ${quoteShellArgument(planPath)} ${quoteShellArgument(responsePath)} --agent ${agentToken}`;
+
 export const agentRecoveryPrompt = ({
   executablePath,
   planPath,

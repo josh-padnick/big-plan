@@ -77,6 +77,13 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
 
     const claim = await runAgentCli(["next", planPath, "--wait"]);
     expect(claim.stdout).toContain("pending: true");
+    // Pickup mints the token that proves this process holds the request; the
+    // agent hands it back on every later command, as the returned
+    // note_command and respond_command do.
+    const agentToken = /agent_token: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
+    if (agentToken === undefined) {
+      throw new Error("The real agent CLI did not return a claim token");
+    }
     const exchange = await readAgentExchange({
       store: runtime.store,
       sessionId: runtime.sessionId,
@@ -126,7 +133,13 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
       }),
       "utf8",
     );
-    const response = await runAgentCli(["respond", planPath, responsePath]);
+    const response = await runAgentCli([
+      "respond",
+      planPath,
+      responsePath,
+      "--agent",
+      agentToken,
+    ]);
     expect(response.stdout).toContain(`responded: ${request.requestId}`);
 
     await page.reload();

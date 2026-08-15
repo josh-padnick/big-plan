@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./comment.js";
+import { AGENT_CLAIM_LEASE_MS } from "./agent-claim.js";
 import {
   projectCommentThread,
   projectConversationHistory,
   projectLatestAgentStatus,
+  projectRequestDelivery,
   projectRequestStatus,
   queuedRequestsAhead,
   requestCommentIds,
+  selectActiveFeedbackBatch,
   type ThreadRequest,
   type ThreadResponse,
 } from "./thread-projection.js";
@@ -24,6 +27,11 @@ const presence = {
   state: "waiting" as const,
   updatedAtMs: NOW,
 };
+const liveClaim = (atMs = NOW) => ({
+  claimedAt: new Date(atMs).toISOString(),
+  claimedBy: "aaaa0000aaaa0000",
+  claimExpiresAtMs: atMs + AGENT_CLAIM_LEASE_MS,
+});
 const request = (overrides: Partial<ThreadRequest> = {}): ThreadRequest => ({
   requestId: "aaaaaaaaaaaaaaaa",
   premiseSnapshot: "1111111111111111",
@@ -32,6 +40,14 @@ const request = (overrides: Partial<ThreadRequest> = {}): ThreadRequest => ({
   commentIds: [comment.id],
   ...overrides,
 });
+const answeredRequest = (
+  overrides: Partial<ThreadRequest> = {},
+): ThreadRequest =>
+  request({
+    ...liveClaim(NOW - 1_000),
+    answeredAt: new Date(NOW).toISOString(),
+    ...overrides,
+  });
 const response = (
   state: "answered" | "changed" | "warning" | "needs-input" | "declined",
 ): ThreadResponse => ({
@@ -74,7 +90,7 @@ describe("thread projection", () => {
     expect(
       projectCommentThread({
         ...base,
-        requests: [request({ claimedAt: new Date(NOW).toISOString() })],
+        requests: [request(liveClaim())],
         progressEvents: [
           {
             requestId: "aaaaaaaaaaaaaaaa",
@@ -90,21 +106,21 @@ describe("thread projection", () => {
     expect(
       projectCommentThread({
         ...base,
-        requests: [request()],
+        requests: [answeredRequest()],
         responses: [response("needs-input")],
       }).group,
     ).toBe("needs-input");
     expect(
       projectCommentThread({
         ...base,
-        requests: [request()],
+        requests: [answeredRequest()],
         responses: [response("warning")],
       }).group,
     ).toBe("needs-input");
     expect(
       projectCommentThread({
         ...base,
-        requests: [request()],
+        requests: [answeredRequest()],
         responses: [response("changed")],
       }).group,
     ).toBe("ready");
@@ -146,8 +162,16 @@ describe("thread projection", () => {
         ...base,
         requests: [canceled],
         responses: [],
-      }).canDeleteCanceled,
-    ).toBe(true);
+      }),
+    ).toMatchObject({
+      group: "ready",
+      latestCanceled: true,
+      latestStatus: {
+        label: "Canceled",
+        headline: "Request canceled",
+      },
+      canDeleteCanceled: true,
+    });
 
     const canceledReply = request({
       requestId: "cccccccccccccccc",
@@ -160,7 +184,7 @@ describe("thread projection", () => {
     expect(
       projectCommentThread({
         ...base,
-        requests: [request(), canceledReply],
+        requests: [answeredRequest(), canceledReply],
         responses: [response("changed")],
       }),
     ).toMatchObject({
@@ -202,7 +226,7 @@ describe("thread projection", () => {
       commentId: comment.id,
       commentIds: undefined,
       createdAt: "2026-08-10T19:03:00Z",
-      claimedAt: "2026-08-10T19:03:30Z",
+      ...liveClaim(Date.parse("2026-08-10T19:03:30Z")),
     });
     expect(
       projectCommentThread({
@@ -309,11 +333,115 @@ describe("thread projection", () => {
     });
   });
 
-  it("should derive one request status from progress and presence", () => {
+  it("should not offer queued deletion after an earlier pickup", () => {
+    const expiredClaim = liveClaim(NOW - AGENT_CLAIM_LEASE_MS - 1);
+    const projection = projectCommentThread({
+      comment,
+      requests: [request(expiredClaim)],
+      responses: [],
+      progressEvents: [],
+      presence,
+      runtime: "online",
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set(),
+    });
+    expect(projection).toMatchObject({
+      group: "queued",
+      canDeleteQueued: false,
+    });
+    expect(projection.latestExchange).toMatchObject({ delivery: "Queued" });
+    expect(
+      projectRequestDelivery({
+        request: request(liveClaim()),
+        nowMs: NOW,
+      }),
+    ).toBe("Sent");
+    expect(
+      projectRequestDelivery({
+        request: request({
+          ...expiredClaim,
+          answeredAt: "2026-08-10T20:00:01Z",
+        }),
+        nowMs: NOW,
+      }),
+    ).toBe("Sent");
+  });
+
+  it("should exclude terminal feedback from the active batch", () => {
+    const pending = request({
+      commentIds: [comment.id, "cccccccccccccccc"],
+    });
+    const answered = request({
+      commentIds: [comment.id, "cccccccccccccccc"],
+      ...liveClaim(),
+      answeredAt: "2026-08-10T20:00:01Z",
+    });
+    expect(
+      selectActiveFeedbackBatch({
+        requests: [pending],
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toBe(pending);
+    expect(
+      selectActiveFeedbackBatch({
+        requests: [answered],
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toBeUndefined();
+  });
+
+  it.each(["thread", "chat"] as const)(
+    "should treat an answered %s request as terminal without its response",
+    (surface) => {
+      const answered = request({
+        ...liveClaim(),
+        answeredAt: "2026-08-10T20:00:01Z",
+      });
+      expect(
+        projectRequestStatus({
+          request: answered,
+          progressEvents: [],
+          presence,
+          runtime: "online",
+          surface,
+          nowMs: NOW,
+          cancelPendingRequestIds: new Set(),
+        }),
+      ).toMatchObject({
+        stage: "answered",
+        headline: "The agent has answered",
+      });
+    },
+  );
+
+  it("should keep an answered thread out of the queued group without its response", () => {
+    expect(
+      projectCommentThread({
+        comment,
+        requests: [
+          request({
+            ...liveClaim(),
+            answeredAt: "2026-08-10T20:00:01Z",
+          }),
+        ],
+        responses: [],
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({
+      group: "ready",
+      latestPending: false,
+      canDeleteQueued: false,
+    });
+  });
+
+  it("should derive one request status from its live claim", () => {
     expect(
       projectRequestStatus({
-        request: request({ claimedAt: new Date(NOW).toISOString() }),
-        response: undefined,
+        request: request(liveClaim()),
         progressEvents: [
           {
             requestId: "aaaaaaaaaaaaaaaa",
@@ -357,11 +485,46 @@ describe("thread projection", () => {
     ).toMatchObject({ stage: "waiting", tone: "neutral" });
   });
 
-  it("should ignore an invalid claimed timestamp when valid activity exists", () => {
+  it("should not report a request as picked up from progress events alone", () => {
     expect(
       projectRequestStatus({
-        request: request({ claimedAt: "not-a-timestamp" }),
-        response: undefined,
+        request: request(),
+        progressEvents: [
+          {
+            requestId: "aaaaaaaaaaaaaaaa",
+            seq: 1,
+            step: "Checking the retry state",
+            state: "live",
+            atMs: NOW,
+          },
+        ],
+        presence: { ...presence, state: "working" },
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }).stage,
+    ).toBe("waiting");
+  });
+
+  it("should stop reporting a request as picked up once its lease lapses", () => {
+    expect(
+      projectRequestStatus({
+        request: request(liveClaim()),
+        progressEvents: [],
+        presence: { ...presence, state: "working" },
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW + AGENT_CLAIM_LEASE_MS + 1,
+        cancelPendingRequestIds: new Set(),
+      }).stage,
+    ).toBe("waiting");
+  });
+
+  it("should ignore an invalid claimed timestamp when its lease is live", () => {
+    expect(
+      projectRequestStatus({
+        request: request({ ...liveClaim(), claimedAt: "not-a-timestamp" }),
         progressEvents: [
           {
             requestId: "aaaaaaaaaaaaaaaa",
@@ -380,11 +543,56 @@ describe("thread projection", () => {
       }).stage,
     ).toBe("working");
   });
+
+  it("should derive work recency from the renewed claim", () => {
+    expect(
+      projectRequestStatus({
+        request: request({
+          claimedAt: new Date(NOW - AGENT_CLAIM_LEASE_MS * 2).toISOString(),
+          claimedBy: "aaaa0000aaaa0000",
+          claimExpiresAtMs: NOW + AGENT_CLAIM_LEASE_MS,
+        }),
+        progressEvents: [],
+        presence: {
+          connected: false,
+          state: "working",
+          requestId: "aaaaaaaaaaaaaaaa",
+          updatedAtMs: NOW - AGENT_CLAIM_LEASE_MS - 1,
+        },
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({ stage: "working" });
+  });
+
+  it("should not treat terminal heartbeat work as session busy", () => {
+    expect(
+      projectRequestStatus({
+        request: request(),
+        progressEvents: [],
+        presence: {
+          connected: true,
+          state: "working",
+          requestId: "bbbbbbbbbbbbbbbb",
+          updatedAtMs: NOW,
+        },
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({
+      stage: "waiting",
+      headline: "Waiting for an agent",
+    });
+  });
 });
 
 describe("conversation history", () => {
   it("should project prior chat turns", () => {
-    const earlier = request({
+    const earlier = answeredRequest({
       requestId: "1111111111111111",
       kind: "chat",
       body: "What changes?",
@@ -427,7 +635,7 @@ describe("conversation history", () => {
   });
 
   it("should project the original comment before a thread reply", () => {
-    const original = request({
+    const original = answeredRequest({
       comments: [comment],
       commentIds: undefined,
       createdAt: "2026-08-10T18:00:00Z",
@@ -494,7 +702,7 @@ describe("review-wide agent status", () => {
   });
 
   it("should report working once the agent owns the message", () => {
-    const claimed = request({ claimedAt: new Date(NOW).toISOString() });
+    const claimed = request(liveClaim());
     expect(
       projectLatestAgentStatus({
         ...base,

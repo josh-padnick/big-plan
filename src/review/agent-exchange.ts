@@ -6,6 +6,11 @@
 import { createHash } from "node:crypto";
 import type { CommentTarget, ReviewComment } from "./shared/comment.js";
 import { QUOTE_LIMIT } from "./shared/comment.js";
+import { claimIsHeldByAnother, claimIsLive } from "./shared/agent-claim.js";
+import {
+  requestIsTerminal,
+  type TerminalAgentRequest,
+} from "./shared/agent-request-state.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
   readAgentRequestValues,
@@ -20,6 +25,10 @@ import {
   isReviewImageWithinLimits,
   type ReviewImageAttachment,
 } from "./shared/review-image.js";
+import {
+  decodeAgentModelIdentity,
+  type AgentModelIdentity,
+} from "./shared/agent-model.js";
 import { agentOwnsRequest } from "./shared/request-ownership.js";
 import { requestIsOutstanding } from "./shared/request-lifecycle.js";
 
@@ -33,7 +42,7 @@ const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
 export type AgentOutcomeState =
   "answered" | "changed" | "warning" | "needs-input" | "declined";
 
-type AgentRequestBase = {
+type AgentRequestBase = TerminalAgentRequest & {
   readonly version: 2;
   readonly requestId: string;
   readonly sessionId: string;
@@ -42,7 +51,9 @@ type AgentRequestBase = {
   readonly createdAt: string;
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
-  readonly canceledAt?: string;
+  readonly claimedBy?: string;
+  readonly claimedModel?: AgentModelIdentity;
+  readonly claimExpiresAtMs?: number;
   readonly attachmentManifest: ReadonlyArray<ReviewImageAttachment>;
   readonly attachments: ReadonlyArray<ReviewImageAttachment>;
 };
@@ -161,6 +172,15 @@ const timestamp = (value: unknown): string => {
     throw new AgentExchangeRejected('"createdAt" must be an ISO timestamp');
   }
   return new Date(value).toISOString();
+};
+
+const epochMilliseconds = (value: unknown, field: string): number => {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new AgentExchangeRejected(
+      `"${field}" must be a positive epoch millisecond count`,
+    );
+  }
+  return value;
 };
 
 const snapshotDigest = (value: unknown, field: string): string => {
@@ -401,12 +421,53 @@ const requestBase = (
       : snapshotDigest(rawBaselineSnapshot, "baselineSnapshot");
   const claimedAt =
     value.claimedAt === undefined ? undefined : timestamp(value.claimedAt);
+  const claimedBy =
+    value.claimedBy === undefined
+      ? undefined
+      : id(value.claimedBy, "claimedBy");
+  const claimedModel =
+    value.claimedModel === undefined
+      ? undefined
+      : decodeAgentModelIdentity(value.claimedModel);
+  if (value.claimedModel !== undefined && claimedModel === undefined) {
+    throw new AgentExchangeRejected(
+      '"claimedModel" must contain a non-empty model name of at most 80 characters',
+    );
+  }
+  const claimExpiresAtMs =
+    value.claimExpiresAtMs === undefined
+      ? undefined
+      : epochMilliseconds(value.claimExpiresAtMs, "claimExpiresAtMs");
+  const answeredAt =
+    value.answeredAt === undefined ? undefined : timestamp(value.answeredAt);
   const canceledAt =
     value.canceledAt === undefined ? undefined : timestamp(value.canceledAt);
-  if ((baselineSnapshot === undefined) !== (claimedAt === undefined)) {
+  if (answeredAt !== undefined && canceledAt !== undefined) {
     throw new AgentExchangeRejected(
-      '"baselineSnapshot" and "claimedAt" must appear together',
+      "A request cannot be both answered and canceled",
     );
+  }
+  const claimFields = [
+    baselineSnapshot,
+    claimedAt,
+    claimedBy,
+    claimExpiresAtMs,
+  ];
+  if (
+    claimFields.some((field) => field !== undefined) !==
+    claimFields.every((field) => field !== undefined)
+  ) {
+    throw new AgentExchangeRejected(
+      '"baselineSnapshot", "claimedAt", "claimedBy", and "claimExpiresAtMs" must appear together',
+    );
+  }
+  if (answeredAt !== undefined && baselineSnapshot === undefined) {
+    throw new AgentExchangeRejected(
+      "An answered request must carry a complete claim",
+    );
+  }
+  if (claimedModel !== undefined && baselineSnapshot === undefined) {
+    throw new AgentExchangeRejected('"claimedModel" requires a complete claim');
   }
   const requestAttachments = validateRequestAttachments({
     attachmentManifest: value.attachmentManifest,
@@ -423,7 +484,16 @@ const requestBase = (
       legacyField: "sourceRevision",
     }),
     createdAt: timestamp(value.createdAt),
-    ...(baselineSnapshot === undefined ? {} : { baselineSnapshot, claimedAt }),
+    ...(baselineSnapshot === undefined
+      ? {}
+      : {
+          baselineSnapshot,
+          claimedAt,
+          claimedBy,
+          claimExpiresAtMs,
+          ...(claimedModel === undefined ? {} : { claimedModel }),
+        }),
+    ...(answeredAt === undefined ? {} : { answeredAt }),
     ...(canceledAt === undefined ? {} : { canceledAt }),
     ...requestAttachments,
   };
@@ -674,6 +744,11 @@ const validateStoredResponse = ({
   readonly request: AgentRequest;
   readonly commentsById: ReadonlyMap<string, ReviewComment>;
 }): AgentResponse => {
+  if (request.answeredAt === undefined) {
+    throw new AgentExchangeRejected(
+      "A stored agent response has not reached its terminal commit",
+    );
+  }
   if (!agentOwnsRequest(request) || request.baselineSnapshot === undefined) {
     throw new AgentExchangeRejected(
       "A stored agent response cannot answer an unclaimed request",
@@ -776,7 +851,7 @@ const commentsFromRequests = (
   return comments;
 };
 
-const readAcceptedAgentRequests = async ({
+export const readValidatedAgentRequests = async ({
   store,
   sessionId,
   planId,
@@ -836,7 +911,7 @@ const readCompleteAgentExchange = async ({
     readonly answeredRequestIds: ReadonlySet<string>;
   }) => ReadonlySet<string>;
 }): Promise<AgentExchangeSnapshot> => {
-  const requests = await readAcceptedAgentRequests({
+  const requests = await readValidatedAgentRequests({
     store,
     sessionId,
     planId,
@@ -857,7 +932,11 @@ const readCompleteAgentExchange = async ({
   const responseRequestIds = new Set<string>();
   const readable = retainedRequests
     .map((request) => request.requestId)
-    .filter((requestId) => answeredRequestIds.has(requestId));
+    .filter(
+      (requestId) =>
+        answeredRequestIds.has(requestId) &&
+        requestById.get(requestId)?.answeredAt !== undefined,
+    );
   for (const value of await readAgentResponseValuesFor({
     store,
     requestIds: readable,
@@ -888,7 +967,9 @@ export const outstandingAgentRequests = (
   snapshot: AgentExchangeSnapshot,
 ): ReadonlyArray<AgentRequest> => {
   const answered = new Set(
-    snapshot.responses.map((response) => response.requestId),
+    snapshot.requests
+      .filter((request) => request.answeredAt !== undefined)
+      .map((request) => request.requestId),
   );
   const cancelPendingRequestIds = new Set<string>();
   return snapshot.requests.filter((request) =>
@@ -899,6 +980,9 @@ export const outstandingAgentRequests = (
     }),
   );
 };
+
+/** True once a request has had its one terminal write. */
+export { requestIsTerminal };
 
 /** A source digest shared by request creation, response validation, and polling. */
 export const deriveSnapshotDigest = (source: string): string =>
@@ -987,6 +1071,21 @@ export const writeAgentRequest = async ({
 };
 
 /**
+ * A plan-wide pickup block releases only when its writer is provably gone.
+ * An answer proves the agent finished, but cancellation is a reviewer action
+ * the agent may not see until its next note or response, so a canceled live
+ * claim keeps blocking new work until its lease lapses.
+ */
+export const requestBlocksPlanPickup = ({
+  request,
+  nowMs,
+}: {
+  readonly request: AgentRequest;
+  readonly nowMs: number;
+}): boolean =>
+  request.answeredAt === undefined && claimIsLive({ request, nowMs });
+
+/**
  * Reads the whole plan exchange through the contract. A review-server restart
  * creates a new transport session, but the plan identity continues to own its
  * threads and outcomes. Invalid, foreign-plan, duplicate, and orphaned files
@@ -996,34 +1095,29 @@ export const readAgentExchange = async ({
   store,
   sessionId,
   planId,
+  nowMs = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly planId: string;
+  readonly nowMs?: number;
 }): Promise<AgentExchangeSnapshot> => {
   const complete = await readCompleteAgentExchange({
     store,
     sessionId,
     planId,
-    // Cancellation or any response file is the only terminal signal available
-    // before response validation. Every request with neither is retained. An
-    // invalid response inside the window is later ignored; an older one can age
-    // out with terminal history rather than appear outstanding indefinitely.
-    retain: ({ requests, answeredRequestIds }) => {
-      const pending = requests.filter(
-        (request) =>
-          request.canceledAt === undefined &&
-          !answeredRequestIds.has(request.requestId),
-      );
+    retain: ({ requests }) => {
+      const pending = requests.filter((request) => !requestIsTerminal(request));
       const terminal = requests
-        .filter(
-          (request) =>
-            request.canceledAt !== undefined ||
-            answeredRequestIds.has(request.requestId),
-        )
+        .filter((request) => requestIsTerminal(request))
         .slice(-EXCHANGE_LIMIT);
+      const pickupBlockers = requests.filter((request) =>
+        requestBlocksPlanPickup({ request, nowMs }),
+      );
       return new Set(
-        [...pending, ...terminal].map((request) => request.requestId),
+        [...pending, ...terminal, ...pickupBlockers].map(
+          (request) => request.requestId,
+        ),
       );
     },
   });
@@ -1034,8 +1128,13 @@ export const readAgentExchange = async ({
   const terminal = complete.requests
     .filter((request) => !pendingRequestIds.has(request.requestId))
     .slice(-EXCHANGE_LIMIT);
+  const pickupBlockers = complete.requests.filter((request) =>
+    requestBlocksPlanPickup({ request, nowMs }),
+  );
   const retainedRequestIds = new Set(
-    [...pending, ...terminal].map((request) => request.requestId),
+    [...pending, ...terminal, ...pickupBlockers].map(
+      (request) => request.requestId,
+    ),
   );
   const requests = complete.requests.filter((request) =>
     retainedRequestIds.has(request.requestId),
@@ -1089,7 +1188,7 @@ export const readValidatedAgentResponse = async ({
   readonly store: ReviewStore;
   readonly request: AgentRequest;
 }): Promise<AgentResponse | undefined> => {
-  const requests = await readAcceptedAgentRequests({
+  const requests = await readValidatedAgentRequests({
     store,
     sessionId: request.sessionId,
     planId: request.planId,
@@ -1108,10 +1207,29 @@ export const readValidatedAgentResponse = async ({
   }
 };
 
-/** Returns the oldest request the agent still owes an answer. */
+/**
+ * Returns the oldest request available for a new plan-wide claim.
+ */
 export const nextPendingAgentRequest = (
   snapshot: AgentExchangeSnapshot,
-): AgentRequest | undefined => outstandingAgentRequests(snapshot)[0];
+  viewer: { readonly claimedBy: string; readonly nowMs: number },
+): AgentRequest | undefined => {
+  if (
+    snapshot.requests.some((request) =>
+      requestBlocksPlanPickup({ request, nowMs: viewer.nowMs }),
+    )
+  ) {
+    return undefined;
+  }
+  return outstandingAgentRequests(snapshot).find(
+    (request) =>
+      !claimIsHeldByAnother({
+        request,
+        claimedBy: viewer.claimedBy,
+        nowMs: viewer.nowMs,
+      }),
+  );
+};
 
 /** Collects the original comments needed to validate a reply response. */
 export const commentsFromExchange = (

@@ -42,7 +42,7 @@ describe("review poll health", () => {
     expect(
       deriveCurrentAgentActivity({
         requests: [],
-        responseRequestIds: new Set(),
+        cancelPendingRequestIds: new Set(),
         progressEvents: [],
         agentConnected: true,
         runtimeOffline: false,

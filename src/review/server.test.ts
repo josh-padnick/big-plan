@@ -31,7 +31,7 @@ import {
 import {
   appendProgressEvent,
   claimAgentRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
 } from "./request-mailbox.js";
 import { materializeReviewImages } from "./plan-assets.js";
 import {
@@ -39,7 +39,10 @@ import {
   startReviewRuntime,
 } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { reviewSessionIsRunning } from "./session-authority.js";
+import {
+  reviewSessionIsRunning,
+  stopReviewSessionIfInactive,
+} from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
 import { validateResolvedCommentIds } from "./shared/comment.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
@@ -846,7 +849,12 @@ describe("review runtime feedback", () => {
       sessionId: runtime.sessionId,
       planId: runtime.planId,
     });
-    expect(nextPendingAgentRequest(exchange)).toMatchObject({
+    expect(
+      nextPendingAgentRequest(exchange, {
+        claimedBy: runtime.sessionId,
+        nowMs: Date.now(),
+      }),
+    ).toMatchObject({
       kind: "feedback",
       comments: [{ id: "55667788" }],
     });
@@ -1048,7 +1056,9 @@ describe("review runtime feedback", () => {
       const claimedAt = new Date().toISOString();
       await claimAgentRequest({
         store: isolated.store,
+        activeSessionId: isolated.sessionId,
         requestId: created.requestId,
+        claimedBy: isolated.sessionId,
         baselineSnapshot: created.premiseSnapshot,
         now: claimedAt,
       });
@@ -1074,6 +1084,74 @@ describe("review runtime feedback", () => {
         await readdir(isolated.store.feedbackSubmissionDirectory),
       ).toHaveLength(1);
       expect(await readdir(isolated.store.feedbackDirectory)).toHaveLength(2);
+    } finally {
+      await isolated.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should never create an agent request without its feedback package", async () => {
+    // The queue must not learn about work whose package the reviewer's own
+    // record does not yet hold. Package and snapshot are written before the
+    // request, so a failure there leaves nothing half-created for an agent to
+    // pick up. This pins that order against a future reshuffle.
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-package-first-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const isolated = await startReviewRuntime({ planPath });
+    try {
+      const descriptor: unknown = JSON.parse(
+        await readFile(isolated.store.sessionPath, "utf8"),
+      );
+      const isolatedToken =
+        typeof descriptor === "object" &&
+        descriptor !== null &&
+        "token" in descriptor &&
+        typeof descriptor.token === "string"
+          ? descriptor.token
+          : "";
+
+      // Blocks the package write the way the resume test blocks the sent
+      // comments: the directory cannot hold the files the package needs.
+      await rm(isolated.store.feedbackDirectory, {
+        recursive: true,
+        force: true,
+      });
+      await writeFile(isolated.store.feedbackDirectory, "not a directory");
+
+      const sent = await fetch(`${isolated.url}api/feedback`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-big-plan-review-token": isolatedToken,
+          "sec-fetch-site": "same-origin",
+          origin: isolated.url.replace(/\/$/, ""),
+        },
+        body: JSON.stringify({
+          comments: [
+            {
+              id: "ab12cd34",
+              body: "This must not reach the queue without its package.",
+              premiseSnapshot: PLAN_SNAPSHOT,
+              target: { type: "document" },
+            },
+          ],
+        }),
+      });
+      expect(sent.status).toBe(500);
+
+      const exchange = await readAgentExchange({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+      });
+      expect(
+        exchange.requests.filter(
+          (request) =>
+            request.kind === "feedback" &&
+            request.comments.some((comment) => comment.id === "ab12cd34"),
+        ),
+      ).toHaveLength(0);
     } finally {
       await isolated.close();
       await rm(directory, { recursive: true, force: true });
@@ -1664,7 +1742,9 @@ The dashboard shows the retry backlog.
       if (request === undefined) throw new Error("Feedback was not queued");
       const claimed = await claimAgentRequest({
         store: isolated.store,
+        activeSessionId: isolated.sessionId,
         requestId: request.requestId,
+        claimedBy: isolated.sessionId,
         baselineSnapshot: request.premiseSnapshot,
         now: new Date().toISOString(),
       });
@@ -1675,7 +1755,8 @@ The dashboard shows the retry backlog.
         snapshot: resultSnapshot,
         source: revised,
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
+        claimedBy: isolated.sessionId,
         store: isolated.store,
         response: validateAgentResponseDraft({
           value: {
@@ -1695,6 +1776,7 @@ The dashboard shows the retry backlog.
           currentSnapshot: resultSnapshot,
           now: new Date().toISOString(),
         }),
+        now: new Date().toISOString(),
       });
 
       const reverted = await isolatedCall({
@@ -1769,11 +1851,14 @@ The dashboard shows the retry backlog.
       throw new Error("The feedback request was not stored");
     const claimed = await claimAgentRequest({
       store: runtime.store,
+      activeSessionId: runtime.sessionId,
       requestId: request.requestId,
+      claimedBy: runtime.sessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
+      claimedBy: runtime.sessionId,
       store: runtime.store,
       response: validateAgentResponseDraft({
         value: {
@@ -1792,6 +1877,7 @@ The dashboard shows the retry backlog.
         currentSnapshot: request.premiseSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
     const answeredAt = Date.parse(request.createdAt);
     for (let index = 0; index < 400; index += 1) {
@@ -2035,6 +2121,96 @@ describe("review runtime resolve invariant", () => {
 });
 
 describe("review runtime shutdown", () => {
+  it("should refuse a mutation queued behind committed idle shutdown", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-idle-write-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 0,
+    });
+    const descriptor: unknown = JSON.parse(
+      await readFile(review.store.sessionPath, "utf8"),
+    );
+    const sessionToken =
+      typeof descriptor === "object" &&
+      descriptor !== null &&
+      "token" in descriptor &&
+      typeof descriptor.token === "string"
+        ? descriptor.token
+        : "";
+    let enterStop = (): void => undefined;
+    const stopEntered = new Promise<void>((settle) => {
+      enterStop = settle;
+    });
+    let releaseStop = (): void => undefined;
+    const stopReleased = new Promise<void>((settle) => {
+      releaseStop = settle;
+    });
+    const stopping = stopReviewSessionIfInactive({
+      store: review.store,
+      sessionId: review.sessionId,
+      stopReason: "Idle",
+      inactive: async () => {
+        enterStop();
+        await stopReleased;
+        return true;
+      },
+    });
+    await stopEntered;
+    const mutation = fetch(`${review.url}api/agent-requests`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": sessionToken,
+        "sec-fetch-site": "same-origin",
+        origin: review.url.replace(/\/$/u, ""),
+      },
+      body: JSON.stringify({
+        kind: "chat",
+        body: "Do not acknowledge this after shutdown.",
+      }),
+    });
+    try {
+      const mutationWaited = await Promise.race([
+        mutation.then(() => false),
+        new Promise<true>((settle) => setTimeout(() => settle(true), 20)),
+      ]);
+      expect(mutationWaited).toBe(true);
+      releaseStop();
+      await expect(stopping).resolves.toEqual({
+        authoritative: true,
+        stopped: true,
+      });
+      // Without the in-lock heartbeat check, this already-waiting POST returns
+      // 200 and writes its request after running:false commits. That
+      // counterfactual was verified before this test passed.
+      const response = await mutation;
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toEqual({
+        error:
+          "This review session has stopped and can no longer accept changes",
+      });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(
+        exchange.requests.some(
+          (request) =>
+            request.kind === "chat" &&
+            request.body === "Do not acknowledge this after shutdown.",
+        ),
+      ).toBe(false);
+    } finally {
+      releaseStop();
+      await stopping;
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should not replace durable review state when reopening a diff preview", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-preview-reopen-"));
     const planPath = join(directory, "plan.mdx");
@@ -2116,11 +2292,14 @@ describe("review runtime shutdown", () => {
     await writeAgentRequest({ store: first.store, request: oldRequest });
     const oldClaim = await claimAgentRequest({
       store: first.store,
+      activeSessionId: first.sessionId,
       requestId: oldRequest.requestId,
+      claimedBy: first.sessionId,
       baselineSnapshot: oldRevision,
       now: "2026-08-10T12:00:01.000Z",
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
+      claimedBy: first.sessionId,
       store: first.store,
       response: validateAgentResponseDraft({
         value: { requestId: oldRequest.requestId, message: "The old answer." },
@@ -2130,6 +2309,7 @@ describe("review runtime shutdown", () => {
         currentSnapshot: oldRevision,
         now: "2026-08-10T12:00:02.000Z",
       }),
+      now: "2026-08-10T12:00:02.000Z",
     });
     await first.close();
 
@@ -2158,13 +2338,16 @@ describe("review runtime shutdown", () => {
       await writeAgentRequest({ store: restarted.store, request: newRequest });
       const newClaim = await claimAgentRequest({
         store: restarted.store,
+        activeSessionId: restarted.sessionId,
         requestId: newRequest.requestId,
+        claimedBy: restarted.sessionId,
         baselineSnapshot: newRequest.premiseSnapshot,
         now: "2026-08-10T12:01:01.000Z",
       });
       const acceptedSource = `${restartedSource}\nThe agent accepted this revision.\n`;
       await writeFile(planPath, acceptedSource);
-      await publishAgentResponse({
+      await commitRequestTerminal({
+        claimedBy: restarted.sessionId,
         store: restarted.store,
         response: validateAgentResponseDraft({
           value: {
@@ -2177,6 +2360,7 @@ describe("review runtime shutdown", () => {
           currentSnapshot: deriveSnapshotDigest(acceptedSource),
           now: "2026-08-10T12:01:02.000Z",
         }),
+        now: "2026-08-10T12:01:02.000Z",
       });
       await expect(agentState()).resolves.toMatchObject({
         currentSnapshot: deriveSnapshotDigest(acceptedSource),
@@ -2618,7 +2802,9 @@ describe("review runtime queued messages", () => {
     if (first === undefined) throw new Error("The first message was lost");
     const claimed = await claimAgentRequest({
       store: queued.store,
+      activeSessionId: queued.sessionId,
       requestId: firstId,
+      claimedBy: queued.sessionId,
       baselineSnapshot: first.premiseSnapshot,
       now: new Date().toISOString(),
     });
@@ -2632,9 +2818,14 @@ describe("review runtime queued messages", () => {
       kind: "chat",
       body: "And what happens on the third retry?",
     });
-    expect(nextPendingAgentRequest(busy)?.requestId).toBe(firstId);
+    expect(
+      nextPendingAgentRequest(busy, {
+        claimedBy: queued.sessionId,
+        nowMs: Date.now(),
+      }),
+    ).toBeUndefined();
 
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store: queued.store,
       response: validateAgentResponseDraft({
         value: { requestId: firstId, message: "Three attempts, then stop." },
@@ -2644,11 +2835,16 @@ describe("review runtime queued messages", () => {
         currentSnapshot: claimed.premiseSnapshot,
         now: new Date().toISOString(),
       }),
+      claimedBy: queued.sessionId,
+      now: new Date().toISOString(),
     });
 
-    expect(nextPendingAgentRequest(await exchangeNow())?.requestId).toBe(
-      secondId,
-    );
+    expect(
+      nextPendingAgentRequest(await exchangeNow(), {
+        claimedBy: queued.sessionId,
+        nowMs: Date.now(),
+      })?.requestId,
+    ).toBe(secondId);
   });
 
   it("should revise a queued message without creating another one", async () => {
@@ -2685,11 +2881,15 @@ describe("review runtime queued messages", () => {
     const requestId = await sendChat("Waht about the timeout?");
     const request = await storedRequest(requestId);
     if (request === undefined) throw new Error("The message was lost");
-    await claimAgentRequest({
+    const expiredClaimAt = Date.now() - 100_000;
+    const claimed = await claimAgentRequest({
       store: queued.store,
+      activeSessionId: queued.sessionId,
       requestId,
+      claimedBy: queued.sessionId,
       baselineSnapshot: request.premiseSnapshot,
-      now: new Date().toISOString(),
+      now: new Date(expiredClaimAt).toISOString(),
+      clock: () => expiredClaimAt,
     });
 
     const response = await ask({
@@ -2703,6 +2903,20 @@ describe("review runtime queued messages", () => {
     });
     expect(await storedRequest(requestId)).toMatchObject({
       body: "Waht about the timeout?",
+    });
+    await commitRequestTerminal({
+      store: queued.store,
+      response: validateAgentResponseDraft({
+        value: { requestId, message: "Answered after revision was refused." },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: claimed.premiseSnapshot,
+        now: new Date(expiredClaimAt + 1).toISOString(),
+      }),
+      claimedBy: queued.sessionId,
+      now: new Date(expiredClaimAt + 1).toISOString(),
+      clock: () => expiredClaimAt + 1,
     });
   });
 
@@ -2869,11 +3083,15 @@ describe("review runtime queued messages", () => {
     const requestId = await sendChat("Keep this one after all.");
     const request = await storedRequest(requestId);
     if (request === undefined) throw new Error("The message was lost");
+    const expiredClaimAt = Date.now() - 100_000;
     await claimAgentRequest({
       store: queued.store,
+      activeSessionId: queued.sessionId,
       requestId,
+      claimedBy: queued.sessionId,
       baselineSnapshot: request.premiseSnapshot,
-      now: new Date().toISOString(),
+      now: new Date(expiredClaimAt).toISOString(),
+      clock: () => expiredClaimAt,
     });
 
     const response = await ask({

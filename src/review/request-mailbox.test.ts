@@ -21,7 +21,10 @@ import {
   deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
+  nextPendingAgentRequest,
+  readAgentCommentHistory,
   readAgentExchange,
+  readValidatedAgentResponse,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
@@ -32,7 +35,8 @@ import {
   cancelAgentRequest,
   claimAgentRequest,
   deleteQueuedRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
+  ensureAgentRequest,
   recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
   reviseQueuedRequest,
@@ -42,6 +46,7 @@ import {
   readAgentConnectionEvents,
   readProgress,
   reviewStoreFor,
+  withReviewStoreLock,
   writeAgentResponseValue,
 } from "./store.js";
 import {
@@ -53,10 +58,54 @@ import {
 const sessionId = "1111111111111111";
 const planId = "2222222222222222";
 const packageId = "3333333333333333";
+const agentA = "aaaa0000aaaa0000";
+const agentB = "bbbb1111bbbb1111";
 const snapshot = deriveSnapshotDigest("# Plan\n");
 const execFileAsync = promisify(execFile);
 const mailboxModule = new URL("./request-mailbox.ts", import.meta.url).href;
 const storeModule = new URL("./store.ts", import.meta.url).href;
+const clockAt =
+  (now: string): (() => number) =>
+  () =>
+    Date.parse(now);
+
+const deferred = (): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+} => {
+  let resolve = (): void => undefined;
+  const promise = new Promise<void>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+};
+
+const holdAgentRequestLock = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReturnType<typeof reviewStoreFor>;
+  readonly requestId: string;
+}): Promise<() => Promise<void>> => {
+  const acquired = deferred();
+  const released = deferred();
+  const lock = withReviewStoreLock({
+    lockPath: join(store.agentRequestDirectory, `.${requestId}.lock`),
+    change: async () => {
+      acquired.resolve();
+      await released.promise;
+    },
+    timeoutError: () => new Error("Timed out holding the agent request lock"),
+  });
+  await acquired.promise;
+  let settled = false;
+  return async () => {
+    if (settled) return;
+    settled = true;
+    released.resolve();
+    await lock;
+  };
+};
 
 const WORKER_SCRIPT = `
 const { reviewStoreFor } = await import(process.env.BP_STORE_MODULE);
@@ -64,9 +113,9 @@ const { claimAgentRequest, cancelAgentRequest } = await import(process.env.BP_MA
 const store = reviewStoreFor({ planPath: process.env.BP_PLAN_PATH, planId: process.env.BP_PLAN_ID });
 const delay = Number(process.env.BP_START_AT) - Date.now();
 if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
-const common = { store, requestId: process.env.BP_REQUEST_ID, now: process.env.BP_NOW };
+const common = { store, activeSessionId: process.env.BP_SESSION_ID, requestId: process.env.BP_REQUEST_ID, now: process.env.BP_NOW };
 if (process.env.BP_OPERATION === "claim") {
-  await claimAgentRequest({ ...common, baselineSnapshot: "aaaaaaaaaaaaaaaa" });
+  await claimAgentRequest({ ...common, claimedBy: process.env.BP_CLAIMED_BY, baselineSnapshot: "aaaaaaaaaaaaaaaa" });
 } else {
   await cancelAgentRequest(common);
 }
@@ -129,12 +178,14 @@ const runRequestWorker = async ({
   requestId,
   startAt,
   now,
+  claimedBy = agentA,
 }: {
   readonly operation: "claim" | "cancel";
   readonly planPath: string;
   readonly requestId: string;
   readonly startAt: number;
   readonly now: string;
+  readonly claimedBy?: string;
 }): Promise<void> => {
   await execFileAsync("bun", ["-e", WORKER_SCRIPT], {
     env: {
@@ -144,9 +195,11 @@ const runRequestWorker = async ({
       BP_OPERATION: operation,
       BP_PLAN_PATH: planPath,
       BP_PLAN_ID: planId,
+      BP_SESSION_ID: sessionId,
       BP_REQUEST_ID: requestId,
       BP_START_AT: String(startAt),
       BP_NOW: now,
+      BP_CLAIMED_BY: claimedBy,
     },
   });
 };
@@ -172,6 +225,7 @@ describe("request mailbox", () => {
         claimAgentRequest({
           store,
           requestId: request.requestId,
+          claimedBy: agentA,
           baselineSnapshot: snapshot,
           now: "2026-08-10T12:00:01.000Z",
         }),
@@ -208,6 +262,7 @@ describe("request mailbox", () => {
         claimAgentRequest({
           store,
           requestId: request.requestId,
+          claimedBy: agentA,
           baselineSnapshot: snapshot,
           now: "2026-08-10T12:00:01.000Z",
         }),
@@ -235,7 +290,9 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -266,7 +323,12 @@ describe("request mailbox", () => {
 
     try {
       await expect(
-        publishAgentResponse({ store, response }),
+        commitRequestTerminal({
+          store,
+          response,
+          claimedBy: agentA,
+          now: "2026-08-10T12:00:02.500Z",
+        }),
       ).rejects.toMatchObject({
         name: "AgentExchangeRejected",
         message: "The request mailbox is unavailable",
@@ -321,6 +383,575 @@ describe("request mailbox", () => {
     }
   });
 
+  it("should refuse a second session's claim on a leased request", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({ id: "4444444444444444", body: "Only one agent." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      model: { name: "Grok 4.6" },
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+      clock: clockAt("2026-08-10T12:00:00.000Z"),
+    });
+
+    await expect(
+      claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: request.requestId,
+        claimedBy: agentB,
+        baselineSnapshot: snapshot,
+        // Well inside the lease agent A just took.
+        now: "2026-08-10T12:00:10.000Z",
+        clock: clockAt("2026-08-10T12:00:10.000Z"),
+      }),
+    ).rejects.toThrow(/Another agent session is working on this request/);
+
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests[0]).toMatchObject({
+      claimedBy: agentA,
+      claimedModel: { name: "Grok 4.6" },
+    });
+  });
+
+  it("should serialize claims across requests until the holder answers", async () => {
+    const { store } = await preparedReview();
+    const firstRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "4444444444444444",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      body: "Answer this first.",
+    });
+    const secondRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "5555555555555555",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:01.000Z",
+      body: "Answer this after the first request.",
+    });
+    await writeAgentRequest({ store, request: firstRequest });
+    await writeAgentRequest({ store, request: secondRequest });
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: firstRequest.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:02.000Z",
+      clock: clockAt("2026-08-10T12:00:02.000Z"),
+    });
+
+    // Without the plan claim boundary, the second claim resolves while the
+    // first is live. That counterfactual was verified before this test passed.
+    await expect(
+      claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: secondRequest.requestId,
+        claimedBy: agentB,
+        baselineSnapshot: snapshot,
+        now: "2026-08-10T12:00:03.000Z",
+        clock: clockAt("2026-08-10T12:00:03.000Z"),
+      }),
+    ).rejects.toThrow(/another agent session is working on this plan/i);
+
+    await commitRequestTerminal({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: firstRequest.requestId,
+          message: "The first request is answered.",
+        },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: snapshot,
+        now: "2026-08-10T12:00:04.000Z",
+      }),
+      claimedBy: agentA,
+      now: "2026-08-10T12:00:04.000Z",
+      clock: clockAt("2026-08-10T12:00:04.000Z"),
+    });
+    await expect(
+      claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: secondRequest.requestId,
+        claimedBy: agentB,
+        baselineSnapshot: snapshot,
+        now: "2026-08-10T12:00:05.000Z",
+        clock: clockAt("2026-08-10T12:00:05.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      requestId: secondRequest.requestId,
+      claimedBy: agentB,
+    });
+  });
+
+  it("should keep a canceled writer blocking until its lease expires", async () => {
+    const { store } = await preparedReview();
+    const firstRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "4444444444444444",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      body: "Cancel this while its writer is active.",
+    });
+    const secondRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "5555555555555555",
+      sessionId,
+      planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-10T12:00:01.000Z",
+      body: "Wait until the canceled writer is gone.",
+    });
+    await writeAgentRequest({ store, request: firstRequest });
+    await writeAgentRequest({ store, request: secondRequest });
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: firstRequest.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:02.000Z",
+      clock: clockAt("2026-08-10T12:00:02.000Z"),
+    });
+    await cancelAgentRequest({
+      store,
+      requestId: firstRequest.requestId,
+      now: "2026-08-10T12:00:03.000Z",
+    });
+
+    // Without the writer-release rule, this second claim resolves immediately
+    // while the canceled request's writer still has a live lease. That
+    // counterfactual was verified before this test passed.
+    await expect(
+      claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: secondRequest.requestId,
+        claimedBy: agentB,
+        baselineSnapshot: snapshot,
+        now: "2026-08-10T12:00:04.000Z",
+        clock: clockAt("2026-08-10T12:00:04.000Z"),
+      }),
+    ).rejects.toThrow(/another agent session is working on this plan/i);
+
+    await expect(
+      claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: secondRequest.requestId,
+        claimedBy: agentB,
+        baselineSnapshot: snapshot,
+        now: "2026-08-10T12:01:18.000Z",
+        clock: clockAt("2026-08-10T12:01:18.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      requestId: secondRequest.requestId,
+      claimedBy: agentB,
+    });
+  });
+
+  it("should let the same session refresh its own claim", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({ id: "4444444444444444", body: "Keep working." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      model: { name: "Grok 4.6" },
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+      clock: clockAt("2026-08-10T12:00:00.000Z"),
+    });
+
+    const renewed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      // A renewal must never move the frozen baseline, even when the caller
+      // offers a newer one, or the request's diff would lose the work so far.
+      baselineSnapshot: deriveSnapshotDigest("# Plan\n\nRewritten.\n"),
+      now: "2026-08-10T12:00:30.000Z",
+      clock: clockAt("2026-08-10T12:00:30.000Z"),
+    });
+
+    expect(renewed).toMatchObject({
+      claimedBy: agentA,
+      claimedModel: { name: "Grok 4.6" },
+      claimedAt: claimed.claimedAt,
+      baselineSnapshot: claimed.baselineSnapshot,
+    });
+    expect(renewed.claimExpiresAtMs).toBeGreaterThan(
+      claimed.claimExpiresAtMs ?? 0,
+    );
+  });
+
+  it("should not shorten a newer lease with a late renewal", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({ id: "4444444444444444", body: "Keep the later lease." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    const startedAt = Date.parse("2026-08-10T12:00:00.000Z");
+    const claim = (nowMs: number) =>
+      claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: request.requestId,
+        claimedBy: agentA,
+        baselineSnapshot: snapshot,
+        now: new Date(nowMs).toISOString(),
+        clock: () => nowMs,
+      });
+
+    await claim(startedAt);
+    const newer = await claim(startedAt + 60_000);
+    const late = await claim(startedAt + 30_000);
+
+    expect(late.claimExpiresAtMs).toBe(newer.claimExpiresAtMs);
+  });
+
+  it("should let a new session take an expired claim", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({ id: "4444444444444444", body: "The first agent died." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      model: { name: "Grok 4.6" },
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+      clock: clockAt("2026-08-10T12:00:00.000Z"),
+    });
+
+    const takenOver = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentB,
+      model: { name: "Claude Sonnet 5" },
+      baselineSnapshot: snapshot,
+      // Past the 75-second lease the reviewer has already been shown as stalled.
+      now: "2026-08-10T12:01:20.000Z",
+      clock: clockAt("2026-08-10T12:01:20.000Z"),
+    });
+
+    expect(takenOver).toMatchObject({
+      claimedBy: agentB,
+      claimedModel: { name: "Claude Sonnet 5" },
+      claimedAt: "2026-08-10T12:01:20.000Z",
+    });
+    const events = await readProgress({ store, sessionId });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stepCode: "request-reclaimed",
+          detail: expect.stringContaining("partial plan edits may interleave"),
+        }),
+      ]),
+    );
+  });
+
+  it("should hide a staged response until its request commits", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Do not reveal a partial commit.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+    await writeAgentResponseValue({
+      store,
+      requestId: request.requestId,
+      value: response,
+    });
+
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ responses: [] });
+    await expect(
+      readAgentCommentHistory({
+        store,
+        sessionId,
+        planId,
+        commentId: comment.id,
+      }),
+    ).resolves.toMatchObject({ responses: [] });
+    await expect(
+      readValidatedAgentResponse({ store, request: claimed }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("should reject an answer after its lease expires", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Reject a stale worker.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+      clock: clockAt("2026-08-10T12:00:00.000Z"),
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:01:16.000Z",
+    });
+
+    await expect(
+      commitRequestTerminal({
+        store,
+        response,
+        claimedBy: agentA,
+        now: "2026-08-10T12:01:16.000Z",
+        clock: clockAt("2026-08-10T12:01:16.000Z"),
+      }),
+    ).rejects.toThrow(/claim/);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ responses: [] });
+  });
+
+  it("should reject an answer whose lease expires while waiting for the lock", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Reject an answer that waited past expiry.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const startedAt = Date.parse("2026-08-10T12:00:00.000Z");
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: new Date(startedAt).toISOString(),
+      clock: () => startedAt,
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: new Date(startedAt + 74_000).toISOString(),
+    });
+    let releaseLock: (() => Promise<void>) | undefined;
+    let lockReleased = false;
+    let clockReads = 0;
+    try {
+      releaseLock = await holdAgentRequestLock({
+        store,
+        requestId: request.requestId,
+      });
+      const commit = commitRequestTerminal({
+        store,
+        response,
+        claimedBy: agentA,
+        now: new Date(startedAt + 74_000).toISOString(),
+        clock: () => {
+          clockReads += 1;
+          return startedAt + (lockReleased ? 76_000 : 74_000);
+        },
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(clockReads).toBe(0);
+      // With the clock read moved before request-lock acquisition, it captures
+      // the live value and this commit resolves; that counterfactual was verified.
+      lockReleased = true;
+      await releaseLock();
+      releaseLock = undefined;
+
+      await expect(commit).rejects.toThrow(/live claim/);
+      expect(clockReads).toBe(1);
+      await expect(
+        readAgentExchange({ store, sessionId, planId }),
+      ).resolves.toMatchObject({ responses: [] });
+    } finally {
+      await releaseLock?.();
+    }
+  });
+
+  it("should reject a claim after its request is answered", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Do not revive this request.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    await commitRequestTerminal({
+      store,
+      response,
+      claimedBy: agentA,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    await expect(
+      claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: request.requestId,
+        claimedBy: agentB,
+        baselineSnapshot: snapshot,
+        now: "2026-08-10T12:01:20.000Z",
+      }),
+    ).rejects.toThrow(/already answered/);
+  });
+
+  it("should preserve terminal lifecycle fields on submission retry", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Retry this completed submission.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    await commitRequestTerminal({
+      store,
+      response,
+      claimedBy: agentA,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    await expect(ensureAgentRequest({ store, request })).resolves.toMatchObject(
+      {
+        requestId: request.requestId,
+        answeredAt: "2026-08-10T12:00:01.000Z",
+      },
+    );
+  });
+
   it("should commit either cancellation or response when they race", async () => {
     const { store } = await preparedReview();
     const comment = reviewComment({
@@ -331,7 +962,9 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -354,7 +987,12 @@ describe("request mailbox", () => {
     });
 
     const results = await Promise.allSettled([
-      publishAgentResponse({ store, response }),
+      commitRequestTerminal({
+        store,
+        response,
+        claimedBy: agentA,
+        now: "2026-08-10T12:00:02.500Z",
+      }),
       cancelAgentRequest({
         store,
         requestId: request.requestId,
@@ -370,6 +1008,68 @@ describe("request mailbox", () => {
       Number(exchange.requests[0]?.canceledAt !== undefined) +
         Number(exchange.responses.length > 0),
     ).toBe(1);
+  });
+
+  it("should mark a request terminal in the same commit as its response", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Answer this once.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+
+    await commitRequestTerminal({
+      store,
+      response,
+      claimedBy: agentA,
+      now: "2026-08-10T12:00:02.500Z",
+    });
+
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests[0]).toMatchObject({
+      answeredAt: "2026-08-10T12:00:02.500Z",
+    });
+    expect(exchange.responses).toHaveLength(1);
+    expect(
+      nextPendingAgentRequest(exchange, {
+        claimedBy: agentA,
+        nowMs: Date.parse("2026-08-10T12:00:03.000Z"),
+      }),
+    ).toBeUndefined();
+    await expect(
+      commitRequestTerminal({
+        store,
+        response,
+        claimedBy: agentA,
+        now: "2026-08-10T12:00:04.000Z",
+      }),
+    ).rejects.toThrow(/already answered/);
   });
 
   it("should reject a response until its request is claimed", async () => {
@@ -398,9 +1098,14 @@ describe("request mailbox", () => {
       now: "2026-08-10T12:00:02.000Z",
     });
 
-    await expect(publishAgentResponse({ store, response })).rejects.toThrow(
-      /must be claimed/,
-    );
+    await expect(
+      commitRequestTerminal({
+        store,
+        response,
+        claimedBy: agentA,
+        now: "2026-08-10T12:00:02.500Z",
+      }),
+    ).rejects.toThrow(/must be claimed/);
   });
 
   it("should replace a malformed stored response after claim", async () => {
@@ -414,6 +1119,7 @@ describe("request mailbox", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -446,7 +1152,12 @@ describe("request mailbox", () => {
       now: "2026-08-10T12:00:02.000Z",
     });
 
-    await publishAgentResponse({ store, response });
+    await commitRequestTerminal({
+      store,
+      response,
+      claimedBy: agentA,
+      now: "2026-08-10T12:00:02.500Z",
+    });
     await expect(
       readAgentExchange({ store, sessionId, planId }),
     ).resolves.toMatchObject({ responses: [response] });
@@ -495,7 +1206,9 @@ describe("request mailbox", () => {
     const results = await Promise.allSettled([
       claimAgentRequest({
         store,
+        activeSessionId: sessionId,
         requestId: request.requestId,
+        claimedBy: agentA,
         baselineSnapshot: "aaaaaaaaaaaaaaaa",
         now: "2026-08-10T12:00:01.000Z",
       }),
@@ -592,11 +1305,13 @@ describe("request mailbox", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
+      claimedBy: agentA,
       response: validateAgentResponseDraft({
         value: {
           requestId: request.requestId,
@@ -614,6 +1329,7 @@ describe("request mailbox", () => {
         currentSnapshot: snapshot,
         now: "2026-08-10T12:00:02.000Z",
       }),
+      now: "2026-08-10T12:00:02.500Z",
     });
 
     await expect(
@@ -750,6 +1466,7 @@ describe("request mailbox", () => {
     await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -811,6 +1528,7 @@ describe("request mailbox", () => {
       claimAgentRequest({
         store,
         requestId: request.requestId,
+        claimedBy: agentA,
         baselineSnapshot: snapshot,
         now: "2026-08-10T12:00:01.000Z",
       }),
@@ -853,6 +1571,7 @@ describe("request mailbox", () => {
     await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -873,6 +1592,7 @@ describe("request mailbox", () => {
       claimAgentRequest({
         store,
         requestId: request.requestId,
+        claimedBy: agentA,
         baselineSnapshot: snapshot,
         now: "2026-08-10T12:00:01.000Z",
       }),

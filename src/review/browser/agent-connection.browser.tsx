@@ -615,7 +615,7 @@ export const AgentConnectionPanel = ({
             ) : (
               <CurrentActivityCard
                 activity={activity}
-                modelName={isConnected ? modelName : undefined}
+                modelName={modelName}
                 nowMs={currentNowMs}
                 attentionKey={attentionKey}
                 onViewRequest={onViewRequest}

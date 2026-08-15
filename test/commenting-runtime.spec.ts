@@ -18,7 +18,7 @@ import {
 import {
   appendProgressEvent,
   claimAgentRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
 } from "../src/review/request-mailbox.js";
 import { diffSnapshots } from "../src/review/snapshot-diff.js";
 import { startReviewRuntime } from "../src/review/server.js";
@@ -28,10 +28,16 @@ import {
   writeSnapshot,
 } from "../src/review/store.js";
 import { renderDocument } from "../src/render/render-document.js";
+import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
 import { boxOf, expect, stageComment, test, type Page } from "./fixtures";
 
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+// These journeys stand in for one coding agent working the review, so every
+// claim they take and every pickup they ask for speaks as the same session.
+const agentSessionId = "aaaa0000aaaa0000";
+const agentViewer = () => ({ claimedBy: agentSessionId, nowMs: Date.now() });
 
 // Two distinct authored pictures, so a swap between them is visible in the
 // diff as two different sources rather than as identical alternative words.
@@ -267,7 +273,7 @@ test("should expire a held connected snapshot when the reviewer returns", async 
   await expect(rail).toContainText("No agent signal for 6h 00m");
 });
 
-test("should show the connector's reported model identity, or none, on the agent status card", async ({
+test("should show the active claim's model despite a competing heartbeat", async ({
   page,
   reviewRuntimeUrl,
 }) => {
@@ -277,76 +283,233 @@ test("should show the connector's reported model identity, or none, on the agent
     planPath: session.plan,
     planId: session.planId,
   });
-  await writeAgentHeartbeat({
-    store,
+  const source = await readFile(session.plan, "utf8");
+  const request = messageAgentRequest({
+    kind: "chat",
+    requestId: "abcdabcdabcdabcd",
     sessionId: session.sessionId,
-    state: "waiting",
-    model: { name: "Grok 4.6" },
+    planId: session.planId,
+    premiseSnapshot: deriveSnapshotDigest(source),
+    createdAt: new Date().toISOString(),
+    body: "Which model is answering this request?",
   });
-  await page.getByRole("button", { name: "Agent session active" }).click();
+  await writeAgentRequest({ store, request });
+  await claimAgentRequest({
+    store,
+    activeSessionId: session.sessionId,
+    requestId: request.requestId,
+    claimedBy: "abababababababab",
+    model: { name: "Grok 4.6" },
+    baselineSnapshot: request.premiseSnapshot,
+    now: new Date().toISOString(),
+  });
+  await writeFile(
+    store.agentHeartbeatPath,
+    JSON.stringify({
+      sessionId: session.sessionId,
+      state: "waiting",
+      model: { name: "Wrong waiting agent" },
+      updatedAtMs: Date.now(),
+    }),
+  );
+  await expect
+    .poll(async () => {
+      const snapshot = await readAgentExchange({
+        store,
+        sessionId: session.sessionId,
+        planId: session.planId,
+      });
+      return snapshot.requests[0]?.claimedModel?.name;
+    })
+    .toBe("Grok 4.6");
+  await page.getByRole("button", { name: "Agent working" }).click();
   const rail = page.getByRole("complementary", { name: "Feedback" });
   const modelBadge = rail.locator("[data-review-agent-model]");
   await expect(modelBadge).toBeVisible();
   await expect(modelBadge).toContainText("Grok 4.6");
+  await expect(modelBadge).not.toContainText("Wrong waiting agent");
   await expect(modelBadge.locator("svg")).toHaveAttribute(
     "viewBox",
     "0 0 34 33",
   );
 
-  await page.emulateMedia({ colorScheme: "dark" });
-  await expect(modelBadge).toBeVisible();
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
   await expect(modelBadge).toContainText("Grok 4.6");
-  await page.emulateMedia({ colorScheme: "light" });
+});
 
+test("should keep progress-only requests waiting in chat and agent status", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const session = await liveReviewSession(page);
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const request = messageAgentRequest({
+    kind: "chat",
+    requestId: "dddddddddddddddd",
+    sessionId: session.sessionId,
+    planId: session.planId,
+    premiseSnapshot: deriveSnapshotDigest(await readFile(session.plan, "utf8")),
+    createdAt: new Date().toISOString(),
+    body: "Is this request actually claimed?",
+  });
+  await writeAgentRequest({ store, request });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "working",
+    requestId: request.requestId,
+  });
+  await appendProgressEvent({
+    store,
+    event: {
+      sessionId: session.sessionId,
+      requestId: request.requestId,
+      atMs: Date.now(),
+      stepCode: "agent-note",
+      step: "This event has no durable claim",
+      state: "live",
+    },
+  });
+
+  const sessionButton = page.getByRole("button", {
+    name: "Agent session active",
+  });
+  await expect(sessionButton).toBeVisible();
+  await sessionButton.click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(
+    rail.locator("[data-review-current-activity='waiting']"),
+  ).toContainText("Waiting for agent");
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await expect(
+    rail.locator("li").filter({ hasText: request.body }),
+  ).toContainText("Waiting for an agent");
+});
+
+test("should keep answered requests terminal when their response is unavailable", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const session = await liveReviewSession(page);
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const now = Date.now();
+  const premiseSnapshot = deriveSnapshotDigest(
+    await readFile(session.plan, "utf8"),
+  );
+  const request = {
+    ...messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: session.sessionId,
+      planId: session.planId,
+      premiseSnapshot,
+      createdAt: new Date(now - 1_000).toISOString(),
+      body: "Is this terminal without a response file?",
+    }),
+    baselineSnapshot: premiseSnapshot,
+    claimedAt: new Date(now - 500).toISOString(),
+    claimedBy: "eeeeeeeeeeeeeeee",
+    claimExpiresAtMs: now + AGENT_CLAIM_LEASE_MS,
+    answeredAt: new Date(now).toISOString(),
+  };
+  await writeAgentRequest({ store, request });
   await writeAgentHeartbeat({
     store,
     sessionId: session.sessionId,
     state: "waiting",
-    model: { name: "GPT-5.6-Luna" },
   });
-  await expect(modelBadge).toContainText("GPT-5.6-Luna");
-  await expect(modelBadge.locator("svg")).toHaveAttribute(
-    "viewBox",
-    "0 0 512 512",
-  );
-  const openAiPath = await modelBadge.locator("svg path").getAttribute("d");
 
-  await writeAgentHeartbeat({
-    store,
-    sessionId: session.sessionId,
-    state: "waiting",
-    model: { name: "Claude Sonnet 5" },
+  const sessionButton = page.getByRole("button", {
+    name: "Agent session active",
   });
-  await expect(modelBadge).toContainText("Claude Sonnet 5");
-  await expect(modelBadge.locator("svg")).toHaveAttribute(
-    "viewBox",
-    "0 0 512 512",
-  );
-  await expect(modelBadge.locator("svg path")).not.toHaveAttribute(
-    "d",
-    openAiPath ?? "",
-  );
-
-  await writeAgentHeartbeat({
-    store,
-    sessionId: session.sessionId,
-    state: "waiting",
-    model: { name: "A model this badge does not recognize" },
-  });
-  await expect(modelBadge.locator("svg")).toHaveAttribute(
-    "viewBox",
-    "0 0 24 24",
-  );
-
-  await writeAgentHeartbeat({
-    store,
-    sessionId: session.sessionId,
-    state: "waiting",
-  });
-  await expect(rail.locator("[data-review-agent-model]")).toHaveCount(0);
+  await expect(sessionButton).toBeVisible();
+  await sessionButton.click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
   await expect(
     rail.locator("[data-review-current-activity='idle']"),
   ).toContainText("Agent connected");
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  const exchange = rail.locator("li").filter({ hasText: request.body });
+  await expect(exchange).toContainText("The agent has answered");
+  await expect(exchange).not.toContainText("Waiting");
+});
+
+test("should not keep an answered feedback batch active without its response", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await stageComment(page, "Clarify the shared retry boundary.");
+  await stageComment(page, "Name the shared recovery owner.");
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submitted).ok()).toBe(true);
+
+  const session = await liveReviewSession(page);
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = exchange.requests.find(
+    (candidate) =>
+      candidate.kind === "feedback" && candidate.comments.length === 2,
+  );
+  if (request === undefined) {
+    throw new Error("The terminal batch journey did not create feedback work");
+  }
+  const source = await readFile(session.plan, "utf8");
+  const claimed = await claimAgentRequest({
+    store,
+    activeSessionId: session.sessionId,
+    requestId: request.requestId,
+    claimedBy: agentSessionId,
+    baselineSnapshot: deriveSnapshotDigest(source),
+    now: new Date().toISOString(),
+  });
+  await writeAgentRequest({
+    store,
+    request: {
+      ...claimed,
+      answeredAt: new Date().toISOString(),
+    },
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
+
+  await expect(
+    rail.locator("[data-review-thread-group='ready']"),
+  ).toContainText("Ready for review");
+  await expect(
+    rail.locator("[data-review-thread-group='working']"),
+  ).toHaveCount(0);
 });
 
 test("should pause a nonstandard request behind an explicit warning", async ({
@@ -400,14 +563,16 @@ test("should pause a nonstandard request behind an explicit warning", async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const request = nextPendingAgentRequest(exchange);
+  const request = nextPendingAgentRequest(exchange, agentViewer());
   if (request === undefined || request.kind !== "feedback") {
     throw new Error("The warning journey did not create feedback work");
   }
   const source = await readFile(session.plan, "utf8");
   const claimed = await claimAgentRequest({
     store,
+    activeSessionId: session.sessionId,
     requestId: request.requestId,
+    claimedBy: agentSessionId,
     baselineSnapshot: deriveSnapshotDigest(source),
     now: new Date().toISOString(),
   });
@@ -431,7 +596,12 @@ test("should pause a nonstandard request behind an explicit warning", async ({
     currentSnapshot: deriveSnapshotDigest(source),
     now: new Date().toISOString(),
   });
-  await publishAgentResponse({ store, response });
+  await commitRequestTerminal({
+    claimedBy: agentSessionId,
+    store,
+    response,
+    now: new Date().toISOString(),
+  });
 
   await rail
     .getByRole("button", { name: "Expand thread", exact: true })
@@ -509,7 +679,7 @@ test("should contain working comments when resolved threads expand", async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const firstRequest = nextPendingAgentRequest(exchange);
+  const firstRequest = nextPendingAgentRequest(exchange, agentViewer());
   if (firstRequest === undefined || firstRequest.kind !== "feedback") {
     throw new Error("The containment journey did not create its first request");
   }
@@ -544,11 +714,14 @@ test("should contain working comments when resolved threads expand", async ({
   });
   const firstClaimed = await claimAgentRequest({
     store,
+    activeSessionId: session.sessionId,
     requestId: firstRequest.requestId,
+    claimedBy: agentSessionId,
     baselineSnapshot: firstRequest.premiseSnapshot,
     now: new Date().toISOString(),
   });
-  await publishAgentResponse({
+  await commitRequestTerminal({
+    claimedBy: agentSessionId,
     store,
     response: validateAgentResponseDraft({
       value: {
@@ -566,6 +739,7 @@ test("should contain working comments when resolved threads expand", async ({
       currentSnapshot: resultSnapshot,
       now: new Date().toISOString(),
     }),
+    now: new Date().toISOString(),
   });
 
   for (let index = 0; index < 6; index += 1) {
@@ -599,7 +773,7 @@ test("should contain working comments when resolved threads expand", async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const secondRequest = nextPendingAgentRequest(secondExchange);
+  const secondRequest = nextPendingAgentRequest(secondExchange, agentViewer());
   if (secondRequest === undefined || secondRequest.kind !== "feedback") {
     throw new Error(
       "The containment journey did not create its working request",
@@ -607,7 +781,9 @@ test("should contain working comments when resolved threads expand", async ({
   }
   const secondClaimed = await claimAgentRequest({
     store,
+    activeSessionId: session.sessionId,
     requestId: secondRequest.requestId,
+    claimedBy: agentSessionId,
     baselineSnapshot: secondRequest.premiseSnapshot,
     now: new Date().toISOString(),
   });
@@ -1206,11 +1382,21 @@ test("should restore and submit staged comments through the local review runtime
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const request = nextPendingAgentRequest(exchange);
+  const request = nextPendingAgentRequest(exchange, agentViewer());
   if (request === undefined || request.kind !== "feedback") {
     throw new Error("Sending did not create a pending feedback request");
   }
   expect(request.comments).toHaveLength(3);
+  // An agent starts work by taking the claim, and only then narrates. Progress
+  // alone no longer implies pickup, so this journey seeds the real thing.
+  await claimAgentRequest({
+    store,
+    activeSessionId: session.sessionId,
+    requestId: request.requestId,
+    claimedBy: agentSessionId,
+    baselineSnapshot: request.premiseSnapshot,
+    now: new Date().toISOString(),
+  });
   await writeAgentHeartbeat({
     store,
     sessionId: session.sessionId,
@@ -1349,23 +1535,19 @@ test("should restore and submit staged comments through the local review runtime
   const waitingChat = rail
     .locator("li")
     .filter({ hasText: "How does this affect the rollout?" });
-  await expect(waitingChat).toContainText(
-    "Waiting - the agent is working on another request",
-  );
-  await waitingChat
-    .getByRole("button", { name: "View active comment →" })
-    .click();
-  const linkedActiveComment = rail
-    .locator('[data-review-comment-id][data-review-selected="true"]')
-    .filter({ hasText: "Clarify the failure boundary." });
-  await expect(linkedActiveComment).toBeVisible();
-  await linkedActiveComment
-    .getByRole("button", { name: "Minimize thread" })
-    .click();
-  await rail.getByRole("tab", { name: "Chat" }).click();
+  await expect(waitingChat).toContainText("Waiting for an agent");
+  await expect(
+    waitingChat.getByRole("button", { name: "View active comment →" }),
+  ).toHaveCount(0);
   await waitingChat.getByRole("button", { name: "Cancel request" }).click();
   await expect(waitingChat).toContainText("Request canceled");
   await rail.getByRole("tab", { name: "Comments" }).click();
+  const expandedActiveComment = rail
+    .locator("[data-review-comment-id]")
+    .filter({ hasText: "Clarify the failure boundary." });
+  await expandedActiveComment
+    .getByRole("button", { name: "Minimize thread" })
+    .click();
 
   const workingGroup = rail.locator("[data-review-thread-group='working']");
   await expect(workingGroup).toBeVisible();
@@ -1505,11 +1687,14 @@ test("should restore and submit staged comments through the local review runtime
   });
   const claimed = await claimAgentRequest({
     store,
+    activeSessionId: session.sessionId,
     requestId: request.requestId,
+    claimedBy: agentSessionId,
     baselineSnapshot: request.premiseSnapshot,
     now: new Date().toISOString(),
   });
-  await publishAgentResponse({
+  await commitRequestTerminal({
+    claimedBy: agentSessionId,
     store,
     response: validateAgentResponseDraft({
       value: {
@@ -1527,6 +1712,7 @@ test("should restore and submit staged comments through the local review runtime
       currentSnapshot: resultSnapshot,
       now: new Date().toISOString(),
     }),
+    now: new Date().toISOString(),
   });
 
   await expect(kernel).toContainText("Changed");
@@ -3547,7 +3733,7 @@ test("should keep shell interactions wired after an agent revision refreshes the
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -3588,11 +3774,14 @@ test("should keep shell interactions wired after an agent revision refreshes the
     });
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -3610,6 +3799,7 @@ test("should keep shell interactions wired after an agent revision refreshes the
         currentSnapshot: resultSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
 
     await test.step("the revision refreshes the article in place", async () => {
@@ -3971,7 +4161,7 @@ Reviewers confirm the output by hand.
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -4011,11 +4201,14 @@ Reviewers confirm the output by hand.
       const answeredAt = new Date().toISOString();
       const claimed = await claimAgentRequest({
         store,
+        activeSessionId: session.sessionId,
         requestId: request.requestId,
+        claimedBy: agentSessionId,
         baselineSnapshot: request.premiseSnapshot,
         now: answeredAt,
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
+        claimedBy: agentSessionId,
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -4033,6 +4226,7 @@ Reviewers confirm the output by hand.
           currentSnapshot: revisedSnapshot,
           now: answeredAt,
         }),
+        now: answeredAt,
       });
       await writeFile(session.plan, latestSource, "utf8");
       const revisedAgainAt = new Date(Date.parse(answeredAt) + 1).toISOString();
@@ -4048,11 +4242,14 @@ Reviewers confirm the output by hand.
       await writeAgentRequest({ store, request: followUp });
       const claimedFollowUp = await claimAgentRequest({
         store,
+        activeSessionId: session.sessionId,
         requestId: followUp.requestId,
+        claimedBy: agentSessionId,
         baselineSnapshot: revisedSnapshot,
         now: revisedAgainAt,
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
+        claimedBy: agentSessionId,
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -4065,6 +4262,7 @@ Reviewers confirm the output by hand.
           currentSnapshot: latestSnapshot,
           now: revisedAgainAt,
         }),
+        now: revisedAgainAt,
       });
     });
 
@@ -4205,7 +4403,7 @@ The current plan contains no slides.
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create component feedback work");
     }
@@ -4244,11 +4442,14 @@ The current plan contains no slides.
     const answeredAt = new Date().toISOString();
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: answeredAt,
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4266,6 +4467,7 @@ The current plan contains no slides.
         currentSnapshot: revisedSnapshot,
         now: answeredAt,
       }),
+      now: answeredAt,
     });
     await writeFile(session.plan, latestSource, "utf8");
     const revisedAgainAt = new Date(Date.parse(answeredAt) + 1).toISOString();
@@ -4281,11 +4483,14 @@ The current plan contains no slides.
     await writeAgentRequest({ store, request: followUp });
     const claimedFollowUp = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: followUp.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: revisedSnapshot,
       now: revisedAgainAt,
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4298,6 +4503,7 @@ The current plan contains no slides.
         currentSnapshot: latestSnapshot,
         now: revisedAgainAt,
       }),
+      now: revisedAgainAt,
     });
 
     await expect(page.locator("article")).toContainText(
@@ -4480,11 +4686,14 @@ The rollout waits for a green build.
     await writeFile(session.plan, revisedSource, "utf8");
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4497,6 +4706,7 @@ The rollout waits for a green build.
         currentSnapshot: revisedSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
 
     await refreshStarted;
@@ -4630,7 +4840,7 @@ test("should open a digest entry in the slide its section header names", async (
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -4662,11 +4872,14 @@ test("should open a digest entry in the slide its section header names", async (
     const answeredAt = new Date().toISOString();
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: answeredAt,
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4684,6 +4897,7 @@ test("should open a digest entry in the slide its section header names", async (
         currentSnapshot: revisedSnapshot,
         now: answeredAt,
       }),
+      now: answeredAt,
     });
 
     await expect(page.locator("article")).toContainText(
@@ -4806,7 +5020,7 @@ ${lowerContent}
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -4845,11 +5059,14 @@ ${lowerContent}
     await writeFile(session.plan, revisedSource, "utf8");
     const claimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4867,6 +5084,7 @@ ${lowerContent}
         currentSnapshot: resultSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
 
     await expect(page.locator("article")).toContainText(
@@ -4986,7 +5204,7 @@ const verification = "first";
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const firstRequest = nextPendingAgentRequest(firstExchange);
+    const firstRequest = nextPendingAgentRequest(firstExchange, agentViewer());
     if (firstRequest === undefined || firstRequest.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -5023,11 +5241,14 @@ const verification = "first";
     await writeFile(session.plan, firstSource, "utf8");
     const firstClaimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: firstRequest.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: firstRequest.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -5047,6 +5268,7 @@ const verification = "first";
         currentSnapshot: firstSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
     await expect(page.locator("article")).toContainText(
       'const delivery = "revised";',
@@ -5074,7 +5296,10 @@ const verification = "first";
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const secondRequest = nextPendingAgentRequest(secondExchange);
+    const secondRequest = nextPendingAgentRequest(
+      secondExchange,
+      agentViewer(),
+    );
     if (secondRequest === undefined || secondRequest.kind !== "reply") {
       throw new Error("The thread reply did not create pending work");
     }
@@ -5100,11 +5325,14 @@ const verification = "first";
     await writeFile(session.plan, secondSource, "utf8");
     const secondClaimed = await claimAgentRequest({
       store,
+      activeSessionId: session.sessionId,
       requestId: secondRequest.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: secondRequest.premiseSnapshot,
       now: new Date().toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -5124,6 +5352,7 @@ const verification = "first";
         currentSnapshot: secondSnapshot,
         now: new Date().toISOString(),
       }),
+      now: new Date().toISOString(),
     });
     await expect(page.locator("article")).toContainText(
       'const verification = "revised";',
@@ -5251,7 +5480,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -5289,11 +5518,14 @@ test("should re-anchor an open lens, its highlights, and hover association when 
       await writeFile(session.plan, revisedSource, "utf8");
       const claimed = await claimAgentRequest({
         store,
+        activeSessionId: session.sessionId,
         requestId: request.requestId,
+        claimedBy: agentSessionId,
         baselineSnapshot: request.premiseSnapshot,
         now: answeredAt,
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
+        claimedBy: agentSessionId,
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -5311,6 +5543,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
           currentSnapshot: revisedSnapshot,
           now: answeredAt,
         }),
+        now: answeredAt,
       });
       await expect(page.locator("article")).toContainText("automated checks", {
         timeout: 15_000,
@@ -5355,11 +5588,14 @@ test("should re-anchor an open lens, its highlights, and hover association when 
       await writeFile(session.plan, latestSource, "utf8");
       const claimedFollowUp = await claimAgentRequest({
         store,
+        activeSessionId: session.sessionId,
         requestId: followUp.requestId,
+        claimedBy: agentSessionId,
         baselineSnapshot: revisedSnapshot,
         now: revisedAgainAt,
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
+        claimedBy: agentSessionId,
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -5372,6 +5608,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
           currentSnapshot: latestSnapshot,
           now: revisedAgainAt,
         }),
+        now: revisedAgainAt,
       });
       await expect(page.locator("article")).toContainText("signed release", {
         timeout: 15_000,

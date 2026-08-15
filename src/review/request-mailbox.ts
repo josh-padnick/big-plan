@@ -1,12 +1,12 @@
-// Owns stored agent-request lifecycle mutations and invariants. Each mutation
-// locks its state, validates it, and writes one complete replacement.
+// Owns locked changes to stored agent requests and the plan-wide claim gate.
 
 import { join } from "node:path";
 import {
   AgentExchangeRejected,
   outstandingAgentRequests,
   readAgentCommentHistory,
-  readValidatedAgentResponse,
+  readValidatedAgentRequests,
+  requestBlocksPlanPickup,
   validateAgentRequest,
 } from "./agent-exchange.js";
 import type {
@@ -35,6 +35,12 @@ import {
   writeAgentRequestValue,
   writeAgentResponseValue,
 } from "./store.js";
+import {
+  claimIsHeldByAnother,
+  claimIsLive,
+  claimLeaseExpiryMs,
+} from "./shared/agent-claim.js";
+import type { AgentModelIdentity } from "./shared/agent-model.js";
 import type {
   AgentRequestDeletionResult,
   ProgressEvent,
@@ -42,6 +48,26 @@ import type {
 } from "./store.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
+
+export class RetryableAgentClaimRejected extends AgentExchangeRejected {}
+
+export class AgentClaimContended extends RetryableAgentClaimRejected {}
+
+export class AgentClaimSelectionStale extends RetryableAgentClaimRejected {}
+
+export class AgentClaimCanceled extends AgentClaimSelectionStale {}
+
+type Clock = () => number;
+
+const readClock = (clock: Clock): number => {
+  const nowMs = clock();
+  if (!Number.isFinite(nowMs)) {
+    throw new AgentExchangeRejected(
+      "The mailbox clock must return milliseconds",
+    );
+  }
+  return nowMs;
+};
 
 /** Runs one request change while the request file is locked. */
 const withRequestLock = async <TResult>({
@@ -84,6 +110,32 @@ const withRequestLock = async <TResult>({
     timeoutError: () =>
       new AgentExchangeRejected(
         "Another process is changing this request. Try again.",
+      ),
+    invalidLockError: () =>
+      new AgentExchangeRejected("The request mailbox is unavailable"),
+  });
+};
+
+const withPlanClaimLock = async <TResult>({
+  store,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly change: (store: ReviewStore) => Promise<TResult>;
+}): Promise<TResult> => {
+  let lockedStore: ReviewStore;
+  try {
+    lockedStore = await (await anchorReviewStore(store)).resolveStore();
+  } catch (error: unknown) {
+    if (!(error instanceof ReviewStorePathRejected)) throw error;
+    throw new AgentExchangeRejected("The request mailbox is unavailable");
+  }
+  return withReviewStoreLock({
+    lockPath: join(lockedStore.reviewDirectory, ".agent-claim.lock"),
+    change: () => change(lockedStore),
+    timeoutError: () =>
+      new AgentExchangeRejected(
+        "Another agent is claiming work on this plan. Try again.",
       ),
     invalidLockError: () =>
       new AgentExchangeRejected("The request mailbox is unavailable"),
@@ -135,6 +187,10 @@ const requestCreation = (request: AgentRequest): string => {
   const created: Record<string, unknown> = { ...request };
   delete created.baselineSnapshot;
   delete created.claimedAt;
+  delete created.claimedBy;
+  delete created.claimedModel;
+  delete created.claimExpiresAtMs;
+  delete created.answeredAt;
   delete created.canceledAt;
   return JSON.stringify(created);
 };
@@ -182,58 +238,148 @@ export const ensureAgentRequest = async ({
   });
 };
 
-/** Freezes the source baseline when an agent first claims a request. */
+/**
+ * Takes or renews one agent session's exclusive claim on a request, freezing
+ * the source baseline the claim's work will be diffed against.
+ *
+ * The claim is an ownership lease, not just a baseline freeze. The plan claim
+ * lock permits one live request claim across the plan, and the request lock
+ * decides renewal, contention, and takeover for the selected request. A
+ * lapsed lease during a long edit can still interleave plan writes until write
+ * fencing exists.
+ */
 export const claimAgentRequest = async ({
   store,
+  activeSessionId,
   requestId,
+  claimedBy,
+  model,
   baselineSnapshot,
   now,
   verifyBeforeClaim,
+  clock = Date.now,
 }: {
   readonly store: ReviewStore;
+  readonly activeSessionId: string;
   readonly requestId: string;
+  readonly claimedBy: string;
+  readonly model?: AgentModelIdentity;
   readonly baselineSnapshot: string;
   readonly now: string;
   readonly verifyBeforeClaim?: (request: AgentRequest) => Promise<void>;
-}): Promise<AgentRequest> =>
-  withRequestLock({
+  readonly clock?: Clock;
+}): Promise<AgentRequest> => {
+  if (Number.isNaN(Date.parse(now))) {
+    throw new AgentExchangeRejected("A claim time must be an ISO timestamp");
+  }
+  const takeover = await withPlanClaimLock({
     store,
-    requestId,
-    change: async (lockedStore) => {
-      const request = await readCurrentRequest({
-        store: lockedStore,
+    change: (planStore) =>
+      withRequestLock({
+        store: planStore,
         requestId,
-      });
-      if (request.canceledAt !== undefined) {
-        throw new AgentExchangeRejected(
-          "The request was canceled by the reviewer",
-        );
-      }
-      if (
-        (await readValidatedAgentResponse({
-          store: lockedStore,
-          request,
-        })) !== undefined
-      ) {
-        throw new AgentExchangeRejected(
-          "The agent has already answered this request",
-        );
-      }
-      await verifyBeforeClaim?.(request);
-      if (request.baselineSnapshot !== undefined) return request;
-      const claimed = validateAgentRequest({
-        ...request,
-        baselineSnapshot,
-        claimedAt: now,
-      });
-      await writeAgentRequestValue({
-        store: lockedStore,
-        requestId,
-        value: claimed,
-      });
-      return claimed;
-    },
+        change: async (
+          lockedStore,
+        ): Promise<{
+          readonly request: AgentRequest;
+          readonly reclaimedFrom?: string;
+          readonly atMs: number;
+        }> => {
+          const request = await readCurrentRequest({
+            store: lockedStore,
+            requestId,
+          });
+          if (request.canceledAt !== undefined) {
+            throw new AgentClaimCanceled(
+              "The request was canceled by the reviewer",
+            );
+          }
+          if (request.answeredAt !== undefined) {
+            throw new AgentClaimSelectionStale(
+              "The agent has already answered this request",
+            );
+          }
+          await verifyBeforeClaim?.(request);
+          const nowMs = readClock(clock);
+          if (claimIsHeldByAnother({ request, claimedBy, nowMs })) {
+            throw new AgentClaimContended(
+              "Another agent session is working on this request",
+            );
+          }
+          if (request.claimedBy === claimedBy) {
+            const renewed = validateAgentRequest({
+              ...request,
+              claimedModel: model ?? request.claimedModel,
+              claimExpiresAtMs: Math.max(
+                request.claimExpiresAtMs ?? 0,
+                claimLeaseExpiryMs(nowMs),
+              ),
+            });
+            await writeAgentRequestValue({
+              store: lockedStore,
+              requestId,
+              value: renewed,
+            });
+            return { request: renewed, atMs: nowMs };
+          }
+          const requests = await readValidatedAgentRequests({
+            store: lockedStore,
+            sessionId: activeSessionId,
+            planId: request.planId,
+          });
+          if (
+            requests.some(
+              (candidate) =>
+                candidate.requestId !== requestId &&
+                requestBlocksPlanPickup({ request: candidate, nowMs }),
+            )
+          ) {
+            throw new AgentClaimContended(
+              "Another agent session is working on this plan",
+            );
+          }
+          // The new durable claim fences claims and answers, not plan writes
+          // the lapsed holder may already have started before write fencing.
+          const claimed = validateAgentRequest({
+            ...request,
+            baselineSnapshot,
+            claimedAt: now,
+            claimedBy,
+            claimedModel: model,
+            claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
+          });
+          await writeAgentRequestValue({
+            store: lockedStore,
+            requestId,
+            value: claimed,
+          });
+          return {
+            request: claimed,
+            atMs: nowMs,
+            ...(request.claimedBy === undefined
+              ? {}
+              : { reclaimedFrom: request.claimedBy }),
+          };
+        },
+      }),
   });
+  if (takeover.reclaimedFrom !== undefined) {
+    await appendProgressEvent({
+      store,
+      event: {
+        sessionId: activeSessionId,
+        requestId,
+        atMs: takeover.atMs,
+        stepCode: "request-reclaimed",
+        step: "Restarting with a new agent session",
+        state: "live",
+        detail:
+          "The previous agent stopped responding; its partial plan edits may interleave with this takeover until write fencing exists",
+      },
+    }).catch(() => undefined);
+  }
+  return takeover.request;
+};
 
 /** Marks one request terminal. A later pickup or response cannot revive it. */
 export const cancelAgentRequest = async ({
@@ -254,12 +400,7 @@ export const cancelAgentRequest = async ({
         requestId,
       });
       if (request.canceledAt !== undefined) return request;
-      if (
-        (await readValidatedAgentResponse({
-          store: lockedStore,
-          request,
-        })) !== undefined
-      ) {
+      if (request.answeredAt !== undefined) {
         throw new AgentExchangeRejected(
           "The agent has already answered this request",
         );
@@ -274,14 +415,20 @@ export const cancelAgentRequest = async ({
     },
   });
 
-/** Publishes one response only while its request remains answerable. */
-export const publishAgentResponse = async ({
+/** Answers one request and marks it terminal as a single commit. */
+export const commitRequestTerminal = async ({
   store,
   response,
+  claimedBy,
+  now,
+  clock = Date.now,
 }: {
   readonly store: ReviewStore;
   readonly response: AgentResponse;
-}): Promise<void> =>
+  readonly claimedBy: string;
+  readonly now: string;
+  readonly clock?: Clock;
+}): Promise<AgentRequest> =>
   withRequestLock({
     store,
     requestId: response.requestId,
@@ -296,11 +443,27 @@ export const publishAgentResponse = async ({
         );
       }
       if (
-        !agentOwnsRequest(request) ||
+        request.claimedAt === undefined ||
         request.baselineSnapshot === undefined
       ) {
         throw new AgentExchangeRejected(
           "The request must be claimed before it can be answered",
+        );
+      }
+      // Answered first: a replay of a settled request is better reported as
+      // settled than as a claim dispute, whoever replays it.
+      if (request.answeredAt !== undefined) {
+        throw new AgentExchangeRejected(
+          "The agent has already answered this request",
+        );
+      }
+      // Only the holder may answer. Without this the lease would guard pickup
+      // but not delivery, and a session that lost its claim could still
+      // overwrite the holder's work at the last step.
+      const nowMs = readClock(clock);
+      if (request.claimedBy !== claimedBy || !claimIsLive({ request, nowMs })) {
+        throw new AgentExchangeRejected(
+          "This agent session does not hold a live claim on this request",
         );
       }
       if (!responseMatchesRequest({ value: response, request })) {
@@ -308,21 +471,21 @@ export const publishAgentResponse = async ({
           "The agent response does not match its request",
         );
       }
-      if (
-        (await readValidatedAgentResponse({
-          store: lockedStore,
-          request,
-        })) !== undefined
-      ) {
-        throw new AgentExchangeRejected(
-          "The agent has already answered this request",
-        );
-      }
+      const answered = validateAgentRequest({
+        ...request,
+        answeredAt: now,
+      });
       await writeAgentResponseValue({
         store: lockedStore,
         requestId: response.requestId,
         value: response,
       });
+      await writeAgentRequestValue({
+        store: lockedStore,
+        requestId: response.requestId,
+        value: answered,
+      });
+      return answered;
     },
   });
 
@@ -356,7 +519,7 @@ const readQueuedMessage = async ({
   if (agentOwnsRequest(request)) {
     throw new AgentExchangeRejected(AGENT_STARTED);
   }
-  if ((await readValidatedAgentResponse({ store, request })) !== undefined) {
+  if (request.answeredAt !== undefined) {
     throw new AgentExchangeRejected(
       "The agent has already answered this request",
     );

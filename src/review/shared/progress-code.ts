@@ -10,6 +10,7 @@ export const PROGRESS_STEP_CODES = [
   "queued-message-deleted",
   "request-canceled",
   "request-picked-up",
+  "request-reclaimed",
   "response-ready",
   "agent-note",
 ] as const;
@@ -26,6 +27,7 @@ const PROGRESS_STEP_OWNERS = {
   "queued-message-deleted": "reviewer",
   "request-canceled": "reviewer",
   "request-picked-up": "agent",
+  "request-reclaimed": "agent",
   "response-ready": "agent",
   "agent-note": "agent",
 } as const satisfies Readonly<Record<ProgressStepCode, "reviewer" | "agent">>;

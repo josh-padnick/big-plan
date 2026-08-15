@@ -2,7 +2,20 @@
 // threads. The browser and coding-agent loop consume this view instead of
 // joining requests, responses, outcomes, progress, and comments themselves.
 
-import { deriveAgentStatus, type AgentStatus } from "./agent-status.js";
+import {
+  deriveAgentStatus,
+  selectPendingAgentRequest,
+  type AgentStatus,
+} from "./agent-status.js";
+import {
+  claimIsLive,
+  claimSignalAtMs,
+  type ClaimedRequest,
+} from "./agent-claim.js";
+import {
+  requestIsTerminal,
+  type TerminalAgentRequest,
+} from "./agent-request-state.js";
 import { requestIsCanceled, type CancelableRequest } from "./cancel-pending.js";
 import type { ReviewComment } from "./comment.js";
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
@@ -10,17 +23,19 @@ import type { ProgressStepCode } from "./progress-code.js";
 import { requestIsOutstanding } from "./request-lifecycle.js";
 import { agentOwnsRequest } from "./request-ownership.js";
 
-export type ThreadRequest = CancelableRequest & {
-  readonly premiseSnapshot: string;
-  readonly baselineSnapshot?: string;
-  readonly claimedAt?: string;
-  readonly createdAt: string;
-  readonly kind: "feedback" | "reply" | "chat";
-  readonly body?: string;
-  readonly commentId?: string;
-  readonly commentIds?: ReadonlyArray<string>;
-  readonly comments?: ReadonlyArray<ReviewComment>;
-};
+export type ThreadRequest = CancelableRequest &
+  ClaimedRequest &
+  TerminalAgentRequest & {
+    readonly premiseSnapshot: string;
+    readonly baselineSnapshot?: string;
+    readonly claimedAt?: string;
+    readonly createdAt: string;
+    readonly kind: "feedback" | "reply" | "chat";
+    readonly body?: string;
+    readonly commentId?: string;
+    readonly commentIds?: ReadonlyArray<string>;
+    readonly comments?: ReadonlyArray<ReviewComment>;
+  };
 
 export type ThreadOutcome = {
   readonly commentId: string;
@@ -61,6 +76,7 @@ export type ThreadPresence = {
 export type ThreadRuntime = "static" | "online" | "offline";
 export type ThreadSurface = "thread" | "chat";
 export type ThreadGroup = "needs-input" | "ready" | "working" | "queued";
+export type RequestDelivery = "Sent" | "Queued";
 
 export type ProjectedThreadExchange<
   Request extends ThreadRequest = ThreadRequest,
@@ -71,6 +87,7 @@ export type ProjectedThreadExchange<
   readonly outcome?: ThreadOutcome;
   readonly activity: ReadonlyArray<ThreadProgress>;
   readonly status: AgentStatus;
+  readonly delivery: RequestDelivery;
   readonly canceled: boolean;
   readonly baselineSnapshot: string;
   /** Whether the reviewer may still edit this waiting message. */
@@ -107,6 +124,37 @@ export const requestCommentIds = (
     ? [request.commentId]
     : [];
 };
+
+/** Projects delivery from durable terminality or a currently live claim. */
+export const projectRequestDelivery = ({
+  request,
+  nowMs,
+}: {
+  readonly request: ThreadRequest;
+  readonly nowMs: number;
+}): RequestDelivery =>
+  requestIsTerminal(request) || claimIsLive({ request, nowMs })
+    ? "Sent"
+    : "Queued";
+
+/** Selects the newest open multi-comment feedback batch. */
+export const selectActiveFeedbackBatch = <Request extends ThreadRequest>({
+  requests,
+  cancelPendingRequestIds,
+}: {
+  readonly requests: ReadonlyArray<Request>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+}): Request | undefined =>
+  [...requests].reverse().find(
+    (request) =>
+      request.kind === "feedback" &&
+      requestCommentIds(request).length > 1 &&
+      !requestIsTerminal(request) &&
+      !requestIsCanceled({
+        request,
+        pendingRequestIds: cancelPendingRequestIds,
+      }),
+  );
 
 export const projectRequestActivity = ({
   request,
@@ -212,50 +260,40 @@ export const projectLatestAgentStatus = ({
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
 }): AgentStatus => {
-  const request = requests.at(-1);
-  const response = responses.find(
-    (candidate) => candidate.requestId === request?.requestId,
-  );
-  const activity =
-    request === undefined
-      ? []
-      : projectRequestActivity({ request, progressEvents });
-  const failure = [...activity]
-    .reverse()
-    .find((event) => event.state === "failed")?.detail;
-  const claimedAtMs =
-    request?.claimedAt === undefined ? 0 : Date.parse(request.claimedAt);
-  const lastAgentSignalAtMs = Math.max(
-    0,
-    ...activity.map((event) => event.atMs ?? 0),
-    Number.isNaN(claimedAtMs) ? 0 : claimedAtMs,
-    presence.requestId === request?.requestId ? (presence.updatedAtMs ?? 0) : 0,
-  );
-  return deriveAgentStatus({
+  const request =
+    selectPendingAgentRequest({
+      requests,
+      cancelPendingRequestIds,
+      now: nowMs,
+    }) ?? requests.at(-1);
+  if (request === undefined) {
+    return deriveAgentStatus({
+      runtime,
+      request: "none",
+      agentConnected,
+      pickedUp: false,
+      nowMs,
+    });
+  }
+  return projectRequestStatus({
+    request,
+    progressEvents,
+    presence: { ...presence, connected: agentConnected },
     runtime,
-    request:
-      request === undefined
-        ? "none"
-        : response === undefined &&
-            !requestIsCanceled({
-              request,
-              pendingRequestIds: cancelPendingRequestIds,
-            })
-          ? "pending"
-          : "answered",
-    agentConnected,
-    pickedUp:
-      (request !== undefined && agentOwnsRequest(request)) ||
-      activity.length > 0,
-    ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
-    ...(failure === undefined ? {} : { failure }),
+    surface: "chat",
     nowMs,
+    cancelPendingRequestIds,
+    queuedAhead: queuedRequestsAhead({
+      request,
+      requests,
+      responses,
+      cancelPendingRequestIds,
+    }),
   });
 };
 
 export const projectRequestStatus = ({
   request,
-  response,
   progressEvents,
   presence,
   runtime,
@@ -265,7 +303,6 @@ export const projectRequestStatus = ({
   queuedAhead,
 }: {
   readonly request: ThreadRequest;
-  readonly response: ThreadResponse | undefined;
   readonly progressEvents: ReadonlyArray<ThreadProgress>;
   readonly presence: ThreadPresence;
   readonly runtime: ThreadRuntime;
@@ -292,21 +329,12 @@ export const projectRequestStatus = ({
   const failed = [...activity]
     .reverse()
     .find((event) => event.state === "failed");
-  const claimedAtMs =
-    request.claimedAt === undefined ? 0 : Date.parse(request.claimedAt);
-  const lastSignalAtMs = Math.max(
-    0,
-    ...activity.map((event) => event.atMs ?? 0),
-    Number.isNaN(claimedAtMs) ? 0 : claimedAtMs,
-    presence.requestId === request.requestId ? (presence.updatedAtMs ?? 0) : 0,
-  );
+  const lastSignalAtMs = claimSignalAtMs(request) ?? 0;
   return deriveAgentStatus({
     runtime,
-    request: response === undefined ? "pending" : "answered",
+    request: requestIsTerminal(request) ? "answered" : "pending",
     agentConnected: presence.connected,
-    pickedUp: agentOwnsRequest(request) || activity.length > 0,
-    sessionBusy:
-      presence.state === "working" && presence.requestId !== request.requestId,
+    pickedUp: claimIsLive({ request, nowMs }),
     ...(queuedAhead === undefined ? {} : { queuedAhead }),
     surface,
     ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
@@ -357,7 +385,6 @@ export const projectCommentThread = <
         activity: projectRequestActivity({ request, progressEvents }),
         status: projectRequestStatus({
           request,
-          response,
           progressEvents,
           presence,
           runtime,
@@ -371,6 +398,7 @@ export const projectCommentThread = <
             cancelPendingRequestIds,
           }),
         }),
+        delivery: projectRequestDelivery({ request, nowMs }),
         canceled,
         baselineSnapshot: request.baselineSnapshot ?? request.premiseSnapshot,
         canReviseMessage: canReviseQueuedMessage({
@@ -391,7 +419,7 @@ export const projectCommentThread = <
       : latestExchange.status;
   const latestPending =
     latestExchange !== undefined &&
-    latestExchange.response === undefined &&
+    !requestIsTerminal(latestExchange.request) &&
     !latestExchange.canceled;
   const group: ThreadGroup =
     latestExchange?.outcome?.state === "needs-input" ||
@@ -399,9 +427,13 @@ export const projectCommentThread = <
       ? "needs-input"
       : latestExchange?.outcome !== undefined
         ? "ready"
-        : latestStatus?.stage === "working" || latestStatus?.stage === "stalled"
-          ? "working"
-          : "queued";
+        : latestExchange !== undefined &&
+            requestIsTerminal(latestExchange.request)
+          ? "ready"
+          : latestStatus?.stage === "working" ||
+              latestStatus?.stage === "stalled"
+            ? "working"
+            : "queued";
   return {
     comment,
     exchanges,
@@ -413,7 +445,11 @@ export const projectCommentThread = <
     canDeleteQueued:
       group === "queued" &&
       latestPending &&
-      exchanges.every((exchange) => exchange.response === undefined),
+      exchanges.every(
+        (exchange) =>
+          exchange.response === undefined &&
+          exchange.request.claimedAt === undefined,
+      ),
     canDeleteCanceled:
       (latestExchange?.canceled ?? false) &&
       exchanges.every(

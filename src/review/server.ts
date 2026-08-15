@@ -54,12 +54,15 @@ import {
   feedbackAgentRequest,
   messageAgentRequest,
   readAgentExchange,
+  readValidatedAgentRequests,
+  requestBlocksPlanPickup,
+  requestIsTerminal,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import {
   claimAgentRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
   recordAgentConnectionState,
 } from "./request-mailbox.js";
 import {
@@ -91,11 +94,13 @@ import {
   agentConnectCommand,
   agentRecoveryPrompt,
 } from "./shared/agent-command.js";
+import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import {
   activateReviewSession,
   REVIEW_HEARTBEAT_INTERVAL_MS,
   readCurrentReviewSession,
   refreshReviewSessionHeartbeat,
+  stopReviewSessionIfInactive,
   withReviewSessionAuthority,
 } from "./session-authority.js";
 import {
@@ -135,7 +140,6 @@ import { readRuntimeSession } from "./routes-session.js";
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const SHUTDOWN_GRACE_MS = 100;
-
 const STALL_CHECK_INTERVAL_MS = 5_000;
 const GROWTH_CHECK_INTERVAL_MS = 60_000;
 // Persistent review state is reported on a ladder rather than every minute, so
@@ -359,13 +363,18 @@ export const startReviewRuntime = async ({
   diffPreviewSource,
   idleTimeoutMs = DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
   writeStallMs = MUTATION_STALL_MS,
+  queuedWorkIdleTimeoutMs = AGENT_CLAIM_LEASE_MS,
 }: {
   readonly planPath: string;
   readonly diffPreviewSource?: string;
   readonly idleTimeoutMs?: number;
   /** How long one mutation may run before this runtime gives up on it. */
   readonly writeStallMs?: number;
+  readonly queuedWorkIdleTimeoutMs?: number;
 }): Promise<ReviewRuntime> => {
+  const queuedWorkIdleLimitMs = Number.isFinite(queuedWorkIdleTimeoutMs)
+    ? Math.max(0, Math.min(AGENT_CLAIM_LEASE_MS, queuedWorkIdleTimeoutMs))
+    : AGENT_CLAIM_LEASE_MS;
   const resolvedPlanPath = resolve(planPath);
   const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
   const agentCommand = agentConnectCommand({
@@ -493,11 +502,13 @@ export const startReviewRuntime = async ({
     await writeAgentRequest({ store, request: feedbackRequest });
     const claimedFeedbackRequest = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: feedbackRequest.requestId,
+      claimedBy: sessionId,
       baselineSnapshot: premiseSnapshot,
       now: createdAt,
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -525,6 +536,8 @@ export const startReviewRuntime = async ({
         currentSnapshot: initialSnapshot,
         now: createdAt,
       }),
+      claimedBy: sessionId,
+      now: createdAt,
     });
     const historicalSource = `${diffPreviewSource.trimEnd()}\n\n## Retired experiment\n\nThis temporary policy is removed by the next revision.\n`;
     const historicalSnapshot = deriveSnapshotDigest(historicalSource);
@@ -545,11 +558,13 @@ export const startReviewRuntime = async ({
     await writeAgentRequest({ store, request: historicalRequest });
     const claimedHistoricalRequest = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: historicalRequest.requestId,
+      claimedBy: sessionId,
       baselineSnapshot: premiseSnapshot,
       now: new Date(Date.parse(createdAt) + 1).toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -563,6 +578,8 @@ export const startReviewRuntime = async ({
         currentSnapshot: historicalSnapshot,
         now: new Date(Date.parse(createdAt) + 1).toISOString(),
       }),
+      claimedBy: sessionId,
+      now: new Date(Date.parse(createdAt) + 1).toISOString(),
     });
     const chatRequest = messageAgentRequest({
       kind: "chat",
@@ -576,11 +593,13 @@ export const startReviewRuntime = async ({
     await writeAgentRequest({ store, request: chatRequest });
     const claimedChatRequest = await claimAgentRequest({
       store,
+      activeSessionId: sessionId,
       requestId: chatRequest.requestId,
+      claimedBy: sessionId,
       baselineSnapshot: premiseSnapshot,
       now: new Date(Date.parse(createdAt) + 2).toISOString(),
     });
-    await publishAgentResponse({
+    await commitRequestTerminal({
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -594,6 +613,8 @@ export const startReviewRuntime = async ({
         currentSnapshot: initialSnapshot,
         now: new Date(Date.parse(createdAt) + 2).toISOString(),
       }),
+      claimedBy: sessionId,
+      now: new Date(Date.parse(createdAt) + 2).toISOString(),
     });
     if (previewBlock !== undefined) {
       await writeComments({
@@ -821,7 +842,9 @@ export const startReviewRuntime = async ({
                 response,
                 status: 409,
                 reason:
-                  "This review was replaced by a newer session and is now read-only",
+                  authority.reason === "stopped"
+                    ? "This review session has stopped and can no longer accept changes"
+                    : "This review was replaced by a newer session and is now read-only",
               });
             }
           },
@@ -1021,9 +1044,25 @@ export const startReviewRuntime = async ({
 
   let closed = false;
   let idleTimer: ReturnType<typeof setInterval> | undefined;
+  let queuedWorkIdleState:
+    | {
+        readonly requestKey: string;
+        readonly expiresAtMs: number;
+      }
+    | undefined;
   const closeRuntime = async (
     reason = "The review session was stopped.",
+    sessionAlreadyStopped = false,
   ): Promise<void> => {
+    if (closed) return;
+    if (!sessionAlreadyStopped) {
+      await stopReviewSessionIfInactive({
+        store,
+        sessionId,
+        stopReason: reason,
+        inactive: async () => true,
+      });
+    }
     if (closed) return;
     closed = true;
     clearInterval(heartbeatTimer);
@@ -1031,7 +1070,7 @@ export const startReviewRuntime = async ({
     clearInterval(stallTimer);
     clearInterval(growthTimer);
     if (idleTimer !== undefined) clearInterval(idleTimer);
-    await queueHeartbeat(false, reason).catch(() => undefined);
+    await heartbeatWrite.catch(() => undefined);
     await connectionWrite.catch(() => undefined);
     const closedServer = new Promise<void>((settle) => {
       server.close(() => settle());
@@ -1053,15 +1092,6 @@ export const startReviewRuntime = async ({
         void (async () => {
           if (closed || context.activityClock.idleForMs() < idleTimeoutMs)
             return;
-          const presence = await readAgentPresence({ store, sessionId });
-          if (presence.connected && presence.state === "working") {
-            context.activityClock.touch();
-            return;
-          }
-          // The presence read awaits filesystem I/O, so a page poll can touch
-          // the clock during it; confirm expiry again before closing.
-          if (closed || context.activityClock.idleForMs() < idleTimeoutMs)
-            return;
           const minutes = idleTimeoutMs / 60_000;
           const duration = Number.isInteger(minutes)
             ? `${minutes} minute${minutes === 1 ? "" : "s"}`
@@ -1069,9 +1099,56 @@ export const startReviewRuntime = async ({
                 const seconds = Math.round(idleTimeoutMs / 1_000);
                 return `${seconds} second${seconds === 1 ? "" : "s"}`;
               })();
-          await closeRuntime(
-            `The review session ended normally after ${duration} of inactivity.`,
-          );
+          const reason = `The review session ended normally after ${duration} of inactivity.`;
+          const stopped = await stopReviewSessionIfInactive({
+            store,
+            sessionId,
+            stopReason: reason,
+            inactive: async () => {
+              if (closed || context.activityClock.idleForMs() < idleTimeoutMs) {
+                return false;
+              }
+              const requests = await readValidatedAgentRequests({
+                store,
+                sessionId,
+                planId,
+              });
+              const nowMs = Date.now();
+              if (
+                requests.some((request) =>
+                  requestBlocksPlanPickup({ request, nowMs }),
+                )
+              ) {
+                queuedWorkIdleState = undefined;
+                context.activityClock.touch();
+                return false;
+              }
+              const queuedRequestKey = requests
+                .filter((request) => !requestIsTerminal(request))
+                .map((request) => request.requestId)
+                .sort()
+                .join(":");
+              if (queuedRequestKey.length === 0) {
+                queuedWorkIdleState = undefined;
+                return true;
+              }
+              if (queuedWorkIdleState?.requestKey !== queuedRequestKey) {
+                queuedWorkIdleState = {
+                  requestKey: queuedRequestKey,
+                  expiresAtMs: nowMs + queuedWorkIdleLimitMs,
+                };
+                context.activityClock.touch();
+                return false;
+              }
+              if (nowMs < queuedWorkIdleState.expiresAtMs) {
+                return false;
+              }
+              return true;
+            },
+          });
+          if (stopped.stopped) {
+            await closeRuntime(reason, true);
+          }
         })();
       },
       Math.min(1_000, idleTimeoutMs),

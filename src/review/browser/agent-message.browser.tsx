@@ -306,7 +306,6 @@ export const RequestStatusStrip = ({
   commentCount = 1,
   onShowAgent,
   onCancelRequest,
-  activeRequestLink,
 }: {
   readonly status: AgentStatus;
   readonly activity: ReadonlyArray<MessageActivity>;
@@ -314,10 +313,6 @@ export const RequestStatusStrip = ({
   readonly commentCount?: number;
   readonly onShowAgent: () => void;
   readonly onCancelRequest?: () => void;
-  readonly activeRequestLink?: {
-    readonly label: string;
-    readonly onClick: () => void;
-  };
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const meaningful = activity
@@ -381,15 +376,6 @@ export const RequestStatusStrip = ({
           onClick={onShowAgent}
         >
           Show setup instructions →
-        </button>
-      ) : null}
-      {status.stage === "waiting" && activeRequestLink !== undefined ? (
-        <button
-          type="button"
-          className="mt-1 w-fit cursor-pointer border-0 bg-transparent p-0 font-semibold text-current underline underline-offset-[0.16em] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          onClick={activeRequestLink.onClick}
-        >
-          {activeRequestLink.label} →
         </button>
       ) : null}
       {isWorking && surface === "thread" ? (

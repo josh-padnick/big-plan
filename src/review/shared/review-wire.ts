@@ -2,6 +2,11 @@
 // encoders and browser decoders meet here so transport changes cannot drift.
 
 import type { ReviewComment } from "./comment.js";
+import {
+  decodeAgentModelIdentity,
+  type AgentModelIdentity,
+} from "./agent-model.js";
+import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
 
 export type ReviewSnapshot = {
@@ -20,12 +25,14 @@ export type AgentOutcome = {
   readonly changeTargets: ReadonlyArray<string>;
 };
 
-export type AgentRequest = {
+export type AgentRequest = TerminalAgentRequest & {
   readonly requestId: string;
   readonly premiseSnapshot: string;
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
-  readonly canceledAt?: string;
+  readonly claimedBy?: string;
+  readonly claimedModel?: AgentModelIdentity;
+  readonly claimExpiresAtMs?: number;
   readonly createdAt: string;
   readonly kind: "feedback" | "reply" | "chat";
   readonly body?: string;
@@ -43,16 +50,11 @@ export type AgentResponse = {
   readonly message?: string;
 };
 
-export type AgentModelIdentity = {
-  readonly name: string;
-};
-
 export type AgentPresence = {
   readonly connected: boolean;
   readonly state: "waiting" | "working";
   readonly requestId?: string;
   readonly updatedAtMs?: number;
-  readonly model?: AgentModelIdentity;
 };
 
 export type BrowserConnectionEvent = {
@@ -189,6 +191,9 @@ export const isReviewWireRecord = (
 ): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const isWireTimestamp = (value: unknown): value is string =>
+  typeof value === "string" && !Number.isNaN(Date.parse(value));
+
 /** Recognizes the bounded comment identity needed by browser persistence. */
 export const isReviewCommentValue = (
   value: unknown,
@@ -265,21 +270,57 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
         ) {
           return [];
         }
+        const rawClaim = [
+          request.baselineSnapshot,
+          request.claimedAt,
+          request.claimedBy,
+          request.claimExpiresAtMs,
+        ];
+        const hasAnyClaim = rawClaim.some((field) => field !== undefined);
+        const hasCompleteClaim =
+          typeof request.baselineSnapshot === "string" &&
+          /^[a-f0-9]{16,64}$/.test(request.baselineSnapshot) &&
+          isWireTimestamp(request.claimedAt) &&
+          typeof request.claimedBy === "string" &&
+          /^[a-f0-9]{16}$/.test(request.claimedBy) &&
+          typeof request.claimExpiresAtMs === "number" &&
+          Number.isSafeInteger(request.claimExpiresAtMs) &&
+          request.claimExpiresAtMs > 0;
+        const claimedModel = decodeAgentModelIdentity(request.claimedModel);
+        const answeredAt = isWireTimestamp(request.answeredAt)
+          ? request.answeredAt
+          : undefined;
+        const canceledAt = isWireTimestamp(request.canceledAt)
+          ? request.canceledAt
+          : undefined;
+        if (
+          (hasAnyClaim && !hasCompleteClaim) ||
+          (request.claimedModel !== undefined &&
+            (claimedModel === undefined || !hasCompleteClaim)) ||
+          (request.answeredAt !== undefined && answeredAt === undefined) ||
+          (request.canceledAt !== undefined && canceledAt === undefined) ||
+          (answeredAt !== undefined && canceledAt !== undefined) ||
+          (answeredAt !== undefined && !hasCompleteClaim)
+        ) {
+          return [];
+        }
         return [
           {
             requestId: request.requestId,
             premiseSnapshot: request.premiseSnapshot,
             createdAt: request.createdAt,
             kind: request.kind,
-            ...(typeof request.baselineSnapshot === "string"
-              ? { baselineSnapshot: request.baselineSnapshot }
+            ...(hasCompleteClaim
+              ? {
+                  baselineSnapshot: request.baselineSnapshot as string,
+                  claimedAt: request.claimedAt as string,
+                  claimedBy: request.claimedBy as string,
+                  claimExpiresAtMs: request.claimExpiresAtMs as number,
+                  ...(claimedModel === undefined ? {} : { claimedModel }),
+                }
               : {}),
-            ...(typeof request.claimedAt === "string"
-              ? { claimedAt: request.claimedAt }
-              : {}),
-            ...(typeof request.canceledAt === "string"
-              ? { canceledAt: request.canceledAt }
-              : {}),
+            ...(answeredAt === undefined ? {} : { answeredAt }),
+            ...(canceledAt === undefined ? {} : { canceledAt }),
             ...(typeof request.body === "string" ? { body: request.body } : {}),
             ...(typeof request.commentId === "string"
               ? { commentId: request.commentId }
@@ -380,11 +421,6 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           : {}),
         ...(typeof value.presence.updatedAtMs === "number"
           ? { updatedAtMs: value.presence.updatedAtMs }
-          : {}),
-        ...(isReviewWireRecord(value.presence.model) &&
-        typeof value.presence.model.name === "string" &&
-        value.presence.model.name.trim() !== ""
-          ? { model: { name: value.presence.model.name } }
           : {}),
       }
     : { connected: false, state: "waiting" as const };

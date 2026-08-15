@@ -1,5 +1,6 @@
 // Covers the review-owned coding-agent loop through its one action interface.
 
+import { exec } from "node:child_process";
 import {
   mkdir,
   mkdtemp,
@@ -14,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildFeedbackPackage } from "./feedback-package.js";
 import {
@@ -29,21 +31,63 @@ import {
   cancelAgentRequest,
   claimAgentRequest,
   deleteQueuedRequest,
-  publishAgentResponse,
+  commitRequestTerminal,
   reviseQueuedRequest,
 } from "./request-mailbox.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewImageId } from "./shared/review-image.js";
+import { reviewSessionIsRunning } from "./session-authority.js";
 import { readProgress } from "./store.js";
 import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
+import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 
 let runtime: ReviewRuntime;
+let pickedUpToken = "";
 const commentBody = "Which confidence level should this claim use?";
 const executablePath = fileURLToPath(
   new URL("../../bin/big-plan.mjs", import.meta.url),
 );
+const execAsync = promisify(exec);
+
+const deferred = (): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+} => {
+  let resolve = (): void => undefined;
+  const promise = new Promise<void>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+};
+
+const holdAgentRequestLock = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewRuntime["store"];
+  readonly requestId: string;
+}): Promise<() => Promise<void>> => {
+  const acquired = deferred();
+  const released = deferred();
+  const lock = reviewStore.withReviewStoreLock({
+    lockPath: join(store.agentRequestDirectory, `.${requestId}.lock`),
+    change: async () => {
+      acquired.resolve();
+      await released.promise;
+    },
+    timeoutError: () => new Error("Timed out holding the agent request lock"),
+  });
+  await acquired.promise;
+  let settled = false;
+  return async () => {
+    if (settled) return;
+    settled = true;
+    released.resolve();
+    await lock;
+  };
+};
 
 beforeAll(async () => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-command-"));
@@ -125,6 +169,12 @@ describe("agent work loop", () => {
     expect(result.agent_prompt).toContain("You are the coding agent");
     expect(result.agent_prompt).toContain("agent next");
     expect(result.agent_prompt).toContain("agent note");
+    expect(result.agent_prompt).toContain("Retain the agent_token");
+    expect(result.agent_prompt).toContain("agent next --agent <token>");
+    expect(result.agent_prompt).toContain("--agent <agent_token>");
+    expect(result.agent_prompt).toContain(
+      "one live request claim for this plan at a time",
+    );
     expect(result.agent_prompt).toContain(runtime.planPath);
     expect(result.codex).toContain('codex "$(cat ');
     expect(result.claude).toContain('claude "$(cat ');
@@ -143,6 +193,10 @@ describe("agent work loop", () => {
       executablePath,
       shouldWait: false,
     });
+    if (typeof result.agent_token !== "string") {
+      throw new Error("The agent command did not mint a claim token");
+    }
+    pickedUpToken = result.agent_token;
     expect(result).toMatchObject({
       pending: true,
       work: {
@@ -173,16 +227,25 @@ describe("agent work loop", () => {
   });
 
   it("should publish a complete needs-input outcome without editing the plan", async () => {
+    // Resumes the claim the previous pickup took, the way a restarted agent
+    // that still holds its token continues its own work.
     const next = await runAgentWorkLoopAction({
       kind: "next",
       planPath: runtime.planPath,
       executablePath,
       shouldWait: false,
+      agentToken: pickedUpToken,
     });
-    if (typeof next.response_file !== "string") {
+    if (
+      typeof next.response_file !== "string" ||
+      typeof next.agent_token !== "string"
+    ) {
       throw new Error("The pending request did not provide a response path");
     }
     const responseFile = next.response_file;
+    // The token minted at pickup is what proves this process holds the
+    // request, so the publish step carries it back.
+    const agentToken = next.agent_token;
     await writeFile(
       responseFile,
       JSON.stringify({
@@ -202,6 +265,7 @@ describe("agent work loop", () => {
         planPath: runtime.planPath,
         responsePath: responseFile,
         executablePath,
+        agentToken,
       }),
     ).toMatchObject({
       responded: "aaaaaaaaaaaaaaaa",
@@ -226,6 +290,219 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should execute the returned note and respond commands", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-commands-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer one question.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "1212121212121212",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "What is the answer?",
+    });
+    await writeAgentRequest({ store: review.store, request });
+
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.note_command !== "string" ||
+        typeof pickup.respond_command !== "string" ||
+        typeof pickup.response_file !== "string"
+      ) {
+        throw new Error("Pickup did not return executable agent commands");
+      }
+      const claimed = (
+        await readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        })
+      ).requests[0];
+      if (claimed?.claimExpiresAtMs === undefined) {
+        throw new Error("Pickup did not persist a claim lease");
+      }
+      const initialExpiry = claimed.claimExpiresAtMs;
+      await vi.waitFor(() => {
+        expect(Date.now() + AGENT_CLAIM_LEASE_MS).toBeGreaterThan(
+          initialExpiry,
+        );
+      });
+
+      await execAsync(pickup.note_command, { cwd: directory });
+
+      const renewed = (
+        await readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        })
+      ).requests[0];
+      expect(renewed?.claimExpiresAtMs).toBeGreaterThan(initialExpiry);
+      await expect(
+        readProgress({ store: review.store, sessionId: review.sessionId }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestId: request.requestId,
+            step: "Working on the request",
+            state: "live",
+          }),
+        ]),
+      );
+
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({
+          requestId: request.requestId,
+          message: "The answer is in the reviewed plan.",
+        }),
+      );
+      await execAsync(pickup.respond_command, { cwd: directory });
+
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [
+          expect.objectContaining({
+            requestId: request.requestId,
+            answeredAt: expect.any(String),
+          }),
+        ],
+        responses: [
+          expect.objectContaining({
+            requestId: request.requestId,
+            message: "The answer is in the reviewed plan.",
+          }),
+        ],
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should not hand one request to two agents on the same review", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-two-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nOne request, two agent processes.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "dddddddddddddddd",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Only one agent may answer this.",
+      }),
+    });
+
+    try {
+      // Two `agent next` invocations against one review server: the same
+      // review session id, so only a per-pickup token can tell them apart.
+      const first = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const second = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+
+      expect(first).toMatchObject({ pending: true });
+      expect(second).toMatchObject({ pending: false });
+      expect(first.agent_token).toEqual(expect.any(String));
+      expect(first.agent_token).not.toEqual(second.agent_token);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should report no work while another request has a live claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-lease-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nTwo agents are polling this plan.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const leased = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "The other agent is already answering this one.",
+    });
+    const free = messageAgentRequest({
+      kind: "chat",
+      requestId: "eeeeeeeeeeeeeeee",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "This one is still unclaimed.",
+    });
+    await writeAgentRequest({ store: review.store, request: leased });
+    await writeAgentRequest({ store: review.store, request: free });
+    await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: leased.requestId,
+      claimedBy: "ffff2222ffff2222",
+      baselineSnapshot: premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+
+    try {
+      // Without plan-level serialization this returns the free request. That
+      // counterfactual is the regression this public-interface assertion pins.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).resolves.toMatchObject({ pending: false });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === free.requestId,
+        ),
+      ).not.toHaveProperty("claimedAt");
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should leave a request reviewer-owned when its attachment cannot be opened", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-claim-"));
     const planPath = join(directory, "plan.mdx");
@@ -536,14 +813,13 @@ describe("agent work loop lifecycle", () => {
     await writeAgentRequest({ store: review.store, request });
     try {
       const canonicalAttachmentPath = await realpath(attachments[0].path);
-      await expect(
-        runAgentWorkLoopAction({
-          kind: "next",
-          planPath,
-          executablePath,
-          shouldWait: false,
-        }),
-      ).resolves.toMatchObject({
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        executablePath,
+        shouldWait: false,
+      });
+      await expect(Promise.resolve(pickup)).resolves.toMatchObject({
         pending: true,
         work: {
           requestId,
@@ -551,6 +827,9 @@ describe("agent work loop lifecycle", () => {
           attachmentManifest: [{ path: canonicalAttachmentPath }],
         },
       });
+      if (typeof pickup.agent_token !== "string") {
+        throw new Error("The pending request did not provide an agent token");
+      }
       await rm(attachments[0].path);
       await expect(
         runAgentWorkLoopAction({
@@ -558,6 +837,7 @@ describe("agent work loop lifecycle", () => {
           planPath,
           executablePath,
           shouldWait: false,
+          agentToken: pickup.agent_token,
         }),
       ).rejects.toThrow(/could not be opened during agent pickup/);
     } finally {
@@ -825,11 +1105,15 @@ describe("agent work loop lifecycle", () => {
     });
     await writeAgentRequest({ store: review.store, request: first });
     await writeAgentRequest({ store: review.store, request: second });
+    const expiredClaimAt = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
     const claimed = await claimAgentRequest({
       store: review.store,
+      activeSessionId: review.sessionId,
       requestId: first.requestId,
+      claimedBy: review.sessionId,
       baselineSnapshot: snapshot,
-      now: "2026-08-12T12:00:02.000Z",
+      now: new Date(expiredClaimAt).toISOString(),
+      clock: () => expiredClaimAt,
     });
     const response = validateAgentResponseDraft({
       value: { requestId: first.requestId, message: "Answered elsewhere." },
@@ -845,7 +1129,13 @@ describe("agent work loop lifecycle", () => {
     const readRequests = vi
       .spyOn(reviewStore, "readAgentRequestValues")
       .mockImplementationOnce(async () => {
-        await publishAgentResponse({ store: review.store, response });
+        await commitRequestTerminal({
+          store: review.store,
+          response,
+          claimedBy: review.sessionId,
+          now: new Date(expiredClaimAt + 1).toISOString(),
+          clock: () => expiredClaimAt + 1,
+        });
         return selectedValues;
       });
     try {
@@ -863,6 +1153,889 @@ describe("agent work loop lifecycle", () => {
     } finally {
       readRequests.mockRestore();
       await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should serialize concurrent waiting pickups until the holder answers", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-race-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nOne agent works this plan at a time.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const firstRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Answer this request first.",
+    });
+    const secondRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "cdcdcdcdcdcdcdcd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "Answer this request after the first one.",
+    });
+    await writeAgentRequest({ store: review.store, request: firstRequest });
+    await writeAgentRequest({ store: review.store, request: secondRequest });
+
+    let releaseLock: (() => Promise<void>) | undefined;
+    try {
+      releaseLock = await holdAgentRequestLock({
+        store: review.store,
+        requestId: firstRequest.requestId,
+      });
+      const firstPickup = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "Race agent one",
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({
+            state: "working",
+            requestId: firstRequest.requestId,
+          });
+        },
+        { timeout: 5_000 },
+      );
+      const firstPresence = await reviewStore.readAgentPresence({
+        store: review.store,
+        sessionId: review.sessionId,
+      });
+      if (firstPresence.updatedAtMs === undefined) {
+        throw new Error("The first pickup did not persist its heartbeat time");
+      }
+      await vi.waitFor(
+        () => {
+          expect(Date.now()).toBeGreaterThan(firstPresence.updatedAtMs ?? 0);
+        },
+        { timeout: 5_000 },
+      );
+      const secondPickup = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "Race agent two",
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({
+            state: "working",
+            requestId: firstRequest.requestId,
+            updatedAtMs: expect.any(Number),
+          });
+          expect(
+            (
+              await reviewStore.readAgentPresence({
+                store: review.store,
+                sessionId: review.sessionId,
+              })
+            ).updatedAtMs,
+          ).toBeGreaterThan(firstPresence.updatedAtMs ?? 0);
+        },
+        { timeout: 5_000 },
+      );
+      // The persisted heartbeat barrier proves both public pickups selected the
+      // same unclaimed request. Without plan-level serialization, both promises
+      // resolve before either response; that counterfactual was verified.
+      await releaseLock();
+      releaseLock = undefined;
+      const firstSettled = await Promise.race([
+        firstPickup.then((pickup) => ({ pickup, waiting: secondPickup })),
+        secondPickup.then((pickup) => ({ pickup, waiting: firstPickup })),
+      ]);
+      expect(firstSettled.pickup).toMatchObject({
+        pending: true,
+        work: { requestId: firstRequest.requestId },
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({ state: "waiting" });
+        },
+        { timeout: 5_000 },
+      );
+      if (
+        typeof firstSettled.pickup.agent_token !== "string" ||
+        typeof firstSettled.pickup.response_file !== "string"
+      ) {
+        throw new Error(
+          "The first pickup did not return its response contract",
+        );
+      }
+      await writeFile(
+        firstSettled.pickup.response_file,
+        JSON.stringify({
+          requestId: firstRequest.requestId,
+          message: "The first request is answered.",
+        }),
+      );
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: firstSettled.pickup.response_file,
+          executablePath,
+          agentToken: firstSettled.pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ responded: firstRequest.requestId });
+      await expect(firstSettled.waiting).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: secondRequest.requestId },
+      });
+    } finally {
+      await releaseLock?.();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 10_000);
+
+  it.each(["answered", "canceled"] as const)(
+    "should move past a request %s during pickup preparation",
+    async (terminalState) => {
+      const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-stale-"));
+      const planPath = join(directory, "plan.mdx");
+      const source =
+        "# Plan\n\nConcurrent terminal transitions are expected.\n";
+      await writeFile(planPath, source);
+      const review = await startReviewRuntime({ planPath });
+      const premiseSnapshot = deriveSnapshotDigest(source);
+      const staleRequest = messageAgentRequest({
+        kind: "chat",
+        requestId: "abababababababab",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "This request becomes terminal during preparation.",
+      });
+      const nextRequest = messageAgentRequest({
+        kind: "chat",
+        requestId: "cdcdcdcdcdcdcdcd",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: "2026-08-12T12:00:01.000Z",
+        body: "Continue with this request.",
+      });
+      await writeAgentRequest({ store: review.store, request: staleRequest });
+      await writeAgentRequest({ store: review.store, request: nextRequest });
+      let releaseLock: (() => Promise<void>) | undefined;
+      try {
+        releaseLock = await holdAgentRequestLock({
+          store: review.store,
+          requestId: staleRequest.requestId,
+        });
+        const pickup = runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: true,
+          executablePath,
+          modelName: "Stale selection agent",
+        });
+        await vi.waitFor(
+          async () => {
+            expect(
+              await reviewStore.readAgentPresence({
+                store: review.store,
+                sessionId: review.sessionId,
+              }),
+            ).toMatchObject({
+              state: "working",
+              requestId: staleRequest.requestId,
+            });
+          },
+          { timeout: 5_000 },
+        );
+        const now = new Date().toISOString();
+        await writeAgentRequest({
+          store: review.store,
+          request:
+            terminalState === "canceled"
+              ? { ...staleRequest, canceledAt: now }
+              : {
+                  ...staleRequest,
+                  baselineSnapshot: premiseSnapshot,
+                  claimedAt: now,
+                  claimedBy: "eeeeeeeeeeeeeeee",
+                  claimExpiresAtMs: Date.now() + AGENT_CLAIM_LEASE_MS,
+                  answeredAt: now,
+                },
+        });
+        await releaseLock();
+        releaseLock = undefined;
+        await expect(pickup).resolves.toMatchObject({
+          pending: true,
+          work: { requestId: nextRequest.requestId },
+        });
+      } finally {
+        await releaseLock?.();
+        await review.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("should surface cancellation while resuming an owned request", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nResume only the explicitly owned request.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const ownedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Resume this request.",
+    });
+    const unrelatedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "cdcdcdcdcdcdcdcd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "Do not silently switch to this request.",
+    });
+    await writeAgentRequest({ store: review.store, request: ownedRequest });
+    await writeAgentRequest({ store: review.store, request: unrelatedRequest });
+    const agentToken = "eeeeeeeeeeeeeeee";
+    const claimed = await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: ownedRequest.requestId,
+      claimedBy: agentToken,
+      baselineSnapshot: premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    let releaseLock: (() => Promise<void>) | undefined;
+    try {
+      releaseLock = await holdAgentRequestLock({
+        store: review.store,
+        requestId: ownedRequest.requestId,
+      });
+      const pickup = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        agentToken,
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({
+            state: "working",
+            requestId: ownedRequest.requestId,
+          });
+        },
+        { timeout: 5_000 },
+      );
+      await writeAgentRequest({
+        store: review.store,
+        request: { ...claimed, canceledAt: new Date().toISOString() },
+      });
+      await releaseLock();
+      releaseLock = undefined;
+
+      await expect(pickup).rejects.toThrow(/canceled by the reviewer/i);
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [
+          expect.objectContaining({
+            requestId: ownedRequest.requestId,
+            canceledAt: expect.any(String),
+          }),
+          expect.not.objectContaining({ claimedBy: expect.any(String) }),
+        ],
+      });
+    } finally {
+      await releaseLock?.();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should surface an owned cancellation before resuming", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nResume only the explicitly owned request.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const ownedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Resume this request.",
+    });
+    const unrelatedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "cdcdcdcdcdcdcdcd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "Do not silently switch to this request.",
+    });
+    await writeAgentRequest({ store: review.store, request: ownedRequest });
+    await writeAgentRequest({ store: review.store, request: unrelatedRequest });
+    const agentToken = "eeeeeeeeeeeeeeee";
+    const claimed = await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: ownedRequest.requestId,
+      claimedBy: agentToken,
+      baselineSnapshot: premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    await writeAgentRequest({
+      store: review.store,
+      request: { ...claimed, canceledAt: new Date().toISOString() },
+    });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          agentToken,
+        }),
+      ).rejects.toThrow(/reviewer canceled this agent request/i);
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [
+          expect.objectContaining({
+            requestId: ownedRequest.requestId,
+            canceledAt: expect.any(String),
+          }),
+          expect.not.objectContaining({ claimedBy: expect.any(String) }),
+        ],
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should surface an owned cancellation beyond retained history", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nResume only the explicitly owned request.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const agentToken = "eeeeeeeeeeeeeeee";
+    const createdAt = Date.parse("2026-08-12T12:00:00.000Z");
+    const ownedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "1111111111111111",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: new Date(createdAt).toISOString(),
+      body: "Resume this request.",
+    });
+    await writeAgentRequest({ store: review.store, request: ownedRequest });
+    const claimed = await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: ownedRequest.requestId,
+      claimedBy: agentToken,
+      baselineSnapshot: premiseSnapshot,
+      now: new Date(createdAt + 1).toISOString(),
+    });
+    await writeAgentRequest({
+      store: review.store,
+      request: {
+        ...claimed,
+        canceledAt: new Date(createdAt + 2).toISOString(),
+      },
+    });
+    for (let index = 0; index < 400; index += 1) {
+      const historical = messageAgentRequest({
+        kind: "chat",
+        requestId: `8${index.toString(16).padStart(15, "0")}`,
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: new Date(createdAt + index + 3).toISOString(),
+        body: `Historical request ${index}`,
+      });
+      await writeAgentRequest({
+        store: review.store,
+        request: {
+          ...historical,
+          canceledAt: new Date(createdAt + index + 4).toISOString(),
+        },
+      });
+    }
+    const unrelatedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "ffffffffffffffff",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: new Date(createdAt + 404).toISOString(),
+      body: "Do not silently switch to this request.",
+    });
+    await writeAgentRequest({ store: review.store, request: unrelatedRequest });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          agentToken,
+        }),
+      ).rejects.toThrow(/reviewer canceled this agent request/i);
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: expect.arrayContaining([
+          expect.objectContaining({
+            requestId: unrelatedRequest.requestId,
+          }),
+        ]),
+      });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === unrelatedRequest.requestId,
+        ),
+      ).not.toHaveProperty("claimedBy");
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a resume token whose request is already terminal", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer two questions in order.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const firstRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Answer this first.",
+    });
+    const secondRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "eeeeeeeeeeeeeeee",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "Answer this second.",
+    });
+    await writeAgentRequest({ store: review.store, request: firstRequest });
+    await writeAgentRequest({ store: review.store, request: secondRequest });
+
+    try {
+      const firstPickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof firstPickup.agent_token !== "string" ||
+        typeof firstPickup.response_file !== "string"
+      ) {
+        throw new Error(
+          "The first pickup did not provide its response contract",
+        );
+      }
+      await writeFile(
+        firstPickup.response_file,
+        JSON.stringify({
+          requestId: firstRequest.requestId,
+          message: "The first answer is complete.",
+        }),
+      );
+      await runAgentWorkLoopAction({
+        kind: "respond",
+        planPath,
+        responsePath: firstPickup.response_file,
+        executablePath,
+        agentToken: firstPickup.agent_token,
+      });
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          agentToken: firstPickup.agent_token,
+        }),
+      ).rejects.toThrow(/already answered|terminal/i);
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === secondRequest.requestId,
+        ),
+      ).not.toHaveProperty("claimedBy");
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a resume token after another agent takes over", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-takeover-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nNever swap resumed work.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const ownedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "9090909090909090",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "This request will be taken over.",
+    });
+    const unrelatedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "abab9090abab9090",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "Do not switch the resumed agent to this request.",
+    });
+    await writeAgentRequest({ store: review.store, request: ownedRequest });
+    await writeAgentRequest({ store: review.store, request: unrelatedRequest });
+    const previousToken = "eeeeeeeeeeeeeeee";
+    const takeoverToken = "ffffffffffffffff";
+    const expiredAt = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
+    await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: ownedRequest.requestId,
+      claimedBy: previousToken,
+      baselineSnapshot: premiseSnapshot,
+      now: new Date(expiredAt).toISOString(),
+      clock: () => expiredAt,
+    });
+    await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: ownedRequest.requestId,
+      claimedBy: takeoverToken,
+      baselineSnapshot: premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          agentToken: previousToken,
+        }),
+      ).rejects.toThrow(/taken over|no longer owns/i);
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === unrelatedRequest.requestId,
+        ),
+      ).not.toHaveProperty("claimedBy");
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should reject a progress note from a token without a claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-note-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nWait for a real pickup.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Do not narrate this before pickup.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Reading the plan",
+          agentToken: "ffff2222ffff2222",
+        }),
+      ).rejects.toThrow(/no pending request to update/i);
+      await expect(
+        readProgress({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestId: request.requestId,
+            stepCode: "agent-note",
+          }),
+        ]),
+      );
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should keep claims usable when progress cannot be stored", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-pickup-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nDo not strand this pickup.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Return the committed claim token.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    const expiredAt = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
+    await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: request.requestId,
+      claimedBy: "eeeeeeeeeeeeeeee",
+      baselineSnapshot: request.premiseSnapshot,
+      now: new Date(expiredAt).toISOString(),
+      clock: () => expiredAt,
+    });
+    await mkdir(review.store.progressPath);
+
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (typeof pickup.agent_token !== "string") {
+        throw new Error("Pickup did not return its committed token");
+      }
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.requests[0]).toMatchObject({
+        requestId: request.requestId,
+        claimedBy: pickup.agent_token,
+      });
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Continuing with the returned token",
+          agentToken: pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ requestId: request.requestId });
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [
+          expect.objectContaining({
+            requestId: request.requestId,
+            claimedBy: pickup.agent_token,
+          }),
+        ],
+      });
+      if (typeof pickup.response_file !== "string") {
+        throw new Error("Pickup did not return its response file");
+      }
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({
+          requestId: request.requestId,
+          message: "The request is complete.",
+        }),
+      );
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ responded: request.requestId });
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [expect.objectContaining({ answeredAt: expect.any(String) })],
+        responses: [expect.objectContaining({ requestId: request.requestId })],
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should expose a takeover after the review runtime restarts", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-restart-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nContinue this review after a restart.\n";
+    await writeFile(planPath, source);
+    const firstReview = await startReviewRuntime({ planPath });
+    let currentReview: ReviewRuntime | undefined;
+    try {
+      const request = messageAgentRequest({
+        kind: "chat",
+        requestId: "abababababababab",
+        sessionId: firstReview.sessionId,
+        planId: firstReview.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Please continue with a new agent session.",
+      });
+      await writeAgentRequest({ store: firstReview.store, request });
+      const expiredAt = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
+      await claimAgentRequest({
+        store: firstReview.store,
+        activeSessionId: firstReview.sessionId,
+        requestId: request.requestId,
+        claimedBy: "cdcdcdcdcdcdcdcd",
+        baselineSnapshot: request.premiseSnapshot,
+        now: new Date(expiredAt).toISOString(),
+        clock: () => expiredAt,
+      });
+      await firstReview.close();
+
+      currentReview = await startReviewRuntime({ planPath });
+      expect(currentReview.sessionId).not.toBe(firstReview.sessionId);
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: request.requestId },
+      });
+      await expect(
+        readProgress({
+          store: currentReview.store,
+          sessionId: currentReview.sessionId,
+        }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestId: request.requestId,
+            stepCode: "request-reclaimed",
+            detail: expect.stringContaining(
+              "partial plan edits may interleave with this takeover",
+            ),
+          }),
+        ]),
+      );
+    } finally {
+      await currentReview?.close();
+      await firstReview.close();
       await rm(directory, { recursive: true, force: true });
     }
   });
@@ -893,9 +2066,11 @@ describe("agent work loop lifecycle", () => {
     await writeAgentRequest({ store: review.store, request });
     await claimAgentRequest({
       store: review.store,
+      activeSessionId: review.sessionId,
       requestId: request.requestId,
+      claimedBy: review.sessionId,
       baselineSnapshot: deriveSnapshotDigest(source),
-      now: "2026-08-12T12:00:01.000Z",
+      now: new Date().toISOString(),
     });
     await writeFile(
       planPath,
@@ -916,6 +2091,7 @@ describe("agent work loop lifecycle", () => {
           planPath,
           responsePath,
           executablePath,
+          agentToken: review.sessionId,
         }),
       ).resolves.toMatchObject({ responded: request.requestId });
       await expect(readFile(planPath, "utf8")).resolves.toContain(
@@ -1097,6 +2273,188 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should stay open while a live claim exists despite waiting presence", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nKeep active work alive.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 500,
+    });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Keep working on this request.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    let waiting: Promise<Record<string, unknown>> | undefined;
+    try {
+      await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      await expect(fetch(review.url)).resolves.toMatchObject({ status: 200 });
+      waiting = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({ state: "waiting" });
+        },
+        { timeout: 5_000 },
+      );
+      const survivedUntil = Date.now() + 1_100;
+      await vi.waitFor(
+        () => {
+          expect(Date.now()).toBeGreaterThan(survivedUntil);
+        },
+        { timeout: 2_000, interval: 20 },
+      );
+      await expect(fetch(review.url)).resolves.toMatchObject({ status: 200 });
+    } finally {
+      await review.close();
+      await waiting;
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should let a waiting agent outlive a canceled writer's lease", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nWait for the previous writer to leave.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 100,
+    });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const blocker = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: new Date().toISOString(),
+      body: "Cancel this while its writer may still be editing.",
+    });
+    const queued = messageAgentRequest({
+      kind: "chat",
+      requestId: "cdcdcdcdcdcdcdcd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: new Date(Date.now() + 1).toISOString(),
+      body: "Pick this up after the canceled writer's lease lapses.",
+    });
+    await writeAgentRequest({ store: review.store, request: blocker });
+    await writeAgentRequest({ store: review.store, request: queued });
+    const leaseClock = Date.now() - AGENT_CLAIM_LEASE_MS + 250;
+    await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: blocker.requestId,
+      claimedBy: "aaaaaaaaaaaaaaaa",
+      baselineSnapshot: premiseSnapshot,
+      now: new Date(leaseClock).toISOString(),
+      clock: () => leaseClock,
+    });
+    await cancelAgentRequest({
+      store: review.store,
+      requestId: blocker.requestId,
+      now: new Date().toISOString(),
+    });
+
+    try {
+      // Without the queued-work extension, the first 100ms idle tick after the
+      // 250ms lease lapses stops the runtime before the waiter's 500ms poll.
+      // That counterfactual was verified before this test passed.
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: true,
+          executablePath,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: queued.requestId },
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should bound the idle extension for queued work without an agent", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nDo not keep an unattended queue alive forever.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 100,
+      queuedWorkIdleTimeoutMs: 300,
+    });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: new Date().toISOString(),
+      body: "Wait for an agent that never connects.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+
+    try {
+      const firstIdleTick = Date.now() + 180;
+      await vi.waitFor(
+        () => {
+          expect(Date.now()).toBeGreaterThan(firstIdleTick);
+        },
+        { timeout: 1_000, interval: 20 },
+      );
+      // Without the state-based extension, the runtime is already stopped at
+      // this first assertion. Without its deadline, the final assertion never
+      // passes. Both counterfactuals were verified before this test passed.
+      await expect(
+        reviewSessionIsRunning({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toMatchObject({ running: true });
+      await vi.waitFor(
+        async () => {
+          await expect(
+            reviewSessionIsRunning({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).resolves.toMatchObject({ running: false });
+        },
+        { timeout: 2_000, interval: 25 },
+      );
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should include complete original context when picking up an old reply", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-history-"));
     const planPath = join(directory, "plan.mdx");
@@ -1130,11 +2488,14 @@ describe("agent work loop lifecycle", () => {
       });
       const originalClaim = await claimAgentRequest({
         store: review.store,
+        activeSessionId: review.sessionId,
         requestId: originalRequest.requestId,
+        claimedBy: review.sessionId,
         baselineSnapshot: revision,
         now: "2026-08-10T12:00:00.500Z",
       });
-      await publishAgentResponse({
+      await commitRequestTerminal({
+        claimedBy: review.sessionId,
         store: review.store,
         response: validateAgentResponseDraft({
           value: {
@@ -1153,6 +2514,7 @@ describe("agent work loop lifecycle", () => {
           currentSnapshot: revision,
           now: "2026-08-10T12:00:01.000Z",
         }),
+        now: "2026-08-10T12:00:01.000Z",
       });
       for (let index = 1; index < 400; index += 1) {
         const chat = messageAgentRequest({
@@ -1211,7 +2573,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should carry the connector's reported model identity onto the working heartbeat", async () => {
+  it("should carry the connector's model identity on the pickup claim", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-model-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nAnswer this question.\n";
@@ -1236,14 +2598,25 @@ describe("agent work loop lifecycle", () => {
         modelName: "Grok 4.6",
       });
       await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [
+          expect.objectContaining({
+            requestId: request.requestId,
+            claimedModel: { name: "Grok 4.6" },
+          }),
+        ],
+      });
+      await expect(
         reviewStore.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         }),
-      ).resolves.toMatchObject({
-        connected: true,
-        model: { name: "Grok 4.6" },
-      });
+      ).resolves.not.toHaveProperty("model");
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
@@ -1256,6 +2629,7 @@ describe("agent work loop lifecycle", () => {
         kind: "note",
         planPath: "/tmp/no-review-session.mdx",
         detail: "   ",
+        agentToken: "ffff2222ffff2222",
       }),
     ).rejects.toThrow(/Progress must be between 1 and 160 characters/);
   });
