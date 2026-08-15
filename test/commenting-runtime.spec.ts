@@ -1535,23 +1535,19 @@ test("should restore and submit staged comments through the local review runtime
   const waitingChat = rail
     .locator("li")
     .filter({ hasText: "How does this affect the rollout?" });
-  await expect(waitingChat).toContainText(
-    "Waiting - the agent is working on another request",
-  );
-  await waitingChat
-    .getByRole("button", { name: "View active comment →" })
-    .click();
-  const linkedActiveComment = rail
-    .locator('[data-review-comment-id][data-review-selected="true"]')
-    .filter({ hasText: "Clarify the failure boundary." });
-  await expect(linkedActiveComment).toBeVisible();
-  await linkedActiveComment
-    .getByRole("button", { name: "Minimize thread" })
-    .click();
-  await rail.getByRole("tab", { name: "Chat" }).click();
+  await expect(waitingChat).toContainText("Waiting for an agent");
+  await expect(
+    waitingChat.getByRole("button", { name: "View active comment →" }),
+  ).toHaveCount(0);
   await waitingChat.getByRole("button", { name: "Cancel request" }).click();
   await expect(waitingChat).toContainText("Request canceled");
   await rail.getByRole("tab", { name: "Comments" }).click();
+  const expandedActiveComment = rail
+    .locator("[data-review-comment-id]")
+    .filter({ hasText: "Clarify the failure boundary." });
+  await expandedActiveComment
+    .getByRole("button", { name: "Minimize thread" })
+    .click();
 
   const workingGroup = rail.locator("[data-review-thread-group='working']");
   await expect(workingGroup).toBeVisible();

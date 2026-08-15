@@ -462,21 +462,20 @@ describe("agent request status", () => {
     expect(status.headline).toBe("Waiting for an agent");
   });
 
-  it("should report a busy queue neutrally and with its position", () => {
+  it("should report a positioned queue neutrally", () => {
     expect(
       deriveAgentStatus({
         runtime: "online",
         request: "pending",
         agentConnected: true,
         pickedUp: false,
-        sessionBusy: true,
         queuedAhead: 2,
         nowMs: NOW,
       }),
     ).toMatchObject({
       stage: "waiting",
       label: "Queued, 2 ahead",
-      headline: "Waiting - the agent is working on another request",
+      headline: "Waiting for an agent",
       tone: "neutral",
     });
   });

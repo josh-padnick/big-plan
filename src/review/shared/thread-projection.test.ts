@@ -406,7 +406,6 @@ describe("thread projection", () => {
           surface,
           nowMs: NOW,
           cancelPendingRequestIds: new Set(),
-          activeRequestId: undefined,
         }),
       ).toMatchObject({
         stage: "answered",
@@ -458,7 +457,6 @@ describe("thread projection", () => {
         surface: "thread",
         nowMs: NOW,
         cancelPendingRequestIds: new Set(),
-        activeRequestId: "aaaaaaaaaaaaaaaa",
       }).stage,
     ).toBe("working");
   });
@@ -505,7 +503,6 @@ describe("thread projection", () => {
         surface: "thread",
         nowMs: NOW,
         cancelPendingRequestIds: new Set(),
-        activeRequestId: undefined,
       }).stage,
     ).toBe("waiting");
   });
@@ -520,7 +517,6 @@ describe("thread projection", () => {
         surface: "thread",
         nowMs: NOW + AGENT_CLAIM_LEASE_MS + 1,
         cancelPendingRequestIds: new Set(),
-        activeRequestId: undefined,
       }).stage,
     ).toBe("waiting");
   });
@@ -544,7 +540,6 @@ describe("thread projection", () => {
         surface: "thread",
         nowMs: NOW,
         cancelPendingRequestIds: new Set(),
-        activeRequestId: "aaaaaaaaaaaaaaaa",
       }).stage,
     ).toBe("working");
   });
@@ -568,7 +563,6 @@ describe("thread projection", () => {
         surface: "thread",
         nowMs: NOW,
         cancelPendingRequestIds: new Set(),
-        activeRequestId: "aaaaaaaaaaaaaaaa",
       }),
     ).toMatchObject({ stage: "working" });
   });
@@ -588,7 +582,6 @@ describe("thread projection", () => {
         surface: "thread",
         nowMs: NOW,
         cancelPendingRequestIds: new Set(),
-        activeRequestId: undefined,
       }),
     ).toMatchObject({
       stage: "waiting",

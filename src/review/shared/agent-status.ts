@@ -13,10 +13,7 @@ import {
   requestIsTerminal,
   type TerminalAgentRequest,
 } from "./agent-request-state.js";
-import {
-  AGENT_STALL_MS,
-  AGENT_STALL_WINDOW_LABEL,
-} from "./agent-timing.js";
+import { AGENT_STALL_MS, AGENT_STALL_WINDOW_LABEL } from "./agent-timing.js";
 import type { BrowserConnectionEvent } from "./review-wire.js";
 import { compactDurationLabel } from "./time-label.js";
 
@@ -389,7 +386,6 @@ export type AgentStatusInput = {
   readonly request: "none" | "pending" | "answered";
   readonly agentConnected: boolean;
   readonly pickedUp: boolean;
-  readonly sessionBusy?: boolean;
   /** How many unanswered messages the agent delivers before this one. */
   readonly queuedAhead?: number;
   readonly surface?: "thread" | "chat";
@@ -467,10 +463,7 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     return {
       stage: "waiting",
       label: ahead > 0 ? `Queued, ${ahead} ahead` : "Waiting",
-      headline:
-        input.sessionBusy === true
-          ? "Waiting - the agent is working on another request"
-          : "Waiting for an agent",
+      headline: "Waiting for an agent",
       detail: "",
       tone: "neutral",
     };

@@ -6,7 +6,9 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import type { ReviewComment } from "./shared/comment.js";
+import { projectCommentThread } from "./shared/thread-projection.js";
 import {
   AgentExchangeRejected,
   commentsFromExchange,
@@ -241,6 +243,47 @@ describe("agent exchange response contract", () => {
         viewer(),
       ),
     ).toEqual(reply);
+  });
+
+  it("should present work another agent can claim as waiting", () => {
+    const nowMs = Date.parse("2026-08-02T12:00:30.000Z");
+    const active = validateAgentRequest({
+      ...messageAgentRequest({
+        kind: "chat",
+        requestId: "5555555555555555",
+        sessionId,
+        planId,
+        premiseSnapshot: deriveSnapshotDigest(before),
+        createdAt: "2026-08-02T11:59:00.000Z",
+        body: "What is already being handled?",
+      }),
+      baselineSnapshot: deriveSnapshotDigest(before),
+      claimedAt: new Date(nowMs).toISOString(),
+      claimedBy: "bbbb0000bbbb0000",
+      claimExpiresAtMs: nowMs + AGENT_CLAIM_LEASE_MS,
+    });
+    const exchange = { requests: [active, request], responses: [] };
+
+    expect(
+      projectCommentThread({
+        comment,
+        ...exchange,
+        progressEvents: [],
+        presence: { connected: true, state: "working" },
+        runtime: "online",
+        nowMs,
+        cancelPendingRequestIds: new Set(),
+      }).latestStatus,
+    ).toMatchObject({
+      stage: "waiting",
+      headline: "Waiting for an agent",
+    });
+    expect(
+      nextPendingAgentRequest(exchange, {
+        claimedBy: "cccc0000cccc0000",
+        nowMs,
+      }),
+    ).toBe(request);
   });
 
   it("should reject an answered request without a complete claim", () => {

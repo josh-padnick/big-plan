@@ -2884,7 +2884,6 @@ const SentThread = ({
   onAssociate,
   onReplySent,
   onShowAgent,
-  activeRequestLink,
   onCancelRequest,
   onDelete,
   onRevert,
@@ -2909,10 +2908,6 @@ const SentThread = ({
   readonly onAssociate: (target: CommentTarget | null) => void;
   readonly onReplySent: (message: string) => void;
   readonly onShowAgent: () => void;
-  readonly activeRequestLink?: {
-    readonly label: string;
-    readonly onClick: () => void;
-  };
   readonly onCancelRequest: (requestId: string) => void;
   readonly onDelete: () => void;
   readonly onRevert: (requestId: string, commentId: string) => void;
@@ -3388,7 +3383,6 @@ const SentThread = ({
                               : 1
                           }
                           onShowAgent={onShowAgent}
-                          activeRequestLink={activeRequestLink}
                           onCancelRequest={() =>
                             onCancelRequest(request.requestId)
                           }
@@ -3605,7 +3599,6 @@ const ChatExchange = ({
   activity,
   onStatus,
   onShowAgent,
-  activeRequestLink,
   onCancelRequest,
   currentSnapshot,
 }: {
@@ -3617,10 +3610,6 @@ const ChatExchange = ({
   readonly activity: ReadonlyArray<MessageActivity>;
   readonly onStatus: (message: string) => void;
   readonly onShowAgent: () => void;
-  readonly activeRequestLink?: {
-    readonly label: string;
-    readonly onClick: () => void;
-  };
   readonly onCancelRequest: (requestId: string) => void;
   readonly currentSnapshot: string;
 }) => {
@@ -3644,7 +3633,6 @@ const ChatExchange = ({
             activity={activity}
             surface="chat"
             onShowAgent={onShowAgent}
-            activeRequestLink={activeRequestLink}
             onCancelRequest={() => onCancelRequest(request.requestId)}
           />
         </div>
@@ -4887,7 +4875,6 @@ export const ReviewController = () => {
       surface,
       nowMs: agentProjectionNowMs,
       cancelPendingRequestIds,
-      activeRequestId: activeRequest?.requestId,
       queuedAhead: queuedRequestsAhead({
         request,
         requests: agent.requests,
@@ -4933,7 +4920,6 @@ export const ReviewController = () => {
         activity={activityForRequest(request)}
         onStatus={setStatus}
         onShowAgent={showAgentSetup}
-        activeRequestLink={activeRequestLink}
         onCancelRequest={(requestId) => void cancelRequest(requestId)}
         currentSnapshot={currentSnapshot}
       />
@@ -5123,17 +5109,6 @@ export const ReviewController = () => {
       });
     });
   };
-  const activeRequestLink =
-    activeRequest === undefined
-      ? undefined
-      : {
-          label:
-            activeRequest.kind === "chat"
-              ? "View active chat"
-              : "View active comment",
-          onClick: () =>
-            viewAgentRequest(activeRequest.requestId, activeRequest.kind),
-        };
   const activeBatchRequest = selectActiveFeedbackBatch({
     requests: agent.requests,
     cancelPendingRequestIds,
@@ -5477,7 +5452,6 @@ export const ReviewController = () => {
                               surface="thread"
                               commentCount={activeBatchCommentIds.length}
                               onShowAgent={showAgentSetup}
-                              activeRequestLink={activeRequestLink}
                               onCancelRequest={() =>
                                 void cancelRequest(activeBatchRequest.requestId)
                               }
@@ -5618,7 +5592,6 @@ export const ReviewController = () => {
                       onAssociate={setAssociatedTarget}
                       onReplySent={setStatus}
                       onShowAgent={showAgentSetup}
-                      activeRequestLink={activeRequestLink}
                       onCancelRequest={(requestId) =>
                         void cancelRequest(requestId)
                       }
@@ -5872,7 +5845,6 @@ export const ReviewController = () => {
                 onAssociate={setAssociatedTarget}
                 onReplySent={setStatus}
                 onShowAgent={showAgentSetup}
-                activeRequestLink={activeRequestLink}
                 onCancelRequest={(requestId) => void cancelRequest(requestId)}
                 onDelete={() =>
                   setPendingDelete({

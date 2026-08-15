@@ -4,7 +4,6 @@
 
 import {
   deriveAgentStatus,
-  selectActiveAgentRequest,
   selectPendingAgentRequest,
   type AgentStatus,
 } from "./agent-status.js";
@@ -261,11 +260,6 @@ export const projectLatestAgentStatus = ({
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
 }): AgentStatus => {
-  const activeRequest = selectActiveAgentRequest({
-    requests,
-    cancelPendingRequestIds,
-    now: nowMs,
-  });
   const request =
     selectPendingAgentRequest({
       requests,
@@ -289,7 +283,6 @@ export const projectLatestAgentStatus = ({
     surface: "chat",
     nowMs,
     cancelPendingRequestIds,
-    activeRequestId: activeRequest?.requestId,
     queuedAhead: queuedRequestsAhead({
       request,
       requests,
@@ -307,7 +300,6 @@ export const projectRequestStatus = ({
   surface,
   nowMs,
   cancelPendingRequestIds,
-  activeRequestId,
   queuedAhead,
 }: {
   readonly request: ThreadRequest;
@@ -317,7 +309,6 @@ export const projectRequestStatus = ({
   readonly surface: ThreadSurface;
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
-  readonly activeRequestId: string | undefined;
   readonly queuedAhead?: number;
 }): AgentStatus => {
   if (
@@ -344,8 +335,6 @@ export const projectRequestStatus = ({
     request: requestIsTerminal(request) ? "answered" : "pending",
     agentConnected: presence.connected,
     pickedUp: claimIsLive({ request, nowMs }),
-    sessionBusy:
-      activeRequestId !== undefined && activeRequestId !== request.requestId,
     ...(queuedAhead === undefined ? {} : { queuedAhead }),
     surface,
     ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
@@ -376,11 +365,6 @@ export const projectCommentThread = <
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
 }): CommentThreadProjection<Request, Response> => {
-  const activeRequest = selectActiveAgentRequest({
-    requests,
-    cancelPendingRequestIds,
-    now: nowMs,
-  });
   const exchanges = requests
     .filter((request) => requestCommentIds(request).includes(comment.id))
     .map((request): ProjectedThreadExchange<Request, Response> => {
@@ -407,7 +391,6 @@ export const projectCommentThread = <
           surface: "thread",
           nowMs,
           cancelPendingRequestIds,
-          activeRequestId: activeRequest?.requestId,
           queuedAhead: queuedRequestsAhead({
             request,
             requests,
