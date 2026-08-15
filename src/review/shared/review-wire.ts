@@ -7,7 +7,6 @@ import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
 export type ReviewSnapshot = {
   readonly drafts: ReadonlyArray<ReviewComment>;
   readonly sent: ReadonlyArray<ReviewComment>;
-  readonly activeDraft: string;
   readonly resolvedCommentIds: ReadonlyArray<string>;
 };
 
@@ -199,15 +198,19 @@ export const isReviewCommentValue = (
   );
 };
 
-/** Encodes the server-owned comment snapshot without losing active draft data. */
+/** Encodes the server-owned comment snapshot for transport. */
 export const encodeReviewSnapshot = (
   value: ReviewSnapshotSource,
 ): ReviewSnapshotSource => value;
 
-/** Decodes comments while dropping malformed local or transport values. */
+/**
+ * Decodes comments while dropping malformed local or transport values. Fields
+ * this contract no longer names are dropped, so state a runtime of another
+ * vintage left behind loads as the fields this one understands.
+ */
 export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
   if (!isReviewWireRecord(value)) {
-    return { drafts: [], sent: [], activeDraft: "", resolvedCommentIds: [] };
+    return { drafts: [], sent: [], resolvedCommentIds: [] };
   }
   return {
     drafts: Array.isArray(value.drafts)
@@ -216,7 +219,6 @@ export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
     sent: Array.isArray(value.sent)
       ? value.sent.filter(isReviewCommentValue)
       : [],
-    activeDraft: typeof value.activeDraft === "string" ? value.activeDraft : "",
     resolvedCommentIds: Array.isArray(value.resolvedCommentIds)
       ? value.resolvedCommentIds.filter(
           (id): id is string => typeof id === "string",

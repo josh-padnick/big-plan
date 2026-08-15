@@ -14,7 +14,6 @@ import type {
 } from "./review-route-context.js";
 import type { ReviewComment } from "./shared/comment.js";
 import {
-  validateActiveDraft,
   validateResolvedCommentIds,
   validateStoredComments,
 } from "./shared/comment.js";
@@ -36,11 +35,9 @@ import {
 } from "./request-mailbox.js";
 import {
   freezeRequestAttachments,
-  readActiveDraft,
   readFeedbackSubmissionValue,
   readResolvedCommentIds,
   readSnapshot,
-  writeActiveDraft,
   writeComments,
   writeFeedbackPackage,
   writeFeedbackSubmissionValue,
@@ -234,10 +231,6 @@ export const readReviewState = async (
     value: encodeReviewSnapshot({
       drafts: await planRenderer.readStoredComments(store.draftsPath),
       sent: await planRenderer.readStoredComments(store.sentPath),
-      activeDraft: await readActiveDraft({
-        path: store.activeDraftPath,
-        validate: validateActiveDraft,
-      }),
       resolvedCommentIds: await readResolvedCommentIds({
         store,
         validate: validateResolvedCommentIds,
@@ -254,7 +247,6 @@ export const updateReviewState = async (
   const { store, planId, sessionId, planRenderer } = context;
   const payload = payloadOf(body);
   const drafts = await planRenderer.validateUpdates(payload.drafts);
-  const activeDraft = validateActiveDraft(payload.activeDraft);
   const resolvedCommentIds = validateResolvedCommentIds(
     payload.resolvedCommentIds,
   );
@@ -283,10 +275,6 @@ export const updateReviewState = async (
   );
   const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
   await writeComments({ path: store.draftsPath, comments: unsentDrafts });
-  await writeActiveDraft({
-    path: store.activeDraftPath,
-    value: activeDraft,
-  });
   await writeResolvedCommentIds({ store, ids: resolvedCommentIds });
   return jsonResponse({ status: 200, value: { drafts: unsentDrafts.length } });
 };
@@ -332,7 +320,6 @@ export const submitFeedback = async (
       path: store.draftsPath,
       comments: remainingDrafts,
     });
-    await writeActiveDraft({ path: store.activeDraftPath, value: "" });
     return jsonResponse({ status: 200, value: { comments: 0, retried: true } });
   }
   const submissionId = feedbackSubmissionId({
@@ -435,7 +422,6 @@ export const submitFeedback = async (
     path: store.draftsPath,
     comments: remainingDrafts,
   });
-  await writeActiveDraft({ path: store.activeDraftPath, value: "" });
   // The one event the runtime can honestly author: it has the package.
   // Everything after this belongs to the agent that reads the channel.
   await appendProgressEvent({

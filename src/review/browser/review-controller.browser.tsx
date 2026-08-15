@@ -4295,7 +4295,6 @@ export const ReviewController = () => {
           method: "PUT",
           body: {
             drafts,
-            activeDraft: "",
             resolvedCommentIds: Array.from(resolvedCommentIds),
           },
         });

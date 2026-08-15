@@ -129,18 +129,6 @@ const asText = ({
   return value;
 };
 
-/**
- * Validates the in-progress whole-plan field without requiring it to be
- * non-empty. Unlike a saved comment, this is reviewer-owned scratch text:
- * preserving its exact whitespace is part of restoring an interrupted edit.
- */
-export const validateActiveDraft = (value: unknown): string =>
-  asText({
-    value: value ?? "",
-    field: "activeDraft",
-    limit: BODY_LIMIT,
-  });
-
 /** Validates the durable set of resolved thread ids stored beside comments. */
 export const validateResolvedCommentIds = (
   value: unknown,
