@@ -71,10 +71,18 @@ import {
   readComments,
   readResolvedCommentIds,
   reviewStoreFor,
+  reviewStoreGrowth,
   writeComments,
   writeSnapshot,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
+import {
+  createMutationRegistry,
+  describeStalledMutation,
+  growthMilestone,
+  stalledMutations,
+} from "./runtime-watchdog.js";
+import type { ReviewRuntimeDiagnostics } from "./runtime-watchdog.js";
 import { RAW_IMAGE_BODY_LIMIT } from "./shared/review-image.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
 import {
@@ -124,6 +132,17 @@ import { readRuntimeSession } from "./routes-session.js";
 const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const SHUTDOWN_GRACE_MS = 100;
+
+// A mutation is expected to finish in milliseconds. The store's own lock gives
+// up after roughly two seconds, so anything still running after thirty is not
+// slow, it is stuck, and the session it belongs to is degraded.
+const MUTATION_STALL_MS = 30_000;
+const STALL_CHECK_INTERVAL_MS = 5_000;
+const GROWTH_CHECK_INTERVAL_MS = 60_000;
+// Both polled read paths re-read their whole history, so growth is reported on
+// a ladder rather than a limit: each rung is one order of magnitude of cost a
+// long session added to every poll.
+const GROWTH_MILESTONE = 1_000;
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.
 const CONTENT_SECURITY_POLICY = [
@@ -201,6 +220,8 @@ export type ReviewRuntime = {
   readonly planPath: string;
   readonly store: ReviewStore;
   readonly close: (reason?: string) => Promise<void>;
+  /** Reports what this runtime is doing right now, including any stalled write. */
+  readonly diagnostics: () => Promise<ReviewRuntimeDiagnostics>;
 };
 
 const constantTimeEquals = (left: string, right: string): boolean => {
@@ -573,6 +594,7 @@ export const startReviewRuntime = async ({
   }
 
   const initialExchange = await readAgentExchange({ store, sessionId, planId });
+  const mutations = createMutationRegistry();
 
   // Every piece of state the routes share is built once, here, and named after
   // what it means. Anything a route may read travels through this record.
@@ -598,7 +620,7 @@ export const startReviewRuntime = async ({
         (response) => response.requestId,
       ),
     }),
-    writeGate: createWriteGate(),
+    writeGate: createWriteGate({ mutations }),
     activityClock: createActivityClock(),
   };
   const { planRenderer } = context;
@@ -751,29 +773,43 @@ export const startReviewRuntime = async ({
       if (matched.method === "GET") {
         await dispatch();
       } else {
-        await context.writeGate.exclusively(async () => {
-          const authority = await withReviewSessionAuthority({
-            store,
-            sessionId,
-            change: async () => {
-              context.activityClock.touch();
-              await dispatch();
-            },
-          });
-          if (!authority.authoritative) {
-            refuse({
-              response,
-              status: 409,
-              reason:
-                "This review was replaced by a newer session and is now read-only",
+        await context.writeGate.exclusively({
+          route: `${matched.method} ${matched.path}`,
+          work: async () => {
+            const authority = await withReviewSessionAuthority({
+              store,
+              sessionId,
+              change: async () => {
+                context.activityClock.touch();
+                await dispatch();
+              },
             });
-          }
+            if (!authority.authoritative) {
+              refuse({
+                response,
+                status: 409,
+                reason:
+                  "This review was replaced by a newer session and is now read-only",
+              });
+            }
+          },
         });
       }
     } catch (error: unknown) {
       if (error instanceof CommentRejected) {
         refuse({ response, status: 400, reason: error.message });
         return;
+      }
+      // The outer boundary is the only place with both the route and the
+      // cause. A refused request the reviewer sees as a generic failure has to
+      // leave a specific line behind, or a session that starts failing every
+      // write reports nothing at all. A client that went away is not such a
+      // failure: nothing is left to read the response, and a reviewer who
+      // closed the page would otherwise fill the log.
+      if (request.complete) {
+        process.stderr.write(
+          `Review request ${request.method ?? "?"} ${request.url ?? "?"} failed for session ${sessionId}: ${String(error)}\n`,
+        );
       }
       refuse({ response, status: 500, reason: "The review runtime failed" });
     }
@@ -870,6 +906,66 @@ export const startReviewRuntime = async ({
   }, REVIEW_HEARTBEAT_INTERVAL_MS);
   connectionTimer.unref();
 
+  // A stalled mutation is reported once. Repeating it every five seconds would
+  // bury the rest of the session's output without telling the reader anything
+  // the first line did not already say.
+  const reportedStalls = new Set<string>();
+  const stallTimer = setInterval(() => {
+    for (const mutation of stalledMutations({
+      inFlight: mutations.inFlight(),
+      nowMs: Date.now(),
+      boundMs: MUTATION_STALL_MS,
+    })) {
+      if (reportedStalls.has(mutation.id)) continue;
+      reportedStalls.add(mutation.id);
+      process.stderr.write(
+        `Review write stalled for session ${sessionId} (${resolvedPlanPath}): ${describeStalledMutation(mutation)}\n`,
+      );
+    }
+  }, STALL_CHECK_INTERVAL_MS);
+  stallTimer.unref();
+
+  let reportedGrowthMilestone = 0;
+  const growthTimer = setInterval(() => {
+    void (async () => {
+      const growth = await reviewStoreGrowth({ store }).catch(() => undefined);
+      if (growth === undefined) return;
+      const milestone = growthMilestone({
+        growth,
+        threshold: GROWTH_MILESTONE,
+      });
+      if (milestone <= reportedGrowthMilestone) return;
+      reportedGrowthMilestone = milestone;
+      process.stderr.write(
+        `Review state growing for session ${sessionId} (${resolvedPlanPath}): ${growth.progressLines} progress lines, ${growth.agentRequests} agent requests, ${growth.agentResponses} agent responses\n`,
+      );
+    })();
+  }, GROWTH_CHECK_INTERVAL_MS);
+  growthTimer.unref();
+
+  // The whole point of the dump is to answer "where is it stuck" while the
+  // process is still stuck, so it reads the registry and the store directly
+  // rather than anything the stall reporter has already summarized.
+  const diagnostics = async (): Promise<ReviewRuntimeDiagnostics> => {
+    const nowMs = Date.now();
+    const inFlight = mutations.inFlight();
+    return {
+      sessionId,
+      planPath: resolvedPlanPath,
+      nowMs,
+      inFlight,
+      stalled: stalledMutations({
+        inFlight,
+        nowMs,
+        boundMs: MUTATION_STALL_MS,
+      }),
+      ...(await reviewStoreGrowth({ store }).then(
+        (growth) => ({ growth }),
+        () => ({}),
+      )),
+    };
+  };
+
   let closed = false;
   let idleTimer: ReturnType<typeof setInterval> | undefined;
   const closeRuntime = async (
@@ -879,6 +975,8 @@ export const startReviewRuntime = async ({
     closed = true;
     clearInterval(heartbeatTimer);
     clearInterval(connectionTimer);
+    clearInterval(stallTimer);
+    clearInterval(growthTimer);
     if (idleTimer !== undefined) clearInterval(idleTimer);
     await queueHeartbeat(false, reason).catch(() => undefined);
     await connectionWrite.catch(() => undefined);
@@ -932,5 +1030,6 @@ export const startReviewRuntime = async ({
     planPath: resolvedPlanPath,
     store,
     close: closeRuntime,
+    diagnostics,
   };
 };

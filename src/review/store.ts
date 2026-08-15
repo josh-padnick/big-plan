@@ -705,6 +705,27 @@ const releaseStoreLock = async ({
   }
 };
 
+/**
+ * Names the resource a timed-out wait was waiting for. The caller owns what
+ * the failure means, so its own error and type are kept and only the contended
+ * lock and the time spent on it are added; without them, every lock in the
+ * store reports the same sentence and a wedged session names nothing.
+ */
+const withContendedLock = ({
+  error,
+  lockPath,
+  waitedMs,
+}: {
+  readonly error: Error;
+  readonly lockPath: string;
+  readonly waitedMs: number;
+}): Error => {
+  // The lock's own name identifies the resource; the directory holding it is
+  // an implementation detail this message must not put in front of a reviewer.
+  error.message = `${error.message} (waited ${waitedMs}ms for ${basename(lockPath)})`;
+  return error;
+};
+
 /** Runs one store change while other processes wait for the same resource. */
 export const withReviewStoreLock = async <TResult>({
   lockPath,
@@ -715,6 +736,7 @@ export const withReviewStoreLock = async <TResult>({
   readonly change: () => Promise<TResult>;
   readonly timeoutError: () => Error;
 }): Promise<TResult> => {
+  const startedAtMs = Date.now();
   for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
     const owner = await acquireStoreLock(lockPath);
     if (owner === undefined) {
@@ -729,7 +751,48 @@ export const withReviewStoreLock = async <TResult>({
       await releaseStoreLock({ lockPath, owner });
     }
   }
-  throw timeoutError();
+  throw withContendedLock({
+    error: timeoutError(),
+    lockPath,
+    waitedMs: Date.now() - startedAtMs,
+  });
+};
+
+/** How much append-only state one review session has accumulated. */
+export type ReviewStoreGrowth = {
+  readonly progressLines: number;
+  readonly agentRequests: number;
+  readonly agentResponses: number;
+};
+
+const countDirectoryEntries = async (path: string): Promise<number> => {
+  try {
+    return (await readdir(path)).length;
+  } catch {
+    return 0;
+  }
+};
+
+/**
+ * Counts the state that only ever grows during a session. Both the progress
+ * log and the agent exchange directories are re-read in full by request paths
+ * the browser polls, so their size is what turns a long session slow; a
+ * suspected long-session stall needs these as numbers, not as a hypothesis.
+ */
+export const reviewStoreGrowth = async ({
+  store,
+}: {
+  readonly store: ReviewStore;
+}): Promise<ReviewStoreGrowth> => {
+  const progressLines = await readFile(store.progressPath, "utf8").then(
+    (raw) => raw.split("\n").filter((line) => line.trim() !== "").length,
+    () => 0,
+  );
+  const [agentRequests, agentResponses] = await Promise.all([
+    countDirectoryEntries(store.agentRequestDirectory),
+    countDirectoryEntries(store.agentResponseDirectory),
+  ]);
+  return { progressLines, agentRequests, agentResponses };
 };
 
 const writeJson = async ({
