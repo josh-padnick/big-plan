@@ -10,11 +10,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 export const GENERATED_BODY_NOTE =
   "(No commit body was supplied; this line was added automatically to satisfy this repository's commit-body requirement - see CONTRIBUTING.md.)";
 
-// Sources whose message git already generates for us (merge participants,
-// branch names); rewriting it would obscure that generated content instead
-// of adding to it, so merges pass through untouched.
-const SKIPPED_SOURCES = new Set(["merge"]);
-
 /**
  * Splits a raw commit-message file into the real content lines and any
  * trailing `#`-comment block git appends for editor-driven commits. `-m`
@@ -32,10 +27,34 @@ const splitCommentBlock = (rawMessage) => {
   return { contentLines: lines, commentLines: [] };
 };
 
+const trailerLinePattern = /^[^\s:=]+[=:][ \t]*\S/;
+
+const findTrailerBlockStart = (lines, subjectIndex) => {
+  let separatorIndex = -1;
+  for (let i = subjectIndex + 1; i < lines.length; i++) {
+    if (lines[i].trim() === "") separatorIndex = i;
+  }
+  if (separatorIndex === -1 || separatorIndex === lines.length - 1) {
+    return lines.length;
+  }
+
+  let hasTrailer = false;
+  for (const line of lines.slice(separatorIndex + 1)) {
+    if (trailerLinePattern.test(line)) {
+      hasTrailer = true;
+      continue;
+    }
+    if (hasTrailer && /^[ \t]+\S/.test(line)) continue;
+    return lines.length;
+  }
+
+  return hasTrailer ? separatorIndex + 1 : lines.length;
+};
+
 /**
- * Ensures the message has a body paragraph after its subject line. Content
- * that already has any non-blank line after the subject counts as a body;
- * this only fills in the pathological case of a subject-only message.
+ * Ensures the message has a body paragraph after its subject line. A trailing
+ * Git trailer block does not count as body content and is preserved after any
+ * generated body note.
  */
 export const ensureBody = (rawMessage) => {
   const { contentLines, commentLines } = splitCommentBlock(rawMessage);
@@ -50,13 +69,18 @@ export const ensureBody = (rawMessage) => {
   }
 
   const subjectIndex = trimmed.findIndex((line) => line.trim() !== "");
+  const trailerStart = findTrailerBlockStart(trimmed, subjectIndex);
   const hasBody = trimmed
-    .slice(subjectIndex + 1)
+    .slice(subjectIndex + 1, trailerStart)
     .some((line) => line.trim() !== "");
 
-  const content = hasBody
-    ? trimmed
-    : [trimmed[subjectIndex], "", GENERATED_BODY_NOTE];
+  let content = trimmed;
+  if (!hasBody) {
+    content = [...trimmed.slice(0, subjectIndex + 1), "", GENERATED_BODY_NOTE];
+    if (trailerStart < trimmed.length) {
+      content.push("", ...trimmed.slice(trailerStart));
+    }
+  }
 
   return commentLines.length > 0
     ? [...content, "", ...commentLines].join("\n")
@@ -95,11 +119,10 @@ const addSignoffTrailer = (messageFile, ident) => {
 };
 
 export const run = (argv) => {
-  const [messageFile, commitSource] = argv;
+  const [messageFile] = argv;
   if (!messageFile) {
     throw new Error("prepare-commit-msg: missing commit message file argument");
   }
-  if (SKIPPED_SOURCES.has(commitSource)) return;
 
   const raw = readFileSync(messageFile, "utf8");
   const withBody = ensureBody(raw);
