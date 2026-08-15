@@ -1,83 +1,79 @@
-// Proves a page that lost contact distinguishes a passed remembered deadline
-// from an unexplained outage without inferring the runtime's current state.
+// Proves the page only claims an idle expiry it can actually prove from the
+// deadline it was last told, and otherwise stays with the honest generic
+// wording rather than guessing.
 
 import { describe, expect, it } from "vitest";
-import { reviewContactLossObservation } from "./review-expiry.js";
+import { reviewEndReason } from "./review-expiry.js";
 
 const THIRTY_MINUTES_MS = 30 * 60 * 1_000;
 
-describe("review contact loss observation", () => {
-  it("should report when the last known deadline passed", () => {
+describe("review end reason", () => {
+  it("should name an idle expiry once the last known deadline has passed", () => {
+    // The tab was suspended past the deadline: polls stopped, so nothing
+    // pushed it forward, and the runtime closed itself while nobody looked.
     expect(
-      reviewContactLossObservation({
+      reviewEndReason({
         expiresAtMs: 1_000,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
       }),
-    ).toEqual({ kind: "deadline-passed" });
+    ).toEqual({ kind: "expired", idleTimeoutMs: THIRTY_MINUTES_MS });
   });
 
-  it("should not infer the runtime state from a passed remembered deadline", () => {
+  it("should treat a deadline still in the future as a stopped runtime", () => {
+    // Polls were landing right up to the silence, so the session had plenty of
+    // life left: somebody stopped the runtime, and claiming expiry would lie.
     expect(
-      reviewContactLossObservation({
-        expiresAtMs: 30_000,
-        idleTimeoutMs: THIRTY_MINUTES_MS,
-        nowMs: 45_000,
-      }),
-    ).toEqual({ kind: "deadline-passed" });
-  });
-
-  it("should remain unexplained when the deadline is still in the future", () => {
-    expect(
-      reviewContactLossObservation({
+      reviewEndReason({
         expiresAtMs: 5_000,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
       }),
-    ).toEqual({ kind: "unexplained" });
+    ).toEqual({ kind: "stopped" });
   });
 
-  it("should remain unexplained when no deadline was ever published", () => {
+  it("should not claim expiry when no deadline was ever published", () => {
     expect(
-      reviewContactLossObservation({
+      reviewEndReason({
         expiresAtMs: undefined,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
       }),
-    ).toEqual({ kind: "unexplained" });
+    ).toEqual({ kind: "stopped" });
   });
 
-  it("should remain unexplained when the idle timeout is disabled", () => {
+  it("should not claim expiry when the idle timeout is disabled", () => {
+    // --idle-timeout 0 publishes no deadline, so a stale one cannot outlive it.
     expect(
-      reviewContactLossObservation({
+      reviewEndReason({
         expiresAtMs: 1_000,
         idleTimeoutMs: 0,
         nowMs: 2_000,
       }),
-    ).toEqual({ kind: "unexplained" });
+    ).toEqual({ kind: "stopped" });
     expect(
-      reviewContactLossObservation({
+      reviewEndReason({
         expiresAtMs: 1_000,
         idleTimeoutMs: undefined,
         nowMs: 2_000,
       }),
-    ).toEqual({ kind: "unexplained" });
+    ).toEqual({ kind: "stopped" });
   });
 
-  it("should report the exact deadline as passed but not one ms before it", () => {
+  it("should treat the deadline itself as reached, and one ms before it as not", () => {
     expect(
-      reviewContactLossObservation({
+      reviewEndReason({
         expiresAtMs: 2_000,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
       }),
-    ).toEqual({ kind: "deadline-passed" });
+    ).toEqual({ kind: "expired", idleTimeoutMs: THIRTY_MINUTES_MS });
     expect(
-      reviewContactLossObservation({
+      reviewEndReason({
         expiresAtMs: 2_001,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
       }),
-    ).toEqual({ kind: "unexplained" });
+    ).toEqual({ kind: "stopped" });
   });
 });

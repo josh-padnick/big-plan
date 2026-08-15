@@ -1,21 +1,29 @@
-// Owns what an already-open page can observe after losing contact with its
-// review runtime. A remembered deadline that passed by the time contact was
-// lost is provable, but activity from another page or agent could have extended
-// the runtime's actual deadline, so this observation cannot establish the
-// runtime's current state.
+// Owns why a review the page can no longer reach is gone. The page cannot ask
+// the runtime that just stopped answering, so it answers from the deadline it
+// was last told: a deadline already in the past is an idle expiry it can name,
+// and any other silence is a runtime that stopped for a reason only the person
+// who stopped it knows.
+//
+// This exists because "the server stopped responding" is true and useless. A
+// link handed over to open later dies exactly this way (BIG-65), and the whole
+// point is telling that reader what happened instead of that something did.
 
-export type ReviewContactLossObservation =
-  { readonly kind: "unexplained" } | { readonly kind: "deadline-passed" };
+export type ReviewEndReason =
+  | { readonly kind: "stopped" }
+  | { readonly kind: "expired"; readonly idleTimeoutMs: number };
 
 /**
- * Classifies the remembered deadline after an already-open page loses contact.
+ * Decides what to say about a review that has gone quiet.
  *
- * The lifetime facts describe only the last poll this page completed. Another
- * page or a working agent can extend the runtime's real deadline without this
- * page seeing it, so a passed remembered deadline does not establish the
- * runtime's current state.
+ * The lifetime facts come from the last poll that succeeded, so they describe
+ * the session as it last was. That is precisely what makes the past-deadline
+ * case provable: a page whose polls were reaching the runtime keeps pushing
+ * its own deadline forward, so a deadline that has since gone by means the
+ * polling stopped long enough for the runtime to expire - a suspended tab, a
+ * closed laptop, a link opened tomorrow - rather than a runtime someone
+ * stopped a moment ago.
  */
-export const reviewContactLossObservation = ({
+export const reviewEndReason = ({
   expiresAtMs,
   idleTimeoutMs,
   nowMs,
@@ -23,11 +31,13 @@ export const reviewContactLossObservation = ({
   readonly expiresAtMs: number | undefined;
   readonly idleTimeoutMs: number | undefined;
   readonly nowMs: number;
-}): ReviewContactLossObservation => {
-  if (expiresAtMs === undefined) return { kind: "unexplained" };
+}): ReviewEndReason => {
+  // No deadline was ever published, or expiry is disabled entirely, so idle
+  // expiry is not an available explanation and guessing it would be a lie.
+  if (expiresAtMs === undefined) return { kind: "stopped" };
   if (idleTimeoutMs === undefined || idleTimeoutMs <= 0) {
-    return { kind: "unexplained" };
+    return { kind: "stopped" };
   }
-  if (nowMs < expiresAtMs) return { kind: "unexplained" };
-  return { kind: "deadline-passed" };
+  if (nowMs < expiresAtMs) return { kind: "stopped" };
+  return { kind: "expired", idleTimeoutMs };
 };

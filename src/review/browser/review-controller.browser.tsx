@@ -126,9 +126,10 @@ import {
   type ReviewPollResult,
 } from "./review-poll-health.js";
 import {
-  reviewContactLossObservation,
-  type ReviewContactLossObservation,
+  reviewEndReason,
+  type ReviewEndReason,
 } from "./review-expiry.js";
+import { reviewIdleDurationLabel } from "../shared/review-lifetime.js";
 import {
   isReviewRuntimeUnavailable,
   normalizeReviewRuntimeRequestError,
@@ -721,19 +722,20 @@ const RuntimeAlertBanner = ({
   </div>
 );
 
-// Distinguishes a passed remembered deadline from an unexplained outage without
-// inferring the runtime's current state. Another page or agent can extend the
-// actual deadline without this page seeing it.
+// Two wordings, because "the server stopped responding" is true and useless to
+// a reader who left this page open overnight. When the deadline the page was
+// last told has since gone by, the session ended on its own and the page can
+// say so without asking the runtime that is no longer there.
 const ServerGoneBanner = ({
   canRefresh,
   onRefresh,
-  contactLossObservation,
-  latestReviewUrl,
+  endReason,
+  restartCommand,
 }: {
   readonly canRefresh: boolean;
   readonly onRefresh: () => void;
-  readonly contactLossObservation: ReviewContactLossObservation;
-  readonly latestReviewUrl: string | undefined;
+  readonly endReason: ReviewEndReason;
+  readonly restartCommand: string | undefined;
 }) => {
   const unsavedInputWarning = canRefresh
     ? ""
@@ -746,24 +748,16 @@ const ServerGoneBanner = ({
     onAct: onRefresh,
     enabled: canRefresh,
   };
-  if (contactLossObservation.kind === "deadline-passed") {
-    if (latestReviewUrl !== undefined) {
-      return (
-        <RuntimeAlertBanner
-          scope="data-review-server-gone"
-          heading="This tab lost contact with this review session"
-          detail={`This tab lost contact with the local review server, and the deadline it last knew has passed. This review continues at the latest address.${unsavedInputWarning}`}
-          link={{ href: latestReviewUrl, label: "Open latest review" }}
-          action={refreshAction}
-        />
-      );
-    }
+  if (endReason.kind === "expired") {
+    const restartInstruction =
+      restartCommand === undefined
+        ? "Restart the review runtime for this plan, then open the new address it prints to continue reviewing."
+        : `Restart it with ${restartCommand}, then open the new address it prints to continue reviewing.`;
     return (
       <RuntimeAlertBanner
         scope="data-review-server-gone"
-        heading="This tab lost contact with this review session"
-        detail={`This tab lost contact with the local review server, and the deadline it last knew has passed.${refreshRecoveryDetail}`}
-        action={refreshAction}
+        heading="This review session ended on its own"
+        detail={`This review session ended after ${reviewIdleDurationLabel(endReason.idleTimeoutMs)} of inactivity. ${restartInstruction}${unsavedInputWarning}`}
       />
     );
   }
@@ -3821,7 +3815,7 @@ export const ReviewController = () => {
   // live status clock would otherwise change this observation after the banner
   // appeared by advancing past a deadline that was still future at contact loss.
   const runtimeDownSinceMs = reviewRuntimeDownSinceMs(pollHealth);
-  const contactLossObservation = reviewContactLossObservation({
+  const endReason = reviewEndReason({
     expiresAtMs: runtimeSession?.expiresAtMs,
     idleTimeoutMs: runtimeSession?.idleTimeoutMs,
     nowMs: runtimeDownSinceMs ?? statusNowMs,
@@ -5197,8 +5191,8 @@ export const ReviewController = () => {
         <ServerGoneBanner
           canRefresh={canRefreshReview}
           onRefresh={() => window.location.reload()}
-          contactLossObservation={contactLossObservation}
-          latestReviewUrl={runtimeSession?.latestReviewUrl}
+          endReason={endReason}
+          restartCommand={runtimeSession?.restartCommand}
         />
       ) : null}
       {writesStalled ? <WritesStalledBanner /> : null}
