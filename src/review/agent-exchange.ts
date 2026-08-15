@@ -1180,12 +1180,29 @@ export const readValidatedAgentResponse = async ({
   }
 };
 
-/** Returns the oldest request this agent session may work. */
+/**
+ * Returns the oldest request this agent session may work. A live foreign claim
+ * anywhere on the plan makes new work unavailable until that holder finishes
+ * or its lease lapses.
+ */
 export const nextPendingAgentRequest = (
   snapshot: AgentExchangeSnapshot,
   viewer: { readonly claimedBy: string; readonly nowMs: number },
-): AgentRequest | undefined =>
-  outstandingAgentRequests(snapshot).find(
+): AgentRequest | undefined => {
+  if (
+    snapshot.requests.some(
+      (request) =>
+        !requestIsTerminal(request) &&
+        claimIsHeldByAnother({
+          request,
+          claimedBy: viewer.claimedBy,
+          nowMs: viewer.nowMs,
+        }),
+    )
+  ) {
+    return undefined;
+  }
+  return outstandingAgentRequests(snapshot).find(
     (request) =>
       !claimIsHeldByAnother({
         request,
@@ -1193,6 +1210,7 @@ export const nextPendingAgentRequest = (
         nowMs: viewer.nowMs,
       }),
   );
+};
 
 /** Collects the original comments needed to validate a reply response. */
 export const commentsFromExchange = (

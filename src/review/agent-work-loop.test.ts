@@ -171,6 +171,9 @@ describe("agent work loop", () => {
     expect(result.agent_prompt).toContain("Retain the agent_token");
     expect(result.agent_prompt).toContain("agent next --agent <token>");
     expect(result.agent_prompt).toContain("--agent <agent_token>");
+    expect(result.agent_prompt).toContain(
+      "one live request claim for this plan at a time",
+    );
     expect(result.agent_prompt).toContain(runtime.planPath);
     expect(result.codex).toContain('codex "$(cat ');
     expect(result.claude).toContain('claude "$(cat ');
@@ -436,221 +439,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should report a stale baseline instead of accepting a lost update", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-conflict-"));
-    const planPath = join(directory, "plan.mdx");
-    const source = "# Plan\n\nKeep both accepted edits.\n";
-    await writeFile(planPath, source);
-    const review = await startReviewRuntime({ planPath });
-    const premiseSnapshot = deriveSnapshotDigest(source);
-    const firstRequest = messageAgentRequest({
-      kind: "chat",
-      requestId: "1212121212121212",
-      sessionId: review.sessionId,
-      planId: review.planId,
-      premiseSnapshot,
-      createdAt: "2026-08-12T12:00:00.000Z",
-      body: "Make the first edit.",
-    });
-    const secondRequest = messageAgentRequest({
-      kind: "chat",
-      requestId: "3434343434343434",
-      sessionId: review.sessionId,
-      planId: review.planId,
-      premiseSnapshot,
-      createdAt: "2026-08-12T12:00:01.000Z",
-      body: "Make the second edit.",
-    });
-    await writeAgentRequest({ store: review.store, request: firstRequest });
-    await writeAgentRequest({ store: review.store, request: secondRequest });
-
-    try {
-      const firstPickup = await runAgentWorkLoopAction({
-        kind: "next",
-        planPath,
-        shouldWait: false,
-        executablePath,
-      });
-      const secondPickup = await runAgentWorkLoopAction({
-        kind: "next",
-        planPath,
-        shouldWait: false,
-        executablePath,
-      });
-      if (
-        typeof firstPickup.agent_token !== "string" ||
-        typeof firstPickup.response_file !== "string" ||
-        typeof secondPickup.agent_token !== "string" ||
-        typeof secondPickup.response_file !== "string"
-      ) {
-        throw new Error("Concurrent pickups did not return response contracts");
-      }
-      const firstRevision = `${source}\nAgent A accepted edit.\n`;
-      const staleSecondRevision = `${source}\nAgent B stale edit.\n`;
-      await writeFile(planPath, firstRevision);
-      await writeFile(
-        firstPickup.response_file,
-        JSON.stringify({
-          requestId: firstRequest.requestId,
-          message: "The first edit is complete.",
-        }),
-      );
-      await runAgentWorkLoopAction({
-        kind: "respond",
-        planPath,
-        responsePath: firstPickup.response_file,
-        executablePath,
-        agentToken: firstPickup.agent_token,
-      });
-
-      await writeFile(planPath, staleSecondRevision);
-      await writeFile(
-        secondPickup.response_file,
-        JSON.stringify({
-          requestId: secondRequest.requestId,
-          message: "The second edit is complete.",
-        }),
-      );
-      await expect(
-        runAgentWorkLoopAction({
-          kind: "respond",
-          planPath,
-          responsePath: secondPickup.response_file,
-          executablePath,
-          agentToken: secondPickup.agent_token,
-        }),
-      ).rejects.toThrow(/baseline is stale|changed underneath/i);
-
-      const exchange = await readAgentExchange({
-        store: review.store,
-        sessionId: review.sessionId,
-        planId: review.planId,
-      });
-      expect(exchange.responses).toEqual([
-        expect.objectContaining({ requestId: firstRequest.requestId }),
-      ]);
-      expect(
-        exchange.requests.find(
-          (candidate) => candidate.requestId === secondRequest.requestId,
-        ),
-      ).toMatchObject({
-        baselineSnapshot: premiseSnapshot,
-      });
-      expect(
-        exchange.requests.find(
-          (candidate) => candidate.requestId === secondRequest.requestId,
-        ),
-      ).not.toHaveProperty("answeredAt");
-
-      await expect(
-        runAgentWorkLoopAction({
-          kind: "respond",
-          planPath,
-          responsePath: secondPickup.response_file,
-          executablePath,
-          agentToken: secondPickup.agent_token,
-        }),
-      ).rejects.toThrow(/baseline is stale|changed underneath/i);
-
-      const reconciledRevision = `${source}\nAgent A accepted edit.\n\nAgent B reconciled edit.\n`;
-      await writeFile(planPath, reconciledRevision);
-      await expect(
-        runAgentWorkLoopAction({
-          kind: "respond",
-          planPath,
-          responsePath: secondPickup.response_file,
-          executablePath,
-          agentToken: secondPickup.agent_token,
-        }),
-      ).resolves.toMatchObject({ responded: secondRequest.requestId });
-    } finally {
-      await review.close();
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-
-  it("should accept concurrent answers that leave the plan unchanged", async () => {
-    const directory = await mkdtemp(
-      join(tmpdir(), "big-plan-agent-no-conflict-"),
-    );
-    const planPath = join(directory, "plan.mdx");
-    const source = "# Plan\n\nAnswer without changing this source.\n";
-    await writeFile(planPath, source);
-    const review = await startReviewRuntime({ planPath });
-    const premiseSnapshot = deriveSnapshotDigest(source);
-    const requests = [
-      messageAgentRequest({
-        kind: "chat",
-        requestId: "5656565656565656",
-        sessionId: review.sessionId,
-        planId: review.planId,
-        premiseSnapshot,
-        createdAt: "2026-08-12T12:00:00.000Z",
-        body: "Answer the first question.",
-      }),
-      messageAgentRequest({
-        kind: "chat",
-        requestId: "7878787878787878",
-        sessionId: review.sessionId,
-        planId: review.planId,
-        premiseSnapshot,
-        createdAt: "2026-08-12T12:00:01.000Z",
-        body: "Answer the second question.",
-      }),
-    ];
-    for (const request of requests) {
-      await writeAgentRequest({ store: review.store, request });
-    }
-
-    try {
-      const pickups = [];
-      for (const request of requests) {
-        const pickup = await runAgentWorkLoopAction({
-          kind: "next",
-          planPath,
-          shouldWait: false,
-          executablePath,
-        });
-        if (
-          typeof pickup.agent_token !== "string" ||
-          typeof pickup.response_file !== "string"
-        ) {
-          throw new Error("Pickup did not return its response contract");
-        }
-        await writeFile(
-          pickup.response_file,
-          JSON.stringify({
-            requestId: request.requestId,
-            message: `Answer for ${request.requestId}`,
-          }),
-        );
-        pickups.push(pickup);
-      }
-      for (const pickup of pickups) {
-        await expect(
-          runAgentWorkLoopAction({
-            kind: "respond",
-            planPath,
-            responsePath: pickup.response_file,
-            executablePath,
-            agentToken: pickup.agent_token,
-          }),
-        ).resolves.toMatchObject({ responded: expect.any(String) });
-      }
-      await expect(
-        readAgentExchange({
-          store: review.store,
-          sessionId: review.sessionId,
-          planId: review.planId,
-        }),
-      ).resolves.toMatchObject({ responses: [{}, {}] });
-    } finally {
-      await review.close();
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-
-  it("should move to the next request when the oldest is leased elsewhere", async () => {
+  it("should report no work while another request has a live claim", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-lease-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nTwo agents are polling this plan.\n";
@@ -687,6 +476,8 @@ describe("agent work loop lifecycle", () => {
     });
 
     try {
+      // Without plan-level serialization this returns the free request. That
+      // counterfactual is the regression this public-interface assertion pins.
       await expect(
         runAgentWorkLoopAction({
           kind: "next",
@@ -694,10 +485,17 @@ describe("agent work loop lifecycle", () => {
           shouldWait: false,
           executablePath,
         }),
-      ).resolves.toMatchObject({
-        pending: true,
-        work: { requestId: free.requestId },
+      ).resolves.toMatchObject({ pending: false });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
       });
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === free.requestId,
+        ),
+      ).not.toHaveProperty("claimedAt");
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
@@ -1306,12 +1104,15 @@ describe("agent work loop lifecycle", () => {
     });
     await writeAgentRequest({ store: review.store, request: first });
     await writeAgentRequest({ store: review.store, request: second });
+    const expiredClaimAt = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
     const claimed = await claimAgentRequest({
       store: review.store,
+      activeSessionId: review.sessionId,
       requestId: first.requestId,
       claimedBy: review.sessionId,
       baselineSnapshot: snapshot,
-      now: "2026-08-12T12:00:02.000Z",
+      now: new Date(expiredClaimAt).toISOString(),
+      clock: () => expiredClaimAt,
     });
     const response = validateAgentResponseDraft({
       value: { requestId: first.requestId, message: "Answered elsewhere." },
@@ -1331,7 +1132,8 @@ describe("agent work loop lifecycle", () => {
           store: review.store,
           response,
           claimedBy: review.sessionId,
-          now: "2026-08-12T12:00:03.000Z",
+          now: new Date(expiredClaimAt + 1).toISOString(),
+          clock: () => expiredClaimAt + 1,
         });
         return selectedValues;
       });
@@ -1354,10 +1156,10 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should move concurrent waiting pickups to distinct requests", async () => {
+  it("should serialize concurrent waiting pickups until the holder answers", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-race-"));
     const planPath = join(directory, "plan.mdx");
-    const source = "# Plan\n\nTwo agents can work in parallel.\n";
+    const source = "# Plan\n\nOne agent works this plan at a time.\n";
     await writeFile(planPath, source);
     const review = await startReviewRuntime({ planPath });
     const premiseSnapshot = deriveSnapshotDigest(source);
@@ -1377,7 +1179,7 @@ describe("agent work loop lifecycle", () => {
       planId: review.planId,
       premiseSnapshot,
       createdAt: "2026-08-12T12:00:01.000Z",
-      body: "Answer this request in parallel.",
+      body: "Answer this request after the first one.",
     });
     await writeAgentRequest({ store: review.store, request: firstRequest });
     await writeAgentRequest({ store: review.store, request: secondRequest });
@@ -1453,32 +1255,63 @@ describe("agent work loop lifecycle", () => {
         { timeout: 5_000 },
       );
       // The persisted heartbeat barrier proves both public pickups selected the
-      // same unclaimed request. With retry handling removed, one pickup rejects
-      // here instead of moving to request two; that counterfactual was verified.
+      // same unclaimed request. Without plan-level serialization, both promises
+      // resolve before either response; that counterfactual was verified.
       await releaseLock();
       releaseLock = undefined;
-      const pickups = await Promise.all([firstPickup, secondPickup]);
-      expect(pickups).toEqual([
-        expect.objectContaining({ pending: true }),
-        expect.objectContaining({ pending: true }),
+      const firstSettled = await Promise.race([
+        firstPickup.then((pickup) => ({ pickup, waiting: secondPickup })),
+        secondPickup.then((pickup) => ({ pickup, waiting: firstPickup })),
       ]);
-      expect(
-        new Set(
-          pickups.map((pickup) =>
-            typeof pickup.work === "object" &&
-            pickup.work !== null &&
-            "requestId" in pickup.work
-              ? pickup.work.requestId
-              : undefined,
-          ),
-        ),
-      ).toEqual(new Set([firstRequest.requestId, secondRequest.requestId]));
+      expect(firstSettled.pickup).toMatchObject({
+        pending: true,
+        work: { requestId: firstRequest.requestId },
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({ state: "waiting" });
+        },
+        { timeout: 5_000 },
+      );
+      if (
+        typeof firstSettled.pickup.agent_token !== "string" ||
+        typeof firstSettled.pickup.response_file !== "string"
+      ) {
+        throw new Error(
+          "The first pickup did not return its response contract",
+        );
+      }
+      await writeFile(
+        firstSettled.pickup.response_file,
+        JSON.stringify({
+          requestId: firstRequest.requestId,
+          message: "The first request is answered.",
+        }),
+      );
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: firstSettled.pickup.response_file,
+          executablePath,
+          agentToken: firstSettled.pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ responded: firstRequest.requestId });
+      await expect(firstSettled.waiting).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: secondRequest.requestId },
+      });
     } finally {
       await releaseLock?.();
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }
-  });
+  }, 10_000);
 
   it.each(["answered", "canceled"] as const)(
     "should move past a request %s during pickup preparation",
@@ -2104,6 +1937,35 @@ describe("agent work loop lifecycle", () => {
             claimedBy: pickup.agent_token,
           }),
         ],
+      });
+      if (typeof pickup.response_file !== "string") {
+        throw new Error("Pickup did not return its response file");
+      }
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({
+          requestId: request.requestId,
+          message: "The request is complete.",
+        }),
+      );
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ responded: request.requestId });
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [expect.objectContaining({ answeredAt: expect.any(String) })],
+        responses: [expect.objectContaining({ requestId: request.requestId })],
       });
     } finally {
       await review.close();

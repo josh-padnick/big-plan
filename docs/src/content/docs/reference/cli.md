@@ -187,7 +187,10 @@ Run the returned `note_command` and `respond_command` strings unchanged.
 The token is what proves this agent process holds the request, so a second
 agent working the same review cannot narrate over or answer another agent's
 work.
-No request is ever claimed or answered twice; a lapsed lease during a long edit can still interleave plan writes until write fencing exists.
+Only one request on a plan may hold a live claim, so a second agent waits rather than editing the plan in parallel.
+Without `--wait`, `agent next` reports that no work is available while another claim is live.
+With `--wait`, it continues once the holder answers or its lease lapses.
+This serialization prevents ordinary concurrent unfenced plan writers; a lapsed lease during a long edit can still interleave plan writes until write fencing exists.
 When a lapsed lease is taken over, the reviewer is warned that the previous agent's partial plan edits may be present.
 
 Set the `BIG_PLAN_AGENT_MODEL` environment variable before running `agent

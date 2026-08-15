@@ -99,7 +99,6 @@ export type ReviewStore = {
   readonly agentResponseDirectory: string;
   readonly agentDraftDirectory: string;
   readonly agentPromptPath: string;
-  readonly agentAcceptedSnapshotPath: string;
   readonly snapshotDirectory: string;
   readonly draftsPath: string;
   readonly sentPath: string;
@@ -464,10 +463,6 @@ export const reviewStoreFor = ({
     agentPromptPath: inside({
       base: agentDirectory,
       leaf: "agent-prompt.md",
-    }),
-    agentAcceptedSnapshotPath: inside({
-      base: agentDirectory,
-      leaf: "accepted-snapshot-frontier.json",
     }),
     snapshotDirectory: inside({
       base: reviewDirectory,
@@ -1562,36 +1557,6 @@ export const writeAgentResponseValue = async ({
     }),
     value,
   });
-};
-
-export type StoredAgentAcceptedSnapshotValue =
-  | { readonly exists: false }
-  | { readonly exists: true; readonly value: unknown };
-
-export const readAgentAcceptedSnapshotValue = async (
-  store: ReviewStore,
-): Promise<StoredAgentAcceptedSnapshotValue> => {
-  try {
-    return {
-      exists: true,
-      value: JSON.parse(
-        await readFile(store.agentAcceptedSnapshotPath, "utf8"),
-      ),
-    };
-  } catch (error: unknown) {
-    if (hasCode(error, "ENOENT")) return { exists: false };
-    return { exists: true, value: undefined };
-  }
-};
-
-export const writeAgentAcceptedSnapshotValue = async ({
-  store,
-  value,
-}: {
-  readonly store: ReviewStore;
-  readonly value: unknown;
-}): Promise<void> => {
-  await writeJson({ path: store.agentAcceptedSnapshotPath, value });
 };
 
 /** Gives an agent a safe ignored path for authoring one response draft. */

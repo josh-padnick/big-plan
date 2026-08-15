@@ -245,7 +245,7 @@ describe("agent exchange response contract", () => {
     ).toEqual(reply);
   });
 
-  it("should present work another agent can claim as waiting", () => {
+  it("should keep queued work unavailable while another claim is live", () => {
     const nowMs = Date.parse("2026-08-02T12:00:30.000Z");
     const active = validateAgentRequest({
       ...messageAgentRequest({
@@ -283,6 +283,20 @@ describe("agent exchange response contract", () => {
         claimedBy: "cccc0000cccc0000",
         nowMs,
       }),
+    ).toBeUndefined();
+    // Without the plan-wide live-claim check, this returns `request` before
+    // the active request is terminal. That counterfactual was verified.
+    expect(
+      nextPendingAgentRequest(
+        {
+          requests: [
+            { ...active, answeredAt: "2026-08-02T12:00:31.000Z" },
+            request,
+          ],
+          responses: [],
+        },
+        { claimedBy: "cccc0000cccc0000", nowMs },
+      ),
     ).toBe(request);
   });
 
