@@ -18,9 +18,10 @@ What does persist is thread-scoped: a thread's baseline and current endpoints li
 You cannot change diff semantics without changing thread semantics, so both live in the Change Engine.
 
 The session runtime is a different subsystem from either.
-`src/review/server.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, and `src/review/agent-work-loop.ts` render and serve the document, authorize requests, and keep the browser, server, and agent connected.
+`src/review/server.ts`, `src/review/review-route-context.ts`, the sibling `src/review/routes-*.ts` modules, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, and `src/review/agent-work-loop.ts` render and serve the document, authorize requests, and keep the browser, server, and agent connected.
 Those are Session Reliability responsibilities, distinct from thread and diff semantics.
-Today `src/review/server.ts` also concentrates cross-subsystem route orchestration for comment resolution and deletion, agent exchanges, and snapshot diffs; that orchestration should delegate semantic decisions to their owning subsystems rather than define them at the runtime boundary.
+`src/review/server.ts` owns request security, dispatch, and the mutating handlers that remain inline; `src/review/review-route-context.ts` owns the named state shared across handlers, and the sibling route modules own the extracted session, review-state, agent-exchange, snapshot-diff, and asset handlers.
+These runtime-boundary modules delegate semantic decisions to their owning subsystems rather than define them at the delivery boundary.
 Session Reliability's own failure modes are lifecycle and atomicity: disconnects, hangs, and lost or double-processed messages, not conversation or diff correctness.
 
 The commenting chrome is a third subsystem again.
@@ -49,7 +50,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 **Problem set.** The browser, the loopback server, and the agent stay connected and honest about liveness, and no message is ever lost, double-processed, or run inside a resolved thread.
 
-**Code anchors.** `src/review/server.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, `src/review/agent-work-loop.ts`, `src/review/agent-exchange.ts`, `src/review/browser/review-poll-health.ts`, `src/review/browser/review-runtime-request.ts`, `src/review/shared/agent-status.ts`, `src/cli/review/command.ts`, `src/cli/agent/`.
+**Code anchors.** `src/review/server.ts`, `src/review/review-route-context.ts`, `src/review/routes-*.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, `src/review/agent-work-loop.ts`, `src/review/agent-exchange.ts`, `src/review/browser/review-poll-health.ts`, `src/review/browser/review-runtime-request.ts`, `src/review/shared/agent-status.ts`, `src/cli/review/command.ts`, `src/cli/agent/`.
 
 **Boundary rules.**
 

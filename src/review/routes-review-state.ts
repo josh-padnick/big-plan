@@ -1,5 +1,5 @@
-// The routes that own the reviewer's own state: the drafts being written, the
-// comments already sent, and the resolutions and reverts applied to them.
+// The route that reads the reviewer's own state: drafts being written, comments
+// already sent, the active draft, and resolved comment ids.
 
 import { jsonResponse } from "./review-route-context.js";
 import type {
