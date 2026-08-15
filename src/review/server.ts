@@ -494,6 +494,7 @@ export const startReviewRuntime = async ({
     const claimedFeedbackRequest = await claimAgentRequest({
       store,
       requestId: feedbackRequest.requestId,
+      claimedBy: sessionId,
       baselineSnapshot: premiseSnapshot,
       now: createdAt,
     });
@@ -546,6 +547,7 @@ export const startReviewRuntime = async ({
     const claimedHistoricalRequest = await claimAgentRequest({
       store,
       requestId: historicalRequest.requestId,
+      claimedBy: sessionId,
       baselineSnapshot: premiseSnapshot,
       now: new Date(Date.parse(createdAt) + 1).toISOString(),
     });
@@ -577,6 +579,7 @@ export const startReviewRuntime = async ({
     const claimedChatRequest = await claimAgentRequest({
       store,
       requestId: chatRequest.requestId,
+      claimedBy: sessionId,
       baselineSnapshot: premiseSnapshot,
       now: new Date(Date.parse(createdAt) + 2).toISOString(),
     });

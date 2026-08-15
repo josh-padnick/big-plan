@@ -226,6 +226,59 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should move to the next request when the oldest is leased elsewhere", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-lease-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nTwo agents are polling this plan.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const leased = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "The other agent is already answering this one.",
+    });
+    const free = messageAgentRequest({
+      kind: "chat",
+      requestId: "eeeeeeeeeeeeeeee",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "This one is still unclaimed.",
+    });
+    await writeAgentRequest({ store: review.store, request: leased });
+    await writeAgentRequest({ store: review.store, request: free });
+    await claimAgentRequest({
+      store: review.store,
+      requestId: leased.requestId,
+      claimedBy: "ffff2222ffff2222",
+      baselineSnapshot: premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: free.requestId },
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should leave a request reviewer-owned when its attachment cannot be opened", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-claim-"));
     const planPath = join(directory, "plan.mdx");
@@ -828,6 +881,7 @@ describe("agent work loop lifecycle", () => {
     const claimed = await claimAgentRequest({
       store: review.store,
       requestId: first.requestId,
+      claimedBy: review.sessionId,
       baselineSnapshot: snapshot,
       now: "2026-08-12T12:00:02.000Z",
     });
@@ -894,6 +948,7 @@ describe("agent work loop lifecycle", () => {
     await claimAgentRequest({
       store: review.store,
       requestId: request.requestId,
+      claimedBy: review.sessionId,
       baselineSnapshot: deriveSnapshotDigest(source),
       now: "2026-08-12T12:00:01.000Z",
     });
@@ -1131,6 +1186,7 @@ describe("agent work loop lifecycle", () => {
       const originalClaim = await claimAgentRequest({
         store: review.store,
         requestId: originalRequest.requestId,
+        claimedBy: review.sessionId,
         baselineSnapshot: revision,
         now: "2026-08-10T12:00:00.500Z",
       });

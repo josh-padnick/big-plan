@@ -31,6 +31,9 @@ import { prepareStore, reviewStoreFor } from "./store.js";
 const sessionId = "1111111111111111";
 const planId = "2222222222222222";
 const packageId = "3333333333333333";
+const agentSessionId = "aaaa0000aaaa0000";
+// The agent asking what to work next, at a time when nothing else holds a lease.
+const viewer = () => ({ claimedBy: agentSessionId, nowMs: Date.now() });
 const commentId = "4444444444444444";
 const blockId = "section/approach/paragraph-1";
 const before = "# Plan\n\n## Approach\n\nKeep the first version.\n";
@@ -199,28 +202,31 @@ describe("agent exchange response contract", () => {
       commentId,
     });
     expect(
-      nextPendingAgentRequest({
-        requests: [request, reply],
-        responses: [
-          {
-            version: 2,
-            requestId: packageId,
-            sessionId,
-            planId,
-            resultSnapshot: deriveSnapshotDigest(after),
-            createdAt: "2026-08-02T12:01:00.000Z",
-            kind: "feedback",
-            outcomes: [
-              {
-                commentId,
-                state: "changed",
-                message: "Revised the approach.",
-                changeTargets: [blockId],
-              },
-            ],
-          },
-        ],
-      }),
+      nextPendingAgentRequest(
+        {
+          requests: [request, reply],
+          responses: [
+            {
+              version: 2,
+              requestId: packageId,
+              sessionId,
+              planId,
+              resultSnapshot: deriveSnapshotDigest(after),
+              createdAt: "2026-08-02T12:01:00.000Z",
+              kind: "feedback",
+              outcomes: [
+                {
+                  commentId,
+                  state: "changed",
+                  message: "Revised the approach.",
+                  changeTargets: [blockId],
+                },
+              ],
+            },
+          ],
+        },
+        viewer(),
+      ),
     ).toEqual(reply);
   });
 
@@ -308,12 +314,14 @@ describe("agent exchange filesystem", () => {
     const firstClaim = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: "aaaaaaaaaaaaaaaa",
       now: "2026-08-02T12:00:30.000Z",
     });
     const repeatedClaim = await claimAgentRequest({
       store,
       requestId: firstClaim.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: "bbbbbbbbbbbbbbbb",
       now: "2026-08-02T12:01:00.000Z",
     });
@@ -340,6 +348,7 @@ describe("agent exchange filesystem", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: "2026-08-02T12:00:30.000Z",
     });
@@ -430,11 +439,12 @@ describe("agent exchange filesystem", () => {
       planId,
     });
     expect(canceled.canceledAt).toBe("2026-08-02T12:00:45.000Z");
-    expect(nextPendingAgentRequest(canceledSnapshot)).toBeUndefined();
+    expect(nextPendingAgentRequest(canceledSnapshot, viewer())).toBeUndefined();
     await expect(
       claimAgentRequest({
         store,
         requestId: request.requestId,
+        claimedBy: agentSessionId,
         baselineSnapshot: "aaaaaaaaaaaaaaaa",
         now: "2026-08-02T12:00:50.000Z",
       }),
@@ -499,6 +509,7 @@ describe("agent exchange filesystem", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: reply.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: reply.premiseSnapshot,
       now: new Date(startedAt + 401).toISOString(),
     });
@@ -527,6 +538,6 @@ describe("agent exchange filesystem", () => {
     expect(bounded.requests[1]?.requestId).toBe("0000000000000001");
     expect(bounded.requests.at(-1)?.requestId).toBe(reply.requestId);
     expect(bounded.responses).toEqual([response]);
-    expect(nextPendingAgentRequest(bounded)).toEqual(request);
+    expect(nextPendingAgentRequest(bounded, viewer())).toEqual(request);
   });
 });

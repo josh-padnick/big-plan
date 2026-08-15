@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto";
 import type { CommentTarget, ReviewComment } from "./shared/comment.js";
 import { QUOTE_LIMIT } from "./shared/comment.js";
+import { claimIsHeldByAnother } from "./shared/agent-claim.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
   readAgentRequestValues,
@@ -42,6 +43,8 @@ type AgentRequestBase = {
   readonly createdAt: string;
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
+  readonly claimedBy?: string;
+  readonly claimExpiresAtMs?: number;
   readonly canceledAt?: string;
   readonly attachmentManifest: ReadonlyArray<ReviewImageAttachment>;
   readonly attachments: ReadonlyArray<ReviewImageAttachment>;
@@ -161,6 +164,15 @@ const timestamp = (value: unknown): string => {
     throw new AgentExchangeRejected('"createdAt" must be an ISO timestamp');
   }
   return new Date(value).toISOString();
+};
+
+const epochMilliseconds = (value: unknown, field: string): number => {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new AgentExchangeRejected(
+      `"${field}" must be a positive epoch millisecond count`,
+    );
+  }
+  return value;
 };
 
 const snapshotDigest = (value: unknown, field: string): string => {
@@ -401,11 +413,28 @@ const requestBase = (
       : snapshotDigest(rawBaselineSnapshot, "baselineSnapshot");
   const claimedAt =
     value.claimedAt === undefined ? undefined : timestamp(value.claimedAt);
+  const claimedBy =
+    value.claimedBy === undefined
+      ? undefined
+      : id(value.claimedBy, "claimedBy");
+  const claimExpiresAtMs =
+    value.claimExpiresAtMs === undefined
+      ? undefined
+      : epochMilliseconds(value.claimExpiresAtMs, "claimExpiresAtMs");
   const canceledAt =
     value.canceledAt === undefined ? undefined : timestamp(value.canceledAt);
-  if ((baselineSnapshot === undefined) !== (claimedAt === undefined)) {
+  const claimFields = [
+    baselineSnapshot,
+    claimedAt,
+    claimedBy,
+    claimExpiresAtMs,
+  ];
+  if (
+    claimFields.some((field) => field !== undefined) !==
+    claimFields.every((field) => field !== undefined)
+  ) {
     throw new AgentExchangeRejected(
-      '"baselineSnapshot" and "claimedAt" must appear together',
+      '"baselineSnapshot", "claimedAt", "claimedBy", and "claimExpiresAtMs" must appear together',
     );
   }
   const requestAttachments = validateRequestAttachments({
@@ -423,7 +452,9 @@ const requestBase = (
       legacyField: "sourceRevision",
     }),
     createdAt: timestamp(value.createdAt),
-    ...(baselineSnapshot === undefined ? {} : { baselineSnapshot, claimedAt }),
+    ...(baselineSnapshot === undefined
+      ? {}
+      : { baselineSnapshot, claimedAt, claimedBy, claimExpiresAtMs }),
     ...(canceledAt === undefined ? {} : { canceledAt }),
     ...requestAttachments,
   };
@@ -1108,10 +1139,19 @@ export const readValidatedAgentResponse = async ({
   }
 };
 
-/** Returns the oldest request the agent still owes an answer. */
+/** Returns the oldest request this agent session may work. */
 export const nextPendingAgentRequest = (
   snapshot: AgentExchangeSnapshot,
-): AgentRequest | undefined => outstandingAgentRequests(snapshot)[0];
+  viewer: { readonly claimedBy: string; readonly nowMs: number },
+): AgentRequest | undefined =>
+  outstandingAgentRequests(snapshot).find(
+    (request) =>
+      !claimIsHeldByAnother({
+        request,
+        claimedBy: viewer.claimedBy,
+        nowMs: viewer.nowMs,
+      }),
+  );
 
 /** Collects the original comments needed to validate a reply response. */
 export const commentsFromExchange = (

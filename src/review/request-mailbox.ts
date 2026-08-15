@@ -35,6 +35,10 @@ import {
   writeAgentRequestValue,
   writeAgentResponseValue,
 } from "./store.js";
+import {
+  claimIsHeldByAnother,
+  claimLeaseExpiryMs,
+} from "./shared/agent-claim.js";
 import type {
   AgentRequestDeletionResult,
   ProgressEvent,
@@ -135,6 +139,8 @@ const requestCreation = (request: AgentRequest): string => {
   const created: Record<string, unknown> = { ...request };
   delete created.baselineSnapshot;
   delete created.claimedAt;
+  delete created.claimedBy;
+  delete created.claimExpiresAtMs;
   delete created.canceledAt;
   return JSON.stringify(created);
 };
@@ -182,24 +188,33 @@ export const ensureAgentRequest = async ({
   });
 };
 
-/** Freezes the source baseline when an agent first claims a request. */
+/** Takes or renews one agent session's exclusive claim on a request. */
 export const claimAgentRequest = async ({
   store,
   requestId,
+  claimedBy,
   baselineSnapshot,
   now,
   verifyBeforeClaim,
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
+  readonly claimedBy: string;
   readonly baselineSnapshot: string;
   readonly now: string;
   readonly verifyBeforeClaim?: (request: AgentRequest) => Promise<void>;
-}): Promise<AgentRequest> =>
-  withRequestLock({
+}): Promise<AgentRequest> => {
+  const nowMs = Date.parse(now);
+  if (Number.isNaN(nowMs)) {
+    throw new AgentExchangeRejected("A claim time must be an ISO timestamp");
+  }
+  const takeover = await withRequestLock({
     store,
     requestId,
-    change: async (lockedStore) => {
+    change: async (lockedStore): Promise<{
+      readonly request: AgentRequest;
+      readonly reclaimedFrom?: string;
+    }> => {
       const request = await readCurrentRequest({
         store: lockedStore,
         requestId,
@@ -220,20 +235,59 @@ export const claimAgentRequest = async ({
         );
       }
       await verifyBeforeClaim?.(request);
-      if (request.baselineSnapshot !== undefined) return request;
+      if (claimIsHeldByAnother({ request, claimedBy, nowMs })) {
+        throw new AgentExchangeRejected(
+          "Another agent session is working on this request",
+        );
+      }
+      if (request.claimedBy === claimedBy) {
+        const renewed = validateAgentRequest({
+          ...request,
+          claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
+        });
+        await writeAgentRequestValue({
+          store: lockedStore,
+          requestId,
+          value: renewed,
+        });
+        return { request: renewed };
+      }
       const claimed = validateAgentRequest({
         ...request,
         baselineSnapshot,
         claimedAt: now,
+        claimedBy,
+        claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
       });
       await writeAgentRequestValue({
         store: lockedStore,
         requestId,
         value: claimed,
       });
-      return claimed;
+      return {
+        request: claimed,
+        ...(request.claimedBy === undefined
+          ? {}
+          : { reclaimedFrom: request.claimedBy }),
+      };
     },
   });
+  if (takeover.reclaimedFrom !== undefined) {
+    await appendProgressEvent({
+      store,
+      event: {
+        sessionId: takeover.request.sessionId,
+        requestId,
+        atMs: nowMs,
+        stepCode: "request-reclaimed",
+        step: "Restarting with a new agent session",
+        state: "live",
+        detail: "The previous agent session stopped responding",
+      },
+    });
+  }
+  return takeover.request;
+};
 
 /** Marks one request terminal. A later pickup or response cannot revive it. */
 export const cancelAgentRequest = async ({

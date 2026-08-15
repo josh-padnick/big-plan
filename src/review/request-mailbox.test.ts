@@ -53,6 +53,8 @@ import {
 const sessionId = "1111111111111111";
 const planId = "2222222222222222";
 const packageId = "3333333333333333";
+const agentA = "aaaa0000aaaa0000";
+const agentB = "bbbb1111bbbb1111";
 const snapshot = deriveSnapshotDigest("# Plan\n");
 const execFileAsync = promisify(execFile);
 const mailboxModule = new URL("./request-mailbox.ts", import.meta.url).href;
@@ -66,7 +68,7 @@ const delay = Number(process.env.BP_START_AT) - Date.now();
 if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
 const common = { store, requestId: process.env.BP_REQUEST_ID, now: process.env.BP_NOW };
 if (process.env.BP_OPERATION === "claim") {
-  await claimAgentRequest({ ...common, baselineSnapshot: "aaaaaaaaaaaaaaaa" });
+  await claimAgentRequest({ ...common, claimedBy: process.env.BP_CLAIMED_BY, baselineSnapshot: "aaaaaaaaaaaaaaaa" });
 } else {
   await cancelAgentRequest(common);
 }
@@ -129,12 +131,14 @@ const runRequestWorker = async ({
   requestId,
   startAt,
   now,
+  claimedBy = agentA,
 }: {
   readonly operation: "claim" | "cancel";
   readonly planPath: string;
   readonly requestId: string;
   readonly startAt: number;
   readonly now: string;
+  readonly claimedBy?: string;
 }): Promise<void> => {
   await execFileAsync("bun", ["-e", WORKER_SCRIPT], {
     env: {
@@ -147,6 +151,7 @@ const runRequestWorker = async ({
       BP_REQUEST_ID: requestId,
       BP_START_AT: String(startAt),
       BP_NOW: now,
+      BP_CLAIMED_BY: claimedBy,
     },
   });
 };
@@ -321,6 +326,102 @@ describe("request mailbox", () => {
     }
   });
 
+  it("should refuse a second session's claim on a leased request", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({ id: "4444444444444444", body: "Only one agent." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+    });
+
+    await expect(
+      claimAgentRequest({
+        store,
+        requestId: request.requestId,
+        claimedBy: agentB,
+        baselineSnapshot: snapshot,
+        // Well inside the lease agent A just took.
+        now: "2026-08-10T12:00:10.000Z",
+      }),
+    ).rejects.toThrow(/Another agent session is working on this request/);
+
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests[0]).toMatchObject({ claimedBy: agentA });
+  });
+
+  it("should let the same session refresh its own claim", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({ id: "4444444444444444", body: "Keep working." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+    });
+
+    const renewed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      // A renewal must never move the frozen baseline, even when the caller
+      // offers a newer one, or the request's diff would lose the work so far.
+      baselineSnapshot: deriveSnapshotDigest("# Plan\n\nRewritten.\n"),
+      now: "2026-08-10T12:00:30.000Z",
+    });
+
+    expect(renewed).toMatchObject({
+      claimedBy: agentA,
+      claimedAt: claimed.claimedAt,
+      baselineSnapshot: claimed.baselineSnapshot,
+    });
+    expect(renewed.claimExpiresAtMs).toBeGreaterThan(
+      claimed.claimExpiresAtMs ?? 0,
+    );
+  });
+
+  it("should let a new session take an expired claim", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({ id: "4444444444444444", body: "The first agent died." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+    });
+
+    const takenOver = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      claimedBy: agentB,
+      baselineSnapshot: snapshot,
+      // Past the 75-second lease the reviewer has already been shown as stalled.
+      now: "2026-08-10T12:01:20.000Z",
+    });
+
+    expect(takenOver).toMatchObject({
+      claimedBy: agentB,
+      claimedAt: "2026-08-10T12:01:20.000Z",
+    });
+    const events = await readProgress({ store, sessionId });
+    expect(events.map((event) => event.stepCode)).toContain(
+      "request-reclaimed",
+    );
+  });
+
   it("should commit either cancellation or response when they race", async () => {
     const { store } = await preparedReview();
     const comment = reviewComment({
@@ -332,6 +433,7 @@ describe("request mailbox", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -414,6 +516,7 @@ describe("request mailbox", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -496,6 +599,7 @@ describe("request mailbox", () => {
       claimAgentRequest({
         store,
         requestId: request.requestId,
+        claimedBy: agentA,
         baselineSnapshot: "aaaaaaaaaaaaaaaa",
         now: "2026-08-10T12:00:01.000Z",
       }),

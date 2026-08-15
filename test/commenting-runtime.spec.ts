@@ -33,6 +33,11 @@ import { boxOf, expect, stageComment, test, type Page } from "./fixtures";
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
+// These journeys stand in for one coding agent working the review, so every
+// claim they take and every pickup they ask for speaks as the same session.
+const agentSessionId = "aaaa0000aaaa0000";
+const agentViewer = () => ({ claimedBy: agentSessionId, nowMs: Date.now() });
+
 // Two distinct authored pictures, so a swap between them is visible in the
 // diff as two different sources rather than as identical alternative words.
 const WIDE_PNG_DATA_URI =
@@ -400,7 +405,7 @@ test("should pause a nonstandard request behind an explicit warning", async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const request = nextPendingAgentRequest(exchange);
+  const request = nextPendingAgentRequest(exchange, agentViewer());
   if (request === undefined || request.kind !== "feedback") {
     throw new Error("The warning journey did not create feedback work");
   }
@@ -408,6 +413,7 @@ test("should pause a nonstandard request behind an explicit warning", async ({
   const claimed = await claimAgentRequest({
     store,
     requestId: request.requestId,
+    claimedBy: agentSessionId,
     baselineSnapshot: deriveSnapshotDigest(source),
     now: new Date().toISOString(),
   });
@@ -509,7 +515,7 @@ test("should contain working comments when resolved threads expand", async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const firstRequest = nextPendingAgentRequest(exchange);
+  const firstRequest = nextPendingAgentRequest(exchange, agentViewer());
   if (firstRequest === undefined || firstRequest.kind !== "feedback") {
     throw new Error("The containment journey did not create its first request");
   }
@@ -545,6 +551,7 @@ test("should contain working comments when resolved threads expand", async ({
   const firstClaimed = await claimAgentRequest({
     store,
     requestId: firstRequest.requestId,
+    claimedBy: agentSessionId,
     baselineSnapshot: firstRequest.premiseSnapshot,
     now: new Date().toISOString(),
   });
@@ -599,7 +606,7 @@ test("should contain working comments when resolved threads expand", async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const secondRequest = nextPendingAgentRequest(secondExchange);
+  const secondRequest = nextPendingAgentRequest(secondExchange, agentViewer());
   if (secondRequest === undefined || secondRequest.kind !== "feedback") {
     throw new Error(
       "The containment journey did not create its working request",
@@ -608,6 +615,7 @@ test("should contain working comments when resolved threads expand", async ({
   const secondClaimed = await claimAgentRequest({
     store,
     requestId: secondRequest.requestId,
+    claimedBy: agentSessionId,
     baselineSnapshot: secondRequest.premiseSnapshot,
     now: new Date().toISOString(),
   });
@@ -1206,7 +1214,7 @@ test("should restore and submit staged comments through the local review runtime
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const request = nextPendingAgentRequest(exchange);
+  const request = nextPendingAgentRequest(exchange, agentViewer());
   if (request === undefined || request.kind !== "feedback") {
     throw new Error("Sending did not create a pending feedback request");
   }
@@ -1506,6 +1514,7 @@ test("should restore and submit staged comments through the local review runtime
   const claimed = await claimAgentRequest({
     store,
     requestId: request.requestId,
+    claimedBy: agentSessionId,
     baselineSnapshot: request.premiseSnapshot,
     now: new Date().toISOString(),
   });
@@ -3547,7 +3556,7 @@ test("should keep shell interactions wired after an agent revision refreshes the
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -3589,6 +3598,7 @@ test("should keep shell interactions wired after an agent revision refreshes the
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
@@ -3971,7 +3981,7 @@ Reviewers confirm the output by hand.
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -4012,6 +4022,7 @@ Reviewers confirm the output by hand.
       const claimed = await claimAgentRequest({
         store,
         requestId: request.requestId,
+        claimedBy: agentSessionId,
         baselineSnapshot: request.premiseSnapshot,
         now: answeredAt,
       });
@@ -4049,6 +4060,7 @@ Reviewers confirm the output by hand.
       const claimedFollowUp = await claimAgentRequest({
         store,
         requestId: followUp.requestId,
+        claimedBy: agentSessionId,
         baselineSnapshot: revisedSnapshot,
         now: revisedAgainAt,
       });
@@ -4205,7 +4217,7 @@ The current plan contains no slides.
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create component feedback work");
     }
@@ -4245,6 +4257,7 @@ The current plan contains no slides.
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: answeredAt,
     });
@@ -4282,6 +4295,7 @@ The current plan contains no slides.
     const claimedFollowUp = await claimAgentRequest({
       store,
       requestId: followUp.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: revisedSnapshot,
       now: revisedAgainAt,
     });
@@ -4481,6 +4495,7 @@ The rollout waits for a green build.
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
@@ -4630,7 +4645,7 @@ test("should open a digest entry in the slide its section header names", async (
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -4663,6 +4678,7 @@ test("should open a digest entry in the slide its section header names", async (
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: answeredAt,
     });
@@ -4806,7 +4822,7 @@ ${lowerContent}
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -4846,6 +4862,7 @@ ${lowerContent}
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
@@ -4986,7 +5003,7 @@ const verification = "first";
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const firstRequest = nextPendingAgentRequest(firstExchange);
+    const firstRequest = nextPendingAgentRequest(firstExchange, agentViewer());
     if (firstRequest === undefined || firstRequest.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -5024,6 +5041,7 @@ const verification = "first";
     const firstClaimed = await claimAgentRequest({
       store,
       requestId: firstRequest.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: firstRequest.premiseSnapshot,
       now: new Date().toISOString(),
     });
@@ -5074,7 +5092,10 @@ const verification = "first";
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const secondRequest = nextPendingAgentRequest(secondExchange);
+    const secondRequest = nextPendingAgentRequest(
+      secondExchange,
+      agentViewer(),
+    );
     if (secondRequest === undefined || secondRequest.kind !== "reply") {
       throw new Error("The thread reply did not create pending work");
     }
@@ -5101,6 +5122,7 @@ const verification = "first";
     const secondClaimed = await claimAgentRequest({
       store,
       requestId: secondRequest.requestId,
+      claimedBy: agentSessionId,
       baselineSnapshot: secondRequest.premiseSnapshot,
       now: new Date().toISOString(),
     });
@@ -5251,7 +5273,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    const request = nextPendingAgentRequest(exchange);
+    const request = nextPendingAgentRequest(exchange, agentViewer());
     if (request === undefined || request.kind !== "feedback") {
       throw new Error("Sending did not create a pending feedback request");
     }
@@ -5290,6 +5312,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
       const claimed = await claimAgentRequest({
         store,
         requestId: request.requestId,
+        claimedBy: agentSessionId,
         baselineSnapshot: request.premiseSnapshot,
         now: answeredAt,
       });
@@ -5356,6 +5379,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
       const claimedFollowUp = await claimAgentRequest({
         store,
         requestId: followUp.requestId,
+        claimedBy: agentSessionId,
         baselineSnapshot: revisedSnapshot,
         now: revisedAgainAt,
       });

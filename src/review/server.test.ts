@@ -846,7 +846,12 @@ describe("review runtime feedback", () => {
       sessionId: runtime.sessionId,
       planId: runtime.planId,
     });
-    expect(nextPendingAgentRequest(exchange)).toMatchObject({
+    expect(
+      nextPendingAgentRequest(exchange, {
+        claimedBy: runtime.sessionId,
+        nowMs: Date.now(),
+      }),
+    ).toMatchObject({
       kind: "feedback",
       comments: [{ id: "55667788" }],
     });
@@ -1049,6 +1054,7 @@ describe("review runtime feedback", () => {
       await claimAgentRequest({
         store: isolated.store,
         requestId: created.requestId,
+        claimedBy: isolated.sessionId,
         baselineSnapshot: created.premiseSnapshot,
         now: claimedAt,
       });
@@ -1665,6 +1671,7 @@ The dashboard shows the retry backlog.
       const claimed = await claimAgentRequest({
         store: isolated.store,
         requestId: request.requestId,
+        claimedBy: isolated.sessionId,
         baselineSnapshot: request.premiseSnapshot,
         now: new Date().toISOString(),
       });
@@ -1770,6 +1777,7 @@ The dashboard shows the retry backlog.
     const claimed = await claimAgentRequest({
       store: runtime.store,
       requestId: request.requestId,
+      claimedBy: runtime.sessionId,
       baselineSnapshot: request.premiseSnapshot,
       now: new Date().toISOString(),
     });
@@ -2117,6 +2125,7 @@ describe("review runtime shutdown", () => {
     const oldClaim = await claimAgentRequest({
       store: first.store,
       requestId: oldRequest.requestId,
+      claimedBy: first.sessionId,
       baselineSnapshot: oldRevision,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -2159,6 +2168,7 @@ describe("review runtime shutdown", () => {
       const newClaim = await claimAgentRequest({
         store: restarted.store,
         requestId: newRequest.requestId,
+        claimedBy: restarted.sessionId,
         baselineSnapshot: newRequest.premiseSnapshot,
         now: "2026-08-10T12:01:01.000Z",
       });

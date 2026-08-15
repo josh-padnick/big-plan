@@ -57,6 +57,9 @@ import {
 } from "./shared/review-image.js";
 import { materializeReviewImages, replacePlanSource } from "./plan-assets.js";
 
+const agentClaimIdentity = (session: { readonly sessionId: string }): string =>
+  session.sessionId;
+
 export type AgentWorkLoopAction =
   | {
       readonly kind: "prompt";
@@ -369,13 +372,17 @@ const nextWork = async ({
     }
     throw error;
   }
+  const claimedBy = agentClaimIdentity(session);
   while (true) {
     let snapshot = await readAgentExchange({
       store: session.store,
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    let request = nextPendingAgentRequest(snapshot);
+    let request = nextPendingAgentRequest(snapshot, {
+      claimedBy,
+      nowMs: Date.now(),
+    });
     while (request === undefined && shouldWait) {
       await writeAgentHeartbeat({
         store: session.store,
@@ -405,7 +412,10 @@ const nextWork = async ({
         sessionId: session.sessionId,
         planId: session.planId,
       });
-      request = nextPendingAgentRequest(snapshot);
+      request = nextPendingAgentRequest(snapshot, {
+        claimedBy,
+        nowMs: Date.now(),
+      });
     }
     if (request === undefined) {
       return {
@@ -431,6 +441,7 @@ const nextWork = async ({
       request = await claimAgentRequest({
         store: session.store,
         requestId: selectedRequestId,
+        claimedBy,
         baselineSnapshot: claimedSnapshot,
         now: new Date().toISOString(),
         verifyBeforeClaim: async (candidate) => {
@@ -552,7 +563,10 @@ const respond = async ({
   }
   if (
     request === undefined ||
-    nextPendingAgentRequest(snapshot)?.requestId !== request.requestId
+    nextPendingAgentRequest(snapshot, {
+      claimedBy: agentClaimIdentity(session),
+      nowMs: Date.now(),
+    })?.requestId !== request.requestId
   ) {
     return fail("The response does not answer the current pending request");
   }
@@ -717,7 +731,12 @@ const note = async ({
   if (active?.canceledAt !== undefined) {
     return fail("The reviewer canceled this agent request");
   }
-  const request = active ?? nextPendingAgentRequest(snapshot);
+  const request =
+    active ??
+    nextPendingAgentRequest(snapshot, {
+      claimedBy: agentClaimIdentity(session),
+      nowMs: Date.now(),
+    });
   if (request === undefined)
     return fail("There is no pending request to update");
   await appendProgressEvent({
@@ -738,6 +757,20 @@ const note = async ({
     requestId: request.requestId,
     ...(model === undefined ? {} : { model }),
   });
+  if (request.claimedBy === agentClaimIdentity(session)) {
+    try {
+      await claimAgentRequest({
+        store: session.store,
+        requestId: request.requestId,
+        claimedBy: agentClaimIdentity(session),
+        baselineSnapshot: requestBaselineSnapshot(request),
+        now: new Date().toISOString(),
+      });
+    } catch (error: unknown) {
+      if (!(error instanceof AgentExchangeRejected)) throw error;
+      return fail(error.message);
+    }
+  }
   return { noted: message, requestId: request.requestId };
 };
 

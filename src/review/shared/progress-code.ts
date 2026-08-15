@@ -10,6 +10,7 @@ export const PROGRESS_STEP_CODES = [
   "queued-message-deleted",
   "request-canceled",
   "request-picked-up",
+  "request-reclaimed",
   "response-ready",
   "agent-note",
 ] as const;
