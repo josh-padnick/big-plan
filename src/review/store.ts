@@ -1199,6 +1199,31 @@ export const writeAgentRequestValue = async ({
   });
 };
 
+/**
+ * Removes one request the agent never started, together with the blobs frozen
+ * for it. The request file goes first, so a failed blob cleanup leaves orphaned
+ * bytes rather than a message the reviewer believes they deleted.
+ */
+export const deleteAgentRequestValue = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<void> => {
+  await rm(
+    exchangePath({ directory: store.agentRequestDirectory, requestId }),
+    { force: true },
+  );
+  await rm(
+    inside({ base: store.requestAttachmentsDirectory, leaf: requestId }),
+    {
+      recursive: true,
+      force: true,
+    },
+  );
+};
+
 /** Writes one validated agent response under the request it answers. */
 export const writeAgentResponseValue = async ({
   store,

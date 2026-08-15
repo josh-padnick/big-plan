@@ -10,14 +10,18 @@ import {
   validateAgentRequest,
 } from "./agent-exchange.js";
 import type {
+  AgentChatRequest,
   AgentFeedbackRequest,
+  AgentReplyRequest,
   AgentRequest,
   AgentResponse,
 } from "./agent-exchange.js";
+import { extractReviewImageReferences } from "./shared/review-image.js";
 import {
   appendAgentConnectionEvent,
   appendProgressValue,
   compactProgressLog,
+  deleteAgentRequestValue,
   nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
@@ -254,6 +258,124 @@ export const publishAgentResponse = async ({
         requestId: response.requestId,
         value: response,
       });
+    },
+  });
+
+/**
+ * Answers whether an agent owns this request. Editing or deleting a message an
+ * agent has started would race its delivery, so both refuse on this fact, and
+ * both ask inside the per-request lock where the claim is written.
+ */
+const agentOwnsRequest = (request: AgentRequest): boolean =>
+  request.claimedAt !== undefined;
+
+const AGENT_STARTED = "The agent already started on this message";
+
+/**
+ * Reads one queued reviewer message and refuses every state in which changing
+ * it would race the agent. Feedback requests carry comments rather than a body,
+ * so `removeCommentFromQueuedFeedbackRequest` owns their queued edits instead.
+ */
+const readQueuedMessage = async ({
+  store,
+  requestId,
+  verb,
+  allowCanceled,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+  readonly verb: string;
+  readonly allowCanceled: boolean;
+}): Promise<AgentReplyRequest | AgentChatRequest> => {
+  const request = await readCurrentRequest({ store, requestId });
+  if (request.kind === "feedback") {
+    throw new AgentExchangeRejected(
+      `Only a reply or plan question can be ${verb} while it waits`,
+    );
+  }
+  if (!allowCanceled && request.canceledAt !== undefined) {
+    throw new AgentExchangeRejected("The request was canceled by the reviewer");
+  }
+  if (agentOwnsRequest(request)) {
+    throw new AgentExchangeRejected(AGENT_STARTED);
+  }
+  if ((await readValidatedAgentResponse({ store, request })) !== undefined) {
+    throw new AgentExchangeRejected(
+      "The agent has already answered this request",
+    );
+  }
+  return request;
+};
+
+/**
+ * Replaces the body of one waiting message. Images are frozen when a message is
+ * first sent, so a revision may drop or keep them but never introduce one; the
+ * reviewer deletes the message and sends a new one to change its pictures.
+ */
+export const reviseQueuedRequest = async ({
+  store,
+  requestId,
+  body,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+  readonly body: string;
+}): Promise<AgentReplyRequest | AgentChatRequest> =>
+  withRequestLock({
+    store,
+    requestId,
+    change: async () => {
+      const request = await readQueuedMessage({
+        store,
+        requestId,
+        verb: "revised",
+        allowCanceled: false,
+      });
+      const frozen = new Set(
+        request.attachments.map((attachment) => attachment.id),
+      );
+      const introduced = extractReviewImageReferences(body).find(
+        (reference) => !frozen.has(reference.id),
+      );
+      if (introduced !== undefined) {
+        throw new AgentExchangeRejected(
+          "A waiting message cannot gain a new image. Delete it and send a new one.",
+        );
+      }
+      const revised = validateAgentRequest({ ...request, body });
+      if (revised.kind === "feedback") {
+        throw new AgentExchangeRejected(
+          "Revising this message changed the request kind",
+        );
+      }
+      await writeAgentRequestValue({ store, requestId, value: revised });
+      return revised;
+    },
+  });
+
+/**
+ * Removes one waiting message outright. Cancel and delete are distinct: cancel
+ * stops work the agent started, delete removes a message that never started,
+ * including one the reviewer already canceled.
+ */
+export const deleteQueuedRequest = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<void> =>
+  withRequestLock({
+    store,
+    requestId,
+    change: async () => {
+      await readQueuedMessage({
+        store,
+        requestId,
+        verb: "deleted",
+        allowCanceled: true,
+      });
+      await deleteAgentRequestValue({ store, requestId });
     },
   });
 

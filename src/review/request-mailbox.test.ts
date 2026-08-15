@@ -22,9 +22,11 @@ import {
   assertResolvableComment,
   cancelAgentRequest,
   claimAgentRequest,
+  deleteQueuedRequest,
   publishAgentResponse,
   recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
+  reviseQueuedRequest,
 } from "./request-mailbox.js";
 import {
   prepareStore,
@@ -81,6 +83,17 @@ const requestWith = (comments: ReadonlyArray<ReviewComment>) =>
       comments,
     }),
     premiseSnapshot: snapshot,
+  });
+
+const chatRequest = (body: string) =>
+  messageAgentRequest({
+    kind: "chat",
+    requestId: "6666666666666666",
+    sessionId,
+    planId,
+    premiseSnapshot: snapshot,
+    createdAt: "2026-08-10T12:00:00.000Z",
+    body,
   });
 
 const preparedReview = async () => {
@@ -481,6 +494,176 @@ describe("request mailbox", () => {
         commentId: "5555555555555555",
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it("should revise a queued request", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Waht is the retry boundary?");
+    await writeAgentRequest({ store, request });
+
+    await expect(
+      reviseQueuedRequest({
+        store,
+        requestId: request.requestId,
+        body: "What is the retry boundary?",
+      }),
+    ).resolves.toMatchObject({
+      kind: "chat",
+      body: "What is the retry boundary?",
+    });
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests).toMatchObject([
+      { requestId: request.requestId, body: "What is the retry boundary?" },
+    ]);
+  });
+
+  it("should refuse to revise a claimed request", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Waht is the retry boundary?");
+    await writeAgentRequest({ store, request });
+    await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    await expect(
+      reviseQueuedRequest({
+        store,
+        requestId: request.requestId,
+        body: "What is the retry boundary?",
+      }),
+    ).rejects.toThrow(/already started/);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests[0]).toMatchObject({
+      body: "Waht is the retry boundary?",
+    });
+  });
+
+  it("should refuse to revise a canceled request", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Waht is the retry boundary?");
+    await writeAgentRequest({ store, request });
+    await cancelAgentRequest({
+      store,
+      requestId: request.requestId,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    await expect(
+      reviseQueuedRequest({
+        store,
+        requestId: request.requestId,
+        body: "What is the retry boundary?",
+      }),
+    ).rejects.toThrow(/canceled/);
+  });
+
+  it("should refuse to revise a feedback request", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({ id: "4444444444444444", body: "Revise this." }),
+    ]);
+    await writeAgentRequest({ store, request });
+
+    await expect(
+      reviseQueuedRequest({
+        store,
+        requestId: request.requestId,
+        body: "A different body.",
+      }),
+    ).rejects.toThrow(/Only a reply or plan question/);
+  });
+
+  it("should either revise or refuse when an edit races pickup", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Waht is the retry boundary?");
+    await writeAgentRequest({ store, request });
+
+    const results = await Promise.allSettled([
+      claimAgentRequest({
+        store,
+        requestId: request.requestId,
+        baselineSnapshot: snapshot,
+        now: "2026-08-10T12:00:01.000Z",
+      }),
+      reviseQueuedRequest({
+        store,
+        requestId: request.requestId,
+        body: "What is the retry boundary?",
+      }),
+    ]);
+
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    const stored = exchange.requests[0];
+    expect(stored).toMatchObject({ baselineSnapshot: snapshot });
+    if (results[1].status === "fulfilled") {
+      expect(stored).toMatchObject({ body: "What is the retry boundary?" });
+    } else {
+      expect(stored).toMatchObject({ body: "Waht is the retry boundary?" });
+      expect(results[1].reason).toMatchObject({
+        message: "The agent already started on this message",
+      });
+    }
+  });
+
+  it("should delete a queued request", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Never mind this question.");
+    await writeAgentRequest({ store, request });
+
+    await deleteQueuedRequest({ store, requestId: request.requestId });
+
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should refuse to delete a claimed request", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Never mind this question.");
+    await writeAgentRequest({ store, request });
+    await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    await expect(
+      deleteQueuedRequest({ store, requestId: request.requestId }),
+    ).rejects.toThrow(/already started/);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests).toHaveLength(1);
+  });
+
+  it("should either delete or refuse when a delete races pickup", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Never mind this question.");
+    await writeAgentRequest({ store, request });
+
+    const results = await Promise.allSettled([
+      claimAgentRequest({
+        store,
+        requestId: request.requestId,
+        baselineSnapshot: snapshot,
+        now: "2026-08-10T12:00:01.000Z",
+      }),
+      deleteQueuedRequest({ store, requestId: request.requestId }),
+    ]);
+
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    if (results[1].status === "fulfilled") {
+      expect(exchange.requests).toHaveLength(0);
+    } else {
+      expect(exchange.requests[0]).toMatchObject({
+        baselineSnapshot: snapshot,
+      });
+      expect(results[1].reason).toMatchObject({
+        message: "The agent already started on this message",
+      });
+    }
   });
 
   it("should allocate unique progress sequences when writers overlap", async () => {
