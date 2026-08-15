@@ -1,6 +1,5 @@
-// The transport boundary is the review runtime's whole security story, so it
-// is covered here as behavior rather than as intent: each test is one refusal
-// the design promises, exercised against a real listening runtime.
+// Covers review-runtime route behavior against a real listening server,
+// including security refusals and durable request-lifecycle invariants.
 
 import { execFileSync } from "node:child_process";
 import { constants } from "node:fs";
@@ -38,6 +37,7 @@ import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
+import { validateResolvedCommentIds } from "./shared/comment.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import {
   readComments,
@@ -1831,6 +1831,181 @@ The dashboard shows the retry backlog.
         (response) => response.requestId === request.requestId,
       ),
     ).toBe(true);
+  });
+});
+
+describe("review runtime resolve invariant", () => {
+  const commentId = "b7b7b7b7";
+  const comment = {
+    id: commentId,
+    body: "Rewrite the status quo section.",
+    premiseSnapshot: PLAN_SNAPSHOT,
+    target: { type: "document" as const },
+  };
+
+  // Each test owns a runtime, because the assertion is about the durable
+  // resolved set the shared runtime's other tests also write.
+  const isolatedRuntime = async (prefix: string) => {
+    const directory = await mkdtemp(join(tmpdir(), prefix));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const isolated = await startReviewRuntime({ planPath });
+    const descriptor: unknown = JSON.parse(
+      await readFile(isolated.store.sessionPath, "utf8"),
+    );
+    const isolatedToken =
+      typeof descriptor === "object" &&
+      descriptor !== null &&
+      "token" in descriptor &&
+      typeof descriptor.token === "string"
+        ? descriptor.token
+        : "";
+    const isolatedCall = ({
+      path,
+      method = "GET",
+      body,
+    }: {
+      readonly path: string;
+      readonly method?: string;
+      readonly body?: unknown;
+    }) =>
+      fetch(`${isolated.url.replace(/\/$/u, "")}${path}`, {
+        method,
+        headers: {
+          "x-big-plan-review-token": isolatedToken,
+          "sec-fetch-site": "same-origin",
+          origin: isolated.url.replace(/\/$/u, ""),
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    const close = async () => {
+      await isolated.close();
+      await rm(directory, { recursive: true, force: true });
+    };
+    return { isolated, isolatedCall, close };
+  };
+
+  const queuedRequestId = async (isolated: ReviewRuntime): Promise<string> => {
+    const exchange = await readAgentExchange({
+      store: isolated.store,
+      sessionId: isolated.sessionId,
+      planId: isolated.planId,
+    });
+    const request = exchange.requests.find(
+      (candidate) =>
+        candidate.kind === "feedback" &&
+        candidate.comments.some((entry) => entry.id === commentId),
+    );
+    if (request === undefined) throw new Error("Feedback was not queued");
+    return request.requestId;
+  };
+
+  const resolveWrite = (
+    isolatedCall: (input: {
+      readonly path: string;
+      readonly method?: string;
+      readonly body?: unknown;
+    }) => Promise<Response>,
+  ) =>
+    isolatedCall({
+      path: "/api/drafts",
+      method: "PUT",
+      body: { drafts: [], activeDraft: "", resolvedCommentIds: [commentId] },
+    });
+
+  it("should refuse a drafts write that resolves a comment with a queued message", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-resolve-refuse-",
+    );
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: { comments: [comment] },
+          })
+        ).status,
+      ).toBe(200);
+
+      const refusal = await resolveWrite(isolatedCall);
+      expect(refusal.status).toBe(409);
+      await expect(refusal.json()).resolves.toMatchObject({
+        error: expect.stringContaining("waiting for the coding agent"),
+      });
+      await expect(
+        readResolvedCommentIds({
+          store: isolated.store,
+          validate: validateResolvedCommentIds,
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("should accept the same write after the request is cancelled", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-resolve-accept-",
+    );
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: { comments: [comment] },
+          })
+        ).status,
+      ).toBe(200);
+      expect((await resolveWrite(isolatedCall)).status).toBe(409);
+
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/agent-cancel",
+            method: "POST",
+            body: { requestId: await queuedRequestId(isolated) },
+          })
+        ).status,
+      ).toBe(200);
+
+      expect((await resolveWrite(isolatedCall)).status).toBe(200);
+      await expect(
+        readResolvedCommentIds({
+          store: isolated.store,
+          validate: validateResolvedCommentIds,
+        }),
+      ).resolves.toEqual([commentId]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("should keep an already resolved comment resolvable while work is queued", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-resolve-idempotent-",
+    );
+    try {
+      await writeResolvedCommentIds({
+        store: isolated.store,
+        ids: [commentId],
+      });
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: { comments: [comment] },
+          })
+        ).status,
+      ).toBe(200);
+
+      expect((await resolveWrite(isolatedCall)).status).toBe(200);
+    } finally {
+      await close();
+    }
   });
 });
 

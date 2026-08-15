@@ -21,6 +21,7 @@ import {
 import { buildFeedbackPackage, renderBrief } from "./feedback-package.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
+  AgentExchangeRejected,
   deriveSnapshotDigest,
   feedbackAgentRequest,
   readAgentCommentHistory,
@@ -28,6 +29,7 @@ import {
 } from "./agent-exchange.js";
 import {
   appendProgressEvent,
+  assertResolvableComment,
   cancelAgentRequest,
   ensureAgentRequest,
   removeCommentFromQueuedFeedbackRequest,
@@ -249,13 +251,31 @@ export const updateReviewState = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
-  const { store, planRenderer } = context;
+  const { store, planId, sessionId, planRenderer } = context;
   const payload = payloadOf(body);
   const drafts = await planRenderer.validateUpdates(payload.drafts);
   const activeDraft = validateActiveDraft(payload.activeDraft);
   const resolvedCommentIds = validateResolvedCommentIds(
     payload.resolvedCommentIds,
   );
+  // A newly resolved thread must not contradict outstanding agent work. The
+  // check runs before any write, so a refusal leaves the whole review state
+  // untouched rather than half applied.
+  const alreadyResolved = new Set(
+    await readResolvedCommentIds({
+      store,
+      validate: validateResolvedCommentIds,
+    }),
+  );
+  for (const commentId of resolvedCommentIds) {
+    if (alreadyResolved.has(commentId)) continue;
+    try {
+      await assertResolvableComment({ store, sessionId, planId, commentId });
+    } catch (error: unknown) {
+      if (!(error instanceof AgentExchangeRejected)) throw error;
+      return refusal({ status: 409, reason: error.message });
+    }
+  }
   const sentIds = new Set(
     (await planRenderer.readStoredComments(store.sentPath)).map(
       (comment) => comment.id,

@@ -1,5 +1,5 @@
-// Proves that separate browser and agent processes can change one stored
-// request without replacing each other's fields.
+// Proves stored request mutations serialize safely across processes and
+// request-lifecycle invariants reject contradictory review state.
 
 import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -11,6 +11,7 @@ import type { ReviewComment } from "./shared/comment.js";
 import {
   deriveSnapshotDigest,
   feedbackAgentRequest,
+  messageAgentRequest,
   readAgentExchange,
   validateAgentResponseDraft,
   writeAgentRequest,
@@ -18,6 +19,7 @@ import {
 import { buildFeedbackPackage } from "./feedback-package.js";
 import {
   appendProgressEvent,
+  assertResolvableComment,
   cancelAgentRequest,
   claimAgentRequest,
   publishAgentResponse,
@@ -364,6 +366,121 @@ describe("request mailbox", () => {
         message: "The agent has already picked up this feedback request",
       });
     }
+  });
+
+  it("should refuse to resolve a comment with an unanswered request", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const request = requestWith([
+      reviewComment({ id: commentId, body: "Answer this before resolving." }),
+    ]);
+    await writeAgentRequest({ store, request });
+
+    await expect(
+      assertResolvableComment({ store, sessionId, planId, commentId }),
+    ).rejects.toThrow(/waiting for the coding agent/);
+  });
+
+  it("should refuse to resolve a comment with an unanswered reply", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    await writeAgentRequest({
+      store,
+      request: messageAgentRequest({
+        kind: "reply",
+        requestId: "6666666666666666",
+        sessionId,
+        planId,
+        premiseSnapshot: snapshot,
+        createdAt: "2026-08-10T12:00:00.000Z",
+        body: "One more question about this.",
+        commentId,
+      }),
+    });
+
+    await expect(
+      assertResolvableComment({ store, sessionId, planId, commentId }),
+    ).rejects.toThrow(/waiting for the coding agent/);
+  });
+
+  it("should allow resolving once the request is cancelled", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const request = requestWith([
+      reviewComment({ id: commentId, body: "Cancel this before resolving." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    await cancelAgentRequest({
+      store,
+      requestId: request.requestId,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    await expect(
+      assertResolvableComment({ store, sessionId, planId, commentId }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("should allow resolving once the agent has answered", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Answer this, then resolve.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    await publishAgentResponse({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: [
+            {
+              commentId: comment.id,
+              state: "declined",
+              message: "No plan revision is needed.",
+            },
+          ],
+        },
+        request: claimed,
+        commentsById: new Map([[comment.id, comment]]),
+        changedBlocks: new Set(),
+        currentSnapshot: snapshot,
+        now: "2026-08-10T12:00:02.000Z",
+      }),
+    });
+
+    await expect(
+      assertResolvableComment({
+        store,
+        sessionId,
+        planId,
+        commentId: comment.id,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("should allow resolving a comment no request names", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({ id: "4444444444444444", body: "A different thread." }),
+    ]);
+    await writeAgentRequest({ store, request });
+
+    await expect(
+      assertResolvableComment({
+        store,
+        sessionId,
+        planId,
+        commentId: "5555555555555555",
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it("should allocate unique progress sequences when writers overlap", async () => {

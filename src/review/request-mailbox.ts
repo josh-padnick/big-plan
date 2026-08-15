@@ -1,9 +1,11 @@
-// Owns changes to stored agent requests. Each change locks one request,
-// reads its current value, validates it, and writes one complete replacement.
+// Owns stored agent-request lifecycle mutations and invariants. Each mutation
+// locks its state, validates it, and writes one complete replacement.
 
 import { join } from "node:path";
 import {
   AgentExchangeRejected,
+  outstandingAgentRequests,
+  readAgentCommentHistory,
   readValidatedAgentResponse,
   validateAgentRequest,
 } from "./agent-exchange.js";
@@ -304,6 +306,34 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
       return updated;
     },
   });
+
+/**
+ * Refuses a resolve that would contradict outstanding work. Resolution and an
+ * unanswered message are mutually exclusive states, so the thread must reach
+ * one of them first: cancel the message, or wait for the answer.
+ */
+export const assertResolvableComment = async ({
+  store,
+  sessionId,
+  planId,
+  commentId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+  readonly commentId: string;
+}): Promise<void> => {
+  const history = await readAgentCommentHistory({
+    store,
+    sessionId,
+    planId,
+    commentId,
+  });
+  if (outstandingAgentRequests(history).length === 0) return;
+  throw new AgentExchangeRejected(
+    "This comment has a message waiting for the coding agent. Cancel the message or wait for its answer before resolving.",
+  );
+};
 
 export type ProgressEventDraft = Omit<ProgressEvent, "seq">;
 

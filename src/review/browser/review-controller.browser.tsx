@@ -123,6 +123,8 @@ import {
 import {
   isReviewRuntimeUnavailable,
   normalizeReviewRuntimeRequestError,
+  reviewRuntimeRefusal,
+  reviewRuntimeRefusalStatus,
 } from "./review-runtime-request.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
@@ -630,9 +632,10 @@ const requestJson = async ({
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {
-      throw new Error(
-        `Review runtime refused the request (${response.status})`,
-      );
+      throw await reviewRuntimeRefusal({
+        status: response.status,
+        readBody: () => response.json(),
+      });
     }
     return await response.json();
   } catch (error) {
@@ -3644,6 +3647,9 @@ export const ReviewController = () => {
   const [resolvedCommentIds, setResolvedCommentIds] = useState<
     ReadonlySet<string>
   >(new Set());
+  // The runtime's own words when it refuses a resolve. A refused resolve
+  // reverts, so without this the thread would simply spring back unexplained.
+  const [resolveRefusal, setResolveRefusal] = useState<string | null>(null);
   const [compose, setCompose] = useState<ComposeState | null>(null);
   const [composeBody, setComposeBody] = useState("");
   const [pendingCompose, setPendingCompose] = useState<ComposeState | null>(
@@ -4229,19 +4235,37 @@ export const ReviewController = () => {
           runtimeFingerprint,
         };
       }
-      await requestJson({
-        path: "/api/drafts",
-        identity,
-        method: "PUT",
-        body: {
-          drafts,
-          activeDraft: "",
-          resolvedCommentIds: Array.from(resolvedCommentIds),
-        },
-      });
+      try {
+        await requestJson({
+          path: "/api/drafts",
+          identity,
+          method: "PUT",
+          body: {
+            drafts,
+            activeDraft: "",
+            resolvedCommentIds: Array.from(resolvedCommentIds),
+          },
+        });
+      } catch (error: unknown) {
+        // The runtime refuses the whole write when a resolve contradicts
+        // outstanding agent work, so the resolved set returns to what it stored.
+        // Local drafts are untouched and persist on the next write.
+        if (reviewRuntimeRefusalStatus(error) !== 409) throw error;
+        return {
+          state: "refused" as const,
+          reason: errorMessage(error),
+          resolvedCommentIds: runtimeReviewState.resolvedCommentIds,
+        };
+      }
       return { state: "persisted" as const, fingerprint };
     })
       .then((result) => {
+        if (result.state === "refused") {
+          setResolvedCommentIds(result.resolvedCommentIds);
+          setResolveRefusal(result.reason);
+          setStatus(result.reason);
+          return;
+        }
         if (result.state === "reconciled") {
           setPersistedReviewState(result.runtimeFingerprint);
           setDrafts(result.reviewState.drafts);
@@ -4769,16 +4793,6 @@ export const ReviewController = () => {
     nowMs: agentProjectionNowMs,
     cancelPendingRequestIds,
   });
-  const cancelRequestsForComment = (commentId: string) => {
-    const thread = threadProjections.get(commentId);
-    if (thread === undefined) return;
-    for (const exchange of thread.exchanges) {
-      if (exchange.response === undefined && !exchange.canceled) {
-        void cancelRequest(exchange.request.requestId);
-      }
-    }
-  };
-
   const latestRequest = agent.requests.at(-1);
   const latestResponse = agent.responses.find(
     (response) => response.requestId === latestRequest?.requestId,
@@ -4996,10 +5010,13 @@ export const ReviewController = () => {
         isRailOpen: isOpen,
       }),
     );
+  // Resolving never cancels outstanding work on the reviewer's behalf: the runtime
+  // refuses a resolve that would contradict an unanswered message, and that
+  // refusal is what the reviewer sees.
   const toggleResolvedComment = (commentId: string) => {
+    setResolveRefusal(null);
     if (!resolvedCommentIds.has(commentId)) {
       closeTour();
-      cancelRequestsForComment(commentId);
       if (selectedCommentId === commentId) setSelectedCommentId(null);
       const comment = [...drafts, ...sent].find(
         (candidate) => candidate.id === commentId,
@@ -5259,6 +5276,15 @@ export const ReviewController = () => {
             Comment
           </button>
         </Tooltip>
+      )}
+      {resolveRefusal === null ? null : (
+        <p
+          className="fixed top-14 right-3 left-3 z-50 mx-auto m-0 max-w-2xl min-w-0 rounded-lg border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-xs font-semibold text-[var(--callout-danger-c)] shadow-floating [overflow-wrap:anywhere]"
+          role="alert"
+          data-review-resolve-refusal
+        >
+          {resolveRefusal}
+        </p>
       )}
       {feedbackHost === null
         ? null

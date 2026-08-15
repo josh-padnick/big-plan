@@ -1,5 +1,6 @@
-// Critical browser journey for the local review runtime behind the React
-// commenting chrome: server-backed restoration and one real feedback handoff.
+// Critical browser journeys for the local review runtime behind the React
+// commenting chrome: durable review state, feedback handoff, and honest
+// request-lifecycle refusals.
 
 import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -725,6 +726,67 @@ test("should contain working comments when resolved threads expand", async ({
   expect(narrowContainment.scrollWidth).toBeLessThanOrEqual(
     narrowContainment.clientWidth,
   );
+});
+
+// The defect this journey guards was invisible: resolving a thread silently
+// threw away the message waiting on it. Only a real browser can prove the
+// reviewer now sees the refusal and keeps the queued message.
+test.describe("a resolve the runtime refuses", () => {
+  // The refusal this journey asks for is the 409 the browser also reports as
+  // a failed resource load.
+  test.use({ allowedConsoleErrors: [/Failed to load resource:.*409/u] });
+
+  test("should refuse to resolve a thread holding a queued message", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    const COMMENT = "Do not resolve this while the agent still owes it.";
+    await page.goto(reviewRuntimeUrl);
+    await stageComment(page, COMMENT);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    await rail.getByRole("button", { name: "Close feedback" }).click();
+    const inlineThread = page
+      .locator("[data-review-sent-thread='queued']")
+      .filter({ hasText: COMMENT });
+    await inlineThread
+      .getByRole("button", { name: `Expand comment: ${COMMENT}` })
+      .click();
+    const refused = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/drafts") &&
+        response.request().method() === "PUT",
+    );
+    await inlineThread.getByRole("button", { name: "Resolve thread" }).click();
+    expect((await refused).status()).toBe(409);
+
+    await expect(page.locator("[data-review-resolve-refusal]")).toContainText(
+      "waiting for the coding agent",
+    );
+    await expect(
+      inlineThread.getByRole("button", { name: "Resolve thread" }),
+    ).toBeVisible();
+
+    // The queued message survived the refused resolve, which is the whole point.
+    await page.reload();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await expect(rail.getByText(/^Resolved \(/u)).toHaveCount(0);
+    await expect(
+      rail.getByRole("button", {
+        name: `Expand queued comment: ${COMMENT}`,
+      }),
+    ).toBeVisible();
+  });
 });
 
 test("should restore and submit staged comments through the local review runtime", async ({
