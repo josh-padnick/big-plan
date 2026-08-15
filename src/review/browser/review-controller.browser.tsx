@@ -127,7 +127,6 @@ import {
 } from "./review-poll-health.js";
 import {
   reviewContactLossObservation,
-  reviewContactLossRecovery,
   type ReviewContactLossObservation,
 } from "./review-expiry.js";
 import {
@@ -722,42 +721,40 @@ const ServerGoneBanner = ({
   onRefresh,
   contactLossObservation,
   latestReviewUrl,
-  restartCommand,
 }: {
   readonly canRefresh: boolean;
   readonly onRefresh: () => void;
   readonly contactLossObservation: ReviewContactLossObservation;
   readonly latestReviewUrl: string | undefined;
-  readonly restartCommand: string | undefined;
 }) => {
   const unsavedInputWarning = canRefresh
     ? ""
     : " Keep this tab open because the latest review input has not reached the local review server.";
-  const recovery = reviewContactLossRecovery({
-    observation: contactLossObservation,
-    latestReviewUrl,
-    restartCommand,
-  });
-  if (recovery !== undefined) {
-    if (recovery.kind === "replacement") {
+  const refreshRecoveryDetail = canRefresh
+    ? " Refresh when it is running again to continue reviewing. This is separate from the agent connection."
+    : `${unsavedInputWarning} This is separate from the agent connection.`;
+  const refreshAction = {
+    label: "Refresh",
+    onAct: onRefresh,
+    enabled: canRefresh,
+  };
+  if (contactLossObservation.kind === "deadline-passed") {
+    if (latestReviewUrl !== undefined) {
       return (
         <RuntimeAlertBanner
           scope="data-review-server-gone"
           heading="This tab lost contact with this review session"
           detail={`This tab lost contact with the local review server, and the deadline it last knew has passed. This review continues at the latest address.${unsavedInputWarning}`}
-          link={{ href: recovery.href, label: "Open latest review" }}
+          link={{ href: latestReviewUrl, label: "Open latest review" }}
         />
       );
     }
-    const restartInstruction =
-      recovery.kind === "restart-command"
-        ? `Restart it with ${recovery.command}, then open the new address it prints to continue reviewing.`
-        : "Restart the review runtime for this plan, then open the new address it prints to continue reviewing.";
     return (
       <RuntimeAlertBanner
         scope="data-review-server-gone"
         heading="This tab lost contact with this review session"
-        detail={`This tab lost contact with the local review server, and the deadline it last knew has passed. ${restartInstruction}${unsavedInputWarning}`}
+        detail={`This tab lost contact with the local review server, and the deadline it last knew has passed.${refreshRecoveryDetail}`}
+        action={refreshAction}
       />
     );
   }
@@ -765,12 +762,8 @@ const ServerGoneBanner = ({
     <RuntimeAlertBanner
       scope="data-review-server-gone"
       heading="This review session is no longer online"
-      detail={
-        canRefresh
-          ? "The local review server stopped responding. Refresh when it is running again to continue reviewing. This is separate from the agent connection."
-          : `The local review server stopped responding.${unsavedInputWarning} This is separate from the agent connection.`
-      }
-      action={{ label: "Refresh", onAct: onRefresh, enabled: canRefresh }}
+      detail={`The local review server stopped responding.${refreshRecoveryDetail}`}
+      action={refreshAction}
     />
   );
 };
@@ -5197,7 +5190,6 @@ export const ReviewController = () => {
           onRefresh={() => window.location.reload()}
           contactLossObservation={contactLossObservation}
           latestReviewUrl={runtimeSession?.latestReviewUrl}
-          restartCommand={runtimeSession?.restartCommand}
         />
       ) : null}
       {writesStalled ? <WritesStalledBanner /> : null}

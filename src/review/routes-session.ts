@@ -27,6 +27,8 @@ export const readRuntimeSession = async (
     value: encodeRuntimeSession({
       ...sessionView,
       ...(writesStalledMs === undefined ? {} : { writesStalledMs }),
+      // Published for recovery consumers other than the offline banner, which
+      // cannot prove that this runtime stopped.
       restartCommand: context.restartCommand,
       idleTimeoutMs: context.activityClock.idleTimeoutMs,
       ...(expiresAtMs === undefined ? {} : { expiresAtMs }),

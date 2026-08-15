@@ -2,10 +2,7 @@
 // from an unexplained outage without inferring the runtime's current state.
 
 import { describe, expect, it } from "vitest";
-import {
-  reviewContactLossObservation,
-  reviewContactLossRecovery,
-} from "./review-expiry.js";
+import { reviewContactLossObservation } from "./review-expiry.js";
 
 const THIRTY_MINUTES_MS = 30 * 60 * 1_000;
 
@@ -82,53 +79,5 @@ describe("review contact loss observation", () => {
         nowMs: 2_000,
       }),
     ).toEqual({ kind: "unexplained" });
-  });
-});
-
-describe("review contact loss recovery", () => {
-  it("should prefer the replacement address over a restart command", () => {
-    expect(
-      reviewContactLossRecovery({
-        observation: { kind: "deadline-passed" },
-        latestReviewUrl: "http://127.0.0.1:4321/review",
-        restartCommand: "node big-plan.mjs review plan.mdx",
-      }),
-    ).toEqual({
-      kind: "replacement",
-      href: "http://127.0.0.1:4321/review",
-    });
-  });
-
-  it("should use the restart command when no replacement is recorded", () => {
-    expect(
-      reviewContactLossRecovery({
-        observation: { kind: "deadline-passed" },
-        latestReviewUrl: undefined,
-        restartCommand: "node big-plan.mjs review plan.mdx",
-      }),
-    ).toEqual({
-      kind: "restart-command",
-      command: "node big-plan.mjs review plan.mdx",
-    });
-  });
-
-  it("should report when neither recovery destination is known", () => {
-    expect(
-      reviewContactLossRecovery({
-        observation: { kind: "deadline-passed" },
-        latestReviewUrl: undefined,
-        restartCommand: undefined,
-      }),
-    ).toEqual({ kind: "no-restart-command" });
-  });
-
-  it("should leave unexplained contact loss to transient recovery", () => {
-    expect(
-      reviewContactLossRecovery({
-        observation: { kind: "unexplained" },
-        latestReviewUrl: "http://127.0.0.1:4321/review",
-        restartCommand: "node big-plan.mjs review plan.mdx",
-      }),
-    ).toBeUndefined();
   });
 });
