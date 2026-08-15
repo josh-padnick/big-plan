@@ -58,19 +58,19 @@ const withRequestLock = async <TResult>({
       "A request id must be 16 hexadecimal characters",
     );
   }
-  let requestDirectory: string;
+  let lockedStore: ReviewStore;
   try {
     const anchoredStore = await anchorReviewStore(store);
-    requestDirectory = (
-      await anchoredStore.resolveAgentPath({ area: "requests" })
-    ).path;
+    lockedStore = await anchoredStore.resolveStoreDirectories([
+      "agentRequestDirectory",
+      "agentResponseDirectory",
+    ]);
   } catch (error: unknown) {
     if (!(error instanceof ReviewStorePathRejected)) throw error;
     throw new AgentExchangeRejected("The request mailbox is unavailable");
   }
-  const lockedStore = { ...store, agentRequestDirectory: requestDirectory };
   return withReviewStoreLock({
-    lockPath: join(requestDirectory, `.${requestId}.lock`),
+    lockPath: join(lockedStore.agentRequestDirectory, `.${requestId}.lock`),
     change: () => change(lockedStore),
     timeoutError: () =>
       new AgentExchangeRejected(

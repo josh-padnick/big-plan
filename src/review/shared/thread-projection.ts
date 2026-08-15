@@ -7,6 +7,7 @@ import { requestIsCanceled, type CancelableRequest } from "./cancel-pending.js";
 import type { ReviewComment } from "./comment.js";
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
+import { requestIsOutstanding } from "./request-lifecycle.js";
 import { agentOwnsRequest } from "./request-ownership.js";
 
 export type ThreadRequest = CancelableRequest & {
@@ -176,13 +177,12 @@ export const queuedRequestsAhead = ({
     (candidate) => candidate.requestId === request.requestId,
   );
   if (position < 0) return 0;
-  return requests.slice(0, position).filter(
-    (candidate) =>
-      !answered.has(candidate.requestId) &&
-      !requestIsCanceled({
-        request: candidate,
-        pendingRequestIds: cancelPendingRequestIds,
-      }),
+  return requests.slice(0, position).filter((candidate) =>
+    requestIsOutstanding({
+      request: candidate,
+      answeredRequestIds: answered,
+      cancelPendingRequestIds,
+    }),
   ).length;
 };
 

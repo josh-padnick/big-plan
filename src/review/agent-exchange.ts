@@ -21,6 +21,7 @@ import {
   type ReviewImageAttachment,
 } from "./shared/review-image.js";
 import { agentOwnsRequest } from "./shared/request-ownership.js";
+import { requestIsOutstanding } from "./shared/request-lifecycle.js";
 
 const TEXT_LIMIT = 4000;
 const MESSAGE_LIMIT = 200;
@@ -882,20 +883,20 @@ const readCompleteAgentExchange = async ({
   return { requests: retainedRequests, responses };
 };
 
-/**
- * The requests the agent still owes an answer, oldest first. This is the one
- * definition of outstanding work: every caller that must not contradict an
- * unanswered request reads it from here rather than re-deriving terminality.
- */
+/** Returns the requests the agent still owes an answer, oldest first. */
 export const outstandingAgentRequests = (
   snapshot: AgentExchangeSnapshot,
 ): ReadonlyArray<AgentRequest> => {
   const answered = new Set(
     snapshot.responses.map((response) => response.requestId),
   );
-  return snapshot.requests.filter(
-    (request) =>
-      request.canceledAt === undefined && !answered.has(request.requestId),
+  const cancelPendingRequestIds = new Set<string>();
+  return snapshot.requests.filter((request) =>
+    requestIsOutstanding({
+      request,
+      answeredRequestIds: answered,
+      cancelPendingRequestIds,
+    }),
   );
 };
 

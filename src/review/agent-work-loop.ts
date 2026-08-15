@@ -161,8 +161,8 @@ const verifyRequestAttachments = async ({
     let attachmentPath: string;
     try {
       attachmentPath = (
-        await anchoredStore.resolveAgentPath({
-          area: "attachments",
+        await anchoredStore.resolveDirectoryPath({
+          directory: "requestAttachmentsDirectory",
           requestId: request.requestId,
           targetPath: attachment.path,
         })

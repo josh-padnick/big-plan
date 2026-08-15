@@ -189,6 +189,62 @@ describe("request mailbox", () => {
     }
   });
 
+  it("should refuse a symlinked response mailbox before publishing", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Keep the response inside the review store.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+    const displacedDirectory = `${store.agentResponseDirectory}.displaced`;
+    const outsideDirectory = join(store.planDirectory, "outside-responses");
+    const sentinelPath = join(outsideDirectory, "sentinel.txt");
+    await rename(store.agentResponseDirectory, displacedDirectory);
+    await mkdir(outsideDirectory);
+    await writeFile(sentinelPath, "untouched\n");
+    await symlink(outsideDirectory, store.agentResponseDirectory);
+
+    try {
+      await expect(
+        publishAgentResponse({ store, response }),
+      ).rejects.toMatchObject({
+        name: "AgentExchangeRejected",
+        message: "The request mailbox is unavailable",
+      });
+      await expect(readFile(sentinelPath, "utf8")).resolves.toBe("untouched\n");
+      await expect(readdir(outsideDirectory)).resolves.toEqual([
+        "sentinel.txt",
+      ]);
+    } finally {
+      await rm(store.agentResponseDirectory, { force: true });
+      await rename(displacedDirectory, store.agentResponseDirectory);
+    }
+  });
+
   it("should preserve claim and cancel fields when two processes race", async () => {
     const { planPath, store } = await preparedReview();
     const request = requestWith([

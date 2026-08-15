@@ -165,18 +165,27 @@ export class ReviewStorePathRejected extends Error {
   }
 }
 
-type AnchoredAgentStorePath = {
+type AnchoredStorePath = {
   readonly path: string;
   readonly exists: boolean;
 };
 
+export type ReviewStoreDirectoryKey = {
+  [Key in keyof ReviewStore]: Key extends "root" | `${string}Directory`
+    ? Key
+    : never;
+}[keyof ReviewStore];
+
 export type AnchoredReviewStore = {
-  readonly resolveAgentPath: (options: {
-    readonly area: "requests" | "attachments";
+  readonly resolveStoreDirectories: (
+    directories: ReadonlyArray<ReviewStoreDirectoryKey>,
+  ) => Promise<ReviewStore>;
+  readonly resolveDirectoryPath: (options: {
+    readonly directory: ReviewStoreDirectoryKey;
     readonly requestId?: string;
     readonly targetPath?: string;
     readonly allowMissingRequestDirectory?: boolean;
-  }) => Promise<AnchoredAgentStorePath>;
+  }) => Promise<AnchoredStorePath>;
 };
 
 const resolveAnchoredSegments = async ({
@@ -187,7 +196,7 @@ const resolveAnchoredSegments = async ({
   readonly base: string;
   readonly segments: ReadonlyArray<string>;
   readonly allowMissingLast?: boolean;
-}): Promise<AnchoredAgentStorePath> => {
+}): Promise<AnchoredStorePath> => {
   let current = base;
   for (const [index, segment] of segments.entries()) {
     const expected = inside({ base: current, leaf: segment });
@@ -215,19 +224,55 @@ const resolveAnchoredSegments = async ({
 export const anchorReviewStore = async (
   store: ReviewStore,
 ): Promise<AnchoredReviewStore> => {
+  const lexicalPlanDirectory = resolve(store.planDirectory);
   let planDirectory: string;
   try {
     planDirectory = await realpath(store.planDirectory);
   } catch (error: unknown) {
     throw new ReviewStorePathRejected("unavailable", error);
   }
-  const agentDirectory = await resolveAnchoredSegments({
-    base: planDirectory,
-    segments: [".big-plan", "review", store.planId, "agent"],
-  });
+  const directories = new Map<
+    ReviewStoreDirectoryKey,
+    Promise<AnchoredStorePath>
+  >();
+  const resolveDirectory = (
+    directory: ReviewStoreDirectoryKey,
+  ): Promise<AnchoredStorePath> => {
+    const existing = directories.get(directory);
+    if (existing !== undefined) return existing;
+    const lexicalDirectory = resolve(store[directory]);
+    const step = [lexicalPlanDirectory, planDirectory]
+      .map((base) => ({ base, step: relative(base, lexicalDirectory) }))
+      .find(
+        (candidate) =>
+          !candidate.step.startsWith("..") &&
+          resolve(candidate.base, candidate.step) === lexicalDirectory,
+      )?.step;
+    if (step === undefined) {
+      return Promise.reject(new ReviewStorePathRejected("outside"));
+    }
+    const resolved = resolveAnchoredSegments({
+      base: planDirectory,
+      segments: step === "" ? [] : step.split(sep),
+    });
+    directories.set(directory, resolved);
+    return resolved;
+  };
+  await resolveDirectory("reviewDirectory");
   return {
-    resolveAgentPath: async ({
-      area,
+    resolveStoreDirectories: async (requestedDirectories) => {
+      const resolvedDirectories: Record<string, string> = {};
+      await Promise.all(
+        requestedDirectories.map(async (directory) => {
+          resolvedDirectories[directory] = (
+            await resolveDirectory(directory)
+          ).path;
+        }),
+      );
+      return { ...store, ...resolvedDirectories };
+    },
+    resolveDirectoryPath: async ({
+      directory,
       requestId,
       targetPath,
       allowMissingRequestDirectory = false,
@@ -235,10 +280,7 @@ export const anchorReviewStore = async (
       if (requestId !== undefined && !/^[a-f0-9]{16}$/.test(requestId)) {
         throw new ReviewStorePathRejected("outside");
       }
-      const areaPath = await resolveAnchoredSegments({
-        base: agentDirectory.path,
-        segments: [area],
-      });
+      const areaPath = await resolveDirectory(directory);
       if (requestId === undefined) {
         if (targetPath !== undefined) {
           throw new ReviewStorePathRejected("outside");
@@ -247,13 +289,10 @@ export const anchorReviewStore = async (
       }
       let targetSegments: ReadonlyArray<string> | undefined;
       if (targetPath !== undefined) {
-        if (area !== "attachments") {
+        if (directory !== "requestAttachmentsDirectory") {
           throw new ReviewStorePathRejected("outside");
         }
-        const lexicalRequestPath = resolve(
-          store.requestAttachmentsDirectory,
-          requestId,
-        );
+        const lexicalRequestPath = resolve(store[directory], requestId);
         const lexicalTargetPath = resolve(targetPath);
         const step = relative(lexicalRequestPath, lexicalTargetPath);
         if (
@@ -1357,15 +1396,15 @@ export const deleteAgentRequestValue = async ({
   readonly requestId: string;
 }): Promise<AgentRequestDeletionResult> => {
   const anchoredStore = await anchorReviewStore(store);
-  const requestDirectory = await anchoredStore.resolveAgentPath({
-    area: "requests",
+  const requestDirectory = await anchoredStore.resolveDirectoryPath({
+    directory: "agentRequestDirectory",
   });
   await rm(exchangePath({ directory: requestDirectory.path, requestId }), {
     force: true,
   });
   try {
-    const attachmentDirectory = await anchoredStore.resolveAgentPath({
-      area: "attachments",
+    const attachmentDirectory = await anchoredStore.resolveDirectoryPath({
+      directory: "requestAttachmentsDirectory",
       requestId,
       allowMissingRequestDirectory: true,
     });
