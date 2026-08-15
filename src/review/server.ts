@@ -158,9 +158,10 @@ type Route = {
   readonly path: string;
 };
 
-// An entry names its own handler so the allow-list and the dispatch table
-// cannot drift: a route with no handler is a compile error here rather than a
-// 500 the first time a reviewer asks for it.
+// An extracted entry names its own handler so the allow-list and dispatch table
+// stay together. The handler remains optional while the six mutating routes use
+// the residual if-chain below; PR 2 makes it required when that chain is deleted,
+// so a route with no handler becomes a compile error then.
 type ApiRoute = Route & {
   readonly binary?: boolean;
   readonly handler?: ReviewRouteHandler;
