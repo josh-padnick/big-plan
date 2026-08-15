@@ -451,32 +451,8 @@ const localStorageKey = (planId: string): string =>
 const liveRecoveryStorageKey = (identity: RuntimeIdentity): string =>
   `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}`;
 
-const LIVE_RECOVERY_TAB_ID_KEY = "big-plan:review:live-recovery-tab-id";
-
-const liveComposerRecoveryStorageKey = (
-  identity: RuntimeIdentity,
-  tabId: string,
-): string => `${liveRecoveryStorageKey(identity)}:tab:${tabId}`;
-
-const liveRecoveryTabId = (): string => {
-  try {
-    const stored = sessionStorage.getItem(LIVE_RECOVERY_TAB_ID_KEY);
-    if (stored !== null && stored !== "") return stored;
-    const bytes = new Uint8Array(8);
-    crypto.getRandomValues(bytes);
-    const created = Array.from(bytes, (value) =>
-      value.toString(16).padStart(2, "0"),
-    ).join("");
-    sessionStorage.setItem(LIVE_RECOVERY_TAB_ID_KEY, created);
-    return created;
-  } catch {
-    const bytes = new Uint8Array(8);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes, (value) =>
-      value.toString(16).padStart(2, "0"),
-    ).join("");
-  }
-};
+const liveComposerRecoveryStorageKey = (identity: RuntimeIdentity): string =>
+  `${liveRecoveryStorageKey(identity)}:composer`;
 
 const archivedChatStorageKey = (planId: string): string =>
   `big-plan:review:archived-chat:${planId}`;
@@ -549,6 +525,7 @@ const sameReviewComment = (
 
 const STALE_SUBMISSION_STATUS =
   "The review changed before submission. Review the latest comments and send again.";
+const RECOVERY_CONFLICT_STATUS = "Two versions of a comment need your choice.";
 
 /** Comment text a reviewer typed that no comment holds yet. */
 type RecoveredComposer = {
@@ -669,11 +646,10 @@ const writeLiveReviewRecovery = ({
 
 const readLiveComposerRecovery = (
   identity: RuntimeIdentity,
-  tabId: string,
 ): RecoveredComposer => {
   try {
-    const raw = localStorage.getItem(
-      liveComposerRecoveryStorageKey(identity, tabId),
+    const raw = sessionStorage.getItem(
+      liveComposerRecoveryStorageKey(identity),
     );
     const parsed: unknown = raw === null ? null : JSON.parse(raw);
     return isRecord(parsed) && parsed.version === LIVE_COMPOSER_RECOVERY_VERSION
@@ -686,20 +662,18 @@ const readLiveComposerRecovery = (
 
 const writeLiveComposerRecovery = ({
   identity,
-  tabId,
   composer,
 }: {
   readonly identity: RuntimeIdentity;
-  readonly tabId: string;
   readonly composer: RecoveredComposer;
 }): void => {
-  const key = liveComposerRecoveryStorageKey(identity, tabId);
+  const key = liveComposerRecoveryStorageKey(identity);
   try {
     if (composer.comment === null && composer.replies.size === 0) {
-      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
       return;
     }
-    localStorage.setItem(
+    sessionStorage.setItem(
       key,
       JSON.stringify({
         version: LIVE_COMPOSER_RECOVERY_VERSION,
@@ -834,34 +808,29 @@ const clearLiveReviewRecovery = ({
 
 const removeLiveReviewRecoveryReply = ({
   identity,
-  tabId,
   commentId,
 }: {
   readonly identity: RuntimeIdentity;
-  readonly tabId: string;
   readonly commentId: string;
 }): void => {
-  const composer = readLiveComposerRecovery(identity, tabId);
+  const composer = readLiveComposerRecovery(identity);
   if (!composer.replies.has(commentId)) return;
   const replies = new Map(composer.replies);
   replies.delete(commentId);
   writeLiveComposerRecovery({
     identity,
-    tabId,
     composer: { ...composer, replies },
   });
 };
 
 const removeLiveReviewRecoveryComment = ({
   identity,
-  tabId,
   comment,
 }: {
   readonly identity: RuntimeIdentity;
-  readonly tabId: string;
   readonly comment: NonNullable<RecoveredComposer["comment"]>;
 }): void => {
-  const composer = readLiveComposerRecovery(identity, tabId);
+  const composer = readLiveComposerRecovery(identity);
   if (
     composer.comment === null ||
     JSON.stringify(composer.comment) !== JSON.stringify(comment)
@@ -870,7 +839,6 @@ const removeLiveReviewRecoveryComment = ({
   }
   writeLiveComposerRecovery({
     identity,
-    tabId,
     composer: { ...composer, comment: null },
   });
 };
@@ -4036,7 +4004,6 @@ export const ReviewController = () => {
     new Map(),
   );
   const replyDraftsRef = useRef<ReadonlyMap<string, string>>(new Map());
-  const [recoveryTabId] = useState(liveRecoveryTabId);
   const [replyPendingCommentIds, setReplyPendingCommentIds] = useState<
     ReadonlySet<string>
   >(new Set());
@@ -4372,7 +4339,7 @@ export const ReviewController = () => {
         setRecoveryConflicts(merged.conflicts);
         setIsRecoveryConflictOpen(true);
         setConflictRuntimeState(runtime);
-        setStatus("Two versions of a comment need your choice.");
+        setStatus(RECOVERY_CONFLICT_STATUS);
       } else {
         recoveryBaseRef.current = reviewRecoveryBase(runtime);
         recoveryConflictsRef.current = [];
@@ -4421,7 +4388,6 @@ export const ReviewController = () => {
           changeReplyDraft(commentId, "");
           removeLiveReviewRecoveryReply({
             identity,
-            tabId: recoveryTabId,
             commentId,
           });
         }
@@ -4435,7 +4401,7 @@ export const ReviewController = () => {
         setReplyPendingCommentIds(remaining);
       }
     },
-    [changeReplyDraft, identity, recoveryTabId],
+    [changeReplyDraft, identity],
   );
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
@@ -4766,10 +4732,7 @@ export const ReviewController = () => {
             persistedReviewFingerprint(runtimeReviewState),
           );
           const recovery = readLiveReviewRecovery(identity);
-          const recoveredComposer = readLiveComposerRecovery(
-            identity,
-            recoveryTabId,
-          );
+          const recoveredComposer = readLiveComposerRecovery(identity);
           let restoredReviewState = runtimeReviewState;
           let conflicted = false;
           if (recovery !== null) {
@@ -4806,7 +4769,7 @@ export const ReviewController = () => {
           setResolvedCommentIds(restoredReviewState.resolvedCommentIds);
           setStatus(
             conflicted
-              ? "Two versions of a comment need your choice."
+              ? RECOVERY_CONFLICT_STATUS
               : detached
                 ? "The comment you were writing could not be reattached: its place in the plan is gone."
                 : "Connected to the local review runtime.",
@@ -4816,10 +4779,7 @@ export const ReviewController = () => {
       } catch (error) {
         if (current) {
           const recovery = readLiveReviewRecovery(identity);
-          const recoveredComposer = readLiveComposerRecovery(
-            identity,
-            recoveryTabId,
-          );
+          const recoveredComposer = readLiveComposerRecovery(identity);
           if (recovery !== null) {
             recoveryBaseRef.current = recovery.base;
             setDrafts(recovery.drafts);
@@ -4848,7 +4808,6 @@ export const ReviewController = () => {
     markPersistedReviewState,
     observeRuntimeReviewState,
     planId,
-    recoveryTabId,
     restoreComposer,
     runtimeSessionOrder,
   ]);
@@ -4869,7 +4828,6 @@ export const ReviewController = () => {
     }
     writeLiveComposerRecovery({
       identity,
-      tabId: recoveryTabId,
       composer: composerRecovery,
     });
   }, [
@@ -4878,7 +4836,6 @@ export const ReviewController = () => {
     identity,
     isHydrated,
     persistedReviewState,
-    recoveryTabId,
     resolvedCommentIds,
   ]);
 
@@ -5238,9 +5195,22 @@ export const ReviewController = () => {
         }
         return;
       }
+      const commentIds = new Set(comments.map((comment) => comment.id));
+      const hasUnresolvedConflict = () =>
+        recoveryConflictsRef.current.some((conflict) =>
+          commentIds.has(conflict.commentId),
+        );
+      if (hasUnresolvedConflict()) {
+        setStatus(RECOVERY_CONFLICT_STATUS);
+        setIsRecoveryConflictOpen(true);
+        return;
+      }
       setIsSending(true);
       try {
         const result = await serializeRuntimeWrite(async () => {
+          if (hasUnresolvedConflict()) {
+            return { submitted: false, conflicted: true, comments: [] };
+          }
           let base = recoveryBaseRef.current;
           if (runtimeVersionRef.current === "") {
             const current = parseSnapshot(
@@ -5315,11 +5285,20 @@ export const ReviewController = () => {
               base,
               local: latestReviewStateRef.current.state,
             });
-            return { submitted: false, conflicted: false, comments: [] };
+            return {
+              submitted: false,
+              conflicted: hasUnresolvedConflict(),
+              comments: [],
+            };
           }
         });
         if (!result.submitted) {
-          setStatus(STALE_SUBMISSION_STATUS);
+          if (result.conflicted) {
+            setStatus(RECOVERY_CONFLICT_STATUS);
+            setIsRecoveryConflictOpen(true);
+          } else {
+            setStatus(STALE_SUBMISSION_STATUS);
+          }
           return;
         }
         const ids = new Set(result.comments.map((comment) => comment.id));
@@ -5475,9 +5454,15 @@ export const ReviewController = () => {
     // and a reviewer who clicks again deletes twice.
     const kind = pendingDelete?.kind;
     setPendingDelete(null);
+    if (recoveryConflictsRef.current.length > 0) {
+      setStatus(RECOVERY_CONFLICT_STATUS);
+      setIsRecoveryConflictOpen(true);
+      return;
+    }
     setStatus("Deleting the comment…");
     try {
       const deleted = await serializeRuntimeWrite(async () => {
+        if (recoveryConflictsRef.current.length > 0) return "conflicted";
         const base = recoveryBaseRef.current;
         try {
           const snapshot = parseSnapshot(
@@ -5496,7 +5481,7 @@ export const ReviewController = () => {
             base,
             local: latestReviewStateRef.current.state,
           });
-          return true;
+          return "deleted";
         } catch (error) {
           if (!isReviewRuntimeRefusal(error, STALE_REVIEW_STATE_CODE)) {
             throw error;
@@ -5509,10 +5494,15 @@ export const ReviewController = () => {
             base,
             local: latestReviewStateRef.current.state,
           });
-          return false;
+          return "stale";
         }
       });
-      if (!deleted) {
+      if (deleted === "conflicted") {
+        setStatus(RECOVERY_CONFLICT_STATUS);
+        setIsRecoveryConflictOpen(true);
+        return;
+      }
+      if (deleted === "stale") {
         setStatus(
           "The review changed before deletion. Review the latest comments and try again.",
         );
@@ -5525,7 +5515,6 @@ export const ReviewController = () => {
       }
       removeLiveReviewRecoveryReply({
         identity,
-        tabId: recoveryTabId,
         commentId,
       });
       acceptAgentSnapshot(
@@ -6578,7 +6567,6 @@ export const ReviewController = () => {
                         if (identity !== null) {
                           removeLiveReviewRecoveryComment({
                             identity,
-                            tabId: recoveryTabId,
                             comment: detachedComposer,
                           });
                         }

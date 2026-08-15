@@ -211,9 +211,22 @@ test("should keep unsent comment text separate across two tabs", async ({
     replyBody: secondReply,
   });
 
+  const duplicatePagePromise = context.waitForEvent("page");
+  await page.evaluate((url) => window.open(url, "_blank"), reviewRuntimeUrl);
+  const duplicatePage = await duplicatePagePromise;
+  await duplicatePage.waitForLoadState();
+  const duplicateComposer = "Keep the duplicated tab's composer text.";
+  const duplicateReply = "Keep the duplicated tab's reply text.";
+  await typeAndReload({
+    targetPage: duplicatePage,
+    composerBody: duplicateComposer,
+    replyBody: duplicateReply,
+  });
+
   for (const [targetPage, composerBody, replyBody] of [
     [page, firstComposer, firstReply],
     [secondPage, secondComposer, secondReply],
+    [duplicatePage, duplicateComposer, duplicateReply],
   ] as const) {
     await targetPage.reload();
     await expect(
@@ -235,6 +248,7 @@ test("should keep unsent comment text separate across two tabs", async ({
       replyBody,
     );
   }
+  await duplicatePage.close();
   await secondPage.close();
 });
 
@@ -253,10 +267,8 @@ test("should retain detached selection text until the reviewer discards it", asy
     .evaluate((block) => {
       const root = document.documentElement;
       const text = block.textContent ?? "";
-      const tabId = "detached-composer-test";
       return {
-        key: `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}:tab:${tabId}`,
-        tabId,
+        key: `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}:composer`,
         snapshot: (() => {
           const bootstrap: unknown = JSON.parse(
             root.getAttribute("data-review-bootstrap") ?? "{}",
@@ -283,12 +295,8 @@ test("should retain detached selection text until the reviewer discards it", asy
     });
   const body = "Do not attach this selection comment to only half its range.";
   await page.evaluate(
-    ({ key, tabId, snapshot, target, recoveredBody }) => {
+    ({ key, snapshot, target, recoveredBody }) => {
       window.sessionStorage.setItem(
-        "big-plan:review:live-recovery-tab-id",
-        tabId,
-      );
-      window.localStorage.setItem(
         key,
         JSON.stringify({
           version: 1,
@@ -336,7 +344,7 @@ test("should retain detached selection text until the reviewer discards it", asy
   await expect
     .poll(() =>
       page.evaluate((key) => {
-        const raw = window.localStorage.getItem(key);
+        const raw = window.sessionStorage.getItem(key);
         if (raw === null) return null;
         const parsed: unknown = JSON.parse(raw);
         return typeof parsed === "object" &&
@@ -359,7 +367,7 @@ test("should retain detached selection text until the reviewer discards it", asy
   await expect
     .poll(() =>
       page.evaluate((key) => {
-        const raw = window.localStorage.getItem(key);
+        const raw = window.sessionStorage.getItem(key);
         if (raw === null) return null;
         const parsed: unknown = JSON.parse(raw);
         return typeof parsed === "object" &&
@@ -642,6 +650,34 @@ test.describe("a drafts write prepared against content the store moved past", ()
     await expect(choice).toContainText(runtimeBody);
     await page.keyboard.press("Escape");
     await expect(choice).toBeHidden();
+    const pendingChoice = rail.getByRole("button", {
+      name: "Review comment versions",
+    });
+    await expect(pendingChoice).toBeVisible();
+    let feedbackWrites = 0;
+    page.on("request", (request) => {
+      if (
+        request.url().endsWith("/api/feedback") &&
+        request.method() === "POST"
+      ) {
+        feedbackWrites += 1;
+      }
+    });
+    await rail
+      .locator(".review-staged-card")
+      .filter({ hasText: browserBody })
+      .getByRole("button", { name: "Send this" })
+      .click();
+    await expect(choice).toBeVisible();
+    expect(feedbackWrites).toBe(0);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (item) => item.body,
+        ),
+      )
+      .toEqual([runtimeBody]);
+    await page.keyboard.press("Escape");
     await rail.getByRole("button", { name: "Review comment versions" }).click();
     await expect(choice).toBeVisible();
     await expect(choice).toContainText(browserBody);
@@ -1107,11 +1143,8 @@ test.describe("a drafts write prepared against content the store moved past", ()
       .poll(() =>
         page.evaluate((expected) => {
           const root = document.documentElement;
-          const tabId = window.sessionStorage.getItem(
-            "big-plan:review:live-recovery-tab-id",
-          );
-          const key = `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}:tab:${tabId ?? ""}`;
-          const raw = window.localStorage.getItem(key);
+          const key = `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}:composer`;
+          const raw = window.sessionStorage.getItem(key);
           if (raw === null) return { expected, keys: [] };
           const recovery: unknown = JSON.parse(raw);
           if (
