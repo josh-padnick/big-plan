@@ -619,9 +619,9 @@ export const startReviewRuntime = async ({
   const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
   await prepareStore(store);
   const previousSession = await readCurrentReviewSession({ store });
-  // The token protects the durable image store as well as the live mailbox.
-  // Reuse it for this plan so a browser page can reconnect after a runtime
-  // restart without turning already-sent images into missing references.
+  // The token protects API requests that write the durable image store or use
+  // the live mailbox. Keep it stable when a later runtime takes custody of the
+  // same plan; the session id, not the token, identifies write authority.
   const token = previousSession?.token ?? randomBytes(32).toString("base64url");
   const initialSource = await readFile(resolvedPlanPath, "utf8");
   renderDocument({
@@ -1059,8 +1059,8 @@ export const startReviewRuntime = async ({
   // An uploaded picture is plan state, not session state: it is stored beside
   // the plan under its content digest and served from that digest alone, like
   // a materialized plan asset. That is what keeps a reference minted in one
-  // review readable in every later one, including after a restart that mints a
-  // new session and a new token.
+  // review readable in every later one, including after a restart that creates
+  // a new session.
   const handleReviewImage = async ({
     response,
     pathname,

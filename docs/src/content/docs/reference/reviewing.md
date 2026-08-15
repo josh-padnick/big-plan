@@ -35,9 +35,7 @@ background command.
 
 A plan may also point at picture files of its own, such as
 `![The cabinet](./assets/cabinet.jpg)`.
-`big-plan review` serves any PNG, JPEG, WebP, GIF, AVIF, or SVG file that sits
-inside the plan's own directory, at any depth, so a photograph an author or an
-agent saves beside the plan appears in the review document.
+`big-plan review` serves any PNG, JPEG, WebP, GIF, AVIF, or SVG file up to 10 MiB that sits inside the plan's own directory, at any depth, so a photograph an author or an agent saves beside the plan appears in the review document.
 Nothing else in that directory is served: another file type, a dot-prefixed
 directory such as `.big-plan/`, and any path that leaves the plan's directory
 are all refused.
@@ -49,8 +47,7 @@ reference into the message.
 Images are limited to four per message, 10 MiB per image, and 20 MiB total.
 Each stored image belongs to the plan rather than to one review session, so a
 picture pasted today still appears after the review runtime is restarted.
-A picture the plan no longer holds is shown as an **Image unavailable**
-placeholder that explains itself on demand.
+A stored picture that cannot load is shown as an **Image unavailable** placeholder that explains itself on demand.
 The local `big-plan review` runtime is required to capture or retrieve images;
 standalone rendered files keep text drafts but do not accept image bytes.
 
