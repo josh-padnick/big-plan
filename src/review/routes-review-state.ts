@@ -602,10 +602,7 @@ export const deleteSentComment = async (
         "Only a queued, canceled, or reverted comment can be deleted from the review",
     });
   }
-  if (
-    answeredRequestIds.size === 0 &&
-    commentRequests.some(agentOwnsRequest)
-  ) {
+  if (answeredRequestIds.size === 0 && commentRequests.some(agentOwnsRequest)) {
     return refusal({
       status: 409,
       reason: "The agent has already picked up this comment",
