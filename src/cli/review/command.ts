@@ -26,6 +26,7 @@ import {
   startReviewRuntime,
 } from "../../review/server.js";
 import { quoteShellArgument } from "../../review/shared/agent-command.js";
+import { reviewIdleDurationLabel } from "../../review/shared/review-lifetime.js";
 import { renderDocument } from "../../render/render-document.js";
 
 const USAGE =
@@ -163,7 +164,7 @@ export const reviewCommand = async (
       "Press Ctrl+C to stop the review runtime",
       parsedArguments.idleTimeoutMs === 0
         ? "Idle timeout is disabled"
-        : `This review ends after ${parsedArguments.idleTimeoutMs / 60_000} minutes with no page open and no agent working; configure with --idle-timeout`,
+        : `This review ends after ${reviewIdleDurationLabel(parsedArguments.idleTimeoutMs)} of inactivity, meaning no page open and no agent working; configure with --idle-timeout`,
     ],
   };
 };

@@ -124,6 +124,9 @@ import {
   type ReviewPollHealth,
   type ReviewPollResult,
 } from "./review-poll-health.js";
+import { reviewEndReason, type ReviewEndReason } from "./review-expiry.js";
+import { reviewIdleDurationLabel } from "../shared/review-lifetime.js";
+import { quoteShellArgument } from "../shared/agent-command.js";
 import {
   isReviewRuntimeUnavailable,
   normalizeReviewRuntimeRequestError,
@@ -694,20 +697,34 @@ const RuntimeAlertBanner = ({
   </div>
 );
 
+// Two wordings, because "the server stopped responding" is true and useless to
+// a reader who left this page open overnight. When the deadline the page was
+// last told has since gone by, the session ended on its own and the page can
+// say so without asking the runtime that is no longer there.
 const ServerGoneBanner = ({
   canRefresh,
   onRefresh,
+  endReason,
+  restartCommand,
 }: {
   readonly canRefresh: boolean;
   readonly onRefresh: () => void;
+  readonly endReason: ReviewEndReason;
+  readonly restartCommand: string;
 }) => (
   <RuntimeAlertBanner
     scope="data-review-server-gone"
-    heading="This review session is no longer online"
+    heading={
+      endReason.kind === "expired"
+        ? "This review session ended on its own"
+        : "This review session is no longer online"
+    }
     detail={
-      canRefresh
-        ? "The local review server stopped responding. Refresh when it is running again to continue reviewing. This is separate from the agent connection."
-        : "The local review server stopped responding. Keep this tab open because the latest review input has not reached the local review server. This is separate from the agent connection."
+      endReason.kind === "expired"
+        ? `This review session ended after ${reviewIdleDurationLabel(endReason.idleTimeoutMs)} of inactivity. Restart it with ${restartCommand} to continue reviewing.`
+        : canRefresh
+          ? "The local review server stopped responding. Refresh when it is running again to continue reviewing. This is separate from the agent connection."
+          : "The local review server stopped responding. Keep this tab open because the latest review input has not reached the local review server. This is separate from the agent connection."
     }
     action={{ label: "Refresh", onAct: onRefresh, enabled: canRefresh }}
   />
@@ -3753,6 +3770,21 @@ export const ReviewController = () => {
   // with the banner for a runtime that has gone entirely.
   const writesStalled =
     !serverGone && runtimeSession?.writesStalledMs !== undefined;
+  // Read from the last poll that succeeded, which is the whole trick: a page
+  // still reaching the runtime keeps pushing its own deadline forward, so a
+  // deadline that has since passed proves the polling stopped rather than the
+  // runtime being stopped by hand.
+  const endReason = reviewEndReason({
+    expiresAtMs: runtimeSession?.expiresAtMs,
+    idleTimeoutMs: runtimeSession?.idleTimeoutMs,
+    nowMs: statusNowMs,
+  });
+  // Naming the actual plan beats a placeholder the reader has to translate,
+  // but a session that never reported its path still needs a usable sentence.
+  const restartReviewCommand =
+    runtimeSession === null || runtimeSession.plan === ""
+      ? "big-plan review <plan>"
+      : `big-plan review ${quoteShellArgument(runtimeSession.plan)}`;
   const threadRuntime: ThreadRuntime =
     identity === null ? "static" : pollIsOffline ? "offline" : "online";
   const agentProjection = agentProjectionForReviewPoll({
@@ -5123,6 +5155,8 @@ export const ReviewController = () => {
         <ServerGoneBanner
           canRefresh={canRefreshReview}
           onRefresh={() => window.location.reload()}
+          endReason={endReason}
+          restartCommand={restartReviewCommand}
         />
       ) : null}
       {writesStalled ? <WritesStalledBanner /> : null}

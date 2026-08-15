@@ -89,6 +89,7 @@ import {
 } from "./runtime-watchdog.js";
 import type { ReviewRuntimeDiagnostics } from "./runtime-watchdog.js";
 import { RAW_IMAGE_BODY_LIMIT } from "./shared/review-image.js";
+import { reviewIdleDurationLabel } from "./shared/review-lifetime.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
 import {
   agentConnectCommand,
@@ -1092,14 +1093,7 @@ export const startReviewRuntime = async ({
         void (async () => {
           if (closed || context.activityClock.idleForMs() < idleTimeoutMs)
             return;
-          const minutes = idleTimeoutMs / 60_000;
-          const duration = Number.isInteger(minutes)
-            ? `${minutes} minute${minutes === 1 ? "" : "s"}`
-            : (() => {
-                const seconds = Math.round(idleTimeoutMs / 1_000);
-                return `${seconds} second${seconds === 1 ? "" : "s"}`;
-              })();
-          const reason = `The review session ended normally after ${duration} of inactivity.`;
+          const reason = `The review session ended normally after ${reviewIdleDurationLabel(idleTimeoutMs)} of inactivity.`;
           const stopped = await stopReviewSessionIfInactive({
             store,
             sessionId,

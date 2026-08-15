@@ -18,6 +18,7 @@ never ends while you are still reading it. Set a different duration with
 `--idle-timeout <minutes>`; a nonzero timeout must be at least 1 minute.
 Pass `--idle-timeout 0` to keep the review open until it is stopped explicitly.
 A waiting agent receives that normal inactivity reason instead of a failed background command.
+If you come back to a page whose session ended while the tab was suspended or the computer was asleep, the page says the review ended after its inactivity period and shows the command that restarts it, rather than only reporting that the server stopped responding.
 
 ## When a session stops accepting changes
 
