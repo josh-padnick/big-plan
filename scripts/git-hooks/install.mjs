@@ -7,9 +7,11 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
@@ -41,6 +43,26 @@ const readDefaultHooksDirectory = (repoRoot) =>
     { cwd: repoRoot, encoding: "utf8" },
   ).trim();
 
+/** Detects active default-directory hooks that cannot be preserved by the two
+ * commit-message dispatchers when core.hooksPath moves to `.githooks`. */
+const hasUnrelatedDefaultHooks = (hooksDirectory) =>
+  existsSync(hooksDirectory) &&
+  readdirSync(hooksDirectory).some((name) => {
+    if (name.endsWith(".sample")) return false;
+    if (
+      hookNames.some(
+        (hookName) =>
+          name === hookName || name.startsWith(`${hookName}.before-big-plan`),
+      )
+    ) {
+      return false;
+    }
+    const hookPath = join(hooksDirectory, name);
+    if (!existsSync(hookPath)) return false;
+    const hook = statSync(hookPath);
+    return hook.isFile() && (hook.mode & 0o111) !== 0;
+  });
+
 const nextBackupName = (hooksDirectory, hookName) => {
   const baseName = `${hookName}.before-big-plan`;
   let candidate = baseName;
@@ -56,9 +78,7 @@ const shellQuote = (value) => `'${value.replaceAll("'", `'"'"'`)}'`;
 
 const isManagedHookOwnedBy = (hook, commonDirectory) =>
   hook.startsWith(managedHookPrefix) &&
-  hook
-    .split("\n")
-    .find((line) => line.startsWith(managedOwnerPrefix)) ===
+  hook.split("\n").find((line) => line.startsWith(managedOwnerPrefix)) ===
     `${managedOwnerPrefix}${shellQuote(commonDirectory)}`;
 
 const compositeHook = (
@@ -123,11 +143,7 @@ export const runManagedDefaultHook = (hookName, argv) => {
   return true;
 };
 
-const deployCompositeHook = (
-  hooksDirectory,
-  hookName,
-  commonDirectory,
-) => {
+const deployCompositeHook = (hooksDirectory, hookName, commonDirectory) => {
   const hookPath = join(hooksDirectory, hookName);
   let backupName = null;
   if (existsSync(hookPath)) {
@@ -178,13 +194,13 @@ export const installGitHooks = (repoRoot) => {
   const defaultHooksDirectory = effectiveHooksPath
     ? join(commonDirectory, "hooks")
     : readDefaultHooksDirectory(repoRoot);
-  const hasDefaultHooks =
-    hookNames.some((hookName) =>
-      existsSync(join(defaultHooksDirectory, hookName)),
-    );
+  const hasDefaultHooks = hookNames.some((hookName) =>
+    existsSync(join(defaultHooksDirectory, hookName)),
+  );
+  const hasUnrelatedHooks = hasUnrelatedDefaultHooks(defaultHooksDirectory);
   const effectiveHooksDirectory = effectiveHooksPath
     ? resolve(repoRoot, effectiveHooksPath)
-    : hasDefaultHooks
+    : hasDefaultHooks || hasUnrelatedHooks
       ? defaultHooksDirectory
       : committedHooksDirectory;
 
@@ -201,6 +217,15 @@ export const installGitHooks = (repoRoot) => {
         deployCompositeHook(defaultHooksDirectory, hookName, commonDirectory);
       }
     }
+    if (hasUnrelatedHooks) {
+      for (const hookName of hookNames) {
+        deployCompositeHook(defaultHooksDirectory, hookName, commonDirectory);
+      }
+      execFileSync("git", ["config", "core.hooksPath", defaultHooksDirectory], {
+        cwd: repoRoot,
+      });
+      return defaultHooksDirectory;
+    }
     execFileSync("git", ["config", "core.hooksPath", ".githooks"], {
       cwd: repoRoot,
     });
@@ -216,9 +241,13 @@ export const installGitHooks = (repoRoot) => {
     deployCompositeHook(effectiveHooksDirectory, hookName, commonDirectory);
   }
   if (!effectiveHooksPath) {
-    execFileSync("git", ["config", "core.hooksPath", ".githooks"], {
+    const installedHooksPath = hasUnrelatedHooks
+      ? defaultHooksDirectory
+      : ".githooks";
+    execFileSync("git", ["config", "core.hooksPath", installedHooksPath], {
       cwd: repoRoot,
     });
+    if (hasUnrelatedHooks) return defaultHooksDirectory;
     for (const hookName of hookNames) {
       const hookPath = join(committedHooksDirectory, hookName);
       if (existsSync(hookPath)) chmodSync(hookPath, 0o755);

@@ -3,9 +3,9 @@
 Thanks for contributing!
 The workflow is intentionally light:
 
-- **DCO sign-off.** Every commit must be signed off, certifying the [Developer Certificate of Origin](https://developercertificate.org/).
+- **DCO sign-off and commit body.** Every commit must include a body and be signed off, certifying the [Developer Certificate of Origin](https://developercertificate.org/).
   `bun install` wires committed `prepare-commit-msg` and `commit-msg` hooks (`.githooks/`, see `scripts/git-hooks/`) into the checkout's effective Git hook path.
-  Together they add the trailer and a body automatically for command-line and editor-authored messages, so plain `git commit -m "..."` already complies; no need to pass `-s` by hand.
+  Together they add the trailer and a fallback body automatically when either is missing from command-line and editor-authored messages, so plain `git commit -m "..."` already complies; no need to pass `-s` by hand.
 - **Feature branches.** Branch off `main` and open a pull request back into `main`.
 - **Small PRs.** Keep pull requests small and reviewable; prefer several self-contained increments over one large change.
 - **Checks.** Run `bun run lint`, `bun run build`, `bun run test`, and `bun run test:e2e` before opening a pull request; CI enforces the same checks on branches pushed to this repository.

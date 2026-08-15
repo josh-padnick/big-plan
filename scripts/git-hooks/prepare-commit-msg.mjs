@@ -22,9 +22,7 @@ const splitCommentBlock = (rawMessage, commentMarker) => {
     if (!lines[i].startsWith(commentMarker)) continue;
     const rest = lines.slice(i);
     if (
-      rest.every(
-        (line) => line.startsWith(commentMarker) || line.trim() === "",
-      )
+      rest.every((line) => line.startsWith(commentMarker) || line.trim() === "")
     ) {
       return { contentLines: lines.slice(0, i), commentLines: rest };
     }
@@ -154,12 +152,7 @@ const currentCommentMarker = (rawMessage, source) => {
   try {
     const configured = execFileSync(
       "git",
-      [
-        "config",
-        "--null",
-        "--get-regexp",
-        "^core\\.comment(Char|String)$",
-      ],
+      ["config", "--null", "--get-regexp", "^core\\.comment(Char|String)$"],
       { encoding: "utf8" },
     );
     const entries = configured.split("\0").filter(Boolean);

@@ -211,6 +211,32 @@ ${validation}printf x >> default-${hookName}-ran
   }
 });
 
+test("should preserve unrelated default hooks when core.hooksPath is unset", () => {
+  const dir = makeScratchRepo((scratchRepo) => {
+    const hooksDirectory = git(scratchRepo, [
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-path",
+      "hooks",
+    ]).trim();
+    writeFileSync(
+      join(hooksDirectory, "pre-commit"),
+      "#!/bin/sh\nprintf x >> default-pre-commit-ran\n",
+      { mode: 0o755 },
+    );
+  });
+
+  try {
+    git(dir, ["commit", "--allow-empty", "-m", "default pre-commit"]);
+    assert.equal(
+      readFileSync(join(dir, "default-pre-commit-ran"), "utf8"),
+      "x",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("should ignore a stale managed default dispatcher", () => {
   let hooksDirectory;
   const dir = makeScratchRepo((scratchRepo) => {
@@ -424,9 +450,7 @@ ${validation}printf x >> ${hookName}-ran
 });
 
 test("should resolve compliance from the active linked worktree when hooks are shared", () => {
-  const sharedDirectory = mkdtempSync(
-    join(tmpdir(), "big-plan-shared-hooks-"),
-  );
+  const sharedDirectory = mkdtempSync(join(tmpdir(), "big-plan-shared-hooks-"));
   const hooksDirectory = join(sharedDirectory, "hooks");
   const linkedWorktree = join(sharedDirectory, "linked-worktree");
   mkdirSync(hooksDirectory);
@@ -646,7 +670,7 @@ test("a merge commit preserves Git's generated participant body", () => {
 
     const message = commitMessage(dir);
     assert.match(message, /^Merge branch 'feature'/);
-    assert.match(message, /\* feature:\n  feature work/);
+    assert.match(message, /\* feature:\n {2}feature work/);
     assert.ok(!message.includes(GENERATED_BODY_NOTE));
     assert.match(
       message,
