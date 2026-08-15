@@ -7,7 +7,8 @@ New work should state which subsystem it belongs to before it starts; when a cha
 ## Why the partition falls where it does
 
 Comment threads and diffs are one subsystem, not two.
-In the code, a diff has no state of its own: its endpoints are fields on the thread's own exchange records (`src/review/shared/thread-projection.ts`), and the diff itself is computed rather than stored (`src/review/snapshot-diff.ts`).
+The diff's content is computed, not stored: `src/review/snapshot-diff.ts` turns two snapshot endpoints into aligned change places on demand, and `/api/snapshot-diff` accepts those endpoints directly, independent of any thread.
+What does persist is thread-scoped: a thread's baseline and current endpoints live as fields on its own exchange records (`src/review/shared/thread-projection.ts`), and per-place review acceptance is keyed by those same endpoints plus a place id (`src/review/browser/diff-tour.browser.tsx`).
 You cannot change diff semantics without changing thread semantics, so both live in the Change Engine.
 
 The session runtime is a different subsystem from either.
