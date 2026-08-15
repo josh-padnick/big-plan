@@ -125,10 +125,7 @@ import {
   type ReviewPollHealth,
   type ReviewPollResult,
 } from "./review-poll-health.js";
-import {
-  reviewEndReason,
-  type ReviewEndReason,
-} from "./review-expiry.js";
+import { reviewEndReason, type ReviewEndReason } from "./review-expiry.js";
 import { reviewIdleDurationLabel } from "../shared/review-lifetime.js";
 import {
   isReviewRuntimeUnavailable,

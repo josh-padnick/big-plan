@@ -5,7 +5,7 @@
 // who stopped it knows.
 //
 // This exists because "the server stopped responding" is true and useless. A
-// link handed over to open later dies exactly this way (BIG-65), and the whole
+// page left open to revisit later dies exactly this way (BIG-65), and the whole
 // point is telling that reader what happened instead of that something did.
 
 export type ReviewEndReason =
@@ -20,7 +20,7 @@ export type ReviewEndReason =
  * case provable: a page whose polls were reaching the runtime keeps pushing
  * its own deadline forward, so a deadline that has since gone by means the
  * polling stopped long enough for the runtime to expire - a suspended tab, a
- * closed laptop, a link opened tomorrow - rather than a runtime someone
+ * closed laptop, a page revisited tomorrow - rather than a runtime someone
  * stopped a moment ago.
  */
 export const reviewEndReason = ({

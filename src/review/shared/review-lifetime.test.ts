@@ -1,5 +1,5 @@
-// Proves the one lifetime phrasing the runtime and review command share,
-// including the sub-minute case the CLI floor still allows programmatically.
+// Proves the one lifetime phrasing shared by the runtime, review command, and
+// browser banner, including the sub-minute case allowed programmatically.
 
 import { describe, expect, it } from "vitest";
 import { reviewIdleDurationLabel } from "./review-lifetime.js";
