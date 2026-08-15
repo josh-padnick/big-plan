@@ -2763,6 +2763,66 @@ describe("review runtime queued messages", () => {
     }
   });
 
+  it("should report progress failures without failing committed queue mutations", async () => {
+    const revisedId = await sendChat("Waht is the retry boundary?");
+    const deletedId = await sendChat("Delete after committing.");
+    const canceledId = await sendChat("Cancel after committing.");
+    const progress = await readFile(queued.store.progressPath, "utf8");
+    await rm(queued.store.progressPath);
+    await mkdir(queued.store.progressPath);
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    try {
+      const revised = await ask({
+        path: "/api/agent-requests",
+        body: {
+          kind: "chat",
+          requestId: revisedId,
+          body: "What is the retry boundary?",
+        },
+      });
+      const deleted = await ask({
+        path: "/api/agent-request-delete",
+        body: { requestId: deletedId },
+      });
+      const canceled = await ask({
+        path: "/api/agent-cancel",
+        body: { requestId: canceledId },
+      });
+      const queuedId = await sendChat("Queue despite progress failure.");
+
+      expect(revised.status).toBe(200);
+      expect(deleted.status).toBe(200);
+      expect(canceled.status).toBe(200);
+      expect(await storedRequest(revisedId)).toMatchObject({
+        body: "What is the retry boundary?",
+      });
+      expect(await storedRequest(deletedId)).toBeUndefined();
+      expect(await storedRequest(canceledId)).toMatchObject({
+        canceledAt: expect.any(String),
+      });
+      expect(await storedRequest(queuedId)).toMatchObject({
+        body: "Queue despite progress failure.",
+      });
+      const diagnostics = stderr.mock.calls
+        .map(([chunk]) => String(chunk))
+        .join("");
+      for (const message of [
+        `Review progress update failed after revising request ${revisedId}`,
+        `Review progress update failed after deleting request ${deletedId}`,
+        `Review progress update failed after canceling request ${canceledId}`,
+        `Review progress update failed after queuing request ${queuedId}`,
+      ]) {
+        expect(diagnostics).toContain(message);
+      }
+    } finally {
+      stderr.mockRestore();
+      await rm(queued.store.progressPath, { recursive: true, force: true });
+      await writeFile(queued.store.progressPath, progress);
+    }
+  });
+
   it("should refuse to delete a message the agent already started", async () => {
     const requestId = await sendChat("Keep this one after all.");
     const request = await storedRequest(requestId);

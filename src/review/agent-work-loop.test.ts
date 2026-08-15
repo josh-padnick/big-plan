@@ -9,7 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildFeedbackPackage } from "./feedback-package.js";
@@ -356,6 +356,62 @@ describe("agent work loop lifecycle", () => {
     await writeFile(outsidePath, bytes);
     await rm(attachment.path);
     await symlink(outsidePath, attachment.path);
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId,
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments,
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/outside the request attachment directory/);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a symlinked request attachment directory", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-root-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    const bytes = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+      0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+    ]);
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes,
+      alt: "Capture",
+    });
+    const requestId = "cccccccccccccccc";
+    const attachments = await reviewStore.freezeRequestAttachments({
+      store: review.store,
+      requestId,
+      references: [{ id: descriptor.id, alt: descriptor.alt }],
+    });
+    const attachmentRoot = join(
+      review.store.requestAttachmentsDirectory,
+      requestId,
+    );
+    const outsideRoot = join(directory, "outside-request");
+    await rm(attachmentRoot, { recursive: true });
+    await mkdir(outsideRoot);
+    await writeFile(join(outsideRoot, basename(attachments[0].path)), bytes);
+    await symlink(outsideRoot, attachmentRoot, "dir");
     const request = messageAgentRequest({
       kind: "chat",
       requestId,

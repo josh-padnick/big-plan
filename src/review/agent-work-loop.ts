@@ -131,6 +131,18 @@ const verifyRequestAttachments = async ({
   readonly store: ReviewStore;
   readonly request: AgentRequest;
 }): Promise<void> => {
+  const firstAttachment = request.attachments[0];
+  if (firstAttachment === undefined) return;
+  let attachmentParent: string;
+  try {
+    attachmentParent = await realpath(
+      resolve(store.requestAttachmentsDirectory),
+    );
+  } catch {
+    fail(
+      `Attachment ${firstAttachment.id} could not be opened during agent pickup`,
+    );
+  }
   for (const attachment of request.attachments) {
     const resolvedAttachmentRoot = resolve(
       join(store.requestAttachmentsDirectory, request.requestId),
@@ -151,6 +163,11 @@ const verifyRequestAttachments = async ({
     } catch {
       fail(
         `Attachment ${attachment.id} could not be opened during agent pickup`,
+      );
+    }
+    if (attachmentRoot !== join(attachmentParent, request.requestId)) {
+      fail(
+        `Attachment ${attachment.id} is outside the request attachment directory`,
       );
     }
     if (!attachmentPath.startsWith(`${attachmentRoot}${sep}`)) {

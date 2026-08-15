@@ -21,6 +21,7 @@ import {
   cancelAgentRequest,
   deleteQueuedRequest,
   reviseQueuedRequest,
+  type ProgressEventDraft,
 } from "./request-mailbox.js";
 import {
   freezeRequestAttachments,
@@ -37,6 +38,22 @@ import {
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
+
+const appendProgressBestEffort = async ({
+  context,
+  event,
+  failureMessage,
+}: {
+  readonly context: ReviewRouteContext;
+  readonly event: ProgressEventDraft;
+  readonly failureMessage: string;
+}): Promise<void> => {
+  try {
+    await appendProgressEvent({ store: context.store, event });
+  } catch (error: unknown) {
+    context.reportDiagnostic({ message: failureMessage, error });
+  }
+};
 
 /**
  * Reading the exchange is also how the runtime learns that a response arrived,
@@ -136,8 +153,8 @@ export const sendAgentRequest = async (
       if (!(error instanceof AgentExchangeRejected)) throw error;
       return refusal({ status: 409, reason: error.message });
     }
-    await appendProgressEvent({
-      store,
+    await appendProgressBestEffort({
+      context,
       event: {
         sessionId,
         requestId,
@@ -146,6 +163,7 @@ export const sendAgentRequest = async (
         step: "Queued message edited by reviewer",
         state: "waiting",
       },
+      failureMessage: `Review progress update failed after revising request ${requestId}`,
     });
     return jsonResponse({
       status: 200,
@@ -213,8 +231,8 @@ export const sendAgentRequest = async (
     }
   }
   await writeAgentRequest({ store, request: agentRequest });
-  await appendProgressEvent({
-    store,
+  await appendProgressBestEffort({
+    context,
     event: {
       sessionId,
       atMs: Date.now(),
@@ -225,6 +243,7 @@ export const sendAgentRequest = async (
           : "Plan question sent to agent",
       state: "waiting",
     },
+    failureMessage: `Review progress update failed after queuing request ${agentRequest.requestId}`,
   });
   return jsonResponse({
     status: 200,
@@ -271,8 +290,8 @@ export const deleteQueuedAgentRequest = async (
   }
   // The request is gone, so the event belongs to the session rather than to a
   // requestId no reader can resolve.
-  await appendProgressEvent({
-    store,
+  await appendProgressBestEffort({
+    context,
     event: {
       sessionId,
       atMs: Date.now(),
@@ -280,6 +299,7 @@ export const deleteQueuedAgentRequest = async (
       step: "Queued message deleted",
       state: "done",
     },
+    failureMessage: `Review progress update failed after deleting request ${requestId}`,
   });
   return jsonResponse({ status: 200, value: { requestId } });
 };
@@ -323,8 +343,8 @@ export const cancelPendingAgentRequest = async (
     if (!(error instanceof AgentExchangeRejected)) throw error;
     return refusal({ status: 409, reason: error.message });
   }
-  await appendProgressEvent({
-    store,
+  await appendProgressBestEffort({
+    context,
     event: {
       sessionId,
       requestId: canceled.requestId,
@@ -333,6 +353,7 @@ export const cancelPendingAgentRequest = async (
       step: "Request canceled by reviewer",
       state: "done",
     },
+    failureMessage: `Review progress update failed after canceling request ${requestId}`,
   });
   return jsonResponse({ status: 200, value: { request: canceled } });
 };
