@@ -25,6 +25,7 @@ import {
   readResolvedCommentIds,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
+import type { MutationRegistry } from "./runtime-watchdog.js";
 import { encodeReviewSnapshot } from "./shared/review-wire.js";
 
 /**
@@ -130,7 +131,10 @@ export type ReaderProgress = {
 
 /** Serializes whole mutations so overlapping requests cannot lose a write. */
 export type WriteGate = {
-  readonly exclusively: <T>(work: () => Promise<T>) => Promise<T>;
+  readonly exclusively: <T>(input: {
+    readonly route: string;
+    readonly work: () => Promise<T>;
+  }) => Promise<T>;
 };
 
 /** How long the review has gone without reviewer activity. */
@@ -280,11 +284,31 @@ export const createReaderProgress = ({
  * Mutating requests share filesystem-backed state. Keep each full mutation
  * atomic so overlapping browser requests cannot lose one another's writes.
  */
-export const createWriteGate = (): WriteGate => {
+export const createWriteGate = ({
+  mutations,
+}: {
+  readonly mutations: MutationRegistry;
+}): WriteGate => {
   let gate: Promise<unknown> = Promise.resolve();
   return {
-    exclusively: <T>(work: () => Promise<T>): Promise<T> => {
-      const next = gate.then(work, work);
+    exclusively: <T>({
+      route,
+      work,
+    }: {
+      readonly route: string;
+      readonly work: () => Promise<T>;
+    }): Promise<T> => {
+      // Register only when the gate hands this request its turn. Time spent
+      // waiting behind another mutation is not time spent doing its own work.
+      const run = async (): Promise<T> => {
+        const settled = mutations.begin({ route, atMs: Date.now() });
+        try {
+          return await work();
+        } finally {
+          settled();
+        }
+      };
+      const next = gate.then(run, run);
       gate = next.catch(() => undefined);
       return next;
     },

@@ -3,6 +3,10 @@
 // keeps running because the runtime is the product - it is the only way submit
 // and progress can work - so it returns the address and then stays listening
 // until the reviewer stops it or the configured idle policy closes it.
+//
+// Because it is long-lived, this command is also where a session that has
+// stopped behaving is interrogated: `kill -USR2 <pid>` prints what the runtime
+// is currently stuck on to stderr, without stopping it.
 
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -13,6 +17,10 @@ import {
   deriveInputFile,
   parseInputCommandArguments,
 } from "../_shared/input-command.js";
+import {
+  describeRuntimeDiagnostics,
+  describeRuntimeGrowth,
+} from "../../review/runtime-watchdog.js";
 import { startReviewRuntime } from "../../review/server.js";
 import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { renderDocument } from "../../render/render-document.js";
@@ -123,6 +131,18 @@ export const reviewCommand = async (
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
+
+  // A session that has stopped answering is normally killed before anyone can
+  // ask it what it was doing. SIGUSR2 makes "capture where it is stuck" one
+  // signal rather than a debugger attach.
+  process.on("SIGUSR2", () => {
+    process.stderr.write(describeRuntimeDiagnostics(runtime.diagnostics()));
+    void runtime.diagnosticGrowth().then((growth) => {
+      if (growth !== undefined) {
+        process.stderr.write(describeRuntimeGrowth(growth));
+      }
+    });
+  });
 
   return {
     review: runtime.url,

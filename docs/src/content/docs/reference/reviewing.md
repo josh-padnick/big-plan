@@ -18,6 +18,22 @@ activity. Set a different duration with `--idle-timeout <minutes>`, or pass
 waiting agent receives that normal inactivity reason instead of a failed
 background command.
 
+## Diagnose an unresponsive session
+
+Keep the terminal running the review open when the page stops answering.
+The runtime reports a write that has run for at least 30 seconds once, naming its route and age without timing it out.
+It also reports progress-history and agent-exchange counts as append-only state crosses each 1,000-entry milestone.
+Request failures that reach the runtime's generic error boundary leave their safe error type and stack in that terminal while keeping the reviewer-facing message and sensitive details out of the log.
+
+Before stopping an unresponsive runtime on macOS or Linux, ask it for an immediate diagnostic dump:
+
+```sh
+kill -USR2 <review-process-pid>
+```
+
+The signal does not stop the review.
+It prints the session, plan path, in-flight and stalled writes, and current growth counts to the review command's standard error output.
+
 ## Commenting workflow
 
 1. Use a slide's comment icon, a component toolbar comment icon, or select text

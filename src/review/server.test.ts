@@ -2,9 +2,12 @@
 // is covered here as behavior rather than as intent: each test is one refusal
 // the design promises, exercised against a real listening runtime.
 
+import { execFileSync } from "node:child_process";
+import { constants } from "node:fs";
 import {
   mkdir,
   mkdtemp,
+  open,
   readdir,
   readFile,
   rm,
@@ -25,7 +28,11 @@ import {
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
-import { claimAgentRequest, publishAgentResponse } from "./request-mailbox.js";
+import {
+  appendProgressEvent,
+  claimAgentRequest,
+  publishAgentResponse,
+} from "./request-mailbox.js";
 import { materializeReviewImages } from "./plan-assets.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
@@ -180,6 +187,87 @@ const openStalledMutation = ({
   request.on("error", () => undefined);
   request.write("{");
   return { request, status };
+};
+
+const sessionTokenFor = async (target: ReviewRuntime): Promise<string> => {
+  const descriptor: unknown = JSON.parse(
+    await readFile(target.store.sessionPath, "utf8"),
+  );
+  return typeof descriptor === "object" &&
+    descriptor !== null &&
+    "token" in descriptor &&
+    typeof descriptor.token === "string"
+    ? descriptor.token
+    : "";
+};
+
+/**
+ * Starts a runtime whose next write cannot finish. The fault is a real
+ * filesystem hang rather than a stubbed one: drafts.json becomes a FIFO with no
+ * writer, so the readFile() inside PUT /api/drafts blocks until a writer
+ * appears. That path reads drafts.json exactly once, so one write releases it.
+ */
+const startWedgedRuntime = async (prefix: string) => {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(planPath, PLAN);
+  const wedged = await startReviewRuntime({ planPath });
+  const wedgedToken = await sessionTokenFor(wedged);
+  await rm(wedged.store.draftsPath, { force: true });
+  execFileSync("mkfifo", [wedged.store.draftsPath]);
+
+  const put = (target: string) =>
+    fetch(`${target}api/drafts`, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": wedgedToken,
+        "sec-fetch-site": "same-origin",
+        origin: target.replace(/\/$/, ""),
+      },
+      body: JSON.stringify({
+        drafts: [],
+        activeDraft: "",
+        resolvedCommentIds: [],
+      }),
+    });
+  const stuck = put(wedged.url).then(
+    (response) => response.status,
+    () => 0,
+  );
+
+  return {
+    runtime: wedged,
+    token: wedgedToken,
+    stuck,
+    write: () => put(wedged.url),
+    /** Waits for the wedging request to reach the gate rather than sleeping. */
+    waitForInFlight: async () => {
+      const deadline = Date.now() + 5_000;
+      for (;;) {
+        const { inFlight } = wedged.diagnostics();
+        if (inFlight.length > 0) return inFlight;
+        if (Date.now() > deadline) return inFlight;
+        await new Promise((settle) => setTimeout(settle, 10));
+      }
+    },
+    /** Unblocks the FIFO read, then stops the runtime and removes the plan. */
+    release: async () => {
+      // O_NONBLOCK refuses with ENXIO when no reader is waiting, so a test
+      // that failed before wedging anything cannot hang here.
+      const handle = await open(
+        wedged.store.draftsPath,
+        constants.O_WRONLY | constants.O_NONBLOCK,
+      ).catch(() => undefined);
+      if (handle !== undefined) {
+        await handle.write("[]");
+        await handle.close();
+      }
+      await stuck;
+      await wedged.close();
+      await rm(directory, { recursive: true, force: true });
+    },
+  };
 };
 
 describe("review runtime transport", () => {
@@ -2000,6 +2088,107 @@ describe("review runtime shutdown", () => {
       await expect(closing.close()).resolves.toBeUndefined();
     } finally {
       stalled.request.destroy();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+// BIG-44: a review session stopped answering writes while it stayed alive and
+// kept answering reads. These tests inject the shape that produces it - one
+// filesystem read inside a mutation that never returns - and hold the runtime
+// to reporting it.
+describe("review runtime diagnostics", () => {
+  it("should name the in-flight write and keep answering reads when a mutation never settles", async () => {
+    const wedged = await startWedgedRuntime("big-plan-server-diagnostics-");
+    try {
+      const inFlight = await wedged.waitForInFlight();
+      expect(inFlight.map((mutation) => mutation.route)).toEqual([
+        "PUT /api/drafts",
+      ]);
+
+      // The reason this failure is invisible today: every polled route is a
+      // GET, and a GET never touches the gate the write is stuck behind.
+      const session = await fetch(`${wedged.runtime.url}api/session`, {
+        headers: { "x-big-plan-review-token": wedged.token },
+      });
+      expect(session.status).toBe(200);
+      const progress = await fetch(`${wedged.runtime.url}api/progress`, {
+        headers: { "x-big-plan-review-token": wedged.token },
+      });
+      expect(progress.status).toBe(200);
+    } finally {
+      await wedged.release();
+    }
+  });
+
+  it("should count the append-only state a long session accumulates", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-growth-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const counted = await startReviewRuntime({ planPath });
+    try {
+      for (let index = 0; index < 3; index += 1) {
+        await appendProgressEvent({
+          store: counted.store,
+          event: {
+            sessionId: counted.sessionId,
+            stepCode: "agent-note",
+            step: "Working through the plan",
+            state: "live",
+          },
+        });
+      }
+      await Promise.all([
+        writeFile(
+          join(counted.store.agentRequestDirectory, "aaaaaaaaaaaaaaaa.json"),
+          "{}\n",
+        ),
+        writeFile(
+          join(counted.store.agentRequestDirectory, "bbbbbbbbbbbbbbbb.json"),
+          "{}\n",
+        ),
+        writeFile(
+          join(counted.store.agentResponseDirectory, "cccccccccccccccc.json"),
+          "{}\n",
+        ),
+        mkdir(
+          join(counted.store.agentRequestDirectory, ".dddddddddddddddd.lock"),
+        ),
+        writeFile(
+          join(
+            counted.store.agentResponseDirectory,
+            ".cccccccccccccccc.json.1234.deadbeef.tmp",
+          ),
+          "{}\n",
+        ),
+      ]);
+      await expect(counted.diagnosticGrowth()).resolves.toEqual({
+        progressLines: 3,
+        agentRequests: 2,
+        agentResponses: 1,
+      });
+    } finally {
+      await counted.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should capture in-flight mutations without reading store growth", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-dump-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const captured = await startReviewRuntime({ planPath });
+    try {
+      await rm(captured.store.progressPath, { force: true });
+      execFileSync("mkfifo", [captured.store.progressPath]);
+      expect(captured.diagnostics()).toMatchObject({
+        sessionId: captured.sessionId,
+        inFlight: [],
+        stalled: [],
+      });
+    } finally {
+      await rm(captured.store.progressPath, { force: true });
+      await captured.close();
       await rm(directory, { recursive: true, force: true });
     }
   });
