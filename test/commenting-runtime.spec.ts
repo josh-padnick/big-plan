@@ -873,6 +873,13 @@ test("should restore and submit staged comments through the local review runtime
     await expect(
       lightbox.locator("[data-review-image-unavailable]"),
     ).toContainText("Image unavailable");
+    const disclosure = lightbox.getByText("What happened");
+    const detail = lightbox.getByText(/could not load/u);
+    await expect(detail).toBeHidden();
+    await page.keyboard.press("Tab");
+    await expect(disclosure).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(detail).toBeVisible();
     await page.unroute("**/review-images/*");
     await page.keyboard.press("Escape");
     await expect(lightbox).toHaveCount(0);

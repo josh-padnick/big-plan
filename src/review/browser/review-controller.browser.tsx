@@ -1399,7 +1399,6 @@ const useBlockHosts = () => {
 // page's own margin. The card is the canvas edge the captain measured against,
 // and the reading column is the fallback for a picture outside one.
 const CANVAS_SELECTOR = "[data-slide], article";
-const MIN_IMAGE_HOST_GAP = 4;
 
 const placeImageHost = ({
   block,
@@ -1416,10 +1415,7 @@ const placeImageHost = ({
   const canvasRight =
     canvas === null ? imageRect.right : canvas.getBoundingClientRect().right;
   const hostWidth = host.offsetWidth;
-  const margin = Math.max(
-    MIN_IMAGE_HOST_GAP,
-    (canvasRight - imageRect.right - hostWidth) / 2,
-  );
+  const margin = (canvasRight - imageRect.right - hostWidth) / 2;
   host.style.left = `${imageRect.right - parentRect.left + margin}px`;
   host.style.top = `${imageRect.top - parentRect.top}px`;
 };

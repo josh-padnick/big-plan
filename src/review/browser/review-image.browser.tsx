@@ -108,19 +108,25 @@ export const ReviewImage = ({
               // instead of walking back into the plan behind the scrim.
               event.stopPropagation();
               event.preventDefault();
-              const controls = Array.from(
-                dialog.current?.querySelectorAll("button") ?? [],
+              const focusable = Array.from(
+                dialog.current?.querySelectorAll<HTMLElement>("*") ?? [],
+              ).filter(
+                (element) =>
+                  element.tabIndex >= 0 &&
+                  !element.matches(":disabled") &&
+                  element.getClientRects().length > 0,
               );
-              if (controls.length === 0) return;
-              const current = controls.indexOf(
-                document.activeElement as HTMLButtonElement,
-              );
+              if (focusable.length === 0) return;
+              const current =
+                document.activeElement instanceof HTMLElement
+                  ? focusable.indexOf(document.activeElement)
+                  : -1;
               const step = event.shiftKey ? -1 : 1;
               const next =
                 current === -1
                   ? 0
-                  : (current + step + controls.length) % controls.length;
-              controls[next]?.focus();
+                  : (current + step + focusable.length) % focusable.length;
+              focusable[next]?.focus();
             }}
           >
             {/* The captain placed zoom above the picture: at the top centre it
