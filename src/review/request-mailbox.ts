@@ -54,6 +54,8 @@ export class AgentClaimContended extends RetryableAgentClaimRejected {}
 
 export class AgentClaimSelectionStale extends RetryableAgentClaimRejected {}
 
+export class AgentClaimCanceled extends AgentClaimSelectionStale {}
+
 /** Runs one request change while the request file is locked. */
 const withRequestLock = async <TResult>({
   store,
@@ -233,7 +235,7 @@ export const claimAgentRequest = async ({
         requestId,
       });
       if (request.canceledAt !== undefined) {
-        throw new AgentClaimSelectionStale(
+        throw new AgentClaimCanceled(
           "The request was canceled by the reviewer",
         );
       }

@@ -23,6 +23,7 @@ import {
 } from "./agent-exchange.js";
 import type { AgentRequest } from "./agent-exchange.js";
 import {
+  AgentClaimCanceled,
   appendProgressEvent,
   claimAgentRequest,
   commitRequestTerminal,
@@ -517,6 +518,9 @@ const nextWork = async ({
         },
       });
     } catch (error: unknown) {
+      if (resumingClaim && error instanceof AgentClaimCanceled) {
+        return fail(error.message);
+      }
       if (error instanceof RetryableAgentClaimRejected) {
         if (resumingClaim) {
           claimedBy = randomId(8);

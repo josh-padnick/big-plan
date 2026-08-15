@@ -1244,6 +1244,99 @@ describe("agent work loop lifecycle", () => {
     },
   );
 
+  it("should surface cancellation while resuming an owned request", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nResume only the explicitly owned request.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const ownedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Resume this request.",
+    });
+    const unrelatedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "cdcdcdcdcdcdcdcd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "Do not silently switch to this request.",
+    });
+    await writeAgentRequest({ store: review.store, request: ownedRequest });
+    await writeAgentRequest({ store: review.store, request: unrelatedRequest });
+    const agentToken = "eeeeeeeeeeeeeeee";
+    const claimed = await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: ownedRequest.requestId,
+      claimedBy: agentToken,
+      baselineSnapshot: premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+    let releaseLock: (() => Promise<void>) | undefined;
+    try {
+      releaseLock = await holdAgentRequestLock({
+        store: review.store,
+        requestId: ownedRequest.requestId,
+      });
+      const pickup = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        agentToken,
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({
+            state: "working",
+            requestId: ownedRequest.requestId,
+          });
+        },
+        { timeout: 5_000 },
+      );
+      await writeAgentRequest({
+        store: review.store,
+        request: { ...claimed, canceledAt: new Date().toISOString() },
+      });
+      await releaseLock();
+      releaseLock = undefined;
+
+      await expect(pickup).rejects.toThrow(/canceled by the reviewer/i);
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [
+          expect.objectContaining({
+            requestId: ownedRequest.requestId,
+            canceledAt: expect.any(String),
+          }),
+          expect.not.objectContaining({ claimedBy: expect.any(String) }),
+        ],
+      });
+    } finally {
+      await releaseLock?.();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should mint a new token when an old pickup is already terminal", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
     const planPath = join(directory, "plan.mdx");
