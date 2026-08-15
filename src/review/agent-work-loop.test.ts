@@ -276,7 +276,7 @@ describe("agent work loop lifecycle", () => {
           store: review.store,
           requestId: request.requestId,
         }),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual({ attachmentCleanup: "complete" });
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
@@ -484,7 +484,7 @@ describe("agent work loop lifecycle", () => {
           store: review.store,
           requestId: request.requestId,
         }),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual({ attachmentCleanup: "complete" });
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

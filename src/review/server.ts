@@ -638,6 +638,11 @@ export const startReviewRuntime = async ({
     }),
     writeGate: createWriteGate({ mutations, stallMs: writeStallMs }),
     activityClock: createActivityClock(idleTimeoutMs),
+    reportDiagnostic: ({ message, error }) => {
+      process.stderr.write(
+        `${message} for session ${sessionId}:\n${describeRuntimeFailure({ error, secrets: [token] })}\n`,
+      );
+    },
   };
   const { planRenderer } = context;
 

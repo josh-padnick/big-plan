@@ -9,6 +9,7 @@ import {
   open,
   readdir,
   readFile,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -16,7 +17,7 @@ import {
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   commentsFromExchange,
   deriveSnapshotDigest,
@@ -2729,6 +2730,37 @@ describe("review runtime queued messages", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ requestId });
     expect(await storedRequest(requestId)).toBeUndefined();
+  });
+
+  it("should report cleanup failure without failing a committed deletion", async () => {
+    const requestId = await sendChat("Delete even if cleanup fails.");
+    const attachmentsDirectory = queued.store.requestAttachmentsDirectory;
+    const displacedDirectory = `${attachmentsDirectory}.displaced`;
+    await rename(attachmentsDirectory, displacedDirectory);
+    await writeFile(attachmentsDirectory, "Blocks attachment cleanup.");
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    try {
+      const response = await ask({
+        path: "/api/agent-request-delete",
+        body: { requestId },
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ requestId });
+      expect(await storedRequest(requestId)).toBeUndefined();
+      await expect(readdir(displacedDirectory)).resolves.toContain(requestId);
+      expect(
+        stderr.mock.calls.map(([chunk]) => String(chunk)).join(""),
+      ).toContain(
+        `Review attachment cleanup failed after deleting request ${requestId}`,
+      );
+    } finally {
+      stderr.mockRestore();
+      await rm(attachmentsDirectory, { force: true });
+      await rename(displacedDirectory, attachmentsDirectory);
+    }
   });
 
   it("should refuse to delete a message the agent already started", async () => {

@@ -33,7 +33,11 @@ import {
   writeAgentRequestValue,
   writeAgentResponseValue,
 } from "./store.js";
-import type { ProgressEvent, ReviewStore } from "./store.js";
+import type {
+  AgentRequestDeletionResult,
+  ProgressEvent,
+  ReviewStore,
+} from "./store.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
 
@@ -369,7 +373,7 @@ export const deleteQueuedRequest = async ({
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
-}): Promise<void> =>
+}): Promise<AgentRequestDeletionResult> =>
   withRequestLock({
     store,
     requestId,
@@ -380,7 +384,7 @@ export const deleteQueuedRequest = async ({
         verb: "deleted",
         allowCanceled: true,
       });
-      await deleteAgentRequestValue({ store, requestId });
+      return deleteAgentRequestValue({ store, requestId });
     },
   });
 

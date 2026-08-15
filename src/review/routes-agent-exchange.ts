@@ -29,6 +29,7 @@ import {
   readAgentPresence,
   readProgress,
   writeSnapshot,
+  type AgentRequestDeletionResult,
 } from "./store.js";
 import {
   imageReferencesForBodies,
@@ -252,11 +253,21 @@ export const deleteQueuedAgentRequest = async (
   ) {
     return refusal({ status: 404, reason: "No such agent request" });
   }
+  let deletion: AgentRequestDeletionResult;
   try {
-    await deleteQueuedRequest({ store, requestId });
+    deletion = await deleteQueuedRequest({
+      store,
+      requestId,
+    });
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;
     return refusal({ status: 409, reason: error.message });
+  }
+  if (deletion.attachmentCleanup === "failed") {
+    context.reportDiagnostic({
+      message: `Review attachment cleanup failed after deleting request ${requestId}`,
+      error: deletion.cleanupError,
+    });
   }
   // The request is gone, so the event belongs to the session rather than to a
   // requestId no reader can resolve.

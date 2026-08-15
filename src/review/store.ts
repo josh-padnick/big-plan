@@ -1199,6 +1199,13 @@ export const writeAgentRequestValue = async ({
   });
 };
 
+export type AgentRequestDeletionResult =
+  | { readonly attachmentCleanup: "complete" }
+  | {
+      readonly attachmentCleanup: "failed";
+      readonly cleanupError: unknown;
+    };
+
 /**
  * Removes one request the agent never started, together with the blobs frozen
  * for it. The request file goes first, so a failed blob cleanup leaves orphaned
@@ -1210,18 +1217,23 @@ export const deleteAgentRequestValue = async ({
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
-}): Promise<void> => {
+}): Promise<AgentRequestDeletionResult> => {
   await rm(
     exchangePath({ directory: store.agentRequestDirectory, requestId }),
     { force: true },
   );
-  await rm(
-    inside({ base: store.requestAttachmentsDirectory, leaf: requestId }),
-    {
-      recursive: true,
-      force: true,
-    },
-  );
+  try {
+    await rm(
+      inside({ base: store.requestAttachmentsDirectory, leaf: requestId }),
+      {
+        recursive: true,
+        force: true,
+      },
+    );
+    return { attachmentCleanup: "complete" };
+  } catch (cleanupError: unknown) {
+    return { attachmentCleanup: "failed", cleanupError };
+  }
 };
 
 /** Writes one validated agent response under the request it answers. */
