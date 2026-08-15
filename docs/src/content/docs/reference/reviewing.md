@@ -107,11 +107,14 @@ edits only the authoritative MDX when appropriate, validates the new render,
 and publishes one outcome for every comment.
 
 Messages sent while the agent is handling another request are received immediately and wait in delivery order.
+A sent thread is **Queued** and says **Waiting for an agent** until its request holds a live claim.
 A waiting turn shows **Queued, _N_ ahead** when earlier unanswered work exists, then reaches the agent when that earlier work finishes.
-Until a response exists, each sent turn shows whether it is waiting or the agent is working on it.
+While that claim remains live, the thread says **Working**.
+If the lease lapses before a response commits, the thread returns to the queued and waiting state until an agent picks it up again.
 A real response records an `answered`, `changed`, `warning`, `needs-input`, or `declined` outcome and shows the agent's message.
 A warning leaves the plan unchanged, shows its short one-line summary directly under the **Warning** badge, explains the standard or template the request would cross, and lets the reviewer explicitly choose **Do it anyway**.
 A changed result updates the plan in place without discarding staged comments, open threads, or scroll position.
+The [agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) owns why pickup is serialized and what must change before concurrent plan editing can return.
 
 Set `BIG_PLAN_AGENT_MODEL` before starting the coding-agent session to report
 the model identity for each pickup, for example `Grok 4.6` or
