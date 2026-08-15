@@ -33,12 +33,16 @@ import {
   publishAgentResponse,
 } from "./request-mailbox.js";
 import { materializeReviewImages } from "./plan-assets.js";
-import { startReviewRuntime } from "./server.js";
+import {
+  DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
+  startReviewRuntime,
+} from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewSessionIsRunning } from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
 import { validateResolvedCommentIds } from "./shared/comment.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
+import { REVIEW_POLL_INTERVAL_MS } from "./shared/review-polling.js";
 import {
   readComments,
   readResolvedCommentIds,
@@ -73,16 +77,7 @@ beforeAll(async () => {
   const planPath = join(planDirectory, "plan.mdx");
   await writeFile(planPath, PLAN);
   runtime = await startReviewRuntime({ planPath });
-  const descriptor: unknown = JSON.parse(
-    await readFile(runtime.store.sessionPath, "utf8"),
-  );
-  token =
-    typeof descriptor === "object" &&
-    descriptor !== null &&
-    "token" in descriptor &&
-    typeof descriptor.token === "string"
-      ? descriptor.token
-      : "";
+  token = await readSessionToken(runtime);
 });
 
 afterAll(async () => {
@@ -112,6 +107,18 @@ const call = ({
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+
+const readSessionToken = async (target: ReviewRuntime): Promise<string> => {
+  const descriptor: unknown = JSON.parse(
+    await readFile(target.store.sessionPath, "utf8"),
+  );
+  return typeof descriptor === "object" &&
+    descriptor !== null &&
+    "token" in descriptor &&
+    typeof descriptor.token === "string"
+    ? descriptor.token
+    : "";
+};
 
 const uploadImage = (bytes: Uint8Array = TINY_PNG) =>
   fetch(`${runtime.url.replace(/\/$/u, "")}/api/review-images`, {
@@ -425,16 +432,7 @@ describe("review runtime images", () => {
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
     const first = await startReviewRuntime({ planPath });
-    const firstDescriptor: unknown = JSON.parse(
-      await readFile(first.store.sessionPath, "utf8"),
-    );
-    const firstToken =
-      typeof firstDescriptor === "object" &&
-      firstDescriptor !== null &&
-      "token" in firstDescriptor &&
-      typeof firstDescriptor.token === "string"
-        ? firstDescriptor.token
-        : "";
+    const firstToken = await readSessionToken(first);
     const upload = await fetch(`${first.url}api/review-images`, {
       method: "POST",
       headers: {
@@ -1008,16 +1006,7 @@ describe("review runtime feedback", () => {
     await writeFile(planPath, PLAN);
     const isolated = await startReviewRuntime({ planPath });
     try {
-      const descriptor: unknown = JSON.parse(
-        await readFile(isolated.store.sessionPath, "utf8"),
-      );
-      const isolatedToken =
-        typeof descriptor === "object" &&
-        descriptor !== null &&
-        "token" in descriptor &&
-        typeof descriptor.token === "string"
-          ? descriptor.token
-          : "";
+      const isolatedToken = await readSessionToken(isolated);
       const post = () =>
         fetch(`${isolated.url}api/feedback`, {
           method: "POST",
@@ -1630,16 +1619,7 @@ The dashboard shows the retry backlog.
     await writeFile(planPath, baseline);
     const isolated = await startReviewRuntime({ planPath });
     try {
-      const descriptor: unknown = JSON.parse(
-        await readFile(isolated.store.sessionPath, "utf8"),
-      );
-      const isolatedToken =
-        typeof descriptor === "object" &&
-        descriptor !== null &&
-        "token" in descriptor &&
-        typeof descriptor.token === "string"
-          ? descriptor.token
-          : "";
+      const isolatedToken = await readSessionToken(isolated);
       const isolatedCall = ({
         path,
         body,
@@ -2155,16 +2135,7 @@ describe("review runtime shutdown", () => {
     await writeFile(planPath, restartedSource);
     const restarted = await startReviewRuntime({ planPath });
     try {
-      const descriptor: unknown = JSON.parse(
-        await readFile(restarted.store.sessionPath, "utf8"),
-      );
-      const restartedToken =
-        typeof descriptor === "object" &&
-        descriptor !== null &&
-        "token" in descriptor &&
-        typeof descriptor.token === "string"
-          ? descriptor.token
-          : "";
+      const restartedToken = await readSessionToken(restarted);
       const agentState = () =>
         fetch(`${restarted.url}api/agent`, {
           headers: { "x-big-plan-review-token": restartedToken },
@@ -2219,16 +2190,7 @@ describe("review runtime shutdown", () => {
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
     const first = await startReviewRuntime({ planPath });
-    const firstDescriptor: unknown = JSON.parse(
-      await readFile(first.store.sessionPath, "utf8"),
-    );
-    const firstToken =
-      typeof firstDescriptor === "object" &&
-      firstDescriptor !== null &&
-      "token" in firstDescriptor &&
-      typeof firstDescriptor.token === "string"
-        ? firstDescriptor.token
-        : "";
+    const firstToken = await readSessionToken(first);
     const stalled = openStalledMutation({
       target: first,
       sessionToken: firstToken,
@@ -2280,21 +2242,79 @@ describe("review runtime shutdown", () => {
     }
   });
 
+  it("should stay open while a page does nothing but poll", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-poll-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const idleTimeoutMs = REVIEW_POLL_INTERVAL_MS * 2;
+    const polling = await startReviewRuntime({ planPath, idleTimeoutMs });
+    const pollingToken = await readSessionToken(polling);
+    const poll = () =>
+      fetch(`${polling.url}api/session`, {
+        headers: { "x-big-plan-review-token": pollingToken },
+      });
+    try {
+      const until = Date.now() + idleTimeoutMs * 2;
+      while (Date.now() < until) {
+        await expect(poll()).resolves.toMatchObject({ status: 200 });
+        await new Promise((settle) =>
+          setTimeout(settle, REVIEW_POLL_INTERVAL_MS),
+        );
+      }
+      await expect(poll()).resolves.toMatchObject({ status: 200 });
+      await expect(
+        reviewSessionIsRunning({
+          store: polling.store,
+          sessionId: polling.sessionId,
+        }),
+      ).resolves.toMatchObject({ running: true });
+    } finally {
+      await polling.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 10_000);
+
+  it("should publish its lifetime and deadline on the session route", async () => {
+    const before = (await (await call({ path: "/api/session" })).json()) as {
+      readonly idleTimeoutMs?: unknown;
+      readonly expiresAtMs?: unknown;
+    };
+    expect(before.idleTimeoutMs).toBe(DEFAULT_REVIEW_IDLE_TIMEOUT_MS);
+    expect(before.expiresAtMs).toBeGreaterThan(Date.now());
+    await new Promise((settle) => setTimeout(settle, 5));
+    const after = (await (await call({ path: "/api/session" })).json()) as {
+      readonly expiresAtMs?: unknown;
+    };
+    expect(after.expiresAtMs).toBeGreaterThan(Number(before.expiresAtMs));
+  });
+
+  it("should publish no deadline when the idle timeout is disabled", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-forever-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const endless = await startReviewRuntime({ planPath, idleTimeoutMs: 0 });
+    const endlessToken = await readSessionToken(endless);
+    try {
+      const response = await fetch(`${endless.url}api/session`, {
+        headers: { "x-big-plan-review-token": endlessToken },
+      });
+      const payload = (await response.json()) as Readonly<
+        Record<string, unknown>
+      >;
+      expect(payload.idleTimeoutMs).toBe(0);
+      expect(payload).not.toHaveProperty("expiresAtMs");
+    } finally {
+      await endless.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should force-close a stalled active request after a short grace period", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-server-stall-"));
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
     const closing = await startReviewRuntime({ planPath });
-    const descriptor: unknown = JSON.parse(
-      await readFile(closing.store.sessionPath, "utf8"),
-    );
-    const closingToken =
-      typeof descriptor === "object" &&
-      descriptor !== null &&
-      "token" in descriptor &&
-      typeof descriptor.token === "string"
-        ? descriptor.token
-        : "";
+    const closingToken = await readSessionToken(closing);
     const stalled = openStalledMutation({
       target: closing,
       sessionToken: closingToken,

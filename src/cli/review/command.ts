@@ -21,7 +21,10 @@ import {
   describeRuntimeDiagnostics,
   describeRuntimeGrowth,
 } from "../../review/runtime-watchdog.js";
-import { startReviewRuntime } from "../../review/server.js";
+import {
+  DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
+  startReviewRuntime,
+} from "../../review/server.js";
 import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { renderDocument } from "../../render/render-document.js";
 
@@ -35,22 +38,25 @@ const reviewArguments = (
   readonly idleTimeoutMs: number;
 } => {
   const positional: Array<string> = [];
-  let idleMinutes = 10;
+  let idleMinutes = DEFAULT_REVIEW_IDLE_TIMEOUT_MS / 60_000;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--diff-preview") continue;
     if (argument === "--idle-timeout") {
       const value = args[index + 1];
       const parsed = Number(value);
+      // A one-minute floor stays safely above the review page's fixed
+      // 1.5-second poll cadence, so an open page cannot expire between polls.
       if (
         value === undefined ||
         value.trim() === "" ||
         !Number.isFinite(parsed) ||
         parsed < 0 ||
+        (parsed > 0 && parsed < 1) ||
         !Number.isFinite(parsed * 60_000)
       ) {
         throw new AxiError(
-          "--idle-timeout must be zero or a positive number of minutes",
+          "--idle-timeout must be 0 to disable it, or at least 1 minute",
           "INVALID_INPUT",
           [USAGE],
         );
@@ -157,7 +163,7 @@ export const reviewCommand = async (
       "Press Ctrl+C to stop the review runtime",
       parsedArguments.idleTimeoutMs === 0
         ? "Idle timeout is disabled"
-        : `The session ends after ${parsedArguments.idleTimeoutMs / 60_000} minutes without reviewer activity; configure with --idle-timeout`,
+        : `This review ends after ${parsedArguments.idleTimeoutMs / 60_000} minutes with no page open and no agent working; configure with --idle-timeout`,
     ],
   };
 };

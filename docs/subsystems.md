@@ -56,8 +56,9 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 - This subsystem owns lifecycle and atomicity: session liveness, replacement, recovery, and locked mutation of stored agent requests.
   It does not own what a thread means or what a diff shows.
-- Idle expiry is a single runtime policy, not a per-feature concern: `src/cli/review/command.ts` chooses the public command's ten-minute default and converts it to milliseconds, while `src/review/server.ts` independently supplies the same API-level default and enforces `idleTimeoutMs`.
-  Keep those boundary defaults aligned unless the policy is centralized; the agent work loop exits when the session heartbeat it follows dies.
+- Idle expiry is one centralized runtime policy, not a pair of aligned boundary defaults: `DEFAULT_REVIEW_IDLE_TIMEOUT_MS` in `src/review/server.ts` owns the default, and `src/cli/review/command.ts` imports it rather than duplicating it.
+  Any authenticated request from an open page counts as activity, so a page being read keeps its own session alive rather than only writes counting.
+  The CLI requires a nonzero `--idle-timeout` to be at least 1 minute, while `--idle-timeout 0` disables expiry entirely; the agent work loop exits when the session heartbeat it follows dies.
   Symptoms that look unrelated (an agent disconnecting, a preview expiring) can share this one cause.
 - A thread-resolution action that conflicts with a queued or in-flight message for that thread is a request-lifecycle invariant, enforced where request claims and terminal states land (`request-mailbox.ts`), not a thread-semantics concern.
 

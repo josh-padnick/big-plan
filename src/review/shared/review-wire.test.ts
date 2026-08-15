@@ -255,6 +255,38 @@ describe("review wire contract", () => {
     expect(decoded?.locations[0]).toMatchObject({ oldText: "Freeze writes." });
   });
 
+  it("should keep only a usable session lifetime and drop a malformed one", () => {
+    const identity = {
+      sessionId: "abcd1234",
+      planId: "plan-1",
+      plan: "/plans/checkout.mdx",
+      authoritative: true,
+    };
+
+    expect(
+      decodeRuntimeSession({
+        value: {
+          ...identity,
+          idleTimeoutMs: 1_800_000,
+          expiresAtMs: 1_700_000,
+        },
+        sessionId: identity.sessionId,
+      }),
+    ).toMatchObject({ idleTimeoutMs: 1_800_000, expiresAtMs: 1_700_000 });
+
+    const malformed = decodeRuntimeSession({
+      value: {
+        ...identity,
+        idleTimeoutMs: "1800000",
+        expiresAtMs: Number.NaN,
+      },
+      sessionId: identity.sessionId,
+    });
+    expect(malformed).toMatchObject({ authoritative: true });
+    expect(malformed).not.toHaveProperty("idleTimeoutMs");
+    expect(malformed).not.toHaveProperty("expiresAtMs");
+  });
+
   it("should preserve stable progress semantics and reject unknown codes", () => {
     const event = {
       seq: 1,

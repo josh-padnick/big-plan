@@ -337,13 +337,21 @@ const refuse = ({
 }): void => sendJson({ response, status, value: { error: reason } });
 
 /**
+ * How long a review outlives its last sign of life. Every authenticated
+ * request from an open page counts, so this measures genuine abandonment -
+ * nobody reading and no agent working - rather than time since the last
+ * keystroke. Callers override it with `--idle-timeout`; zero disables it.
+ */
+export const DEFAULT_REVIEW_IDLE_TIMEOUT_MS = 30 * 60 * 1_000;
+
+/**
  * Starts the review runtime for one plan and resolves once it is listening.
  * The caller owns the plan path; nothing about a request ever contributes one.
  */
 export const startReviewRuntime = async ({
   planPath,
   diffPreviewSource,
-  idleTimeoutMs = 10 * 60 * 1_000,
+  idleTimeoutMs = DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
   writeStallMs = MUTATION_STALL_MS,
 }: {
   readonly planPath: string;
@@ -623,7 +631,7 @@ export const startReviewRuntime = async ({
       ),
     }),
     writeGate: createWriteGate({ mutations, stallMs: writeStallMs }),
-    activityClock: createActivityClock(),
+    activityClock: createActivityClock(idleTimeoutMs),
   };
   const { planRenderer } = context;
 
@@ -759,6 +767,11 @@ export const startReviewRuntime = async ({
         return;
       }
 
+      // Above the method split on purpose: a page that only polls is a page
+      // someone still has open, and treating its reads as idleness is what
+      // used to close a session out from under a reader.
+      context.activityClock.touch();
+
       // A slow client may occupy its own request, but it must not hold the
       // filesystem mutation gate while it is still streaming input.
       const binaryBody =
@@ -786,10 +799,7 @@ export const startReviewRuntime = async ({
             const authority = await withReviewSessionAuthority({
               store,
               sessionId,
-              change: async () => {
-                context.activityClock.touch();
-                await dispatch();
-              },
+              change: dispatch,
             });
             if (!authority.authoritative) {
               refuse({
@@ -1033,6 +1043,10 @@ export const startReviewRuntime = async ({
             context.activityClock.touch();
             return;
           }
+          // The presence read awaits filesystem I/O, so a page poll can touch
+          // the clock during it; confirm expiry again before closing.
+          if (closed || context.activityClock.idleForMs() < idleTimeoutMs)
+            return;
           const minutes = idleTimeoutMs / 60_000;
           const duration = Number.isInteger(minutes)
             ? `${minutes} minute${minutes === 1 ? "" : "s"}`

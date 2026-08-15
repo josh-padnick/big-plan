@@ -21,11 +21,14 @@ export const readRuntimeSession = async (
     plan: context.resolvedPlanPath,
   });
   const writesStalledMs = context.writeGate.stalledForMs();
+  const expiresAtMs = context.activityClock.expiresAtMs();
   return jsonResponse({
     status: 200,
     value: encodeRuntimeSession({
       ...sessionView,
       ...(writesStalledMs === undefined ? {} : { writesStalledMs }),
+      idleTimeoutMs: context.activityClock.idleTimeoutMs,
+      ...(expiresAtMs === undefined ? {} : { expiresAtMs }),
     }),
   });
 };
