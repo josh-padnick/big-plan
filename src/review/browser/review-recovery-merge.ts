@@ -172,6 +172,7 @@ export const mergeLiveReviewRecovery = ({
     const sentBody = sentBodies.get(id);
     if (sentBody !== undefined) {
       if (localDraft === undefined) continue;
+      if (localDraft.body === sentBody) continue;
       const priorBody = submittedBodies.get(id) ?? baseBody ?? sentBody;
       if (localDraft.body === priorBody) continue;
       drafts.push(localDraft);
@@ -251,6 +252,72 @@ export const mergeLiveReviewRecovery = ({
   };
 };
 
+/** Carries explicit conflict evidence while advancing everything else. */
+export const resumeLiveReviewRecovery = ({
+  recovery,
+  runtime,
+  sent = [],
+}: {
+  readonly recovery: LiveReviewRecovery;
+  readonly runtime: ReviewRecoveryState;
+  readonly sent?: ReadonlyArray<ReviewComment>;
+}): ReviewRecoveryMerge => {
+  const priorRuntime = recovery.reconciliation.runtime;
+  if (priorRuntime === null || recovery.reconciliation.conflicts.length === 0) {
+    return mergeLiveReviewRecovery({
+      base: recovery.reconciliation.base,
+      local: recovery,
+      runtime,
+      sent,
+    });
+  }
+  const merged = mergeLiveReviewRecovery({
+    base: reviewRecoveryBase(priorRuntime),
+    local: recovery,
+    runtime,
+    sent,
+  });
+  const localBodies = new Map(
+    recovery.drafts.map((draft) => [draft.id, draft.body]),
+  );
+  const runtimeBodies = new Map(
+    runtime.drafts.map((draft) => [draft.id, draft.body]),
+  );
+  const sentBodies = new Map(sent.map((comment) => [comment.id, comment.body]));
+  const conflicts = new Map(
+    merged.conflicts.map((conflict) => [conflict.commentId, conflict]),
+  );
+  for (const priorConflict of recovery.reconciliation.conflicts) {
+    const localBody = localBodies.get(priorConflict.commentId) ?? null;
+    const sentBody = sentBodies.get(priorConflict.commentId);
+    if (sentBody !== undefined) {
+      if (localBody === null || localBody === sentBody) {
+        conflicts.delete(priorConflict.commentId);
+      } else {
+        conflicts.set(priorConflict.commentId, {
+          kind: "sent",
+          commentId: priorConflict.commentId,
+          localBody,
+          runtimeBody: sentBody,
+        });
+      }
+      continue;
+    }
+    const runtimeBody = runtimeBodies.get(priorConflict.commentId) ?? null;
+    if (localBody === runtimeBody) {
+      conflicts.delete(priorConflict.commentId);
+    } else {
+      conflicts.set(priorConflict.commentId, {
+        kind: "draft",
+        commentId: priorConflict.commentId,
+        localBody,
+        runtimeBody,
+      });
+    }
+  }
+  return { state: merged.state, conflicts: [...conflicts.values()] };
+};
+
 /** Offers unsynchronized work adopted from an orphaned tab before applying it. */
 export const adoptLiveReviewRecovery = ({
   recovery,
@@ -261,9 +328,8 @@ export const adoptLiveReviewRecovery = ({
   readonly runtime: ReviewRecoveryState;
   readonly sent?: ReadonlyArray<ReviewComment>;
 }): ReviewRecoveryMerge => {
-  const merged = mergeLiveReviewRecovery({
-    base: recovery.reconciliation.base,
-    local: recovery,
+  const merged = resumeLiveReviewRecovery({
+    recovery,
     runtime,
     sent,
   });
@@ -277,12 +343,16 @@ export const adoptLiveReviewRecovery = ({
     runtime.drafts.map((draft) => [draft.id, draft]),
   );
   const sentIds = new Set(sent.map((comment) => comment.id));
+  const adoptionBase =
+    recovery.reconciliation.runtime === null
+      ? recovery.reconciliation.base
+      : reviewRecoveryBase(recovery.reconciliation.runtime);
   for (const commentId of new Set([
-    ...recovery.reconciliation.base.draftBodies.keys(),
+    ...adoptionBase.draftBodies.keys(),
     ...localDrafts.keys(),
   ])) {
     if (conflicts.has(commentId) || sentIds.has(commentId)) continue;
-    const baseBody = recovery.reconciliation.base.draftBodies.get(commentId);
+    const baseBody = adoptionBase.draftBodies.get(commentId);
     const localBody = localDrafts.get(commentId)?.body ?? null;
     const runtimeBody = runtimeDrafts.get(commentId)?.body ?? null;
     if (localBody === (baseBody ?? null) || localBody === runtimeBody) continue;
@@ -316,9 +386,7 @@ export const resolveReviewRecoveryConflict = ({
         throw new Error("A sent comment edit needs a new staged comment id");
       }
       const resolvedCommentIds = new Set(state.resolvedCommentIds);
-      if (resolvedCommentIds.delete(conflict.commentId)) {
-        resolvedCommentIds.add(replacementCommentId);
-      }
+      resolvedCommentIds.delete(replacementCommentId);
       return {
         drafts: state.drafts.map((draft) =>
           draft.id === conflict.commentId

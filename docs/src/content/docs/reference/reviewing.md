@@ -95,7 +95,8 @@ server-rendered article without client-rendering or gating the plan.
 Runtime-backed staged comments live under `.big-plan/review/<plan-id>/` beside the plan.
 The review id comes from the resolved source path, so staged comments survive the plan revision the agent creates in response to feedback.
 Comment text that is typed but not yet staged or sent is kept in a recovery record owned by its browser tab, so reloading or reopening after a crash gives back the tab's staged drafts, open comment composer, and half-written thread replies.
-A fresh load may adopt an unsynchronized record left by a closed tab, while records left untouched for seven days expire.
+A fresh load may offer an unsynchronized record after the runtime supplies authoritative state, without changing or removing the record another tab owns.
+Records left untouched for seven days expire.
 A composer whose place in the plan no longer exists is not reattached, and the review retains its text for copying until the reviewer discards it.
 Text currently being typed in the plan-wide **Chat** composer exists only in the current page and does not survive a reload.
 Static `big-plan render` documents use browser storage for their document-level comment draft.

@@ -158,6 +158,7 @@ import {
   refreshReviewRecoveryConflicts,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
+  resumeLiveReviewRecovery,
   reviewRecoveryBase,
   reviewRecoveryBaseAfterConflictAnswers,
 } from "./review-recovery-merge.js";
@@ -467,9 +468,6 @@ const liveRecoveryStorageKey = ({
 const liveRecoveryOwnerSessionKey = (identity: RuntimeIdentity): string =>
   `${liveRecoveryStoragePrefix(identity)}:owner`;
 
-const liveRecoveryOwnerChannel = (identity: RuntimeIdentity): string =>
-  `${liveRecoveryStoragePrefix(identity)}:owners`;
-
 const archivedChatStorageKey = (planId: string): string =>
   `big-plan:review:archived-chat:${planId}`;
 
@@ -566,7 +564,7 @@ const emptyReviewRecoveryReconciliation = (): ReviewRecoveryReconciliation => ({
   runtime: null,
 });
 
-const LIVE_RECOVERY_SNAPSHOT_VERSION = 7;
+const LIVE_RECOVERY_SNAPSHOT_VERSION = 8;
 const LIVE_RECOVERY_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const isStringRecord = (
@@ -635,19 +633,18 @@ const readRecoveredComposer = (value: unknown): RecoveredComposer => {
 
 type StoredLiveReviewRecovery = LiveReviewRecovery & {
   readonly ownerId: string;
+  readonly adoptedOwnerIds: ReadonlySet<string>;
   readonly updatedAtMs: number;
   readonly composer: RecoveredComposer;
 };
 
 type LiveRecoveryOwner = {
   readonly ownerId: string;
-  readonly activeOwnerIds: ReadonlySet<string>;
-  readonly channel: BroadcastChannel | null;
 };
 
 type LiveRecoverySelection = {
   readonly recovery: StoredLiveReviewRecovery | null;
-  readonly adoptedKey: string | null;
+  readonly source: "owned" | "orphan" | null;
 };
 
 /** Reads one tab-owned recovery snapshot without accepting partial data. */
@@ -662,6 +659,10 @@ const readLiveReviewRecovery = (
       !isRecord(parsed) ||
       parsed.version !== LIVE_RECOVERY_SNAPSHOT_VERSION ||
       typeof parsed.ownerId !== "string" ||
+      !Array.isArray(parsed.adoptedOwnerIds) ||
+      !parsed.adoptedOwnerIds.every(
+        (value): value is string => typeof value === "string",
+      ) ||
       typeof parsed.updatedAtMs !== "number" ||
       reviewState === null ||
       !isRecord(parsed.reconciliation) ||
@@ -689,6 +690,7 @@ const readLiveReviewRecovery = (
     return {
       ...reviewState,
       ownerId: parsed.ownerId,
+      adoptedOwnerIds: new Set(parsed.adoptedOwnerIds),
       updatedAtMs: parsed.updatedAtMs,
       composer: readRecoveredComposer(parsed.composer),
       reconciliation: {
@@ -715,6 +717,7 @@ const serializedLiveReviewRecovery = (
   JSON.stringify({
     version: LIVE_RECOVERY_SNAPSHOT_VERSION,
     ownerId: recovery.ownerId,
+    adoptedOwnerIds: Array.from(recovery.adoptedOwnerIds),
     updatedAtMs: recovery.updatedAtMs,
     drafts: recovery.drafts,
     resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
@@ -744,78 +747,23 @@ const serializedLiveReviewRecovery = (
     },
   });
 
-type LiveRecoveryOwnerMessage =
-  | {
-      readonly kind: "probe";
-      readonly requestId: string;
-      readonly instanceId: string;
-      readonly ownerId: string;
-    }
-  | {
-      readonly kind: "owner";
-      readonly requestId: string;
-      readonly instanceId: string;
-      readonly ownerId: string;
-    };
-
-const isLiveRecoveryOwnerMessage = (
-  value: unknown,
-): value is LiveRecoveryOwnerMessage =>
-  isRecord(value) &&
-  (value.kind === "probe" || value.kind === "owner") &&
-  typeof value.requestId === "string" &&
-  typeof value.instanceId === "string" &&
-  typeof value.ownerId === "string";
-
-/** Claims a writer identity, forking copied session state when its tab is live. */
-const claimLiveRecoveryOwner = async (
+/** Claims a tab writer identity without inferring whether another tab is live. */
+const claimLiveRecoveryOwner = (
   identity: RuntimeIdentity,
-): Promise<LiveRecoveryOwner> => {
+): LiveRecoveryOwner => {
   const sessionKey = liveRecoveryOwnerSessionKey(identity);
-  const candidateOwnerId = sessionStorage.getItem(sessionKey) ?? randomId();
-  if (typeof BroadcastChannel === "undefined") {
-    sessionStorage.setItem(sessionKey, candidateOwnerId);
-    return {
-      ownerId: candidateOwnerId,
-      activeOwnerIds: new Set(),
-      channel: null,
-    };
-  }
-  const channel = new BroadcastChannel(liveRecoveryOwnerChannel(identity));
-  const instanceId = randomId();
-  const requestId = randomId();
-  const peers = new Map<string, string>();
-  let ownerId = candidateOwnerId;
-  channel.onmessage = (event: MessageEvent<unknown>) => {
-    if (!isLiveRecoveryOwnerMessage(event.data)) return;
-    const message = event.data;
-    if (message.instanceId === instanceId) return;
-    if (message.kind === "probe") {
-      peers.set(message.instanceId, message.ownerId);
-      channel.postMessage({
-        kind: "owner",
-        requestId: message.requestId,
-        instanceId,
-        ownerId,
-      });
-      return;
-    }
-    if (message.requestId === requestId) {
-      peers.set(message.instanceId, message.ownerId);
-    }
-  };
-  channel.postMessage({ kind: "probe", requestId, instanceId, ownerId });
-  await new Promise<void>((resolve) => window.setTimeout(resolve, 40));
-  if ([...peers.values()].includes(candidateOwnerId)) ownerId = randomId();
+  const previousOwnerId = sessionStorage.getItem(sessionKey);
+  const navigation = performance.getEntriesByType("navigation")[0];
+  const isReload =
+    navigation instanceof PerformanceNavigationTiming &&
+    navigation.type === "reload";
+  const ownerId =
+    isReload && previousOwnerId !== null ? previousOwnerId : randomId();
   sessionStorage.setItem(sessionKey, ownerId);
-  return {
-    ownerId,
-    activeOwnerIds: new Set(peers.values()),
-    channel,
-  };
+  return { ownerId };
 };
 
-/** Chooses this tab's record, or one expired tab left safe to adopt. */
+/** Selects continuity first, then the newest unexpired recovery candidate. */
 const selectLiveReviewRecovery = ({
   identity,
   owner,
@@ -825,12 +773,9 @@ const selectLiveReviewRecovery = ({
   readonly owner: LiveRecoveryOwner;
   readonly nowMs: number;
 }): LiveRecoverySelection => {
-  const ownedKey = liveRecoveryStorageKey({
-    identity,
-    ownerId: owner.ownerId,
-  });
-  const owned = readLiveReviewRecovery(ownedKey);
-  if (owned !== null) return { recovery: owned, adoptedKey: null };
+  const owned = readLiveReviewRecovery(
+    liveRecoveryStorageKey({ identity, ownerId: owner.ownerId }),
+  );
   const prefix = `${liveRecoveryStoragePrefix(identity)}:tab:`;
   const candidates: Array<{
     readonly key: string;
@@ -840,8 +785,7 @@ const selectLiveReviewRecovery = ({
     const key = localStorage.key(index);
     if (key === null || !key.startsWith(prefix)) continue;
     const recovery = readLiveReviewRecovery(key);
-    if (recovery === null || owner.activeOwnerIds.has(recovery.ownerId))
-      continue;
+    if (recovery === null || recovery.ownerId === owner.ownerId) continue;
     if (nowMs - recovery.updatedAtMs > LIVE_RECOVERY_EXPIRY_MS) {
       localStorage.removeItem(key);
       index -= 1;
@@ -849,15 +793,13 @@ const selectLiveReviewRecovery = ({
     }
     candidates.push({ key, recovery });
   }
-  if (owner.activeOwnerIds.size > 0) {
-    return { recovery: null, adoptedKey: null };
-  }
-  const adopted = candidates.sort(
+  if (owned !== null) return { recovery: owned, source: "owned" };
+  const orphan = candidates.sort(
     (left, right) => right.recovery.updatedAtMs - left.recovery.updatedAtMs,
   )[0];
-  return adopted === undefined
-    ? { recovery: null, adoptedKey: null }
-    : { recovery: adopted.recovery, adoptedKey: adopted.key };
+  return orphan === undefined
+    ? { recovery: null, source: null }
+    : { recovery: orphan.recovery, source: "orphan" };
 };
 
 /** Writes only the record this browser tab owns. */
@@ -992,6 +934,7 @@ const clearLiveReviewRecovery = ({
   if (
     recovery === null ||
     recovery.reconciliation.conflicts.length > 0 ||
+    recovery.adoptedOwnerIds.size > 0 ||
     recovery.composer.comment !== null ||
     recovery.composer.replies.size > 0 ||
     persistedReviewFingerprint(recovery) !== fingerprint
@@ -4318,7 +4261,8 @@ export const ReviewController = () => {
   const [liveRecoveryOwnerId, setLiveRecoveryOwnerId] = useState<string | null>(
     null,
   );
-  const adoptedRecoveryKeyRef = useRef<string | null>(null);
+  const adoptedRecoveryOwnerIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const isOrphanRecoveryDeferredRef = useRef(false);
   // The version the next conditional write must carry.
   const runtimeVersionRef = useRef("");
   const [persistedReviewState, setPersistedReviewState] = useState<
@@ -4502,7 +4446,7 @@ export const ReviewController = () => {
       );
       if (merged.conflicts.length > 0) {
         replaceRecoveryReconciliation({
-          base,
+          base: reviewRecoveryBase(runtime),
           conflicts: merged.conflicts,
           runtime,
         });
@@ -4916,26 +4860,26 @@ export const ReviewController = () => {
 
   useEffect(() => {
     let current = true;
-    let claimedOwner: LiveRecoveryOwner | null = null;
     void (async () => {
       if (identity === null) {
         setDrafts(planId === "" ? [] : readLocalDrafts(planId));
         setIsHydrated(true);
         return;
       }
-      claimedOwner = await claimLiveRecoveryOwner(identity);
-      if (!current) {
-        claimedOwner.channel?.close();
-        return;
-      }
+      const claimedOwner = claimLiveRecoveryOwner(identity);
+      if (!current) return;
       setLiveRecoveryOwnerId(claimedOwner.ownerId);
       const selection = selectLiveReviewRecovery({
         identity,
         owner: claimedOwner,
         nowMs: Date.now(),
       });
-      adoptedRecoveryKeyRef.current = selection.adoptedKey;
+      isOrphanRecoveryDeferredRef.current = selection.source === "orphan";
       const recovery = selection.recovery;
+      adoptedRecoveryOwnerIdsRef.current =
+        selection.source === "owned" && recovery !== null
+          ? recovery.adoptedOwnerIds
+          : new Set();
       const recoveredComposer = recovery?.composer ?? EMPTY_RECOVERED_COMPOSER;
       try {
         const sessionSequence = runtimeSessionOrder.issueRequest();
@@ -4961,23 +4905,29 @@ export const ReviewController = () => {
           let conflicted = false;
           if (recovery !== null) {
             const merged =
-              selection.adoptedKey === null
-                ? mergeLiveReviewRecovery({
-                    base: recovery.reconciliation.base,
-                    local: recovery,
+              selection.source === "orphan"
+                ? adoptLiveReviewRecovery({
+                    recovery,
                     runtime: runtimeReviewState,
                     sent: snapshot.sent,
                   })
-                : adoptLiveReviewRecovery({
+                : resumeLiveReviewRecovery({
                     recovery,
                     runtime: runtimeReviewState,
                     sent: snapshot.sent,
                   });
+            isOrphanRecoveryDeferredRef.current = false;
+            if (selection.source === "orphan") {
+              adoptedRecoveryOwnerIdsRef.current = new Set([
+                ...recovery.adoptedOwnerIds,
+                recovery.ownerId,
+              ]);
+            }
             restoredReviewState = merged.state;
             conflicted = merged.conflicts.length > 0;
             if (conflicted) {
               replaceRecoveryReconciliation({
-                base: recovery.reconciliation.base,
+                base: reviewRecoveryBase(runtimeReviewState),
                 conflicts: merged.conflicts,
                 runtime: runtimeReviewState,
               });
@@ -5019,36 +4969,13 @@ export const ReviewController = () => {
       } catch (error) {
         if (current) {
           if (recovery !== null) {
-            if (selection.adoptedKey === null) {
+            if (selection.source === "owned") {
               replaceRecoveryReconciliation(recovery.reconciliation);
               setDrafts(recovery.drafts);
               setResolvedCommentIds(recovery.resolvedCommentIds);
               setIsRecoveryConflictOpen(
                 recovery.reconciliation.conflicts.length > 0,
               );
-            } else {
-              const savedRuntime = recovery.reconciliation.runtime ?? {
-                drafts: recovery.drafts.flatMap((draft) => {
-                  const body = recovery.reconciliation.base.draftBodies.get(
-                    draft.id,
-                  );
-                  return body === undefined ? [] : [{ ...draft, body }];
-                }),
-                resolvedCommentIds:
-                  recovery.reconciliation.base.resolvedCommentIds,
-              };
-              const adopted = adoptLiveReviewRecovery({
-                recovery,
-                runtime: savedRuntime,
-              });
-              replaceRecoveryReconciliation({
-                base: recovery.reconciliation.base,
-                conflicts: adopted.conflicts,
-                runtime: savedRuntime,
-              });
-              setDrafts(adopted.state.drafts);
-              setResolvedCommentIds(adopted.state.resolvedCommentIds);
-              setIsRecoveryConflictOpen(adopted.conflicts.length > 0);
             }
           } else {
             markPersistedReviewState(
@@ -5058,7 +4985,11 @@ export const ReviewController = () => {
               }),
             );
           }
-          restoreComposer(recoveredComposer);
+          restoreComposer(
+            selection.source === "orphan"
+              ? EMPTY_RECOVERED_COMPOSER
+              : recoveredComposer,
+          );
           setStatus(errorMessage(error));
           setIsHydrated(true);
         }
@@ -5066,7 +4997,6 @@ export const ReviewController = () => {
     })();
     return () => {
       current = false;
-      claimedOwner?.channel?.close();
     };
   }, [
     acceptRuntimeSession,
@@ -5083,10 +5013,12 @@ export const ReviewController = () => {
   useEffect(() => {
     if (!isHydrated || identity === null || liveRecoveryOwnerId === null)
       return;
+    if (isOrphanRecoveryDeferredRef.current) return;
     const reviewState = { drafts, resolvedCommentIds };
     const recovery: StoredLiveReviewRecovery = {
       ...reviewState,
       ownerId: liveRecoveryOwnerId,
+      adoptedOwnerIds: adoptedRecoveryOwnerIdsRef.current,
       updatedAtMs: Date.now(),
       composer: composerRecovery,
       reconciliation: recoveryReconciliation,
@@ -5096,10 +5028,6 @@ export const ReviewController = () => {
       ownerId: liveRecoveryOwnerId,
       recovery,
     });
-    if (didPersist && adoptedRecoveryKeyRef.current !== null) {
-      localStorage.removeItem(adoptedRecoveryKeyRef.current);
-      adoptedRecoveryKeyRef.current = null;
-    }
     if (
       didPersist &&
       recovery.reconciliation.conflicts.length === 0 &&

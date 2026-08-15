@@ -6,6 +6,7 @@ import {
   refreshReviewRecoveryConflicts,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
+  resumeLiveReviewRecovery,
   reviewRecoveryBase,
   reviewRecoveryBaseAfterConflictAnswers,
 } from "./review-recovery-merge.js";
@@ -135,6 +136,49 @@ describe("live review recovery merge", () => {
     expect(reconciled.state.drafts).toEqual([
       comment("x", "later runtime x"),
       comment("y", "local y"),
+    ]);
+  });
+
+  it("should carry a conflict while advancing unrelated runtime state", () => {
+    const original = state([
+      comment("x", "agreed x"),
+      comment("y", "agreed y"),
+    ]);
+    const firstRuntime = state([
+      comment("x", "runtime x"),
+      comment("y", "runtime y"),
+    ]);
+    const firstMerge = mergeLiveReviewRecovery({
+      base: reviewRecoveryBase(original),
+      local: state([comment("x", "agreed x"), comment("y", "local y")]),
+      runtime: firstRuntime,
+    });
+    const resumed = resumeLiveReviewRecovery({
+      recovery: {
+        ...firstMerge.state,
+        reconciliation: {
+          base: reviewRecoveryBase(original),
+          conflicts: firstMerge.conflicts,
+          runtime: firstRuntime,
+        },
+      },
+      runtime: state([
+        comment("x", "later runtime x"),
+        comment("y", "runtime y"),
+      ]),
+    });
+
+    expect(resumed.state.drafts).toEqual([
+      comment("x", "later runtime x"),
+      comment("y", "local y"),
+    ]);
+    expect(resumed.conflicts).toEqual([
+      {
+        kind: "draft",
+        commentId: "y",
+        localBody: "local y",
+        runtimeBody: "runtime y",
+      },
     ]);
   });
 
@@ -352,6 +396,18 @@ describe("live review recovery merge", () => {
     expect(merged.state.drafts).toEqual([]);
   });
 
+  it("should treat an identical sent body as agreement after a lost response", () => {
+    const merged = mergeLiveReviewRecovery({
+      base: reviewRecoveryBase(state([comment("c1", "agreed")])),
+      local: state([comment("c1", "accepted body")]),
+      runtime: state([]),
+      sent: [comment("c1", "accepted body")],
+    });
+
+    expect(merged.state.drafts).toEqual([]);
+    expect(merged.conflicts).toEqual([]);
+  });
+
   it("should surface a sent transition without minting an id", () => {
     const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
     const existingIds = new Set(["c1"]);
@@ -423,6 +479,47 @@ describe("live review recovery merge", () => {
         replacementCommentId: "c2",
       }).drafts,
     ).toEqual([comment("c2", "edited here")]);
+  });
+
+  it("should keep thread resolution on a staged sent replacement", () => {
+    const runtime = state([], ["c1"]);
+    const merged = mergeLiveReviewRecovery({
+      base: reviewRecoveryBase(state([comment("c1", "agreed")], ["c1"])),
+      local: state([comment("c1", "edited here")], ["c1"]),
+      runtime,
+      sent: [comment("c1", "agreed")],
+    });
+    const conflict = merged.conflicts[0];
+    if (conflict === undefined) throw new Error("expected one conflict");
+
+    const resolved = resolveReviewRecoveryConflict({
+      state: merged.state,
+      runtime,
+      conflict,
+      keep: "local",
+      replacementCommentId: "c2",
+    });
+
+    expect(resolved.drafts).toEqual([comment("c2", "edited here")]);
+    expect([...resolved.resolvedCommentIds]).toEqual(["c1"]);
+  });
+
+  it("should offer an adopted deletion against authoritative runtime state", () => {
+    const agreed = state([comment("c1", "agreed")]);
+    const merged = adoptLiveReviewRecovery({
+      recovery: recovery({ base: reviewRecoveryBase(agreed), drafts: [] }),
+      runtime: agreed,
+    });
+
+    expect(merged.state.drafts).toEqual([]);
+    expect(merged.conflicts).toEqual([
+      {
+        kind: "draft",
+        commentId: "c1",
+        localBody: null,
+        runtimeBody: "agreed",
+      },
+    ]);
   });
 
   it("should remove reply text when its sent thread is deleted", () => {
