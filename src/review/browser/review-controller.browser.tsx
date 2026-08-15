@@ -545,12 +545,23 @@ const EMPTY_RECOVERED_COMPOSER: RecoveredComposer = {
   replies: new Map(),
 };
 
-type LiveReviewRecovery = ReviewRecoveryState & {
-  /** What this browser and the runtime last agreed on, recorded per comment. */
+type ReviewRecoveryReconciliation = {
   readonly base: ReviewRecoveryBase;
+  readonly conflicts: ReadonlyArray<ReviewRecoveryConflict>;
+  readonly runtime: ReviewRecoveryState | null;
 };
 
-const LIVE_RECOVERY_SNAPSHOT_VERSION = 4;
+type LiveReviewRecovery = ReviewRecoveryState & {
+  readonly reconciliation: ReviewRecoveryReconciliation;
+};
+
+const emptyReviewRecoveryReconciliation = (): ReviewRecoveryReconciliation => ({
+  base: { draftBodies: new Map(), resolvedCommentIds: new Set() },
+  conflicts: [],
+  runtime: null,
+});
+
+const LIVE_RECOVERY_SNAPSHOT_VERSION = 5;
 const LIVE_COMPOSER_RECOVERY_VERSION = 1;
 
 const isStringRecord = (
@@ -558,6 +569,43 @@ const isStringRecord = (
 ): value is Readonly<Record<string, string>> =>
   isRecord(value) &&
   Object.values(value).every((entry) => typeof entry === "string");
+
+const readStoredReviewState = (value: unknown): ReviewRecoveryState | null => {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.drafts) ||
+    !value.drafts.every(isComment) ||
+    !Array.isArray(value.resolvedCommentIds) ||
+    !value.resolvedCommentIds.every(
+      (entry): entry is string => typeof entry === "string",
+    )
+  ) {
+    return null;
+  }
+  return {
+    drafts: value.drafts,
+    resolvedCommentIds: new Set(value.resolvedCommentIds),
+  };
+};
+
+const isStoredReviewRecoveryConflict = (
+  value: unknown,
+): value is ReviewRecoveryConflict => {
+  if (
+    !isRecord(value) ||
+    typeof value.commentId !== "string" ||
+    (typeof value.localBody !== "string" && value.localBody !== null) ||
+    (typeof value.runtimeBody !== "string" && value.runtimeBody !== null)
+  ) {
+    return false;
+  }
+  return (
+    value.kind === "draft" ||
+    (value.kind === "sent" &&
+      typeof value.localBody === "string" &&
+      typeof value.runtimeBody === "string")
+  );
+};
 
 const readRecoveredComposer = (value: unknown): RecoveredComposer => {
   if (!isRecord(value)) return EMPTY_RECOVERED_COMPOSER;
@@ -587,30 +635,46 @@ const readLiveReviewRecovery = (
   try {
     const raw = localStorage.getItem(liveRecoveryStorageKey(identity));
     const parsed: unknown = raw === null ? null : JSON.parse(raw);
+    const reviewState = readStoredReviewState(parsed);
     if (
       !isRecord(parsed) ||
       parsed.version !== LIVE_RECOVERY_SNAPSHOT_VERSION ||
-      !Array.isArray(parsed.drafts) ||
-      !parsed.drafts.every(isComment) ||
-      !Array.isArray(parsed.resolvedCommentIds) ||
-      !parsed.resolvedCommentIds.every(
+      reviewState === null ||
+      !isRecord(parsed.reconciliation) ||
+      !isRecord(parsed.reconciliation.base) ||
+      !isStringRecord(parsed.reconciliation.base.draftBodies) ||
+      !Array.isArray(parsed.reconciliation.base.resolvedCommentIds) ||
+      !parsed.reconciliation.base.resolvedCommentIds.every(
         (value): value is string => typeof value === "string",
       ) ||
-      !isRecord(parsed.base) ||
-      !isStringRecord(parsed.base.draftBodies) ||
-      !Array.isArray(parsed.base.resolvedCommentIds) ||
-      !parsed.base.resolvedCommentIds.every(
-        (value): value is string => typeof value === "string",
-      )
+      !Array.isArray(parsed.reconciliation.conflicts) ||
+      !parsed.reconciliation.conflicts.every(isStoredReviewRecoveryConflict)
     ) {
       return null;
     }
+    const runtime =
+      parsed.reconciliation.runtime === null
+        ? null
+        : readStoredReviewState(parsed.reconciliation.runtime);
+    if (parsed.reconciliation.runtime !== null && runtime === null) {
+      return null;
+    }
+    if (parsed.reconciliation.conflicts.length > 0 && runtime === null) {
+      return null;
+    }
     return {
-      drafts: parsed.drafts,
-      resolvedCommentIds: new Set(parsed.resolvedCommentIds),
-      base: {
-        draftBodies: new Map(Object.entries(parsed.base.draftBodies)),
-        resolvedCommentIds: new Set(parsed.base.resolvedCommentIds),
+      ...reviewState,
+      reconciliation: {
+        base: {
+          draftBodies: new Map(
+            Object.entries(parsed.reconciliation.base.draftBodies),
+          ),
+          resolvedCommentIds: new Set(
+            parsed.reconciliation.base.resolvedCommentIds,
+          ),
+        },
+        conflicts: parsed.reconciliation.conflicts,
+        runtime,
       },
     };
   } catch {
@@ -633,9 +697,25 @@ const writeLiveReviewRecovery = ({
         version: LIVE_RECOVERY_SNAPSHOT_VERSION,
         drafts: recovery.drafts,
         resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
-        base: {
-          draftBodies: Object.fromEntries(recovery.base.draftBodies),
-          resolvedCommentIds: Array.from(recovery.base.resolvedCommentIds),
+        reconciliation: {
+          base: {
+            draftBodies: Object.fromEntries(
+              recovery.reconciliation.base.draftBodies,
+            ),
+            resolvedCommentIds: Array.from(
+              recovery.reconciliation.base.resolvedCommentIds,
+            ),
+          },
+          conflicts: recovery.reconciliation.conflicts,
+          runtime:
+            recovery.reconciliation.runtime === null
+              ? null
+              : {
+                  drafts: recovery.reconciliation.runtime.drafts,
+                  resolvedCommentIds: Array.from(
+                    recovery.reconciliation.runtime.resolvedCommentIds,
+                  ),
+                },
         },
       }),
     );
@@ -796,6 +876,7 @@ const clearLiveReviewRecovery = ({
   const recovery = readLiveReviewRecovery(identity);
   if (
     recovery === null ||
+    recovery.reconciliation.conflicts.length > 0 ||
     persistedReviewFingerprint(recovery) !== fingerprint
   ) {
     return;
@@ -4009,15 +4090,20 @@ export const ReviewController = () => {
     ReadonlySet<string>
   >(new Set());
   const replyPendingCommentIdsRef = useRef<ReadonlySet<string>>(new Set());
-  const [recoveryConflicts, setRecoveryConflicts] = useState<
-    ReadonlyArray<ReviewRecoveryConflict>
-  >([]);
-  const recoveryConflictsRef = useRef<ReadonlyArray<ReviewRecoveryConflict>>(
+  const [recoveryReconciliation, setRecoveryReconciliation] =
+    useState<ReviewRecoveryReconciliation>(emptyReviewRecoveryReconciliation);
+  const recoveryReconciliationRef = useRef<ReviewRecoveryReconciliation>(
+    recoveryReconciliation,
+  );
+  const replaceRecoveryReconciliation = useCallback(
+    (next: ReviewRecoveryReconciliation): void => {
+      recoveryReconciliationRef.current = next;
+      setRecoveryReconciliation(next);
+    },
     [],
   );
+  const recoveryConflicts = recoveryReconciliation.conflicts;
   const [isRecoveryConflictOpen, setIsRecoveryConflictOpen] = useState(false);
-  const [conflictRuntimeState, setConflictRuntimeState] =
-    useState<ReviewRecoveryState | null>(null);
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
   const [hasObservedAgentSnapshot, setHasObservedAgentSnapshot] =
     useState(false);
@@ -4147,13 +4233,7 @@ export const ReviewController = () => {
     [resolvedCommentIds, sent, unresolvedDrafts],
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
-  // What this browser and the runtime last agreed on, and the version the next
-  // conditional write must carry. Neither is rendered, and both must be current
-  // the moment a write is prepared rather than at the last render.
-  const recoveryBaseRef = useRef<ReviewRecoveryBase>({
-    draftBodies: new Map(),
-    resolvedCommentIds: new Set(),
-  });
+  // The version the next conditional write must carry.
   const runtimeVersionRef = useRef("");
   const [persistedReviewState, setPersistedReviewState] = useState<
     string | null
@@ -4335,18 +4415,20 @@ export const ReviewController = () => {
         }),
       );
       if (merged.conflicts.length > 0) {
-        recoveryBaseRef.current = base;
-        recoveryConflictsRef.current = merged.conflicts;
-        setRecoveryConflicts(merged.conflicts);
+        replaceRecoveryReconciliation({
+          base,
+          conflicts: merged.conflicts,
+          runtime,
+        });
         setIsRecoveryConflictOpen(true);
-        setConflictRuntimeState(runtime);
         setStatus(RECOVERY_CONFLICT_STATUS);
       } else {
-        recoveryBaseRef.current = reviewRecoveryBase(runtime);
-        recoveryConflictsRef.current = [];
-        setRecoveryConflicts([]);
+        replaceRecoveryReconciliation({
+          base: reviewRecoveryBase(runtime),
+          conflicts: [],
+          runtime: null,
+        });
         setIsRecoveryConflictOpen(false);
-        setConflictRuntimeState(null);
       }
       return merged;
     },
@@ -4354,12 +4436,14 @@ export const ReviewController = () => {
       applyReviewState,
       markPersistedReviewState,
       observeRuntimeReviewState,
+      replaceRecoveryReconciliation,
       replaceReplyDrafts,
     ],
   );
   const applyLocalReviewState = useCallback(
     (state: ReviewRecoveryState): void => {
-      const currentConflicts = recoveryConflictsRef.current;
+      const reconciliation = recoveryReconciliationRef.current;
+      const currentConflicts = reconciliation.conflicts;
       if (currentConflicts.length === 0) {
         applyReviewState(state);
         return;
@@ -4369,33 +4453,37 @@ export const ReviewController = () => {
         local: state,
       });
       let nextState = state;
-      if (conflictRuntimeState !== null) {
+      let nextBase = reconciliation.base;
+      if (reconciliation.runtime !== null) {
         for (const conflict of refreshed.settledConflicts) {
           nextState = resolveReviewRecoveryConflict({
             state: nextState,
-            runtime: conflictRuntimeState,
+            runtime: reconciliation.runtime,
             conflict,
             keep: "runtime",
           });
         }
         if (refreshed.settledConflicts.length > 0) {
-          recoveryBaseRef.current = reviewRecoveryBaseAfterConflictAnswers({
-            base: recoveryBaseRef.current,
-            runtime: conflictRuntimeState,
+          nextBase = reviewRecoveryBaseAfterConflictAnswers({
+            base: reconciliation.base,
+            runtime: reconciliation.runtime,
             answeredConflicts: refreshed.settledConflicts,
             remainingConflicts: refreshed.conflicts,
           });
         }
       }
       applyReviewState(nextState);
-      recoveryConflictsRef.current = refreshed.conflicts;
-      setRecoveryConflicts(refreshed.conflicts);
+      replaceRecoveryReconciliation({
+        base: nextBase,
+        conflicts: refreshed.conflicts,
+        runtime:
+          refreshed.conflicts.length === 0 ? null : reconciliation.runtime,
+      });
       if (refreshed.conflicts.length === 0) {
         setIsRecoveryConflictOpen(false);
-        setConflictRuntimeState(null);
       }
     },
-    [applyReviewState, conflictRuntimeState],
+    [applyReviewState, replaceRecoveryReconciliation],
   );
   const changeReplyDraft = useCallback((commentId: string, body: string) => {
     const current = replyDraftsRef.current;
@@ -4778,7 +4866,7 @@ export const ReviewController = () => {
           let conflicted = false;
           if (recovery !== null) {
             const merged = mergeLiveReviewRecovery({
-              base: recovery.base,
+              base: recovery.reconciliation.base,
               local: recovery,
               runtime: runtimeReviewState,
               sent: snapshot.sent,
@@ -4786,16 +4874,25 @@ export const ReviewController = () => {
             restoredReviewState = merged.state;
             conflicted = merged.conflicts.length > 0;
             if (conflicted) {
-              recoveryBaseRef.current = recovery.base;
-              recoveryConflictsRef.current = merged.conflicts;
-              setRecoveryConflicts(merged.conflicts);
+              replaceRecoveryReconciliation({
+                base: recovery.reconciliation.base,
+                conflicts: merged.conflicts,
+                runtime: runtimeReviewState,
+              });
               setIsRecoveryConflictOpen(true);
-              setConflictRuntimeState(runtimeReviewState);
             } else {
-              recoveryBaseRef.current = reviewRecoveryBase(runtimeReviewState);
+              replaceRecoveryReconciliation({
+                base: reviewRecoveryBase(runtimeReviewState),
+                conflicts: [],
+                runtime: null,
+              });
             }
           } else {
-            recoveryBaseRef.current = reviewRecoveryBase(runtimeReviewState);
+            replaceRecoveryReconciliation({
+              base: reviewRecoveryBase(runtimeReviewState),
+              conflicts: [],
+              runtime: null,
+            });
           }
           const detached =
             restoreComposer({
@@ -4822,9 +4919,12 @@ export const ReviewController = () => {
           const recovery = readLiveReviewRecovery(identity);
           const recoveredComposer = readLiveComposerRecovery(identity);
           if (recovery !== null) {
-            recoveryBaseRef.current = recovery.base;
+            replaceRecoveryReconciliation(recovery.reconciliation);
             setDrafts(recovery.drafts);
             setResolvedCommentIds(recovery.resolvedCommentIds);
+            setIsRecoveryConflictOpen(
+              recovery.reconciliation.conflicts.length > 0,
+            );
           } else {
             markPersistedReviewState(
               persistedReviewFingerprint({
@@ -4849,6 +4949,7 @@ export const ReviewController = () => {
     markPersistedReviewState,
     observeRuntimeReviewState,
     planId,
+    replaceRecoveryReconciliation,
     restoreComposer,
     runtimeSessionOrder,
   ]);
@@ -4856,14 +4957,17 @@ export const ReviewController = () => {
   useEffect(() => {
     if (!isHydrated || identity === null) return;
     const reviewState = { drafts, resolvedCommentIds };
-    if (persistedReviewState === persistedReviewFingerprint(reviewState)) {
+    if (
+      recoveryReconciliation.conflicts.length === 0 &&
+      persistedReviewState === persistedReviewFingerprint(reviewState)
+    ) {
       clearLiveReviewRecovery({ identity, fingerprint: persistedReviewState });
     } else {
       writeLiveReviewRecovery({
         identity,
         recovery: {
           ...reviewState,
-          base: recoveryBaseRef.current,
+          reconciliation: recoveryReconciliation,
         },
       });
     }
@@ -4877,6 +4981,7 @@ export const ReviewController = () => {
     identity,
     isHydrated,
     persistedReviewState,
+    recoveryReconciliation,
     resolvedCommentIds,
   ]);
 
@@ -4899,10 +5004,10 @@ export const ReviewController = () => {
     // other silently, so the write waits for the reviewer's answer.
     if (recoveryConflicts.length > 0) return;
     void serializeRuntimeWrite(async () => {
-      if (recoveryConflictsRef.current.length > 0) return;
+      if (recoveryReconciliationRef.current.conflicts.length > 0) return;
       let prepared = latestReviewStateRef.current;
       if (persistedReviewStateRef.current === prepared.fingerprint) return;
-      let preparedBase = recoveryBaseRef.current;
+      let preparedBase = recoveryReconciliationRef.current.base;
       if (runtimeVersionRef.current === "") {
         const snapshot = parseSnapshot(
           await requestJson({ path: "/api/drafts", identity }),
@@ -4914,7 +5019,7 @@ export const ReviewController = () => {
         });
         if (merged.conflicts.length > 0) return;
         prepared = latestReviewStateRef.current;
-        preparedBase = recoveryBaseRef.current;
+        preparedBase = recoveryReconciliationRef.current.base;
       }
       try {
         const written = await requestJson({
@@ -5238,7 +5343,7 @@ export const ReviewController = () => {
       }
       const commentIds = new Set(comments.map((comment) => comment.id));
       const hasUnresolvedConflict = () =>
-        recoveryConflictsRef.current.some((conflict) =>
+        recoveryReconciliationRef.current.conflicts.some((conflict) =>
           commentIds.has(conflict.commentId),
         );
       if (hasUnresolvedConflict()) {
@@ -5252,7 +5357,7 @@ export const ReviewController = () => {
           if (hasUnresolvedConflict()) {
             return { submitted: false, conflicted: true, comments: [] };
           }
-          let base = recoveryBaseRef.current;
+          let base = recoveryReconciliationRef.current.base;
           if (runtimeVersionRef.current === "") {
             const current = parseSnapshot(
               await requestJson({ path: "/api/drafts", identity }),
@@ -5265,7 +5370,7 @@ export const ReviewController = () => {
             if (preflight.conflicts.length > 0) {
               return { submitted: false, conflicted: true, comments: [] };
             }
-            base = recoveryBaseRef.current;
+            base = recoveryReconciliationRef.current.base;
           }
           const latestDraftsById = new Map(
             latestReviewStateRef.current.state.drafts.map((comment) => [
@@ -5451,12 +5556,13 @@ export const ReviewController = () => {
   };
 
   const answerRecoveryConflict = (keep: "local" | "runtime") => {
-    const [conflict, ...remaining] = recoveryConflictsRef.current;
+    const reconciliation = recoveryReconciliationRef.current;
+    const [conflict, ...remaining] = reconciliation.conflicts;
     if (conflict === undefined) return;
-    if (conflictRuntimeState !== null) {
+    if (reconciliation.runtime !== null) {
       const next = resolveReviewRecoveryConflict({
         state: latestReviewStateRef.current.state,
-        runtime: conflictRuntimeState,
+        runtime: reconciliation.runtime,
         conflict,
         keep,
         ...(conflict.kind === "sent" && keep === "local"
@@ -5464,19 +5570,24 @@ export const ReviewController = () => {
           : {}),
       });
       applyReviewState(next);
-      recoveryBaseRef.current = reviewRecoveryBaseAfterConflictAnswers({
-        base: recoveryBaseRef.current,
-        runtime: conflictRuntimeState,
-        answeredConflicts: [conflict],
-        remainingConflicts: remaining,
+      replaceRecoveryReconciliation({
+        base: reviewRecoveryBaseAfterConflictAnswers({
+          base: reconciliation.base,
+          runtime: reconciliation.runtime,
+          answeredConflicts: [conflict],
+          remainingConflicts: remaining,
+        }),
+        conflicts: remaining,
+        runtime: remaining.length === 0 ? null : reconciliation.runtime,
+      });
+    } else {
+      replaceRecoveryReconciliation({
+        base: reconciliation.base,
+        conflicts: remaining,
+        runtime: null,
       });
     }
-    recoveryConflictsRef.current = remaining;
-    setRecoveryConflicts(remaining);
     setIsRecoveryConflictOpen(remaining.length > 0);
-    if (remaining.length === 0) {
-      setConflictRuntimeState(null);
-    }
   };
 
   const deleteDraft = (id: string) => {
@@ -5504,7 +5615,7 @@ export const ReviewController = () => {
     // and a reviewer who clicks again deletes twice.
     const kind = pendingDelete?.kind;
     setPendingDelete(null);
-    if (recoveryConflictsRef.current.length > 0) {
+    if (recoveryReconciliationRef.current.conflicts.length > 0) {
       setStatus(RECOVERY_CONFLICT_STATUS);
       setIsRecoveryConflictOpen(true);
       return;
@@ -5512,8 +5623,9 @@ export const ReviewController = () => {
     setStatus("Deleting the comment…");
     try {
       const deleted = await serializeRuntimeWrite(async () => {
-        if (recoveryConflictsRef.current.length > 0) return "conflicted";
-        const base = recoveryBaseRef.current;
+        if (recoveryReconciliationRef.current.conflicts.length > 0)
+          return "conflicted";
+        const base = recoveryReconciliationRef.current.base;
         try {
           const snapshot = parseSnapshot(
             await requestJson({

@@ -724,6 +724,172 @@ test.describe("a drafts write prepared against content the store moved past", ()
       .toEqual([runtimeBody]);
   });
 
+  test("should remember conflict answers across failed and offline recovery", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const originalX = "Agreed owner for the rollback.";
+    const originalY = "Agreed window for the rollback.";
+    await stageComment(page, originalX);
+    await stageComment(page, originalY);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([originalX, originalY]);
+
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const draftX = stored.drafts[0];
+    const draftY = stored.drafts[1];
+    if (draftX === undefined || draftY === undefined) {
+      throw new Error("Expected two stored drafts");
+    }
+    const runtimeX = "Runtime owner for the rollback.";
+    const runtimeY = "Runtime window for the rollback.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: stored.version,
+      drafts: [
+        { ...draftX, body: runtimeX },
+        { ...draftY, body: runtimeY },
+      ],
+    });
+
+    let releaseResponse = (): void => undefined;
+    const responseMayFinish = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    let markStaleResponse = (): void => undefined;
+    const staleResponseReachedBrowser = new Promise<void>((resolve) => {
+      markStaleResponse = resolve;
+    });
+    await page.route(
+      "**/api/drafts",
+      async (route) => {
+        const response = await route.fetch();
+        markStaleResponse();
+        await responseMayFinish;
+        await route.fulfill({ response });
+      },
+      { times: 1 },
+    );
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const editDraft = async (before: string, after: string): Promise<void> => {
+      const expand = rail.getByRole("button", {
+        name: `Expand staged comment: ${before}`,
+      });
+      if (await expand.isVisible()) await expand.click();
+      await rail
+        .locator(".review-staged-card")
+        .filter({ hasText: before })
+        .getByRole("button", { name: "Edit staged comment" })
+        .click();
+      await rail.getByLabel("Edit comment").fill(after);
+      await rail.getByRole("button", { name: "Save" }).click();
+    };
+    const localX = "Local owner for the rollback.";
+    const localY = "Local window for the rollback.";
+    await editDraft(originalX, localX);
+    await staleResponseReachedBrowser;
+    await editDraft(originalY, localY);
+    releaseResponse();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toContainText(localX);
+    await expect(choice).toContainText(runtimeX);
+    await choice.getByRole("button", { name: "Keep mine" }).click();
+    await expect(choice).toContainText(localY);
+    await expect(choice).toContainText(runtimeY);
+
+    await page.reload();
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(localY);
+    await expect(choice).toContainText(runtimeY);
+    await expect(choice).not.toContainText(localX);
+    await expect(choice).not.toContainText(runtimeX);
+
+    const failedWritesKey = "big-plan:test:failed-recovery-writes";
+    await page.evaluate((key) => {
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        const method =
+          init?.method ?? (input instanceof Request ? input.method : "GET");
+        if (url.pathname === "/api/drafts" && method === "PUT") {
+          const failed = Number(window.sessionStorage.getItem(key) ?? "0");
+          window.sessionStorage.setItem(key, String(failed + 1));
+          return Promise.reject(new TypeError("Failed to fetch"));
+        }
+        return runtimeFetch(input, init);
+      };
+    }, failedWritesKey);
+    await choice.getByRole("button", { name: "Keep mine" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => Number(window.sessionStorage.getItem(key) ?? "0"),
+          failedWritesKey,
+        ),
+      )
+      .toBe(1);
+
+    const offlineKey = "big-plan:test:recovery-offline";
+    await page.addInitScript((key) => {
+      let offline = false;
+      try {
+        offline = window.sessionStorage.getItem(key) === "true";
+      } catch {
+        return;
+      }
+      if (!offline) return;
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        return url.pathname.startsWith("/api/")
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : runtimeFetch(input, init);
+      };
+    }, offlineKey);
+    await page.evaluate(
+      (key) => window.sessionStorage.setItem(key, "true"),
+      offlineKey,
+    );
+    await page.reload();
+    await expect(choice).toBeHidden();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await expect(rail).toContainText(localX);
+    await expect(rail).toContainText(localY);
+    await page.evaluate(
+      (key) => window.sessionStorage.setItem(key, "false"),
+      offlineKey,
+    );
+
+    await page.reload();
+    await expect(choice).toBeHidden();
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([localX, localY]);
+  });
+
   test("should merge a stale result against the latest browser edit", async ({
     page,
     reviewRuntimeUrl,
@@ -1211,7 +1377,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 4,
+            version: 5,
             drafts: [
               {
                 id,
@@ -1222,7 +1388,11 @@ test.describe("a drafts write prepared against content the store moved past", ()
               },
             ],
             resolvedCommentIds: [],
-            base: { draftBodies: {}, resolvedCommentIds: [] },
+            reconciliation: {
+              base: { draftBodies: {}, resolvedCommentIds: [] },
+              conflicts: [],
+              runtime: null,
+            },
           }),
         );
       },
@@ -1312,7 +1482,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 4,
+            version: 5,
             drafts: [
               {
                 id,
@@ -1323,7 +1493,11 @@ test.describe("a drafts write prepared against content the store moved past", ()
               },
             ],
             resolvedCommentIds: [],
-            base: { draftBodies: {}, resolvedCommentIds: [] },
+            reconciliation: {
+              base: { draftBodies: {}, resolvedCommentIds: [] },
+              conflicts: [],
+              runtime: null,
+            },
           }),
         );
       },
