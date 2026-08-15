@@ -9,6 +9,7 @@ import type {
   KeyboardEvent,
   MouseEventHandler,
   ReactElement,
+  ReactNode,
   Ref,
 } from "react";
 import {
@@ -385,6 +386,10 @@ type AlertDialogProps = {
   readonly actionLabel: string;
   readonly onCancel: () => void;
   readonly onAction: () => void;
+  /** Evidence the choice needs, shown between the description and the controls. */
+  readonly children?: ReactNode;
+  /** A choice between two equal options is not a destructive one. */
+  readonly tone?: "destructive" | "neutral";
 };
 
 /** Token-themed shadcn AlertDialog primitive for consequential choices. */
@@ -396,6 +401,8 @@ export const AlertDialog = ({
   actionLabel,
   onCancel,
   onAction,
+  children,
+  tone = "destructive",
 }: AlertDialogProps) => {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -469,11 +476,16 @@ export const AlertDialog = ({
         <p id={descriptionId} className="mt-3 text-base text-muted">
           {description}
         </p>
+        {children}
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="outline" size="md" onClick={onCancel}>
             {cancelLabel}
           </Button>
-          <Button variant="destructive" size="md" onClick={onAction}>
+          <Button
+            variant={tone === "neutral" ? "default" : "destructive"}
+            size="md"
+            onClick={onAction}
+          >
             {actionLabel}
           </Button>
         </div>

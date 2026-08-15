@@ -64,6 +64,198 @@ test("should keep one staged comment after reloading the live review", async ({
   ).toHaveCount(1);
 });
 
+/** Reads the reviewer state the runtime holds, outside the browser under test. */
+const readRuntimeDrafts = async (
+  reviewRuntimeUrl: string,
+  token: string,
+): Promise<{
+  readonly version: string;
+  readonly drafts: ReadonlyArray<{
+    readonly id: string;
+    readonly body: string;
+  }>;
+}> => {
+  const answer: unknown = await (
+    await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
+      headers: { "x-big-plan-review-token": token },
+    })
+  ).json();
+  if (
+    typeof answer !== "object" ||
+    answer === null ||
+    !("version" in answer) ||
+    typeof answer.version !== "string" ||
+    !("drafts" in answer) ||
+    !Array.isArray(answer.drafts)
+  ) {
+    throw new Error("The review runtime did not answer with its drafts");
+  }
+  return {
+    version: answer.version,
+    drafts: answer.drafts as ReadonlyArray<{
+      readonly id: string;
+      readonly body: string;
+    }>,
+  };
+};
+
+const writeRuntimeDrafts = async ({
+  reviewRuntimeUrl,
+  token,
+  version,
+  drafts,
+}: {
+  readonly reviewRuntimeUrl: string;
+  readonly token: string;
+  readonly version: string;
+  readonly drafts: ReadonlyArray<unknown>;
+}): Promise<void> => {
+  const written = await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      "x-big-plan-review-token": token,
+    },
+    body: JSON.stringify({ drafts, resolvedCommentIds: [], version }),
+  });
+  expect(written.ok).toBe(true);
+};
+
+/** The plan revision the page was rendered against, as the runtime named it. */
+const currentSnapshot = (page: Page): Promise<string> =>
+  page.evaluate(() => {
+    const bootstrap: unknown = JSON.parse(
+      document.documentElement.getAttribute("data-review-bootstrap") ?? "{}",
+    );
+    return typeof bootstrap === "object" &&
+      bootstrap !== null &&
+      "currentSnapshot" in bootstrap &&
+      typeof bootstrap.currentSnapshot === "string"
+      ? bootstrap.currentSnapshot
+      : "";
+  });
+
+const reviewToken = async (page: Page): Promise<string> => {
+  const token = await page.locator("html").getAttribute("data-review-token");
+  if (token === null) {
+    throw new Error("The review runtime did not expose its request token");
+  }
+  return token;
+};
+
+test.describe("a drafts write prepared against content the store moved past", () => {
+  // The refused write is the mechanism under test, and the browser reports a
+  // refusal as a failed resource load.
+  test.use({
+    allowedConsoleErrors: [/Failed to load resource:.*409/u],
+  });
+
+  test("should keep a concurrent runtime comment when this browser writes", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    // Risk 4: the browser prepares a write, another writer changes the store
+    // first, and the browser's write used to replace it wholesale.
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const before = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const concurrentBody =
+      "Written straight into the runtime, not this browser.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: before.version,
+      drafts: [
+        {
+          id: randomBytes(8).toString("hex"),
+          body: concurrentBody,
+          createdAt: new Date().toISOString(),
+          premiseSnapshot: await currentSnapshot(page),
+          target: { type: "document" },
+        },
+      ],
+    });
+
+    const browserBody = "Staged in this browser after the other write.";
+    await stageComment(page, browserBody);
+
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts
+          .map((draft) => draft.body)
+          .sort(),
+      )
+      .toEqual([browserBody, concurrentBody].sort());
+  });
+
+  test("should ask which version to keep when both sides changed one comment", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    // Risks 2 and 3: without a per-comment base this reappeared as a second
+    // comment nobody wrote, instead of as a question with two real answers.
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Name the rollback owner.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const draft = stored.drafts[0];
+    if (draft === undefined)
+      throw new Error("The staged comment was not stored");
+    const runtimeBody = "Name the rollback owner and the rollback window.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: stored.version,
+      drafts: [
+        {
+          ...draft,
+          body: runtimeBody,
+        },
+      ],
+    });
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: `Expand staged comment: ${original}` })
+      .click();
+    await rail.getByRole("button", { name: "Edit staged comment" }).click();
+    const browserBody = "Name the rollback owner and who signs it off.";
+    await rail.getByLabel("Edit comment").fill(browserBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(browserBody);
+    await expect(choice).toContainText(runtimeBody);
+    await choice
+      .getByRole("button", { name: "Use the review session's version" })
+      .click();
+
+    await expect(choice).toBeHidden();
+    await expect(rail).toContainText(runtimeBody);
+    // Exactly one comment survives: the superseded body is not resurrected.
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (item) => item.body,
+        ),
+      )
+      .toEqual([runtimeBody]);
+  });
+});
+
 test("should keep feedback tabs clickable above the mobile contents bar", async ({
   page,
   reviewRuntimeUrl,
@@ -156,6 +348,13 @@ test("should merge an outage-time draft with newer runtime state", async ({
   if (reviewToken === null) {
     throw new Error("The review runtime did not expose its request token");
   }
+  // A drafts write is conditional on the version it was prepared against, so
+  // another writer reads the current one first.
+  const runtimeVersion: unknown = await (
+    await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
+      headers: { "x-big-plan-review-token": reviewToken },
+    })
+  ).json();
   const runtimeUpdate = await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
     method: "PUT",
     headers: {
@@ -163,6 +362,12 @@ test("should merge an outage-time draft with newer runtime state", async ({
       "x-big-plan-review-token": reviewToken,
     },
     body: JSON.stringify({
+      version:
+        typeof runtimeVersion === "object" &&
+        runtimeVersion !== null &&
+        "version" in runtimeVersion
+          ? runtimeVersion.version
+          : "",
       drafts: [
         {
           id: randomBytes(8).toString("hex"),

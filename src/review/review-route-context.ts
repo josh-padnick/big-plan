@@ -26,6 +26,7 @@ import {
   stalledMutations,
 } from "./runtime-watchdog.js";
 import type { MutationRegistry } from "./runtime-watchdog.js";
+import { reviewStateVersion } from "./review-state-version.js";
 import { encodeReviewSnapshot } from "./shared/review-wire.js";
 
 /**
@@ -82,17 +83,23 @@ export const jsonResponse = ({
   readonly value: unknown;
 }): ReviewRouteResponse => ({ kind: "json", status, value });
 
-/** A refusal is an ordinary JSON response; only the body shape is fixed. */
+/**
+ * A refusal is an ordinary JSON response; only the body shape is fixed. A
+ * refusal the browser must act on differently from the rest of its status
+ * class also carries a code, because two refusals can share a status.
+ */
 export const refusal = ({
   status,
   reason,
+  code,
 }: {
   readonly status: number;
   readonly reason: string;
+  readonly code?: string;
 }): ReviewRouteResponse => ({
   kind: "json",
   status,
-  value: { error: reason },
+  value: code === undefined ? { error: reason } : { error: reason, code },
 });
 
 export const binaryResponse = ({
@@ -217,20 +224,24 @@ export const createPlanRenderer = ({
       now: new Date().toISOString(),
     });
 
-  const readBootstrap = async (markdown: string): Promise<string> =>
-    JSON.stringify({
+  const readBootstrap = async (markdown: string): Promise<string> => {
+    const drafts = await readStoredComments(store.draftsPath);
+    const resolvedCommentIds = await readResolvedCommentIds({
+      store,
+      validate: validateResolvedCommentIds,
+    });
+    return JSON.stringify({
       ...encodeReviewSnapshot({
-        drafts: await readStoredComments(store.draftsPath),
+        drafts,
         sent: await readStoredComments(store.sentPath),
-        resolvedCommentIds: await readResolvedCommentIds({
-          store,
-          validate: validateResolvedCommentIds,
-        }),
+        resolvedCommentIds,
+        version: reviewStateVersion({ drafts, resolvedCommentIds }),
       }),
       agent: await readAgentExchange({ store, sessionId, planId }),
       currentSnapshot: deriveSnapshotDigest(markdown),
       diffPreview: isDiffPreview,
     });
+  };
 
   const renderPlan = async (): Promise<string> => {
     const markdown = await readFile(resolvedPlanPath, "utf8");

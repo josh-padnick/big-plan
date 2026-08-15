@@ -11,6 +11,7 @@ import {
   readFile,
   rename,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -113,6 +114,26 @@ const call = ({
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
+/** Reads the conditional-write version any runtime is currently at. */
+const draftsVersionOf = async (
+  target: ReviewRuntime,
+  sessionToken: string,
+): Promise<string> => {
+  const answer: unknown = await (
+    await fetch(`${target.url}api/drafts`, {
+      headers: { "x-big-plan-review-token": sessionToken },
+    })
+  ).json();
+  const version =
+    typeof answer === "object" && answer !== null
+      ? (answer as { readonly version?: unknown }).version
+      : undefined;
+  if (typeof version !== "string" || version === "") {
+    throw new Error("The drafts snapshot carried no version");
+  }
+  return version;
+};
+
 const readSessionToken = async (target: ReviewRuntime): Promise<string> => {
   const descriptor: unknown = JSON.parse(
     await readFile(target.store.sessionPath, "utf8"),
@@ -124,6 +145,10 @@ const readSessionToken = async (target: ReviewRuntime): Promise<string> => {
     ? descriptor.token
     : "";
 };
+
+/** The version a conditional drafts write must carry to be accepted. */
+const draftsVersion = async (): Promise<string> =>
+  draftsVersionOf(runtime, token);
 
 const uploadImage = (bytes: Uint8Array = TINY_PNG) =>
   fetch(`${runtime.url.replace(/\/$/u, "")}/api/review-images`, {
@@ -229,6 +254,9 @@ const startWedgedRuntime = async (
   await writeFile(planPath, PLAN);
   const wedged = await startReviewRuntime({ planPath, ...options });
   const wedgedToken = await sessionTokenFor(wedged);
+  // The version a conditional write must carry is read before the drafts file
+  // becomes a FIFO, because reading it afterwards is what wedges.
+  const wedgedVersion = await draftsVersionOf(wedged, wedgedToken);
   await rm(wedged.store.draftsPath, { force: true });
   execFileSync("mkfifo", [wedged.store.draftsPath]);
 
@@ -241,7 +269,11 @@ const startWedgedRuntime = async (
         "sec-fetch-site": "same-origin",
         origin: target.replace(/\/$/, ""),
       },
-      body: JSON.stringify({ drafts: [], resolvedCommentIds: [] }),
+      body: JSON.stringify({
+        drafts: [],
+        resolvedCommentIds: [],
+        version: wedgedVersion,
+      }),
     });
   const stuck = put(wedged.url).then(
     (response) => response.status,
@@ -263,17 +295,28 @@ const startWedgedRuntime = async (
         await new Promise((settle) => setTimeout(settle, 10));
       }
     },
-    /** Unblocks the FIFO read, then stops the runtime and removes the plan. */
+    /** Unblocks the FIFO reads, then stops the runtime and removes the plan. */
     release: async () => {
-      // O_NONBLOCK refuses with ENXIO when no reader is waiting, so a test
-      // that failed before wedging anything cannot hang here.
-      const handle = await open(
-        wedged.store.draftsPath,
-        constants.O_WRONLY | constants.O_NONBLOCK,
-      ).catch(() => undefined);
-      if (handle !== undefined) {
-        await handle.write("[]");
-        await handle.close();
+      // The wedged mutation reads the drafts file more than once - the
+      // conditional-write version check, then validation - and its request may
+      // already have been refused at the gate while that work keeps running
+      // and holding the store's custody lock. So the FIFO is fed until the
+      // runtime replaces it with a real file, which is the moment the wedged
+      // work is past its reads; feeding after that would write into the store.
+      // O_NONBLOCK refuses with ENXIO when no reader is waiting, so a test that
+      // failed before wedging anything cannot hang here.
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        const path = await stat(wedged.store.draftsPath).catch(() => undefined);
+        if (path?.isFIFO() !== true) break;
+        const handle = await open(
+          wedged.store.draftsPath,
+          constants.O_WRONLY | constants.O_NONBLOCK,
+        ).catch(() => undefined);
+        if (handle !== undefined) {
+          await handle.write("[]");
+          await handle.close();
+        }
+        await new Promise((settle) => setTimeout(settle, 20));
       }
       await stuck;
       // Work the gate gave up on keeps running once it is unblocked, so the
@@ -616,12 +659,98 @@ describe("review runtime feedback", () => {
         await call({
           path: "/api/drafts",
           method: "PUT",
-          body: { drafts, resolvedCommentIds: [] },
+          body: {
+            drafts,
+            resolvedCommentIds: [],
+            version: await draftsVersion(),
+          },
         })
       ).status,
     ).toBe(200);
     const answer: unknown = await (await call({ path: "/api/drafts" })).json();
     expect(answer).toMatchObject({ drafts: [{ id: "aabbccdd" }] });
+  });
+
+  it("should accept a drafts write carrying the current version", async () => {
+    const draft = {
+      id: "11aa22bb",
+      body: "This write was prepared against what the store holds.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" },
+    };
+    const response = await call({
+      path: "/api/drafts",
+      method: "PUT",
+      body: {
+        drafts: [draft],
+        resolvedCommentIds: [],
+        version: await draftsVersion(),
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      drafts: 1,
+      // The version the write produced, so the next write needs no re-read.
+      version: await draftsVersion(),
+    });
+  });
+
+  it("should refuse a stale conditional drafts write", async () => {
+    // Two writers hold the same version. The first write moves the store, so
+    // the second is prepared against content that no longer exists and must
+    // be refused rather than replace the first writer's comment.
+    const held = await draftsVersion();
+    const winner = {
+      id: "33cc44dd",
+      body: "The write that got there first.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" },
+    };
+    expect(
+      (
+        await call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: { drafts: [winner], resolvedCommentIds: [], version: held },
+        })
+      ).status,
+    ).toBe(200);
+
+    const stale = await call({
+      path: "/api/drafts",
+      method: "PUT",
+      body: {
+        drafts: [
+          {
+            id: "55ee66ff",
+            body: "The write prepared before the other one landed.",
+            premiseSnapshot: PLAN_SNAPSHOT,
+            target: { type: "document" },
+          },
+        ],
+        resolvedCommentIds: [],
+        version: held,
+      },
+    });
+
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      code: "stale-review-state",
+    });
+    await expect(
+      (await call({ path: "/api/drafts" })).json(),
+    ).resolves.toMatchObject({ drafts: [{ id: "33cc44dd" }] });
+  });
+
+  it("should refuse a drafts write that names no version", async () => {
+    const response = await call({
+      path: "/api/drafts",
+      method: "PUT",
+      body: { drafts: [], resolvedCommentIds: [] },
+    });
+
+    expect(response.status).toBe(400);
   });
 
   it("should hold an anchored draft alongside state another vintage left behind", async () => {
@@ -651,6 +780,7 @@ describe("review runtime feedback", () => {
             drafts,
             activeDraft: "Text no composer will ever read back.",
             resolvedCommentIds: [],
+            version: await draftsVersion(),
           },
         })
       ).status,
@@ -682,7 +812,11 @@ describe("review runtime feedback", () => {
         await call({
           path: "/api/drafts",
           method: "PUT",
-          body: { drafts, resolvedCommentIds: [] },
+          body: {
+            drafts,
+            resolvedCommentIds: [],
+            version: await draftsVersion(),
+          },
         })
       ).status,
     ).toBe(200);
@@ -709,10 +843,14 @@ describe("review runtime feedback", () => {
         await call({
           path: "/api/drafts",
           method: "PUT",
-          body: { drafts, resolvedCommentIds: [] },
+          body: {
+            drafts,
+            resolvedCommentIds: [],
+            version: await draftsVersion(),
+          },
         })
       ).json(),
-    ).resolves.toEqual({ drafts: 1 });
+    ).resolves.toMatchObject({ drafts: 1, version: expect.any(String) });
     await expect(
       (await call({ path: "/api/drafts" })).json(),
     ).resolves.toMatchObject({
@@ -1194,6 +1332,7 @@ describe("review runtime feedback", () => {
   });
 
   it("should not let a streaming body hold the mutation gate", async () => {
+    const stalledVersion = await draftsVersion();
     const stalled = openStalledMutation({
       target: runtime,
       sessionToken: token,
@@ -1204,7 +1343,11 @@ describe("review runtime feedback", () => {
         call({
           path: "/api/drafts",
           method: "PUT",
-          body: { drafts: [], resolvedCommentIds: [] },
+          body: {
+            drafts: [],
+            resolvedCommentIds: [],
+            version: stalledVersion,
+          },
         }),
         new Promise<"timeout">((settle) =>
           setTimeout(() => settle("timeout"), 500),
@@ -1665,7 +1808,11 @@ The dashboard shows the retry backlog.
         await call({
           path: "/api/drafts",
           method: "PUT",
-          body: { drafts: [comment], resolvedCommentIds: [] },
+          body: {
+            drafts: [comment],
+            resolvedCommentIds: [],
+            version: await draftsVersion(),
+          },
         })
       ).status,
     ).toBe(200);
@@ -2012,18 +2159,29 @@ describe("review runtime resolve invariant", () => {
     return request.requestId;
   };
 
-  const resolveWrite = (
+  const resolveWrite = async (
     isolatedCall: (input: {
       readonly path: string;
       readonly method?: string;
       readonly body?: unknown;
     }) => Promise<Response>,
-  ) =>
-    isolatedCall({
+  ): Promise<Response> => {
+    const snapshot: unknown = await (
+      await isolatedCall({ path: "/api/drafts" })
+    ).json();
+    return isolatedCall({
       path: "/api/drafts",
       method: "PUT",
-      body: { drafts: [], resolvedCommentIds: [commentId] },
+      body: {
+        drafts: [],
+        resolvedCommentIds: [commentId],
+        version:
+          typeof snapshot === "object" && snapshot !== null
+            ? (snapshot as { readonly version?: unknown }).version
+            : "",
+      },
     });
+  };
 
   it("should refuse a drafts write that resolves a comment with a queued message", async () => {
     const { isolated, isolatedCall, close } = await isolatedRuntime(

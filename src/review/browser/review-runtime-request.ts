@@ -14,23 +14,32 @@ export const isReviewRuntimeUnavailable = (error: unknown): boolean =>
 /**
  * A reachable runtime that refused. The reason preserves the runtime's own
  * words when available, while the status lets callers react without matching
- * prose.
+ * prose. A status is not always enough to tell two refusals apart - two
+ * unrelated ones can share it - so a refusal the browser must act on
+ * differently also carries the code the runtime named it by.
  */
 export class ReviewRuntimeRefusedError extends Error {
   readonly status: number;
+  readonly code: string | undefined;
 
   constructor({
     status,
     reason,
+    code,
   }: {
     readonly status: number;
     readonly reason: string;
+    readonly code?: string;
   }) {
     super(reason);
     this.name = "ReviewRuntimeRefusedError";
     this.status = status;
+    this.code = code;
   }
 }
+
+export const isReviewRuntimeRefusal = (error: unknown, code: string): boolean =>
+  error instanceof ReviewRuntimeRefusedError && error.code === code;
 
 export const reviewRuntimeRefusalStatus = (
   error: unknown,
@@ -46,21 +55,29 @@ export const reviewRuntimeRefusal = async ({
   readonly readBody: () => Promise<unknown>;
 }): Promise<ReviewRuntimeRefusedError> => {
   let reason = `Review runtime refused the request (${status})`;
+  let code: string | undefined;
   try {
     const value = await readBody();
-    if (
-      typeof value === "object" &&
-      value !== null &&
-      "error" in value &&
-      typeof value.error === "string" &&
-      value.error !== ""
-    ) {
-      reason = value.error;
+    if (typeof value === "object" && value !== null) {
+      if (
+        "error" in value &&
+        typeof value.error === "string" &&
+        value.error !== ""
+      ) {
+        reason = value.error;
+      }
+      if ("code" in value && typeof value.code === "string") {
+        code = value.code;
+      }
     }
   } catch {
     // A refusal without a readable body keeps the status-only reason.
   }
-  return new ReviewRuntimeRefusedError({ status, reason });
+  return new ReviewRuntimeRefusedError({
+    status,
+    reason,
+    ...(code === undefined ? {} : { code }),
+  });
 };
 
 /** Normalizes browser transport failures while preserving application errors. */

@@ -13,7 +13,20 @@ export type ReviewSnapshot = {
   readonly drafts: ReadonlyArray<ReviewComment>;
   readonly sent: ReadonlyArray<ReviewComment>;
   readonly resolvedCommentIds: ReadonlyArray<string>;
+  /**
+   * The store content this snapshot was read from, named so a later write can
+   * be conditional on it. An empty version means the reader has no claim to
+   * make, and a write carrying it is refused rather than applied blindly.
+   */
+  readonly version: string;
 };
+
+/**
+ * The code a refused conditional drafts write carries. A status alone cannot
+ * name this refusal, because a read-only replaced session refuses with 409 too
+ * and the browser must answer the two differently.
+ */
+export const STALE_REVIEW_STATE_CODE = "stale-review-state";
 
 export type AgentOutcome = {
   readonly commentId: string;
@@ -223,7 +236,7 @@ export const encodeReviewSnapshot = (
  */
 export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
   if (!isReviewWireRecord(value)) {
-    return { drafts: [], sent: [], resolvedCommentIds: [] };
+    return { drafts: [], sent: [], resolvedCommentIds: [], version: "" };
   }
   return {
     drafts: Array.isArray(value.drafts)
@@ -237,6 +250,7 @@ export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
           (id): id is string => typeof id === "string",
         )
       : [],
+    version: typeof value.version === "string" ? value.version : "",
   };
 };
 

@@ -1,6 +1,17 @@
 // Mounts Big Plan's typed React review interaction island over the inert,
 // server-rendered plan. React owns only review chrome; authored content stays
 // server-rendered and readable when this island is unavailable.
+//
+// The consistency model for the reviewer's own state - drafts, resolved ids,
+// and the comment text no comment holds yet - is one loop. Every write is
+// conditional on the version this browser last read, so a write prepared
+// against content the store has moved past is refused rather than applied; a
+// refusal is the fact that tells an unsynchronized newer edit from a stale
+// superseded one. On refusal the browser re-reads and merges against the base
+// it recorded per comment at the last agreed point, and hands back any comment
+// both sides changed instead of picking a side. Everything not yet agreed is
+// mirrored into one session-scoped recovery snapshot, so a reload gives it
+// back.
 
 import {
   useCallback,
@@ -78,11 +89,13 @@ import {
   emptyAgentSnapshot,
   isReviewCommentValue as isComment,
   isReviewWireRecord as isRecord,
+  STALE_REVIEW_STATE_CODE,
   type AgentRequest,
   type AgentResponse,
   type AgentSnapshot,
   type SnapshotDiff,
   type ProgressEvent,
+  type ReviewSnapshot,
   type RuntimeSession,
 } from "../shared/review-wire.js";
 import { AgentHealthAlert } from "./agent-connection.browser.js";
@@ -127,12 +140,23 @@ import {
 } from "./review-poll-health.js";
 import { reviewEndReason, type ReviewEndReason } from "./review-expiry.js";
 import {
+  isReviewRuntimeRefusal,
   isReviewRuntimeUnavailable,
   normalizeReviewRuntimeRequestError,
   reviewRuntimeRefusal,
   reviewRuntimeRefusalStatus,
 } from "./review-runtime-request.js";
 import { createRuntimeSessionOrder } from "./runtime-session-order.js";
+import {
+  mergeLiveReviewRecovery,
+  resolveReviewRecoveryConflict,
+  reviewRecoveryBase,
+} from "./review-recovery-merge.js";
+import type {
+  ReviewRecoveryBase,
+  ReviewRecoveryConflict,
+  ReviewRecoveryState,
+} from "./review-recovery-merge.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
   AlertDialog,
@@ -485,11 +509,18 @@ const persistedReviewFingerprint = ({
     resolvedCommentIds: Array.from(resolvedCommentIds).sort(),
   });
 
-type LiveReviewRecovery = {
-  readonly drafts: ReadonlyArray<ReviewComment>;
-  readonly resolvedCommentIds: ReadonlySet<string>;
-  readonly baseFingerprint: string | null;
+type LiveReviewRecovery = ReviewRecoveryState & {
+  /** What this browser and the runtime last agreed on, recorded per comment. */
+  readonly base: ReviewRecoveryBase;
 };
+
+const LIVE_RECOVERY_SNAPSHOT_VERSION = 3;
+
+const isStringRecord = (
+  value: unknown,
+): value is Readonly<Record<string, string>> =>
+  isRecord(value) &&
+  Object.values(value).every((entry) => typeof entry === "string");
 
 /** Reads a session-scoped recovery snapshot without accepting partial data. */
 const readLiveReviewRecovery = (
@@ -500,26 +531,29 @@ const readLiveReviewRecovery = (
     const parsed: unknown = raw === null ? null : JSON.parse(raw);
     if (
       !isRecord(parsed) ||
-      (parsed.version !== 1 && parsed.version !== 2) ||
+      parsed.version !== LIVE_RECOVERY_SNAPSHOT_VERSION ||
       !Array.isArray(parsed.drafts) ||
       !parsed.drafts.every(isComment) ||
       !Array.isArray(parsed.resolvedCommentIds) ||
       !parsed.resolvedCommentIds.every(
         (value): value is string => typeof value === "string",
       ) ||
-      (parsed.version === 2 &&
-        parsed.baseFingerprint !== null &&
-        typeof parsed.baseFingerprint !== "string")
+      !isRecord(parsed.base) ||
+      !isStringRecord(parsed.base.draftBodies) ||
+      !Array.isArray(parsed.base.resolvedCommentIds) ||
+      !parsed.base.resolvedCommentIds.every(
+        (value): value is string => typeof value === "string",
+      )
     ) {
       return null;
     }
     return {
       drafts: parsed.drafts,
       resolvedCommentIds: new Set(parsed.resolvedCommentIds),
-      baseFingerprint:
-        parsed.version === 2 && typeof parsed.baseFingerprint === "string"
-          ? parsed.baseFingerprint
-          : null,
+      base: {
+        draftBodies: new Map(Object.entries(parsed.base.draftBodies)),
+        resolvedCommentIds: new Set(parsed.base.resolvedCommentIds),
+      },
     };
   } catch {
     return null;
@@ -530,20 +564,21 @@ const readLiveReviewRecovery = (
 const writeLiveReviewRecovery = ({
   identity,
   recovery,
-  baseFingerprint,
 }: {
   readonly identity: RuntimeIdentity;
-  readonly recovery: Omit<LiveReviewRecovery, "baseFingerprint">;
-  readonly baseFingerprint: string | null;
+  readonly recovery: LiveReviewRecovery;
 }): boolean => {
   try {
     localStorage.setItem(
       liveRecoveryStorageKey(identity),
       JSON.stringify({
-        version: 2,
+        version: LIVE_RECOVERY_SNAPSHOT_VERSION,
         drafts: recovery.drafts,
         resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
-        baseFingerprint,
+        base: {
+          draftBodies: Object.fromEntries(recovery.base.draftBodies),
+          resolvedCommentIds: Array.from(recovery.base.resolvedCommentIds),
+        },
       }),
     );
     return true;
@@ -552,38 +587,80 @@ const writeLiveReviewRecovery = ({
   }
 };
 
-const reconcileLiveReviewRecovery = ({
-  runtime,
-  recovery,
+/**
+ * The version the next conditional write must carry. A write answers with the
+ * version it produced; only a runtime that answered without one costs a read.
+ */
+const draftsWriteVersion = async ({
+  identity,
+  written,
 }: {
-  readonly runtime: Omit<LiveReviewRecovery, "baseFingerprint">;
-  readonly recovery: Omit<LiveReviewRecovery, "baseFingerprint">;
-}): Omit<LiveReviewRecovery, "baseFingerprint"> => {
-  const drafts = [...runtime.drafts];
-  const runtimeDrafts = new Map(
-    runtime.drafts.map((comment) => [comment.id, comment]),
-  );
-  const resolvedCommentIds = new Set(runtime.resolvedCommentIds);
-  for (const recovered of recovery.drafts) {
-    const current = runtimeDrafts.get(recovered.id);
-    if (current === undefined) {
-      drafts.push(recovered);
-      if (recovery.resolvedCommentIds.has(recovered.id)) {
-        resolvedCommentIds.add(recovered.id);
+  readonly identity: RuntimeIdentity;
+  readonly written: unknown;
+}): Promise<string> =>
+  isRecord(written) &&
+  typeof written.version === "string" &&
+  written.version !== ""
+    ? written.version
+    : parseSnapshot(await requestJson({ path: "/api/drafts", identity }))
+        .version;
+
+/**
+ * The one place a merge cannot decide: this comment was changed here and in
+ * the review session while the two were apart. Both versions are shown, and
+ * neither is applied until the reviewer says which one to keep.
+ */
+const RecoveryConflictDialog = ({
+  conflict,
+  onKeep,
+}: {
+  readonly conflict: ReviewRecoveryConflict | undefined;
+  readonly onKeep: (keep: "local" | "runtime") => void;
+}) => {
+  if (conflict === undefined) return null;
+  const description =
+    conflict.runtimeBody === null
+      ? "You changed this comment here, and it was deleted in the review session. Keep your version, or let the deletion stand."
+      : conflict.localBody === null
+        ? "You deleted this comment here, and it was changed in the review session. Keep the deletion, or take the version from the review session."
+        : "This comment was changed here and in the review session while the two were apart. Keep one of them.";
+  return (
+    <AlertDialog
+      open
+      tone="neutral"
+      title="Two versions of this comment"
+      description={description}
+      cancelLabel={
+        conflict.localBody === null ? "Keep the deletion" : "Keep mine"
       }
-      continue;
-    }
-    // Target metadata is runtime-owned and may be canonicalized on first save.
-    // A matching body therefore represents the same immutable comment even
-    // when the browser's display kind differs from the stored block kind.
-    if (current.body === recovered.body) continue;
-    const recoveredId = randomId();
-    drafts.push({ ...recovered, id: recoveredId });
-    if (recovery.resolvedCommentIds.has(recovered.id)) {
-      resolvedCommentIds.add(recoveredId);
-    }
-  }
-  return { drafts, resolvedCommentIds };
+      actionLabel={
+        conflict.runtimeBody === null
+          ? "Delete it"
+          : "Use the review session's version"
+      }
+      onCancel={() => onKeep("local")}
+      onAction={() => onKeep("runtime")}
+    >
+      <div className="mt-4 grid gap-3">
+        <div>
+          <p className="m-0 text-2xs font-semibold text-subtle uppercase">
+            Yours
+          </p>
+          <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
+            {conflict.localBody ?? "Deleted here."}
+          </p>
+        </div>
+        <div>
+          <p className="m-0 text-2xs font-semibold text-subtle uppercase">
+            In the review session
+          </p>
+          <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
+            {conflict.runtimeBody ?? "Deleted there."}
+          </p>
+        </div>
+      </div>
+    </AlertDialog>
+  );
 };
 
 /** Clears only the recovery snapshot confirmed by the completed runtime write. */
@@ -3748,6 +3825,11 @@ export const ReviewController = () => {
   const [unsavedInputKeys, setUnsavedInputKeys] = useState<ReadonlySet<string>>(
     new Set(),
   );
+  const [recoveryConflicts, setRecoveryConflicts] = useState<
+    ReadonlyArray<ReviewRecoveryConflict>
+  >([]);
+  const [conflictRuntimeState, setConflictRuntimeState] =
+    useState<ReviewRecoveryState | null>(null);
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
   const [hasObservedAgentSnapshot, setHasObservedAgentSnapshot] =
     useState(false);
@@ -3877,6 +3959,14 @@ export const ReviewController = () => {
     [resolvedCommentIds, sent, unresolvedDrafts],
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
+  // What this browser and the runtime last agreed on, and the version the next
+  // conditional write must carry. Neither is rendered, and both must be current
+  // the moment a write is prepared rather than at the last render.
+  const recoveryBaseRef = useRef<ReviewRecoveryBase>({
+    draftBodies: new Map(),
+    resolvedCommentIds: new Set(),
+  });
+  const runtimeVersionRef = useRef("");
   const [persistedReviewState, setPersistedReviewState] = useState<
     string | null
   >(null);
@@ -3899,6 +3989,25 @@ export const ReviewController = () => {
         else next.delete(key);
         return next;
       });
+    },
+    [],
+  );
+  /**
+   * Takes a snapshot the runtime just answered with as the new agreed point:
+   * the version the next conditional write must carry, and the base a later
+   * merge compares against. Every route that changes the reviewer's own state
+   * has to end here, or the next write is prepared against content the store
+   * has already moved past.
+   */
+  const adoptRuntimeReviewState = useCallback(
+    (snapshot: ReviewSnapshot): ReviewRecoveryState => {
+      const state: ReviewRecoveryState = {
+        drafts: snapshot.drafts,
+        resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
+      };
+      runtimeVersionRef.current = snapshot.version;
+      recoveryBaseRef.current = reviewRecoveryBase(state);
+      return state;
     },
     [],
   );
@@ -4226,51 +4335,43 @@ export const ReviewController = () => {
           await requestJson({ path: "/api/drafts", identity }),
         );
         if (current) {
-          const runtimeResolvedCommentIds = new Set(
-            snapshot.resolvedCommentIds,
+          // The runtime is what the next write will be prepared against, so
+          // it becomes the base whether or not anything was recovered.
+          const runtimeReviewState = adoptRuntimeReviewState(snapshot);
+          setPersistedReviewState(
+            persistedReviewFingerprint(runtimeReviewState),
           );
-          const runtimeFingerprint = persistedReviewFingerprint({
-            drafts: snapshot.drafts,
-            resolvedCommentIds: runtimeResolvedCommentIds,
-          });
-          setPersistedReviewState(runtimeFingerprint);
           const recovery = readLiveReviewRecovery(identity);
-          const recoveryFingerprint =
-            recovery === null ? null : persistedReviewFingerprint(recovery);
-          let restoredReviewState: Omit<LiveReviewRecovery, "baseFingerprint"> =
-            {
-              drafts: snapshot.drafts,
-              resolvedCommentIds: runtimeResolvedCommentIds,
-            };
-          if (recoveryFingerprint === runtimeFingerprint) {
-            clearLiveReviewRecovery({
-              identity,
-              fingerprint: runtimeFingerprint,
+          let restoredReviewState = runtimeReviewState;
+          let conflicted = false;
+          if (recovery !== null) {
+            const merged = mergeLiveReviewRecovery({
+              base: recovery.base,
+              local: recovery,
+              runtime: runtimeReviewState,
             });
-          } else if (recovery !== null) {
-            restoredReviewState =
-              recovery.baseFingerprint === runtimeFingerprint
-                ? recovery
-                : reconcileLiveReviewRecovery({
-                    runtime: restoredReviewState,
-                    recovery,
-                  });
-            writeLiveReviewRecovery({
-              identity,
-              recovery: restoredReviewState,
-              baseFingerprint: runtimeFingerprint,
-            });
+            restoredReviewState = merged.state;
+            conflicted = merged.conflicts.length > 0;
+            if (conflicted) {
+              setRecoveryConflicts(merged.conflicts);
+              setConflictRuntimeState(runtimeReviewState);
+            }
           }
           setDrafts(restoredReviewState.drafts);
           setSent(snapshot.sent);
           setResolvedCommentIds(restoredReviewState.resolvedCommentIds);
-          setStatus("Connected to the local review runtime.");
+          setStatus(
+            conflicted
+              ? "Two versions of a comment need your choice."
+              : "Connected to the local review runtime.",
+          );
           setIsHydrated(true);
         }
       } catch (error) {
         if (current) {
           const recovery = readLiveReviewRecovery(identity);
           if (recovery !== null) {
+            recoveryBaseRef.current = recovery.base;
             setDrafts(recovery.drafts);
             setResolvedCommentIds(recovery.resolvedCommentIds);
           } else {
@@ -4289,7 +4390,29 @@ export const ReviewController = () => {
     return () => {
       current = false;
     };
-  }, [acceptRuntimeSession, identity, planId, runtimeSessionOrder]);
+  }, [
+    acceptRuntimeSession,
+    adoptRuntimeReviewState,
+    identity,
+    planId,
+    runtimeSessionOrder,
+  ]);
+
+  // The recovery snapshot has exactly one writer. It carries the review state
+  // and the base a later merge compares against, so a reload gives back what
+  // the runtime has not accepted yet.
+  useEffect(() => {
+    if (!isHydrated || identity === null) return;
+    const reviewState = { drafts, resolvedCommentIds };
+    if (persistedReviewState === persistedReviewFingerprint(reviewState)) {
+      clearLiveReviewRecovery({ identity, fingerprint: persistedReviewState });
+      return;
+    }
+    writeLiveReviewRecovery({
+      identity,
+      recovery: { ...reviewState, base: recoveryBaseRef.current },
+    });
+  }, [drafts, identity, isHydrated, persistedReviewState, resolvedCommentIds]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -4298,96 +4421,94 @@ export const ReviewController = () => {
       return;
     }
     if (runtimeSession?.authoritative === false) return;
-    const fingerprint = persistedReviewFingerprint({
-      drafts,
-      resolvedCommentIds,
-    });
+    const local: ReviewRecoveryState = { drafts, resolvedCommentIds };
+    const fingerprint = persistedReviewFingerprint(local);
     if (persistedReviewState === fingerprint) return;
-    const existingRecovery = readLiveReviewRecovery(identity);
-    const recoveryBaseFingerprint =
-      existingRecovery?.baseFingerprint ?? persistedReviewState;
-    writeLiveReviewRecovery({
-      identity,
-      recovery: { drafts, resolvedCommentIds },
-      baseFingerprint: recoveryBaseFingerprint,
-    });
-    // The recovery snapshot above is written first and unconditionally, so a
-    // runtime that cannot take this change still cannot lose it.
+    // The recovery snapshot has its own writer above and runs whatever the
+    // runtime is doing, so a runtime that cannot take this change still
+    // cannot lose it.
     if (!runtimeAcceptsWrites) return;
+    // An unanswered conflict means the browser and the runtime hold two
+    // versions of the same comment. Writing either one now would discard the
+    // other silently, so the write waits for the reviewer's answer.
+    if (recoveryConflicts.length > 0) return;
     void serializeRuntimeWrite(async () => {
-      const runtimeSnapshot = parseSnapshot(
-        await requestJson({ path: "/api/drafts", identity }),
-      );
-      const runtimeReviewState = {
-        drafts: runtimeSnapshot.drafts,
-        resolvedCommentIds: new Set(runtimeSnapshot.resolvedCommentIds),
-      };
-      const runtimeFingerprint = persistedReviewFingerprint(runtimeReviewState);
-      if (runtimeFingerprint === fingerprint) {
-        return { state: "persisted" as const, fingerprint };
-      }
-      if (recoveryBaseFingerprint !== runtimeFingerprint) {
-        const reconciled = reconcileLiveReviewRecovery({
-          runtime: runtimeReviewState,
-          recovery: { drafts, resolvedCommentIds },
-        });
-        const reconciledFingerprint = persistedReviewFingerprint(reconciled);
-        if (reconciledFingerprint === runtimeFingerprint) {
-          clearLiveReviewRecovery({ identity, fingerprint });
-        } else {
-          writeLiveReviewRecovery({
-            identity,
-            recovery: reconciled,
-            baseFingerprint: runtimeFingerprint,
-          });
-        }
-        return {
-          state: "reconciled" as const,
-          reviewState: reconciled,
-          runtimeFingerprint,
-        };
-      }
       try {
-        await requestJson({
+        const written = await requestJson({
           path: "/api/drafts",
           identity,
           method: "PUT",
           body: {
             drafts,
             resolvedCommentIds: Array.from(resolvedCommentIds),
+            version: runtimeVersionRef.current,
           },
         });
-      } catch (error: unknown) {
-        // The runtime refuses the whole write when a resolve contradicts
-        // outstanding agent work, so the resolved set returns to what it stored.
-        // Local drafts are untouched and persist on the next write.
-        if (reviewRuntimeRefusalStatus(error) !== 409) throw error;
         return {
-          state: "refused" as const,
-          reason: errorMessage(error),
-          resolvedCommentIds: runtimeReviewState.resolvedCommentIds,
+          state: "persisted" as const,
+          fingerprint,
+          version: await draftsWriteVersion({ identity, written }),
+        };
+      } catch (error) {
+        // Both refusals below are a 409, so the code the runtime named this
+        // one by is what tells them apart.
+        if (reviewRuntimeRefusalStatus(error) !== 409) throw error;
+        // Someone else wrote, or the write contradicts outstanding agent work.
+        // Either way the browser now needs what the runtime actually holds.
+        const snapshot = parseSnapshot(
+          await requestJson({ path: "/api/drafts", identity }),
+        );
+        const runtime: ReviewRecoveryState = {
+          drafts: snapshot.drafts,
+          resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
+        };
+        if (!isReviewRuntimeRefusal(error, STALE_REVIEW_STATE_CODE)) {
+          // The runtime refuses the whole write when a resolve contradicts
+          // outstanding agent work, so the resolved set returns to what it
+          // stored. Local drafts are untouched and persist on the next write.
+          return {
+            state: "refused" as const,
+            reason: errorMessage(error),
+            runtime,
+            version: snapshot.version,
+          };
+        }
+        // A stale version is the fact that tells a local edit the runtime has
+        // not seen from a local copy the runtime has already moved past.
+        return {
+          state: "merged" as const,
+          merged: mergeLiveReviewRecovery({
+            base: recoveryBaseRef.current,
+            local,
+            runtime,
+          }),
+          runtime,
+          version: snapshot.version,
         };
       }
-      return { state: "persisted" as const, fingerprint };
     })
       .then((result) => {
+        runtimeVersionRef.current = result.version;
+        if (result.state === "persisted") {
+          recoveryBaseRef.current = reviewRecoveryBase(local);
+          setPersistedReviewState(result.fingerprint);
+          return;
+        }
         if (result.state === "refused") {
-          setResolvedCommentIds(result.resolvedCommentIds);
+          recoveryBaseRef.current = reviewRecoveryBase(result.runtime);
+          setResolvedCommentIds(result.runtime.resolvedCommentIds);
           setResolveRefusal(result.reason);
           setStatus(result.reason);
           return;
         }
-        if (result.state === "reconciled") {
-          setPersistedReviewState(result.runtimeFingerprint);
-          setDrafts(result.reviewState.drafts);
-          setResolvedCommentIds(result.reviewState.resolvedCommentIds);
-          return;
-        }
-        setPersistedReviewState(result.fingerprint);
-        clearLiveReviewRecovery({
-          identity,
-          fingerprint: result.fingerprint,
-        });
+        recoveryBaseRef.current = reviewRecoveryBase(result.runtime);
+        setPersistedReviewState(persistedReviewFingerprint(result.runtime));
+        setDrafts(result.merged.state.drafts);
+        setResolvedCommentIds(result.merged.state.resolvedCommentIds);
+        if (result.merged.conflicts.length === 0) return;
+        setRecoveryConflicts(result.merged.conflicts);
+        setConflictRuntimeState(result.runtime);
+        setStatus("Two versions of a comment need your choice.");
       })
       .catch((error: unknown) => setStatus(errorMessage(error)));
   }, [
@@ -4397,6 +4518,7 @@ export const ReviewController = () => {
     planId,
     pollHealth.state,
     persistedReviewState,
+    recoveryConflicts,
     resolvedCommentIds,
     runtimeAcceptsWrites,
     runtimeSession?.authoritative,
@@ -4659,27 +4781,37 @@ export const ReviewController = () => {
       }
       setIsSending(true);
       try {
+        // A send moves comments out of drafts, so the browser reads back the
+        // state the runtime now holds instead of guessing at it. Reading it
+        // inside the same serialized write is what keeps the version the next
+        // conditional write carries current.
         const result = parseSnapshot(
-          await serializeRuntimeWrite(() =>
-            requestJson({
+          await serializeRuntimeWrite(async () => {
+            await requestJson({
               path: "/api/feedback",
               identity,
               method: "POST",
               body: { comments },
-            }),
-          ),
+            });
+            return requestJson({ path: "/api/drafts", identity });
+          }),
         );
+        const runtimeReviewState = adoptRuntimeReviewState(result);
+        setPersistedReviewState(persistedReviewFingerprint(runtimeReviewState));
         const ids = new Set(comments.map((comment) => comment.id));
         justSubmittedCommentIds.current = new Set([
           ...justSubmittedCommentIds.current,
           ...ids,
         ]);
+        // Drafts this browser staged but has not written yet are not in the
+        // runtime's answer, so they are kept rather than read back.
         setDrafts((current) =>
           current.filter((comment) => !ids.has(comment.id)),
         );
-        setSent((current) =>
-          result.sent.length > 0 ? result.sent : [...current, ...comments],
-        );
+        // Sent comments keep the identity this browser gave them, because the
+        // stored copy may carry canonicalized target metadata that resolves to
+        // different elements than the ones the reviewer is looking at.
+        setSent((current) => [...current, ...comments]);
         setStatus(
           `${comments.length} comment${comments.length === 1 ? "" : "s"} submitted.`,
         );
@@ -4781,6 +4913,23 @@ export const ReviewController = () => {
     if (submitRightAway) void sendComments([comment]);
   };
 
+  const answerRecoveryConflict = (keep: "local" | "runtime") => {
+    const [conflict, ...remaining] = recoveryConflicts;
+    if (conflict === undefined) return;
+    if (keep === "runtime" && conflictRuntimeState !== null) {
+      const next = resolveReviewRecoveryConflict({
+        state: { drafts, resolvedCommentIds },
+        runtime: conflictRuntimeState,
+        conflict,
+        keep,
+      });
+      setDrafts(next.drafts);
+      setResolvedCommentIds(next.resolvedCommentIds);
+    }
+    setRecoveryConflicts(remaining);
+    if (remaining.length === 0) setConflictRuntimeState(null);
+  };
+
   const deleteDraft = (id: string) => {
     setDrafts((current) => current.filter((comment) => comment.id !== id));
     setPendingDelete(null);
@@ -4813,8 +4962,9 @@ export const ReviewController = () => {
         requestJson({ path: "/api/agent", identity }),
       ]);
       const snapshot = parseSnapshot(snapshotValue);
+      const runtimeReviewState = adoptRuntimeReviewState(snapshot);
       setSent(snapshot.sent);
-      setResolvedCommentIds(new Set(snapshot.resolvedCommentIds));
+      setResolvedCommentIds(runtimeReviewState.resolvedCommentIds);
       acceptAgentSnapshot(parseAgentSnapshot(agentValue));
       setThreadOpenState((current) =>
         setThreadOpen({
@@ -6062,6 +6212,10 @@ export const ReviewController = () => {
           setComposeBody("");
           setPendingCompose(null);
         }}
+      />
+      <RecoveryConflictDialog
+        conflict={recoveryConflicts[0]}
+        onKeep={answerRecoveryConflict}
       />
       <AlertDialog
         open={pendingRevert !== null}

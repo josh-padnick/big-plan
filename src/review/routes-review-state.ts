@@ -1,6 +1,14 @@
 // The routes that own the reviewer's own state: the drafts being written, the
 // comments sent to the agent, the deletions applied to them, and the revert
 // that puts the plan back to the baseline a response was built on.
+//
+// The drafts write is conditional. A reviewer state read carries the version of
+// the content it came from, and a write must carry the version it was prepared
+// against; a write prepared against content the store has since moved past is
+// refused rather than applied. Without that, a read-check-write sequence has a
+// window in which another tab, or the runtime itself, can change the store
+// between the check and the write, and the write replaces their change with no
+// sign that anything was lost.
 
 import { createHash, randomBytes } from "node:crypto";
 import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
@@ -51,7 +59,24 @@ import {
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
 import { agentOwnsRequest } from "./shared/request-ownership.js";
-import { encodeReviewSnapshot } from "./shared/review-wire.js";
+import { reviewStateVersion } from "./review-state-version.js";
+import {
+  encodeReviewSnapshot,
+  STALE_REVIEW_STATE_CODE,
+} from "./shared/review-wire.js";
+
+/** The version a write must carry, derived from what the store holds now. */
+const currentReviewStateVersion = async ({
+  store,
+  planRenderer,
+}: ReviewRouteContext): Promise<string> =>
+  reviewStateVersion({
+    drafts: await planRenderer.readStoredComments(store.draftsPath),
+    resolvedCommentIds: await readResolvedCommentIds({
+      store,
+      validate: validateResolvedCommentIds,
+    }),
+  });
 
 /**
  * Replaces the plan through a same-directory temporary file so a reader never
@@ -228,15 +253,18 @@ export const readReviewState = async (
   // The document must exist before drafts can be resolved, because the
   // block map is what makes a stored target meaningful.
   await planRenderer.renderPlan();
+  const drafts = await planRenderer.readStoredComments(store.draftsPath);
+  const resolvedCommentIds = await readResolvedCommentIds({
+    store,
+    validate: validateResolvedCommentIds,
+  });
   return jsonResponse({
     status: 200,
     value: encodeReviewSnapshot({
-      drafts: await planRenderer.readStoredComments(store.draftsPath),
+      drafts,
       sent: await planRenderer.readStoredComments(store.sentPath),
-      resolvedCommentIds: await readResolvedCommentIds({
-        store,
-        validate: validateResolvedCommentIds,
-      }),
+      resolvedCommentIds,
+      version: reviewStateVersion({ drafts, resolvedCommentIds }),
     }),
   });
 };
@@ -248,6 +276,19 @@ export const updateReviewState = async (
 ): Promise<ReviewRouteResponse> => {
   const { store, planId, sessionId, planRenderer } = context;
   const payload = payloadOf(body);
+  if (typeof payload.version !== "string" || payload.version === "") {
+    return refusal({
+      status: 400,
+      reason: "A drafts write must carry the version it was prepared against",
+    });
+  }
+  if (payload.version !== (await currentReviewStateVersion(context))) {
+    return refusal({
+      status: 409,
+      reason: "The review state changed since this write was prepared",
+      code: STALE_REVIEW_STATE_CODE,
+    });
+  }
   const drafts = await planRenderer.validateUpdates(payload.drafts);
   const resolvedCommentIds = validateResolvedCommentIds(
     payload.resolvedCommentIds,
@@ -278,7 +319,15 @@ export const updateReviewState = async (
   const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
   await writeComments({ path: store.draftsPath, comments: unsentDrafts });
   await writeResolvedCommentIds({ store, ids: resolvedCommentIds });
-  return jsonResponse({ status: 200, value: { drafts: unsentDrafts.length } });
+  return jsonResponse({
+    status: 200,
+    // The version the write produced, so the browser can prepare its next
+    // write without re-reading the whole snapshot first.
+    value: {
+      drafts: unsentDrafts.length,
+      version: await currentReviewStateVersion(context),
+    },
+  });
 };
 
 /**
