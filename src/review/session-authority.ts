@@ -42,6 +42,13 @@ export type ReviewSessionLiveness = {
   readonly stopReason?: string;
 };
 
+type ReviewSessionHeartbeat = {
+  readonly sessionId: string;
+  readonly running: boolean;
+  readonly updatedAtMs: number;
+  readonly stopReason?: string;
+};
+
 export type SessionAuthorityErrorCode =
   "invalid" | "missing" | "wrong-plan" | "stopped";
 
@@ -65,6 +72,28 @@ const isHttpUrl = (value: string): boolean => {
   } catch {
     return false;
   }
+};
+
+const validateReviewSessionHeartbeat = (
+  value: unknown,
+): ReviewSessionHeartbeat | undefined => {
+  if (
+    !isRecord(value) ||
+    typeof value.sessionId !== "string" ||
+    !SESSION_ID.test(value.sessionId) ||
+    typeof value.running !== "boolean" ||
+    typeof value.updatedAtMs !== "number" ||
+    !Number.isFinite(value.updatedAtMs) ||
+    (value.stopReason !== undefined && typeof value.stopReason !== "string")
+  ) {
+    return undefined;
+  }
+  return {
+    sessionId: value.sessionId,
+    running: value.running,
+    updatedAtMs: value.updatedAtMs,
+    ...(value.stopReason === undefined ? {} : { stopReason: value.stopReason }),
+  };
 };
 
 /** Checks one session descriptor read from the owner-only review store. */
@@ -195,6 +224,86 @@ export const withReviewSessionAuthority = async <TResult>({
     timeoutError: () => new Error("Another process is changing review custody"),
   });
 
+export const withRunningReviewSessionAuthority = async <TResult>({
+  store,
+  sessionId,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly change: () => Promise<TResult>;
+}): Promise<ReviewSessionAuthorityResult<TResult>> =>
+  withReviewStoreLock({
+    lockPath: store.sessionLockPath,
+    change: async () => {
+      const [session, heartbeat] = await Promise.all([
+        readCurrentReviewSession({ store }),
+        readSessionHeartbeatValue(store).then(validateReviewSessionHeartbeat),
+      ]);
+      if (
+        session?.sessionId !== sessionId ||
+        heartbeat?.sessionId !== sessionId ||
+        !heartbeat.running
+      ) {
+        return { authoritative: false };
+      }
+      return { authoritative: true, value: await change() };
+    },
+    timeoutError: () => new Error("Another process is changing review custody"),
+  });
+
+export const stopReviewSessionIfInactive = async ({
+  store,
+  sessionId,
+  stopReason,
+  inactive,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly stopReason: string;
+  readonly inactive: () => Promise<boolean>;
+  readonly now?: number;
+}): Promise<{ readonly authoritative: boolean; readonly stopped: boolean }> =>
+  withReviewStoreLock({
+    lockPath: store.sessionLockPath,
+    change: () =>
+      withReviewStoreLock({
+        lockPath: store.heartbeatLockPath,
+        change: async () => {
+          const [session, heartbeat] = await Promise.all([
+            readCurrentReviewSession({ store }),
+            readSessionHeartbeatValue(store).then(
+              validateReviewSessionHeartbeat,
+            ),
+          ]);
+          if (
+            session?.sessionId !== sessionId ||
+            heartbeat?.sessionId !== sessionId ||
+            !heartbeat.running
+          ) {
+            return { authoritative: false, stopped: false };
+          }
+          if (!(await inactive())) {
+            return { authoritative: true, stopped: false };
+          }
+          await writeSessionHeartbeatValue({
+            store,
+            value: {
+              sessionId,
+              running: false,
+              updatedAtMs: now,
+              stopReason,
+            },
+          });
+          return { authoritative: true, stopped: true };
+        },
+        timeoutError: () =>
+          new Error("Another process is writing this heartbeat"),
+      }),
+    timeoutError: () => new Error("Another process is changing review custody"),
+  });
+
 const wait = async (milliseconds: number): Promise<void> => {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, milliseconds);
@@ -219,23 +328,22 @@ export const reviewSessionIsRunning = async ({
     if (value !== undefined || attempt === HEARTBEAT_READ_ATTEMPTS - 1) break;
     await wait(HEARTBEAT_READ_RETRY_MS);
   }
-  if (!isRecord(value)) return { running: false };
+  const heartbeat = validateReviewSessionHeartbeat(value);
+  if (heartbeat === undefined) return { running: false };
   const observedAtMs = now ?? Date.now();
-  const updatedAtMs = value.updatedAtMs;
+  const updatedAtMs = heartbeat.updatedAtMs;
   if (
-    value.sessionId !== sessionId ||
-    value.running !== true ||
-    typeof updatedAtMs !== "number" ||
-    !Number.isFinite(updatedAtMs) ||
+    heartbeat.sessionId !== sessionId ||
+    !heartbeat.running ||
     observedAtMs - updatedAtMs < 0 ||
     observedAtMs - updatedAtMs > maximumAgeMs
   ) {
     return {
       running: false,
-      ...(value.sessionId === sessionId &&
-      value.running === false &&
-      typeof value.stopReason === "string"
-        ? { stopReason: value.stopReason }
+      ...(heartbeat.sessionId === sessionId &&
+      !heartbeat.running &&
+      heartbeat.stopReason !== undefined
+        ? { stopReason: heartbeat.stopReason }
         : {}),
     };
   }
@@ -269,6 +377,12 @@ export const refreshReviewSessionHeartbeat = async ({
     lockPath: store.heartbeatLockPath,
     change: async () => {
       if (!(await reviewSessionOwnsMailbox({ store, sessionId }))) return false;
+      const current = validateReviewSessionHeartbeat(
+        await readSessionHeartbeatValue(store),
+      );
+      if (running && current?.sessionId === sessionId && !current.running) {
+        return false;
+      }
       await writeSessionHeartbeatValue({
         store,
         value: {

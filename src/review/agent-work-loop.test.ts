@@ -436,6 +436,210 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should report a stale baseline instead of accepting a lost update", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-conflict-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nKeep both accepted edits.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const firstRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "1212121212121212",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Make the first edit.",
+    });
+    const secondRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "3434343434343434",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "Make the second edit.",
+    });
+    await writeAgentRequest({ store: review.store, request: firstRequest });
+    await writeAgentRequest({ store: review.store, request: secondRequest });
+
+    try {
+      const firstPickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const secondPickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof firstPickup.agent_token !== "string" ||
+        typeof firstPickup.response_file !== "string" ||
+        typeof secondPickup.agent_token !== "string" ||
+        typeof secondPickup.response_file !== "string"
+      ) {
+        throw new Error("Concurrent pickups did not return response contracts");
+      }
+      const firstRevision = `${source}\nAgent A accepted edit.\n`;
+      const staleSecondRevision = `${source}\nAgent B stale edit.\n`;
+      await writeFile(planPath, firstRevision);
+      await writeFile(
+        firstPickup.response_file,
+        JSON.stringify({
+          requestId: firstRequest.requestId,
+          message: "The first edit is complete.",
+        }),
+      );
+      await runAgentWorkLoopAction({
+        kind: "respond",
+        planPath,
+        responsePath: firstPickup.response_file,
+        executablePath,
+        agentToken: firstPickup.agent_token,
+      });
+
+      await writeFile(planPath, staleSecondRevision);
+      await writeFile(
+        secondPickup.response_file,
+        JSON.stringify({
+          requestId: secondRequest.requestId,
+          message: "The second edit is complete.",
+        }),
+      );
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: secondPickup.response_file,
+          executablePath,
+          agentToken: secondPickup.agent_token,
+        }),
+      ).rejects.toThrow(/baseline is stale|changed underneath/i);
+
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.responses).toEqual([
+        expect.objectContaining({ requestId: firstRequest.requestId }),
+      ]);
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === secondRequest.requestId,
+        ),
+      ).toMatchObject({
+        baselineSnapshot: deriveSnapshotDigest(firstRevision),
+      });
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === secondRequest.requestId,
+        ),
+      ).not.toHaveProperty("answeredAt");
+
+      const reconciledRevision = `${source}\nAgent A accepted edit.\n\nAgent B reconciled edit.\n`;
+      await writeFile(planPath, reconciledRevision);
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: secondPickup.response_file,
+          executablePath,
+          agentToken: secondPickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ responded: secondRequest.requestId });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should accept concurrent answers that leave the plan unchanged", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-agent-no-conflict-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer without changing this source.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const requests = [
+      messageAgentRequest({
+        kind: "chat",
+        requestId: "5656565656565656",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Answer the first question.",
+      }),
+      messageAgentRequest({
+        kind: "chat",
+        requestId: "7878787878787878",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: "2026-08-12T12:00:01.000Z",
+        body: "Answer the second question.",
+      }),
+    ];
+    for (const request of requests) {
+      await writeAgentRequest({ store: review.store, request });
+    }
+
+    try {
+      const pickups = [];
+      for (const request of requests) {
+        const pickup = await runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+        });
+        if (
+          typeof pickup.agent_token !== "string" ||
+          typeof pickup.response_file !== "string"
+        ) {
+          throw new Error("Pickup did not return its response contract");
+        }
+        await writeFile(
+          pickup.response_file,
+          JSON.stringify({
+            requestId: request.requestId,
+            message: `Answer for ${request.requestId}`,
+          }),
+        );
+        pickups.push(pickup);
+      }
+      for (const pickup of pickups) {
+        await expect(
+          runAgentWorkLoopAction({
+            kind: "respond",
+            planPath,
+            responsePath: pickup.response_file,
+            executablePath,
+            agentToken: pickup.agent_token,
+          }),
+        ).resolves.toMatchObject({ responded: expect.any(String) });
+      }
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({ responses: [{}, {}] });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should move to the next request when the oldest is leased elsewhere", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-lease-"));
     const planPath = join(directory, "plan.mdx");
@@ -1619,7 +1823,7 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
-  it("should mint a new token when an old pickup is already terminal", async () => {
+  it("should refuse a resume token whose request is already terminal", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
     const planPath = join(directory, "plan.mdx");
     const source = "# Plan\n\nAnswer two questions in order.\n";
@@ -1677,19 +1881,99 @@ describe("agent work loop lifecycle", () => {
         agentToken: firstPickup.agent_token,
       });
 
-      const secondPickup = await runAgentWorkLoopAction({
-        kind: "next",
-        planPath,
-        shouldWait: false,
-        executablePath,
-        agentToken: firstPickup.agent_token,
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          agentToken: firstPickup.agent_token,
+        }),
+      ).rejects.toThrow(/already answered|terminal/i);
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
       });
-      expect(secondPickup).toMatchObject({
-        pending: true,
-        work: { requestId: secondRequest.requestId },
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === secondRequest.requestId,
+        ),
+      ).not.toHaveProperty("claimedBy");
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a resume token after another agent takes over", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-takeover-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nNever swap resumed work.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const ownedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "9090909090909090",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "This request will be taken over.",
+    });
+    const unrelatedRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "abab9090abab9090",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "Do not switch the resumed agent to this request.",
+    });
+    await writeAgentRequest({ store: review.store, request: ownedRequest });
+    await writeAgentRequest({ store: review.store, request: unrelatedRequest });
+    const previousToken = "eeeeeeeeeeeeeeee";
+    const takeoverToken = "ffffffffffffffff";
+    const expiredAt = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
+    await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: ownedRequest.requestId,
+      claimedBy: previousToken,
+      baselineSnapshot: premiseSnapshot,
+      now: new Date(expiredAt).toISOString(),
+      clock: () => expiredAt,
+    });
+    await claimAgentRequest({
+      store: review.store,
+      activeSessionId: review.sessionId,
+      requestId: ownedRequest.requestId,
+      claimedBy: takeoverToken,
+      baselineSnapshot: premiseSnapshot,
+      now: new Date().toISOString(),
+    });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          agentToken: previousToken,
+        }),
+      ).rejects.toThrow(/taken over|no longer owns/i);
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
       });
-      expect(secondPickup.agent_token).toEqual(expect.any(String));
-      expect(secondPickup.agent_token).not.toBe(firstPickup.agent_token);
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === unrelatedRequest.requestId,
+        ),
+      ).not.toHaveProperty("claimedBy");
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
@@ -1757,15 +2041,15 @@ describe("agent work loop lifecycle", () => {
       body: "Return the committed claim token.",
     });
     await writeAgentRequest({ store: review.store, request });
-    const lapsedAtMs = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
+    const expiredAt = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
     await claimAgentRequest({
       store: review.store,
       activeSessionId: review.sessionId,
       requestId: request.requestId,
       claimedBy: "eeeeeeeeeeeeeeee",
       baselineSnapshot: request.premiseSnapshot,
-      now: new Date(lapsedAtMs).toISOString(),
-      clock: () => lapsedAtMs,
+      now: new Date(expiredAt).toISOString(),
+      clock: () => expiredAt,
     });
     await mkdir(review.store.progressPath);
 
@@ -1835,15 +2119,15 @@ describe("agent work loop lifecycle", () => {
         body: "Please continue with a new agent session.",
       });
       await writeAgentRequest({ store: firstReview.store, request });
-      const lapsedAtMs = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
+      const expiredAt = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
       await claimAgentRequest({
         store: firstReview.store,
         activeSessionId: firstReview.sessionId,
         requestId: request.requestId,
         claimedBy: "cdcdcdcdcdcdcdcd",
         baselineSnapshot: request.premiseSnapshot,
-        now: new Date(lapsedAtMs).toISOString(),
-        clock: () => lapsedAtMs,
+        now: new Date(expiredAt).toISOString(),
+        clock: () => expiredAt,
       });
       await firstReview.close();
 

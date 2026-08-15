@@ -13,7 +13,9 @@ import {
   reviewSessionIsRunning,
   reviewSessionOwnsMailbox,
   reviewSessionView,
+  stopReviewSessionIfInactive,
   validateReviewSessionDescriptor,
+  withRunningReviewSessionAuthority,
   withReviewSessionAuthority,
 } from "./session-authority.js";
 import type {
@@ -263,5 +265,60 @@ describe("session authority", () => {
 
     expect(order).toEqual(["mutation", "replacement"]);
     await expect(readCurrentReviewSession({ store })).resolves.toEqual(current);
+  });
+
+  it("should serialize idle stopping after a concurrent live claim", async () => {
+    const store = await preparedStore();
+    const current = descriptor({
+      sessionId: "2222222222222222",
+      url: "http://127.0.0.1:61000/",
+    });
+    await activateReviewSession({ store, descriptor: current });
+    await refreshReviewSessionHeartbeat({
+      store,
+      sessionId: current.sessionId,
+      running: true,
+      now: 10_000,
+    });
+    let releaseClaim = (): void => undefined;
+    const released = new Promise<void>((settle) => {
+      releaseClaim = settle;
+    });
+    let claimStarted = (): void => undefined;
+    const started = new Promise<void>((settle) => {
+      claimStarted = settle;
+    });
+    let liveClaim = false;
+    const claim = withRunningReviewSessionAuthority({
+      store,
+      sessionId: current.sessionId,
+      change: async () => {
+        claimStarted();
+        await released;
+        liveClaim = true;
+      },
+    });
+    await started;
+    const stopping = stopReviewSessionIfInactive({
+      store,
+      sessionId: current.sessionId,
+      stopReason: "Idle",
+      now: 11_000,
+      inactive: async () => !liveClaim,
+    });
+    releaseClaim();
+
+    await expect(claim).resolves.toMatchObject({ authoritative: true });
+    await expect(stopping).resolves.toEqual({
+      authoritative: true,
+      stopped: false,
+    });
+    await expect(
+      reviewSessionIsRunning({
+        store,
+        sessionId: current.sessionId,
+        now: 12_000,
+      }),
+    ).resolves.toMatchObject({ running: true });
   });
 });

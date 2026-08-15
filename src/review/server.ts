@@ -97,6 +97,7 @@ import {
   REVIEW_HEARTBEAT_INTERVAL_MS,
   readCurrentReviewSession,
   refreshReviewSessionHeartbeat,
+  stopReviewSessionIfInactive,
   withReviewSessionAuthority,
 } from "./session-authority.js";
 import {
@@ -1036,7 +1037,17 @@ export const startReviewRuntime = async ({
   let idleTimer: ReturnType<typeof setInterval> | undefined;
   const closeRuntime = async (
     reason = "The review session was stopped.",
+    sessionAlreadyStopped = false,
   ): Promise<void> => {
+    if (closed) return;
+    if (!sessionAlreadyStopped) {
+      await stopReviewSessionIfInactive({
+        store,
+        sessionId,
+        stopReason: reason,
+        inactive: async () => true,
+      });
+    }
     if (closed) return;
     closed = true;
     clearInterval(heartbeatTimer);
@@ -1044,7 +1055,7 @@ export const startReviewRuntime = async ({
     clearInterval(stallTimer);
     clearInterval(growthTimer);
     if (idleTimer !== undefined) clearInterval(idleTimer);
-    await queueHeartbeat(false, reason).catch(() => undefined);
+    await heartbeatWrite.catch(() => undefined);
     await connectionWrite.catch(() => undefined);
     const closedServer = new Promise<void>((settle) => {
       server.close(() => settle());
@@ -1066,24 +1077,6 @@ export const startReviewRuntime = async ({
         void (async () => {
           if (closed || context.activityClock.idleForMs() < idleTimeoutMs)
             return;
-          const exchange = await readAgentExchange({
-            store,
-            sessionId,
-            planId,
-          });
-          const activeRequest = selectActiveAgentRequest({
-            requests: exchange.requests,
-            cancelPendingRequestIds: NO_CANCEL_PENDING_REQUEST_IDS,
-            now: Date.now(),
-          });
-          if (activeRequest !== undefined) {
-            context.activityClock.touch();
-            return;
-          }
-          // The presence read awaits filesystem I/O, so a page poll can touch
-          // the clock during it; confirm expiry again before closing.
-          if (closed || context.activityClock.idleForMs() < idleTimeoutMs)
-            return;
           const minutes = idleTimeoutMs / 60_000;
           const duration = Number.isInteger(minutes)
             ? `${minutes} minute${minutes === 1 ? "" : "s"}`
@@ -1091,9 +1084,35 @@ export const startReviewRuntime = async ({
                 const seconds = Math.round(idleTimeoutMs / 1_000);
                 return `${seconds} second${seconds === 1 ? "" : "s"}`;
               })();
-          await closeRuntime(
-            `The review session ended normally after ${duration} of inactivity.`,
-          );
+          const reason = `The review session ended normally after ${duration} of inactivity.`;
+          const stopped = await stopReviewSessionIfInactive({
+            store,
+            sessionId,
+            stopReason: reason,
+            inactive: async () => {
+              if (closed || context.activityClock.idleForMs() < idleTimeoutMs) {
+                return false;
+              }
+              const exchange = await readAgentExchange({
+                store,
+                sessionId,
+                planId,
+              });
+              const activeRequest = selectActiveAgentRequest({
+                requests: exchange.requests,
+                cancelPendingRequestIds: NO_CANCEL_PENDING_REQUEST_IDS,
+                now: Date.now(),
+              });
+              if (activeRequest !== undefined) {
+                context.activityClock.touch();
+                return false;
+              }
+              return true;
+            },
+          });
+          if (stopped.stopped) {
+            await closeRuntime(reason, true);
+          }
         })();
       },
       Math.min(1_000, idleTimeoutMs),

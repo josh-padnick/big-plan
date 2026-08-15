@@ -49,6 +49,7 @@ import {
   liveReviewSessionForPlan,
   reviewSessionIsRunning,
   SessionAuthorityRejected,
+  withRunningReviewSessionAuthority,
 } from "./session-authority.js";
 import {
   AGENT_NOTE_INITIAL_PROGRESS,
@@ -392,39 +393,42 @@ const nextWork = async ({
           sessionId: session.sessionId,
           planId: session.planId,
         });
-  let claimedBy = randomId(8);
-  let resumeToken = agentToken;
-  let resumingClaim = false;
-  while (true) {
-    let snapshot = await readAgentExchange({
-      store: session.store,
-      sessionId: session.sessionId,
-      planId: session.planId,
-    });
-    const ownedRequest =
-      resumeToken === undefined
-        ? undefined
-        : resumeRequests?.find(
-            (candidate) => candidate.claimedBy === resumeToken,
-          );
+  let snapshot = await readAgentExchange({
+    store: session.store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  // Minted per pickup, because the review session id is shared by every agent
+  // process attached to this review and so cannot tell two of them apart. This
+  // token is what makes the claim an exclusive lease rather than a label.
+  // An agent that still holds a token from an earlier pickup passes it back to
+  // resume that claim, so restarting mid-request continues the work instead of
+  // waiting out its own lease.
+  let claimedBy = agentToken ?? randomId(8);
+  const resumingClaim = agentToken !== undefined;
+  let request: AgentRequest | undefined;
+  if (agentToken !== undefined) {
+    const ownedRequest = resumeRequests?.find(
+      (candidate) => candidate.claimedBy === agentToken,
+    );
+    if (ownedRequest === undefined) {
+      return fail(
+        "This agent token no longer owns an open request; another agent may have taken it over",
+      );
+    }
     if (ownedRequest?.canceledAt !== undefined) {
       return fail("The reviewer canceled this agent request");
     }
-    const resumedRequest =
-      ownedRequest === undefined || requestIsTerminal(ownedRequest)
-        ? undefined
-        : ownedRequest;
-    if (resumedRequest !== undefined && resumeToken !== undefined) {
-      claimedBy = resumeToken;
-      resumingClaim = true;
+    if (ownedRequest.answeredAt !== undefined) {
+      return fail("The agent has already answered this request");
     }
-    resumeToken = undefined;
-    let request =
-      resumedRequest ??
-      nextPendingAgentRequest(snapshot, {
-        claimedBy,
-        nowMs: Date.now(),
-      });
+    request = ownedRequest;
+  }
+  while (true) {
+    request ??= nextPendingAgentRequest(snapshot, {
+      claimedBy,
+      nowMs: Date.now(),
+    });
     while (request === undefined && shouldWait) {
       await writeAgentHeartbeat({
         store: session.store,
@@ -516,31 +520,64 @@ const nextWork = async ({
       state: "working",
       requestId: request.requestId,
     });
+    const selectedRequest = request;
     try {
-      request = await claimAgentRequest({
+      const authority = await withRunningReviewSessionAuthority({
         store: session.store,
-        activeSessionId: session.sessionId,
-        requestId: selectedRequestId,
-        claimedBy,
-        ...(model === undefined ? {} : { model }),
-        baselineSnapshot: claimedSnapshot,
-        now: new Date().toISOString(),
-        verifyBeforeClaim: async (candidate) => {
-          verifiedAttachments = await verifyRequestAttachments({
+        sessionId: session.sessionId,
+        change: () =>
+          claimAgentRequest({
             store: session.store,
-            request: candidate,
-          });
-        },
+            activeSessionId: session.sessionId,
+            requestId: selectedRequest.requestId,
+            claimedBy,
+            ...(model === undefined ? {} : { model }),
+            baselineSnapshot: claimedSnapshot,
+            now: new Date().toISOString(),
+            verifyBeforeClaim: async (candidate) => {
+              verifiedAttachments = await verifyRequestAttachments({
+                store: session.store,
+                request: candidate,
+              });
+            },
+          }),
       });
-    } catch (error: unknown) {
-      if (resumingClaim && error instanceof AgentClaimCanceled) {
-        return fail(error.message);
+      if (!authority.authoritative) {
+        return fail(
+          "The review session stopped before this request was claimed",
+        );
       }
+      request = authority.value;
+    } catch (error: unknown) {
       if (error instanceof RetryableAgentClaimRejected) {
         if (resumingClaim) {
-          claimedBy = randomId(8);
-          resumingClaim = false;
+          if (error instanceof AgentClaimCanceled) {
+            return fail(error.message);
+          }
+          const currentRequests = await readValidatedAgentRequests({
+            store: session.store,
+            sessionId: session.sessionId,
+            planId: session.planId,
+          });
+          const currentOwned = currentRequests.find(
+            (candidate) => candidate.claimedBy === agentToken,
+          );
+          if (currentOwned?.canceledAt !== undefined) {
+            return fail("The reviewer canceled this agent request");
+          }
+          if (currentOwned?.answeredAt !== undefined) {
+            return fail("The agent has already answered this request");
+          }
+          return fail(
+            "This agent token no longer owns the request; another agent took it over",
+          );
         }
+        snapshot = await readAgentExchange({
+          store: session.store,
+          sessionId: session.sessionId,
+          planId: session.planId,
+        });
+        request = undefined;
         continue;
       }
       if (!(error instanceof AgentExchangeRejected)) throw error;
@@ -554,6 +591,8 @@ const nextWork = async ({
           (candidate) => candidate.requestId === selectedRequestId,
         )
       ) {
+        snapshot = current;
+        request = undefined;
         continue;
       }
       return fail(error.message);
@@ -734,6 +773,8 @@ const respond = async ({
       response,
       claimedBy: agentToken,
       now: new Date().toISOString(),
+      readCurrentSnapshot: async () =>
+        deriveSnapshotDigest(await readFile(session.planPath, "utf8")),
     });
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;
@@ -814,15 +855,24 @@ const note = async ({
     return fail("There is no pending request to update");
   let renewed: AgentRequest;
   try {
-    renewed = await claimAgentRequest({
+    const authority = await withRunningReviewSessionAuthority({
       store: session.store,
-      activeSessionId: session.sessionId,
-      requestId: request.requestId,
-      claimedBy: agentToken,
-      ...(model === undefined ? {} : { model }),
-      baselineSnapshot: requestBaselineSnapshot(request),
-      now: new Date().toISOString(),
+      sessionId: session.sessionId,
+      change: () =>
+        claimAgentRequest({
+          store: session.store,
+          activeSessionId: session.sessionId,
+          requestId: request.requestId,
+          claimedBy: agentToken,
+          ...(model === undefined ? {} : { model }),
+          baselineSnapshot: requestBaselineSnapshot(request),
+          now: new Date().toISOString(),
+        }),
     });
+    if (!authority.authoritative) {
+      return fail("The review session stopped before this claim was renewed");
+    }
+    renewed = authority.value;
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;
     return fail(error.message);

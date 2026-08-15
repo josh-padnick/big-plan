@@ -6,6 +6,8 @@ import {
   AgentExchangeRejected,
   outstandingAgentRequests,
   readAgentCommentHistory,
+  readValidatedAgentRequests,
+  readValidatedAgentResponse,
   validateAgentRequest,
 } from "./agent-exchange.js";
 import type {
@@ -55,6 +57,27 @@ export class AgentClaimContended extends RetryableAgentClaimRejected {}
 export class AgentClaimSelectionStale extends RetryableAgentClaimRejected {}
 
 export class AgentClaimCanceled extends AgentClaimSelectionStale {}
+
+export class AgentResponseConflict extends AgentExchangeRejected {
+  readonly code = "stale-baseline";
+  readonly baselineSnapshot: string;
+  readonly committedSnapshot?: string;
+
+  constructor({
+    baselineSnapshot,
+    committedSnapshot,
+  }: {
+    readonly baselineSnapshot: string;
+    readonly committedSnapshot?: string;
+  }) {
+    super(
+      "The plan changed underneath this request, so its baseline is stale. Reconcile the newer accepted plan before responding again.",
+    );
+    this.name = "AgentResponseConflict";
+    this.baselineSnapshot = baselineSnapshot;
+    this.committedSnapshot = committedSnapshot;
+  }
+}
 
 type Clock = () => number;
 
@@ -115,6 +138,38 @@ const withRequestLock = async <TResult>({
   });
 };
 
+const withTerminalCommitLock = async <TResult>({
+  store,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly change: () => Promise<TResult>;
+}): Promise<TResult> => {
+  let reviewDirectory: string;
+  try {
+    reviewDirectory = (
+      await (
+        await anchorReviewStore(store)
+      ).resolveDirectoryPath({
+        directory: "reviewDirectory",
+      })
+    ).path;
+  } catch (error: unknown) {
+    if (!(error instanceof ReviewStorePathRejected)) throw error;
+    throw new AgentExchangeRejected("The request mailbox is unavailable");
+  }
+  return withReviewStoreLock({
+    lockPath: join(reviewDirectory, ".agent-terminal.lock"),
+    change,
+    timeoutError: () =>
+      new AgentExchangeRejected(
+        "Another agent is committing a response. Try again.",
+      ),
+    invalidLockError: () =>
+      new AgentExchangeRejected("The request mailbox is unavailable"),
+  });
+};
+
 /** Checks the identity fields shared by one request and response. */
 const responseMatchesRequest = ({
   value,
@@ -166,6 +221,53 @@ const requestCreation = (request: AgentRequest): string => {
   delete created.answeredAt;
   delete created.canceledAt;
   return JSON.stringify(created);
+};
+
+const acceptedSnapshotAfterClaim = async ({
+  store,
+  request,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest & {
+    readonly claimedAt: string;
+    readonly baselineSnapshot: string;
+  };
+}): Promise<string> => {
+  const answered = (
+    await readValidatedAgentRequests({
+      store,
+      sessionId: request.sessionId,
+      planId: request.planId,
+    })
+  )
+    .filter(
+      (candidate) =>
+        candidate.requestId !== request.requestId &&
+        candidate.answeredAt !== undefined &&
+        Date.parse(candidate.answeredAt) >= Date.parse(request.claimedAt),
+    )
+    .sort((left, right) => {
+      const chronological = (left.answeredAt ?? "").localeCompare(
+        right.answeredAt ?? "",
+      );
+      return chronological === 0
+        ? left.requestId.localeCompare(right.requestId)
+        : chronological;
+    });
+  let acceptedSnapshot = request.baselineSnapshot;
+  for (const answeredRequest of answered) {
+    const response = await readValidatedAgentResponse({
+      store,
+      request: answeredRequest,
+    });
+    if (response === undefined) {
+      throw new AgentResponseConflict({
+        baselineSnapshot: request.baselineSnapshot,
+      });
+    }
+    acceptedSnapshot = response.resultSnapshot;
+  }
+  return acceptedSnapshot;
 };
 
 export const ensureAgentRequest = async ({
@@ -364,68 +466,111 @@ export const commitRequestTerminal = async ({
   claimedBy,
   now,
   clock = Date.now,
+  readCurrentSnapshot,
 }: {
   readonly store: ReviewStore;
   readonly response: AgentResponse;
   readonly claimedBy: string;
   readonly now: string;
   readonly clock?: Clock;
+  readonly readCurrentSnapshot?: () => Promise<string>;
 }): Promise<AgentRequest> =>
-  withRequestLock({
+  withTerminalCommitLock({
     store,
-    requestId: response.requestId,
-    change: async (lockedStore) => {
-      const request = await readCurrentRequest({
-        store: lockedStore,
+    change: () =>
+      withRequestLock({
+        store,
         requestId: response.requestId,
-      });
-      if (request.canceledAt !== undefined) {
-        throw new AgentExchangeRejected(
-          "The request was canceled by the reviewer",
-        );
-      }
-      if (
-        !agentOwnsRequest(request) ||
-        request.baselineSnapshot === undefined
-      ) {
-        throw new AgentExchangeRejected(
-          "The request must be claimed before it can be answered",
-        );
-      }
-      // Answered first: a replay of a settled request is better reported as
-      // settled than as a claim dispute, whoever replays it.
-      if (request.answeredAt !== undefined) {
-        throw new AgentExchangeRejected(
-          "The agent has already answered this request",
-        );
-      }
-      // Only the holder may answer. Without this the lease would guard pickup
-      // but not delivery, and a session that lost its claim could still
-      // overwrite the holder's work at the last step.
-      const nowMs = readClock(clock);
-      if (request.claimedBy !== claimedBy || !claimIsLive({ request, nowMs })) {
-        throw new AgentExchangeRejected(
-          "This agent session does not hold a live claim on this request",
-        );
-      }
-      if (!responseMatchesRequest({ value: response, request })) {
-        throw new AgentExchangeRejected(
-          "The agent response does not match its request",
-        );
-      }
-      const answered = validateAgentRequest({ ...request, answeredAt: now });
-      await writeAgentResponseValue({
-        store: lockedStore,
-        requestId: response.requestId,
-        value: response,
-      });
-      await writeAgentRequestValue({
-        store: lockedStore,
-        requestId: response.requestId,
-        value: answered,
-      });
-      return answered;
-    },
+        change: async (lockedStore) => {
+          const request = await readCurrentRequest({
+            store: lockedStore,
+            requestId: response.requestId,
+          });
+          if (request.canceledAt !== undefined) {
+            throw new AgentExchangeRejected(
+              "The request was canceled by the reviewer",
+            );
+          }
+          if (
+            request.claimedAt === undefined ||
+            request.baselineSnapshot === undefined
+          ) {
+            throw new AgentExchangeRejected(
+              "The request must be claimed before it can be answered",
+            );
+          }
+          // Answered first: a replay of a settled request is better reported as
+          // settled than as a claim dispute, whoever replays it.
+          if (request.answeredAt !== undefined) {
+            throw new AgentExchangeRejected(
+              "The agent has already answered this request",
+            );
+          }
+          // Only the holder may answer. Without this the lease would guard pickup
+          // but not delivery, and a session that lost its claim could still
+          // overwrite the holder's work at the last step.
+          const nowMs = readClock(clock);
+          if (
+            request.claimedBy !== claimedBy ||
+            !claimIsLive({ request, nowMs })
+          ) {
+            throw new AgentExchangeRejected(
+              "This agent session does not hold a live claim on this request",
+            );
+          }
+          if (!responseMatchesRequest({ value: response, request })) {
+            throw new AgentExchangeRejected(
+              "The agent response does not match its request",
+            );
+          }
+          const checkedClaim = request as AgentRequest & {
+            readonly claimedAt: string;
+            readonly baselineSnapshot: string;
+          };
+          const acceptedSnapshot = await acceptedSnapshotAfterClaim({
+            store: lockedStore,
+            request: checkedClaim,
+          });
+          const currentSnapshot =
+            readCurrentSnapshot === undefined
+              ? response.resultSnapshot
+              : await readCurrentSnapshot();
+          if (
+            acceptedSnapshot !== request.baselineSnapshot ||
+            currentSnapshot !== response.resultSnapshot
+          ) {
+            if (acceptedSnapshot !== request.baselineSnapshot) {
+              await writeAgentRequestValue({
+                store: lockedStore,
+                requestId: request.requestId,
+                value: validateAgentRequest({
+                  ...request,
+                  baselineSnapshot: acceptedSnapshot,
+                }),
+              });
+            }
+            throw new AgentResponseConflict({
+              baselineSnapshot: request.baselineSnapshot,
+              committedSnapshot: acceptedSnapshot,
+            });
+          }
+          const answered = validateAgentRequest({
+            ...request,
+            answeredAt: now,
+          });
+          await writeAgentResponseValue({
+            store: lockedStore,
+            requestId: response.requestId,
+            value: response,
+          });
+          await writeAgentRequestValue({
+            store: lockedStore,
+            requestId: response.requestId,
+            value: answered,
+          });
+          return answered;
+        },
+      }),
   });
 
 const AGENT_STARTED = "The agent already started on this message";
