@@ -40,6 +40,7 @@ import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
 
 let runtime: ReviewRuntime;
+let pickedUpToken = "";
 const commentBody = "Which confidence level should this claim use?";
 const executablePath = fileURLToPath(
   new URL("../../bin/big-plan.mjs", import.meta.url),
@@ -143,6 +144,10 @@ describe("agent work loop", () => {
       executablePath,
       shouldWait: false,
     });
+    if (typeof result.agent_token !== "string") {
+      throw new Error("The agent command did not mint a claim token");
+    }
+    pickedUpToken = result.agent_token;
     expect(result).toMatchObject({
       pending: true,
       work: {
@@ -173,16 +178,25 @@ describe("agent work loop", () => {
   });
 
   it("should publish a complete needs-input outcome without editing the plan", async () => {
+    // Resumes the claim the previous pickup took, the way a restarted agent
+    // that still holds its token continues its own work.
     const next = await runAgentWorkLoopAction({
       kind: "next",
       planPath: runtime.planPath,
       executablePath,
       shouldWait: false,
+      agentToken: pickedUpToken,
     });
-    if (typeof next.response_file !== "string") {
+    if (
+      typeof next.response_file !== "string" ||
+      typeof next.agent_token !== "string"
+    ) {
       throw new Error("The pending request did not provide a response path");
     }
     const responseFile = next.response_file;
+    // The token minted at pickup is what proves this process holds the
+    // request, so the publish step carries it back.
+    const agentToken = next.agent_token;
     await writeFile(
       responseFile,
       JSON.stringify({
@@ -202,6 +216,7 @@ describe("agent work loop", () => {
         planPath: runtime.planPath,
         responsePath: responseFile,
         executablePath,
+        agentToken,
       }),
     ).toMatchObject({
       responded: "aaaaaaaaaaaaaaaa",
@@ -226,6 +241,51 @@ describe("agent work loop", () => {
 });
 
 describe("agent work loop lifecycle", () => {
+  it("should not hand one request to two agents on the same review", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-two-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nOne request, two agent processes.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    await writeAgentRequest({
+      store: review.store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: "dddddddddddddddd",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot: deriveSnapshotDigest(source),
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "Only one agent may answer this.",
+      }),
+    });
+
+    try {
+      // Two `agent next` invocations against one review server: the same
+      // review session id, so only a per-pickup token can tell them apart.
+      const first = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      const second = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+
+      expect(first).toMatchObject({ pending: true });
+      expect(second).toMatchObject({ pending: false });
+      expect(first.agent_token).toEqual(expect.any(String));
+      expect(first.agent_token).not.toEqual(second.agent_token);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should move to the next request when the oldest is leased elsewhere", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-lease-"));
     const planPath = join(directory, "plan.mdx");
@@ -975,6 +1035,7 @@ describe("agent work loop lifecycle", () => {
           planPath,
           responsePath,
           executablePath,
+          agentToken: review.sessionId,
         }),
       ).resolves.toMatchObject({ responded: request.requestId });
       await expect(readFile(planPath, "utf8")).resolves.toContain(
@@ -1195,6 +1256,7 @@ describe("agent work loop lifecycle", () => {
         now: "2026-08-10T12:00:00.500Z",
       });
       await commitRequestTerminal({
+        claimedBy: review.sessionId,
         store: review.store,
         response: validateAgentResponseDraft({
           value: {

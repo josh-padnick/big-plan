@@ -31,6 +31,25 @@ describe("agent command adapter", () => {
       });
     },
   );
+
+  // Without the token these two cannot say which agent process is speaking,
+  // so accepting them untokened would quietly reopen the double-claim they
+  // exist to prevent.
+  it.each([
+    { action: "note", args: ["note", "plan.mdx", "Reading the request"] },
+    { action: "respond", args: ["respond", "plan.mdx", "response.json"] },
+  ])("should reject $action without an agent token", async ({ args }) => {
+    await expect(agentCommand(args)).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+      message: expect.stringContaining("--agent"),
+    });
+  });
+
+  it("should reject an agent flag with no token after it", async () => {
+    await expect(
+      agentCommand(["note", "plan.mdx", "Reading the request", "--agent"]),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
 });
 
 describe("agent command connector model identity", () => {

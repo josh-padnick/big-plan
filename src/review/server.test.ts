@@ -1683,6 +1683,7 @@ The dashboard shows the retry backlog.
         source: revised,
       });
       await commitRequestTerminal({
+        claimedBy: isolated.sessionId,
         store: isolated.store,
         response: validateAgentResponseDraft({
           value: {
@@ -1783,6 +1784,7 @@ The dashboard shows the retry backlog.
       now: new Date().toISOString(),
     });
     await commitRequestTerminal({
+      claimedBy: runtime.sessionId,
       store: runtime.store,
       response: validateAgentResponseDraft({
         value: {
@@ -2132,6 +2134,7 @@ describe("review runtime shutdown", () => {
       now: "2026-08-10T12:00:01.000Z",
     });
     await commitRequestTerminal({
+      claimedBy: first.sessionId,
       store: first.store,
       response: validateAgentResponseDraft({
         value: { requestId: oldRequest.requestId, message: "The old answer." },
@@ -2178,6 +2181,7 @@ describe("review runtime shutdown", () => {
       const acceptedSource = `${restartedSource}\nThe agent accepted this revision.\n`;
       await writeFile(planPath, acceptedSource);
       await commitRequestTerminal({
+        claimedBy: restarted.sessionId,
         store: restarted.store,
         response: validateAgentResponseDraft({
           value: {

@@ -438,6 +438,7 @@ test("should pause a nonstandard request behind an explicit warning", async ({
     now: new Date().toISOString(),
   });
   await commitRequestTerminal({
+    claimedBy: agentSessionId,
     store,
     response,
     now: new Date().toISOString(),
@@ -560,6 +561,7 @@ test("should contain working comments when resolved threads expand", async ({
     now: new Date().toISOString(),
   });
   await commitRequestTerminal({
+    claimedBy: agentSessionId,
     store,
     response: validateAgentResponseDraft({
       value: {
@@ -1524,6 +1526,7 @@ test("should restore and submit staged comments through the local review runtime
     now: new Date().toISOString(),
   });
   await commitRequestTerminal({
+    claimedBy: agentSessionId,
     store,
     response: validateAgentResponseDraft({
       value: {
@@ -3609,6 +3612,7 @@ test("should keep shell interactions wired after an agent revision refreshes the
       now: new Date().toISOString(),
     });
     await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4034,6 +4038,7 @@ Reviewers confirm the output by hand.
         now: answeredAt,
       });
       await commitRequestTerminal({
+        claimedBy: agentSessionId,
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -4073,6 +4078,7 @@ Reviewers confirm the output by hand.
         now: revisedAgainAt,
       });
       await commitRequestTerminal({
+        claimedBy: agentSessionId,
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -4271,6 +4277,7 @@ The current plan contains no slides.
       now: answeredAt,
     });
     await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4310,6 +4317,7 @@ The current plan contains no slides.
       now: revisedAgainAt,
     });
     await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4511,6 +4519,7 @@ The rollout waits for a green build.
       now: new Date().toISOString(),
     });
     await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4695,6 +4704,7 @@ test("should open a digest entry in the slide its section header names", async (
       now: answeredAt,
     });
     await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -4880,6 +4890,7 @@ ${lowerContent}
       now: new Date().toISOString(),
     });
     await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -5060,6 +5071,7 @@ const verification = "first";
       now: new Date().toISOString(),
     });
     await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -5142,6 +5154,7 @@ const verification = "first";
       now: new Date().toISOString(),
     });
     await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response: validateAgentResponseDraft({
         value: {
@@ -5333,6 +5346,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
         now: answeredAt,
       });
       await commitRequestTerminal({
+        claimedBy: agentSessionId,
         store,
         response: validateAgentResponseDraft({
           value: {
@@ -5401,6 +5415,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
         now: revisedAgainAt,
       });
       await commitRequestTerminal({
+        claimedBy: agentSessionId,
         store,
         response: validateAgentResponseDraft({
           value: {

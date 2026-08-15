@@ -321,10 +321,12 @@ export const cancelAgentRequest = async ({
 export const commitRequestTerminal = async ({
   store,
   response,
+  claimedBy,
   now,
 }: {
   readonly store: ReviewStore;
   readonly response: AgentResponse;
+  readonly claimedBy: string;
   readonly now: string;
 }): Promise<AgentRequest> =>
   withRequestLock({
@@ -348,14 +350,24 @@ export const commitRequestTerminal = async ({
           "The request must be claimed before it can be answered",
         );
       }
-      if (!responseMatchesRequest({ value: response, request })) {
-        throw new AgentExchangeRejected(
-          "The agent response does not match its request",
-        );
-      }
+      // Answered first: a replay of a settled request is better reported as
+      // settled than as a claim dispute, whoever replays it.
       if (request.answeredAt !== undefined) {
         throw new AgentExchangeRejected(
           "The agent has already answered this request",
+        );
+      }
+      // Only the holder may answer. Without this the lease would guard pickup
+      // but not delivery, and a session that lost its claim could still
+      // overwrite the holder's work at the last step.
+      if (request.claimedBy !== claimedBy) {
+        throw new AgentExchangeRejected(
+          "Another agent session holds the claim on this request",
+        );
+      }
+      if (!responseMatchesRequest({ value: response, request })) {
+        throw new AgentExchangeRejected(
+          "The agent response does not match its request",
         );
       }
       const answered = validateAgentRequest({ ...request, answeredAt: now });

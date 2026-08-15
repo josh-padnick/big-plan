@@ -18,8 +18,8 @@ big-plan compile <input.mdx> [output.json]
 big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
 big-plan agent <input.mdx>
 big-plan agent next <input.mdx> [--wait]
-big-plan agent note <input.mdx> "<progress>"
-big-plan agent respond <input.mdx> <response.json>
+big-plan agent note <input.mdx> "<progress>" --agent <token>
+big-plan agent respond <input.mdx> <response.json> --agent <token>
 big-plan update [--check]
 ```
 
@@ -42,8 +42,8 @@ npx big-plan compile <input.mdx> [output.json]
 npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
 npx big-plan agent <input.mdx>
 npx big-plan agent next <input.mdx> --wait
-npx big-plan agent note <input.mdx> "<progress>"
-npx big-plan agent respond <input.mdx> <response.json>
+npx big-plan agent note <input.mdx> "<progress>" --agent <token>
+npx big-plan agent respond <input.mdx> <response.json> --agent <token>
 npx big-plan update --check
 ```
 
@@ -172,10 +172,18 @@ a model provider itself. The launched coding-agent session uses:
 - `agent next <input.mdx> --wait` to receive the oldest pending feedback,
   thread reply, or plan-wide chat question, its prior conversation, a validated
   response template, and the exact publish command;
-- `agent note <input.mdx> "<progress>"` to keep the reviewer informed as each
-  meaningful work step begins; and
-- `agent respond <input.mdx> <response.json>` to publish one complete answer
-  after the current MDX has rendered and passed lint.
+- `agent note <input.mdx> "<progress>" --agent <token>` to keep the reviewer
+  informed as each meaningful work step begins; and
+- `agent respond <input.mdx> <response.json> --agent <token>` to publish one
+  complete answer after the current MDX has rendered and passed lint.
+
+`agent next` mints the `--agent` token when it hands out a request, and returns
+it as `agent_token` together with ready-to-run `note_command` and
+`respond_command` strings.
+Run those strings as returned rather than composing the commands yourself.
+The token is what proves this agent process holds the request, so a second
+agent working the same review cannot narrate over or answer another agent's
+work.
 
 Set the `BIG_PLAN_AGENT_MODEL` environment variable before running `agent
 next` or `agent note` to report which model is connected, for example `Grok

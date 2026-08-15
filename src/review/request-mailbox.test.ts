@@ -275,6 +275,7 @@ describe("request mailbox", () => {
         commitRequestTerminal({
           store,
           response,
+          claimedBy: agentA,
           now: "2026-08-10T12:00:02.500Z",
         }),
       ).rejects.toMatchObject({
@@ -464,6 +465,7 @@ describe("request mailbox", () => {
       commitRequestTerminal({
         store,
         response,
+        claimedBy: agentA,
         now: "2026-08-10T12:00:02.500Z",
       }),
       cancelAgentRequest({
@@ -519,6 +521,7 @@ describe("request mailbox", () => {
     await commitRequestTerminal({
       store,
       response,
+      claimedBy: agentA,
       now: "2026-08-10T12:00:02.500Z",
     });
 
@@ -537,6 +540,7 @@ describe("request mailbox", () => {
       commitRequestTerminal({
         store,
         response,
+        claimedBy: agentA,
         now: "2026-08-10T12:00:04.000Z",
       }),
     ).rejects.toThrow(/already answered/);
@@ -572,6 +576,7 @@ describe("request mailbox", () => {
       commitRequestTerminal({
         store,
         response,
+        claimedBy: agentA,
         now: "2026-08-10T12:00:02.500Z",
       }),
     ).rejects.toThrow(/must be claimed/);
@@ -624,6 +629,7 @@ describe("request mailbox", () => {
     await commitRequestTerminal({
       store,
       response,
+      claimedBy: agentA,
       now: "2026-08-10T12:00:02.500Z",
     });
     await expect(
@@ -772,11 +778,13 @@ describe("request mailbox", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
     await commitRequestTerminal({
       store,
+      claimedBy: agentA,
       response: validateAgentResponseDraft({
         value: {
           requestId: request.requestId,

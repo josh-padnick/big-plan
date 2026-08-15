@@ -526,6 +526,7 @@ export const startReviewRuntime = async ({
         currentSnapshot: initialSnapshot,
         now: createdAt,
       }),
+      claimedBy: sessionId,
       now: createdAt,
     });
     const historicalSource = `${diffPreviewSource.trimEnd()}\n\n## Retired experiment\n\nThis temporary policy is removed by the next revision.\n`;
@@ -566,6 +567,7 @@ export const startReviewRuntime = async ({
         currentSnapshot: historicalSnapshot,
         now: new Date(Date.parse(createdAt) + 1).toISOString(),
       }),
+      claimedBy: sessionId,
       now: new Date(Date.parse(createdAt) + 1).toISOString(),
     });
     const chatRequest = messageAgentRequest({
@@ -599,6 +601,7 @@ export const startReviewRuntime = async ({
         currentSnapshot: initialSnapshot,
         now: new Date(Date.parse(createdAt) + 2).toISOString(),
       }),
+      claimedBy: sessionId,
       now: new Date(Date.parse(createdAt) + 2).toISOString(),
     });
     if (previewBlock !== undefined) {

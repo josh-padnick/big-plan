@@ -378,6 +378,7 @@ describe("agent exchange filesystem", () => {
     const answered = await commitRequestTerminal({
       store,
       response,
+      claimedBy: agentSessionId,
       now: "2026-08-02T12:01:01.000Z",
     });
     expect(answered).toMatchObject({ answeredAt: "2026-08-02T12:01:01.000Z" });
@@ -541,6 +542,7 @@ describe("agent exchange filesystem", () => {
       now: new Date(startedAt + 402).toISOString(),
     });
     await commitRequestTerminal({
+      claimedBy: agentSessionId,
       store,
       response,
       now: new Date().toISOString(),
