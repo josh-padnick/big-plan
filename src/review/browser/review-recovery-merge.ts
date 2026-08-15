@@ -49,6 +49,11 @@ export type ReviewRecoveryMerge = {
   readonly conflicts: ReadonlyArray<ReviewRecoveryConflict>;
 };
 
+export type ReviewRecoveryConflictRefresh = {
+  readonly conflicts: ReadonlyArray<ReviewRecoveryConflict>;
+  readonly settledConflicts: ReadonlyArray<ReviewRecoveryConflict>;
+};
+
 /** Records the base a later merge compares against, from an agreed state. */
 export const reviewRecoveryBase = (
   state: ReviewRecoveryState,
@@ -66,6 +71,38 @@ export const repliesForSentComments = ({
 }): ReadonlyMap<string, string> => {
   const sentIds = new Set(sent.map((comment) => comment.id));
   return new Map([...replies].filter(([commentId]) => sentIds.has(commentId)));
+};
+
+/** Keeps pending conflict evidence aligned with the current local state. */
+export const refreshReviewRecoveryConflicts = ({
+  conflicts,
+  local,
+}: {
+  readonly conflicts: ReadonlyArray<ReviewRecoveryConflict>;
+  readonly local: ReviewRecoveryState;
+}): ReviewRecoveryConflictRefresh => {
+  const localBodies = new Map(
+    local.drafts.map((draft) => [draft.id, draft.body]),
+  );
+  const refreshed: Array<ReviewRecoveryConflict> = [];
+  const settledConflicts: Array<ReviewRecoveryConflict> = [];
+  for (const conflict of conflicts) {
+    const localBody = localBodies.get(conflict.commentId) ?? null;
+    if (conflict.kind === "sent") {
+      if (localBody === null || localBody === conflict.runtimeBody) {
+        settledConflicts.push(conflict);
+      } else {
+        refreshed.push({ ...conflict, localBody });
+      }
+      continue;
+    }
+    if (localBody === conflict.runtimeBody) {
+      settledConflicts.push(conflict);
+    } else {
+      refreshed.push({ ...conflict, localBody });
+    }
+  }
+  return { conflicts: refreshed, settledConflicts };
 };
 
 const mergeResolvedCommentIds = ({

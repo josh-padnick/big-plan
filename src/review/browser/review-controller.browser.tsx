@@ -154,6 +154,7 @@ import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import {
   advanceReviewRecoveryBase,
   mergeLiveReviewRecovery,
+  refreshReviewRecoveryConflicts,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
   reviewRecoveryBase,
@@ -4356,6 +4357,43 @@ export const ReviewController = () => {
       replaceReplyDrafts,
     ],
   );
+  const applyLocalReviewState = useCallback(
+    (state: ReviewRecoveryState): void => {
+      const currentConflicts = recoveryConflictsRef.current;
+      if (currentConflicts.length === 0) {
+        applyReviewState(state);
+        return;
+      }
+      const refreshed = refreshReviewRecoveryConflicts({
+        conflicts: currentConflicts,
+        local: state,
+      });
+      let nextState = state;
+      if (conflictRuntimeState !== null) {
+        for (const conflict of refreshed.settledConflicts) {
+          nextState = resolveReviewRecoveryConflict({
+            state: nextState,
+            runtime: conflictRuntimeState,
+            conflict,
+            keep: "runtime",
+          });
+          recoveryBaseRef.current = advanceReviewRecoveryBase({
+            base: recoveryBaseRef.current,
+            runtime: conflictRuntimeState,
+            conflict,
+          });
+        }
+      }
+      applyReviewState(nextState);
+      recoveryConflictsRef.current = refreshed.conflicts;
+      setRecoveryConflicts(refreshed.conflicts);
+      if (refreshed.conflicts.length === 0) {
+        setIsRecoveryConflictOpen(false);
+        setConflictRuntimeState(null);
+      }
+    },
+    [applyReviewState, conflictRuntimeState],
+  );
   const changeReplyDraft = useCallback((commentId: string, body: string) => {
     const current = replyDraftsRef.current;
     if ((current.get(commentId) ?? "") === body) return;
@@ -5410,11 +5448,11 @@ export const ReviewController = () => {
   };
 
   const answerRecoveryConflict = (keep: "local" | "runtime") => {
-    const [conflict, ...remaining] = recoveryConflicts;
+    const [conflict, ...remaining] = recoveryConflictsRef.current;
     if (conflict === undefined) return;
     if (conflictRuntimeState !== null) {
       const next = resolveReviewRecoveryConflict({
-        state: { drafts, resolvedCommentIds },
+        state: latestReviewStateRef.current.state,
         runtime: conflictRuntimeState,
         conflict,
         keep,
@@ -5438,12 +5476,20 @@ export const ReviewController = () => {
   };
 
   const deleteDraft = (id: string) => {
-    setDrafts((current) => current.filter((comment) => comment.id !== id));
+    const current = latestReviewStateRef.current.state;
+    applyLocalReviewState({
+      drafts: current.drafts.filter((comment) => comment.id !== id),
+      resolvedCommentIds: current.resolvedCommentIds,
+    });
     setPendingDelete(null);
     setStatus("Staged comment deleted.");
   };
   const deleteAllDrafts = () => {
-    setDrafts([]);
+    const current = latestReviewStateRef.current.state;
+    applyLocalReviewState({
+      drafts: [],
+      resolvedCommentIds: current.resolvedCommentIds,
+    });
     setPendingDelete(null);
     setStatus("All staged comments deleted.");
   };
@@ -5590,11 +5636,13 @@ export const ReviewController = () => {
     });
   };
   const updateDraft = (id: string, body: string) => {
-    setDrafts((current) =>
-      current.map((comment) =>
+    const current = latestReviewStateRef.current.state;
+    applyLocalReviewState({
+      drafts: current.drafts.map((comment) =>
         comment.id === id ? { ...comment, body } : comment,
       ),
-    );
+      resolvedCommentIds: current.resolvedCommentIds,
+    });
     setStatus("Comment updated locally.");
   };
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "../shared/comment.js";
 import {
   mergeLiveReviewRecovery,
+  refreshReviewRecoveryConflicts,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
   reviewRecoveryBase,
@@ -43,6 +44,97 @@ describe("live review recovery merge", () => {
     expect(merged.state.drafts.map((draft) => draft.body)).toEqual([
       "typed here",
     ]);
+  });
+
+  it("should refresh the local conflict body before either answer is applied", () => {
+    const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
+    const runtime = state([comment("c1", "typed elsewhere")]);
+    const merged = mergeLiveReviewRecovery({
+      base,
+      local: state([comment("c1", "first local edit")]),
+      runtime,
+    });
+    const refreshed = refreshReviewRecoveryConflicts({
+      conflicts: merged.conflicts,
+      local: state([comment("c1", "latest local edit")]),
+    });
+    const conflict = refreshed.conflicts[0];
+    if (conflict === undefined) throw new Error("expected one conflict");
+
+    expect(conflict.localBody).toBe("latest local edit");
+    expect(
+      resolveReviewRecoveryConflict({
+        state: state([comment("c1", "latest local edit")]),
+        runtime,
+        conflict,
+        keep: "local",
+      }).drafts,
+    ).toEqual([comment("c1", "latest local edit")]);
+    expect(
+      resolveReviewRecoveryConflict({
+        state: state([comment("c1", "latest local edit")]),
+        runtime,
+        conflict,
+        keep: "runtime",
+      }).drafts,
+    ).toEqual([comment("c1", "typed elsewhere")]);
+  });
+
+  it("should settle a conflict when the local edit matches the runtime", () => {
+    const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
+    const runtime = state([comment("c1", "typed elsewhere")]);
+    const merged = mergeLiveReviewRecovery({
+      base,
+      local: state([comment("c1", "typed here")]),
+      runtime,
+    });
+
+    const refreshed = refreshReviewRecoveryConflicts({
+      conflicts: merged.conflicts,
+      local: runtime,
+    });
+
+    expect(refreshed.conflicts).toEqual([]);
+    expect(refreshed.settledConflicts).toEqual(merged.conflicts);
+  });
+
+  it("should turn a conflicted local edit into a deletion choice", () => {
+    const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
+    const runtime = state([comment("c1", "typed elsewhere")]);
+    const merged = mergeLiveReviewRecovery({
+      base,
+      local: state([comment("c1", "typed here")]),
+      runtime,
+    });
+    const refreshed = refreshReviewRecoveryConflicts({
+      conflicts: merged.conflicts,
+      local: state([]),
+    });
+    const conflict = refreshed.conflicts[0];
+    if (conflict === undefined) throw new Error("expected one conflict");
+
+    expect(conflict).toEqual({
+      kind: "draft",
+      commentId: "c1",
+      localBody: null,
+      runtimeBody: "typed elsewhere",
+    });
+    expect(
+      resolveReviewRecoveryConflict({
+        state: state([]),
+        runtime,
+        conflict,
+        keep: "local",
+      }).drafts,
+    ).toEqual([]);
+    expect(
+      resolveReviewRecoveryConflict({
+        state: state([]),
+        runtime,
+        conflict,
+        keep: "runtime",
+      }).drafts,
+    ).toEqual([comment("c1", "typed elsewhere")]);
   });
 
   it("should not resurrect a superseded body", () => {

@@ -654,6 +654,16 @@ test.describe("a drafts write prepared against content the store moved past", ()
       name: "Review comment versions",
     });
     await expect(pendingChoice).toBeVisible();
+    const latestBrowserBody =
+      "Name the rollback owner, approver, and escalation path.";
+    const conflictedCard = rail
+      .locator(".review-staged-card")
+      .filter({ hasText: browserBody });
+    await conflictedCard
+      .getByRole("button", { name: "Edit staged comment" })
+      .click();
+    await rail.getByLabel("Edit comment").fill(latestBrowserBody);
+    await rail.getByRole("button", { name: "Save" }).click();
     let feedbackWrites = 0;
     page.on("request", (request) => {
       if (
@@ -665,10 +675,12 @@ test.describe("a drafts write prepared against content the store moved past", ()
     });
     await rail
       .locator(".review-staged-card")
-      .filter({ hasText: browserBody })
+      .filter({ hasText: latestBrowserBody })
       .getByRole("button", { name: "Send this" })
       .click();
     await expect(choice).toBeVisible();
+    await expect(choice).toContainText(latestBrowserBody);
+    await expect(choice).not.toContainText(browserBody);
     expect(feedbackWrites).toBe(0);
     await expect
       .poll(async () =>
@@ -680,7 +692,8 @@ test.describe("a drafts write prepared against content the store moved past", ()
     await page.keyboard.press("Escape");
     await rail.getByRole("button", { name: "Review comment versions" }).click();
     await expect(choice).toBeVisible();
-    await expect(choice).toContainText(browserBody);
+    await expect(choice).toContainText(latestBrowserBody);
+    await expect(choice).not.toContainText(browserBody);
     await expect(choice).toContainText(runtimeBody);
     await expect
       .poll(async () =>
@@ -691,7 +704,8 @@ test.describe("a drafts write prepared against content the store moved past", ()
       .toEqual([runtimeBody]);
     await page.reload();
     await expect(choice).toBeVisible();
-    await expect(choice).toContainText(browserBody);
+    await expect(choice).toContainText(latestBrowserBody);
+    await expect(choice).not.toContainText(browserBody);
     await expect(choice).toContainText(runtimeBody);
     await choice
       .getByRole("button", { name: "Use the review session's version" })
