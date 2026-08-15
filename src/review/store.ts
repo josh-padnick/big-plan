@@ -23,6 +23,7 @@ import {
   rename,
   readdir,
   readFile,
+  realpath,
   rm,
   stat,
   unlink,
@@ -137,6 +138,25 @@ const inside = ({
     throw new Error(`Refusing a review path outside ${base}`);
   }
   return candidate;
+};
+
+const canonicalReviewStoreDirectory = async ({
+  store,
+  directory,
+  leaf,
+}: {
+  readonly store: ReviewStore;
+  readonly directory: string;
+  readonly leaf: string;
+}): Promise<string> => {
+  const [reviewDirectory, canonicalDirectory] = await Promise.all([
+    realpath(store.reviewDirectory),
+    realpath(directory),
+  ]);
+  if (canonicalDirectory !== inside({ base: reviewDirectory, leaf })) {
+    throw new Error("Refusing a review store directory outside its root");
+  }
+  return canonicalDirectory;
 };
 
 /** Describes where one plan's review state lives, without creating anything. */
@@ -1218,18 +1238,24 @@ export const deleteAgentRequestValue = async ({
   readonly store: ReviewStore;
   readonly requestId: string;
 }): Promise<AgentRequestDeletionResult> => {
-  await rm(
-    exchangePath({ directory: store.agentRequestDirectory, requestId }),
-    { force: true },
-  );
+  const requestDirectory = await canonicalReviewStoreDirectory({
+    store,
+    directory: store.agentRequestDirectory,
+    leaf: join("agent", "requests"),
+  });
+  await rm(exchangePath({ directory: requestDirectory, requestId }), {
+    force: true,
+  });
   try {
-    await rm(
-      inside({ base: store.requestAttachmentsDirectory, leaf: requestId }),
-      {
-        recursive: true,
-        force: true,
-      },
-    );
+    const attachmentDirectory = await canonicalReviewStoreDirectory({
+      store,
+      directory: store.requestAttachmentsDirectory,
+      leaf: join("agent", "attachments"),
+    });
+    await rm(inside({ base: attachmentDirectory, leaf: requestId }), {
+      recursive: true,
+      force: true,
+    });
     return { attachmentCleanup: "complete" };
   } catch (cleanupError: unknown) {
     return { attachmentCleanup: "failed", cleanupError };

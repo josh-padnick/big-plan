@@ -182,6 +182,13 @@ export const claimAgentRequest = async ({
           "The request was canceled by the reviewer",
         );
       }
+      if (
+        (await readValidatedAgentResponse({ store, request })) !== undefined
+      ) {
+        throw new AgentExchangeRejected(
+          "The agent has already answered this request",
+        );
+      }
       await verifyBeforeClaim?.(request);
       if (request.baselineSnapshot !== undefined) return request;
       const claimed = validateAgentRequest({

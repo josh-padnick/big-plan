@@ -23,6 +23,7 @@ import {
 } from "./agent-exchange.js";
 import { runAgentWorkLoopAction } from "./agent-work-loop.js";
 import {
+  cancelAgentRequest,
   claimAgentRequest,
   deleteQueuedRequest,
   publishAgentResponse,
@@ -599,6 +600,134 @@ describe("agent work loop lifecycle", () => {
           store: review.store,
           requestId: first.requestId,
         });
+        return selectedValues;
+      });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: second.requestId },
+      });
+    } finally {
+      readRequests.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should select the next request when cancellation wins before claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-cancel-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const first = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Cancel before pickup.",
+    });
+    const second = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "What should happen next?",
+    });
+    await writeAgentRequest({ store: review.store, request: first });
+    await writeAgentRequest({ store: review.store, request: second });
+
+    const selectedValues = await reviewStore.readAgentRequestValues(
+      review.store,
+    );
+    const readRequests = vi
+      .spyOn(reviewStore, "readAgentRequestValues")
+      .mockImplementationOnce(async () => {
+        await cancelAgentRequest({
+          store: review.store,
+          requestId: first.requestId,
+          now: "2026-08-12T12:00:02.000Z",
+        });
+        return selectedValues;
+      });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).resolves.toMatchObject({
+        pending: true,
+        work: { requestId: second.requestId },
+      });
+    } finally {
+      readRequests.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should select the next request when an answer wins before claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-answer-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    const snapshot = deriveSnapshotDigest(source);
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const first = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Answer before pickup resumes.",
+    });
+    const second = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: snapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "What should happen next?",
+    });
+    await writeAgentRequest({ store: review.store, request: first });
+    await writeAgentRequest({ store: review.store, request: second });
+    const claimed = await claimAgentRequest({
+      store: review.store,
+      requestId: first.requestId,
+      baselineSnapshot: snapshot,
+      now: "2026-08-12T12:00:02.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: { requestId: first.requestId, message: "Answered elsewhere." },
+      request: claimed,
+      commentsById: new Map(),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-12T12:00:03.000Z",
+    });
+    const selectedValues = await reviewStore.readAgentRequestValues(
+      review.store,
+    );
+    const readRequests = vi
+      .spyOn(reviewStore, "readAgentRequestValues")
+      .mockImplementationOnce(async () => {
+        await publishAgentResponse({ store: review.store, response });
         return selectedValues;
       });
     try {

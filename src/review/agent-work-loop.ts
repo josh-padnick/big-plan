@@ -12,6 +12,7 @@ import {
   commentsFromExchange,
   deriveSnapshotDigest,
   nextPendingAgentRequest,
+  outstandingAgentRequests,
   readAgentCommentHistory,
   requestBaselineSnapshot,
   readAgentExchange,
@@ -426,7 +427,7 @@ const nextWork = async ({
         planId: session.planId,
       });
       if (
-        !current.requests.some(
+        !outstandingAgentRequests(current).some(
           (candidate) => candidate.requestId === selectedRequestId,
         )
       ) {

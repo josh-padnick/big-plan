@@ -2763,6 +2763,48 @@ describe("review runtime queued messages", () => {
     }
   });
 
+  it("should refuse attachment cleanup through a symlinked store directory", async () => {
+    const requestId = await sendChat("Keep outside files during cleanup.");
+    const attachmentsDirectory = queued.store.requestAttachmentsDirectory;
+    const displacedDirectory = `${attachmentsDirectory}.symlink-displaced`;
+    const outsideDirectory = join(
+      queuedDirectory,
+      `outside-attachments-${requestId}`,
+    );
+    const outsideRequestDirectory = join(outsideDirectory, requestId);
+    const sentinelPath = join(outsideRequestDirectory, "keep.txt");
+    await rename(attachmentsDirectory, displacedDirectory);
+    await mkdir(outsideRequestDirectory, { recursive: true });
+    await writeFile(sentinelPath, "Keep this file.");
+    await symlink(outsideDirectory, attachmentsDirectory, "dir");
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    try {
+      const response = await ask({
+        path: "/api/agent-request-delete",
+        body: { requestId },
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ requestId });
+      expect(await storedRequest(requestId)).toBeUndefined();
+      await expect(readFile(sentinelPath, "utf8")).resolves.toBe(
+        "Keep this file.",
+      );
+      expect(
+        stderr.mock.calls.map(([chunk]) => String(chunk)).join(""),
+      ).toContain(
+        `Review attachment cleanup failed after deleting request ${requestId}`,
+      );
+    } finally {
+      stderr.mockRestore();
+      await rm(attachmentsDirectory, { force: true });
+      await rename(displacedDirectory, attachmentsDirectory);
+      await rm(outsideDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("should report progress failures without failing committed queue mutations", async () => {
     const revisedId = await sendChat("Waht is the retry boundary?");
     const deletedId = await sendChat("Delete after committing.");
