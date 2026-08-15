@@ -1186,11 +1186,34 @@ export const readAgentRequestValue = async ({
 }): Promise<unknown> =>
   readJson(exchangePath({ directory: store.agentRequestDirectory, requestId }));
 
-/** Reads every untrusted response value for validation by the exchange module. */
-export const readAgentResponseValues = async (
+/**
+ * Which requests have a response on disk, from the directory listing alone.
+ * Deciding what to read must not cost what reading it would.
+ */
+export const listAgentResponseRequestIds = async (
   store: ReviewStore,
-): Promise<ReadonlyArray<unknown>> =>
-  readJsonDirectory(store.agentResponseDirectory);
+): Promise<ReadonlyArray<string>> =>
+  (await publishedJsonFileNames(store.agentResponseDirectory)).map((name) =>
+    name.slice(0, -".json".length),
+  );
+
+/** Reads the named untrusted response values for validation by the exchange. */
+export const readAgentResponseValuesFor = async ({
+  store,
+  requestIds,
+}: {
+  readonly store: ReviewStore;
+  readonly requestIds: ReadonlyArray<string>;
+}): Promise<ReadonlyArray<unknown>> => {
+  const values: Array<unknown> = [];
+  for (const requestId of requestIds) {
+    const value = await readJson(
+      exchangePath({ directory: store.agentResponseDirectory, requestId }),
+    );
+    if (value !== undefined) values.push(value);
+  }
+  return values;
+};
 
 /** Reads one untrusted response value for a locked mailbox change. */
 export const readAgentResponseValue = async ({

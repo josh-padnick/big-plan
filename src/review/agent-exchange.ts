@@ -10,7 +10,8 @@ import type { FeedbackPackage } from "./feedback-package.js";
 import {
   readAgentRequestValues,
   readAgentResponseValue,
-  readAgentResponseValues,
+  listAgentResponseRequestIds,
+  readAgentResponseValuesFor,
   writeAgentRequestValue,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
@@ -758,14 +759,30 @@ const readAcceptedAgentRequests = async ({
   return acceptedRequests;
 };
 
+/**
+ * Reads validated history, reading only the response files the caller will
+ * keep. Which requests have an answer at all comes from the response directory
+ * listing, so choosing the window costs one listing rather than the reads it
+ * exists to avoid.
+ *
+ * `select` receives every accepted request, oldest first, and names the ones
+ * whose responses are worth reading. It must include every request that could
+ * still be outstanding, because a request whose response is never read is a
+ * request that reads as unanswered.
+ */
 const readCompleteAgentExchange = async ({
   store,
   sessionId,
   planId,
+  select,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly planId: string;
+  readonly select?: (input: {
+    readonly requests: ReadonlyArray<AgentRequest>;
+    readonly answeredRequestIds: ReadonlySet<string>;
+  }) => ReadonlySet<string>;
 }): Promise<AgentExchangeSnapshot> => {
   const requests = await readAcceptedAgentRequests({
     store,
@@ -776,9 +793,20 @@ const readCompleteAgentExchange = async ({
   const requestById = new Map(
     requests.map((request) => [request.requestId, request]),
   );
+  const answeredRequestIds = new Set(await listAgentResponseRequestIds(store));
+  const wanted =
+    select === undefined
+      ? new Set(requestById.keys())
+      : select({ requests, answeredRequestIds });
   const responses: Array<AgentResponse> = [];
   const responseRequestIds = new Set<string>();
-  for (const value of await readAgentResponseValues(store)) {
+  const readable = [...wanted].filter((requestId) =>
+    answeredRequestIds.has(requestId),
+  );
+  for (const value of await readAgentResponseValuesFor({
+    store,
+    requestIds: readable,
+  })) {
     try {
       if (!isRecord(value) || typeof value.requestId !== "string") continue;
       const request = requestById.get(value.requestId);
@@ -919,6 +947,22 @@ export const readAgentExchange = async ({
     store,
     sessionId,
     planId,
+    // Everything the window below keeps, decided before any response is read:
+    // every request that has no answer on disk, which is every request that
+    // could still be outstanding however old it is, plus the newest answered
+    // ones the snapshot retains. An answered request older than that window is
+    // dropped here exactly as it was dropped after being read.
+    select: ({ requests, answeredRequestIds }) => {
+      const unanswered = requests.filter(
+        (request) => !answeredRequestIds.has(request.requestId),
+      );
+      const answered = requests
+        .filter((request) => answeredRequestIds.has(request.requestId))
+        .slice(-EXCHANGE_LIMIT);
+      return new Set(
+        [...unanswered, ...answered].map((request) => request.requestId),
+      );
+    },
   });
   const pending = outstandingAgentRequests(complete);
   const pendingRequestIds = new Set(
@@ -951,17 +995,20 @@ export const readAgentCommentHistory = async ({
   readonly planId: string;
   readonly commentId: string;
 }): Promise<AgentExchangeSnapshot> => {
+  const forComment = (request: AgentRequest): boolean =>
+    (request.kind === "feedback" &&
+      request.comments.some((comment) => comment.id === commentId)) ||
+    (request.kind === "reply" && request.commentId === commentId);
   const complete = await readCompleteAgentExchange({
     store,
     sessionId,
     planId,
+    // This history answers questions about one comment, so the responses of
+    // every other comment's requests are read for nothing.
+    select: ({ requests }) =>
+      new Set(requests.filter(forComment).map((request) => request.requestId)),
   });
-  const requests = complete.requests.filter(
-    (request) =>
-      (request.kind === "feedback" &&
-        request.comments.some((comment) => comment.id === commentId)) ||
-      (request.kind === "reply" && request.commentId === commentId),
-  );
+  const requests = complete.requests.filter(forComment);
   const requestIds = new Set(requests.map((request) => request.requestId));
   return {
     requests,
