@@ -4878,9 +4878,6 @@ export const ReviewController = () => {
   ): AgentStatus =>
     projectRequestStatus({
       request,
-      response: agent.responses.find(
-        (candidate) => candidate.requestId === request.requestId,
-      ),
       progressEvents: progress,
       presence: effectivePresence,
       runtime: threadRuntime,
@@ -4896,17 +4893,7 @@ export const ReviewController = () => {
     });
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
-    responseRequestIds: new Set([
-      ...agent.responses.map((response) => response.requestId),
-      ...agent.requests.flatMap((request) =>
-        requestIsCanceled({
-          request,
-          pendingRequestIds: cancelPendingRequestIds,
-        })
-          ? [request.requestId]
-          : [],
-      ),
-    ]),
+    cancelPendingRequestIds,
     progressEvents: progress,
     agentConnected,
     runtimeOffline: pollIsOffline,

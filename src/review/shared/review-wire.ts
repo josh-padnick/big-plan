@@ -2,6 +2,7 @@
 // encoders and browser decoders meet here so transport changes cannot drift.
 
 import type { ReviewComment } from "./comment.js";
+import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
 
 export type ReviewSnapshot = {
@@ -20,15 +21,13 @@ export type AgentOutcome = {
   readonly changeTargets: ReadonlyArray<string>;
 };
 
-export type AgentRequest = {
+export type AgentRequest = TerminalAgentRequest & {
   readonly requestId: string;
   readonly premiseSnapshot: string;
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly claimedBy?: string;
   readonly claimExpiresAtMs?: number;
-  readonly answeredAt?: string;
-  readonly canceledAt?: string;
   readonly createdAt: string;
   readonly kind: "feedback" | "reply" | "chat";
   readonly body?: string;

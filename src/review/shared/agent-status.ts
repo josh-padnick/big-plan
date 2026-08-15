@@ -6,6 +6,10 @@ import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
 import { claimIsLive, type ClaimedRequest } from "./agent-claim.js";
 import {
+  requestIsTerminal,
+  type TerminalAgentRequest,
+} from "./agent-request-state.js";
+import {
   AGENT_STALL_MS,
   AGENT_STALL_WINDOW_LABEL,
 } from "./agent-timing.js";
@@ -17,14 +21,15 @@ import { compactDurationLabel } from "./time-label.js";
 // still marks a killed agent disconnected well before a two-minute wait.
 export { AGENT_STALL_MS, AGENT_STALL_WINDOW_LABEL } from "./agent-timing.js";
 
-export type AgentActivityRequest = ClaimedRequest & {
-  readonly requestId: string;
-  readonly kind: "feedback" | "reply" | "chat";
-  readonly createdAt: string;
-  readonly claimedAt?: string;
-  readonly baselineSnapshot?: string;
-  readonly targetLabel?: string;
-};
+export type AgentActivityRequest = ClaimedRequest &
+  TerminalAgentRequest & {
+    readonly requestId: string;
+    readonly kind: "feedback" | "reply" | "chat";
+    readonly createdAt: string;
+    readonly claimedAt?: string;
+    readonly baselineSnapshot?: string;
+    readonly targetLabel?: string;
+  };
 
 export type AgentActivityProgress = {
   readonly requestId?: string;
@@ -233,7 +238,7 @@ const disconnectedSupporting = ({
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({
   requests,
-  responseRequestIds,
+  cancelPendingRequestIds,
   progressEvents,
   agentConnected,
   runtimeOffline,
@@ -241,7 +246,7 @@ export const deriveCurrentAgentActivity = ({
   heartbeatAt,
 }: {
   readonly requests: ReadonlyArray<AgentActivityRequest>;
-  readonly responseRequestIds: ReadonlySet<string>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly progressEvents: ReadonlyArray<AgentActivityProgress>;
   readonly agentConnected: boolean;
   readonly runtimeOffline: boolean;
@@ -267,7 +272,9 @@ export const deriveCurrentAgentActivity = ({
   }
 
   const request = requests.find(
-    (candidate) => !responseRequestIds.has(candidate.requestId),
+    (candidate) =>
+      !requestIsTerminal(candidate) &&
+      !cancelPendingRequestIds.has(candidate.requestId),
   );
   if (request === undefined) {
     return {

@@ -334,11 +334,58 @@ describe("thread projection", () => {
     });
   });
 
+  it.each(["thread", "chat"] as const)(
+    "should treat an answered %s request as terminal without its response",
+    (surface) => {
+      const answered = request({
+        ...liveClaim(),
+        answeredAt: "2026-08-10T20:00:01Z",
+      });
+      expect(
+        projectRequestStatus({
+          request: answered,
+          progressEvents: [],
+          presence,
+          runtime: "online",
+          surface,
+          nowMs: NOW,
+          cancelPendingRequestIds: new Set(),
+        }),
+      ).toMatchObject({
+        stage: "answered",
+        headline: "The agent has answered",
+      });
+    },
+  );
+
+  it("should keep an answered thread out of the queued group without its response", () => {
+    expect(
+      projectCommentThread({
+        comment,
+        requests: [
+          request({
+            ...liveClaim(),
+            answeredAt: "2026-08-10T20:00:01Z",
+          }),
+        ],
+        responses: [],
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({
+      group: "ready",
+      latestPending: false,
+      canDeleteQueued: false,
+    });
+  });
+
   it("should derive one request status from progress and presence", () => {
     expect(
       projectRequestStatus({
         request: request(liveClaim()),
-        response: undefined,
         progressEvents: [
           {
             requestId: "aaaaaaaaaaaaaaaa",
@@ -386,7 +433,6 @@ describe("thread projection", () => {
     expect(
       projectRequestStatus({
         request: request(),
-        response: undefined,
         progressEvents: [
           {
             requestId: "aaaaaaaaaaaaaaaa",
@@ -409,7 +455,6 @@ describe("thread projection", () => {
     expect(
       projectRequestStatus({
         request: request(liveClaim()),
-        response: undefined,
         progressEvents: [],
         presence: { ...presence, state: "working" },
         runtime: "online",
@@ -424,7 +469,6 @@ describe("thread projection", () => {
     expect(
       projectRequestStatus({
         request: request({ ...liveClaim(), claimedAt: "not-a-timestamp" }),
-        response: undefined,
         progressEvents: [
           {
             requestId: "aaaaaaaaaaaaaaaa",

@@ -455,6 +455,45 @@ const nextWork = async ({
       snapshot: claimedSnapshot,
       source: claimedSource,
     });
+    const responseFile = agentResponseDraftPath({
+      store: session.store,
+      requestId: request.requestId,
+    });
+    const historySnapshot =
+      request.kind === "reply"
+        ? await readAgentCommentHistory({
+            store: session.store,
+            sessionId: session.sessionId,
+            planId: session.planId,
+            commentId: request.commentId,
+          })
+        : snapshot;
+    const history = projectConversationHistory({
+      request,
+      requests: historySnapshot.requests,
+      responses: historySnapshot.responses,
+    });
+    const responseTemplate = responseTemplateFor(request);
+    const binPath = resolve(executablePath);
+    const respondCommand = agentRespondCommand({
+      executablePath: binPath,
+      planPath: session.planPath,
+      responsePath: responseFile,
+      agentToken: claimedBy,
+    });
+    const noteCommand = agentNoteCommand({
+      executablePath: binPath,
+      planPath: session.planPath,
+      agentToken: claimedBy,
+    });
+    const pickup = pickupProgress(request);
+    await writeAgentHeartbeat({
+      store: session.store,
+      sessionId: session.sessionId,
+      state: "working",
+      requestId: request.requestId,
+      ...(model === undefined ? {} : { model }),
+    });
     try {
       request = await claimAgentRequest({
         store: session.store,
@@ -490,13 +529,6 @@ const nextWork = async ({
       attachmentManifest: verifiedAttachments,
       attachments: verifiedAttachments,
     });
-    await writeAgentHeartbeat({
-      store: session.store,
-      sessionId: session.sessionId,
-      state: "working",
-      requestId: request.requestId,
-      ...(model === undefined ? {} : { model }),
-    });
     await appendProgressEvent({
       store: session.store,
       event: {
@@ -504,47 +536,20 @@ const nextWork = async ({
         requestId: request.requestId,
         atMs: Date.now(),
         stepCode: "request-picked-up",
-        ...pickupProgress(request),
+        ...pickup,
         state: "live",
       },
-    });
-    const responseFile = agentResponseDraftPath({
-      store: session.store,
-      requestId: request.requestId,
-    });
-    const binPath = resolve(executablePath);
-    const historySnapshot =
-      request.kind === "reply"
-        ? await readAgentCommentHistory({
-            store: session.store,
-            sessionId: session.sessionId,
-            planId: session.planId,
-            commentId: request.commentId,
-          })
-        : snapshot;
+    }).catch(() => undefined);
     return {
       pending: true,
       plan: session.planPath,
       work: request,
-      history: projectConversationHistory({
-        request,
-        requests: historySnapshot.requests,
-        responses: historySnapshot.responses,
-      }),
-      response_template: responseTemplateFor(request),
+      history,
+      response_template: responseTemplate,
       response_file: responseFile,
       agent_token: claimedBy,
-      respond_command: agentRespondCommand({
-        executablePath: binPath,
-        planPath: session.planPath,
-        responsePath: responseFile,
-        agentToken: claimedBy,
-      }),
-      note_command: agentNoteCommand({
-        executablePath: binPath,
-        planPath: session.planPath,
-        agentToken: claimedBy,
-      }),
+      respond_command: respondCommand,
+      note_command: noteCommand,
       rules: [
         "Run the returned note_command and respond_command as given; they carry the agent_token that proves this session holds the request",
         "Edit only the authoritative plan source named above",

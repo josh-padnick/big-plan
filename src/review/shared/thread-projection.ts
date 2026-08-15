@@ -4,6 +4,10 @@
 
 import { deriveAgentStatus, type AgentStatus } from "./agent-status.js";
 import { claimIsLive, type ClaimedRequest } from "./agent-claim.js";
+import {
+  requestIsTerminal,
+  type TerminalAgentRequest,
+} from "./agent-request-state.js";
 import { requestIsCanceled, type CancelableRequest } from "./cancel-pending.js";
 import type { ReviewComment } from "./comment.js";
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
@@ -12,7 +16,8 @@ import { requestIsOutstanding } from "./request-lifecycle.js";
 import { agentOwnsRequest } from "./request-ownership.js";
 
 export type ThreadRequest = CancelableRequest &
-  ClaimedRequest & {
+  ClaimedRequest &
+  TerminalAgentRequest & {
     readonly premiseSnapshot: string;
     readonly baselineSnapshot?: string;
     readonly claimedAt?: string;
@@ -257,7 +262,6 @@ export const projectLatestAgentStatus = ({
 
 export const projectRequestStatus = ({
   request,
-  response,
   progressEvents,
   presence,
   runtime,
@@ -267,7 +271,6 @@ export const projectRequestStatus = ({
   queuedAhead,
 }: {
   readonly request: ThreadRequest;
-  readonly response: ThreadResponse | undefined;
   readonly progressEvents: ReadonlyArray<ThreadProgress>;
   readonly presence: ThreadPresence;
   readonly runtime: ThreadRuntime;
@@ -304,7 +307,7 @@ export const projectRequestStatus = ({
   );
   return deriveAgentStatus({
     runtime,
-    request: response === undefined ? "pending" : "answered",
+    request: requestIsTerminal(request) ? "answered" : "pending",
     agentConnected: presence.connected,
     pickedUp: claimIsLive({ request, nowMs }),
     sessionBusy:
@@ -359,7 +362,6 @@ export const projectCommentThread = <
         activity: projectRequestActivity({ request, progressEvents }),
         status: projectRequestStatus({
           request,
-          response,
           progressEvents,
           presence,
           runtime,
@@ -393,7 +395,7 @@ export const projectCommentThread = <
       : latestExchange.status;
   const latestPending =
     latestExchange !== undefined &&
-    latestExchange.response === undefined &&
+    !requestIsTerminal(latestExchange.request) &&
     !latestExchange.canceled;
   const group: ThreadGroup =
     latestExchange?.outcome?.state === "needs-input" ||
@@ -401,9 +403,12 @@ export const projectCommentThread = <
       ? "needs-input"
       : latestExchange?.outcome !== undefined
         ? "ready"
-        : latestStatus?.stage === "working" || latestStatus?.stage === "stalled"
-          ? "working"
-          : "queued";
+        : latestExchange?.request.answeredAt !== undefined
+          ? "ready"
+          : latestStatus?.stage === "working" ||
+              latestStatus?.stage === "stalled"
+            ? "working"
+            : "queued";
   return {
     comment,
     exchanges,

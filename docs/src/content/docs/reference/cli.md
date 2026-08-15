@@ -17,7 +17,7 @@ big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
 big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
 big-plan agent <input.mdx>
-big-plan agent next <input.mdx> [--wait]
+big-plan agent next <input.mdx> [--wait] [--agent <token>]
 big-plan agent note <input.mdx> "<progress>" --agent <token>
 big-plan agent respond <input.mdx> <response.json> --agent <token>
 big-plan update [--check]
@@ -41,7 +41,7 @@ npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
 npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
 npx big-plan agent <input.mdx>
-npx big-plan agent next <input.mdx> --wait
+npx big-plan agent next <input.mdx> --wait [--agent <token>]
 npx big-plan agent note <input.mdx> "<progress>" --agent <token>
 npx big-plan agent respond <input.mdx> <response.json> --agent <token>
 npx big-plan update --check
@@ -169,7 +169,7 @@ source snapshots.
 prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
 a model provider itself. The launched coding-agent session uses:
 
-- `agent next <input.mdx> --wait` to receive the oldest pending feedback,
+- `agent next <input.mdx> --wait [--agent <token>]` to receive the oldest pending feedback,
   thread reply, or plan-wide chat question, its prior conversation, a validated
   response template, and the exact publish command;
 - `agent note <input.mdx> "<progress>" --agent <token>` to keep the reviewer
@@ -180,6 +180,7 @@ a model provider itself. The launched coding-agent session uses:
 `agent next` mints the `--agent` token when it hands out a request, and returns
 it as `agent_token` together with ready-to-run `note_command` and
 `respond_command` strings.
+If the agent process restarts while that request remains open, pass the returned token back with `agent next <input.mdx> --agent <token>` to resume the same pickup.
 Run those strings as returned rather than composing the commands yourself.
 The token is what proves this agent process holds the request, so a second
 agent working the same review cannot narrate over or answer another agent's

@@ -28,6 +28,7 @@ import {
   writeSnapshot,
 } from "../src/review/store.js";
 import { renderDocument } from "../src/render/render-document.js";
+import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
 import { boxOf, expect, stageComment, test, type Page } from "./fixtures";
 
 const PASTED_PNG_BASE64 =
@@ -405,6 +406,58 @@ test("should keep progress-only requests waiting in chat and agent status", asyn
   await expect(
     rail.locator("li").filter({ hasText: request.body }),
   ).toContainText("Waiting for an agent");
+});
+
+test("should keep answered requests terminal when their response is unavailable", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const session = await liveReviewSession(page);
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const now = Date.now();
+  const premiseSnapshot = deriveSnapshotDigest(
+    await readFile(session.plan, "utf8"),
+  );
+  const request = {
+    ...messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: session.sessionId,
+      planId: session.planId,
+      premiseSnapshot,
+      createdAt: new Date(now - 1_000).toISOString(),
+      body: "Is this terminal without a response file?",
+    }),
+    baselineSnapshot: premiseSnapshot,
+    claimedAt: new Date(now - 500).toISOString(),
+    claimedBy: "eeeeeeeeeeeeeeee",
+    claimExpiresAtMs: now + AGENT_CLAIM_LEASE_MS,
+    answeredAt: new Date(now).toISOString(),
+  };
+  await writeAgentRequest({ store, request });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
+
+  const sessionButton = page.getByRole("button", {
+    name: "Agent session active",
+  });
+  await expect(sessionButton).toBeVisible();
+  await sessionButton.click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(
+    rail.locator("[data-review-current-activity='idle']"),
+  ).toContainText("Agent connected");
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  const exchange = rail.locator("li").filter({ hasText: request.body });
+  await expect(exchange).toContainText("The agent has answered");
+  await expect(exchange).not.toContainText("Waiting");
 });
 
 test("should pause a nonstandard request behind an explicit warning", async ({

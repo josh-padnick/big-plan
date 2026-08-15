@@ -545,7 +545,7 @@ describe("agent exchange filesystem", () => {
       claimedBy: agentSessionId,
       store,
       response,
-      now: new Date().toISOString(),
+      now: new Date(startedAt + 402).toISOString(),
     });
 
     const bounded = await readAgentExchange({ store, sessionId, planId });

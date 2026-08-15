@@ -7,6 +7,10 @@ import { createHash } from "node:crypto";
 import type { CommentTarget, ReviewComment } from "./shared/comment.js";
 import { QUOTE_LIMIT } from "./shared/comment.js";
 import { claimIsHeldByAnother } from "./shared/agent-claim.js";
+import {
+  requestIsTerminal,
+  type TerminalAgentRequest,
+} from "./shared/agent-request-state.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import {
   readAgentRequestValues,
@@ -34,7 +38,7 @@ const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
 export type AgentOutcomeState =
   "answered" | "changed" | "warning" | "needs-input" | "declined";
 
-type AgentRequestBase = {
+type AgentRequestBase = TerminalAgentRequest & {
   readonly version: 2;
   readonly requestId: string;
   readonly sessionId: string;
@@ -45,8 +49,6 @@ type AgentRequestBase = {
   readonly claimedAt?: string;
   readonly claimedBy?: string;
   readonly claimExpiresAtMs?: number;
-  readonly answeredAt?: string;
-  readonly canceledAt?: string;
   readonly attachmentManifest: ReadonlyArray<ReviewImageAttachment>;
   readonly attachments: ReadonlyArray<ReviewImageAttachment>;
 };
@@ -952,8 +954,7 @@ export const outstandingAgentRequests = (
 };
 
 /** True once a request has had its one terminal write. */
-export const requestIsTerminal = (request: AgentRequest): boolean =>
-  request.answeredAt !== undefined || request.canceledAt !== undefined;
+export { requestIsTerminal };
 
 /** A source digest shared by request creation, response validation, and polling. */
 export const deriveSnapshotDigest = (source: string): string =>

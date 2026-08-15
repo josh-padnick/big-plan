@@ -280,7 +280,7 @@ export const claimAgentRequest = async ({
         state: "live",
         detail: "The previous agent session stopped responding",
       },
-    });
+    }).catch(() => undefined);
   }
   return takeover.request;
 };

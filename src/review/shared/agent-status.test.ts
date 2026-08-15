@@ -29,7 +29,7 @@ describe("current agent activity", () => {
     expect(
       deriveCurrentAgentActivity({
         requests: [],
-        responseRequestIds: new Set(),
+        cancelPendingRequestIds: new Set(),
         progressEvents: [],
         agentConnected: false,
         runtimeOffline: false,
@@ -48,7 +48,7 @@ describe("current agent activity", () => {
     expect(
       deriveCurrentAgentActivity({
         requests: [],
-        responseRequestIds: new Set(),
+        cancelPendingRequestIds: new Set(),
         progressEvents: [],
         agentConnected: true,
         runtimeOffline: false,
@@ -80,7 +80,7 @@ describe("current agent activity", () => {
     expect(
       deriveCurrentAgentActivity({
         requests: [],
-        responseRequestIds: new Set(),
+        cancelPendingRequestIds: new Set(),
         progressEvents: [],
         agentConnected: true,
         runtimeOffline: false,
@@ -97,7 +97,7 @@ describe("current agent activity", () => {
   it("should distinguish a disconnected agent from an ordinary wait", () => {
     const activity = deriveCurrentAgentActivity({
       requests: [request()],
-      responseRequestIds: new Set(),
+      cancelPendingRequestIds: new Set(),
       progressEvents: [],
       agentConnected: false,
       runtimeOffline: false,
@@ -118,7 +118,7 @@ describe("current agent activity", () => {
     expect(
       deriveCurrentAgentActivity({
         requests: [request()],
-        responseRequestIds: new Set(),
+        cancelPendingRequestIds: new Set(),
         progressEvents: [
           {
             requestId: "1111111111111111",
@@ -139,10 +139,33 @@ describe("current agent activity", () => {
     });
   });
 
+  it("should ignore an answered request when its response is unavailable", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [
+          {
+            ...request(),
+            ...liveClaim(),
+            answeredAt: "2026-08-08T20:00:01.000Z",
+          },
+        ],
+        cancelPendingRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: true,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW,
+      }),
+    ).toMatchObject({
+      state: "idle",
+      headline: "Agent connected",
+    });
+  });
+
   it("should let disconnection override fresh claimed work", () => {
     const activity = deriveCurrentAgentActivity({
       requests: [{ ...request(), ...liveClaim() }],
-      responseRequestIds: new Set(),
+      cancelPendingRequestIds: new Set(),
       progressEvents: [
         {
           requestId: "1111111111111111",
@@ -178,7 +201,7 @@ describe("current agent activity", () => {
     expect(
       deriveCurrentAgentActivity({
         requests: [{ ...request(kind), ...liveClaim() }],
-        responseRequestIds: new Set(),
+        cancelPendingRequestIds: new Set(),
         progressEvents: [
           {
             requestId: "1111111111111111",
@@ -200,7 +223,7 @@ describe("current agent activity", () => {
     expect(
       deriveCurrentAgentActivity({
         requests: [request()],
-        responseRequestIds: new Set(),
+        cancelPendingRequestIds: new Set(),
         progressEvents: [],
         agentConnected: true,
         runtimeOffline: false,
@@ -218,7 +241,7 @@ describe("current agent activity", () => {
     expect(
       deriveCurrentAgentActivity({
         requests: [request("chat")],
-        responseRequestIds: new Set(),
+        cancelPendingRequestIds: new Set(),
         progressEvents: [
           {
             requestId: "1111111111111111",
@@ -249,7 +272,7 @@ describe("current agent activity", () => {
             ...liveClaim(NOW - AGENT_STALL_MS - 1),
           },
         ],
-        responseRequestIds: new Set(),
+        cancelPendingRequestIds: new Set(),
         progressEvents: [],
         agentConnected: true,
         runtimeOffline: false,

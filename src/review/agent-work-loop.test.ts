@@ -38,6 +38,7 @@ import { reviewImageId } from "./shared/review-image.js";
 import { readProgress } from "./store.js";
 import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
+import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 
 let runtime: ReviewRuntime;
 let pickedUpToken = "";
@@ -1028,7 +1029,9 @@ describe("agent work loop lifecycle", () => {
         typeof firstPickup.agent_token !== "string" ||
         typeof firstPickup.response_file !== "string"
       ) {
-        throw new Error("The first pickup did not provide its response contract");
+        throw new Error(
+          "The first pickup did not provide its response contract",
+        );
       }
       await writeFile(
         firstPickup.response_file,
@@ -1104,6 +1107,69 @@ describe("agent work loop lifecycle", () => {
         ]),
       );
     } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should return a usable token when pickup progress cannot be stored", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-pickup-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nDo not strand this pickup.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Return the committed claim token.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    await claimAgentRequest({
+      store: review.store,
+      requestId: request.requestId,
+      claimedBy: "eeeeeeeeeeeeeeee",
+      baselineSnapshot: request.premiseSnapshot,
+      now: new Date(Date.now() - AGENT_CLAIM_LEASE_MS - 1).toISOString(),
+    });
+    const appendProgress = vi
+      .spyOn(reviewStore, "appendProgressValue")
+      .mockRejectedValue(new Error("Progress channel unavailable"));
+
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (typeof pickup.agent_token !== "string") {
+        throw new Error("Pickup did not return its committed token");
+      }
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(exchange.requests[0]).toMatchObject({
+        requestId: request.requestId,
+        claimedBy: pickup.agent_token,
+      });
+
+      appendProgress.mockRestore();
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Continuing with the returned token",
+          agentToken: pickup.agent_token,
+        }),
+      ).resolves.toMatchObject({ requestId: request.requestId });
+    } finally {
+      appendProgress.mockRestore();
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }
