@@ -7,6 +7,7 @@ import { requestIsCanceled, type CancelableRequest } from "./cancel-pending.js";
 import type { ReviewComment } from "./comment.js";
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
+import { agentOwnsRequest } from "./request-ownership.js";
 
 export type ThreadRequest = CancelableRequest & {
   readonly premiseSnapshot: string;
@@ -136,7 +137,7 @@ export const canReviseQueuedMessage = ({
   request.kind !== "feedback" &&
   !canceled &&
   response === undefined &&
-  request.claimedAt === undefined;
+  !agentOwnsRequest(request);
 
 /**
  * Mirrors the mailbox guard on removing a message the agent never started. A
@@ -152,7 +153,7 @@ export const canDeleteQueuedMessage = ({
 }): boolean =>
   request.kind !== "feedback" &&
   response === undefined &&
-  request.claimedAt === undefined;
+  !agentOwnsRequest(request);
 
 /**
  * Counts the unanswered work an agent delivers before one request. Requests
@@ -236,7 +237,7 @@ export const projectRequestStatus = ({
     runtime,
     request: response === undefined ? "pending" : "answered",
     agentConnected: presence.connected,
-    pickedUp: request.claimedAt !== undefined || activity.length > 0,
+    pickedUp: agentOwnsRequest(request) || activity.length > 0,
     sessionBusy:
       presence.state === "working" && presence.requestId !== request.requestId,
     ...(queuedAhead === undefined ? {} : { queuedAhead }),
@@ -351,7 +352,7 @@ export const projectCommentThread = <
       exchanges.every(
         (exchange) =>
           exchange.response === undefined &&
-          exchange.request.claimedAt === undefined,
+          !agentOwnsRequest(exchange.request),
       ),
     group,
   };

@@ -4,6 +4,7 @@
 
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
+import { agentOwnsRequest } from "./request-ownership.js";
 import type { BrowserConnectionEvent } from "./review-wire.js";
 import { compactDurationLabel } from "./time-label.js";
 
@@ -298,7 +299,7 @@ export const deriveCurrentAgentActivity = ({
   );
   const latest = meaningful.at(-1);
   if (
-    request.claimedAt === undefined &&
+    !agentOwnsRequest(request) &&
     request.baselineSnapshot === undefined &&
     latest === undefined
   ) {

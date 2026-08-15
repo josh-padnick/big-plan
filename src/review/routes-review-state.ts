@@ -49,6 +49,7 @@ import {
   MAX_IMAGES_PER_MESSAGE,
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
+import { agentOwnsRequest } from "./shared/request-ownership.js";
 import { encodeReviewSnapshot } from "./shared/review-wire.js";
 
 /**
@@ -603,7 +604,7 @@ export const deleteSentComment = async (
   }
   if (
     answeredRequestIds.size === 0 &&
-    commentRequests.some((candidate) => candidate.claimedAt !== undefined)
+    commentRequests.some(agentOwnsRequest)
   ) {
     return refusal({
       status: 409,

@@ -20,6 +20,7 @@ import {
   isReviewImageWithinLimits,
   type ReviewImageAttachment,
 } from "./shared/review-image.js";
+import { agentOwnsRequest } from "./shared/request-ownership.js";
 
 const TEXT_LIMIT = 4000;
 const MESSAGE_LIMIT = 200;
@@ -41,6 +42,7 @@ type AgentRequestBase = {
   readonly baselineSnapshot?: string;
   readonly claimedAt?: string;
   readonly canceledAt?: string;
+  readonly attachmentManifest: ReadonlyArray<ReviewImageAttachment>;
   readonly attachments: ReadonlyArray<ReviewImageAttachment>;
 };
 
@@ -279,9 +281,10 @@ const comment = (value: unknown): ReviewComment => {
 
 const validateAttachments = (
   value: unknown,
+  field = "attachments",
 ): ReadonlyArray<ReviewImageAttachment> => {
   if (!Array.isArray(value)) {
-    throw new AgentExchangeRejected('"attachments" must be an array');
+    throw new AgentExchangeRejected(`"${field}" must be an array`);
   }
   return value.map((entry) => {
     if (!isRecord(entry))
@@ -334,6 +337,55 @@ const validateAttachments = (
   });
 };
 
+const validateRequestAttachments = ({
+  attachmentManifest,
+  attachments,
+}: {
+  readonly attachmentManifest: unknown;
+  readonly attachments: unknown;
+}): Pick<AgentRequestBase, "attachmentManifest" | "attachments"> => {
+  const manifest = validateAttachments(
+    attachmentManifest,
+    "attachmentManifest",
+  );
+  const active = validateAttachments(attachments);
+  if (
+    new Set(manifest.map((attachment) => attachment.id)).size !==
+    manifest.length
+  ) {
+    throw new AgentExchangeRejected(
+      "The attachment manifest cannot contain duplicate images",
+    );
+  }
+  if (
+    new Set(active.map((attachment) => attachment.id)).size !== active.length
+  ) {
+    throw new AgentExchangeRejected(
+      "Active attachments cannot contain duplicate images",
+    );
+  }
+  const manifestById = new Map(
+    manifest.map((attachment) => [attachment.id, attachment]),
+  );
+  for (const attachment of active) {
+    const frozen = manifestById.get(attachment.id);
+    if (
+      frozen === undefined ||
+      frozen.sha256 !== attachment.sha256 ||
+      frozen.mimeType !== attachment.mimeType ||
+      frozen.byteLength !== attachment.byteLength ||
+      frozen.width !== attachment.width ||
+      frozen.height !== attachment.height ||
+      frozen.path !== attachment.path
+    ) {
+      throw new AgentExchangeRejected(
+        `Active attachment ${attachment.id} is not in the frozen manifest`,
+      );
+    }
+  }
+  return { attachmentManifest: manifest, attachments: active };
+};
+
 const requestBase = (
   value: Readonly<Record<string, unknown>>,
 ): AgentRequestBase => {
@@ -355,6 +407,10 @@ const requestBase = (
       '"baselineSnapshot" and "claimedAt" must appear together',
     );
   }
+  const requestAttachments = validateRequestAttachments({
+    attachmentManifest: value.attachmentManifest,
+    attachments: value.attachments,
+  });
   return {
     version: 2,
     requestId: id(value.requestId, "requestId"),
@@ -368,7 +424,7 @@ const requestBase = (
     createdAt: timestamp(value.createdAt),
     ...(baselineSnapshot === undefined ? {} : { baselineSnapshot, claimedAt }),
     ...(canceledAt === undefined ? {} : { canceledAt }),
-    attachments: validateAttachments(value.attachments),
+    ...requestAttachments,
   };
 };
 
@@ -617,10 +673,7 @@ const validateStoredResponse = ({
   readonly request: AgentRequest;
   readonly commentsById: ReadonlyMap<string, ReviewComment>;
 }): AgentResponse => {
-  if (
-    request.claimedAt === undefined ||
-    request.baselineSnapshot === undefined
-  ) {
+  if (!agentOwnsRequest(request) || request.baselineSnapshot === undefined) {
     throw new AgentExchangeRejected(
       "A stored agent response cannot answer an unclaimed request",
     );
@@ -867,6 +920,7 @@ export const feedbackAgentRequest = ({
   kind: "feedback",
   packageId: feedback.packageId,
   comments: feedback.comments,
+  attachmentManifest: feedback.attachments,
   attachments: feedback.attachments,
 });
 
@@ -892,6 +946,7 @@ export const messageAgentRequest = ({
   readonly commentId?: string;
   readonly attachments?: ReadonlyArray<ReviewImageAttachment>;
 }): AgentReplyRequest | AgentChatRequest => {
+  const checkedAttachments = validateAttachments(attachments ?? []);
   const base: AgentRequestBase = {
     version: 2,
     requestId: id(requestId, "requestId"),
@@ -899,7 +954,8 @@ export const messageAgentRequest = ({
     planId: id(planId, "planId"),
     premiseSnapshot: snapshotDigest(premiseSnapshot, "premiseSnapshot"),
     createdAt: timestamp(createdAt),
-    attachments: validateAttachments(attachments ?? []),
+    attachmentManifest: checkedAttachments,
+    attachments: checkedAttachments,
   };
   const checkedBody = text({ value: body, field: "body" });
   if (kind === "chat") {

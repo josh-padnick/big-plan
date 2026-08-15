@@ -526,10 +526,11 @@ describe("request mailbox", () => {
     ]);
   });
 
-  it("should retain only referenced attachment metadata when revising a queued request", async () => {
+  it("should derive active attachments from every queued revision", async () => {
     const { store } = await preparedReview();
     const keptId = reviewImageId("a".repeat(64));
     const droppedId = reviewImageId("b".repeat(64));
+    const neverFrozenId = reviewImageId("c".repeat(64));
     const attachment = (
       id: typeof keptId,
       alt: string,
@@ -576,8 +577,32 @@ describe("request mailbox", () => {
     expect(revised.attachments).toEqual([
       { ...kept, alt: "Updated retry graph" },
     ]);
+    const restored = await reviseQueuedRequest({
+      store,
+      requestId: request.requestId,
+      body: buildReviewImageReference({
+        alt: "Restored timeout graph",
+        id: droppedId,
+      }),
+    });
+
+    expect(restored.attachments).toEqual([
+      { ...dropped, alt: "Restored timeout graph" },
+    ]);
+    expect(restored.attachmentManifest).toEqual([kept, dropped]);
+    await expect(
+      reviseQueuedRequest({
+        store,
+        requestId: request.requestId,
+        body: buildReviewImageReference({
+          alt: "New graph",
+          id: neverFrozenId,
+        }),
+      }),
+    ).rejects.toThrow(/cannot gain a new image/);
     const exchange = await readAgentExchange({ store, sessionId, planId });
-    expect(exchange.requests[0]?.attachments).toEqual(revised.attachments);
+    expect(exchange.requests[0]?.attachments).toEqual(restored.attachments);
+    expect(exchange.requests[0]?.attachmentManifest).toEqual([kept, dropped]);
   });
 
   it("should refuse to revise a claimed request", async () => {

@@ -20,6 +20,7 @@ import {
   deduplicateReviewImageReferences,
   extractReviewImageReferences,
 } from "./shared/review-image.js";
+import { agentOwnsRequest } from "./shared/request-ownership.js";
 import {
   appendAgentConnectionEvent,
   appendProgressValue,
@@ -237,7 +238,7 @@ export const publishAgentResponse = async ({
         );
       }
       if (
-        request.claimedAt === undefined ||
+        !agentOwnsRequest(request) ||
         request.baselineSnapshot === undefined
       ) {
         throw new AgentExchangeRejected(
@@ -263,14 +264,6 @@ export const publishAgentResponse = async ({
       });
     },
   });
-
-/**
- * Answers whether an agent owns this request. Editing or deleting a message an
- * agent has started would race its delivery, so both refuse on this fact, and
- * both ask inside the per-request lock where the claim is written.
- */
-const agentOwnsRequest = (request: AgentRequest): boolean =>
-  request.claimedAt !== undefined;
 
 const AGENT_STARTED = "The agent already started on this message";
 
@@ -335,7 +328,10 @@ export const reviseQueuedRequest = async ({
         allowCanceled: false,
       });
       const frozen = new Map(
-        request.attachments.map((attachment) => [attachment.id, attachment]),
+        request.attachmentManifest.map((attachment) => [
+          attachment.id,
+          attachment,
+        ]),
       );
       const attachments = deduplicateReviewImageReferences(
         extractReviewImageReferences(body),
@@ -407,7 +403,7 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
           "Only a feedback request can remove a queued comment",
         );
       }
-      if (request.claimedAt !== undefined) {
+      if (agentOwnsRequest(request)) {
         throw new AgentExchangeRejected(
           "The agent has already picked up this feedback request",
         );

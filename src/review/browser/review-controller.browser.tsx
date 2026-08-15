@@ -48,6 +48,7 @@ import {
   reconcilePendingCancellations,
   requestIsCanceled,
 } from "../shared/cancel-pending.js";
+import { agentOwnsRequest } from "../shared/request-ownership.js";
 import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
   clearThreadOpenOverlay,
@@ -3353,8 +3354,7 @@ const SentThread = ({
                       }
                       createdAt={request.createdAt}
                       delivery={
-                        response !== undefined ||
-                        request.claimedAt !== undefined
+                        response !== undefined || agentOwnsRequest(request)
                           ? "Sent"
                           : "Queued"
                       }
@@ -3634,7 +3634,7 @@ const ChatExchange = ({
         body={request.body ?? ""}
         createdAt={request.createdAt}
         delivery={
-          response !== undefined || request.claimedAt !== undefined
+          response !== undefined || agentOwnsRequest(request)
             ? "Sent"
             : "Queued"
         }
@@ -4893,7 +4893,8 @@ export const ReviewController = () => {
           : "answered",
     agentConnected,
     pickedUp:
-      latestRequest?.claimedAt !== undefined || requestProgress.length > 0,
+      (latestRequest !== undefined && agentOwnsRequest(latestRequest)) ||
+      requestProgress.length > 0,
     ...(lastAgentSignalAtMs > 0 ? { lastAgentSignalAtMs } : {}),
     ...(failure === undefined ? {} : { failure }),
     nowMs: agentProjectionNowMs,
