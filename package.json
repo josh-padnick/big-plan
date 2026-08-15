@@ -23,6 +23,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "prepare": "node scripts/git-hooks/install.mjs",
     "gen": "bun run gen:fonts && bun run gen:review && bun run gen:css && bun run gen:assets && bun run gen:guidance && bun run gen:skill",
     "gen:assets": "node scripts/gen-assets.mjs",
     "gen:css": "node scripts/gen-css.mjs",
@@ -32,7 +33,7 @@
     "gen:review": "node scripts/gen-review-script.mjs",
     "build": "bun run gen && tsc",
     "test": "bun run gen && vitest run && bun run test:contracts",
-    "test:contracts": "node --test scripts/style-contract/*.test.mjs scripts/design-system/*.test.mjs",
+    "test:contracts": "node --test scripts/style-contract/*.test.mjs scripts/design-system/*.test.mjs scripts/git-hooks/*.test.mjs",
     "test:e2e": "playwright test",
     "lint": "eslint . && node scripts/style-contract/check.mjs && node scripts/design-system/check.mjs && prettier --check .",
     "format": "prettier --write .",
