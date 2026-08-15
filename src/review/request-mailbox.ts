@@ -6,8 +6,6 @@ import {
   AgentExchangeRejected,
   outstandingAgentRequests,
   readAgentCommentHistory,
-  readValidatedAgentRequests,
-  readValidatedAgentResponse,
   validateAgentRequest,
 } from "./agent-exchange.js";
 import type {
@@ -29,12 +27,14 @@ import {
   compactProgressLog,
   deleteAgentRequestValue,
   nextProgressSequence,
+  readAgentAcceptedSnapshotValue,
   readAgentConnectionEvents,
   readAgentRequestValue,
   readSnapshot,
   ReviewStorePathRejected,
   withReviewStoreLock,
   writeAgentRequestValue,
+  writeAgentAcceptedSnapshotValue,
   writeAgentResponseValue,
 } from "./store.js";
 import { diffWords } from "./snapshot-diff.js";
@@ -51,6 +51,7 @@ import type {
 } from "./store.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
+const SNAPSHOT_ID = /^[a-f0-9]{16,64}$/;
 
 export class RetryableAgentClaimRejected extends AgentExchangeRejected {}
 
@@ -145,24 +146,18 @@ const withTerminalCommitLock = async <TResult>({
   change,
 }: {
   readonly store: ReviewStore;
-  readonly change: () => Promise<TResult>;
+  readonly change: (store: ReviewStore) => Promise<TResult>;
 }): Promise<TResult> => {
-  let reviewDirectory: string;
+  let lockedStore: ReviewStore;
   try {
-    reviewDirectory = (
-      await (
-        await anchorReviewStore(store)
-      ).resolveDirectoryPath({
-        directory: "reviewDirectory",
-      })
-    ).path;
+    lockedStore = await (await anchorReviewStore(store)).resolveStore();
   } catch (error: unknown) {
     if (!(error instanceof ReviewStorePathRejected)) throw error;
     throw new AgentExchangeRejected("The request mailbox is unavailable");
   }
   return withReviewStoreLock({
-    lockPath: join(reviewDirectory, ".agent-terminal.lock"),
-    change,
+    lockPath: join(lockedStore.reviewDirectory, ".agent-terminal.lock"),
+    change: () => change(lockedStore),
     timeoutError: () =>
       new AgentExchangeRejected(
         "Another agent is committing a response. Try again.",
@@ -225,51 +220,54 @@ const requestCreation = (request: AgentRequest): string => {
   return JSON.stringify(created);
 };
 
-const acceptedSnapshotAfterClaim = async ({
+type AgentAcceptedSnapshotFrontier = {
+  readonly version: 1;
+  readonly planId: string;
+  readonly sequence: number;
+  readonly requestId: string;
+  readonly snapshot: string;
+};
+
+const readAcceptedSnapshotFrontier = async ({
   store,
-  request,
+  planId,
+  baselineSnapshot,
 }: {
   readonly store: ReviewStore;
-  readonly request: AgentRequest & {
-    readonly claimedAt: string;
-    readonly baselineSnapshot: string;
-  };
-}): Promise<string> => {
-  const answered = (
-    await readValidatedAgentRequests({
-      store,
-      sessionId: request.sessionId,
-      planId: request.planId,
-    })
-  )
-    .filter(
-      (candidate) =>
-        candidate.requestId !== request.requestId &&
-        candidate.answeredAt !== undefined &&
-        Date.parse(candidate.answeredAt) >= Date.parse(request.claimedAt),
-    )
-    .sort((left, right) => {
-      const chronological = (left.answeredAt ?? "").localeCompare(
-        right.answeredAt ?? "",
-      );
-      return chronological === 0
-        ? left.requestId.localeCompare(right.requestId)
-        : chronological;
-    });
-  let acceptedSnapshot = request.baselineSnapshot;
-  for (const answeredRequest of answered) {
-    const response = await readValidatedAgentResponse({
-      store,
-      request: answeredRequest,
-    });
-    if (response === undefined) {
-      throw new AgentResponseConflict({
-        baselineSnapshot: request.baselineSnapshot,
-      });
-    }
-    acceptedSnapshot = response.resultSnapshot;
+  readonly planId: string;
+  readonly baselineSnapshot: string;
+}): Promise<AgentAcceptedSnapshotFrontier | undefined> => {
+  const stored = await readAgentAcceptedSnapshotValue(store);
+  if (!stored.exists) return undefined;
+  const value = stored.value;
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("version" in value) ||
+    value.version !== 1 ||
+    !("planId" in value) ||
+    value.planId !== planId ||
+    !("sequence" in value) ||
+    typeof value.sequence !== "number" ||
+    !Number.isSafeInteger(value.sequence) ||
+    value.sequence < 1 ||
+    !("requestId" in value) ||
+    typeof value.requestId !== "string" ||
+    !REQUEST_ID.test(value.requestId) ||
+    !("snapshot" in value) ||
+    typeof value.snapshot !== "string" ||
+    !SNAPSHOT_ID.test(value.snapshot)
+  ) {
+    throw new AgentResponseConflict({ baselineSnapshot });
   }
-  return acceptedSnapshot;
+  return {
+    version: 1,
+    planId,
+    sequence: value.sequence,
+    requestId: value.requestId,
+    snapshot: value.snapshot,
+  };
 };
 
 type TextRange = {
@@ -614,9 +612,9 @@ export const commitRequestTerminal = async ({
 }): Promise<AgentRequest> =>
   withTerminalCommitLock({
     store,
-    change: () =>
+    change: (terminalStore) =>
       withRequestLock({
-        store,
+        store: terminalStore,
         requestId: response.requestId,
         change: async (lockedStore) => {
           const request = await readCurrentRequest({
@@ -660,14 +658,13 @@ export const commitRequestTerminal = async ({
               "The agent response does not match its request",
             );
           }
-          const checkedClaim = request as AgentRequest & {
-            readonly claimedAt: string;
-            readonly baselineSnapshot: string;
-          };
-          const acceptedSnapshot = await acceptedSnapshotAfterClaim({
+          const acceptedFrontier = await readAcceptedSnapshotFrontier({
             store: lockedStore,
-            request: checkedClaim,
+            planId: request.planId,
+            baselineSnapshot: request.baselineSnapshot,
           });
+          const acceptedSnapshot =
+            acceptedFrontier?.snapshot ?? request.baselineSnapshot;
           const currentSnapshot =
             readCurrentSnapshot === undefined
               ? response.resultSnapshot
@@ -696,6 +693,16 @@ export const commitRequestTerminal = async ({
             store: lockedStore,
             requestId: response.requestId,
             value: response,
+          });
+          await writeAgentAcceptedSnapshotValue({
+            store: lockedStore,
+            value: {
+              version: 1,
+              planId: request.planId,
+              sequence: (acceptedFrontier?.sequence ?? 0) + 1,
+              requestId: request.requestId,
+              snapshot: response.resultSnapshot,
+            } satisfies AgentAcceptedSnapshotFrontier,
           });
           await writeAgentRequestValue({
             store: lockedStore,

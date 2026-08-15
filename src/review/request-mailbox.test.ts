@@ -3,6 +3,7 @@
 
 import { execFile } from "node:child_process";
 import {
+  access,
   mkdir,
   mkdtemp,
   readFile,
@@ -15,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ReviewComment } from "./shared/comment.js";
 import {
   deriveSnapshotDigest,
@@ -48,6 +49,7 @@ import {
   reviewStoreFor,
   withReviewStoreLock,
   writeAgentResponseValue,
+  writeSnapshot,
 } from "./store.js";
 import {
   buildReviewImageReference,
@@ -670,6 +672,7 @@ describe("request mailbox", () => {
       now: new Date(startedAt + 74_000).toISOString(),
     });
     let releaseLock: (() => Promise<void>) | undefined;
+    let lockReleased = false;
     try {
       releaseLock = await holdAgentRequestLock({
         store,
@@ -680,8 +683,16 @@ describe("request mailbox", () => {
         response,
         claimedBy: agentA,
         now: new Date(startedAt + 74_000).toISOString(),
-        clock: () => startedAt + 76_000,
+        clock: () => startedAt + (lockReleased ? 76_000 : 74_000),
       });
+      await vi.waitFor(() =>
+        expect(
+          access(join(store.reviewDirectory, ".agent-terminal.lock")),
+        ).resolves.toBeUndefined(),
+      );
+      // With the clock read moved before request-lock acquisition, it captures
+      // the live value and this commit resolves; that counterfactual was verified.
+      lockReleased = true;
       await releaseLock();
       releaseLock = undefined;
 
@@ -692,6 +703,117 @@ describe("request mailbox", () => {
     } finally {
       await releaseLock?.();
     }
+  });
+
+  it("should reject a stale baseline claimed after an intervening answer", async () => {
+    const { store } = await preparedReview();
+    const baselineSource = "# Plan\n";
+    const acceptedSource = "# Plan\n\nAgent A accepted edit.\n";
+    const staleSource = "# Plan\n\nAgent B stale edit.\n";
+    const baselineSnapshot = deriveSnapshotDigest(baselineSource);
+    const acceptedSnapshot = deriveSnapshotDigest(acceptedSource);
+    const staleSnapshot = deriveSnapshotDigest(staleSource);
+    await Promise.all([
+      writeSnapshot({
+        store,
+        snapshot: baselineSnapshot,
+        source: baselineSource,
+      }),
+      writeSnapshot({
+        store,
+        snapshot: acceptedSnapshot,
+        source: acceptedSource,
+      }),
+      writeSnapshot({ store, snapshot: staleSnapshot, source: staleSource }),
+    ]);
+    const firstRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "4444444444444444",
+      sessionId,
+      planId,
+      premiseSnapshot: baselineSnapshot,
+      createdAt: "2026-08-10T12:00:00.000Z",
+      body: "Make the first edit.",
+    });
+    const secondRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "5555555555555555",
+      sessionId,
+      planId,
+      premiseSnapshot: baselineSnapshot,
+      createdAt: "2026-08-10T12:00:01.000Z",
+      body: "Make the second edit.",
+    });
+    await writeAgentRequest({ store, request: firstRequest });
+    await writeAgentRequest({ store, request: secondRequest });
+    const firstClaim = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: firstRequest.requestId,
+      claimedBy: agentA,
+      baselineSnapshot,
+      now: "2026-08-10T12:00:02.000Z",
+      clock: clockAt("2026-08-10T12:00:02.000Z"),
+    });
+    await commitRequestTerminal({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: firstRequest.requestId,
+          message: "The first edit is complete.",
+        },
+        request: firstClaim,
+        commentsById: new Map(),
+        changedBlocks: new Set(),
+        currentSnapshot: acceptedSnapshot,
+        now: "2026-08-10T12:00:03.000Z",
+      }),
+      claimedBy: agentA,
+      now: "2026-08-10T12:00:03.000Z",
+      clock: clockAt("2026-08-10T12:00:03.000Z"),
+      readCurrentSnapshot: async () => acceptedSnapshot,
+    });
+    const staleClaim = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: secondRequest.requestId,
+      claimedBy: agentB,
+      baselineSnapshot,
+      now: "2026-08-10T12:00:04.000Z",
+      clock: clockAt("2026-08-10T12:00:04.000Z"),
+    });
+    const staleResponse = validateAgentResponseDraft({
+      value: {
+        requestId: secondRequest.requestId,
+        message: "The stale second edit is complete.",
+      },
+      request: staleClaim,
+      commentsById: new Map(),
+      changedBlocks: new Set(),
+      currentSnapshot: staleSnapshot,
+      now: "2026-08-10T12:00:05.000Z",
+    });
+
+    // The second baseline was captured before the first answer but claimed
+    // afterward. With timestamp filtering restored, this stale commit resolves;
+    // that counterfactual was verified.
+    await expect(
+      commitRequestTerminal({
+        store,
+        response: staleResponse,
+        claimedBy: agentB,
+        now: "2026-08-10T12:00:05.000Z",
+        clock: clockAt("2026-08-10T12:00:05.000Z"),
+        readCurrentSnapshot: async () => staleSnapshot,
+      }),
+    ).rejects.toThrow(/baseline is stale|changed underneath/i);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({
+      responses: [
+        expect.objectContaining({ requestId: firstRequest.requestId }),
+      ],
+    });
   });
 
   it("should reject a claim after its request is answered", async () => {
