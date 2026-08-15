@@ -40,6 +40,7 @@ const {
 const { buildFeedbackPackage } = await import("./feedback-package.js");
 const { claimAgentRequest, commitRequestTerminal } =
   await import("./request-mailbox.js");
+const { AGENT_CLAIM_LEASE_MS } = await import("./shared/agent-claim.js");
 
 const SESSION = "a".repeat(16);
 const PLAN_ID = "0123456789abcdef";
@@ -115,12 +116,16 @@ const answer = async ({
   readonly id: string;
   readonly commentId: string;
 }): Promise<void> => {
+  const claimMs = 1_800_000_500_000;
+  const answerMs = claimMs + 1_000;
   const claimed = await claimAgentRequest({
     store,
+    activeSessionId: SESSION,
     requestId: id,
     claimedBy: SESSION,
     baselineSnapshot: SNAPSHOT,
-    now: new Date(1_800_000_500_000).toISOString(),
+    now: new Date(claimMs).toISOString(),
+    clock: () => claimMs,
   });
   const exchange = await readAgentExchange({
     store,
@@ -140,9 +145,11 @@ const answer = async ({
       commentsById: commentsFromExchange(exchange),
       changedBlocks: new Set<string>(),
       currentSnapshot: SNAPSHOT,
-      now: new Date(1_800_000_600_000).toISOString(),
+      now: new Date(answerMs).toISOString(),
     }),
-    now: new Date(1_800_000_600_000).toISOString(),
+    claimedBy: SESSION,
+    now: new Date(answerMs).toISOString(),
+    clock: () => answerMs,
   });
 };
 
@@ -154,7 +161,9 @@ const answeredChat = async ({
   readonly index: number;
 }): Promise<string> => {
   const id = requestId(index);
-  const createdAt = new Date(1_800_000_000_000 + index * 1_000).toISOString();
+  const createdAtMs = 1_800_000_000_000 + index * 1_000;
+  const answeredAtMs = createdAtMs + 1_000;
+  const createdAt = new Date(createdAtMs).toISOString();
   const request = {
     ...messageAgentRequest({
       kind: "chat",
@@ -167,8 +176,10 @@ const answeredChat = async ({
     }),
     baselineSnapshot: SNAPSHOT,
     claimedAt: createdAt,
+    claimedBy: SESSION,
+    claimExpiresAtMs: createdAtMs + AGENT_CLAIM_LEASE_MS,
+    answeredAt: new Date(answeredAtMs).toISOString(),
   };
-  await writeAgentRequest({ store, request });
   await writeAgentResponseValue({
     store,
     requestId: id,
@@ -178,9 +189,10 @@ const answeredChat = async ({
       commentsById: new Map(),
       changedBlocks: new Set(),
       currentSnapshot: SNAPSHOT,
-      now: new Date(1_800_000_500_000 + index * 1_000).toISOString(),
+      now: new Date(answeredAtMs).toISOString(),
     }),
   });
+  await writeAgentRequest({ store, request });
   return id;
 };
 

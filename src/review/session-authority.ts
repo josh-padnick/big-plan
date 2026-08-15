@@ -223,8 +223,36 @@ export type ReviewSessionAuthorityResult<TResult> =
   | { readonly authoritative: false; readonly reason: "replaced" | "stopped" }
   | { readonly authoritative: true; readonly value: TResult };
 
-/** Runs one mailbox mutation while the same live session owns plan custody. */
+/** Runs one reviewer mutation unless this session was replaced or stopped. */
 export const withReviewSessionAuthority = async <TResult>({
+  store,
+  sessionId,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly change: () => Promise<TResult>;
+}): Promise<ReviewSessionAuthorityResult<TResult>> =>
+  withReviewStoreLock({
+    lockPath: store.sessionLockPath,
+    change: async () => {
+      const [session, heartbeat] = await Promise.all([
+        readCurrentReviewSession({ store }),
+        readSessionHeartbeatValue(store).then(validateReviewSessionHeartbeat),
+      ]);
+      if (session?.sessionId !== sessionId) {
+        return { authoritative: false, reason: "replaced" };
+      }
+      if (heartbeat?.sessionId === sessionId && heartbeat.running === false) {
+        return { authoritative: false, reason: "stopped" };
+      }
+      return { authoritative: true, value: await change() };
+    },
+    timeoutError: () => new Error("Another process is changing review custody"),
+  });
+
+/** Runs one agent mutation while the same live session owns plan custody. */
+export const withRunningReviewSessionAuthority = async <TResult>({
   store,
   sessionId,
   change,
@@ -258,8 +286,6 @@ export const withReviewSessionAuthority = async <TResult>({
     },
     timeoutError: () => new Error("Another process is changing review custody"),
   });
-
-export const withRunningReviewSessionAuthority = withReviewSessionAuthority;
 
 export const stopReviewSessionIfInactive = async ({
   store,

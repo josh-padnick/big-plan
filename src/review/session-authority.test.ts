@@ -357,4 +357,31 @@ describe("session authority", () => {
     ).resolves.toEqual({ authoritative: false, reason: "stopped" });
     expect(changed).toBe(false);
   });
+
+  it("should keep reviewer authority until shutdown is durably committed", async () => {
+    const store = await preparedStore();
+    const current = descriptor({
+      sessionId: "3333333333333333",
+      url: "http://127.0.0.1:61001/",
+    });
+    await activateReviewSession({ store, descriptor: current });
+    await refreshReviewSessionHeartbeat({
+      store,
+      sessionId: current.sessionId,
+      running: true,
+      now: 10_000,
+    });
+    let changed = false;
+
+    await expect(
+      withReviewSessionAuthority({
+        store,
+        sessionId: current.sessionId,
+        change: async () => {
+          changed = true;
+        },
+      }),
+    ).resolves.toMatchObject({ authoritative: true });
+    expect(changed).toBe(true);
+  });
 });

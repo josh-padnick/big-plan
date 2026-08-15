@@ -44,10 +44,7 @@ import {
   type ReviewerMarkdownNode,
 } from "../shared/reviewer-markdown.js";
 import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
-import {
-  reconcilePendingCancellations,
-  requestIsCanceled,
-} from "../shared/cancel-pending.js";
+import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
 import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
   clearThreadOpenOverlay,
