@@ -220,31 +220,11 @@ export const reviewSessionOwnsMailbox = async ({
   (await readCurrentReviewSession({ store }))?.sessionId === sessionId;
 
 export type ReviewSessionAuthorityResult<TResult> =
-  | { readonly authoritative: false }
+  | { readonly authoritative: false; readonly reason: "replaced" | "stopped" }
   | { readonly authoritative: true; readonly value: TResult };
 
-/** Runs one mailbox mutation while the same session owns plan custody. */
+/** Runs one mailbox mutation while the same live session owns plan custody. */
 export const withReviewSessionAuthority = async <TResult>({
-  store,
-  sessionId,
-  change,
-}: {
-  readonly store: ReviewStore;
-  readonly sessionId: string;
-  readonly change: () => Promise<TResult>;
-}): Promise<ReviewSessionAuthorityResult<TResult>> =>
-  withReviewStoreLock({
-    lockPath: store.sessionLockPath,
-    change: async () => {
-      if (!(await reviewSessionOwnsMailbox({ store, sessionId }))) {
-        return { authoritative: false };
-      }
-      return { authoritative: true, value: await change() };
-    },
-    timeoutError: () => new Error("Another process is changing review custody"),
-  });
-
-export const withRunningReviewSessionAuthority = async <TResult>({
   store,
   sessionId,
   change,
@@ -262,20 +242,24 @@ export const withRunningReviewSessionAuthority = async <TResult>({
         readCurrentReviewSession({ store }),
         readSessionHeartbeatValue(store).then(validateReviewSessionHeartbeat),
       ]);
+      if (session?.sessionId !== sessionId) {
+        return { authoritative: false, reason: "replaced" };
+      }
       if (
-        session?.sessionId !== sessionId ||
         !heartbeatIsFresh({
           heartbeat,
           sessionId,
           observedAtMs: clock(),
         })
       ) {
-        return { authoritative: false };
+        return { authoritative: false, reason: "stopped" };
       }
       return { authoritative: true, value: await change() };
     },
     timeoutError: () => new Error("Another process is changing review custody"),
   });
+
+export const withRunningReviewSessionAuthority = withReviewSessionAuthority;
 
 export const stopReviewSessionIfInactive = async ({
   store,

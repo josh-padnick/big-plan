@@ -39,7 +39,10 @@ import {
   startReviewRuntime,
 } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
-import { reviewSessionIsRunning } from "./session-authority.js";
+import {
+  reviewSessionIsRunning,
+  stopReviewSessionIfInactive,
+} from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
 import { validateResolvedCommentIds } from "./shared/comment.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
@@ -2118,6 +2121,96 @@ describe("review runtime resolve invariant", () => {
 });
 
 describe("review runtime shutdown", () => {
+  it("should refuse a mutation queued behind committed idle shutdown", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-idle-write-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 0,
+    });
+    const descriptor: unknown = JSON.parse(
+      await readFile(review.store.sessionPath, "utf8"),
+    );
+    const sessionToken =
+      typeof descriptor === "object" &&
+      descriptor !== null &&
+      "token" in descriptor &&
+      typeof descriptor.token === "string"
+        ? descriptor.token
+        : "";
+    let enterStop = (): void => undefined;
+    const stopEntered = new Promise<void>((settle) => {
+      enterStop = settle;
+    });
+    let releaseStop = (): void => undefined;
+    const stopReleased = new Promise<void>((settle) => {
+      releaseStop = settle;
+    });
+    const stopping = stopReviewSessionIfInactive({
+      store: review.store,
+      sessionId: review.sessionId,
+      stopReason: "Idle",
+      inactive: async () => {
+        enterStop();
+        await stopReleased;
+        return true;
+      },
+    });
+    await stopEntered;
+    const mutation = fetch(`${review.url}api/agent-requests`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-big-plan-review-token": sessionToken,
+        "sec-fetch-site": "same-origin",
+        origin: review.url.replace(/\/$/u, ""),
+      },
+      body: JSON.stringify({
+        kind: "chat",
+        body: "Do not acknowledge this after shutdown.",
+      }),
+    });
+    try {
+      const mutationWaited = await Promise.race([
+        mutation.then(() => false),
+        new Promise<true>((settle) => setTimeout(() => settle(true), 20)),
+      ]);
+      expect(mutationWaited).toBe(true);
+      releaseStop();
+      await expect(stopping).resolves.toEqual({
+        authoritative: true,
+        stopped: true,
+      });
+      // Without the in-lock heartbeat check, this already-waiting POST returns
+      // 200 and writes its request after running:false commits. That
+      // counterfactual was verified before this test passed.
+      const response = await mutation;
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toEqual({
+        error:
+          "This review session has stopped and can no longer accept changes",
+      });
+      const exchange = await readAgentExchange({
+        store: review.store,
+        sessionId: review.sessionId,
+        planId: review.planId,
+      });
+      expect(
+        exchange.requests.some(
+          (request) =>
+            request.kind === "chat" &&
+            request.body === "Do not acknowledge this after shutdown.",
+        ),
+      ).toBe(false);
+    } finally {
+      releaseStop();
+      await stopping;
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should not replace durable review state when reopening a diff preview", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-preview-reopen-"));
     const planPath = join(directory, "plan.mdx");

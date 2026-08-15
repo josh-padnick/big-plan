@@ -228,6 +228,12 @@ describe("session authority", () => {
       url: "http://127.0.0.1:62000/",
     });
     await activateReviewSession({ store, descriptor: replaced });
+    await refreshReviewSessionHeartbeat({
+      store,
+      sessionId: replaced.sessionId,
+      running: true,
+      now: 10_000,
+    });
     let releaseMutation = (): void => undefined;
     const mutationReleased = new Promise<void>((settle) => {
       releaseMutation = settle;
@@ -240,6 +246,7 @@ describe("session authority", () => {
     const mutation = withReviewSessionAuthority({
       store,
       sessionId: replaced.sessionId,
+      clock: () => 11_000,
       change: async () => {
         mutationStarted();
         await mutationReleased;
@@ -347,7 +354,7 @@ describe("session authority", () => {
           changed = true;
         },
       }),
-    ).resolves.toEqual({ authoritative: false });
+    ).resolves.toEqual({ authoritative: false, reason: "stopped" });
     expect(changed).toBe(false);
   });
 });

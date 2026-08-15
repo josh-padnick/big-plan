@@ -842,7 +842,9 @@ export const startReviewRuntime = async ({
                 response,
                 status: 409,
                 reason:
-                  "This review was replaced by a newer session and is now read-only",
+                  authority.reason === "stopped"
+                    ? "This review session has stopped and can no longer accept changes"
+                    : "This review was replaced by a newer session and is now read-only",
               });
             }
           },
