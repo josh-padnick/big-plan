@@ -1,6 +1,6 @@
-// Proves the page only claims an idle expiry it can actually prove from the
-// deadline it was last told, and otherwise stays with the honest generic
-// wording rather than guessing.
+// Proves the page reports only the observation it can defend - contact lost
+// and the remembered deadline passed - and never infers why the runtime went
+// away.
 
 import { describe, expect, it } from "vitest";
 import { reviewEndReason } from "./review-expiry.js";
@@ -8,21 +8,32 @@ import { reviewEndReason } from "./review-expiry.js";
 const THIRTY_MINUTES_MS = 30 * 60 * 1_000;
 
 describe("review end reason", () => {
-  it("should name an idle expiry once the last known deadline has passed", () => {
-    // The tab was suspended past the deadline: polls stopped, so nothing
-    // pushed it forward, and the runtime closed itself while nobody looked.
+  it("should report a passed deadline once the last known one is behind us", () => {
+    // Polls stopped long enough that nothing pushed the deadline forward.
     expect(
       reviewEndReason({
         expiresAtMs: 1_000,
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
       }),
-    ).toEqual({ kind: "expired", idleTimeoutMs: THIRTY_MINUTES_MS });
+    ).toEqual({ kind: "deadline-passed" });
   });
 
-  it("should treat a deadline still in the future as a stopped runtime", () => {
-    // Polls were landing right up to the silence, so the session had plenty of
-    // life left: somebody stopped the runtime, and claiming expiry would lie.
+  it("should report a passed deadline without claiming why the runtime went away", () => {
+    // The limit this test documents: the runtime may have been stopped by
+    // hand, or may still be running for another tab whose polls kept its real
+    // deadline ahead of this one. The result carries no cause either way, so
+    // no caller can render an explanation the page cannot defend.
+    expect(
+      reviewEndReason({
+        expiresAtMs: 1_000,
+        idleTimeoutMs: THIRTY_MINUTES_MS,
+        nowMs: 5_000_000,
+      }),
+    ).toEqual({ kind: "deadline-passed" });
+  });
+
+  it("should treat a deadline still ahead as an ordinary stopped runtime", () => {
     expect(
       reviewEndReason({
         expiresAtMs: 5_000,
@@ -32,7 +43,7 @@ describe("review end reason", () => {
     ).toEqual({ kind: "stopped" });
   });
 
-  it("should not claim expiry when no deadline was ever published", () => {
+  it("should report nothing extra when no deadline was ever published", () => {
     expect(
       reviewEndReason({
         expiresAtMs: undefined,
@@ -42,7 +53,7 @@ describe("review end reason", () => {
     ).toEqual({ kind: "stopped" });
   });
 
-  it("should not claim expiry when the idle timeout is disabled", () => {
+  it("should report nothing extra when the idle timeout is disabled", () => {
     // --idle-timeout 0 publishes no deadline, so a stale one cannot outlive it.
     expect(
       reviewEndReason({
@@ -67,7 +78,7 @@ describe("review end reason", () => {
         idleTimeoutMs: THIRTY_MINUTES_MS,
         nowMs: 2_000,
       }),
-    ).toEqual({ kind: "expired", idleTimeoutMs: THIRTY_MINUTES_MS });
+    ).toEqual({ kind: "deadline-passed" });
     expect(
       reviewEndReason({
         expiresAtMs: 2_001,
