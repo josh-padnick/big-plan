@@ -229,11 +229,7 @@ const startWedgedRuntime = async (
         "sec-fetch-site": "same-origin",
         origin: target.replace(/\/$/, ""),
       },
-      body: JSON.stringify({
-        drafts: [],
-        activeDraft: "",
-        resolvedCommentIds: [],
-      }),
+      body: JSON.stringify({ drafts: [], resolvedCommentIds: [] }),
     });
   const stuck = put(wedged.url).then(
     (response) => response.status,
