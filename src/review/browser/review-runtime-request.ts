@@ -1,5 +1,5 @@
-// Owns browser request-error normalization at the local review-runtime
-// boundary so transport loss has one stable error identity.
+// Owns browser request errors at the local review-runtime boundary so
+// transport loss and application refusals retain distinct, stable identities.
 
 export class ReviewRuntimeUnavailableError extends Error {
   constructor({ cause }: { readonly cause: unknown }) {
@@ -12,9 +12,9 @@ export const isReviewRuntimeUnavailable = (error: unknown): boolean =>
   error instanceof ReviewRuntimeUnavailableError;
 
 /**
- * A reachable runtime that refused. The reason is the runtime's own words, so
- * a caller can show it and a caller that must react to one refusal can read
- * the status instead of matching prose.
+ * A reachable runtime that refused. The reason preserves the runtime's own
+ * words when available, while the status lets callers react without matching
+ * prose.
  */
 export class ReviewRuntimeRefusedError extends Error {
   readonly status: number;

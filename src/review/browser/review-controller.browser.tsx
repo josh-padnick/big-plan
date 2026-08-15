@@ -4248,7 +4248,7 @@ export const ReviewController = () => {
         });
       } catch (error: unknown) {
         // The runtime refuses the whole write when a resolve contradicts
-        // queued agent work, so the resolved set returns to what it stored.
+        // outstanding agent work, so the resolved set returns to what it stored.
         // Local drafts are untouched and persist on the next write.
         if (reviewRuntimeRefusalStatus(error) !== 409) throw error;
         return {
@@ -5010,7 +5010,7 @@ export const ReviewController = () => {
         isRailOpen: isOpen,
       }),
     );
-  // Resolving never cancels queued work on the reviewer's behalf: the runtime
+  // Resolving never cancels outstanding work on the reviewer's behalf: the runtime
   // refuses a resolve that would contradict an unanswered message, and that
   // refusal is what the reviewer sees.
   const toggleResolvedComment = (commentId: string) => {

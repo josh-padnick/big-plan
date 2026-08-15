@@ -1,5 +1,5 @@
-// Proves browser transport failures normalize to the runtime-unavailable
-// identity while application failures retain their original meaning.
+// Proves browser transport failures and reachable runtime refusals retain
+// distinct identities, including the runtime's refusal reason and status.
 
 import { describe, expect, it } from "vitest";
 import {

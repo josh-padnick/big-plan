@@ -1,6 +1,5 @@
-// The local review runtime: the loopback server that renders the plan, serves
-// that document, holds the reviewer's drafts, and writes the feedback package
-// on Send.
+// The local review runtime: the loopback server that renders and serves the
+// plan, persists review state, and mediates the reviewer-agent exchange.
 //
 // Loopback is not an authentication boundary. Any page the reviewer visits can
 // reach 127.0.0.1, and any process running as the reviewer can too, so every

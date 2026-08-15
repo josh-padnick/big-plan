@@ -802,8 +802,8 @@ const readCompleteAgentExchange = async ({
 
 /**
  * The requests the agent still owes an answer, oldest first. This is the one
- * definition of outstanding work: every caller that must not contradict a
- * queued message reads it from here rather than re-deriving terminality.
+ * definition of outstanding work: every caller that must not contradict an
+ * unanswered request reads it from here rather than re-deriving terminality.
  */
 export const outstandingAgentRequests = (
   snapshot: AgentExchangeSnapshot,
@@ -998,7 +998,7 @@ export const readValidatedAgentResponse = async ({
   }
 };
 
-/** Returns the oldest request that does not yet have a validated response. */
+/** Returns the oldest request the agent still owes an answer. */
 export const nextPendingAgentRequest = (
   snapshot: AgentExchangeSnapshot,
 ): AgentRequest | undefined => outstandingAgentRequests(snapshot)[0];

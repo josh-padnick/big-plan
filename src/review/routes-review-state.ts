@@ -258,9 +258,9 @@ export const updateReviewState = async (
   const resolvedCommentIds = validateResolvedCommentIds(
     payload.resolvedCommentIds,
   );
-  // A newly resolved thread must not contradict queued agent work. The check
-  // runs before any write, so a refusal leaves the whole review state untouched
-  // rather than half applied.
+  // A newly resolved thread must not contradict outstanding agent work. The
+  // check runs before any write, so a refusal leaves the whole review state
+  // untouched rather than half applied.
   const alreadyResolved = new Set(
     await readResolvedCommentIds({
       store,

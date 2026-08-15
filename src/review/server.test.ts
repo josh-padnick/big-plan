@@ -1,6 +1,5 @@
-// The transport boundary is the review runtime's whole security story, so it
-// is covered here as behavior rather than as intent: each test is one refusal
-// the design promises, exercised against a real listening runtime.
+// Covers review-runtime route behavior against a real listening server,
+// including security refusals and durable request-lifecycle invariants.
 
 import { execFileSync } from "node:child_process";
 import { constants } from "node:fs";

@@ -1,5 +1,6 @@
-// Critical browser journey for the local review runtime behind the React
-// commenting chrome: server-backed restoration and one real feedback handoff.
+// Critical browser journeys for the local review runtime behind the React
+// commenting chrome: durable review state, feedback handoff, and honest
+// request-lifecycle refusals.
 
 import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -766,14 +767,12 @@ test.describe("a resolve the runtime refuses", () => {
         response.url().endsWith("/api/drafts") &&
         response.request().method() === "PUT",
     );
-    await inlineThread
-      .getByRole("button", { name: "Resolve thread" })
-      .click();
+    await inlineThread.getByRole("button", { name: "Resolve thread" }).click();
     expect((await refused).status()).toBe(409);
 
-    await expect(
-      page.locator("[data-review-resolve-refusal]"),
-    ).toContainText("waiting for the coding agent");
+    await expect(page.locator("[data-review-resolve-refusal]")).toContainText(
+      "waiting for the coding agent",
+    );
     await expect(
       inlineThread.getByRole("button", { name: "Resolve thread" }),
     ).toBeVisible();

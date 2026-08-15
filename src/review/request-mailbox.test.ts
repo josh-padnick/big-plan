@@ -1,5 +1,5 @@
-// Proves that separate browser and agent processes can change one stored
-// request without replacing each other's fields.
+// Proves stored request mutations serialize safely across processes and
+// request-lifecycle invariants reject contradictory review state.
 
 import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";

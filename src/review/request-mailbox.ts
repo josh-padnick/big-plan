@@ -1,5 +1,5 @@
-// Owns changes to stored agent requests. Each change locks one request,
-// reads its current value, validates it, and writes one complete replacement.
+// Owns stored agent-request lifecycle mutations and invariants. Each mutation
+// locks its state, validates it, and writes one complete replacement.
 
 import { join } from "node:path";
 import {
@@ -308,7 +308,7 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
   });
 
 /**
- * Refuses a resolve that would contradict queued work. Resolution and an
+ * Refuses a resolve that would contradict outstanding work. Resolution and an
  * unanswered message are mutually exclusive states, so the thread must reach
  * one of them first: cancel the message, or wait for the answer.
  */
