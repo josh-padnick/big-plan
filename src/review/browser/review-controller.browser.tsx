@@ -682,46 +682,97 @@ const readLiveReviewRecovery = (
   }
 };
 
-/** Saves unsynchronized live review state before a runtime write is attempted. */
+const serializedLiveReviewRecovery = (recovery: LiveReviewRecovery): string =>
+  JSON.stringify({
+    version: LIVE_RECOVERY_SNAPSHOT_VERSION,
+    drafts: recovery.drafts,
+    resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
+    reconciliation: {
+      base: {
+        draftBodies: Object.fromEntries(
+          recovery.reconciliation.base.draftBodies,
+        ),
+        resolvedCommentIds: Array.from(
+          recovery.reconciliation.base.resolvedCommentIds,
+        ),
+      },
+      conflicts: recovery.reconciliation.conflicts,
+      runtime:
+        recovery.reconciliation.runtime === null
+          ? null
+          : {
+              drafts: recovery.reconciliation.runtime.drafts,
+              resolvedCommentIds: Array.from(
+                recovery.reconciliation.runtime.resolvedCommentIds,
+              ),
+            },
+    },
+  });
+
+const incomingRecoveryCoversStored = ({
+  stored,
+  incoming,
+}: {
+  readonly stored: LiveReviewRecovery;
+  readonly incoming: LiveReviewRecovery;
+}): boolean => {
+  const storedFingerprint = persistedReviewFingerprint(stored);
+  const incomingFingerprint = persistedReviewFingerprint(incoming);
+  if (storedFingerprint === incomingFingerprint) {
+    return (
+      serializedLiveReviewRecovery(stored) ===
+      serializedLiveReviewRecovery(incoming)
+    );
+  }
+  if (
+    stored.reconciliation.conflicts.length > 0 &&
+    JSON.stringify(stored.reconciliation.conflicts) !==
+      JSON.stringify(incoming.reconciliation.conflicts)
+  ) {
+    return false;
+  }
+  const merged = mergeLiveReviewRecovery({
+    base: stored.reconciliation.base,
+    local: stored,
+    runtime: incoming,
+  });
+  return (
+    merged.conflicts.length === 0 &&
+    persistedReviewFingerprint(merged.state) === incomingFingerprint
+  );
+};
+
+/**
+ * The record is shared by every tab in the session, and one tab may hold work
+ * another has never seen, so this writer reconciles and never assigns over an
+ * unfamiliar snapshot.
+ */
 const writeLiveReviewRecovery = ({
   identity,
   recovery,
+  ownedStorageValue,
 }: {
   readonly identity: RuntimeIdentity;
   readonly recovery: LiveReviewRecovery;
-}): boolean => {
+  readonly ownedStorageValue: string | null;
+}): string | null => {
   try {
-    localStorage.setItem(
-      liveRecoveryStorageKey(identity),
-      JSON.stringify({
-        version: LIVE_RECOVERY_SNAPSHOT_VERSION,
-        drafts: recovery.drafts,
-        resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
-        reconciliation: {
-          base: {
-            draftBodies: Object.fromEntries(
-              recovery.reconciliation.base.draftBodies,
-            ),
-            resolvedCommentIds: Array.from(
-              recovery.reconciliation.base.resolvedCommentIds,
-            ),
-          },
-          conflicts: recovery.reconciliation.conflicts,
-          runtime:
-            recovery.reconciliation.runtime === null
-              ? null
-              : {
-                  drafts: recovery.reconciliation.runtime.drafts,
-                  resolvedCommentIds: Array.from(
-                    recovery.reconciliation.runtime.resolvedCommentIds,
-                  ),
-                },
-        },
-      }),
-    );
-    return true;
+    const key = liveRecoveryStorageKey(identity);
+    const storedValue = localStorage.getItem(key);
+    if (storedValue !== ownedStorageValue) {
+      const stored = readLiveReviewRecovery(identity);
+      if (
+        stored !== null &&
+        !incomingRecoveryCoversStored({ stored, incoming: recovery })
+      ) {
+        return ownedStorageValue;
+      }
+    }
+    const incomingValue = serializedLiveReviewRecovery(recovery);
+    localStorage.setItem(key, incomingValue);
+    return incomingValue;
   } catch {
-    return false;
+    return ownedStorageValue;
   }
 };
 
@@ -872,19 +923,21 @@ const clearLiveReviewRecovery = ({
 }: {
   readonly identity: RuntimeIdentity;
   readonly fingerprint: string;
-}): void => {
+}): boolean => {
   const recovery = readLiveReviewRecovery(identity);
   if (
     recovery === null ||
     recovery.reconciliation.conflicts.length > 0 ||
     persistedReviewFingerprint(recovery) !== fingerprint
   ) {
-    return;
+    return false;
   }
   try {
     localStorage.removeItem(liveRecoveryStorageKey(identity));
+    return true;
   } catch {
     // The runtime now owns the state, so stale recovery cleanup is best effort.
+    return false;
   }
 };
 
@@ -4233,6 +4286,10 @@ export const ReviewController = () => {
     [resolvedCommentIds, sent, unresolvedDrafts],
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
+  const liveRecoveryOwnershipRef = useRef<{
+    readonly key: string;
+    readonly storageValue: string | null;
+  } | null>(null);
   // The version the next conditional write must carry.
   const runtimeVersionRef = useRef("");
   const [persistedReviewState, setPersistedReviewState] = useState<
@@ -4957,25 +5014,31 @@ export const ReviewController = () => {
   useEffect(() => {
     if (!isHydrated || identity === null) return;
     const reviewState = { drafts, resolvedCommentIds };
-    writeLiveReviewRecovery({
+    const key = liveRecoveryStorageKey(identity);
+    const ownedStorageValue =
+      liveRecoveryOwnershipRef.current?.key === key
+        ? liveRecoveryOwnershipRef.current.storageValue
+        : null;
+    const storageValue = writeLiveReviewRecovery({
       identity,
       recovery: {
         ...reviewState,
         reconciliation: recoveryReconciliation,
       },
+      ownedStorageValue,
     });
+    liveRecoveryOwnershipRef.current = { key, storageValue };
     if (
       recoveryReconciliation.conflicts.length === 0 &&
-      persistedReviewState === persistedReviewFingerprint(reviewState)
+      persistedReviewState === persistedReviewFingerprint(reviewState) &&
+      clearLiveReviewRecovery({
+        identity,
+        fingerprint: persistedReviewState,
+      })
     ) {
-      clearLiveReviewRecovery({ identity, fingerprint: persistedReviewState });
+      liveRecoveryOwnershipRef.current = { key, storageValue: null };
     }
-    writeLiveComposerRecovery({
-      identity,
-      composer: composerRecovery,
-    });
   }, [
-    composerRecovery,
     drafts,
     identity,
     isHydrated,
@@ -4983,6 +5046,14 @@ export const ReviewController = () => {
     recoveryReconciliation,
     resolvedCommentIds,
   ]);
+
+  useEffect(() => {
+    if (!isHydrated || identity === null) return;
+    writeLiveComposerRecovery({
+      identity,
+      composer: composerRecovery,
+    });
+  }, [composerRecovery, identity, isHydrated]);
 
   useEffect(() => {
     if (!isHydrated) return;

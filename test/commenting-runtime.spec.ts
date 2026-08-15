@@ -559,6 +559,122 @@ test.describe("a drafts write prepared against content the store moved past", ()
     allowedConsoleErrors: [/Failed to load resource:.*(?:400|409|503)/u],
   });
 
+  test("should preserve another tab's offline draft during composer recovery", async ({
+    context,
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Keep this draft before either tab goes offline.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const secondPage = await context.newPage();
+    await secondPage.goto(reviewRuntimeUrl);
+    const recoveryKeys = await page.locator("html").evaluate((root) => {
+      const shared = `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}`;
+      return { shared, composer: `${shared}:composer` };
+    });
+    const storedRecoveryBodies = (targetPage: Page): Promise<string[]> =>
+      targetPage.evaluate((key) => {
+        const raw = window.localStorage.getItem(key);
+        if (raw === null) return [];
+        const parsed: unknown = JSON.parse(raw);
+        return typeof parsed === "object" &&
+          parsed !== null &&
+          "drafts" in parsed &&
+          Array.isArray(parsed.drafts)
+          ? parsed.drafts.flatMap((draft) =>
+              typeof draft === "object" &&
+              draft !== null &&
+              "body" in draft &&
+              typeof draft.body === "string"
+                ? [draft.body]
+                : [],
+            )
+          : [];
+      }, recoveryKeys.shared);
+    const blockRuntimeFetch = (): void => {
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        return url.pathname.startsWith("/api/")
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : runtimeFetch(input, init);
+      };
+    };
+    await page.addInitScript(blockRuntimeFetch);
+    await page.evaluate(blockRuntimeFetch);
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: `Expand staged comment: ${original}` })
+      .click();
+    await rail.getByRole("button", { name: "Edit staged comment" }).click();
+    const offlineBody = "Keep this edit owned only by the offline tab.";
+    await rail.getByLabel("Edit comment").fill(offlineBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    await expect.poll(() => storedRecoveryBodies(page)).toEqual([offlineBody]);
+
+    const slide = secondPage.locator("[data-slide]").first();
+    await slide.hover();
+    await slide.getByRole("button", { name: "Comment on slide" }).click();
+    const composerBody = "Typing here must not clear another tab's recovery.";
+    await secondPage
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByLabel("Add a comment")
+      .fill(composerBody);
+    await expect
+      .poll(() =>
+        secondPage.evaluate(
+          (key) => window.sessionStorage.getItem(key),
+          recoveryKeys.composer,
+        ),
+      )
+      .toContain(composerBody);
+    await secondPage
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByRole("button", { name: "Cancel" })
+      .click();
+    await secondPage
+      .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+      .click();
+    const secondRail = secondPage.getByRole("complementary", {
+      name: "Feedback",
+    });
+    await secondRail
+      .getByRole("button", { name: `Expand staged comment: ${original}` })
+      .click();
+    await secondRail
+      .getByRole("button", { name: "Edit staged comment" })
+      .click();
+    await secondRail.getByLabel("Edit comment").fill(original);
+    await secondRail.getByRole("button", { name: "Save" }).click();
+    await expect
+      .poll(() => storedRecoveryBodies(secondPage))
+      .toEqual([offlineBody]);
+
+    await page.reload();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await expect(
+      page
+        .getByRole("complementary", { name: "Feedback" })
+        .getByText(offlineBody),
+    ).toBeVisible();
+    await secondPage.close();
+  });
+
   test("should keep a concurrent runtime comment when this browser writes", async ({
     page,
     reviewRuntimeUrl,
