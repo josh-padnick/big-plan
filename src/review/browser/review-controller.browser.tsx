@@ -4957,19 +4957,18 @@ export const ReviewController = () => {
   useEffect(() => {
     if (!isHydrated || identity === null) return;
     const reviewState = { drafts, resolvedCommentIds };
+    writeLiveReviewRecovery({
+      identity,
+      recovery: {
+        ...reviewState,
+        reconciliation: recoveryReconciliation,
+      },
+    });
     if (
       recoveryReconciliation.conflicts.length === 0 &&
       persistedReviewState === persistedReviewFingerprint(reviewState)
     ) {
       clearLiveReviewRecovery({ identity, fingerprint: persistedReviewState });
-    } else {
-      writeLiveReviewRecovery({
-        identity,
-        recovery: {
-          ...reviewState,
-          reconciliation: recoveryReconciliation,
-        },
-      });
     }
     writeLiveComposerRecovery({
       identity,
@@ -5387,7 +5386,6 @@ export const ReviewController = () => {
           if (preparedComments.length !== comments.length) {
             return { submitted: false, conflicted: false, comments: [] };
           }
-          const preparedGeneration = latestReviewStateRef.current.generation;
           const submittedBodies = new Map(
             preparedComments.map((comment) => [comment.id, comment.body]),
           );
@@ -5409,10 +5407,7 @@ export const ReviewController = () => {
               base,
               local: latest.state,
               preferredSent: preparedComments,
-              submittedBodies:
-                latest.generation === preparedGeneration
-                  ? undefined
-                  : submittedBodies,
+              submittedBodies,
             });
             return {
               submitted: true,

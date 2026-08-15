@@ -722,6 +722,116 @@ test.describe("a drafts write prepared against content the store moved past", ()
         ),
       )
       .toEqual([runtimeBody]);
+    const offlineKey = "big-plan:test:runtime-choice-offline";
+    await page.addInitScript((key) => {
+      let offline = false;
+      try {
+        offline = window.sessionStorage.getItem(key) === "true";
+      } catch {
+        return;
+      }
+      if (!offline) return;
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        return url.pathname.startsWith("/api/")
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : runtimeFetch(input, init);
+      };
+    }, offlineKey);
+    await page.evaluate(
+      (key) => window.sessionStorage.setItem(key, "true"),
+      offlineKey,
+    );
+    await page.reload();
+    await expect(choice).toBeHidden();
+  });
+
+  test("should submit an unsynchronized local edit without a conflict", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Name the owner before submission.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const failedWritesKey = "big-plan:test:failed-unsynchronized-write";
+    await page.evaluate((key) => {
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        const method =
+          init?.method ?? (input instanceof Request ? input.method : "GET");
+        if (
+          url.pathname === "/api/drafts" &&
+          method === "PUT" &&
+          window.sessionStorage.getItem(key) === null
+        ) {
+          window.sessionStorage.setItem(key, "1");
+          return Promise.reject(new TypeError("Failed to fetch"));
+        }
+        return runtimeFetch(input, init);
+      };
+    }, failedWritesKey);
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: `Expand staged comment: ${original}` })
+      .click();
+    await rail.getByRole("button", { name: "Edit staged comment" }).click();
+    const localBody = "Name the owner and escalation contact.";
+    await rail.getByLabel("Edit comment").fill(localBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => Number(window.sessionStorage.getItem(key) ?? "0"),
+          failedWritesKey,
+        ),
+      )
+      .toBe(1);
+
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .locator(".review-staged-card")
+      .filter({ hasText: localBody })
+      .getByRole("button", { name: "Send this" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    await expect(
+      page.getByRole("alertdialog", {
+        name: "Two versions of this comment",
+      }),
+    ).toBeHidden();
+    await expect
+      .poll(async () => {
+        const snapshot = await readRuntimeDrafts(reviewRuntimeUrl, token);
+        return {
+          drafts: snapshot.drafts.map((draft) => draft.body),
+          sent: snapshot.sent.map((comment) => comment.body),
+        };
+      })
+      .toEqual({ drafts: [], sent: [localBody] });
   });
 
   test("should remember conflict answers across failed and offline recovery", async ({
