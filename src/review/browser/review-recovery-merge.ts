@@ -42,6 +42,12 @@ export type ReviewRecoveryConflict =
       readonly commentId: string;
       readonly localBody: string;
       readonly runtimeBody: string;
+    }
+  | {
+      readonly kind: "resolution";
+      readonly commentId: string;
+      readonly localResolved: boolean;
+      readonly runtimeResolved: boolean;
     };
 
 export type ReviewRecoveryMerge = {
@@ -63,6 +69,9 @@ export type ReviewRecoveryConflictRefresh = {
   readonly conflicts: ReadonlyArray<ReviewRecoveryConflict>;
   readonly settledConflicts: ReadonlyArray<ReviewRecoveryConflict>;
 };
+
+const reviewRecoveryConflictKey = (conflict: ReviewRecoveryConflict): string =>
+  `${conflict.kind === "resolution" ? "resolution" : "body"}:${conflict.commentId}`;
 
 /** Records the base a later merge compares against, from an agreed state. */
 export const reviewRecoveryBase = (
@@ -97,6 +106,15 @@ export const refreshReviewRecoveryConflicts = ({
   const refreshed: Array<ReviewRecoveryConflict> = [];
   const settledConflicts: Array<ReviewRecoveryConflict> = [];
   for (const conflict of conflicts) {
+    if (conflict.kind === "resolution") {
+      const localResolved = local.resolvedCommentIds.has(conflict.commentId);
+      if (localResolved === conflict.runtimeResolved) {
+        settledConflicts.push(conflict);
+      } else {
+        refreshed.push({ ...conflict, localResolved });
+      }
+      continue;
+    }
     const localBody = localBodies.get(conflict.commentId) ?? null;
     if (conflict.kind === "sent") {
       if (localBody === null || localBody === conflict.runtimeBody) {
@@ -285,16 +303,39 @@ export const resumeLiveReviewRecovery = ({
   );
   const sentBodies = new Map(sent.map((comment) => [comment.id, comment.body]));
   const conflicts = new Map(
-    merged.conflicts.map((conflict) => [conflict.commentId, conflict]),
+    merged.conflicts.map((conflict) => [
+      reviewRecoveryConflictKey(conflict),
+      conflict,
+    ]),
   );
   for (const priorConflict of recovery.reconciliation.conflicts) {
+    const conflictKey = reviewRecoveryConflictKey(priorConflict);
+    if (priorConflict.kind === "resolution") {
+      const localResolved = recovery.resolvedCommentIds.has(
+        priorConflict.commentId,
+      );
+      const runtimeResolved = runtime.resolvedCommentIds.has(
+        priorConflict.commentId,
+      );
+      if (localResolved === runtimeResolved) {
+        conflicts.delete(conflictKey);
+      } else {
+        conflicts.set(conflictKey, {
+          kind: "resolution",
+          commentId: priorConflict.commentId,
+          localResolved,
+          runtimeResolved,
+        });
+      }
+      continue;
+    }
     const localBody = localBodies.get(priorConflict.commentId) ?? null;
     const sentBody = sentBodies.get(priorConflict.commentId);
     if (sentBody !== undefined) {
       if (localBody === null || localBody === sentBody) {
-        conflicts.delete(priorConflict.commentId);
+        conflicts.delete(conflictKey);
       } else {
-        conflicts.set(priorConflict.commentId, {
+        conflicts.set(conflictKey, {
           kind: "sent",
           commentId: priorConflict.commentId,
           localBody,
@@ -305,9 +346,9 @@ export const resumeLiveReviewRecovery = ({
     }
     const runtimeBody = runtimeBodies.get(priorConflict.commentId) ?? null;
     if (localBody === runtimeBody) {
-      conflicts.delete(priorConflict.commentId);
+      conflicts.delete(conflictKey);
     } else {
-      conflicts.set(priorConflict.commentId, {
+      conflicts.set(conflictKey, {
         kind: "draft",
         commentId: priorConflict.commentId,
         localBody,
@@ -334,7 +375,10 @@ export const adoptLiveReviewRecovery = ({
     sent,
   });
   const conflicts = new Map(
-    merged.conflicts.map((conflict) => [conflict.commentId, conflict]),
+    merged.conflicts.map((conflict) => [
+      reviewRecoveryConflictKey(conflict),
+      conflict,
+    ]),
   );
   const localDrafts = new Map(
     recovery.drafts.map((draft) => [draft.id, draft]),
@@ -351,16 +395,37 @@ export const adoptLiveReviewRecovery = ({
     ...adoptionBase.draftBodies.keys(),
     ...localDrafts.keys(),
   ])) {
-    if (conflicts.has(commentId) || sentIds.has(commentId)) continue;
+    const conflictKey = `body:${commentId}`;
+    if (conflicts.has(conflictKey) || sentIds.has(commentId)) continue;
     const baseBody = adoptionBase.draftBodies.get(commentId);
     const localBody = localDrafts.get(commentId)?.body ?? null;
     const runtimeBody = runtimeDrafts.get(commentId)?.body ?? null;
     if (localBody === (baseBody ?? null) || localBody === runtimeBody) continue;
-    conflicts.set(commentId, {
+    conflicts.set(conflictKey, {
       kind: "draft",
       commentId,
       localBody,
       runtimeBody,
+    });
+  }
+  for (const commentId of new Set([
+    ...adoptionBase.resolvedCommentIds,
+    ...recovery.resolvedCommentIds,
+    ...runtime.resolvedCommentIds,
+  ])) {
+    const localResolved = recovery.resolvedCommentIds.has(commentId);
+    const runtimeResolved = runtime.resolvedCommentIds.has(commentId);
+    if (
+      localResolved === adoptionBase.resolvedCommentIds.has(commentId) ||
+      localResolved === runtimeResolved
+    ) {
+      continue;
+    }
+    conflicts.set(`resolution:${commentId}`, {
+      kind: "resolution",
+      commentId,
+      localResolved,
+      runtimeResolved,
     });
   }
   return { state: merged.state, conflicts: [...conflicts.values()] };
@@ -380,6 +445,14 @@ export const resolveReviewRecoveryConflict = ({
   readonly keep: "local" | "runtime";
   readonly replacementCommentId?: string;
 }): ReviewRecoveryState => {
+  if (conflict.kind === "resolution") {
+    const resolvedCommentIds = new Set(state.resolvedCommentIds);
+    const resolved =
+      keep === "local" ? conflict.localResolved : conflict.runtimeResolved;
+    if (resolved) resolvedCommentIds.add(conflict.commentId);
+    else resolvedCommentIds.delete(conflict.commentId);
+    return { drafts: state.drafts, resolvedCommentIds };
+  }
   if (keep === "local") {
     if (conflict.kind === "sent") {
       if (replacementCommentId === undefined) {
@@ -444,6 +517,7 @@ export const reviewRecoveryBaseAfterConflictAnswers = ({
     runtime.drafts.map((draft) => [draft.id, draft.body]),
   );
   for (const conflict of answeredConflicts) {
+    if (conflict.kind === "resolution") continue;
     const runtimeBody = runtimeDrafts.get(conflict.commentId);
     if (runtimeBody === undefined) draftBodies.delete(conflict.commentId);
     else draftBodies.set(conflict.commentId, runtimeBody);

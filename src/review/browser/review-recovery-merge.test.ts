@@ -238,7 +238,9 @@ describe("live review recovery merge", () => {
       local: state([comment("c1", "latest local edit")]),
     });
     const conflict = refreshed.conflicts[0];
-    if (conflict === undefined) throw new Error("expected one conflict");
+    if (conflict === undefined || conflict.kind === "resolution") {
+      throw new Error("expected one body conflict");
+    }
 
     expect(conflict.localBody).toBe("latest local edit");
     expect(

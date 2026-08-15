@@ -64,6 +64,43 @@ test("should keep one staged comment after reloading the live review", async ({
   ).toHaveCount(1);
 });
 
+test("should hydrate when browser recovery storage is blocked", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.addInitScript(() => {
+    const blocked = (): never => {
+      throw new DOMException("Storage is blocked", "SecurityError");
+    };
+    Object.defineProperty(Storage.prototype, "getItem", {
+      configurable: true,
+      value: blocked,
+    });
+    Object.defineProperty(Storage.prototype, "setItem", {
+      configurable: true,
+      value: blocked,
+    });
+  });
+  await page.goto(reviewRuntimeUrl);
+
+  await page.getByRole("button", { name: "Feedback" }).click();
+  await expect(
+    page.getByText(
+      "Browser recovery is unavailable. The live review remains usable, but browser-only drafts cannot be recovered after a reload.",
+    ),
+  ).toBeVisible();
+  const token = await reviewToken(page);
+  const body = "Keep the review usable without browser storage.";
+  await stageComment(page, body);
+  await expect
+    .poll(async () =>
+      (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+        (draft) => draft.body,
+      ),
+    )
+    .toEqual([body]);
+});
+
 test("should keep unsent comment text through a reload", async ({
   page,
   reviewRuntimeUrl,
@@ -487,6 +524,7 @@ const readRuntimeDrafts = async (
     readonly id: string;
     readonly body: string;
   }>;
+  readonly resolvedCommentIds: ReadonlyArray<string>;
 }> => {
   const answer: unknown = await (
     await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
@@ -501,7 +539,12 @@ const readRuntimeDrafts = async (
     !("drafts" in answer) ||
     !Array.isArray(answer.drafts) ||
     !("sent" in answer) ||
-    !Array.isArray(answer.sent)
+    !Array.isArray(answer.sent) ||
+    !("resolvedCommentIds" in answer) ||
+    !Array.isArray(answer.resolvedCommentIds) ||
+    !answer.resolvedCommentIds.every(
+      (commentId): commentId is string => typeof commentId === "string",
+    )
   ) {
     throw new Error("The review runtime did not answer with its drafts");
   }
@@ -515,6 +558,7 @@ const readRuntimeDrafts = async (
       readonly id: string;
       readonly body: string;
     }>,
+    resolvedCommentIds: answer.resolvedCommentIds,
   };
 };
 
@@ -523,11 +567,13 @@ const writeRuntimeDrafts = async ({
   token,
   version,
   drafts,
+  resolvedCommentIds = [],
 }: {
   readonly reviewRuntimeUrl: string;
   readonly token: string;
   readonly version: string;
   readonly drafts: ReadonlyArray<unknown>;
+  readonly resolvedCommentIds?: ReadonlyArray<string>;
 }): Promise<void> => {
   const written = await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
     method: "PUT",
@@ -535,7 +581,7 @@ const writeRuntimeDrafts = async ({
       "content-type": "application/json",
       "x-big-plan-review-token": token,
     },
-    body: JSON.stringify({ drafts, resolvedCommentIds: [], version }),
+    body: JSON.stringify({ drafts, resolvedCommentIds, version }),
   });
   expect(written.ok).toBe(true);
 };
@@ -1146,6 +1192,76 @@ test.describe("a drafts write prepared against content the store moved past", ()
       .not.toContain(null);
   });
 
+  test("should offer an orphaned resolution change before applying it", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const body = "Offer the recovered resolution before applying it.";
+    await stageComment(page, body);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([body]);
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const draft = stored.drafts[0];
+    if (draft === undefined) throw new Error("Expected one stored draft");
+    const identity = await page.locator("html").evaluate((root) => ({
+      planId: root.dataset.planId ?? "",
+      sessionId: root.dataset.reviewSession ?? "",
+    }));
+    const ownerId = randomBytes(8).toString("hex");
+    const orphanKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}:tab:${ownerId}`;
+    await page.evaluate(
+      ({ key, storedOwnerId, storedDraft }) => {
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 9,
+            ownerId: storedOwnerId,
+            updatedAtMs: Date.now(),
+            drafts: [storedDraft],
+            resolvedCommentIds: [storedDraft.id],
+            reconciliation: {
+              base: {
+                draftBodies: { [storedDraft.id]: storedDraft.body },
+                resolvedCommentIds: [],
+              },
+              conflicts: [],
+              runtime: null,
+            },
+            composer: { comment: null, replies: {} },
+          }),
+        );
+      },
+      { key: orphanKey, storedOwnerId: ownerId, storedDraft: draft },
+    );
+
+    await page.reload();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText("Resolved");
+    await expect(choice).toContainText("Unresolved");
+    expect(
+      (await readRuntimeDrafts(reviewRuntimeUrl, token)).resolvedCommentIds,
+    ).toEqual([]);
+    await choice.getByRole("button", { name: "Keep resolved" }).click();
+    await expect(choice).toBeHidden();
+    await expect
+      .poll(
+        async () =>
+          (await readRuntimeDrafts(reviewRuntimeUrl, token)).resolvedCommentIds,
+      )
+      .toEqual([draft.id]);
+  });
+
   test("should defer an orphaned deletion until runtime state is authoritative", async ({
     page,
     reviewRuntimeUrl,
@@ -1477,6 +1593,126 @@ test.describe("a drafts write prepared against content the store moved past", ()
     );
     await page.reload();
     await expect(choice).toBeHidden();
+  });
+
+  test("should pause unrelated feedback while any conflict is unresolved", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Keep the conflicted runtime body authoritative.";
+    const unrelated = "Do not submit this unrelated comment yet.";
+    await stageComment(page, original);
+    await stageComment(page, unrelated);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original, unrelated]);
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const conflictedDraft = stored.drafts[0];
+    const unrelatedDraft = stored.drafts[1];
+    if (conflictedDraft === undefined || unrelatedDraft === undefined) {
+      throw new Error("Expected two stored drafts");
+    }
+    const recoveryKey = await ownedLiveRecoveryKey(page);
+    const ownerId = recoveryKey.split(":tab:")[1];
+    if (ownerId === undefined) throw new Error("Expected a recovery owner");
+    const localBody = "Keep this unsynchronized local version.";
+    await page.evaluate(
+      ({ key, storedOwnerId, local, other }) => {
+        const { baseBody, ...localDraft } = local;
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 9,
+            ownerId: storedOwnerId,
+            updatedAtMs: Date.now(),
+            drafts: [localDraft, other],
+            resolvedCommentIds: [],
+            reconciliation: {
+              base: {
+                draftBodies: {
+                  [local.id]: baseBody,
+                  [other.id]: other.body,
+                },
+                resolvedCommentIds: [],
+              },
+              conflicts: [],
+              runtime: null,
+            },
+            composer: { comment: null, replies: {} },
+          }),
+        );
+      },
+      {
+        key: recoveryKey,
+        storedOwnerId: ownerId,
+        local: {
+          ...conflictedDraft,
+          body: localBody,
+          baseBody: original,
+        },
+        other: unrelatedDraft,
+      },
+    );
+    const runtimeBody = "Keep this newer runtime version.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: stored.version,
+      drafts: [{ ...conflictedDraft, body: runtimeBody }, unrelatedDraft],
+    });
+
+    await page.reload();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toContainText(localBody);
+    await expect(choice).toContainText(runtimeBody);
+    await page.keyboard.press("Escape");
+    await expect(choice).toBeHidden();
+    const feedbackButton = page.getByRole("button", {
+      name: /^Feedback(?: \d+)?$/u,
+    });
+    if ((await feedbackButton.getAttribute("aria-expanded")) !== "true") {
+      await feedbackButton.click();
+    }
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", {
+        name: `Expand staged comment: ${unrelated}`,
+      })
+      .click();
+    let feedbackWrites = 0;
+    page.on("request", (request) => {
+      if (
+        request.url().endsWith("/api/feedback") &&
+        request.method() === "POST"
+      ) {
+        feedbackWrites += 1;
+      }
+    });
+    await rail
+      .locator(".review-staged-card")
+      .filter({ hasText: unrelated })
+      .getByRole("button", { name: "Send this" })
+      .click();
+    await expect(choice).toBeVisible();
+    expect(feedbackWrites).toBe(0);
+    await expect
+      .poll(async () => {
+        const snapshot = await readRuntimeDrafts(reviewRuntimeUrl, token);
+        return {
+          drafts: snapshot.drafts.map((draft) => draft.body),
+          sent: snapshot.sent.map((comment) => comment.body),
+        };
+      })
+      .toEqual({ drafts: [runtimeBody, unrelated], sent: [] });
   });
 
   test("should submit an unsynchronized local edit without a conflict", async ({

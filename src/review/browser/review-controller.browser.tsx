@@ -548,6 +548,8 @@ const sameReviewComment = (
 const STALE_SUBMISSION_STATUS =
   "The review changed before submission. Review the latest comments and send again.";
 const RECOVERY_CONFLICT_STATUS = "Two versions of a comment need your choice.";
+const LIVE_RECOVERY_UNAVAILABLE_STATUS =
+  "Browser recovery is unavailable. The live review remains usable, but browser-only drafts cannot be recovered after a reload.";
 
 /** Comment text a reviewer typed that no comment holds yet. */
 type RecoveredComposer = {
@@ -603,16 +605,19 @@ const readStoredReviewState = (value: unknown): ReviewRecoveryState | null => {
 const isStoredReviewRecoveryConflict = (
   value: unknown,
 ): value is ReviewRecoveryConflict => {
-  if (
-    !isRecord(value) ||
-    typeof value.commentId !== "string" ||
-    (typeof value.localBody !== "string" && value.localBody !== null) ||
-    (typeof value.runtimeBody !== "string" && value.runtimeBody !== null)
-  ) {
+  if (!isRecord(value) || typeof value.commentId !== "string") {
     return false;
   }
+  if (value.kind === "resolution") {
+    return (
+      typeof value.localResolved === "boolean" &&
+      typeof value.runtimeResolved === "boolean"
+    );
+  }
   return (
-    value.kind === "draft" ||
+    (value.kind === "draft" &&
+      (typeof value.localBody === "string" || value.localBody === null) &&
+      (typeof value.runtimeBody === "string" || value.runtimeBody === null)) ||
     (value.kind === "sent" &&
       typeof value.localBody === "string" &&
       typeof value.runtimeBody === "string")
@@ -654,11 +659,13 @@ type StoredLiveRecoveryAdoptions = {
 
 type LiveRecoveryOwner = {
   readonly ownerId: string;
+  readonly recoveryAvailable: boolean;
 };
 
 type LiveRecoverySelection = {
   readonly recovery: StoredLiveReviewRecovery | null;
   readonly source: "owned" | "orphan" | null;
+  readonly recoveryAvailable: boolean;
 };
 
 /** Reads one tab-owned recovery snapshot without accepting partial data. */
@@ -863,16 +870,20 @@ const recordLiveRecoveryAdoption = ({
 const claimLiveRecoveryOwner = (
   identity: RuntimeIdentity,
 ): LiveRecoveryOwner => {
-  const sessionKey = liveRecoveryOwnerSessionKey(identity);
-  const previousOwnerId = sessionStorage.getItem(sessionKey);
-  const navigation = performance.getEntriesByType("navigation")[0];
-  const isReload =
-    navigation instanceof PerformanceNavigationTiming &&
-    navigation.type === "reload";
-  const ownerId =
-    isReload && previousOwnerId !== null ? previousOwnerId : randomId();
-  sessionStorage.setItem(sessionKey, ownerId);
-  return { ownerId };
+  try {
+    const sessionKey = liveRecoveryOwnerSessionKey(identity);
+    const previousOwnerId = sessionStorage.getItem(sessionKey);
+    const navigation = performance.getEntriesByType("navigation")[0];
+    const isReload =
+      navigation instanceof PerformanceNavigationTiming &&
+      navigation.type === "reload";
+    const ownerId =
+      isReload && previousOwnerId !== null ? previousOwnerId : randomId();
+    sessionStorage.setItem(sessionKey, ownerId);
+    return { ownerId, recoveryAvailable: true };
+  } catch {
+    return { ownerId: randomId(), recoveryAvailable: false };
+  }
 };
 
 /** Selects continuity first, then the newest unexpired recovery candidate. */
@@ -885,37 +896,52 @@ const selectLiveReviewRecovery = ({
   readonly owner: LiveRecoveryOwner;
   readonly nowMs: number;
 }): LiveRecoverySelection => {
-  const owned = readLiveReviewRecovery(
-    liveRecoveryStorageKey({ identity, ownerId: owner.ownerId }),
-  );
-  const adoptedRevisions = adoptedLiveRecoveryRevisions({ identity, nowMs });
-  const prefix = `${liveRecoveryStoragePrefix(identity)}:tab:`;
-  const candidates: Array<{
-    readonly key: string;
-    readonly recovery: StoredLiveReviewRecovery;
-  }> = [];
-  for (let index = 0; index < localStorage.length; index += 1) {
-    const key = localStorage.key(index);
-    if (key === null || !key.startsWith(prefix)) continue;
-    const recovery = readLiveReviewRecovery(key);
-    if (recovery === null || recovery.ownerId === owner.ownerId) continue;
-    if (nowMs - recovery.updatedAtMs > LIVE_RECOVERY_EXPIRY_MS) {
-      localStorage.removeItem(key);
-      index -= 1;
-      continue;
-    }
-    if ((adoptedRevisions.get(recovery.ownerId) ?? 0) >= recovery.updatedAtMs) {
-      continue;
-    }
-    candidates.push({ key, recovery });
+  if (!owner.recoveryAvailable) {
+    return { recovery: null, source: null, recoveryAvailable: false };
   }
-  if (owned !== null) return { recovery: owned, source: "owned" };
-  const orphan = candidates.sort(
-    (left, right) => right.recovery.updatedAtMs - left.recovery.updatedAtMs,
-  )[0];
-  return orphan === undefined
-    ? { recovery: null, source: null }
-    : { recovery: orphan.recovery, source: "orphan" };
+  try {
+    const owned = readLiveReviewRecovery(
+      liveRecoveryStorageKey({ identity, ownerId: owner.ownerId }),
+    );
+    const adoptedRevisions = adoptedLiveRecoveryRevisions({ identity, nowMs });
+    const prefix = `${liveRecoveryStoragePrefix(identity)}:tab:`;
+    const candidates: Array<{
+      readonly key: string;
+      readonly recovery: StoredLiveReviewRecovery;
+    }> = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key === null || !key.startsWith(prefix)) continue;
+      const recovery = readLiveReviewRecovery(key);
+      if (recovery === null || recovery.ownerId === owner.ownerId) continue;
+      if (nowMs - recovery.updatedAtMs > LIVE_RECOVERY_EXPIRY_MS) {
+        localStorage.removeItem(key);
+        index -= 1;
+        continue;
+      }
+      if (
+        (adoptedRevisions.get(recovery.ownerId) ?? 0) >= recovery.updatedAtMs
+      ) {
+        continue;
+      }
+      candidates.push({ key, recovery });
+    }
+    if (owned !== null) {
+      return { recovery: owned, source: "owned", recoveryAvailable: true };
+    }
+    const orphan = candidates.sort(
+      (left, right) => right.recovery.updatedAtMs - left.recovery.updatedAtMs,
+    )[0];
+    return orphan === undefined
+      ? { recovery: null, source: null, recoveryAvailable: true }
+      : {
+          recovery: orphan.recovery,
+          source: "orphan",
+          recoveryAvailable: true,
+        };
+  } catch {
+    return { recovery: null, source: null, recoveryAvailable: false };
+  }
 };
 
 /** Writes only the record this browser tab owns. */
@@ -980,13 +1006,15 @@ const RecoveryConflictDialog = ({
 }) => {
   if (conflict === undefined) return null;
   const description =
-    conflict.kind === "sent"
-      ? "This comment was sent in the review session while you kept editing it here. Keep the submitted version, or stage your edit as new feedback."
-      : conflict.runtimeBody === null
-        ? "You changed this comment here, and it was deleted in the review session. Keep your version, or let the deletion stand."
-        : conflict.localBody === null
-          ? "You deleted this comment here, and it was changed in the review session. Keep the deletion, or take the version from the review session."
-          : "This comment was changed here and in the review session while the two were apart. Keep one of them.";
+    conflict.kind === "resolution"
+      ? `This thread was ${conflict.localResolved ? "resolved" : "unresolved"} in the recovered review and ${conflict.runtimeResolved ? "resolved" : "unresolved"} in the review session. Keep one state.`
+      : conflict.kind === "sent"
+        ? "This comment was sent in the review session while you kept editing it here. Keep the submitted version, or stage your edit as new feedback."
+        : conflict.runtimeBody === null
+          ? "You changed this comment here, and it was deleted in the review session. Keep your version, or let the deletion stand."
+          : conflict.localBody === null
+            ? "You deleted this comment here, and it was changed in the review session. Keep the deletion, or take the version from the review session."
+            : "This comment was changed here and in the review session while the two were apart. Keep one of them.";
   return (
     <AlertDialog
       open
@@ -994,18 +1022,22 @@ const RecoveryConflictDialog = ({
       title="Two versions of this comment"
       description={description}
       cancelLabel={
-        conflict.kind === "sent"
-          ? "Stage mine as new feedback"
-          : conflict.localBody === null
-            ? "Keep the deletion"
-            : "Keep mine"
+        conflict.kind === "resolution"
+          ? `Keep ${conflict.localResolved ? "resolved" : "unresolved"}`
+          : conflict.kind === "sent"
+            ? "Stage mine as new feedback"
+            : conflict.localBody === null
+              ? "Keep the deletion"
+              : "Keep mine"
       }
       actionLabel={
-        conflict.kind === "sent"
-          ? "Keep submitted version"
-          : conflict.runtimeBody === null
-            ? "Delete it"
-            : "Use the review session's version"
+        conflict.kind === "resolution"
+          ? "Use the review session's state"
+          : conflict.kind === "sent"
+            ? "Keep submitted version"
+            : conflict.runtimeBody === null
+              ? "Delete it"
+              : "Use the review session's version"
       }
       onCancel={() => onKeep("local")}
       onAction={() => onKeep("runtime")}
@@ -1017,7 +1049,11 @@ const RecoveryConflictDialog = ({
             Yours
           </p>
           <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
-            {conflict.localBody ?? "Deleted here."}
+            {conflict.kind === "resolution"
+              ? conflict.localResolved
+                ? "Resolved"
+                : "Unresolved"
+              : (conflict.localBody ?? "Deleted here.")}
           </p>
         </div>
         <div>
@@ -1027,7 +1063,11 @@ const RecoveryConflictDialog = ({
               : "In the review session"}
           </p>
           <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
-            {conflict.runtimeBody ?? "Deleted there."}
+            {conflict.kind === "resolution"
+              ? conflict.runtimeResolved
+                ? "Resolved"
+                : "Unresolved"
+              : (conflict.runtimeBody ?? "Deleted there.")}
           </p>
         </div>
       </div>
@@ -4376,6 +4416,7 @@ export const ReviewController = () => {
   const [liveRecoveryOwnerId, setLiveRecoveryOwnerId] = useState<string | null>(
     null,
   );
+  const [isLiveRecoveryAvailable, setIsLiveRecoveryAvailable] = useState(true);
   const pendingRecoveryAdoptionRef = useRef<{
     readonly ownerId: string;
     readonly updatedAtMs: number;
@@ -4688,7 +4729,15 @@ export const ReviewController = () => {
   }, []);
   const serializeRuntimeWrite = useCallback(
     <Value,>(write: () => Promise<Value>): Promise<Value> => {
-      const result = persistenceQueue.current.then(write, write);
+      const guardedWrite = (): Promise<Value> => {
+        if (recoveryReconciliationRef.current.conflicts.length > 0) {
+          setStatus(RECOVERY_CONFLICT_STATUS);
+          setIsRecoveryConflictOpen(true);
+          return Promise.reject(new Error(RECOVERY_CONFLICT_STATUS));
+        }
+        return write();
+      };
+      const result = persistenceQueue.current.then(guardedWrite, guardedWrite);
       persistenceQueue.current = result.then(
         () => undefined,
         () => undefined,
@@ -4992,6 +5041,7 @@ export const ReviewController = () => {
         owner: claimedOwner,
         nowMs: Date.now(),
       });
+      setIsLiveRecoveryAvailable(selection.recoveryAvailable);
       isOrphanRecoveryDeferredRef.current = selection.source === "orphan";
       const recovery = selection.recovery;
       pendingRecoveryAdoptionRef.current = null;
@@ -5077,7 +5127,9 @@ export const ReviewController = () => {
               ? RECOVERY_CONFLICT_STATUS
               : detached
                 ? "The comment you were writing could not be reattached: its place in the plan is gone."
-                : "Connected to the local review runtime.",
+                : selection.recoveryAvailable
+                  ? "Connected to the local review runtime."
+                  : "Connected to the local review runtime. Browser recovery is unavailable.",
           );
           setIsHydrated(true);
         }
@@ -5126,7 +5178,12 @@ export const ReviewController = () => {
   ]);
 
   useEffect(() => {
-    if (!isHydrated || identity === null || liveRecoveryOwnerId === null)
+    if (
+      !isHydrated ||
+      identity === null ||
+      liveRecoveryOwnerId === null ||
+      !isLiveRecoveryAvailable
+    )
       return;
     if (isOrphanRecoveryDeferredRef.current) return;
     const reviewState = { drafts, resolvedCommentIds };
@@ -5169,6 +5226,7 @@ export const ReviewController = () => {
     drafts,
     identity,
     isHydrated,
+    isLiveRecoveryAvailable,
     liveRecoveryOwnerId,
     persistedReviewState,
     recoveryReconciliation,
@@ -5189,12 +5247,7 @@ export const ReviewController = () => {
     // runtime is doing, so a runtime that cannot take this change still
     // cannot lose it.
     if (!runtimeAcceptsWrites) return;
-    // An unanswered conflict means the browser and the runtime hold two
-    // versions of the same comment. Writing either one now would discard the
-    // other silently, so the write waits for the reviewer's answer.
-    if (recoveryConflicts.length > 0) return;
     void serializeRuntimeWrite(async () => {
-      if (recoveryReconciliationRef.current.conflicts.length > 0) return;
       let prepared = latestReviewStateRef.current;
       if (persistedReviewStateRef.current === prepared.fingerprint) return;
       let preparedBase = recoveryReconciliationRef.current.base;
@@ -5531,22 +5584,9 @@ export const ReviewController = () => {
         }
         return;
       }
-      const commentIds = new Set(comments.map((comment) => comment.id));
-      const hasUnresolvedConflict = () =>
-        recoveryReconciliationRef.current.conflicts.some((conflict) =>
-          commentIds.has(conflict.commentId),
-        );
-      if (hasUnresolvedConflict()) {
-        setStatus(RECOVERY_CONFLICT_STATUS);
-        setIsRecoveryConflictOpen(true);
-        return;
-      }
       setIsSending(true);
       try {
         const result = await serializeRuntimeWrite(async () => {
-          if (hasUnresolvedConflict()) {
-            return { submitted: false, conflicted: true, comments: [] };
-          }
           let base = recoveryReconciliationRef.current.base;
           if (runtimeVersionRef.current === "") {
             const current = parseSnapshot(
@@ -5619,7 +5659,8 @@ export const ReviewController = () => {
             });
             return {
               submitted: false,
-              conflicted: hasUnresolvedConflict(),
+              conflicted:
+                recoveryReconciliationRef.current.conflicts.length > 0,
               comments: [],
             };
           }
@@ -5801,16 +5842,9 @@ export const ReviewController = () => {
     // and a reviewer who clicks again deletes twice.
     const kind = pendingDelete?.kind;
     setPendingDelete(null);
-    if (recoveryReconciliationRef.current.conflicts.length > 0) {
-      setStatus(RECOVERY_CONFLICT_STATUS);
-      setIsRecoveryConflictOpen(true);
-      return;
-    }
     setStatus("Deleting the comment…");
     try {
       const deleted = await serializeRuntimeWrite(async () => {
-        if (recoveryReconciliationRef.current.conflicts.length > 0)
-          return "conflicted";
         const base = recoveryReconciliationRef.current.base;
         try {
           const snapshot = parseSnapshot(
@@ -5845,11 +5879,6 @@ export const ReviewController = () => {
           return "stale";
         }
       });
-      if (deleted === "conflicted") {
-        setStatus(RECOVERY_CONFLICT_STATUS);
-        setIsRecoveryConflictOpen(true);
-        return;
-      }
       if (deleted === "stale") {
         setStatus(
           "The review changed before deletion. Review the latest comments and try again.",
@@ -6918,12 +6947,17 @@ export const ReviewController = () => {
                   </div>
                 </div>
               )}
-              {identity !== null && status === STALE_SUBMISSION_STATUS ? (
+              {identity !== null &&
+              (status === STALE_SUBMISSION_STATUS ||
+                !isLiveRecoveryAvailable) ? (
                 <p
                   className="m-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]"
                   role="status"
                 >
-                  {status}
+                  {status === STALE_SUBMISSION_STATUS ? `${status} ` : ""}
+                  {!isLiveRecoveryAvailable
+                    ? LIVE_RECOVERY_UNAVAILABLE_STATUS
+                    : ""}
                 </p>
               ) : null}
               {identity !== null &&
