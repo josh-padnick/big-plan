@@ -119,6 +119,150 @@ test("should keep unsent comment text through a reload", async ({
   ).toHaveValue(replyBody);
 });
 
+test("should detach recovered selection text when its full range no longer resolves", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const recovery = await page
+    .locator("[data-block-kind='paragraph']")
+    .first()
+    .evaluate((block) => {
+      const root = document.documentElement;
+      const text = block.textContent ?? "";
+      return {
+        key: `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}`,
+        snapshot: (() => {
+          const bootstrap: unknown = JSON.parse(
+            root.getAttribute("data-review-bootstrap") ?? "{}",
+          );
+          return typeof bootstrap === "object" &&
+            bootstrap !== null &&
+            "currentSnapshot" in bootstrap &&
+            typeof bootstrap.currentSnapshot === "string"
+            ? bootstrap.currentSnapshot
+            : "";
+        })(),
+        target: {
+          type: "selection" as const,
+          blockId: block.getAttribute("data-block-id") ?? "",
+          endBlockId: "missing/paragraph",
+          kind: block.getAttribute("data-block-kind") ?? "paragraph",
+          label: block.getAttribute("data-block-label") ?? "Paragraph",
+          start: 0,
+          end: 1,
+          quote: text.slice(0, 1),
+          isQuoteExcerpt: false,
+        },
+      };
+    });
+  const body = "Do not attach this selection comment to only half its range.";
+  await page.evaluate(
+    ({ key, snapshot, target, recoveredBody }) => {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 3,
+          drafts: [],
+          resolvedCommentIds: [],
+          base: { draftBodies: {}, resolvedCommentIds: [] },
+          composer: {
+            comment: {
+              target,
+              premiseSnapshot: snapshot,
+              body: recoveredBody,
+            },
+            replies: {},
+          },
+        }),
+      );
+    },
+    { ...recovery, recoveredBody: body },
+  );
+
+  await page.reload();
+
+  await expect(page.getByRole("dialog", { name: /Comment on/u })).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  await expect(
+    page.getByRole("complementary", { name: "Feedback" }),
+  ).toContainText(
+    "The comment you were writing could not be reattached: its place in the plan is gone.",
+  );
+});
+
+test("should share pending reply state across the rail and inline thread", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const sentBody = "Show this thread in both commenting surfaces.";
+  await stageComment(page, sentBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submitted).ok()).toBe(true);
+
+  const railThread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: sentBody });
+  await railThread
+    .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+    .click();
+  const commentId = await railThread.getAttribute("data-review-comment-id");
+  if (commentId === null) throw new Error("The sent thread has no comment id");
+  const inlineThread = page.locator(
+    `[data-review-thread-for="${commentId}"] [data-review-comment-id="${commentId}"]`,
+  );
+  await inlineThread
+    .getByRole("button", { name: `Expand comment: ${sentBody}` })
+    .click();
+
+  const replyBody = "Only post this shared reply once.";
+  await railThread.getByPlaceholder("Reply to the agent…").fill(replyBody);
+  await expect(
+    inlineThread.getByPlaceholder("Reply to the agent…"),
+  ).toHaveValue(replyBody);
+  let releaseReply = (): void => undefined;
+  const replyMayFinish = new Promise<void>((resolve) => {
+    releaseReply = resolve;
+  });
+  let markReplyStarted = (): void => undefined;
+  const replyStarted = new Promise<void>((resolve) => {
+    markReplyStarted = resolve;
+  });
+  let replyRequests = 0;
+  await page.route("**/api/agent-requests", async (route) => {
+    replyRequests += 1;
+    markReplyStarted();
+    await replyMayFinish;
+    await route.continue();
+  });
+  const replied = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/agent-requests") &&
+      response.request().method() === "POST",
+  );
+
+  await railThread.getByRole("button", { name: "Reply" }).click();
+  await replyStarted;
+  await expect(
+    inlineThread.getByRole("button", { name: "Sending…" }),
+  ).toBeDisabled();
+  releaseReply();
+  expect((await replied).ok()).toBe(true);
+  expect(replyRequests).toBe(1);
+});
+
 /** Reads the reviewer state the runtime holds, outside the browser under test. */
 const readRuntimeDrafts = async (
   reviewRuntimeUrl: string,
@@ -304,11 +448,16 @@ test.describe("a drafts write prepared against content the store moved past", ()
     await expect(choice).toBeVisible();
     await expect(choice).toContainText(browserBody);
     await expect(choice).toContainText(runtimeBody);
+    await page.reload();
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(browserBody);
+    await expect(choice).toContainText(runtimeBody);
     await choice
       .getByRole("button", { name: "Use the review session's version" })
       .click();
 
     await expect(choice).toBeHidden();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
     await expect(rail).toContainText(runtimeBody);
     // Exactly one comment survives: the superseded body is not resurrected.
     await expect
@@ -543,6 +692,15 @@ test.describe("a drafts write prepared against content the store moved past", ()
     await rail.getByRole("button", { name: "Save" }).click();
     releaseResponse();
 
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toContainText(newerBody);
+    await expect(choice).toContainText(submittedBody);
+    await choice
+      .getByRole("button", { name: "Stage mine as new feedback" })
+      .click();
+
     await expect
       .poll(async () => {
         const snapshot = await readRuntimeDrafts(reviewRuntimeUrl, token);
@@ -552,9 +710,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
         };
       })
       .toEqual({ drafts: [newerBody], sent: [submittedBody] });
-    await expect(
-      page.getByRole("alertdialog", { name: "Two versions of this comment" }),
-    ).toHaveCount(0);
+    await expect(choice).toBeHidden();
   });
 
   test("should reconcile drafts and replies across conditional deletion", async ({
@@ -774,6 +930,94 @@ test.describe("a drafts write prepared against content the store moved past", ()
         ),
       )
       .toEqual([newerBody]);
+  });
+
+  test("should read a runtime version before submitting recovered feedback", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const identity = await page.locator("html").evaluate((root) => {
+      const bootstrap: unknown = JSON.parse(
+        root.getAttribute("data-review-bootstrap") ?? "{}",
+      );
+      return {
+        planId: root.getAttribute("data-plan-id") ?? "",
+        sessionId: root.getAttribute("data-review-session") ?? "",
+        currentSnapshot:
+          typeof bootstrap === "object" &&
+          bootstrap !== null &&
+          "currentSnapshot" in bootstrap &&
+          typeof bootstrap.currentSnapshot === "string"
+            ? bootstrap.currentSnapshot
+            : "",
+      };
+    });
+    const recoveredBody = "Submit this after the runtime recovers.";
+    await page.evaluate(
+      ({ identity: storedIdentity, body, id }) => {
+        const key = `big-plan:review:live-recovery:${storedIdentity.planId}:${storedIdentity.sessionId}`;
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 3,
+            drafts: [
+              {
+                id,
+                body,
+                createdAt: "2026-08-10T12:00:00.000Z",
+                premiseSnapshot: storedIdentity.currentSnapshot,
+                target: { type: "document" },
+              },
+            ],
+            resolvedCommentIds: [],
+            base: { draftBodies: {}, resolvedCommentIds: [] },
+            composer: { comment: null, replies: {} },
+          }),
+        );
+      },
+      {
+        identity,
+        body: recoveredBody,
+        id: randomBytes(8).toString("hex"),
+      },
+    );
+    let draftsReads = 0;
+    await page.route(
+      "**/api/drafts",
+      async (route) => {
+        draftsReads += 1;
+        await route.fulfill({ status: 503, body: "Unavailable during load" });
+      },
+      { times: 2 },
+    );
+
+    await page.reload();
+    await expect.poll(() => draftsReads).toBe(2);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    const response = await submitted;
+
+    expect(response.status()).toBe(200);
+    const request: unknown = response.request().postDataJSON();
+    expect(request).toMatchObject({ version: expect.any(String) });
+    if (
+      typeof request !== "object" ||
+      request === null ||
+      !("version" in request) ||
+      typeof request.version !== "string"
+    ) {
+      throw new Error("Feedback did not carry a review-state version");
+    }
+    expect(request.version).not.toBe("");
   });
 });
 

@@ -30,11 +30,19 @@ export type ReviewRecoveryBase = {
  * One comment both sides changed since the base. A `null` body means that side
  * no longer has the comment at all, which is a change like any other edit.
  */
-export type ReviewRecoveryConflict = {
-  readonly commentId: string;
-  readonly localBody: string | null;
-  readonly runtimeBody: string | null;
-};
+export type ReviewRecoveryConflict =
+  | {
+      readonly kind: "draft";
+      readonly commentId: string;
+      readonly localBody: string | null;
+      readonly runtimeBody: string | null;
+    }
+  | {
+      readonly kind: "sent";
+      readonly commentId: string;
+      readonly localBody: string;
+      readonly runtimeBody: string;
+    };
 
 export type ReviewRecoveryMerge = {
   readonly state: ReviewRecoveryState;
@@ -48,43 +56,6 @@ export const reviewRecoveryBase = (
   draftBodies: new Map(state.drafts.map((draft) => [draft.id, draft.body])),
   resolvedCommentIds: new Set(state.resolvedCommentIds),
 });
-
-export const rebaseLocalDraftsAgainstSent = ({
-  base,
-  local,
-  sent,
-  submittedBodies = new Map(),
-  createId,
-}: {
-  readonly base: ReviewRecoveryBase;
-  readonly local: ReviewRecoveryState;
-  readonly sent: ReadonlyArray<ReviewComment>;
-  readonly submittedBodies?: ReadonlyMap<string, string>;
-  readonly createId: () => string;
-}): ReviewRecoveryState => {
-  const sentBodies = new Map(sent.map((comment) => [comment.id, comment.body]));
-  const resolvedCommentIds = new Set(local.resolvedCommentIds);
-  const drafts: Array<ReviewComment> = [];
-  for (const draft of local.drafts) {
-    const sentBody = sentBodies.get(draft.id);
-    if (sentBody === undefined) {
-      drafts.push(draft);
-      continue;
-    }
-    const priorBody =
-      submittedBodies.get(draft.id) ??
-      base.draftBodies.get(draft.id) ??
-      sentBody;
-    if (draft.body === priorBody) continue;
-    const id = createId();
-    drafts.push({ ...draft, id });
-    if (local.resolvedCommentIds.has(draft.id)) resolvedCommentIds.add(id);
-  }
-  return {
-    drafts,
-    resolvedCommentIds,
-  };
-};
 
 export const repliesForSentComments = ({
   replies,
@@ -123,15 +94,20 @@ export const mergeLiveReviewRecovery = ({
   base,
   local,
   runtime,
+  sent = [],
+  submittedBodies = new Map(),
 }: {
   readonly base: ReviewRecoveryBase;
   readonly local: ReviewRecoveryState;
   readonly runtime: ReviewRecoveryState;
+  readonly sent?: ReadonlyArray<ReviewComment>;
+  readonly submittedBodies?: ReadonlyMap<string, string>;
 }): ReviewRecoveryMerge => {
   const localDrafts = new Map(local.drafts.map((draft) => [draft.id, draft]));
   const runtimeDrafts = new Map(
     runtime.drafts.map((draft) => [draft.id, draft]),
   );
+  const sentBodies = new Map(sent.map((comment) => [comment.id, comment.body]));
   const drafts: Array<ReviewComment> = [];
   const conflicts: Array<ReviewRecoveryConflict> = [];
   // Runtime order first so the stored order survives, then whatever the
@@ -146,6 +122,20 @@ export const mergeLiveReviewRecovery = ({
     const localDraft = localDrafts.get(id);
     const runtimeDraft = runtimeDrafts.get(id);
     const baseBody = base.draftBodies.get(id);
+    const sentBody = sentBodies.get(id);
+    if (sentBody !== undefined) {
+      if (localDraft === undefined) continue;
+      const priorBody = submittedBodies.get(id) ?? baseBody ?? sentBody;
+      if (localDraft.body === priorBody) continue;
+      drafts.push(localDraft);
+      conflicts.push({
+        kind: "sent",
+        commentId: id,
+        localBody: localDraft.body,
+        runtimeBody: sentBody,
+      });
+      continue;
+    }
     if (localDraft !== undefined && runtimeDraft !== undefined) {
       // Target metadata is runtime-owned and may be canonicalized on first
       // save, so a matching body is the same comment even when the browser's
@@ -164,6 +154,7 @@ export const mergeLiveReviewRecovery = ({
       }
       drafts.push(localDraft);
       conflicts.push({
+        kind: "draft",
         commentId: id,
         localBody: localDraft.body,
         runtimeBody: runtimeDraft.body,
@@ -180,6 +171,7 @@ export const mergeLiveReviewRecovery = ({
       if (localDraft.body === baseBody) continue;
       drafts.push(localDraft);
       conflicts.push({
+        kind: "draft",
         commentId: id,
         localBody: localDraft.body,
         runtimeBody: null,
@@ -192,8 +184,8 @@ export const mergeLiveReviewRecovery = ({
       continue;
     }
     if (runtimeDraft.body === baseBody) continue;
-    drafts.push(runtimeDraft);
     conflicts.push({
+      kind: "draft",
       commentId: id,
       localBody: null,
       runtimeBody: runtimeDraft.body,
@@ -218,13 +210,32 @@ export const resolveReviewRecoveryConflict = ({
   runtime,
   conflict,
   keep,
+  replacementCommentId,
 }: {
   readonly state: ReviewRecoveryState;
   readonly runtime: ReviewRecoveryState;
   readonly conflict: ReviewRecoveryConflict;
   readonly keep: "local" | "runtime";
+  readonly replacementCommentId?: string;
 }): ReviewRecoveryState => {
   if (keep === "local") {
+    if (conflict.kind === "sent") {
+      if (replacementCommentId === undefined) {
+        throw new Error("A sent comment edit needs a new staged comment id");
+      }
+      const resolvedCommentIds = new Set(state.resolvedCommentIds);
+      if (resolvedCommentIds.delete(conflict.commentId)) {
+        resolvedCommentIds.add(replacementCommentId);
+      }
+      return {
+        drafts: state.drafts.map((draft) =>
+          draft.id === conflict.commentId
+            ? { ...draft, id: replacementCommentId }
+            : draft,
+        ),
+        resolvedCommentIds,
+      };
+    }
     return conflict.localBody === null
       ? {
           drafts: state.drafts.filter(
@@ -253,5 +264,26 @@ export const resolveReviewRecoveryConflict = ({
         )
       : [...state.drafts, runtimeDraft],
     resolvedCommentIds: state.resolvedCommentIds,
+  };
+};
+
+export const advanceReviewRecoveryBase = ({
+  base,
+  runtime,
+  conflict,
+}: {
+  readonly base: ReviewRecoveryBase;
+  readonly runtime: ReviewRecoveryState;
+  readonly conflict: ReviewRecoveryConflict;
+}): ReviewRecoveryBase => {
+  const draftBodies = new Map(base.draftBodies);
+  const runtimeDraft = runtime.drafts.find(
+    (draft) => draft.id === conflict.commentId,
+  );
+  if (runtimeDraft === undefined) draftBodies.delete(conflict.commentId);
+  else draftBodies.set(conflict.commentId, runtimeDraft.body);
+  return {
+    draftBodies,
+    resolvedCommentIds: new Set(runtime.resolvedCommentIds),
   };
 };

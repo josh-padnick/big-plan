@@ -102,6 +102,7 @@ Static `big-plan render` documents use browser storage for their document-level 
 Every write of the reviewer's own state is conditional on the state the page last read, so a second tab or the runtime itself cannot have its work replaced without notice.
 When a write finds the state has moved on, the page reconciles comment by comment.
 If the same comment really was changed in two places, the review shows both versions and asks which one to keep.
+If one copy was submitted while another copy was still being edited, the review asks before staging that edit as new feedback.
 
 The `.big-plan/` directory is created for the reviewer only and ignored by
 version control. Feedback packages and their Markdown briefs live under

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "../shared/comment.js";
 import {
   mergeLiveReviewRecovery,
-  rebaseLocalDraftsAgainstSent,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
   reviewRecoveryBase,
@@ -35,6 +34,7 @@ describe("live review recovery merge", () => {
 
     expect(merged.conflicts).toEqual([
       {
+        kind: "draft",
         commentId: "c1",
         localBody: "typed here",
         runtimeBody: "typed elsewhere",
@@ -114,37 +114,86 @@ describe("live review recovery merge", () => {
   it("should not restore an unchanged draft after it was sent", () => {
     const agreed = state([comment("c1", "agreed")]);
 
+    const merged = mergeLiveReviewRecovery({
+      base: reviewRecoveryBase(agreed),
+      local: agreed,
+      runtime: state([]),
+      sent: [comment("c1", "agreed")],
+    });
+
+    expect(merged.conflicts).toEqual([]);
+    expect(merged.state.drafts).toEqual([]);
+  });
+
+  it("should surface a sent transition without minting an id", () => {
+    const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
+    const existingIds = new Set(["c1"]);
+    const merged = mergeLiveReviewRecovery({
+      base,
+      local: state([comment("c1", "edited here")]),
+      runtime: state([]),
+      sent: [comment("c1", "agreed")],
+    });
+
     expect(
-      rebaseLocalDraftsAgainstSent({
-        base: reviewRecoveryBase(agreed),
-        local: agreed,
-        sent: [comment("c1", "agreed")],
-        createId: () => "c2",
+      merged.state.drafts.every((draft) => existingIds.has(draft.id)),
+    ).toBe(true);
+    expect(merged.conflicts).toEqual([
+      {
+        kind: "sent",
+        commentId: "c1",
+        localBody: "edited here",
+        runtimeBody: "agreed",
+      },
+    ]);
+  });
+
+  it("should surface an edit made while its prior body was sent", () => {
+    const merged = mergeLiveReviewRecovery({
+      base: reviewRecoveryBase(state([])),
+      local: state([comment("c1", "newer edit")]),
+      runtime: state([]),
+      sent: [comment("c1", "submitted body")],
+      submittedBodies: new Map([["c1", "submitted body"]]),
+    });
+
+    expect(merged.state.drafts).toEqual([comment("c1", "newer edit")]);
+    expect(merged.conflicts).toEqual([
+      {
+        kind: "sent",
+        commentId: "c1",
+        localBody: "newer edit",
+        runtimeBody: "submitted body",
+      },
+    ]);
+  });
+
+  it("should apply either answer to a sent-transition conflict", () => {
+    const runtime = state([]);
+    const merged = mergeLiveReviewRecovery({
+      base: reviewRecoveryBase(state([comment("c1", "agreed")])),
+      local: state([comment("c1", "edited here")]),
+      runtime,
+      sent: [comment("c1", "agreed")],
+    });
+    const conflict = merged.conflicts[0];
+    if (conflict === undefined) throw new Error("expected one conflict");
+
+    expect(
+      resolveReviewRecoveryConflict({
+        state: merged.state,
+        runtime,
+        conflict,
+        keep: "runtime",
       }).drafts,
     ).toEqual([]);
-  });
-
-  it("should preserve a newer edit made while its prior body was sent", () => {
     expect(
-      rebaseLocalDraftsAgainstSent({
-        base: reviewRecoveryBase(state([])),
-        local: state([comment("c1", "newer edit")]),
-        sent: [comment("c1", "submitted body")],
-        submittedBodies: new Map([["c1", "submitted body"]]),
-        createId: () => "c2",
-      }).drafts,
-    ).toEqual([comment("c2", "newer edit")]);
-  });
-
-  it("should keep an edit made before another browser sent its base", () => {
-    const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
-
-    expect(
-      rebaseLocalDraftsAgainstSent({
-        base,
-        local: state([comment("c1", "edited here")]),
-        sent: [comment("c1", "agreed")],
-        createId: () => "c2",
+      resolveReviewRecoveryConflict({
+        state: merged.state,
+        runtime,
+        conflict,
+        keep: "local",
+        replacementCommentId: "c2",
       }).drafts,
     ).toEqual([comment("c2", "edited here")]);
   });
@@ -172,6 +221,7 @@ describe("live review recovery merge", () => {
 
     expect(merged.conflicts).toEqual([
       {
+        kind: "draft",
         commentId: "c1",
         localBody: "edited while it was deleted",
         runtimeBody: null,
@@ -312,6 +362,14 @@ describe("live review recovery merge", () => {
     const conflict = merged.conflicts[0];
     if (conflict === undefined) throw new Error("expected one conflict");
 
+    expect(merged.state.drafts).toEqual([]);
+    expect(
+      mergeLiveReviewRecovery({
+        base,
+        local: merged.state,
+        runtime,
+      }).conflicts,
+    ).toEqual([conflict]);
     expect(
       resolveReviewRecoveryConflict({
         state: merged.state,

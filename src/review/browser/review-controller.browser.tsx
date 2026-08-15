@@ -152,8 +152,8 @@ import {
 } from "./review-runtime-request.js";
 import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import {
+  advanceReviewRecoveryBase,
   mergeLiveReviewRecovery,
-  rebaseLocalDraftsAgainstSent,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
   reviewRecoveryBase,
@@ -676,11 +676,13 @@ const RecoveryConflictDialog = ({
 }) => {
   if (conflict === undefined) return null;
   const description =
-    conflict.runtimeBody === null
-      ? "You changed this comment here, and it was deleted in the review session. Keep your version, or let the deletion stand."
-      : conflict.localBody === null
-        ? "You deleted this comment here, and it was changed in the review session. Keep the deletion, or take the version from the review session."
-        : "This comment was changed here and in the review session while the two were apart. Keep one of them.";
+    conflict.kind === "sent"
+      ? "This comment was sent in the review session while you kept editing it here. Keep the submitted version, or stage your edit as new feedback."
+      : conflict.runtimeBody === null
+        ? "You changed this comment here, and it was deleted in the review session. Keep your version, or let the deletion stand."
+        : conflict.localBody === null
+          ? "You deleted this comment here, and it was changed in the review session. Keep the deletion, or take the version from the review session."
+          : "This comment was changed here and in the review session while the two were apart. Keep one of them.";
   return (
     <AlertDialog
       open
@@ -688,12 +690,18 @@ const RecoveryConflictDialog = ({
       title="Two versions of this comment"
       description={description}
       cancelLabel={
-        conflict.localBody === null ? "Keep the deletion" : "Keep mine"
+        conflict.kind === "sent"
+          ? "Stage mine as new feedback"
+          : conflict.localBody === null
+            ? "Keep the deletion"
+            : "Keep mine"
       }
       actionLabel={
-        conflict.runtimeBody === null
-          ? "Delete it"
-          : "Use the review session's version"
+        conflict.kind === "sent"
+          ? "Keep submitted version"
+          : conflict.runtimeBody === null
+            ? "Delete it"
+            : "Use the review session's version"
       }
       onCancel={() => onKeep("local")}
       onAction={() => onKeep("runtime")}
@@ -709,7 +717,9 @@ const RecoveryConflictDialog = ({
         </div>
         <div>
           <p className="m-0 text-2xs font-semibold text-subtle uppercase">
-            In the review session
+            {conflict.kind === "sent"
+              ? "Submitted in the review session"
+              : "In the review session"}
           </p>
           <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
             {conflict.runtimeBody ?? "Deleted there."}
@@ -1356,16 +1366,15 @@ const selectionRange = (
     block: HTMLElement,
     targetOffset: number,
   ): { readonly node: Text; readonly offset: number } | null => {
+    if (targetOffset < 0) return null;
     const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
     let consumed = 0;
-    let last: Text | null = null;
     let node = walker.nextNode();
     while (node !== null) {
       if (!(node instanceof Text)) {
         node = walker.nextNode();
         continue;
       }
-      last = node;
       const length = node.data.length;
       if (targetOffset <= consumed + length) {
         return { node, offset: Math.max(0, targetOffset - consumed) };
@@ -1373,7 +1382,7 @@ const selectionRange = (
       consumed += length;
       node = walker.nextNode();
     }
-    return last === null ? null : { node: last, offset: last.data.length };
+    return null;
   };
   const start = textPoint(startBlock, target.start);
   const end = textPoint(endBlock, target.end);
@@ -1386,6 +1395,32 @@ const selectionRange = (
   } catch {
     return null;
   }
+};
+
+const selectionTargetResolves = (target: SelectionTarget): boolean => {
+  const range = selectionRange(target);
+  if (range === null) return false;
+  const images: Array<HTMLElement> = [];
+  for (const imageId of target.imageBlockIds ?? []) {
+    const image = foundElement(liveBlock(imageId));
+    if (
+      image === null ||
+      image.dataset.blockKind !== "image" ||
+      !range.intersectsNode(image)
+    ) {
+      return false;
+    }
+    images.push(image);
+  }
+  const imageEvidence = images
+    .map((image) => `[Image: ${image.dataset.blockLabel ?? "Image"}]`)
+    .join("\n");
+  const selected = [range.toString(), imageEvidence]
+    .filter((part) => part.trim() !== "")
+    .join("\n");
+  return target.isQuoteExcerpt
+    ? selected.startsWith(target.quote)
+    : selected === target.quote;
 };
 
 const targetHighlightRange = (target: CommentTarget): Range | null => {
@@ -3097,6 +3132,8 @@ const SentThread = ({
   currentSnapshot,
   reply,
   onReplyChange,
+  isReplying,
+  onReply,
   compact = false,
   queuePosition,
   suppressPendingStatus = false,
@@ -3126,11 +3163,12 @@ const SentThread = ({
    */
   readonly reply: string;
   readonly onReplyChange: (body: string) => void;
+  readonly isReplying: boolean;
+  readonly onReply: (body: string) => void;
   readonly compact?: boolean;
   readonly queuePosition?: number;
   readonly suppressPendingStatus?: boolean;
 }) => {
-  const [isReplying, setIsReplying] = useState(false);
   const {
     exchanges,
     latestExchange,
@@ -3206,24 +3244,10 @@ const SentThread = ({
       ? "Delete canceled comment"
       : "Delete queued comment";
 
-  const sendReply = async (bodyOverride?: string) => {
+  const sendReply = (bodyOverride?: string) => {
     const body = (bodyOverride ?? reply).trim();
     if (identity === null || body === "") return;
-    setIsReplying(true);
-    try {
-      await requestJson({
-        path: "/api/agent-requests",
-        identity,
-        method: "POST",
-        body: { kind: "reply", commentId: comment.id, body },
-      });
-      onReplyChange("");
-      onReplySent("Reply sent to the coding agent.");
-    } catch (error) {
-      onReplySent(errorMessage(error));
-    } finally {
-      setIsReplying(false);
-    }
+    onReply(body);
   };
 
   if (!expanded) {
@@ -3885,6 +3909,9 @@ export const ReviewController = () => {
   const [resolveRefusal, setResolveRefusal] = useState<string | null>(null);
   const [compose, setCompose] = useState<ComposeState | null>(null);
   const [composeBody, setComposeBody] = useState("");
+  const [composerRecoveryNotice, setComposerRecoveryNotice] = useState<
+    string | null
+  >(null);
   const [pendingCompose, setPendingCompose] = useState<ComposeState | null>(
     null,
   );
@@ -3910,6 +3937,10 @@ export const ReviewController = () => {
   const [replyDrafts, setReplyDrafts] = useState<ReadonlyMap<string, string>>(
     new Map(),
   );
+  const [replyPendingCommentIds, setReplyPendingCommentIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const replyPendingCommentIdsRef = useRef<ReadonlySet<string>>(new Set());
   const [recoveryConflicts, setRecoveryConflicts] = useState<
     ReadonlyArray<ReviewRecoveryConflict>
   >([]);
@@ -4140,7 +4171,17 @@ export const ReviewController = () => {
       // gone, the text has nowhere to attach, and saying so beats reattaching
       // it to whatever happens to be there now.
       const element = targetElement(recovered.target);
-      if (element === null) return "detached";
+      if (
+        element === null ||
+        (recovered.target.type === "selection" &&
+          !selectionTargetResolves(recovered.target))
+      ) {
+        setComposerRecoveryNotice(
+          "The comment you were writing could not be reattached: its place in the plan is gone.",
+        );
+        return "detached";
+      }
+      setComposerRecoveryNotice(null);
       setCompose({
         target: recovered.target,
         premiseSnapshot: recovered.premiseSnapshot,
@@ -4154,21 +4195,14 @@ export const ReviewController = () => {
     },
     [],
   );
-  /**
-   * Takes a snapshot the runtime just answered with as the new agreed point:
-   * the version the next conditional write must carry, and the base a later
-   * merge compares against. Every route that changes the reviewer's own state
-   * has to end here, or the next write is prepared against content the store
-   * has already moved past.
-   */
-  const adoptRuntimeReviewState = useCallback(
+  /** Takes the runtime's answer as the version the next write must carry. */
+  const observeRuntimeReviewState = useCallback(
     (snapshot: ReviewSnapshot): ReviewRecoveryState => {
       const state: ReviewRecoveryState = {
         drafts: snapshot.drafts,
         resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
       };
       runtimeVersionRef.current = snapshot.version;
-      recoveryBaseRef.current = reviewRecoveryBase(state);
       return state;
     },
     [],
@@ -4187,18 +4221,13 @@ export const ReviewController = () => {
       readonly preferredSent?: ReadonlyArray<ReviewComment>;
       readonly submittedBodies?: ReadonlyMap<string, string>;
     }) => {
-      const runtime = adoptRuntimeReviewState(snapshot);
-      const rebasedLocal = rebaseLocalDraftsAgainstSent({
-        base,
-        local,
-        sent: snapshot.sent,
-        submittedBodies,
-        createId: randomId,
-      });
+      const runtime = observeRuntimeReviewState(snapshot);
       const merged = mergeLiveReviewRecovery({
         base,
-        local: rebasedLocal,
+        local,
         runtime,
+        sent: snapshot.sent,
+        submittedBodies,
       });
       markPersistedReviewState(persistedReviewFingerprint(runtime));
       applyReviewState(merged.state);
@@ -4217,14 +4246,20 @@ export const ReviewController = () => {
         repliesForSentComments({ replies: current, sent: snapshot.sent }),
       );
       if (merged.conflicts.length > 0) {
+        recoveryBaseRef.current = base;
         recoveryConflictsRef.current = merged.conflicts;
         setRecoveryConflicts(merged.conflicts);
         setConflictRuntimeState(runtime);
         setStatus("Two versions of a comment need your choice.");
+      } else {
+        recoveryBaseRef.current = reviewRecoveryBase(runtime);
+        recoveryConflictsRef.current = [];
+        setRecoveryConflicts([]);
+        setConflictRuntimeState(null);
       }
       return merged;
     },
-    [adoptRuntimeReviewState, applyReviewState, markPersistedReviewState],
+    [applyReviewState, markPersistedReviewState, observeRuntimeReviewState],
   );
   const changeReplyDraft = useCallback((commentId: string, body: string) => {
     setReplyDrafts((current) => {
@@ -4235,6 +4270,38 @@ export const ReviewController = () => {
       return next;
     });
   }, []);
+  const sendThreadReply = useCallback(
+    async (commentId: string, body: string): Promise<void> => {
+      if (
+        identity === null ||
+        body === "" ||
+        replyPendingCommentIdsRef.current.has(commentId)
+      ) {
+        return;
+      }
+      const pending = new Set(replyPendingCommentIdsRef.current).add(commentId);
+      replyPendingCommentIdsRef.current = pending;
+      setReplyPendingCommentIds(pending);
+      try {
+        await requestJson({
+          path: "/api/agent-requests",
+          identity,
+          method: "POST",
+          body: { kind: "reply", commentId, body },
+        });
+        changeReplyDraft(commentId, "");
+        setStatus("Reply sent to the coding agent.");
+      } catch (error) {
+        setStatus(errorMessage(error));
+      } finally {
+        const remaining = new Set(replyPendingCommentIdsRef.current);
+        remaining.delete(commentId);
+        replyPendingCommentIdsRef.current = remaining;
+        setReplyPendingCommentIds(remaining);
+      }
+    },
+    [changeReplyDraft, identity],
+  );
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
     setAgent(snapshot);
@@ -4559,9 +4626,7 @@ export const ReviewController = () => {
           await requestJson({ path: "/api/drafts", identity }),
         );
         if (current) {
-          // The runtime is what the next write will be prepared against, so
-          // it becomes the base whether or not anything was recovered.
-          const runtimeReviewState = adoptRuntimeReviewState(snapshot);
+          const runtimeReviewState = observeRuntimeReviewState(snapshot);
           markPersistedReviewState(
             persistedReviewFingerprint(runtimeReviewState),
           );
@@ -4570,23 +4635,21 @@ export const ReviewController = () => {
           let conflicted = false;
           let detached = false;
           if (recovery !== null) {
-            const local = rebaseLocalDraftsAgainstSent({
-              base: recovery.base,
-              local: recovery,
-              sent: snapshot.sent,
-              createId: randomId,
-            });
             const merged = mergeLiveReviewRecovery({
               base: recovery.base,
-              local,
+              local: recovery,
               runtime: runtimeReviewState,
+              sent: snapshot.sent,
             });
             restoredReviewState = merged.state;
             conflicted = merged.conflicts.length > 0;
             if (conflicted) {
+              recoveryBaseRef.current = recovery.base;
               recoveryConflictsRef.current = merged.conflicts;
               setRecoveryConflicts(merged.conflicts);
               setConflictRuntimeState(runtimeReviewState);
+            } else {
+              recoveryBaseRef.current = reviewRecoveryBase(runtimeReviewState);
             }
             detached =
               restoreComposer({
@@ -4596,6 +4659,8 @@ export const ReviewController = () => {
                   sent: snapshot.sent,
                 }),
               }) === "detached";
+          } else {
+            recoveryBaseRef.current = reviewRecoveryBase(runtimeReviewState);
           }
           setDrafts(restoredReviewState.drafts);
           setSent(snapshot.sent);
@@ -4638,6 +4703,7 @@ export const ReviewController = () => {
     adoptRuntimeReviewState,
     identity,
     markPersistedReviewState,
+    observeRuntimeReviewState,
     planId,
     restoreComposer,
     runtimeSessionOrder,
@@ -4968,6 +5034,7 @@ export const ReviewController = () => {
         setTab("agent");
         return;
       }
+      setComposerRecoveryNotice(null);
       if (
         compose !== null &&
         targetAddress(compose.target) === targetAddress(target)
@@ -5022,7 +5089,21 @@ export const ReviewController = () => {
       setIsSending(true);
       try {
         const result = await serializeRuntimeWrite(async () => {
-          const base = recoveryBaseRef.current;
+          let base = recoveryBaseRef.current;
+          if (runtimeVersionRef.current === "") {
+            const current = parseSnapshot(
+              await requestJson({ path: "/api/drafts", identity }),
+            );
+            const preflight = reconcileAuthoritativeReviewSnapshot({
+              snapshot: current,
+              base,
+              local: latestReviewStateRef.current.state,
+            });
+            if (preflight.conflicts.length > 0) {
+              return { submitted: false, conflicted: true };
+            }
+            base = recoveryBaseRef.current;
+          }
           const preparedGeneration = latestReviewStateRef.current.generation;
           const submittedBodies = new Map(
             comments.map((comment) => [comment.id, comment.body]),
@@ -5192,12 +5273,22 @@ export const ReviewController = () => {
         runtime: conflictRuntimeState,
         conflict,
         keep,
+        ...(conflict.kind === "sent" && keep === "local"
+          ? { replacementCommentId: randomId() }
+          : {}),
       });
       applyReviewState(next);
+      recoveryBaseRef.current = advanceReviewRecoveryBase({
+        base: recoveryBaseRef.current,
+        runtime: conflictRuntimeState,
+        conflict,
+      });
     }
     recoveryConflictsRef.current = remaining;
     setRecoveryConflicts(remaining);
-    if (remaining.length === 0) setConflictRuntimeState(null);
+    if (remaining.length === 0) {
+      setConflictRuntimeState(null);
+    }
   };
 
   const deleteDraft = (id: string) => {
@@ -6193,6 +6284,8 @@ export const ReviewController = () => {
                       onReplyChange={(body) =>
                         changeReplyDraft(comment.id, body)
                       }
+                      isReplying={replyPendingCommentIds.has(comment.id)}
+                      onReply={(body) => void sendThreadReply(comment.id, body)}
                       compact={compact}
                       queuePosition={queuePosition}
                       suppressPendingStatus={activeBatchCommentIds.includes(
@@ -6278,6 +6371,14 @@ export const ReviewController = () => {
               >
                 {isSending ? "Sending…" : "Send all comments to agent"}
               </Button>
+              {composerRecoveryNotice === null ? null : (
+                <p
+                  className="m-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]"
+                  role="status"
+                >
+                  {composerRecoveryNotice}
+                </p>
+              )}
               {identity === null ? (
                 <p className="m-0 text-xs text-support" role="status">
                   {status}
@@ -6443,6 +6544,8 @@ export const ReviewController = () => {
                 currentSnapshot={currentSnapshot}
                 reply={replyDrafts.get(comment.id) ?? ""}
                 onReplyChange={(body) => changeReplyDraft(comment.id, body)}
+                isReplying={replyPendingCommentIds.has(comment.id)}
+                onReply={(body) => void sendThreadReply(comment.id, body)}
               />
             );
           },
