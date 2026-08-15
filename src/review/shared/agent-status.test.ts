@@ -166,6 +166,24 @@ describe("current agent activity", () => {
     ).toMatchObject({ state: "working", headline });
   });
 
+  it("should present an ordinary queue wait without a warning tone", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [request()],
+        responseRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: true,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW,
+      }),
+    ).toMatchObject({
+      state: "waiting",
+      tone: "neutral",
+      headline: "Waiting for agent",
+    });
+  });
+
   it("should report stalled work after the legacy threshold", () => {
     expect(
       deriveCurrentAgentActivity({
@@ -282,6 +300,53 @@ describe("agent request status", () => {
     });
     expect(status.stage).toBe("waiting");
     expect(status.headline).toBe("Waiting for an agent");
+  });
+
+  it("should report a busy queue neutrally and with its position", () => {
+    expect(
+      deriveAgentStatus({
+        runtime: "online",
+        request: "pending",
+        agentConnected: true,
+        pickedUp: false,
+        sessionBusy: true,
+        queuedAhead: 2,
+        nowMs: NOW,
+      }),
+    ).toMatchObject({
+      stage: "waiting",
+      label: "Queued, 2 ahead",
+      headline: "Waiting - the agent is working on another request",
+      tone: "neutral",
+    });
+  });
+
+  it("should keep the plain waiting label when nothing is ahead", () => {
+    expect(
+      deriveAgentStatus({
+        runtime: "online",
+        request: "pending",
+        agentConnected: true,
+        pickedUp: false,
+        sessionBusy: true,
+        queuedAhead: 0,
+        nowMs: NOW,
+      }).label,
+    ).toBe("Waiting");
+  });
+
+  it("should count one queued message ahead in the singular", () => {
+    expect(
+      deriveAgentStatus({
+        runtime: "online",
+        request: "pending",
+        agentConnected: true,
+        pickedUp: false,
+        sessionBusy: true,
+        queuedAhead: 1,
+        nowMs: NOW,
+      }).label,
+    ).toBe("Queued, 1 ahead");
   });
 
   it("should show disconnected pending work as blocked", () => {

@@ -44,9 +44,11 @@ export type CurrentAgentActivity =
       readonly latestStep: string;
       readonly updatedAtMs: number;
     } & ActivityRequestFacts)
+  // A queue position is ordinary, not a problem, so it stays out of the
+  // warning register the stalled and errored states own.
   | ({
       readonly state: "waiting";
-      readonly tone: "warning";
+      readonly tone: "neutral";
       readonly headline: "Waiting for agent";
       readonly supporting: "Feedback is queued and will start when the agent is available.";
     } & ActivityRequestFacts)
@@ -303,7 +305,7 @@ export const deriveCurrentAgentActivity = ({
     return {
       ...facts,
       state: "waiting",
-      tone: "warning",
+      tone: "neutral",
       headline: "Waiting for agent",
       supporting:
         "Feedback is queued and will start when the agent is available.",
@@ -360,6 +362,8 @@ export type AgentStatusInput = {
   readonly agentConnected: boolean;
   readonly pickedUp: boolean;
   readonly sessionBusy?: boolean;
+  /** How many unanswered messages the agent delivers before this one. */
+  readonly queuedAhead?: number;
   readonly surface?: "thread" | "chat";
   readonly lastAgentSignalAtMs?: number;
   readonly failure?: string;
@@ -429,9 +433,12 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     };
   }
   if (!input.pickedUp) {
+    // The position is what makes a queue feel like a queue rather than a
+    // stall, so it replaces the bare label whenever anything is ahead.
+    const ahead = input.queuedAhead ?? 0;
     return {
       stage: "waiting",
-      label: "Waiting",
+      label: ahead > 0 ? `Queued, ${ahead} ahead` : "Waiting",
       headline:
         input.sessionBusy === true
           ? "Waiting - the agent is working on another request"

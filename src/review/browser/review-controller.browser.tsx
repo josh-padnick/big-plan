@@ -62,6 +62,7 @@ import {
   projectCommentThreads,
   projectRequestActivity,
   projectRequestStatus,
+  queuedRequestsAhead,
   requestCommentIds,
   type CommentThreadProjection,
   type ThreadGroup,
@@ -4916,6 +4917,12 @@ export const ReviewController = () => {
       surface,
       nowMs: agentProjectionNowMs,
       cancelPendingRequestIds,
+      queuedAhead: queuedRequestsAhead({
+        request,
+        requests: agent.requests,
+        responses: agent.responses,
+        cancelPendingRequestIds,
+      }),
     });
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,

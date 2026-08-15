@@ -70,6 +70,10 @@ export type ProjectedThreadExchange<
   readonly status: AgentStatus;
   readonly canceled: boolean;
   readonly baselineSnapshot: string;
+  /** Whether the reviewer may still edit this waiting message. */
+  readonly canReviseMessage: boolean;
+  /** Whether the reviewer may still remove this waiting message. */
+  readonly canDeleteMessage: boolean;
 };
 
 export type CommentThreadProjection<
@@ -110,6 +114,72 @@ export const projectRequestActivity = ({
 }): ReadonlyArray<ThreadProgress> =>
   progressEvents.filter((event) => event.requestId === request.requestId);
 
+/**
+ * Mirrors the mailbox guard on editing a message that still waits. It is a fact
+ * about one message, not about its thread: a thread the agent already answered
+ * can still hold a follow-up nobody has started.
+ */
+export const canReviseQueuedMessage = ({
+  request,
+  response,
+  canceled,
+}: {
+  readonly request: ThreadRequest;
+  readonly response: ThreadResponse | undefined;
+  readonly canceled: boolean;
+}): boolean =>
+  request.kind !== "feedback" &&
+  !canceled &&
+  response === undefined &&
+  request.claimedAt === undefined;
+
+/**
+ * Mirrors the mailbox guard on removing a message the agent never started. A
+ * canceled message is still removable, which is how a reviewer clears a turn
+ * they never meant to send.
+ */
+export const canDeleteQueuedMessage = ({
+  request,
+  response,
+}: {
+  readonly request: ThreadRequest;
+  readonly response: ThreadResponse | undefined;
+}): boolean =>
+  request.kind !== "feedback" &&
+  response === undefined &&
+  request.claimedAt === undefined;
+
+/**
+ * Counts the unanswered work an agent delivers before one request. Requests
+ * arrive in delivery order, so position in the list is the queue position the
+ * agent's work loop will honour.
+ */
+export const queuedRequestsAhead = ({
+  request,
+  requests,
+  responses,
+  cancelPendingRequestIds,
+}: {
+  readonly request: ThreadRequest;
+  readonly requests: ReadonlyArray<ThreadRequest>;
+  readonly responses: ReadonlyArray<ThreadResponse>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+}): number => {
+  const answered = new Set(responses.map((response) => response.requestId));
+  const position = requests.findIndex(
+    (candidate) => candidate.requestId === request.requestId,
+  );
+  if (position < 0) return 0;
+  return requests.slice(0, position).filter(
+    (candidate) =>
+      !answered.has(candidate.requestId) &&
+      !requestIsCanceled({
+        request: candidate,
+        pendingRequestIds: cancelPendingRequestIds,
+      }),
+  ).length;
+};
+
 export const projectRequestStatus = ({
   request,
   response,
@@ -119,6 +189,7 @@ export const projectRequestStatus = ({
   surface,
   nowMs,
   cancelPendingRequestIds,
+  queuedAhead,
 }: {
   readonly request: ThreadRequest;
   readonly response: ThreadResponse | undefined;
@@ -128,6 +199,7 @@ export const projectRequestStatus = ({
   readonly surface: ThreadSurface;
   readonly nowMs: number;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly queuedAhead?: number;
 }): AgentStatus => {
   if (
     requestIsCanceled({
@@ -162,6 +234,7 @@ export const projectRequestStatus = ({
     pickedUp: request.claimedAt !== undefined || activity.length > 0,
     sessionBusy:
       presence.state === "working" && presence.requestId !== request.requestId,
+    ...(queuedAhead === undefined ? {} : { queuedAhead }),
     surface,
     ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
     ...(failed === undefined ? {} : { failure: failed.detail ?? failed.step }),
@@ -200,6 +273,10 @@ export const projectCommentThread = <
       const outcome = response?.outcomes?.find(
         (candidate) => candidate.commentId === comment.id,
       );
+      const canceled = requestIsCanceled({
+        request,
+        pendingRequestIds: cancelPendingRequestIds,
+      });
       return {
         request,
         ...(response === undefined ? {} : { response }),
@@ -214,12 +291,21 @@ export const projectCommentThread = <
           surface: "thread",
           nowMs,
           cancelPendingRequestIds,
+          queuedAhead: queuedRequestsAhead({
+            request,
+            requests,
+            responses,
+            cancelPendingRequestIds,
+          }),
         }),
-        canceled: requestIsCanceled({
-          request,
-          pendingRequestIds: cancelPendingRequestIds,
-        }),
+        canceled,
         baselineSnapshot: request.baselineSnapshot ?? request.premiseSnapshot,
+        canReviseMessage: canReviseQueuedMessage({
+          request,
+          response,
+          canceled,
+        }),
+        canDeleteMessage: canDeleteQueuedMessage({ request, response }),
       };
     });
   const latestExchange = exchanges.at(-1);
