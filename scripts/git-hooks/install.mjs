@@ -48,10 +48,8 @@ const shellQuote = (value) => `'${value.replaceAll("'", `'"'"'`)}'`;
 const compositeHook = (
   hookName,
   backupName,
-  repoRoot,
   commonDirectory,
 ) => `${managedHookPrefix}BIG_PLAN_ORIGINAL_HOOK=${backupName ?? ""}
-BIG_PLAN_REPO_ROOT=${shellQuote(repoRoot)}
 BIG_PLAN_COMMON_DIR=${shellQuote(commonDirectory)}
 set -eu
 hook_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -66,7 +64,8 @@ ${
     : ""
 }  exit 0
 fi
-compliance_hook="$BIG_PLAN_REPO_ROOT/.githooks/${hookName}"
+current_worktree_root=$(git rev-parse --path-format=absolute --show-toplevel)
+compliance_hook="$current_worktree_root/.githooks/${hookName}"
 ${
   hookName === "commit-msg" && backupName
     ? `if [ -f "$compliance_hook" ]; then
@@ -91,7 +90,6 @@ exit 0
 const deployCompositeHook = (
   hooksDirectory,
   hookName,
-  repoRoot,
   commonDirectory,
 ) => {
   const hookPath = join(hooksDirectory, hookName);
@@ -113,7 +111,7 @@ const deployCompositeHook = (
   try {
     writeFileSync(
       hookPath,
-      compositeHook(hookName, backupName, repoRoot, commonDirectory),
+      compositeHook(hookName, backupName, commonDirectory),
       {
         encoding: "utf8",
         mode: 0o755,
@@ -153,12 +151,7 @@ export const installGitHooks = (repoRoot) => {
 
   mkdirSync(effectiveHooksDirectory, { recursive: true });
   for (const hookName of hookNames) {
-    deployCompositeHook(
-      effectiveHooksDirectory,
-      hookName,
-      repoRoot,
-      commonDirectory,
-    );
+    deployCompositeHook(effectiveHooksDirectory, hookName, commonDirectory);
   }
   return effectiveHooksPath;
 };

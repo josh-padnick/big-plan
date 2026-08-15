@@ -246,6 +246,127 @@ ${validation}printf x >> ${hookName}-ran
   }
 });
 
+test("should resolve compliance from the active linked worktree when hooks are shared", () => {
+  const sharedDirectory = mkdtempSync(
+    join(tmpdir(), "big-plan-shared-hooks-"),
+  );
+  const hooksDirectory = join(sharedDirectory, "hooks");
+  const linkedWorktree = join(sharedDirectory, "linked-worktree");
+  mkdirSync(hooksDirectory);
+  const dir = makeScratchRepo((scratchRepo) => {
+    git(scratchRepo, ["config", "core.hooksPath", hooksDirectory]);
+  });
+
+  try {
+    git(dir, ["add", "."]);
+    git(dir, ["commit", "-m", "seed linked worktree"]);
+    git(dir, [
+      "worktree",
+      "add",
+      "--quiet",
+      "-b",
+      "linked-hook-test",
+      linkedWorktree,
+    ]);
+    execFileSync("bun", ["run", "prepare"], {
+      cwd: linkedWorktree,
+      encoding: "utf8",
+    });
+    git(dir, ["worktree", "remove", "--force", linkedWorktree]);
+
+    git(dir, ["commit", "--allow-empty", "-m", "primary worktree commit"]);
+    const message = commitMessage(dir);
+    assert.ok(message.includes(GENERATED_BODY_NOTE));
+    assert.match(
+      message,
+      /Signed-off-by: Scratch Committer <scratch@example\.com>/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(sharedDirectory, { recursive: true, force: true });
+  }
+});
+
+for (const [configKey, commentMarker] of [
+  ["core.commentChar", ";"],
+  ["core.commentString", "//"],
+]) {
+  test(`should honor editor comments configured through ${configKey}`, () => {
+    const dir = makeScratchRepo((scratchRepo) => {
+      git(scratchRepo, ["config", configKey, commentMarker]);
+    });
+    try {
+      const editorPath = join(dir, "prepend-commit-subject");
+      writeFileSync(
+        editorPath,
+        `#!/bin/sh
+set -eu
+message_file=$1
+temporary_file="$message_file.with-subject"
+printf '%s\\n' 'configured-comment subject' > "$temporary_file"
+cat "$message_file" >> "$temporary_file"
+mv "$temporary_file" "$message_file"
+`,
+        { mode: 0o755 },
+      );
+      execFileSync("git", ["commit", "--allow-empty"], {
+        cwd: dir,
+        encoding: "utf8",
+        env: { ...process.env, GIT_EDITOR: editorPath },
+      });
+
+      const message = commitMessage(dir);
+      assert.match(message, /^configured-comment subject\n/);
+      assert.ok(message.includes(GENERATED_BODY_NOTE));
+      assert.match(
+        message,
+        /Signed-off-by: Scratch Committer <scratch@example\.com>/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+test("should honor the marker Git selects for auto-configured editor comments", () => {
+  const dir = makeScratchRepo((scratchRepo) => {
+    const templatePath = join(scratchRepo, "commit-template");
+    writeFileSync(templatePath, "# forces Git to select another marker\n");
+    git(scratchRepo, ["config", "commit.template", templatePath]);
+    git(scratchRepo, ["config", "core.commentChar", "auto"]);
+  });
+  try {
+    const editorPath = join(dir, "replace-auto-comment-message");
+    writeFileSync(
+      editorPath,
+      `#!/bin/sh
+set -eu
+message_file=$1
+temporary_file="$message_file.with-subject"
+printf '%s\\n' 'auto-comment subject' > "$temporary_file"
+sed -n '/^;/,$p' "$message_file" >> "$temporary_file"
+mv "$temporary_file" "$message_file"
+`,
+      { mode: 0o755 },
+    );
+    execFileSync("git", ["commit", "--allow-empty"], {
+      cwd: dir,
+      encoding: "utf8",
+      env: { ...process.env, GIT_EDITOR: editorPath },
+    });
+
+    const message = commitMessage(dir);
+    assert.match(message, /^auto-comment subject\n/);
+    assert.ok(message.includes(GENERATED_BODY_NOTE));
+    assert.match(
+      message,
+      /Signed-off-by: Scratch Committer <scratch@example\.com>/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("ensureBody: subject-only message gains the generated body note", () => {
   const result = ensureBody("x\n");
   assert.equal(result, `x\n\n${GENERATED_BODY_NOTE}`);

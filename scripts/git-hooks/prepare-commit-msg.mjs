@@ -12,15 +12,20 @@ export const GENERATED_BODY_NOTE =
 
 /**
  * Splits a raw commit-message file into the real content lines and any
- * trailing `#`-comment block git appends for editor-driven commits. `-m`
- * commits have no comment block, so `commentLines` is empty for those.
+ * trailing comment block git appends for editor-driven commits. `-m` commits
+ * have no comment block, so `commentLines` is empty for those.
  */
-const splitCommentBlock = (rawMessage) => {
+const splitCommentBlock = (rawMessage, commentMarker) => {
   const lines = rawMessage.split("\n");
+  if (!commentMarker) return { contentLines: lines, commentLines: [] };
   for (let i = 0; i < lines.length; i++) {
-    if (!lines[i].startsWith("#")) continue;
+    if (!lines[i].startsWith(commentMarker)) continue;
     const rest = lines.slice(i);
-    if (rest.every((line) => line.startsWith("#") || line.trim() === "")) {
+    if (
+      rest.every(
+        (line) => line.startsWith(commentMarker) || line.trim() === "",
+      )
+    ) {
       return { contentLines: lines.slice(0, i), commentLines: rest };
     }
   }
@@ -56,8 +61,11 @@ const findTrailerBlockStart = (lines, subjectIndex) => {
  * Git trailer block does not count as body content and is preserved after any
  * generated body note.
  */
-export const ensureBody = (rawMessage) => {
-  const { contentLines, commentLines } = splitCommentBlock(rawMessage);
+export const ensureBody = (rawMessage, commentMarker = "#") => {
+  const { contentLines, commentLines } = splitCommentBlock(
+    rawMessage,
+    commentMarker,
+  );
 
   const trimmed = [...contentLines];
   while (trimmed.length > 0 && trimmed[trimmed.length - 1].trim() === "") {
@@ -104,9 +112,63 @@ const currentCommitterIdent = () => {
   }
 };
 
-/** Appends a Signed-off-by trailer via `git interpret-trailers`, which owns
- * the correct blank-line and dedup semantics for trailer blocks. */
-const addSignoffTrailer = (messageFile, ident) => {
+const automaticCommentMarkers = "#;@!$%^&|:";
+
+/** Finds the marker Git selected for an auto-configured trailing comment block. */
+const inferAutomaticCommentMarker = (rawMessage) => {
+  const lines = rawMessage.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const marker = lines[i][0];
+    if (!marker || !automaticCommentMarkers.includes(marker)) continue;
+    const rest = lines.slice(i);
+    if (rest.every((line) => line.startsWith(marker) || line.trim() === "")) {
+      return marker;
+    }
+  }
+  return null;
+};
+
+/** Reads the last configured spelling because commentChar and commentString
+ * are aliases whose effective value follows Git's config order. */
+const currentCommentMarker = (rawMessage, source) => {
+  try {
+    const configured = execFileSync(
+      "git",
+      [
+        "config",
+        "--null",
+        "--get-regexp",
+        "^core\\.comment(Char|String)$",
+      ],
+      { encoding: "utf8" },
+    );
+    const entries = configured.split("\0").filter(Boolean);
+    const effectiveEntry = entries.at(-1);
+    if (!effectiveEntry) return "#";
+    const valueSeparator = effectiveEntry.indexOf("\n");
+    if (valueSeparator === -1) return "#";
+    const marker = effectiveEntry.slice(valueSeparator + 1);
+    if (marker !== "auto") return marker;
+    return source === "message"
+      ? null
+      : inferAutomaticCommentMarker(rawMessage);
+  } catch (error) {
+    if (error && typeof error === "object" && error.status === 1) return "#";
+    throw error;
+  }
+};
+
+/** Appends a Signed-off-by trailer while keeping editor comments outside the
+ * content that `git interpret-trailers` normalizes. */
+const addSignoffTrailer = (messageFile, ident, commentMarker) => {
+  const rawMessage = readFileSync(messageFile, "utf8");
+  const { contentLines, commentLines } = splitCommentBlock(
+    rawMessage,
+    commentMarker,
+  );
+  if (commentLines.length > 0) {
+    writeFileSync(messageFile, contentLines.join("\n"), "utf8");
+  }
   execFileSync("git", [
     "interpret-trailers",
     "--in-place",
@@ -116,21 +178,30 @@ const addSignoffTrailer = (messageFile, ident) => {
     `Signed-off-by: ${ident.name} <${ident.email}>`,
     messageFile,
   ]);
+  if (commentLines.length > 0) {
+    const signedContent = readFileSync(messageFile, "utf8").replace(/\n+$/, "");
+    writeFileSync(
+      messageFile,
+      `${signedContent}\n\n${commentLines.join("\n")}`,
+      "utf8",
+    );
+  }
 };
 
 export const run = (argv) => {
-  const [messageFile] = argv;
+  const [messageFile, source] = argv;
   if (!messageFile) {
     throw new Error("prepare-commit-msg: missing commit message file argument");
   }
 
   const raw = readFileSync(messageFile, "utf8");
-  const withBody = ensureBody(raw);
+  const commentMarker = currentCommentMarker(raw, source);
+  const withBody = ensureBody(raw, commentMarker);
   if (withBody !== raw) writeFileSync(messageFile, withBody, "utf8");
 
   const ident = currentCommitterIdent();
   // No configured identity: git itself will refuse to create the commit
   // before this hook's output matters, so there is nothing honest to sign.
   if (!ident) return;
-  addSignoffTrailer(messageFile, ident);
+  addSignoffTrailer(messageFile, ident, commentMarker);
 };
