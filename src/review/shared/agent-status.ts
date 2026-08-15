@@ -235,6 +235,29 @@ const disconnectedSupporting = ({
     : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
 };
 
+/** Selects live work before falling back to the oldest queued request. */
+export const selectPendingAgentRequest = <
+  Request extends AgentActivityRequest,
+>({
+  requests,
+  cancelPendingRequestIds,
+  now,
+}: {
+  readonly requests: ReadonlyArray<Request>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly now: number;
+}): Request | undefined => {
+  const pending = requests.filter(
+    (request) =>
+      !requestIsTerminal(request) &&
+      !cancelPendingRequestIds.has(request.requestId),
+  );
+  return (
+    pending.find((request) => claimIsLive({ request, nowMs: now })) ??
+    pending[0]
+  );
+};
+
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({
   requests,
@@ -271,11 +294,11 @@ export const deriveCurrentAgentActivity = ({
     };
   }
 
-  const request = requests.find(
-    (candidate) =>
-      !requestIsTerminal(candidate) &&
-      !cancelPendingRequestIds.has(candidate.requestId),
-  );
+  const request = selectPendingAgentRequest({
+    requests,
+    cancelPendingRequestIds,
+    now,
+  });
   if (request === undefined) {
     return {
       state: "idle",

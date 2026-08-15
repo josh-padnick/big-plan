@@ -5,9 +5,11 @@ import {
   projectCommentThread,
   projectConversationHistory,
   projectLatestAgentStatus,
+  projectRequestDelivery,
   projectRequestStatus,
   queuedRequestsAhead,
   requestCommentIds,
+  selectActiveFeedbackBatch,
   type ThreadRequest,
   type ThreadResponse,
 } from "./thread-projection.js";
@@ -38,6 +40,14 @@ const request = (overrides: Partial<ThreadRequest> = {}): ThreadRequest => ({
   commentIds: [comment.id],
   ...overrides,
 });
+const answeredRequest = (
+  overrides: Partial<ThreadRequest> = {},
+): ThreadRequest =>
+  request({
+    ...liveClaim(NOW - 1_000),
+    answeredAt: new Date(NOW).toISOString(),
+    ...overrides,
+  });
 const response = (
   state: "answered" | "changed" | "warning" | "needs-input" | "declined",
 ): ThreadResponse => ({
@@ -96,21 +106,21 @@ describe("thread projection", () => {
     expect(
       projectCommentThread({
         ...base,
-        requests: [request()],
+        requests: [answeredRequest()],
         responses: [response("needs-input")],
       }).group,
     ).toBe("needs-input");
     expect(
       projectCommentThread({
         ...base,
-        requests: [request()],
+        requests: [answeredRequest()],
         responses: [response("warning")],
       }).group,
     ).toBe("needs-input");
     expect(
       projectCommentThread({
         ...base,
-        requests: [request()],
+        requests: [answeredRequest()],
         responses: [response("changed")],
       }).group,
     ).toBe("ready");
@@ -166,7 +176,7 @@ describe("thread projection", () => {
     expect(
       projectCommentThread({
         ...base,
-        requests: [request(), canceledReply],
+        requests: [answeredRequest(), canceledReply],
         responses: [response("changed")],
       }),
     ).toMatchObject({
@@ -317,21 +327,59 @@ describe("thread projection", () => {
 
   it("should not offer queued deletion after an earlier pickup", () => {
     const expiredClaim = liveClaim(NOW - AGENT_CLAIM_LEASE_MS - 1);
-    expect(
-      projectCommentThread({
-        comment,
-        requests: [request(expiredClaim)],
-        responses: [],
-        progressEvents: [],
-        presence,
-        runtime: "online",
-        nowMs: NOW,
-        cancelPendingRequestIds: new Set(),
-      }),
-    ).toMatchObject({
+    const projection = projectCommentThread({
+      comment,
+      requests: [request(expiredClaim)],
+      responses: [],
+      progressEvents: [],
+      presence,
+      runtime: "online",
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set(),
+    });
+    expect(projection).toMatchObject({
       group: "queued",
       canDeleteQueued: false,
     });
+    expect(projection.latestExchange).toMatchObject({ delivery: "Queued" });
+    expect(
+      projectRequestDelivery({
+        request: request(liveClaim()),
+        nowMs: NOW,
+      }),
+    ).toBe("Sent");
+    expect(
+      projectRequestDelivery({
+        request: request({
+          ...expiredClaim,
+          answeredAt: "2026-08-10T20:00:01Z",
+        }),
+        nowMs: NOW,
+      }),
+    ).toBe("Sent");
+  });
+
+  it("should exclude terminal feedback from the active batch", () => {
+    const pending = request({
+      commentIds: [comment.id, "cccccccccccccccc"],
+    });
+    const answered = request({
+      commentIds: [comment.id, "cccccccccccccccc"],
+      ...liveClaim(),
+      answeredAt: "2026-08-10T20:00:01Z",
+    });
+    expect(
+      selectActiveFeedbackBatch({
+        requests: [pending],
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toBe(pending);
+    expect(
+      selectActiveFeedbackBatch({
+        requests: [answered],
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toBeUndefined();
   });
 
   it.each(["thread", "chat"] as const)(
@@ -491,7 +539,7 @@ describe("thread projection", () => {
 
 describe("conversation history", () => {
   it("should project prior chat turns", () => {
-    const earlier = request({
+    const earlier = answeredRequest({
       requestId: "1111111111111111",
       kind: "chat",
       body: "What changes?",
@@ -534,7 +582,7 @@ describe("conversation history", () => {
   });
 
   it("should project the original comment before a thread reply", () => {
-    const original = request({
+    const original = answeredRequest({
       comments: [comment],
       commentIds: undefined,
       createdAt: "2026-08-10T18:00:00Z",

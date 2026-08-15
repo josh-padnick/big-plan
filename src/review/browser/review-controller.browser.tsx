@@ -47,7 +47,6 @@ import {
   reconcilePendingCancellations,
   requestIsCanceled,
 } from "../shared/cancel-pending.js";
-import { agentOwnsRequest } from "../shared/request-ownership.js";
 import { stackThreadPositions } from "../shared/thread-layout.js";
 import {
   clearThreadOpenOverlay,
@@ -62,10 +61,13 @@ import {
   projectCommentThreads,
   projectLatestAgentStatus,
   projectRequestActivity,
+  projectRequestDelivery,
   projectRequestStatus,
   queuedRequestsAhead,
   requestCommentIds,
+  selectActiveFeedbackBatch,
   type CommentThreadProjection,
+  type RequestDelivery,
   type ThreadGroup,
   type ThreadRuntime,
 } from "../shared/thread-projection.js";
@@ -3336,6 +3338,7 @@ const SentThread = ({
                 response,
                 outcome: requestOutcome,
                 status: requestStatus,
+                delivery,
                 activity,
               }) => {
                 const sharedConnectionState =
@@ -3353,11 +3356,7 @@ const SentThread = ({
                           : (request.body ?? "")
                       }
                       createdAt={request.createdAt}
-                      delivery={
-                        response !== undefined || agentOwnsRequest(request)
-                          ? "Sent"
-                          : "Queued"
-                      }
+                      delivery={delivery}
                     >
                       {response === undefined ? (
                         <StalePremiseNotice
@@ -3599,6 +3598,7 @@ const SentThread = ({
 const ChatExchange = ({
   request,
   response,
+  delivery,
   identity,
   status,
   activity,
@@ -3610,6 +3610,7 @@ const ChatExchange = ({
 }: {
   readonly request: AgentRequest;
   readonly response: AgentResponse | undefined;
+  readonly delivery: RequestDelivery;
   readonly identity: RuntimeIdentity;
   readonly status: AgentStatus;
   readonly activity: ReadonlyArray<MessageActivity>;
@@ -3633,11 +3634,7 @@ const ChatExchange = ({
         surface="chat"
         body={request.body ?? ""}
         createdAt={request.createdAt}
-        delivery={
-          response !== undefined || agentOwnsRequest(request)
-            ? "Sent"
-            : "Queued"
-        }
+        delivery={delivery}
       />
       {response === undefined ? (
         <div className="min-w-0 w-[calc(100%_-_1.5rem)] rounded-lg border border-dashed border-edge bg-paper px-2 py-2 text-muted">
@@ -4920,6 +4917,10 @@ export const ReviewController = () => {
         key={request.requestId}
         request={request}
         response={response}
+        delivery={projectRequestDelivery({
+          request,
+          nowMs: agentProjectionNowMs,
+        })}
         identity={identity}
         status={statusForRequest(request, "chat")}
         activity={activityForRequest(request)}
@@ -5131,18 +5132,10 @@ export const ReviewController = () => {
           onClick: () =>
             viewAgentRequest(activeRequest.requestId, activeRequest.kind),
         };
-  const activeBatchRequest = [...agent.requests].reverse().find(
-    (request) =>
-      request.kind === "feedback" &&
-      requestCommentIds(request).length > 1 &&
-      !requestIsCanceled({
-        request,
-        pendingRequestIds: cancelPendingRequestIds,
-      }) &&
-      !agent.responses.some(
-        (response) => response.requestId === request.requestId,
-      ),
-  );
+  const activeBatchRequest = selectActiveFeedbackBatch({
+    requests: agent.requests,
+    cancelPendingRequestIds,
+  });
   const activeBatchCommentIds =
     activeBatchRequest === undefined
       ? []

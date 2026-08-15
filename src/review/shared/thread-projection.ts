@@ -68,6 +68,7 @@ export type ThreadPresence = {
 export type ThreadRuntime = "static" | "online" | "offline";
 export type ThreadSurface = "thread" | "chat";
 export type ThreadGroup = "needs-input" | "ready" | "working" | "queued";
+export type RequestDelivery = "Sent" | "Queued";
 
 export type ProjectedThreadExchange<
   Request extends ThreadRequest = ThreadRequest,
@@ -78,6 +79,7 @@ export type ProjectedThreadExchange<
   readonly outcome?: ThreadOutcome;
   readonly activity: ReadonlyArray<ThreadProgress>;
   readonly status: AgentStatus;
+  readonly delivery: RequestDelivery;
   readonly canceled: boolean;
   readonly baselineSnapshot: string;
   /** Whether the reviewer may still edit this waiting message. */
@@ -114,6 +116,37 @@ export const requestCommentIds = (
     ? [request.commentId]
     : [];
 };
+
+/** Projects delivery from durable terminality or a currently live claim. */
+export const projectRequestDelivery = ({
+  request,
+  nowMs,
+}: {
+  readonly request: ThreadRequest;
+  readonly nowMs: number;
+}): RequestDelivery =>
+  requestIsTerminal(request) || claimIsLive({ request, nowMs })
+    ? "Sent"
+    : "Queued";
+
+/** Selects the newest open multi-comment feedback batch. */
+export const selectActiveFeedbackBatch = <Request extends ThreadRequest>({
+  requests,
+  cancelPendingRequestIds,
+}: {
+  readonly requests: ReadonlyArray<Request>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+}): Request | undefined =>
+  [...requests].reverse().find(
+    (request) =>
+      request.kind === "feedback" &&
+      requestCommentIds(request).length > 1 &&
+      !requestIsTerminal(request) &&
+      !requestIsCanceled({
+        request,
+        pendingRequestIds: cancelPendingRequestIds,
+      }),
+  );
 
 export const projectRequestActivity = ({
   request,
@@ -375,6 +408,7 @@ export const projectCommentThread = <
             cancelPendingRequestIds,
           }),
         }),
+        delivery: projectRequestDelivery({ request, nowMs }),
         canceled,
         baselineSnapshot: request.baselineSnapshot ?? request.premiseSnapshot,
         canReviseMessage: canReviseQueuedMessage({

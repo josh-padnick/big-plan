@@ -281,6 +281,35 @@ describe("current agent activity", () => {
       }),
     ).toMatchObject({ state: "waiting", headline: "Waiting for agent" });
   });
+
+  it("should prefer live claimed work over an older lapsed request", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [
+          {
+            ...request(),
+            ...liveClaim(NOW - AGENT_STALL_MS - 1),
+          },
+          {
+            ...request("chat"),
+            requestId: "2222222222222222",
+            createdAt: "2026-08-08T19:59:30.000Z",
+            ...liveClaim(),
+          },
+        ],
+        cancelPendingRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: true,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW,
+      }),
+    ).toMatchObject({
+      state: "working",
+      requestId: "2222222222222222",
+      headline: "Answering a plan question",
+    });
+  });
 });
 
 describe("agent connection events", () => {

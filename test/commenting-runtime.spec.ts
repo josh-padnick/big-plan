@@ -460,6 +460,71 @@ test("should keep answered requests terminal when their response is unavailable"
   await expect(exchange).not.toContainText("Waiting");
 });
 
+test("should not keep an answered feedback batch active without its response", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await stageComment(page, "Clarify the shared retry boundary.");
+  await stageComment(page, "Name the shared recovery owner.");
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submitted).ok()).toBe(true);
+
+  const session = await liveReviewSession(page);
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = exchange.requests.find(
+    (candidate) =>
+      candidate.kind === "feedback" && candidate.comments.length === 2,
+  );
+  if (request === undefined) {
+    throw new Error("The terminal batch journey did not create feedback work");
+  }
+  const source = await readFile(session.plan, "utf8");
+  const claimed = await claimAgentRequest({
+    store,
+    requestId: request.requestId,
+    claimedBy: agentSessionId,
+    baselineSnapshot: deriveSnapshotDigest(source),
+    now: new Date().toISOString(),
+  });
+  await writeAgentRequest({
+    store,
+    request: {
+      ...claimed,
+      answeredAt: new Date().toISOString(),
+    },
+  });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "waiting",
+  });
+
+  await expect(
+    rail.locator("[data-review-thread-group='ready']"),
+  ).toContainText("Ready for review");
+  await expect(
+    rail.locator("[data-review-thread-group='working']"),
+  ).toHaveCount(0);
+});
+
 test("should pause a nonstandard request behind an explicit warning", async ({
   page,
   reviewRuntimeUrl,
