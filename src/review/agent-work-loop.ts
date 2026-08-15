@@ -3,7 +3,7 @@
 // response publication, progress, and the agent's continuing work loop.
 
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { basename, extname, join, resolve, sep } from "node:path";
 import { lintPlan } from "../lint/lint-plan.js";
 import { renderDocument } from "../render/render-document.js";
@@ -356,12 +356,29 @@ const nextWork = async ({
       return fail(error.message);
     }
     for (const attachment of request.attachments) {
-      // Compare resolved paths: a raw prefix test accepts `<root>/../../secret`,
-      // which would let a hand-edited request read outside its own directory.
-      const attachmentRoot = resolve(
+      const resolvedAttachmentRoot = resolve(
         join(session.store.requestAttachmentsDirectory, request.requestId),
       );
-      const attachmentPath = resolve(attachment.path);
+      const resolvedAttachmentPath = resolve(attachment.path);
+      if (
+        !resolvedAttachmentPath.startsWith(`${resolvedAttachmentRoot}${sep}`)
+      ) {
+        return fail(
+          `Attachment ${attachment.id} is outside the request attachment directory`,
+        );
+      }
+      let attachmentRoot: string;
+      let attachmentPath: string;
+      try {
+        [attachmentRoot, attachmentPath] = await Promise.all([
+          realpath(resolvedAttachmentRoot),
+          realpath(resolvedAttachmentPath),
+        ]);
+      } catch {
+        return fail(
+          `Attachment ${attachment.id} could not be opened during agent pickup`,
+        );
+      }
       if (!attachmentPath.startsWith(`${attachmentRoot}${sep}`)) {
         return fail(
           `Attachment ${attachment.id} is outside the request attachment directory`,

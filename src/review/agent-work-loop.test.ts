@@ -1,6 +1,13 @@
 // Covers the review-owned coding-agent loop through its one action interface.
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -298,6 +305,58 @@ describe("agent work loop lifecycle", () => {
           path: `${review.store.requestAttachmentsDirectory}/cccccccccccccccc/../../escaped.png`,
         },
       ],
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/outside the request attachment directory/);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a symlinked attachment target outside its request directory", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-symlink-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    const bytes = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+      0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+    ]);
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes,
+      alt: "Capture",
+    });
+    const requestId = "cccccccccccccccc";
+    const attachments = await reviewStore.freezeRequestAttachments({
+      store: review.store,
+      requestId,
+      references: [{ id: descriptor.id, alt: descriptor.alt }],
+    });
+    const attachment = attachments[0];
+    const outsidePath = join(directory, "outside.png");
+    await writeFile(outsidePath, bytes);
+    await rm(attachment.path);
+    await symlink(outsidePath, attachment.path);
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId,
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please inspect the capture.",
+      attachments,
     });
     await writeAgentRequest({ store: review.store, request });
     try {
