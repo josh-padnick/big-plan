@@ -1,4 +1,10 @@
+<!--
+Owns Big Plan's durable subsystem partition, code anchors, boundaries, and dependency order.
+-->
+
 # Subsystem partition
+
+Start with the root [agent guide](../AGENTS.md) for product orientation and repository-wide contributor guidance.
 
 Big Plan's product work is organized into seven subsystems.
 The partition is grounded in the codebase's actual module boundaries, not in issue-tracker categories.
@@ -134,7 +140,9 @@ The application can then trust the container: any content inside a container get
 
 ## Incremental order
 
-The subsystems are not independent to build in arbitrary order; each has a rationale for where it falls in sequence.
+This section records the durable dependency order for work that implements the subsystem partition.
+It is an exception to the normal rule that task-specific future work and sequencing belong in temporary plans or issue tracking.
+Keep each task's detailed steps and delivery status in those temporary owners while preserving the dependency order below.
 
 1. **Session Reliability first.**
    It is the smallest coherent set with the highest trust payoff.
