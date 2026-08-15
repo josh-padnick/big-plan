@@ -119,6 +119,7 @@ import {
   reviewPollIsOffline,
   reviewRuntimeAcceptsWrites,
   reviewRuntimeCanWrite,
+  reviewRuntimeDownSinceMs,
   reviewRuntimeIsDown,
   transitionReviewPollHealth,
   type ReviewPollHealth,
@@ -711,24 +712,32 @@ const ServerGoneBanner = ({
   readonly onRefresh: () => void;
   readonly endReason: ReviewEndReason;
   readonly restartCommand: string;
-}) => (
-  <RuntimeAlertBanner
-    scope="data-review-server-gone"
-    heading={
-      endReason.kind === "expired"
-        ? "This review session ended on its own"
-        : "This review session is no longer online"
-    }
-    detail={
-      endReason.kind === "expired"
-        ? `This review session ended after ${reviewIdleDurationLabel(endReason.idleTimeoutMs)} of inactivity. Restart it with ${restartCommand} to continue reviewing.`
-        : canRefresh
+}) => {
+  const unsavedInputWarning = canRefresh
+    ? ""
+    : " Keep this tab open because the latest review input has not reached the local review server.";
+  if (endReason.kind === "expired") {
+    return (
+      <RuntimeAlertBanner
+        scope="data-review-server-gone"
+        heading="This review session ended on its own"
+        detail={`This review session ended after ${reviewIdleDurationLabel(endReason.idleTimeoutMs)} of inactivity. Restart it with ${restartCommand}, then open the new address it prints to continue reviewing.${unsavedInputWarning}`}
+      />
+    );
+  }
+  return (
+    <RuntimeAlertBanner
+      scope="data-review-server-gone"
+      heading="This review session is no longer online"
+      detail={
+        canRefresh
           ? "The local review server stopped responding. Refresh when it is running again to continue reviewing. This is separate from the agent connection."
-          : "The local review server stopped responding. Keep this tab open because the latest review input has not reached the local review server. This is separate from the agent connection."
-    }
-    action={{ label: "Refresh", onAct: onRefresh, enabled: canRefresh }}
-  />
-);
+          : `The local review server stopped responding.${unsavedInputWarning} This is separate from the agent connection.`
+      }
+      action={{ label: "Refresh", onAct: onRefresh, enabled: canRefresh }}
+    />
+  );
+};
 
 // The failure this exists for answers reads perfectly: the server is up, so
 // nothing else on the page looks wrong, and a reviewer would keep writing
@@ -3770,14 +3779,14 @@ export const ReviewController = () => {
   // with the banner for a runtime that has gone entirely.
   const writesStalled =
     !serverGone && runtimeSession?.writesStalledMs !== undefined;
-  // Read from the last poll that succeeded, which is the whole trick: a page
-  // still reaching the runtime keeps pushing its own deadline forward, so a
-  // deadline that has since passed proves the polling stopped rather than the
-  // runtime being stopped by hand.
+  // Decide the diagnosis once, from when contact was actually lost. The live
+  // status clock advances on every failed poll and would otherwise turn a
+  // stopped runtime into a false idle expiry after its stale deadline passes.
+  const runtimeDownSinceMs = reviewRuntimeDownSinceMs(pollHealth);
   const endReason = reviewEndReason({
     expiresAtMs: runtimeSession?.expiresAtMs,
     idleTimeoutMs: runtimeSession?.idleTimeoutMs,
-    nowMs: statusNowMs,
+    nowMs: runtimeDownSinceMs ?? statusNowMs,
   });
   // Naming the actual plan beats a placeholder the reader has to translate,
   // but a session that never reported its path still needs a usable sentence.
@@ -4397,10 +4406,11 @@ export const ReviewController = () => {
           const result: ReviewPollResult = isReviewRuntimeUnavailable(error)
             ? "runtime-unavailable"
             : "poll-failed";
+          const now = Date.now();
           setPollHealth((health) =>
-            transitionReviewPollHealth({ health, result }),
+            transitionReviewPollHealth({ health, result, nowMs: now }),
           );
-          setStatusNowMs(Date.now());
+          setStatusNowMs(now);
         }
       } finally {
         pending = false;

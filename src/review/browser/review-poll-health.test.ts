@@ -9,6 +9,7 @@ import {
   reviewPollIsOffline,
   reviewRuntimeAcceptsWrites,
   reviewRuntimeCanWrite,
+  reviewRuntimeDownSinceMs,
   reviewRuntimeIsDown,
   transitionReviewPollHealth,
   type ReviewPollHealth,
@@ -17,9 +18,15 @@ import {
 
 const transition = (
   results: ReadonlyArray<ReviewPollResult>,
+  firstNowMs = 1_000,
 ): ReviewPollHealth =>
   results.reduce<ReviewPollHealth>(
-    (health, result) => transitionReviewPollHealth({ health, result }),
+    (health, result, index) =>
+      transitionReviewPollHealth({
+        health,
+        result,
+        nowMs: firstNowMs + index,
+      }),
     INITIAL_REVIEW_POLL_HEALTH,
   );
 
@@ -50,6 +57,51 @@ describe("review poll health", () => {
         heartbeatAt: 1_000,
       }),
     ).toMatchObject({ state: "idle", headline: "Agent connected" });
+  });
+
+  it("should stamp the first runtime-unavailable failure", () => {
+    const health = transition(["runtime-unavailable"], 2_000);
+
+    expect(health).toEqual({
+      state: "runtime-unavailable",
+      consecutiveFailures: 1,
+      firstFailureAtMs: 2_000,
+    });
+    expect(reviewRuntimeDownSinceMs(health)).toBeUndefined();
+  });
+
+  it("should preserve the first runtime-unavailable failure time", () => {
+    const health = transition(
+      ["runtime-unavailable", "runtime-unavailable", "runtime-unavailable"],
+      2_000,
+    );
+
+    expect(health).toEqual({
+      state: "runtime-unavailable",
+      consecutiveFailures: 2,
+      firstFailureAtMs: 2_000,
+    });
+    expect(reviewRuntimeDownSinceMs(health)).toBe(2_000);
+  });
+
+  it("should stamp a new failure time after runtime recovery", () => {
+    const health = transition(
+      [
+        "runtime-unavailable",
+        "runtime-unavailable",
+        "success",
+        "runtime-unavailable",
+        "runtime-unavailable",
+      ],
+      2_000,
+    );
+
+    expect(health).toEqual({
+      state: "runtime-unavailable",
+      consecutiveFailures: 2,
+      firstFailureAtMs: 2_003,
+    });
+    expect(reviewRuntimeDownSinceMs(health)).toBe(2_003);
   });
 
   it("should report poll failure without reporting runtime unavailability", () => {
@@ -119,6 +171,9 @@ describe("review poll health", () => {
       expect(health).toEqual({
         state: secondResult,
         consecutiveFailures: 1,
+        ...(secondResult === "runtime-unavailable"
+          ? { firstFailureAtMs: 1_002 }
+          : {}),
       });
       expect(reviewPollIsOffline(health)).toBe(false);
       expect(reviewRuntimeIsDown(health)).toBe(false);
