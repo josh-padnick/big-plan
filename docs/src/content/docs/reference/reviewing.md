@@ -145,7 +145,11 @@ Three types of read-only GET request do not use the per-session token, `Origin`,
 
 For a plan-picture request, both the requested path and its real path must stay in the plan's own directory.
 Neither path can contain a dot-prefixed segment.
-The opened target must be a regular file, must match the accepted path, and must stay inside the image size limit.
+The opened target must be a regular file and must stay inside the image size limit.
+The file-identity check is best effort.
+An attacker who can already write in the reviewer's plan directory can replace an ancestor directory between path validation and file open.
+The attacker can then make the plan-picture route open a file outside the plan directory.
+The runtime accepts this limit because the attacker already has access to the reviewer's local files, and the server listens only on loopback.
 For a stored review-image request, the metadata and picture must be regular files and must stay inside their explicit size limits.
 
 All API routes require the per-session token in a request header.

@@ -23,9 +23,9 @@ const MAX_ZOOM = 4;
 // over a diagram - and, because every colour is a role, it reads correctly in
 // both appearances instead of assuming a dark ground.
 const CONTROL_CLASSES =
-  "inline-flex h-9 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent px-2 text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:size-3.5";
+  "inline-flex h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent px-2 text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:bg-surface focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:h-9 wide:min-w-0 [&_svg]:size-3.5";
 const CONTROL_GROUP_CLASSES =
-  "inline-flex h-9 shrink-0 items-center overflow-hidden rounded-md border border-edge bg-raised shadow-floating";
+  "inline-flex h-11 shrink-0 items-center overflow-hidden rounded-md border border-edge bg-raised shadow-floating wide:h-9";
 
 /**
  * Says that a picture is missing instead of leaving a bare box the reader has
@@ -46,7 +46,7 @@ const UnavailableImage = ({ alt }: { readonly alt: string }) => (
       Image unavailable
     </span>
     <details className="mt-1">
-      <summary className="cursor-pointer text-2xs text-subtle underline-offset-2 hover:text-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+      <summary className="min-h-11 min-w-11 cursor-pointer py-3 text-2xs text-subtle underline-offset-2 hover:text-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-0 wide:min-w-0 wide:py-0">
         What happened
       </summary>
       <span className="mt-1 block text-2xs leading-normal text-subtle">
@@ -150,7 +150,7 @@ export const ReviewImage = ({
                   <Icon icon={MINUS_ICON} />
                 </button>
                 <span
-                  className="flex h-9 min-w-12 items-center justify-center border-x border-edge px-2 text-2xs tabular-nums text-muted"
+                  className="flex h-11 min-w-12 items-center justify-center border-x border-edge px-2 text-2xs tabular-nums text-muted wide:h-9"
                   aria-live="polite"
                 >
                   {Math.round(zoom * 100)}%

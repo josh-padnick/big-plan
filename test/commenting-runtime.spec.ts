@@ -831,7 +831,7 @@ test("should restore and submit staged comments through the local review runtime
     /^\/review-images\/[a-f0-9]{64}$/u,
   );
 
-  await test.step("the lightbox keeps every control inside the viewport", async () => {
+  await test.step("the lightbox keeps every control inside the viewport and touchable", async () => {
     await rail.getByRole("button", { name: "Open Screenshot" }).first().click();
     const lightbox = page.getByRole("dialog", { name: "Screenshot" });
     const zoom = lightbox.getByRole("group", { name: "Image zoom" });
@@ -861,6 +861,16 @@ test("should restore and submit staged comments through the local review runtime
     await expect(
       rail.getByRole("button", { name: "Open Screenshot" }).first(),
     ).toBeFocused();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await rail.getByRole("button", { name: "Open Screenshot" }).first().click();
+    await expect(lightbox).toBeVisible();
+    for (const name of ["Zoom out", "Zoom in", "Fit image", "Close image"]) {
+      const controlBox = await boxOf(lightbox.getByRole("button", { name }));
+      expect(controlBox.width).toBeGreaterThanOrEqual(44);
+      expect(controlBox.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.keyboard.press("Escape");
+    await expect(lightbox).toHaveCount(0);
     await page.route("**/review-images/*", (route) =>
       route.fulfill({
         status: 200,
@@ -876,6 +886,9 @@ test("should restore and submit staged comments through the local review runtime
     const disclosure = lightbox.getByText("What happened");
     const detail = lightbox.getByText(/could not load/u);
     await expect(detail).toBeHidden();
+    const disclosureBox = await boxOf(disclosure);
+    expect(disclosureBox.width).toBeGreaterThanOrEqual(44);
+    expect(disclosureBox.height).toBeGreaterThanOrEqual(44);
     await page.keyboard.press("Tab");
     await expect(disclosure).toBeFocused();
     await page.keyboard.press("Enter");
@@ -883,6 +896,7 @@ test("should restore and submit staged comments through the local review runtime
     await page.unroute("**/review-images/*");
     await page.keyboard.press("Escape");
     await expect(lightbox).toHaveCount(0);
+    await page.setViewportSize(viewport);
   });
 
   const responsePromise = page.waitForResponse(
