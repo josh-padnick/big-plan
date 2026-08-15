@@ -19,10 +19,12 @@ import {
   appendFile,
   chmod,
   mkdir,
+  open,
   rename,
   readdir,
   readFile,
   rm,
+  stat,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -762,7 +764,7 @@ export const withReviewStoreLock = async <TResult>({
   });
 };
 
-/** How much append-only state one review session has accumulated. */
+/** How much persistent state one review session currently retains. */
 export type ReviewStoreGrowth = {
   readonly progressLines: number;
   readonly agentRequests: number;
@@ -777,20 +779,19 @@ const publishedJsonFileNames = async (
     .sort();
 
 /**
- * Counts the state that only ever grows during a session. Both the progress
- * log and the agent exchange directories are re-read in full by request paths
- * the browser polls, so their size is what turns a long session slow; a
- * suspected long-session stall needs these as numbers, not as a hypothesis.
+ * Counts persistent review state for long-session diagnostics. The progress
+ * log is compacted, while agent exchange files continue to accumulate, so a
+ * suspected long-session stall needs the current retained sizes as numbers,
+ * not as a hypothesis.
  */
 export const reviewStoreGrowth = async ({
   store,
 }: {
   readonly store: ReviewStore;
 }): Promise<ReviewStoreGrowth> => {
-  const progressLines = await readFile(store.progressPath, "utf8").then(
-    (raw) => raw.split("\n").filter((line) => line.trim() !== "").length,
-    () => 0,
-  );
+  // Counted through the same cache the read paths use, so asking how much of
+  // the log remains does not itself re-read it every minute.
+  const progressLines = (await readProgressValues(store.progressPath)).length;
   const [agentRequests, agentResponses] = await Promise.all([
     publishedJsonFileNames(store.agentRequestDirectory).then(
       (names) => names.length,
@@ -802,25 +803,20 @@ export const reviewStoreGrowth = async ({
   return { progressLines, agentRequests, agentResponses };
 };
 
-const writeJson = async ({
+/** Replaces one file's whole contents without ever showing a partial one. */
+const writeFileAtomically = async ({
   path,
-  value,
+  contents,
 }: {
   readonly path: string;
-  readonly value: unknown;
+  readonly contents: string;
 }): Promise<void> => {
   const temporaryPath = join(
     dirname(path),
     `.${basename(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`,
   );
   try {
-    // Readers either retain the previous complete snapshot or open the next
-    // complete snapshot; they never observe writeFile's truncate-and-rewrite
-    // window and mistake a live review or agent for a disconnected one.
-    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
-      flag: "wx",
-      mode: FILE_MODE,
-    });
+    await writeFile(temporaryPath, contents, { flag: "wx", mode: FILE_MODE });
     await chmod(temporaryPath, FILE_MODE);
     await rename(temporaryPath, path);
   } catch (error: unknown) {
@@ -828,6 +824,18 @@ const writeJson = async ({
     throw error;
   }
 };
+
+const writeJson = async ({
+  path,
+  value,
+}: {
+  readonly path: string;
+  readonly value: unknown;
+}): Promise<void> =>
+  writeFileAtomically({
+    path,
+    contents: `${JSON.stringify(value, null, 2)}\n`,
+  });
 
 /** Reads a stored comment list back through the caller's own validator. */
 export const readComments = async ({
@@ -1131,11 +1139,34 @@ export const readAgentRequestValue = async ({
 }): Promise<unknown> =>
   readJson(exchangePath({ directory: store.agentRequestDirectory, requestId }));
 
-/** Reads every untrusted response value for validation by the exchange module. */
-export const readAgentResponseValues = async (
+/**
+ * Which requests have a response on disk, from the directory listing alone.
+ * Deciding what to read must not cost what reading it would.
+ */
+export const listAgentResponseRequestIds = async (
   store: ReviewStore,
-): Promise<ReadonlyArray<unknown>> =>
-  readJsonDirectory(store.agentResponseDirectory);
+): Promise<ReadonlyArray<string>> =>
+  (await publishedJsonFileNames(store.agentResponseDirectory)).map((name) =>
+    name.slice(0, -".json".length),
+  );
+
+/** Reads the named untrusted response values for validation by the exchange. */
+export const readAgentResponseValuesFor = async ({
+  store,
+  requestIds,
+}: {
+  readonly store: ReviewStore;
+  readonly requestIds: ReadonlyArray<string>;
+}): Promise<ReadonlyArray<unknown>> => {
+  const values: Array<unknown> = [];
+  for (const requestId of requestIds) {
+    const value = await readJson(
+      exchangePath({ directory: store.agentResponseDirectory, requestId }),
+    );
+    if (value !== undefined) values.push(value);
+  }
+  return values;
+};
 
 /** Reads one untrusted response value for a locked mailbox change. */
 export const readAgentResponseValue = async ({
@@ -1260,6 +1291,270 @@ const asProgressEvent = ({
   };
 };
 
+// The parsed progress log, per file, for this process. The browser polls the
+// progress route about forty times a minute and every appended event used to
+// reparse the whole history under a lock, so the cost of one event grew with
+// the length of the session it belonged to.
+//
+// The log is append-only apart from compaction, which only ever shrinks it, so
+// a file that is longer than what this process parsed has been appended to and
+// only those bytes need parsing. Any other change - a shorter file, a
+// different modification time at the same length - drops the cache and starts
+// over, because the one thing this must never do is answer from a history that
+// is no longer on disk.
+type ProgressLogCache = {
+  readonly version: ProgressFileVersion;
+  /** Bytes ending at the last complete line, which is all that was parsed. */
+  readonly parsedBytes: number;
+  readonly values: ReadonlyArray<unknown>;
+};
+
+type ProgressFileVersion = {
+  readonly device: number;
+  readonly inode: number;
+  readonly sizeBytes: number;
+  readonly mtimeMs: number;
+  readonly ctimeMs: number;
+};
+
+const progressLogCaches = new Map<string, ProgressLogCache>();
+const progressCompactionChecks = new Map<string, number>();
+
+const progressFileVersion = ({
+  dev,
+  ino,
+  size,
+  mtimeMs,
+  ctimeMs,
+}: {
+  readonly dev: number;
+  readonly ino: number;
+  readonly size: number;
+  readonly mtimeMs: number;
+  readonly ctimeMs: number;
+}): ProgressFileVersion => ({
+  device: dev,
+  inode: ino,
+  sizeBytes: size,
+  mtimeMs,
+  ctimeMs,
+});
+
+const sameProgressFile = (
+  left: ProgressFileVersion,
+  right: ProgressFileVersion,
+): boolean => left.device === right.device && left.inode === right.inode;
+
+const sameProgressVersion = (
+  left: ProgressFileVersion,
+  right: ProgressFileVersion,
+): boolean =>
+  sameProgressFile(left, right) &&
+  left.sizeBytes === right.sizeBytes &&
+  left.mtimeMs === right.mtimeMs &&
+  left.ctimeMs === right.ctimeMs;
+
+const parseProgressLines = (raw: string): ReadonlyArray<unknown> => {
+  const values: Array<unknown> = [];
+  for (const line of raw.split("\n")) {
+    if (line.trim() === "") continue;
+    try {
+      values.push(JSON.parse(line));
+    } catch {
+      // A line this process cannot parse is state some other writer left
+      // behind, and it is skipped on every read rather than repaired.
+    }
+  }
+  return values;
+};
+
+/** Reads a stable prefix of the file currently published at `path`. */
+const readProgressBytes = async ({
+  path,
+  from,
+  expected,
+}: {
+  readonly path: string;
+  readonly from: number;
+  readonly expected?: ProgressFileVersion;
+}): Promise<
+  { readonly bytes: Buffer; readonly version: ProgressFileVersion } | undefined
+> => {
+  let handle;
+  try {
+    handle = await open(path, "r");
+  } catch {
+    return undefined;
+  }
+  try {
+    let before: ProgressFileVersion;
+    try {
+      before = progressFileVersion(await handle.stat());
+    } catch {
+      return undefined;
+    }
+    if (
+      (expected !== undefined && !sameProgressVersion(before, expected)) ||
+      from > before.sizeBytes
+    ) {
+      return undefined;
+    }
+    const buffer = Buffer.alloc(before.sizeBytes - from);
+    let offset = 0;
+    while (offset < buffer.length) {
+      const { bytesRead } = await handle.read(
+        buffer,
+        offset,
+        buffer.length - offset,
+        from + offset,
+      );
+      if (bytesRead === 0) return undefined;
+      offset += bytesRead;
+    }
+    let after: ProgressFileVersion;
+    let published: ProgressFileVersion;
+    try {
+      after = progressFileVersion(await handle.stat());
+      published = progressFileVersion(await stat(path));
+    } catch {
+      return undefined;
+    }
+    if (
+      !sameProgressFile(before, after) ||
+      !sameProgressFile(before, published) ||
+      after.sizeBytes < before.sizeBytes ||
+      published.sizeBytes < before.sizeBytes ||
+      (after.sizeBytes === before.sizeBytes &&
+        !sameProgressVersion(before, after)) ||
+      (published.sizeBytes === before.sizeBytes &&
+        !sameProgressVersion(before, published))
+    ) {
+      return undefined;
+    }
+    return { bytes: buffer, version: before };
+  } finally {
+    await handle.close();
+  }
+};
+
+const readWholeProgressBytes = async (
+  path: string,
+): Promise<
+  { readonly bytes: Buffer; readonly version: ProgressFileVersion } | undefined
+> => {
+  try {
+    const before = progressFileVersion(await stat(path));
+    const bytes = await readFile(path);
+    const after = progressFileVersion(await stat(path));
+    return bytes.length === before.sizeBytes &&
+      sameProgressVersion(before, after)
+      ? { bytes, version: before }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Returns every parsed line of one progress log, reusing what it can. */
+const readProgressValues = async (
+  path: string,
+): Promise<ReadonlyArray<unknown>> => {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    let version: ProgressFileVersion;
+    try {
+      version = progressFileVersion(await stat(path));
+    } catch {
+      progressLogCaches.delete(path);
+      progressCompactionChecks.delete(path);
+      return [];
+    }
+    const cached = progressLogCaches.get(path);
+    if (cached !== undefined && sameProgressVersion(cached.version, version)) {
+      return cached.values;
+    }
+    if (
+      cached !== undefined &&
+      sameProgressFile(cached.version, version) &&
+      version.sizeBytes > cached.version.sizeBytes
+    ) {
+      const appended = await readProgressBytes({
+        path,
+        from: cached.parsedBytes,
+        expected: version,
+      });
+      if (appended !== undefined) {
+        const lastBreak = appended.bytes.lastIndexOf(0x0a);
+        const complete =
+          lastBreak === -1
+            ? Buffer.alloc(0)
+            : appended.bytes.subarray(0, lastBreak + 1);
+        const values = [
+          ...cached.values,
+          ...parseProgressLines(complete.toString("utf8")),
+        ];
+        progressLogCaches.set(path, {
+          version: appended.version,
+          parsedBytes: cached.parsedBytes + complete.length,
+          values,
+        });
+        return values;
+      }
+    }
+    const whole = await readWholeProgressBytes(path);
+    if (whole === undefined) continue;
+    const lastBreak = whole.bytes.lastIndexOf(0x0a);
+    const complete =
+      lastBreak === -1
+        ? Buffer.alloc(0)
+        : whole.bytes.subarray(0, lastBreak + 1);
+    const values = parseProgressLines(complete.toString("utf8"));
+    if (cached !== undefined) progressCompactionChecks.delete(path);
+    progressLogCaches.set(path, {
+      version: whole.version,
+      parsedBytes: complete.length,
+      values,
+    });
+    return values;
+  }
+  throw new Error(`Progress log changed repeatedly while reading ${path}`);
+};
+
+type ReadableProgressEntry = {
+  readonly event: ProgressEvent;
+  readonly index: number;
+};
+
+type ReadableProgressHistory = {
+  readonly entries: Array<ReadableProgressEntry>;
+  highestSequence: number;
+};
+
+const readableProgressHistories = (
+  values: ReadonlyArray<unknown>,
+): ReadonlyMap<string, ReadableProgressHistory> => {
+  const histories = new Map<string, ReadableProgressHistory>();
+  for (const [index, value] of values.entries()) {
+    const sessionId =
+      typeof value === "object" &&
+      value !== null &&
+      "sessionId" in value &&
+      typeof value.sessionId === "string"
+        ? value.sessionId
+        : undefined;
+    if (sessionId === undefined) continue;
+    const event = asProgressEvent({ value, sessionId });
+    const history = histories.get(sessionId) ?? {
+      entries: [],
+      highestSequence: 0,
+    };
+    if (event === undefined || event.seq <= history.highestSequence) continue;
+    history.highestSequence = event.seq;
+    history.entries.push({ event, index });
+    histories.set(sessionId, history);
+  }
+  return histories;
+};
+
 /**
  * Relays the agent's status channel: line-delimited events, kept only when
  * they belong to the running session and advance its sequence. A foreign or
@@ -1275,32 +1570,15 @@ const readProgressHistory = async ({
   readonly events: ReadonlyArray<ProgressEvent>;
   readonly highestSequence: number;
 }> => {
-  let raw: string;
-  try {
-    raw = await readFile(store.progressPath, "utf8");
-  } catch {
-    return { events: [], highestSequence: 0 };
-  }
-  const accepted: Array<ProgressEvent> = [];
-  let highest = 0;
-  for (const line of raw.split("\n")) {
-    if (line.trim() === "") {
-      continue;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const event = asProgressEvent({ value: parsed, sessionId });
-    if (event === undefined || event.seq <= highest) {
-      continue;
-    }
-    highest = event.seq;
-    accepted.push(event);
-  }
-  return { events: accepted, highestSequence: highest };
+  const history = readableProgressHistories(
+    await readProgressValues(store.progressPath),
+  ).get(sessionId);
+  return history === undefined
+    ? { events: [], highestSequence: 0 }
+    : {
+        events: history.entries.map((entry) => entry.event),
+        highestSequence: history.highestSequence,
+      };
 };
 
 export const readProgress = async ({
@@ -1314,6 +1592,20 @@ export const readProgress = async ({
   return history.events.slice(-PROGRESS_EVENT_LIMIT);
 };
 
+/**
+ * The sequence one session's next event takes. Callers hold the progress lock
+ * across this and the append that follows it, so the number they receive is
+ * still theirs when they use it.
+ */
+export const nextProgressSequence = async ({
+  store,
+  sessionId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+}): Promise<number> =>
+  (await readProgressHistory({ store, sessionId })).highestSequence + 1;
+
 /** Appends one checked event for the mailbox mutation owner. */
 export const appendProgressValue = async ({
   store,
@@ -1326,6 +1618,56 @@ export const appendProgressValue = async ({
     mode: FILE_MODE,
   });
   await chmod(store.progressPath, FILE_MODE);
+};
+
+const PROGRESS_COMPACTION_CHECK = PROGRESS_EVENT_LIMIT * 5;
+const PROGRESS_COMPACTION_RECLAIM = PROGRESS_EVENT_LIMIT;
+
+/**
+ * Rewrites the log as the tail every reader would already have been given:
+ * `readProgress` returns at most the last `PROGRESS_EVENT_LIMIT` events of the
+ * asking session, so keeping that many per session present in the file changes
+ * nothing any reader can observe, and drops what nothing can reach.
+ *
+ * The caller must hold the progress lock, because this replaces the file that
+ * every appender is appending to.
+ */
+export const compactProgressLog = async ({
+  store,
+}: {
+  readonly store: ReviewStore;
+}): Promise<boolean> => {
+  const values = await readProgressValues(store.progressPath);
+  const nextCheck =
+    progressCompactionChecks.get(store.progressPath) ??
+    PROGRESS_COMPACTION_CHECK + 1;
+  if (values.length < nextCheck) return false;
+  const compacted = [...readableProgressHistories(values).values()]
+    .flatMap((history) => history.entries.slice(-PROGRESS_EVENT_LIMIT))
+    .sort((left, right) => left.index - right.index)
+    .map((entry) => entry.event);
+  const reclaimable = values.length - compacted.length;
+  if (reclaimable < PROGRESS_COMPACTION_RECLAIM) {
+    progressCompactionChecks.set(
+      store.progressPath,
+      values.length +
+        Math.max(
+          PROGRESS_EVENT_LIMIT,
+          PROGRESS_COMPACTION_RECLAIM - reclaimable,
+        ),
+    );
+    return false;
+  }
+  await writeFileAtomically({
+    path: store.progressPath,
+    contents: compacted.map((value) => `${JSON.stringify(value)}\n`).join(""),
+  });
+  progressLogCaches.delete(store.progressPath);
+  progressCompactionChecks.set(
+    store.progressPath,
+    compacted.length + PROGRESS_COMPACTION_CHECK,
+  );
+  return true;
 };
 
 /** Writes one checked session value for the authority module. */

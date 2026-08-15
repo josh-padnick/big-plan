@@ -137,9 +137,9 @@ const SHUTDOWN_GRACE_MS = 100;
 
 const STALL_CHECK_INTERVAL_MS = 5_000;
 const GROWTH_CHECK_INTERVAL_MS = 60_000;
-// Both polled read paths re-read their whole history, so growth is reported on
-// a ladder rather than a limit: each rung is one order of magnitude of cost a
-// long session added to every poll.
+// Persistent review state is reported on a ladder rather than every minute, so
+// operators can correlate a long-session stall with the retained state size
+// without filling the terminal with repetitive diagnostics.
 const GROWTH_MILESTONE = 1_000;
 // Everything the document needs is embedded, and the only origin it may reach
 // is this runtime. The browser enforces the egress boundary the design claims.

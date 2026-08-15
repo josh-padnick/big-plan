@@ -10,7 +10,8 @@ import type { FeedbackPackage } from "./feedback-package.js";
 import {
   readAgentRequestValues,
   readAgentResponseValue,
-  readAgentResponseValues,
+  listAgentResponseRequestIds,
+  readAgentResponseValuesFor,
   writeAgentRequestValue,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
@@ -758,14 +759,28 @@ const readAcceptedAgentRequests = async ({
   return acceptedRequests;
 };
 
+/**
+ * Reads validated history, reading only the response files the caller will
+ * keep. Which requests have a response file comes from the response directory
+ * listing, so choosing the window costs one listing rather than the reads it
+ * exists to avoid.
+ *
+ * `retain` receives every accepted request, oldest first, and names the ones
+ * the caller will keep. Response files are opened only for retained requests.
+ */
 const readCompleteAgentExchange = async ({
   store,
   sessionId,
   planId,
+  retain,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly planId: string;
+  readonly retain?: (input: {
+    readonly requests: ReadonlyArray<AgentRequest>;
+    readonly answeredRequestIds: ReadonlySet<string>;
+  }) => ReadonlySet<string>;
 }): Promise<AgentExchangeSnapshot> => {
   const requests = await readAcceptedAgentRequests({
     store,
@@ -773,12 +788,26 @@ const readCompleteAgentExchange = async ({
     planId,
   });
   const commentsById = commentsFromRequests(requests);
+  const answeredRequestIds = new Set(await listAgentResponseRequestIds(store));
+  const retainedRequestIds =
+    retain === undefined
+      ? new Set(requests.map((request) => request.requestId))
+      : retain({ requests, answeredRequestIds });
+  const retainedRequests = requests.filter((request) =>
+    retainedRequestIds.has(request.requestId),
+  );
   const requestById = new Map(
-    requests.map((request) => [request.requestId, request]),
+    retainedRequests.map((request) => [request.requestId, request]),
   );
   const responses: Array<AgentResponse> = [];
   const responseRequestIds = new Set<string>();
-  for (const value of await readAgentResponseValues(store)) {
+  const readable = retainedRequests
+    .map((request) => request.requestId)
+    .filter((requestId) => answeredRequestIds.has(requestId));
+  for (const value of await readAgentResponseValuesFor({
+    store,
+    requestIds: readable,
+  })) {
     try {
       if (!isRecord(value) || typeof value.requestId !== "string") continue;
       const request = requestById.get(value.requestId);
@@ -797,7 +826,7 @@ const readCompleteAgentExchange = async ({
     if (chronological !== 0) return chronological;
     return left.requestId.localeCompare(right.requestId);
   });
-  return { requests, responses };
+  return { requests: retainedRequests, responses };
 };
 
 /**
@@ -919,6 +948,27 @@ export const readAgentExchange = async ({
     store,
     sessionId,
     planId,
+    // Cancellation or any response file is the only terminal signal available
+    // before response validation. Every request with neither is retained. An
+    // invalid response inside the window is later ignored; an older one can age
+    // out with terminal history rather than appear outstanding indefinitely.
+    retain: ({ requests, answeredRequestIds }) => {
+      const pending = requests.filter(
+        (request) =>
+          request.canceledAt === undefined &&
+          !answeredRequestIds.has(request.requestId),
+      );
+      const terminal = requests
+        .filter(
+          (request) =>
+            request.canceledAt !== undefined ||
+            answeredRequestIds.has(request.requestId),
+        )
+        .slice(-EXCHANGE_LIMIT);
+      return new Set(
+        [...pending, ...terminal].map((request) => request.requestId),
+      );
+    },
   });
   const pending = outstandingAgentRequests(complete);
   const pendingRequestIds = new Set(
@@ -951,17 +1001,20 @@ export const readAgentCommentHistory = async ({
   readonly planId: string;
   readonly commentId: string;
 }): Promise<AgentExchangeSnapshot> => {
+  const forComment = (request: AgentRequest): boolean =>
+    (request.kind === "feedback" &&
+      request.comments.some((comment) => comment.id === commentId)) ||
+    (request.kind === "reply" && request.commentId === commentId);
   const complete = await readCompleteAgentExchange({
     store,
     sessionId,
     planId,
+    // This history answers questions about one comment, so the responses of
+    // every other comment's requests are read for nothing.
+    retain: ({ requests }) =>
+      new Set(requests.filter(forComment).map((request) => request.requestId)),
   });
-  const requests = complete.requests.filter(
-    (request) =>
-      (request.kind === "feedback" &&
-        request.comments.some((comment) => comment.id === commentId)) ||
-      (request.kind === "reply" && request.commentId === commentId),
-  );
+  const requests = complete.requests.filter(forComment);
   const requestIds = new Set(requests.map((request) => request.requestId));
   return {
     requests,
