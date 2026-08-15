@@ -119,6 +119,125 @@ test("should keep unsent comment text through a reload", async ({
   ).toHaveValue(replyBody);
 });
 
+test("should keep unsent comment text separate across two tabs", async ({
+  context,
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const sentBody = "Give both tabs the same thread to reply to.";
+  await stageComment(page, sentBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const firstRail = page.getByRole("complementary", { name: "Feedback" });
+  const submission = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await firstRail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submission).ok()).toBe(true);
+
+  const secondPage = await context.newPage();
+  await secondPage.goto(reviewRuntimeUrl);
+
+  const typeAndReload = async ({
+    targetPage,
+    composerBody,
+    replyBody,
+  }: {
+    readonly targetPage: Page;
+    readonly composerBody: string;
+    readonly replyBody: string;
+  }): Promise<void> => {
+    const feedbackButton = targetPage.getByRole("button", {
+      name: /^Feedback(?: \d+)?$/u,
+    });
+    if ((await feedbackButton.getAttribute("aria-expanded")) !== "true") {
+      await feedbackButton.click();
+    }
+    const rail = targetPage.getByRole("complementary", { name: "Feedback" });
+    const thread = rail
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: sentBody });
+    const expandThread = thread.getByRole("button", {
+      name: `Expand queued comment: ${sentBody}`,
+    });
+    if (await expandThread.isVisible()) await expandThread.click();
+    await thread.getByPlaceholder("Reply to the agent…").fill(replyBody);
+
+    const slide = targetPage.locator("[data-slide]").first();
+    await slide.hover();
+    await slide.getByRole("button", { name: "Comment on slide" }).click();
+    await targetPage
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByLabel("Add a comment")
+      .fill(composerBody);
+
+    await targetPage.reload();
+    await expect(
+      targetPage
+        .getByRole("dialog", { name: /Comment on/u })
+        .getByLabel("Add a comment"),
+    ).toHaveValue(composerBody);
+    await targetPage
+      .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+      .click();
+    const restoredThread = targetPage
+      .getByRole("complementary", { name: "Feedback" })
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: sentBody });
+    await restoredThread
+      .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+      .click();
+    await expect(
+      restoredThread.getByPlaceholder("Reply to the agent…"),
+    ).toHaveValue(replyBody);
+  };
+
+  const firstComposer = "Keep the first tab's composer text.";
+  const firstReply = "Keep the first tab's reply text.";
+  await typeAndReload({
+    targetPage: page,
+    composerBody: firstComposer,
+    replyBody: firstReply,
+  });
+  const secondComposer = "Keep the second tab's composer text.";
+  const secondReply = "Keep the second tab's reply text.";
+  await typeAndReload({
+    targetPage: secondPage,
+    composerBody: secondComposer,
+    replyBody: secondReply,
+  });
+
+  for (const [targetPage, composerBody, replyBody] of [
+    [page, firstComposer, firstReply],
+    [secondPage, secondComposer, secondReply],
+  ] as const) {
+    await targetPage.reload();
+    await expect(
+      targetPage
+        .getByRole("dialog", { name: /Comment on/u })
+        .getByLabel("Add a comment"),
+    ).toHaveValue(composerBody);
+    await targetPage
+      .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+      .click();
+    const thread = targetPage
+      .getByRole("complementary", { name: "Feedback" })
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: sentBody });
+    await thread
+      .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+      .click();
+    await expect(thread.getByPlaceholder("Reply to the agent…")).toHaveValue(
+      replyBody,
+    );
+  }
+  await secondPage.close();
+});
+
 test("should retain detached selection text until the reviewer discards it", async ({
   context,
   page,
@@ -134,8 +253,10 @@ test("should retain detached selection text until the reviewer discards it", asy
     .evaluate((block) => {
       const root = document.documentElement;
       const text = block.textContent ?? "";
+      const tabId = "detached-composer-test";
       return {
-        key: `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}`,
+        key: `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}:tab:${tabId}`,
+        tabId,
         snapshot: (() => {
           const bootstrap: unknown = JSON.parse(
             root.getAttribute("data-review-bootstrap") ?? "{}",
@@ -162,14 +283,15 @@ test("should retain detached selection text until the reviewer discards it", asy
     });
   const body = "Do not attach this selection comment to only half its range.";
   await page.evaluate(
-    ({ key, snapshot, target, recoveredBody }) => {
+    ({ key, tabId, snapshot, target, recoveredBody }) => {
+      window.sessionStorage.setItem(
+        "big-plan:review:live-recovery-tab-id",
+        tabId,
+      );
       window.localStorage.setItem(
         key,
         JSON.stringify({
-          version: 3,
-          drafts: [],
-          resolvedCommentIds: [],
-          base: { draftBodies: {}, resolvedCommentIds: [] },
+          version: 1,
           composer: {
             comment: {
               target,
@@ -318,9 +440,19 @@ test("should share pending reply state across the rail and inline thread", async
   await expect(
     inlineThread.getByRole("button", { name: "Sending…" }),
   ).toBeDisabled();
+  const newerReplyBody = "Keep this newer reply text for another send.";
+  await inlineThread
+    .getByPlaceholder("Reply to the agent…")
+    .fill(newerReplyBody);
   releaseReply();
   expect((await replied).ok()).toBe(true);
   expect(replyRequests).toBe(1);
+  await expect(railThread.getByPlaceholder("Reply to the agent…")).toHaveValue(
+    newerReplyBody,
+  );
+  await expect(
+    inlineThread.getByPlaceholder("Reply to the agent…"),
+  ).toHaveValue(newerReplyBody);
 });
 
 /** Reads the reviewer state the runtime holds, outside the browser under test. */
@@ -508,6 +640,19 @@ test.describe("a drafts write prepared against content the store moved past", ()
     await expect(choice).toBeVisible();
     await expect(choice).toContainText(browserBody);
     await expect(choice).toContainText(runtimeBody);
+    await page.keyboard.press("Escape");
+    await expect(choice).toBeHidden();
+    await rail.getByRole("button", { name: "Review comment versions" }).click();
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(browserBody);
+    await expect(choice).toContainText(runtimeBody);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (item) => item.body,
+        ),
+      )
+      .toEqual([runtimeBody]);
     await page.reload();
     await expect(choice).toBeVisible();
     await expect(choice).toContainText(browserBody);
@@ -962,7 +1107,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
       .poll(() =>
         page.evaluate((expected) => {
           const root = document.documentElement;
-          const key = `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}`;
+          const tabId = window.sessionStorage.getItem(
+            "big-plan:review:live-recovery-tab-id",
+          );
+          const key = `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}:tab:${tabId ?? ""}`;
           const raw = window.localStorage.getItem(key);
           if (raw === null) return { expected, keys: [] };
           const recovery: unknown = JSON.parse(raw);
@@ -1016,7 +1164,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 3,
+            version: 4,
             drafts: [
               {
                 id,
@@ -1028,7 +1176,6 @@ test.describe("a drafts write prepared against content the store moved past", ()
             ],
             resolvedCommentIds: [],
             base: { draftBodies: {}, resolvedCommentIds: [] },
-            composer: { comment: null, replies: {} },
           }),
         );
       },
@@ -1118,7 +1265,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 3,
+            version: 4,
             drafts: [
               {
                 id,
@@ -1130,7 +1277,6 @@ test.describe("a drafts write prepared against content the store moved past", ()
             ],
             resolvedCommentIds: [],
             base: { draftBodies: {}, resolvedCommentIds: [] },
-            composer: { comment: null, replies: {} },
           }),
         );
       },

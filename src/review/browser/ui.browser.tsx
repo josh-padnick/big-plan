@@ -386,6 +386,7 @@ type AlertDialogProps = {
   readonly actionLabel: string;
   readonly onCancel: () => void;
   readonly onAction: () => void;
+  readonly onDismiss?: () => void;
   /** Evidence the choice needs, shown between the description and the controls. */
   readonly children?: ReactNode;
   /** A choice between two equal options is not a destructive one. */
@@ -401,6 +402,7 @@ export const AlertDialog = ({
   actionLabel,
   onCancel,
   onAction,
+  onDismiss = onCancel,
   children,
   tone = "destructive",
 }: AlertDialogProps) => {
@@ -424,7 +426,7 @@ export const AlertDialog = ({
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      onCancel();
+      onDismiss();
       return;
     }
     if (

@@ -451,6 +451,33 @@ const localStorageKey = (planId: string): string =>
 const liveRecoveryStorageKey = (identity: RuntimeIdentity): string =>
   `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}`;
 
+const LIVE_RECOVERY_TAB_ID_KEY = "big-plan:review:live-recovery-tab-id";
+
+const liveComposerRecoveryStorageKey = (
+  identity: RuntimeIdentity,
+  tabId: string,
+): string => `${liveRecoveryStorageKey(identity)}:tab:${tabId}`;
+
+const liveRecoveryTabId = (): string => {
+  try {
+    const stored = sessionStorage.getItem(LIVE_RECOVERY_TAB_ID_KEY);
+    if (stored !== null && stored !== "") return stored;
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    const created = Array.from(bytes, (value) =>
+      value.toString(16).padStart(2, "0"),
+    ).join("");
+    sessionStorage.setItem(LIVE_RECOVERY_TAB_ID_KEY, created);
+    return created;
+  } catch {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (value) =>
+      value.toString(16).padStart(2, "0"),
+    ).join("");
+  }
+};
+
 const archivedChatStorageKey = (planId: string): string =>
   `big-plan:review:archived-chat:${planId}`;
 
@@ -543,10 +570,10 @@ const EMPTY_RECOVERED_COMPOSER: RecoveredComposer = {
 type LiveReviewRecovery = ReviewRecoveryState & {
   /** What this browser and the runtime last agreed on, recorded per comment. */
   readonly base: ReviewRecoveryBase;
-  readonly composer: RecoveredComposer;
 };
 
-const LIVE_RECOVERY_SNAPSHOT_VERSION = 3;
+const LIVE_RECOVERY_SNAPSHOT_VERSION = 4;
+const LIVE_COMPOSER_RECOVERY_VERSION = 1;
 
 const isStringRecord = (
   value: unknown,
@@ -607,7 +634,6 @@ const readLiveReviewRecovery = (
         draftBodies: new Map(Object.entries(parsed.base.draftBodies)),
         resolvedCommentIds: new Set(parsed.base.resolvedCommentIds),
       },
-      composer: readRecoveredComposer(parsed.composer),
     };
   } catch {
     return null;
@@ -633,15 +659,58 @@ const writeLiveReviewRecovery = ({
           draftBodies: Object.fromEntries(recovery.base.draftBodies),
           resolvedCommentIds: Array.from(recovery.base.resolvedCommentIds),
         },
-        composer: {
-          comment: recovery.composer.comment,
-          replies: Object.fromEntries(recovery.composer.replies),
-        },
       }),
     );
     return true;
   } catch {
     return false;
+  }
+};
+
+const readLiveComposerRecovery = (
+  identity: RuntimeIdentity,
+  tabId: string,
+): RecoveredComposer => {
+  try {
+    const raw = localStorage.getItem(
+      liveComposerRecoveryStorageKey(identity, tabId),
+    );
+    const parsed: unknown = raw === null ? null : JSON.parse(raw);
+    return isRecord(parsed) && parsed.version === LIVE_COMPOSER_RECOVERY_VERSION
+      ? readRecoveredComposer(parsed.composer)
+      : EMPTY_RECOVERED_COMPOSER;
+  } catch {
+    return EMPTY_RECOVERED_COMPOSER;
+  }
+};
+
+const writeLiveComposerRecovery = ({
+  identity,
+  tabId,
+  composer,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly tabId: string;
+  readonly composer: RecoveredComposer;
+}): void => {
+  const key = liveComposerRecoveryStorageKey(identity, tabId);
+  try {
+    if (composer.comment === null && composer.replies.size === 0) {
+      localStorage.removeItem(key);
+      return;
+    }
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        version: LIVE_COMPOSER_RECOVERY_VERSION,
+        composer: {
+          comment: composer.comment,
+          replies: Object.fromEntries(composer.replies),
+        },
+      }),
+    );
+  } catch {
+    return;
   }
 };
 
@@ -678,9 +747,11 @@ const composePlacement = ({
 const RecoveryConflictDialog = ({
   conflict,
   onKeep,
+  onDismiss,
 }: {
   readonly conflict: ReviewRecoveryConflict | undefined;
   readonly onKeep: (keep: "local" | "runtime") => void;
+  readonly onDismiss: () => void;
 }) => {
   if (conflict === undefined) return null;
   const description =
@@ -713,6 +784,7 @@ const RecoveryConflictDialog = ({
       }
       onCancel={() => onKeep("local")}
       onAction={() => onKeep("runtime")}
+      onDismiss={onDismiss}
     >
       <div className="mt-4 grid gap-3">
         <div>
@@ -749,9 +821,7 @@ const clearLiveReviewRecovery = ({
   const recovery = readLiveReviewRecovery(identity);
   if (
     recovery === null ||
-    persistedReviewFingerprint(recovery) !== fingerprint ||
-    recovery.composer.comment !== null ||
-    recovery.composer.replies.size > 0
+    persistedReviewFingerprint(recovery) !== fingerprint
   ) {
     return;
   }
@@ -764,49 +834,44 @@ const clearLiveReviewRecovery = ({
 
 const removeLiveReviewRecoveryReply = ({
   identity,
+  tabId,
   commentId,
 }: {
   readonly identity: RuntimeIdentity;
+  readonly tabId: string;
   readonly commentId: string;
 }): void => {
-  const recovery = readLiveReviewRecovery(identity);
-  if (recovery === null || !recovery.composer.replies.has(commentId)) return;
-  const replies = new Map(recovery.composer.replies);
+  const composer = readLiveComposerRecovery(identity, tabId);
+  if (!composer.replies.has(commentId)) return;
+  const replies = new Map(composer.replies);
   replies.delete(commentId);
-  writeLiveReviewRecovery({
+  writeLiveComposerRecovery({
     identity,
-    recovery: {
-      drafts: recovery.drafts,
-      resolvedCommentIds: recovery.resolvedCommentIds,
-      base: recovery.base,
-      composer: { ...recovery.composer, replies },
-    },
+    tabId,
+    composer: { ...composer, replies },
   });
 };
 
 const removeLiveReviewRecoveryComment = ({
   identity,
+  tabId,
   comment,
 }: {
   readonly identity: RuntimeIdentity;
+  readonly tabId: string;
   readonly comment: NonNullable<RecoveredComposer["comment"]>;
 }): void => {
-  const recovery = readLiveReviewRecovery(identity);
+  const composer = readLiveComposerRecovery(identity, tabId);
   if (
-    recovery === null ||
-    recovery.composer.comment === null ||
-    JSON.stringify(recovery.composer.comment) !== JSON.stringify(comment)
+    composer.comment === null ||
+    JSON.stringify(composer.comment) !== JSON.stringify(comment)
   ) {
     return;
   }
-  writeLiveReviewRecovery({
+  writeLiveComposerRecovery({
     identity,
-    recovery: {
-      drafts: recovery.drafts,
-      resolvedCommentIds: recovery.resolvedCommentIds,
-      base: recovery.base,
-      composer: { ...recovery.composer, comment: null },
-    },
+    tabId,
+    composer: { ...composer, comment: null },
   });
 };
 
@@ -3970,6 +4035,8 @@ export const ReviewController = () => {
   const [replyDrafts, setReplyDrafts] = useState<ReadonlyMap<string, string>>(
     new Map(),
   );
+  const replyDraftsRef = useRef<ReadonlyMap<string, string>>(new Map());
+  const [recoveryTabId] = useState(liveRecoveryTabId);
   const [replyPendingCommentIds, setReplyPendingCommentIds] = useState<
     ReadonlySet<string>
   >(new Set());
@@ -3980,6 +4047,7 @@ export const ReviewController = () => {
   const recoveryConflictsRef = useRef<ReadonlyArray<ReviewRecoveryConflict>>(
     [],
   );
+  const [isRecoveryConflictOpen, setIsRecoveryConflictOpen] = useState(false);
   const [conflictRuntimeState, setConflictRuntimeState] =
     useState<ReviewRecoveryState | null>(null);
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
@@ -4190,6 +4258,13 @@ export const ReviewController = () => {
     },
     [],
   );
+  const replaceReplyDrafts = useCallback(
+    (replies: ReadonlyMap<string, string>): void => {
+      replyDraftsRef.current = replies;
+      setReplyDrafts(replies);
+    },
+    [],
+  );
   const composerRecovery = useMemo<RecoveredComposer>(
     () => ({
       comment:
@@ -4207,7 +4282,7 @@ export const ReviewController = () => {
   /** Gives back typed comment text, and says when it had nowhere to go. */
   const restoreComposer = useCallback(
     (composer: RecoveredComposer): "restored" | "detached" => {
-      setReplyDrafts(composer.replies);
+      replaceReplyDrafts(composer.replies);
       const recovered = composer.comment;
       if (recovered === null) return "restored";
       // A comment is written against a place in the plan. If that place is
@@ -4236,7 +4311,7 @@ export const ReviewController = () => {
       setComposeBody(recovered.body);
       return "restored";
     },
-    [],
+    [replaceReplyDrafts],
   );
   /** Takes the runtime's answer as the version the next write must carry. */
   const observeRuntimeReviewState = useCallback(
@@ -4285,33 +4360,43 @@ export const ReviewController = () => {
           (comment) => localById.get(comment.id) ?? comment,
         );
       });
-      setReplyDrafts((current) =>
-        repliesForSentComments({ replies: current, sent: snapshot.sent }),
+      replaceReplyDrafts(
+        repliesForSentComments({
+          replies: replyDraftsRef.current,
+          sent: snapshot.sent,
+        }),
       );
       if (merged.conflicts.length > 0) {
         recoveryBaseRef.current = base;
         recoveryConflictsRef.current = merged.conflicts;
         setRecoveryConflicts(merged.conflicts);
+        setIsRecoveryConflictOpen(true);
         setConflictRuntimeState(runtime);
         setStatus("Two versions of a comment need your choice.");
       } else {
         recoveryBaseRef.current = reviewRecoveryBase(runtime);
         recoveryConflictsRef.current = [];
         setRecoveryConflicts([]);
+        setIsRecoveryConflictOpen(false);
         setConflictRuntimeState(null);
       }
       return merged;
     },
-    [applyReviewState, markPersistedReviewState, observeRuntimeReviewState],
+    [
+      applyReviewState,
+      markPersistedReviewState,
+      observeRuntimeReviewState,
+      replaceReplyDrafts,
+    ],
   );
   const changeReplyDraft = useCallback((commentId: string, body: string) => {
-    setReplyDrafts((current) => {
-      if ((current.get(commentId) ?? "") === body) return current;
-      const next = new Map(current);
-      if (body === "") next.delete(commentId);
-      else next.set(commentId, body);
-      return next;
-    });
+    const current = replyDraftsRef.current;
+    if ((current.get(commentId) ?? "") === body) return;
+    const next = new Map(current);
+    if (body === "") next.delete(commentId);
+    else next.set(commentId, body);
+    replyDraftsRef.current = next;
+    setReplyDrafts(next);
   }, []);
   const sendThreadReply = useCallback(
     async (commentId: string, body: string): Promise<void> => {
@@ -4332,7 +4417,14 @@ export const ReviewController = () => {
           method: "POST",
           body: { kind: "reply", commentId, body },
         });
-        changeReplyDraft(commentId, "");
+        if ((replyDraftsRef.current.get(commentId) ?? "").trim() === body) {
+          changeReplyDraft(commentId, "");
+          removeLiveReviewRecoveryReply({
+            identity,
+            tabId: recoveryTabId,
+            commentId,
+          });
+        }
         setStatus("Reply sent to the coding agent.");
       } catch (error) {
         setStatus(errorMessage(error));
@@ -4343,7 +4435,7 @@ export const ReviewController = () => {
         setReplyPendingCommentIds(remaining);
       }
     },
-    [changeReplyDraft, identity],
+    [changeReplyDraft, identity, recoveryTabId],
   );
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
@@ -4674,9 +4766,12 @@ export const ReviewController = () => {
             persistedReviewFingerprint(runtimeReviewState),
           );
           const recovery = readLiveReviewRecovery(identity);
+          const recoveredComposer = readLiveComposerRecovery(
+            identity,
+            recoveryTabId,
+          );
           let restoredReviewState = runtimeReviewState;
           let conflicted = false;
-          let detached = false;
           if (recovery !== null) {
             const merged = mergeLiveReviewRecovery({
               base: recovery.base,
@@ -4690,21 +4785,22 @@ export const ReviewController = () => {
               recoveryBaseRef.current = recovery.base;
               recoveryConflictsRef.current = merged.conflicts;
               setRecoveryConflicts(merged.conflicts);
+              setIsRecoveryConflictOpen(true);
               setConflictRuntimeState(runtimeReviewState);
             } else {
               recoveryBaseRef.current = reviewRecoveryBase(runtimeReviewState);
             }
-            detached =
-              restoreComposer({
-                ...recovery.composer,
-                replies: repliesForSentComments({
-                  replies: recovery.composer.replies,
-                  sent: snapshot.sent,
-                }),
-              }) === "detached";
           } else {
             recoveryBaseRef.current = reviewRecoveryBase(runtimeReviewState);
           }
+          const detached =
+            restoreComposer({
+              ...recoveredComposer,
+              replies: repliesForSentComments({
+                replies: recoveredComposer.replies,
+                sent: snapshot.sent,
+              }),
+            }) === "detached";
           setDrafts(restoredReviewState.drafts);
           setSent(snapshot.sent);
           setResolvedCommentIds(restoredReviewState.resolvedCommentIds);
@@ -4720,11 +4816,14 @@ export const ReviewController = () => {
       } catch (error) {
         if (current) {
           const recovery = readLiveReviewRecovery(identity);
+          const recoveredComposer = readLiveComposerRecovery(
+            identity,
+            recoveryTabId,
+          );
           if (recovery !== null) {
             recoveryBaseRef.current = recovery.base;
             setDrafts(recovery.drafts);
             setResolvedCommentIds(recovery.resolvedCommentIds);
-            restoreComposer(recovery.composer);
           } else {
             markPersistedReviewState(
               persistedReviewFingerprint({
@@ -4733,6 +4832,7 @@ export const ReviewController = () => {
               }),
             );
           }
+          restoreComposer(recoveredComposer);
           setStatus(errorMessage(error));
           setIsHydrated(true);
         }
@@ -4748,31 +4848,29 @@ export const ReviewController = () => {
     markPersistedReviewState,
     observeRuntimeReviewState,
     planId,
+    recoveryTabId,
     restoreComposer,
     runtimeSessionOrder,
   ]);
 
-  // The recovery snapshot has exactly one writer. It carries the review state,
-  // the base a later merge compares against, and the comment text no comment
-  // holds yet, so a reload gives back everything the reviewer had on screen.
   useEffect(() => {
     if (!isHydrated || identity === null) return;
     const reviewState = { drafts, resolvedCommentIds };
-    if (
-      persistedReviewState === persistedReviewFingerprint(reviewState) &&
-      composerRecovery.comment === null &&
-      composerRecovery.replies.size === 0
-    ) {
+    if (persistedReviewState === persistedReviewFingerprint(reviewState)) {
       clearLiveReviewRecovery({ identity, fingerprint: persistedReviewState });
-      return;
+    } else {
+      writeLiveReviewRecovery({
+        identity,
+        recovery: {
+          ...reviewState,
+          base: recoveryBaseRef.current,
+        },
+      });
     }
-    writeLiveReviewRecovery({
+    writeLiveComposerRecovery({
       identity,
-      recovery: {
-        ...reviewState,
-        base: recoveryBaseRef.current,
-        composer: composerRecovery,
-      },
+      tabId: recoveryTabId,
+      composer: composerRecovery,
     });
   }, [
     composerRecovery,
@@ -4780,6 +4878,7 @@ export const ReviewController = () => {
     identity,
     isHydrated,
     persistedReviewState,
+    recoveryTabId,
     resolvedCommentIds,
   ]);
 
@@ -5353,6 +5452,7 @@ export const ReviewController = () => {
     }
     recoveryConflictsRef.current = remaining;
     setRecoveryConflicts(remaining);
+    setIsRecoveryConflictOpen(remaining.length > 0);
     if (remaining.length === 0) {
       setConflictRuntimeState(null);
     }
@@ -5418,13 +5518,16 @@ export const ReviewController = () => {
         );
         return;
       }
-      setReplyDrafts((current) => {
-        if (!current.has(commentId)) return current;
-        const next = new Map(current);
+      if (replyDraftsRef.current.has(commentId)) {
+        const next = new Map(replyDraftsRef.current);
         next.delete(commentId);
-        return next;
+        replaceReplyDrafts(next);
+      }
+      removeLiveReviewRecoveryReply({
+        identity,
+        tabId: recoveryTabId,
+        commentId,
       });
-      removeLiveReviewRecoveryReply({ identity, commentId });
       acceptAgentSnapshot(
         parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
       );
@@ -6475,6 +6578,7 @@ export const ReviewController = () => {
                         if (identity !== null) {
                           removeLiveReviewRecoveryComment({
                             identity,
+                            tabId: recoveryTabId,
                             comment: detachedComposer,
                           });
                         }
@@ -6493,6 +6597,17 @@ export const ReviewController = () => {
                 >
                   {status}
                 </p>
+              ) : null}
+              {identity !== null &&
+              recoveryConflicts.length > 0 &&
+              !isRecoveryConflictOpen ? (
+                <Button
+                  variant="outline"
+                  size="micro"
+                  onClick={() => setIsRecoveryConflictOpen(true)}
+                >
+                  Review comment versions
+                </Button>
               ) : null}
               {identity === null ? (
                 <p className="m-0 text-xs text-support" role="status">
@@ -6738,8 +6853,9 @@ export const ReviewController = () => {
         }}
       />
       <RecoveryConflictDialog
-        conflict={recoveryConflicts[0]}
+        conflict={isRecoveryConflictOpen ? recoveryConflicts[0] : undefined}
         onKeep={answerRecoveryConflict}
+        onDismiss={() => setIsRecoveryConflictOpen(false)}
       />
       <AlertDialog
         open={pendingRevert !== null}
