@@ -176,7 +176,16 @@ export const resolveReviewRecoveryConflict = ({
   readonly conflict: ReviewRecoveryConflict;
   readonly keep: "local" | "runtime";
 }): ReviewRecoveryState => {
-  if (keep === "local") return state;
+  if (keep === "local") {
+    return conflict.localBody === null
+      ? {
+          drafts: state.drafts.filter(
+            (draft) => draft.id !== conflict.commentId,
+          ),
+          resolvedCommentIds: state.resolvedCommentIds,
+        }
+      : state;
+  }
   const runtimeDraft = runtime.drafts.find(
     (draft) => draft.id === conflict.commentId,
   );

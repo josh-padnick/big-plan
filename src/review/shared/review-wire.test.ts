@@ -59,6 +59,35 @@ describe("review wire contract", () => {
     ).toBe("");
   });
 
+  it("should reject a comment whose target is malformed", () => {
+    expect(
+      decodeReviewSnapshot({
+        drafts: [
+          {
+            id: "aabbccdd",
+            body: "Malformed target",
+            createdAt: "2026-08-10T12:00:00.000Z",
+            premiseSnapshot: "a".repeat(16),
+            target: {
+              type: "selection",
+              blockId: "slide-1",
+              imageBlockIds: [42],
+              kind: "paragraph",
+              label: "Overview",
+              start: 0,
+              end: 1,
+              quote: "A",
+              isQuoteExcerpt: false,
+            },
+          },
+        ],
+        sent: [],
+        resolvedCommentIds: [],
+        version: "0123456789abcdef",
+      }).drafts,
+    ).toEqual([]);
+  });
+
   it("should round-trip a server agent snapshot into the browser projection", () => {
     const encoded = encodeAgentSnapshot({
       currentSnapshot: "a".repeat(16),

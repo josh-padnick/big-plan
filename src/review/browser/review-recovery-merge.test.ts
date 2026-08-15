@@ -206,4 +206,67 @@ describe("live review recovery merge", () => {
       }).drafts,
     ).toEqual([]);
   });
+
+  it("should keep the local edit when the runtime removed the comment", () => {
+    const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
+    const runtime = state([]);
+    const merged = mergeLiveReviewRecovery({
+      base,
+      local: state([comment("c1", "edited while it was deleted")]),
+      runtime,
+    });
+    const conflict = merged.conflicts[0];
+    if (conflict === undefined) throw new Error("expected one conflict");
+
+    expect(
+      resolveReviewRecoveryConflict({
+        state: merged.state,
+        runtime,
+        conflict,
+        keep: "local",
+      }).drafts,
+    ).toEqual([comment("c1", "edited while it was deleted")]);
+  });
+
+  it("should keep the runtime edit when the browser removed the comment", () => {
+    const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
+    const runtime = state([comment("c1", "edited in the review session")]);
+    const merged = mergeLiveReviewRecovery({
+      base,
+      local: state([]),
+      runtime,
+    });
+    const conflict = merged.conflicts[0];
+    if (conflict === undefined) throw new Error("expected one conflict");
+
+    expect(
+      resolveReviewRecoveryConflict({
+        state: merged.state,
+        runtime,
+        conflict,
+        keep: "runtime",
+      }).drafts,
+    ).toEqual([comment("c1", "edited in the review session")]);
+  });
+
+  it("should keep the local removal when the runtime edited the comment", () => {
+    const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
+    const runtime = state([comment("c1", "edited in the review session")]);
+    const merged = mergeLiveReviewRecovery({
+      base,
+      local: state([]),
+      runtime,
+    });
+    const conflict = merged.conflicts[0];
+    if (conflict === undefined) throw new Error("expected one conflict");
+
+    expect(
+      resolveReviewRecoveryConflict({
+        state: merged.state,
+        runtime,
+        conflict,
+        keep: "local",
+      }).drafts,
+    ).toEqual([]);
+  });
 });

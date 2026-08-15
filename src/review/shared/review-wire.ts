@@ -1,7 +1,7 @@
 // Owns the loopback review runtime's browser-safe JSON contract. Server
 // encoders and browser decoders meet here so transport changes cannot drift.
 
-import type { ReviewComment } from "./comment.js";
+import { isStoredCommentTarget, type ReviewComment } from "./comment.js";
 import {
   decodeAgentModelIdentity,
   type AgentModelIdentity,
@@ -219,8 +219,7 @@ export const isReviewCommentValue = (
     typeof value.body === "string" &&
     typeof value.createdAt === "string" &&
     typeof value.premiseSnapshot === "string" &&
-    typeof value.target === "object" &&
-    value.target !== null
+    isStoredCommentTarget(value.target)
   );
 };
 

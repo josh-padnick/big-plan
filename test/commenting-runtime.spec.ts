@@ -202,7 +202,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
   // The refused write is the mechanism under test, and the browser reports a
   // refusal as a failed resource load.
   test.use({
-    allowedConsoleErrors: [/Failed to load resource:.*409/u],
+    allowedConsoleErrors: [/Failed to load resource:.*(?:400|409|503)/u],
   });
 
   test("should keep a concurrent runtime comment when this browser writes", async ({
@@ -308,6 +308,228 @@ test.describe("a drafts write prepared against content the store moved past", ()
         ),
       )
       .toEqual([runtimeBody]);
+  });
+
+  test("should merge a stale result against the latest browser edit", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Original queued edit.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const draft = stored.drafts[0];
+    if (draft === undefined)
+      throw new Error("The staged comment was not stored");
+    const runtimeBody = "Edited by the concurrent runtime.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: stored.version,
+      drafts: [{ ...draft, body: runtimeBody }],
+    });
+
+    let releaseResponse = (): void => undefined;
+    const responseMayFinish = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    let markStaleResponse = (): void => undefined;
+    const staleResponseReachedBrowser = new Promise<void>((resolve) => {
+      markStaleResponse = resolve;
+    });
+    await page.route(
+      "**/api/drafts",
+      async (route) => {
+        const response = await route.fetch();
+        markStaleResponse();
+        await responseMayFinish;
+        await route.fulfill({ response });
+      },
+      { times: 1 },
+    );
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const openEditor = async (body: string): Promise<void> => {
+      const expand = rail.getByRole("button", {
+        name: `Expand staged comment: ${body}`,
+      });
+      if (await expand.isVisible()) await expand.click();
+      const card = rail
+        .locator(".review-staged-card")
+        .filter({ hasText: body });
+      await card.getByRole("button", { name: "Edit staged comment" }).click();
+    };
+    const firstLocalBody = "First browser edit waiting on the stale response.";
+    await openEditor(original);
+    await rail.getByLabel("Edit comment").fill(firstLocalBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    await staleResponseReachedBrowser;
+
+    const latestLocalBody = "Latest browser edit must win the queue race.";
+    await openEditor(firstLocalBody);
+    await rail.getByLabel("Edit comment").fill(latestLocalBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    releaseResponse();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toContainText(latestLocalBody);
+    await expect(choice).not.toContainText(firstLocalBody);
+    await choice.getByRole("button", { name: "Keep mine" }).click();
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (item) => item.body,
+        ),
+      )
+      .toEqual([latestLocalBody]);
+  });
+
+  test("should adopt other submitted comments after sending one draft", async ({
+    context,
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const initial = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const snapshot = await currentSnapshot(page);
+    const firstBody = "Submit this from the first tab.";
+    const secondBody = "Submit this from the second tab.";
+    const firstComment = {
+      id: randomBytes(8).toString("hex"),
+      body: firstBody,
+      createdAt: new Date().toISOString(),
+      premiseSnapshot: snapshot,
+      target: { type: "document" },
+    };
+    const secondComment = {
+      ...firstComment,
+      id: randomBytes(8).toString("hex"),
+      body: secondBody,
+    };
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: initial.version,
+      drafts: [firstComment, secondComment],
+    });
+    await page.reload();
+    const secondPage = await context.newPage();
+    await secondPage.goto(reviewRuntimeUrl);
+
+    const sendOne = async (targetPage: Page, body: string): Promise<void> => {
+      await targetPage
+        .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+        .click();
+      const rail = targetPage.getByRole("complementary", { name: "Feedback" });
+      await rail
+        .getByRole("button", { name: `Expand staged comment: ${body}` })
+        .click();
+      const card = rail
+        .locator(".review-staged-card")
+        .filter({ hasText: body });
+      const submitted = targetPage.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/feedback") &&
+          response.request().method() === "POST",
+      );
+      await card.getByRole("button", { name: "Send this" }).click();
+      expect((await submitted).ok()).toBe(true);
+    };
+
+    await sendOne(secondPage, secondBody);
+    await sendOne(page, firstBody);
+
+    const firstRail = page.getByRole("complementary", { name: "Feedback" });
+    await expect(
+      firstRail.locator(".review-staged-card").filter({ hasText: secondBody }),
+    ).toHaveCount(0);
+    await expect(
+      firstRail.locator("[data-review-sent-thread]").filter({
+        hasText: secondBody,
+      }),
+    ).toHaveCount(1);
+    await secondPage.close();
+  });
+
+  test("should read a runtime version before writing recovered state", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const identity = await page.locator("html").evaluate((root) => {
+      const bootstrap: unknown = JSON.parse(
+        root.getAttribute("data-review-bootstrap") ?? "{}",
+      );
+      return {
+        planId: root.getAttribute("data-plan-id") ?? "",
+        sessionId: root.getAttribute("data-review-session") ?? "",
+        currentSnapshot:
+          typeof bootstrap === "object" &&
+          bootstrap !== null &&
+          "currentSnapshot" in bootstrap &&
+          typeof bootstrap.currentSnapshot === "string"
+            ? bootstrap.currentSnapshot
+            : "",
+      };
+    });
+    const recoveredBody = "Recovered before the runtime version was known.";
+    await page.evaluate(
+      ({ identity: storedIdentity, body, id }) => {
+        const key = `big-plan:review:live-recovery:${storedIdentity.planId}:${storedIdentity.sessionId}`;
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 3,
+            drafts: [
+              {
+                id,
+                body,
+                createdAt: "2026-08-10T12:00:00.000Z",
+                premiseSnapshot: storedIdentity.currentSnapshot,
+                target: { type: "document" },
+              },
+            ],
+            resolvedCommentIds: [],
+            base: { draftBodies: {}, resolvedCommentIds: [] },
+            composer: { comment: null, replies: {} },
+          }),
+        );
+      },
+      {
+        identity,
+        body: recoveredBody,
+        id: randomBytes(8).toString("hex"),
+      },
+    );
+    await page.route(
+      "**/api/drafts",
+      (route) => route.fulfill({ status: 503, body: "Unavailable once" }),
+      { times: 1 },
+    );
+
+    await page.reload();
+
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([recoveredBody]);
   });
 });
 
