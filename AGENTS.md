@@ -121,7 +121,7 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 | `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                                                       |
 | `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                                                        |
 | `test/`                  | Critical browser journeys over complete rendered documents. Keep pure behavior in colocated unit tests.                                                                                                                                                                 |
-| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. It does not own internal source-placement rules.                                                                                                         |
+| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. The subsystem definitions and boundary rules live in `docs/subsystems.md`; otherwise, docs do not own internal source-placement rules.                  |
 
 Use these placement tests:
 
@@ -177,7 +177,8 @@ Route by the kind of fact:
 - A repeatable whole-task workflow becomes a skill only after the workflow has repeated and proven easy to get wrong.
 - The installable Big Plan agent skill shell is authored at `assets/skill/SKILL.md`, embedded by `scripts/gen-skill.mjs`, and delivered by `big-plan skill`; live authoring rules stay in `big-plan guidance` (see `docs/src/content/docs/for-agents/use-the-skill.md`).
 - Future work, sequencing, and delivery status live in temporary planning artifacts or issue tracking.
-- Product orientation, cross-directory architecture, repository-wide vocabulary, and cross-cutting conventions with no deeper owner live in this guide.
+- The seven-subsystem partition, including its code anchors and boundary rules, lives in [docs/subsystems.md](docs/subsystems.md).
+- Product orientation, cross-directory architecture outside the subsystem partition, repository-wide vocabulary, and cross-cutting conventions with no deeper owner live in this guide.
 - The gold-standard plan-quality testing workflow (context-free generation, co-refine, backport, re-verify) lives in this guide under [Gold-standard plan-quality testing](#gold-standard-plan-quality-testing).
 
 ### README principles
