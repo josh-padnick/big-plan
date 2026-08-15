@@ -64,6 +64,61 @@ test("should keep one staged comment after reloading the live review", async ({
   ).toHaveCount(1);
 });
 
+test("should keep unsent comment text through a reload", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  // Text that is typed but not yet sent has no home on the runtime, so a
+  // reload is the whole test: the reviewer must get back what was on screen.
+  await page.goto(reviewRuntimeUrl);
+  const sentBody = "Send this so the thread has a reply box.";
+  await stageComment(page, sentBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const submission = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submission).ok()).toBe(true);
+
+  const thread = rail.locator("[data-review-sent-thread]").first();
+  await thread
+    .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+    .click();
+  const replyBody = "Keep this half-written reply through the reload.";
+  await thread.getByPlaceholder("Reply to the agent…").fill(replyBody);
+
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  const composerBody = "Keep this half-written comment through the reload.";
+  await composer.getByLabel("Add a comment").fill(composerBody);
+
+  await page.reload();
+
+  await expect(
+    page
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByLabel("Add a comment"),
+  ).toHaveValue(composerBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const restoredThread = page
+    .getByRole("complementary", { name: "Feedback" })
+    .locator("[data-review-sent-thread]")
+    .first();
+  await restoredThread
+    .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+    .click();
+  await expect(
+    restoredThread.getByPlaceholder("Reply to the agent…"),
+  ).toHaveValue(replyBody);
+});
+
 /** Reads the reviewer state the runtime holds, outside the browser under test. */
 const readRuntimeDrafts = async (
   reviewRuntimeUrl: string,

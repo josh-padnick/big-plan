@@ -9,9 +9,9 @@
 // refusal is the fact that tells an unsynchronized newer edit from a stale
 // superseded one. On refusal the browser re-reads and merges against the base
 // it recorded per comment at the last agreed point, and hands back any comment
-// both sides changed instead of picking a side. Everything not yet agreed is
-// mirrored into one session-scoped recovery snapshot, so a reload gives it
-// back.
+// both sides changed instead of picking a side. Everything not yet agreed -
+// including comment text with no runtime home - is mirrored into one
+// session-scoped recovery snapshot, so a reload gives back what was on screen.
 
 import {
   useCallback,
@@ -509,9 +509,27 @@ const persistedReviewFingerprint = ({
     resolvedCommentIds: Array.from(resolvedCommentIds).sort(),
   });
 
+/** Comment text a reviewer typed that no comment holds yet. */
+type RecoveredComposer = {
+  /** The comment being written, with the target it was opened against. */
+  readonly comment: {
+    readonly target: CommentTarget;
+    readonly premiseSnapshot: string;
+    readonly body: string;
+  } | null;
+  /** Reply text per comment thread, which has no runtime home and needs none. */
+  readonly replies: ReadonlyMap<string, string>;
+};
+
+const EMPTY_RECOVERED_COMPOSER: RecoveredComposer = {
+  comment: null,
+  replies: new Map(),
+};
+
 type LiveReviewRecovery = ReviewRecoveryState & {
   /** What this browser and the runtime last agreed on, recorded per comment. */
   readonly base: ReviewRecoveryBase;
+  readonly composer: RecoveredComposer;
 };
 
 const LIVE_RECOVERY_SNAPSHOT_VERSION = 3;
@@ -521,6 +539,27 @@ const isStringRecord = (
 ): value is Readonly<Record<string, string>> =>
   isRecord(value) &&
   Object.values(value).every((entry) => typeof entry === "string");
+
+const readRecoveredComposer = (value: unknown): RecoveredComposer => {
+  if (!isRecord(value)) return EMPTY_RECOVERED_COMPOSER;
+  const comment = value.comment;
+  return {
+    comment:
+      isRecord(comment) &&
+      typeof comment.body === "string" &&
+      typeof comment.premiseSnapshot === "string" &&
+      isRecord(comment.target)
+        ? {
+            target: comment.target as unknown as CommentTarget,
+            premiseSnapshot: comment.premiseSnapshot,
+            body: comment.body,
+          }
+        : null,
+    replies: isStringRecord(value.replies)
+      ? new Map(Object.entries(value.replies))
+      : new Map(),
+  };
+};
 
 /** Reads a session-scoped recovery snapshot without accepting partial data. */
 const readLiveReviewRecovery = (
@@ -554,6 +593,7 @@ const readLiveReviewRecovery = (
         draftBodies: new Map(Object.entries(parsed.base.draftBodies)),
         resolvedCommentIds: new Set(parsed.base.resolvedCommentIds),
       },
+      composer: readRecoveredComposer(parsed.composer),
     };
   } catch {
     return null;
@@ -578,6 +618,10 @@ const writeLiveReviewRecovery = ({
         base: {
           draftBodies: Object.fromEntries(recovery.base.draftBodies),
           resolvedCommentIds: Array.from(recovery.base.resolvedCommentIds),
+        },
+        composer: {
+          comment: recovery.composer.comment,
+          replies: Object.fromEntries(recovery.composer.replies),
         },
       }),
     );
@@ -604,6 +648,31 @@ const draftsWriteVersion = async ({
     ? written.version
     : parseSnapshot(await requestJson({ path: "/api/drafts", identity }))
         .version;
+
+/** Places the composer beside its target, at a vertical position it is given. */
+const composePlacement = ({
+  target,
+  top,
+}: {
+  readonly target: CommentTarget;
+  readonly top: number;
+}): { readonly top: number; readonly left: number } => {
+  const targetRect = targetElement(target)?.getBoundingClientRect();
+  const composerWidth = 17 * 16;
+  const edge = 24;
+  const overlap = 12;
+  const viewportWidth = document.documentElement.clientWidth;
+  return {
+    top: window.scrollY + Math.max(56, Math.min(top, window.innerHeight - 360)),
+    left: Math.max(
+      edge + window.scrollX,
+      Math.min(
+        (targetRect?.right ?? viewportWidth) + window.scrollX - overlap,
+        window.scrollX + viewportWidth - composerWidth - edge,
+      ),
+    ),
+  };
+};
 
 /**
  * The one place a merge cannot decide: this comment was changed here and in
@@ -674,7 +743,9 @@ const clearLiveReviewRecovery = ({
   const recovery = readLiveReviewRecovery(identity);
   if (
     recovery === null ||
-    persistedReviewFingerprint(recovery) !== fingerprint
+    persistedReviewFingerprint(recovery) !== fingerprint ||
+    recovery.composer.comment !== null ||
+    recovery.composer.replies.size > 0
   ) {
     return;
   }
@@ -3014,8 +3085,8 @@ const SentThread = ({
   onDelete,
   onRevert,
   currentSnapshot,
-  unsavedInputKey,
-  onUnsavedInputChange,
+  reply,
+  onReplyChange,
   compact = false,
   queuePosition,
   suppressPendingStatus = false,
@@ -3038,19 +3109,18 @@ const SentThread = ({
   readonly onDelete: () => void;
   readonly onRevert: (requestId: string, commentId: string) => void;
   readonly currentSnapshot: string;
-  readonly unsavedInputKey: string;
-  readonly onUnsavedInputChange: UnsavedInputChange;
+  /**
+   * Reply text is owned above this card, because one thread can be on screen
+   * twice - in the rail and inline - and because unsent reply text is part of
+   * what a reload must give back.
+   */
+  readonly reply: string;
+  readonly onReplyChange: (body: string) => void;
   readonly compact?: boolean;
   readonly queuePosition?: number;
   readonly suppressPendingStatus?: boolean;
 }) => {
-  const [reply, setReply] = useState("");
   const [isReplying, setIsReplying] = useState(false);
-  const hasUnsavedReply = reply !== "";
-  useEffect(() => {
-    onUnsavedInputChange(unsavedInputKey, hasUnsavedReply);
-    return () => onUnsavedInputChange(unsavedInputKey, false);
-  }, [hasUnsavedReply, onUnsavedInputChange, unsavedInputKey]);
   const {
     exchanges,
     latestExchange,
@@ -3137,7 +3207,7 @@ const SentThread = ({
         method: "POST",
         body: { kind: "reply", commentId: comment.id, body },
       });
-      setReply("");
+      onReplyChange("");
       onReplySent("Reply sent to the coding agent.");
     } catch (error) {
       onReplySent(errorMessage(error));
@@ -3690,7 +3760,7 @@ const SentThread = ({
               body={reply}
               maxLength={BODY_LIMIT}
               placeholder="Reply to the agent…"
-              onBodyChange={setReply}
+              onBodyChange={onReplyChange}
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                   event.preventDefault();
@@ -3824,6 +3894,11 @@ export const ReviewController = () => {
   const [commentQuery, setCommentQuery] = useState("");
   const [unsavedInputKeys, setUnsavedInputKeys] = useState<ReadonlySet<string>>(
     new Set(),
+  );
+  // Only threads with text are held, so emptiness is a size check rather than
+  // a scan, and the recovery snapshot never carries blank entries.
+  const [replyDrafts, setReplyDrafts] = useState<ReadonlyMap<string, string>>(
+    new Map(),
   );
   const [recoveryConflicts, setRecoveryConflicts] = useState<
     ReadonlyArray<ReviewRecoveryConflict>
@@ -3978,6 +4053,7 @@ export const ReviewController = () => {
     persistedReviewState === currentReviewState &&
     composeBody === "" &&
     chatBody === "" &&
+    replyDrafts.size === 0 &&
     unsavedInputKeys.size === 0;
   const justSubmittedCommentIds = useRef<ReadonlySet<string>>(new Set());
   const onUnsavedInputChange = useCallback<UnsavedInputChange>(
@@ -3989,6 +4065,44 @@ export const ReviewController = () => {
         else next.delete(key);
         return next;
       });
+    },
+    [],
+  );
+  const composerRecovery = useMemo<RecoveredComposer>(
+    () => ({
+      comment:
+        compose === null || composeBody === ""
+          ? null
+          : {
+              target: compose.target,
+              premiseSnapshot: compose.premiseSnapshot,
+              body: composeBody,
+            },
+      replies: replyDrafts,
+    }),
+    [compose, composeBody, replyDrafts],
+  );
+  /** Gives back typed comment text, and says when it had nowhere to go. */
+  const restoreComposer = useCallback(
+    (composer: RecoveredComposer): "restored" | "detached" => {
+      setReplyDrafts(composer.replies);
+      const recovered = composer.comment;
+      if (recovered === null) return "restored";
+      // A comment is written against a place in the plan. If that place is
+      // gone, the text has nowhere to attach, and saying so beats reattaching
+      // it to whatever happens to be there now.
+      const element = targetElement(recovered.target);
+      if (element === null) return "detached";
+      setCompose({
+        target: recovered.target,
+        premiseSnapshot: recovered.premiseSnapshot,
+        ...composePlacement({
+          target: recovered.target,
+          top: element.getBoundingClientRect().top,
+        }),
+      });
+      setComposeBody(recovered.body);
+      return "restored";
     },
     [],
   );
@@ -4011,6 +4125,15 @@ export const ReviewController = () => {
     },
     [],
   );
+  const changeReplyDraft = useCallback((commentId: string, body: string) => {
+    setReplyDrafts((current) => {
+      if ((current.get(commentId) ?? "") === body) return current;
+      const next = new Map(current);
+      if (body === "") next.delete(commentId);
+      else next.set(commentId, body);
+      return next;
+    });
+  }, []);
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
     setAgent(snapshot);
@@ -4344,6 +4467,7 @@ export const ReviewController = () => {
           const recovery = readLiveReviewRecovery(identity);
           let restoredReviewState = runtimeReviewState;
           let conflicted = false;
+          let detached = false;
           if (recovery !== null) {
             const merged = mergeLiveReviewRecovery({
               base: recovery.base,
@@ -4356,6 +4480,7 @@ export const ReviewController = () => {
               setRecoveryConflicts(merged.conflicts);
               setConflictRuntimeState(runtimeReviewState);
             }
+            detached = restoreComposer(recovery.composer) === "detached";
           }
           setDrafts(restoredReviewState.drafts);
           setSent(snapshot.sent);
@@ -4363,7 +4488,9 @@ export const ReviewController = () => {
           setStatus(
             conflicted
               ? "Two versions of a comment need your choice."
-              : "Connected to the local review runtime.",
+              : detached
+                ? "The comment you were writing could not be reattached: its place in the plan is gone."
+                : "Connected to the local review runtime.",
           );
           setIsHydrated(true);
         }
@@ -4374,6 +4501,7 @@ export const ReviewController = () => {
             recoveryBaseRef.current = recovery.base;
             setDrafts(recovery.drafts);
             setResolvedCommentIds(recovery.resolvedCommentIds);
+            restoreComposer(recovery.composer);
           } else {
             setPersistedReviewState(
               persistedReviewFingerprint({
@@ -4395,24 +4523,40 @@ export const ReviewController = () => {
     adoptRuntimeReviewState,
     identity,
     planId,
+    restoreComposer,
     runtimeSessionOrder,
   ]);
 
-  // The recovery snapshot has exactly one writer. It carries the review state
-  // and the base a later merge compares against, so a reload gives back what
-  // the runtime has not accepted yet.
+  // The recovery snapshot has exactly one writer. It carries the review state,
+  // the base a later merge compares against, and the comment text no comment
+  // holds yet, so a reload gives back everything the reviewer had on screen.
   useEffect(() => {
     if (!isHydrated || identity === null) return;
     const reviewState = { drafts, resolvedCommentIds };
-    if (persistedReviewState === persistedReviewFingerprint(reviewState)) {
+    if (
+      persistedReviewState === persistedReviewFingerprint(reviewState) &&
+      composerRecovery.comment === null &&
+      composerRecovery.replies.size === 0
+    ) {
       clearLiveReviewRecovery({ identity, fingerprint: persistedReviewState });
       return;
     }
     writeLiveReviewRecovery({
       identity,
-      recovery: { ...reviewState, base: recoveryBaseRef.current },
+      recovery: {
+        ...reviewState,
+        base: recoveryBaseRef.current,
+        composer: composerRecovery,
+      },
     });
-  }, [drafts, identity, isHydrated, persistedReviewState, resolvedCommentIds]);
+  }, [
+    composerRecovery,
+    drafts,
+    identity,
+    isHydrated,
+    persistedReviewState,
+    resolvedCommentIds,
+  ]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -4720,24 +4864,10 @@ export const ReviewController = () => {
       ) {
         return;
       }
-      const targetRect = targetElement(target)?.getBoundingClientRect();
-      const composerWidth = 17 * 16;
-      const edge = 24;
-      const overlap = 12;
-      const viewportWidth = document.documentElement.clientWidth;
       const next = {
         target,
         premiseSnapshot: displayedSnapshot,
-        top:
-          window.scrollY +
-          Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
-        left: Math.max(
-          edge + window.scrollX,
-          Math.min(
-            (targetRect?.right ?? viewportWidth) + window.scrollX - overlap,
-            window.scrollX + viewportWidth - composerWidth - edge,
-          ),
-        ),
+        ...composePlacement({ target, top: rect.top }),
       };
       if (compose === null || composeBody.trim() === "") {
         setComposeBody("");
@@ -5885,8 +6015,10 @@ export const ReviewController = () => {
                         setPendingRevert({ requestId, commentId })
                       }
                       currentSnapshot={currentSnapshot}
-                      unsavedInputKey={`reply:rail:${comment.id}`}
-                      onUnsavedInputChange={onUnsavedInputChange}
+                      reply={replyDrafts.get(comment.id) ?? ""}
+                      onReplyChange={(body) =>
+                        changeReplyDraft(comment.id, body)
+                      }
                       compact={compact}
                       queuePosition={queuePosition}
                       suppressPendingStatus={activeBatchCommentIds.includes(
@@ -6135,8 +6267,8 @@ export const ReviewController = () => {
                   setPendingRevert({ requestId, commentId })
                 }
                 currentSnapshot={currentSnapshot}
-                unsavedInputKey={`reply:thread:${comment.id}`}
-                onUnsavedInputChange={onUnsavedInputChange}
+                reply={replyDrafts.get(comment.id) ?? ""}
+                onReplyChange={(body) => changeReplyDraft(comment.id, body)}
               />
             );
           },
