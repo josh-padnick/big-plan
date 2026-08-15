@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   createMutationRegistry,
   describeRuntimeDiagnostics,
+  describeRuntimeFailure,
   growthMilestone,
   stalledMutations,
 } from "./runtime-watchdog.js";
@@ -144,5 +145,31 @@ describe("the diagnostics dump", () => {
     expect(dump).toContain("in-flight mutations: 0");
     expect(dump).not.toContain("stalled");
     expect(dump).not.toContain("growth");
+  });
+});
+
+describe("runtime failure diagnostics", () => {
+  it("should preserve stack frames without exposing the error message", () => {
+    const error = new Error("plan words and review-token-value");
+    error.stack = [
+      "Error: plan words and review-token-value",
+      "    at handleApi (/project/src/review/server.ts:100:10)",
+      "    at async handle (/project/review-token-value/server.ts:200:5)",
+    ].join("\n");
+    const diagnostic = describeRuntimeFailure({
+      error,
+      secrets: ["review-token-value"],
+    });
+    expect(diagnostic).toContain("Error: [message redacted]");
+    expect(diagnostic).toContain("at handleApi");
+    expect(diagnostic).toContain("at async handle");
+    expect(diagnostic).not.toContain("plan words");
+    expect(diagnostic).not.toContain("review-token-value");
+  });
+
+  it("should safely describe a non-error thrown value", () => {
+    expect(describeRuntimeFailure({ error: "plan words", secrets: [] })).toBe(
+      "Non-Error failure (string)",
+    );
   });
 });

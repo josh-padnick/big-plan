@@ -17,7 +17,10 @@ import {
   deriveInputFile,
   parseInputCommandArguments,
 } from "../_shared/input-command.js";
-import { describeRuntimeDiagnostics } from "../../review/runtime-watchdog.js";
+import {
+  describeRuntimeDiagnostics,
+  describeRuntimeGrowth,
+} from "../../review/runtime-watchdog.js";
 import { startReviewRuntime } from "../../review/server.js";
 import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { renderDocument } from "../../render/render-document.js";
@@ -133,16 +136,12 @@ export const reviewCommand = async (
   // ask it what it was doing. SIGUSR2 makes "capture where it is stuck" one
   // signal rather than a debugger attach.
   process.on("SIGUSR2", () => {
-    void runtime
-      .diagnostics()
-      .then((diagnostics) =>
-        process.stderr.write(describeRuntimeDiagnostics(diagnostics)),
-      )
-      .catch((error: unknown) => {
-        process.stderr.write(
-          `Cannot report review runtime diagnostics: ${String(error)}\n`,
-        );
-      });
+    process.stderr.write(describeRuntimeDiagnostics(runtime.diagnostics()));
+    void runtime.diagnosticGrowth().then((growth) => {
+      if (growth !== undefined) {
+        process.stderr.write(describeRuntimeGrowth(growth));
+      }
+    });
   });
 
   return {

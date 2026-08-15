@@ -245,7 +245,7 @@ const startWedgedRuntime = async (prefix: string) => {
     waitForInFlight: async () => {
       const deadline = Date.now() + 5_000;
       for (;;) {
-        const { inFlight } = await wedged.diagnostics();
+        const { inFlight } = wedged.diagnostics();
         if (inFlight.length > 0) return inFlight;
         if (Date.now() > deadline) return inFlight;
         await new Promise((settle) => setTimeout(settle, 10));
@@ -2138,10 +2138,57 @@ describe("review runtime diagnostics", () => {
           },
         });
       }
-      const diagnostics = await counted.diagnostics();
-      expect(diagnostics.growth).toMatchObject({ progressLines: 3 });
+      await Promise.all([
+        writeFile(
+          join(counted.store.agentRequestDirectory, "aaaaaaaaaaaaaaaa.json"),
+          "{}\n",
+        ),
+        writeFile(
+          join(counted.store.agentRequestDirectory, "bbbbbbbbbbbbbbbb.json"),
+          "{}\n",
+        ),
+        writeFile(
+          join(counted.store.agentResponseDirectory, "cccccccccccccccc.json"),
+          "{}\n",
+        ),
+        mkdir(
+          join(counted.store.agentRequestDirectory, ".dddddddddddddddd.lock"),
+        ),
+        writeFile(
+          join(
+            counted.store.agentResponseDirectory,
+            ".cccccccccccccccc.json.1234.deadbeef.tmp",
+          ),
+          "{}\n",
+        ),
+      ]);
+      await expect(counted.diagnosticGrowth()).resolves.toEqual({
+        progressLines: 3,
+        agentRequests: 2,
+        agentResponses: 1,
+      });
     } finally {
       await counted.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should capture in-flight mutations without reading store growth", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-server-dump-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const captured = await startReviewRuntime({ planPath });
+    try {
+      await rm(captured.store.progressPath, { force: true });
+      execFileSync("mkfifo", [captured.store.progressPath]);
+      expect(captured.diagnostics()).toMatchObject({
+        sessionId: captured.sessionId,
+        inFlight: [],
+        stalled: [],
+      });
+    } finally {
+      await rm(captured.store.progressPath, { force: true });
+      await captured.close();
       await rm(directory, { recursive: true, force: true });
     }
   });

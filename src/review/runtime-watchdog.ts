@@ -92,11 +92,53 @@ export const describeRuntimeDiagnostics = (
     lines.push(`  stalled: ${describeStalledMutation(mutation)}`);
   }
   if (diagnostics.growth !== undefined) {
-    lines.push(
-      `  growth: ${diagnostics.growth.progressLines} progress lines, ${diagnostics.growth.agentRequests} agent requests, ${diagnostics.growth.agentResponses} agent responses`,
-    );
+    lines.push(describeRuntimeGrowth(diagnostics.growth).trimEnd());
   }
   return `${lines.join("\n")}\n`;
+};
+
+/** Renders the optional store-growth portion of a runtime dump. */
+export const describeRuntimeGrowth = (growth: ReviewStoreGrowth): string =>
+  `  growth: ${growth.progressLines} progress lines, ${growth.agentRequests} agent requests, ${growth.agentResponses} agent responses\n`;
+
+/** Renders a runtime failure without copying its message across the log boundary. */
+export const describeRuntimeFailure = ({
+  error,
+  secrets,
+}: {
+  readonly error: unknown;
+  readonly secrets: ReadonlyArray<string>;
+}): string => {
+  if (!(error instanceof Error)) {
+    return `Non-Error failure (${typeof error})`;
+  }
+  const name = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u.test(error.name)
+    ? error.name
+    : "Error";
+  const code =
+    "code" in error &&
+    typeof error.code === "string" &&
+    /^[A-Z0-9_]{1,32}$/u.test(error.code)
+      ? ` [${error.code}]`
+      : "";
+  const frames =
+    typeof error.stack === "string"
+      ? error.stack
+          .split("\n")
+          .slice(1)
+          .filter((line) => /^\s*at\s+/u.test(line))
+          .map((line) =>
+            secrets.reduce(
+              (safe, secret) =>
+                secret === "" ? safe : safe.replaceAll(secret, "[redacted]"),
+              line,
+            ),
+          )
+      : [];
+  return [
+    `${name}${code}: [message redacted]`,
+    ...(frames.length === 0 ? ["  stack unavailable"] : frames),
+  ].join("\n");
 };
 
 /** Tracks which mutations the write gate is currently running. */

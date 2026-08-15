@@ -57,6 +57,7 @@ const PROGRESS_TEXT_LIMIT = 160;
 const PROGRESS_EVENT_LIMIT = 200;
 const REVIEW_PLAN_ID_LENGTH = 16;
 const REVIEW_IMAGE_METADATA_BYTES = 4096;
+const PUBLISHED_JSON_FILE = /^[a-f0-9]{16}\.json$/;
 
 /** One relayed agent progress event, after checking. */
 export type ProgressEvent = {
@@ -765,13 +766,12 @@ export type ReviewStoreGrowth = {
   readonly agentResponses: number;
 };
 
-const countDirectoryEntries = async (path: string): Promise<number> => {
-  try {
-    return (await readdir(path)).length;
-  } catch {
-    return 0;
-  }
-};
+const publishedJsonFileNames = async (
+  directory: string,
+): Promise<ReadonlyArray<string>> =>
+  (await readdir(directory).catch(() => []))
+    .filter((name) => PUBLISHED_JSON_FILE.test(name))
+    .sort();
 
 /**
  * Counts the state that only ever grows during a session. Both the progress
@@ -789,8 +789,12 @@ export const reviewStoreGrowth = async ({
     () => 0,
   );
   const [agentRequests, agentResponses] = await Promise.all([
-    countDirectoryEntries(store.agentRequestDirectory),
-    countDirectoryEntries(store.agentResponseDirectory),
+    publishedJsonFileNames(store.agentRequestDirectory).then(
+      (names) => names.length,
+    ),
+    publishedJsonFileNames(store.agentResponseDirectory).then(
+      (names) => names.length,
+    ),
   ]);
   return { progressLines, agentRequests, agentResponses };
 };
@@ -1048,12 +1052,9 @@ const exchangePath = ({
 const readJsonDirectory = async (
   directory: string,
 ): Promise<ReadonlyArray<unknown>> => {
-  const names = await readdir(directory).catch(() => []);
+  const names = await publishedJsonFileNames(directory);
   const values: Array<unknown> = [];
-  for (const name of names.sort()) {
-    if (!/^[a-f0-9]{16}\.json$/.test(name)) {
-      continue;
-    }
+  for (const name of names) {
     const value = await readJson(inside({ base: directory, leaf: name }));
     if (value !== undefined) {
       values.push(value);

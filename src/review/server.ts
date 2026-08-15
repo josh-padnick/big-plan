@@ -75,9 +75,10 @@ import {
   writeComments,
   writeSnapshot,
 } from "./store.js";
-import type { ReviewStore } from "./store.js";
+import type { ReviewStore, ReviewStoreGrowth } from "./store.js";
 import {
   createMutationRegistry,
+  describeRuntimeFailure,
   describeStalledMutation,
   growthMilestone,
   stalledMutations,
@@ -221,7 +222,8 @@ export type ReviewRuntime = {
   readonly store: ReviewStore;
   readonly close: (reason?: string) => Promise<void>;
   /** Reports what this runtime is doing right now, including any stalled write. */
-  readonly diagnostics: () => Promise<ReviewRuntimeDiagnostics>;
+  readonly diagnostics: () => ReviewRuntimeDiagnostics;
+  readonly diagnosticGrowth: () => Promise<ReviewStoreGrowth | undefined>;
 };
 
 const constantTimeEquals = (left: string, right: string): boolean => {
@@ -679,6 +681,7 @@ export const startReviewRuntime = async ({
     readonly request: IncomingMessage;
     readonly response: ServerResponse;
   }): Promise<void> => {
+    let requestLabel = `${request.method ?? "?"} request`;
     try {
       const address = server.address();
       const port =
@@ -698,6 +701,7 @@ export const startReviewRuntime = async ({
       const method = request.method ?? "GET";
 
       if (method === DOCUMENT_ROUTE.method && target.pathname === "/") {
+        requestLabel = `${method} /`;
         context.activityClock.touch();
         await handleDocument(response);
         return;
@@ -724,6 +728,7 @@ export const startReviewRuntime = async ({
         refuse({ response, status: 405, reason: "Method not allowed here" });
         return;
       }
+      requestLabel = `${matched.method} ${matched.path}`;
 
       // No CORS allowance is ever sent, so a browser hides the response - but
       // a simple cross-origin POST still arrives, and would still be executed
@@ -808,7 +813,7 @@ export const startReviewRuntime = async ({
       // closed the page would otherwise fill the log.
       if (request.complete) {
         process.stderr.write(
-          `Review request ${request.method ?? "?"} ${request.url ?? "?"} failed for session ${sessionId}: ${String(error)}\n`,
+          `Review request ${requestLabel} failed for session ${sessionId}:\n${describeRuntimeFailure({ error, secrets: [token] })}\n`,
         );
       }
       refuse({ response, status: 500, reason: "The review runtime failed" });
@@ -943,10 +948,7 @@ export const startReviewRuntime = async ({
   }, GROWTH_CHECK_INTERVAL_MS);
   growthTimer.unref();
 
-  // The whole point of the dump is to answer "where is it stuck" while the
-  // process is still stuck, so it reads the registry and the store directly
-  // rather than anything the stall reporter has already summarized.
-  const diagnostics = async (): Promise<ReviewRuntimeDiagnostics> => {
+  const diagnostics = (): ReviewRuntimeDiagnostics => {
     const nowMs = Date.now();
     const inFlight = mutations.inFlight();
     return {
@@ -959,12 +961,11 @@ export const startReviewRuntime = async ({
         nowMs,
         boundMs: MUTATION_STALL_MS,
       }),
-      ...(await reviewStoreGrowth({ store }).then(
-        (growth) => ({ growth }),
-        () => ({}),
-      )),
     };
   };
+
+  const diagnosticGrowth = (): Promise<ReviewStoreGrowth | undefined> =>
+    reviewStoreGrowth({ store }).catch(() => undefined);
 
   let closed = false;
   let idleTimer: ReturnType<typeof setInterval> | undefined;
@@ -1031,5 +1032,6 @@ export const startReviewRuntime = async ({
     store,
     close: closeRuntime,
     diagnostics,
+    diagnosticGrowth,
   };
 };
