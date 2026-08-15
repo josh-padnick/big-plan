@@ -1,8 +1,8 @@
 // Rewrites a commit message in place so it always carries a body and a
 // Signed-off-by trailer, matching CONTRIBUTING.md's DCO requirement, without
 // depending on a human or an automated tool to remember `-s` or write a body.
-// Invoked by .githooks/prepare-commit-msg, which core.hooksPath activates for
-// every clone once `bun install` runs the "prepare" script (scripts/git-hooks/install.mjs).
+// Invoked before and after commit-message editing by the committed hooks that
+// scripts/git-hooks/install.mjs activates during `bun install`.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";

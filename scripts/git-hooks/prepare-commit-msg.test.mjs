@@ -5,7 +5,16 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +28,7 @@ const git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8" });
 
 /** Builds a scratch repo carrying the real shipped hook files and invokes the
  * package's executable prepare lifecycle just as a fresh install does. */
-const makeScratchRepo = () => {
+const makeScratchRepo = (beforePrepare) => {
   const dir = mkdtempSync(join(tmpdir(), "big-plan-git-hooks-"));
   git(dir, ["init", "--quiet", "--initial-branch=main"]);
   git(dir, ["config", "user.name", "Scratch Committer"]);
@@ -39,6 +48,7 @@ const makeScratchRepo = () => {
     join(dir, "scripts", "git-hooks", "install.mjs"),
   );
   cpSync(join(repoRoot, "package.json"), join(dir, "package.json"));
+  if (beforePrepare) beforePrepare(dir);
   execFileSync("bun", ["run", "prepare"], { cwd: dir, encoding: "utf8" });
 
   return dir;
@@ -118,6 +128,120 @@ test("the package prepare lifecycle activates the committed hooks", () => {
       ".githooks",
     );
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an editor-authored subject is normalized after the editor closes", () => {
+  const dir = makeScratchRepo();
+  try {
+    const editorPath = join(dir, "write-commit-message");
+    writeFileSync(
+      editorPath,
+      "#!/bin/sh\nprintf '%s\\n' 'editor-authored subject' > \"$1\"\n",
+      { mode: 0o755 },
+    );
+    execFileSync("git", ["commit", "--allow-empty"], {
+      cwd: dir,
+      encoding: "utf8",
+      env: { ...process.env, GIT_EDITOR: editorPath },
+    });
+
+    const message = commitMessage(dir);
+    assert.match(message, /^editor-authored subject\n/);
+    assert.ok(message.includes(GENERATED_BODY_NOTE));
+    assert.match(
+      message,
+      /Signed-off-by: Scratch Committer <scratch@example\.com>/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a worktree hooks override composes compliance with existing hooks", () => {
+  const alternateHooksPath = "alternate-hooks";
+  let unrelatedDir = null;
+  const dir = makeScratchRepo((scratchRepo) => {
+    git(scratchRepo, ["config", "extensions.worktreeConfig", "true"]);
+    git(scratchRepo, [
+      "config",
+      "--worktree",
+      "core.hooksPath",
+      alternateHooksPath,
+    ]);
+
+    const hooksDirectory = join(scratchRepo, alternateHooksPath);
+    mkdirSync(hooksDirectory, { recursive: true });
+    writeFileSync(join(scratchRepo, "require-compliance"), "");
+    for (const hookName of ["prepare-commit-msg", "commit-msg"]) {
+      const hookPath = join(hooksDirectory, hookName);
+      const validation =
+        hookName === "commit-msg"
+          ? `if [ -f require-compliance ]; then
+  grep -q '^Signed-off-by:' "$1"
+  grep -Fq "No commit body was supplied" "$1"
+fi
+`
+          : "";
+      writeFileSync(
+        hookPath,
+        `#!/bin/sh
+set -eu
+${validation}printf x >> ${hookName}-ran
+`,
+      );
+      chmodSync(hookPath, 0o755);
+    }
+  });
+
+  try {
+    assert.equal(
+      git(dir, ["config", "--get", "core.hooksPath"]).trim(),
+      alternateHooksPath,
+    );
+    execFileSync("bun", ["run", "prepare"], { cwd: dir, encoding: "utf8" });
+    git(dir, ["commit", "--allow-empty", "-m", "pipeline commit"]);
+
+    const message = commitMessage(dir);
+    assert.ok(message.includes(GENERATED_BODY_NOTE));
+    assert.match(
+      message,
+      /Signed-off-by: Scratch Committer <scratch@example\.com>/,
+    );
+    assert.equal(
+      readFileSync(join(dir, "prepare-commit-msg-ran"), "utf8"),
+      "x",
+    );
+    assert.equal(readFileSync(join(dir, "commit-msg-ran"), "utf8"), "x");
+
+    unrelatedDir = mkdtempSync(join(tmpdir(), "big-plan-unrelated-hooks-"));
+    git(unrelatedDir, ["init", "--quiet", "--initial-branch=main"]);
+    git(unrelatedDir, ["config", "user.name", "Unrelated Committer"]);
+    git(unrelatedDir, ["config", "user.email", "unrelated@example.com"]);
+    git(unrelatedDir, ["config", "commit.gpgsign", "false"]);
+    git(unrelatedDir, [
+      "config",
+      "core.hooksPath",
+      join(dir, alternateHooksPath),
+    ]);
+    mkdirSync(join(unrelatedDir, ".githooks"));
+    const unrelatedHook = join(unrelatedDir, ".githooks", "commit-msg");
+    writeFileSync(unrelatedHook, "#!/bin/sh\ntouch arbitrary-hook-ran\n");
+    chmodSync(unrelatedHook, 0o755);
+
+    git(unrelatedDir, ["commit", "--allow-empty", "-m", "unrelated commit"]);
+    assert.ok(!existsSync(join(unrelatedDir, "arbitrary-hook-ran")));
+    assert.equal(
+      readFileSync(join(unrelatedDir, "prepare-commit-msg-ran"), "utf8"),
+      "x",
+    );
+    assert.equal(
+      readFileSync(join(unrelatedDir, "commit-msg-ran"), "utf8"),
+      "x",
+    );
+  } finally {
+    if (unrelatedDir) rmSync(unrelatedDir, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });
   }
 });
