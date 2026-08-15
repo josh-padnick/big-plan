@@ -18,13 +18,40 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 
 import { ensureBody, GENERATED_BODY_NOTE } from "./prepare-commit-msg.mjs";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const isolatedGitConfigDirectory = mkdtempSync(
+  join(tmpdir(), "big-plan-git-config-"),
+);
+const isolatedGitConfigPath = join(isolatedGitConfigDirectory, "config");
+writeFileSync(isolatedGitConfigPath, "");
+after(() =>
+  rmSync(isolatedGitConfigDirectory, { recursive: true, force: true }),
+);
 
-const git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8" });
+const runChild = (command, args, options = {}) => {
+  const { env, ...execOptions } = options;
+  const childEnvironment = { ...process.env, ...env };
+  for (const key of Object.keys(childEnvironment)) {
+    if (key === "GIT_CONFIG" || key.startsWith("GIT_CONFIG_")) {
+      delete childEnvironment[key];
+    }
+  }
+  return execFileSync(command, args, {
+    ...execOptions,
+    env: {
+      ...childEnvironment,
+      GIT_CONFIG_GLOBAL: isolatedGitConfigPath,
+      GIT_CONFIG_SYSTEM: isolatedGitConfigPath,
+      GIT_CONFIG_NOSYSTEM: "1",
+    },
+  });
+};
+
+const git = (cwd, args) => runChild("git", args, { cwd, encoding: "utf8" });
 
 /** Builds a scratch repo carrying the real shipped hook files and invokes the
  * package's executable prepare lifecycle just as a fresh install does. */
@@ -49,7 +76,7 @@ const makeScratchRepo = (beforePrepare) => {
   );
   cpSync(join(repoRoot, "package.json"), join(dir, "package.json"));
   if (beforePrepare) beforePrepare(dir);
-  execFileSync("bun", ["run", "prepare"], { cwd: dir, encoding: "utf8" });
+  runChild("bun", ["run", "prepare"], { cwd: dir, encoding: "utf8" });
 
   return dir;
 };
@@ -237,7 +264,7 @@ test("an editor-authored subject is normalized after the editor closes", () => {
       "#!/bin/sh\nprintf '%s\\n' 'editor-authored subject' > \"$1\"\n",
       { mode: 0o755 },
     );
-    execFileSync("git", ["commit", "--allow-empty"], {
+    runChild("git", ["commit", "--allow-empty"], {
       cwd: dir,
       encoding: "utf8",
       env: { ...process.env, GIT_EDITOR: editorPath },
@@ -260,7 +287,7 @@ test("should abort an editor commit when no subject is supplied", () => {
   try {
     assert.throws(
       () =>
-        execFileSync("git", ["commit", "--allow-empty"], {
+        runChild("git", ["commit", "--allow-empty"], {
           cwd: dir,
           encoding: "utf8",
           env: { ...process.env, GIT_EDITOR: "true" },
@@ -350,7 +377,7 @@ ${validation}printf x >> ${hookName}-ran
       git(dir, ["config", "--get", "core.hooksPath"]).trim(),
       alternateHooksPath,
     );
-    execFileSync("bun", ["run", "prepare"], { cwd: dir, encoding: "utf8" });
+    runChild("bun", ["run", "prepare"], { cwd: dir, encoding: "utf8" });
     git(dir, ["commit", "--allow-empty", "-m", "pipeline commit"]);
 
     const message = commitMessage(dir);
@@ -418,7 +445,7 @@ test("should resolve compliance from the active linked worktree when hooks are s
       "linked-hook-test",
       linkedWorktree,
     ]);
-    execFileSync("bun", ["run", "prepare"], {
+    runChild("bun", ["run", "prepare"], {
       cwd: linkedWorktree,
       encoding: "utf8",
     });
@@ -494,7 +521,7 @@ mv "$temporary_file" "$message_file"
 `,
         { mode: 0o755 },
       );
-      execFileSync("git", ["commit", "--allow-empty"], {
+      runChild("git", ["commit", "--allow-empty"], {
         cwd: dir,
         encoding: "utf8",
         env: { ...process.env, GIT_EDITOR: editorPath },
@@ -534,7 +561,7 @@ mv "$temporary_file" "$message_file"
 `,
       { mode: 0o755 },
     );
-    execFileSync("git", ["commit", "--allow-empty"], {
+    runChild("git", ["commit", "--allow-empty"], {
       cwd: dir,
       encoding: "utf8",
       env: { ...process.env, GIT_EDITOR: editorPath },
