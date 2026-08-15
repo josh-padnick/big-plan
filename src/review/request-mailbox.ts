@@ -56,6 +56,18 @@ export class AgentClaimSelectionStale extends RetryableAgentClaimRejected {}
 
 export class AgentClaimCanceled extends AgentClaimSelectionStale {}
 
+type Clock = () => number;
+
+const readClock = (clock: Clock): number => {
+  const nowMs = clock();
+  if (!Number.isFinite(nowMs)) {
+    throw new AgentExchangeRejected(
+      "The mailbox clock must return milliseconds",
+    );
+  }
+  return nowMs;
+};
+
 /** Runs one request change while the request file is locked. */
 const withRequestLock = async <TResult>({
   store,
@@ -209,6 +221,7 @@ export const claimAgentRequest = async ({
   baselineSnapshot,
   now,
   verifyBeforeClaim,
+  clock = Date.now,
 }: {
   readonly store: ReviewStore;
   readonly activeSessionId: string;
@@ -218,17 +231,20 @@ export const claimAgentRequest = async ({
   readonly baselineSnapshot: string;
   readonly now: string;
   readonly verifyBeforeClaim?: (request: AgentRequest) => Promise<void>;
+  readonly clock?: Clock;
 }): Promise<AgentRequest> => {
-  const nowMs = Date.parse(now);
-  if (Number.isNaN(nowMs)) {
+  if (Number.isNaN(Date.parse(now))) {
     throw new AgentExchangeRejected("A claim time must be an ISO timestamp");
   }
   const takeover = await withRequestLock({
     store,
     requestId,
-    change: async (lockedStore): Promise<{
+    change: async (
+      lockedStore,
+    ): Promise<{
       readonly request: AgentRequest;
       readonly reclaimedFrom?: string;
+      readonly atMs: number;
     }> => {
       const request = await readCurrentRequest({
         store: lockedStore,
@@ -245,6 +261,7 @@ export const claimAgentRequest = async ({
         );
       }
       await verifyBeforeClaim?.(request);
+      const nowMs = readClock(clock);
       if (claimIsHeldByAnother({ request, claimedBy, nowMs })) {
         throw new AgentClaimContended(
           "Another agent session is working on this request",
@@ -254,14 +271,17 @@ export const claimAgentRequest = async ({
         const renewed = validateAgentRequest({
           ...request,
           claimedModel: model ?? request.claimedModel,
-          claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
+          claimExpiresAtMs: Math.max(
+            request.claimExpiresAtMs ?? 0,
+            claimLeaseExpiryMs(nowMs),
+          ),
         });
         await writeAgentRequestValue({
           store: lockedStore,
           requestId,
           value: renewed,
         });
-        return { request: renewed };
+        return { request: renewed, atMs: nowMs };
       }
       const claimed = validateAgentRequest({
         ...request,
@@ -278,6 +298,7 @@ export const claimAgentRequest = async ({
       });
       return {
         request: claimed,
+        atMs: nowMs,
         ...(request.claimedBy === undefined
           ? {}
           : { reclaimedFrom: request.claimedBy }),
@@ -290,7 +311,7 @@ export const claimAgentRequest = async ({
       event: {
         sessionId: activeSessionId,
         requestId,
-        atMs: nowMs,
+        atMs: takeover.atMs,
         stepCode: "request-reclaimed",
         step: "Restarting with a new agent session",
         state: "live",
@@ -342,11 +363,13 @@ export const commitRequestTerminal = async ({
   response,
   claimedBy,
   now,
+  clock = Date.now,
 }: {
   readonly store: ReviewStore;
   readonly response: AgentResponse;
   readonly claimedBy: string;
   readonly now: string;
+  readonly clock?: Clock;
 }): Promise<AgentRequest> =>
   withRequestLock({
     store,
@@ -379,10 +402,8 @@ export const commitRequestTerminal = async ({
       // Only the holder may answer. Without this the lease would guard pickup
       // but not delivery, and a session that lost its claim could still
       // overwrite the holder's work at the last step.
-      if (
-        request.claimedBy !== claimedBy ||
-        !claimIsLive({ request, nowMs: Date.parse(now) })
-      ) {
+      const nowMs = readClock(clock);
+      if (request.claimedBy !== claimedBy || !claimIsLive({ request, nowMs })) {
         throw new AgentExchangeRejected(
           "This agent session does not hold a live claim on this request",
         );

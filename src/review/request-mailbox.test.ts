@@ -46,6 +46,7 @@ import {
   readAgentConnectionEvents,
   readProgress,
   reviewStoreFor,
+  withReviewStoreLock,
   writeAgentResponseValue,
 } from "./store.js";
 import {
@@ -63,6 +64,48 @@ const snapshot = deriveSnapshotDigest("# Plan\n");
 const execFileAsync = promisify(execFile);
 const mailboxModule = new URL("./request-mailbox.ts", import.meta.url).href;
 const storeModule = new URL("./store.ts", import.meta.url).href;
+const clockAt =
+  (now: string): (() => number) =>
+  () =>
+    Date.parse(now);
+
+const deferred = (): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+} => {
+  let resolve = (): void => undefined;
+  const promise = new Promise<void>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+};
+
+const holdAgentRequestLock = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReturnType<typeof reviewStoreFor>;
+  readonly requestId: string;
+}): Promise<() => Promise<void>> => {
+  const acquired = deferred();
+  const released = deferred();
+  const lock = withReviewStoreLock({
+    lockPath: join(store.agentRequestDirectory, `.${requestId}.lock`),
+    change: async () => {
+      acquired.resolve();
+      await released.promise;
+    },
+    timeoutError: () => new Error("Timed out holding the agent request lock"),
+  });
+  await acquired.promise;
+  let settled = false;
+  return async () => {
+    if (settled) return;
+    settled = true;
+    released.resolve();
+    await lock;
+  };
+};
 
 const WORKER_SCRIPT = `
 const { reviewStoreFor } = await import(process.env.BP_STORE_MODULE);
@@ -354,6 +397,7 @@ describe("request mailbox", () => {
       model: { name: "Grok 4.6" },
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:00.000Z",
+      clock: clockAt("2026-08-10T12:00:00.000Z"),
     });
 
     await expect(
@@ -365,6 +409,7 @@ describe("request mailbox", () => {
         baselineSnapshot: snapshot,
         // Well inside the lease agent A just took.
         now: "2026-08-10T12:00:10.000Z",
+        clock: clockAt("2026-08-10T12:00:10.000Z"),
       }),
     ).rejects.toThrow(/Another agent session is working on this request/);
 
@@ -389,6 +434,7 @@ describe("request mailbox", () => {
       model: { name: "Grok 4.6" },
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:00.000Z",
+      clock: clockAt("2026-08-10T12:00:00.000Z"),
     });
 
     const renewed = await claimAgentRequest({
@@ -400,6 +446,7 @@ describe("request mailbox", () => {
       // offers a newer one, or the request's diff would lose the work so far.
       baselineSnapshot: deriveSnapshotDigest("# Plan\n\nRewritten.\n"),
       now: "2026-08-10T12:00:30.000Z",
+      clock: clockAt("2026-08-10T12:00:30.000Z"),
     });
 
     expect(renewed).toMatchObject({
@@ -411,6 +458,31 @@ describe("request mailbox", () => {
     expect(renewed.claimExpiresAtMs).toBeGreaterThan(
       claimed.claimExpiresAtMs ?? 0,
     );
+  });
+
+  it("should not shorten a newer lease with a late renewal", async () => {
+    const { store } = await preparedReview();
+    const request = requestWith([
+      reviewComment({ id: "4444444444444444", body: "Keep the later lease." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    const startedAt = Date.parse("2026-08-10T12:00:00.000Z");
+    const claim = (nowMs: number) =>
+      claimAgentRequest({
+        store,
+        activeSessionId: sessionId,
+        requestId: request.requestId,
+        claimedBy: agentA,
+        baselineSnapshot: snapshot,
+        now: new Date(nowMs).toISOString(),
+        clock: () => nowMs,
+      });
+
+    await claim(startedAt);
+    const newer = await claim(startedAt + 60_000);
+    const late = await claim(startedAt + 30_000);
+
+    expect(late.claimExpiresAtMs).toBe(newer.claimExpiresAtMs);
   });
 
   it("should let a new session take an expired claim", async () => {
@@ -427,6 +499,7 @@ describe("request mailbox", () => {
       model: { name: "Grok 4.6" },
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:00.000Z",
+      clock: clockAt("2026-08-10T12:00:00.000Z"),
     });
 
     const takenOver = await claimAgentRequest({
@@ -438,6 +511,7 @@ describe("request mailbox", () => {
       baselineSnapshot: snapshot,
       // Past the 75-second lease the reviewer has already been shown as stalled.
       now: "2026-08-10T12:01:20.000Z",
+      clock: clockAt("2026-08-10T12:01:20.000Z"),
     });
 
     expect(takenOver).toMatchObject({
@@ -526,6 +600,7 @@ describe("request mailbox", () => {
       claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:00.000Z",
+      clock: clockAt("2026-08-10T12:00:00.000Z"),
     });
     const response = validateAgentResponseDraft({
       value: {
@@ -551,11 +626,72 @@ describe("request mailbox", () => {
         response,
         claimedBy: agentA,
         now: "2026-08-10T12:01:16.000Z",
+        clock: clockAt("2026-08-10T12:01:16.000Z"),
       }),
     ).rejects.toThrow(/claim/);
     await expect(
       readAgentExchange({ store, sessionId, planId }),
     ).resolves.toMatchObject({ responses: [] });
+  });
+
+  it("should reject an answer whose lease expires while waiting for the lock", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Reject an answer that waited past expiry.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const startedAt = Date.parse("2026-08-10T12:00:00.000Z");
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: new Date(startedAt).toISOString(),
+      clock: () => startedAt,
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: new Date(startedAt + 74_000).toISOString(),
+    });
+    let releaseLock: (() => Promise<void>) | undefined;
+    try {
+      releaseLock = await holdAgentRequestLock({
+        store,
+        requestId: request.requestId,
+      });
+      const commit = commitRequestTerminal({
+        store,
+        response,
+        claimedBy: agentA,
+        now: new Date(startedAt + 74_000).toISOString(),
+        clock: () => startedAt + 76_000,
+      });
+      await releaseLock();
+      releaseLock = undefined;
+
+      await expect(commit).rejects.toThrow(/live claim/);
+      await expect(
+        readAgentExchange({ store, sessionId, planId }),
+      ).resolves.toMatchObject({ responses: [] });
+    } finally {
+      await releaseLock?.();
+    }
   });
 
   it("should reject a claim after its request is answered", async () => {

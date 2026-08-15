@@ -1757,13 +1757,15 @@ describe("agent work loop lifecycle", () => {
       body: "Return the committed claim token.",
     });
     await writeAgentRequest({ store: review.store, request });
+    const lapsedAtMs = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
     await claimAgentRequest({
       store: review.store,
       activeSessionId: review.sessionId,
       requestId: request.requestId,
       claimedBy: "eeeeeeeeeeeeeeee",
       baselineSnapshot: request.premiseSnapshot,
-      now: new Date(Date.now() - AGENT_CLAIM_LEASE_MS - 1).toISOString(),
+      now: new Date(lapsedAtMs).toISOString(),
+      clock: () => lapsedAtMs,
     });
     await mkdir(review.store.progressPath);
 
@@ -1833,13 +1835,15 @@ describe("agent work loop lifecycle", () => {
         body: "Please continue with a new agent session.",
       });
       await writeAgentRequest({ store: firstReview.store, request });
+      const lapsedAtMs = Date.now() - AGENT_CLAIM_LEASE_MS - 1;
       await claimAgentRequest({
         store: firstReview.store,
         activeSessionId: firstReview.sessionId,
         requestId: request.requestId,
         claimedBy: "cdcdcdcdcdcdcdcd",
         baselineSnapshot: request.premiseSnapshot,
-        now: new Date(Date.now() - AGENT_CLAIM_LEASE_MS - 1).toISOString(),
+        now: new Date(lapsedAtMs).toISOString(),
+        clock: () => lapsedAtMs,
       });
       await firstReview.close();
 
