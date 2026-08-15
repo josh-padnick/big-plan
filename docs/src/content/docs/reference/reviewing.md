@@ -21,9 +21,10 @@ background command.
 ## When a session stops accepting changes
 
 A review session can stay online after one change never finishes: reading the plan keeps working, but the runtime stops accepting changes.
-After 30 seconds, the page shows a **This review session has stopped accepting changes** alert, and the unfinished change and every later change are refused instead of waiting indefinitely.
+After 30 seconds, the runtime refuses the unfinished request and answers later direct write requests instead of leaving them waiting indefinitely.
+The page then shows a **This review session has stopped accepting changes** alert, disables sending, and stops automatic draft-save requests instead of submitting changes the runtime has already said it will refuse.
 The runtime keeps renewing its heartbeat, so the coding agent still sees the session as live, but it cannot save changes through that runtime.
-Already persisted review data remains available, and unsent input stays in the page, so keep the tab open, stop the runtime, and start it again on the same plan.
+Already persisted review data remains available, and a newly staged comment stays in the page and its local recovery snapshot, so keep the tab open, stop the runtime, and start it again on the same plan.
 
 ## Diagnose an unresponsive session
 
