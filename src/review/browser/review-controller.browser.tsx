@@ -465,6 +465,14 @@ const liveRecoveryStorageKey = ({
   readonly ownerId: string;
 }): string => `${liveRecoveryStoragePrefix(identity)}:tab:${ownerId}`;
 
+const liveRecoveryAdoptionsStorageKey = ({
+  identity,
+  ownerId,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly ownerId: string;
+}): string => `${liveRecoveryStoragePrefix(identity)}:adoptions:${ownerId}`;
+
 const liveRecoveryOwnerSessionKey = (identity: RuntimeIdentity): string =>
   `${liveRecoveryStoragePrefix(identity)}:owner`;
 
@@ -564,7 +572,8 @@ const emptyReviewRecoveryReconciliation = (): ReviewRecoveryReconciliation => ({
   runtime: null,
 });
 
-const LIVE_RECOVERY_SNAPSHOT_VERSION = 8;
+const LIVE_RECOVERY_SNAPSHOT_VERSION = 9;
+const LIVE_RECOVERY_ADOPTIONS_VERSION = 1;
 const LIVE_RECOVERY_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const isStringRecord = (
@@ -633,9 +642,14 @@ const readRecoveredComposer = (value: unknown): RecoveredComposer => {
 
 type StoredLiveReviewRecovery = LiveReviewRecovery & {
   readonly ownerId: string;
-  readonly adoptedOwnerIds: ReadonlySet<string>;
   readonly updatedAtMs: number;
   readonly composer: RecoveredComposer;
+};
+
+type StoredLiveRecoveryAdoptions = {
+  readonly ownerId: string;
+  readonly updatedAtMs: number;
+  readonly recoveryUpdatedAtMsByOwnerId: ReadonlyMap<string, number>;
 };
 
 type LiveRecoveryOwner = {
@@ -659,10 +673,6 @@ const readLiveReviewRecovery = (
       !isRecord(parsed) ||
       parsed.version !== LIVE_RECOVERY_SNAPSHOT_VERSION ||
       typeof parsed.ownerId !== "string" ||
-      !Array.isArray(parsed.adoptedOwnerIds) ||
-      !parsed.adoptedOwnerIds.every(
-        (value): value is string => typeof value === "string",
-      ) ||
       typeof parsed.updatedAtMs !== "number" ||
       reviewState === null ||
       !isRecord(parsed.reconciliation) ||
@@ -690,7 +700,6 @@ const readLiveReviewRecovery = (
     return {
       ...reviewState,
       ownerId: parsed.ownerId,
-      adoptedOwnerIds: new Set(parsed.adoptedOwnerIds),
       updatedAtMs: parsed.updatedAtMs,
       composer: readRecoveredComposer(parsed.composer),
       reconciliation: {
@@ -717,7 +726,6 @@ const serializedLiveReviewRecovery = (
   JSON.stringify({
     version: LIVE_RECOVERY_SNAPSHOT_VERSION,
     ownerId: recovery.ownerId,
-    adoptedOwnerIds: Array.from(recovery.adoptedOwnerIds),
     updatedAtMs: recovery.updatedAtMs,
     drafts: recovery.drafts,
     resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
@@ -746,6 +754,110 @@ const serializedLiveReviewRecovery = (
       replies: Object.fromEntries(recovery.composer.replies),
     },
   });
+
+/** Reads one tab-owned adoption ledger without accepting partial data. */
+const readLiveRecoveryAdoptions = (
+  key: string,
+): StoredLiveRecoveryAdoptions | null => {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed: unknown = raw === null ? null : JSON.parse(raw);
+    const revisionEntries =
+      isRecord(parsed) && isRecord(parsed.recoveryUpdatedAtMsByOwnerId)
+        ? Object.entries(parsed.recoveryUpdatedAtMsByOwnerId)
+        : [];
+    if (
+      !isRecord(parsed) ||
+      parsed.version !== LIVE_RECOVERY_ADOPTIONS_VERSION ||
+      typeof parsed.ownerId !== "string" ||
+      typeof parsed.updatedAtMs !== "number" ||
+      !isRecord(parsed.recoveryUpdatedAtMsByOwnerId) ||
+      !revisionEntries.every(
+        (entry): entry is [string, number] => typeof entry[1] === "number",
+      )
+    ) {
+      return null;
+    }
+    return {
+      ownerId: parsed.ownerId,
+      updatedAtMs: parsed.updatedAtMs,
+      recoveryUpdatedAtMsByOwnerId: new Map(revisionEntries),
+    };
+  } catch {
+    return null;
+  }
+};
+
+/** Collects adopted orphan revisions while expiring only stale ledgers. */
+const adoptedLiveRecoveryRevisions = ({
+  identity,
+  nowMs,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly nowMs: number;
+}): ReadonlyMap<string, number> => {
+  const prefix = `${liveRecoveryStoragePrefix(identity)}:adoptions:`;
+  const revisions = new Map<string, number>();
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key === null || !key.startsWith(prefix)) continue;
+    const adoptions = readLiveRecoveryAdoptions(key);
+    if (
+      adoptions === null ||
+      nowMs - adoptions.updatedAtMs > LIVE_RECOVERY_EXPIRY_MS
+    ) {
+      localStorage.removeItem(key);
+      index -= 1;
+      continue;
+    }
+    for (const [
+      ownerId,
+      updatedAtMs,
+    ] of adoptions.recoveryUpdatedAtMsByOwnerId) {
+      revisions.set(
+        ownerId,
+        Math.max(revisions.get(ownerId) ?? 0, updatedAtMs),
+      );
+    }
+  }
+  return revisions;
+};
+
+/** Records one adopted orphan revision in this tab's independent ledger. */
+const recordLiveRecoveryAdoption = ({
+  identity,
+  ownerId,
+  recoveryOwnerId,
+  recoveryUpdatedAtMs,
+  nowMs,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly ownerId: string;
+  readonly recoveryOwnerId: string;
+  readonly recoveryUpdatedAtMs: number;
+  readonly nowMs: number;
+}): void => {
+  const key = liveRecoveryAdoptionsStorageKey({ identity, ownerId });
+  const previous = readLiveRecoveryAdoptions(key);
+  const revisions = new Map(previous?.recoveryUpdatedAtMsByOwnerId ?? []);
+  revisions.set(
+    recoveryOwnerId,
+    Math.max(revisions.get(recoveryOwnerId) ?? 0, recoveryUpdatedAtMs),
+  );
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        version: LIVE_RECOVERY_ADOPTIONS_VERSION,
+        ownerId,
+        updatedAtMs: nowMs,
+        recoveryUpdatedAtMsByOwnerId: Object.fromEntries(revisions),
+      }),
+    );
+  } catch {
+    // Browser recovery is best effort when storage is unavailable.
+  }
+};
 
 /** Claims a tab writer identity without inferring whether another tab is live. */
 const claimLiveRecoveryOwner = (
@@ -776,6 +888,7 @@ const selectLiveReviewRecovery = ({
   const owned = readLiveReviewRecovery(
     liveRecoveryStorageKey({ identity, ownerId: owner.ownerId }),
   );
+  const adoptedRevisions = adoptedLiveRecoveryRevisions({ identity, nowMs });
   const prefix = `${liveRecoveryStoragePrefix(identity)}:tab:`;
   const candidates: Array<{
     readonly key: string;
@@ -789,6 +902,9 @@ const selectLiveReviewRecovery = ({
     if (nowMs - recovery.updatedAtMs > LIVE_RECOVERY_EXPIRY_MS) {
       localStorage.removeItem(key);
       index -= 1;
+      continue;
+    }
+    if ((adoptedRevisions.get(recovery.ownerId) ?? 0) >= recovery.updatedAtMs) {
       continue;
     }
     candidates.push({ key, recovery });
@@ -934,7 +1050,6 @@ const clearLiveReviewRecovery = ({
   if (
     recovery === null ||
     recovery.reconciliation.conflicts.length > 0 ||
-    recovery.adoptedOwnerIds.size > 0 ||
     recovery.composer.comment !== null ||
     recovery.composer.replies.size > 0 ||
     persistedReviewFingerprint(recovery) !== fingerprint
@@ -4261,7 +4376,10 @@ export const ReviewController = () => {
   const [liveRecoveryOwnerId, setLiveRecoveryOwnerId] = useState<string | null>(
     null,
   );
-  const adoptedRecoveryOwnerIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const pendingRecoveryAdoptionRef = useRef<{
+    readonly ownerId: string;
+    readonly updatedAtMs: number;
+  } | null>(null);
   const isOrphanRecoveryDeferredRef = useRef(false);
   // The version the next conditional write must carry.
   const runtimeVersionRef = useRef("");
@@ -4876,10 +4994,7 @@ export const ReviewController = () => {
       });
       isOrphanRecoveryDeferredRef.current = selection.source === "orphan";
       const recovery = selection.recovery;
-      adoptedRecoveryOwnerIdsRef.current =
-        selection.source === "owned" && recovery !== null
-          ? recovery.adoptedOwnerIds
-          : new Set();
+      pendingRecoveryAdoptionRef.current = null;
       const recoveredComposer = recovery?.composer ?? EMPTY_RECOVERED_COMPOSER;
       try {
         const sessionSequence = runtimeSessionOrder.issueRequest();
@@ -4918,10 +5033,10 @@ export const ReviewController = () => {
                   });
             isOrphanRecoveryDeferredRef.current = false;
             if (selection.source === "orphan") {
-              adoptedRecoveryOwnerIdsRef.current = new Set([
-                ...recovery.adoptedOwnerIds,
-                recovery.ownerId,
-              ]);
+              pendingRecoveryAdoptionRef.current = {
+                ownerId: recovery.ownerId,
+                updatedAtMs: recovery.updatedAtMs,
+              };
             }
             restoredReviewState = merged.state;
             conflicted = merged.conflicts.length > 0;
@@ -5018,7 +5133,6 @@ export const ReviewController = () => {
     const recovery: StoredLiveReviewRecovery = {
       ...reviewState,
       ownerId: liveRecoveryOwnerId,
-      adoptedOwnerIds: adoptedRecoveryOwnerIdsRef.current,
       updatedAtMs: Date.now(),
       composer: composerRecovery,
       reconciliation: recoveryReconciliation,
@@ -5028,6 +5142,17 @@ export const ReviewController = () => {
       ownerId: liveRecoveryOwnerId,
       recovery,
     });
+    const pendingAdoption = pendingRecoveryAdoptionRef.current;
+    if (didPersist && pendingAdoption !== null) {
+      recordLiveRecoveryAdoption({
+        identity,
+        ownerId: liveRecoveryOwnerId,
+        recoveryOwnerId: pendingAdoption.ownerId,
+        recoveryUpdatedAtMs: pendingAdoption.updatedAtMs,
+        nowMs: Date.now(),
+      });
+      pendingRecoveryAdoptionRef.current = null;
+    }
     if (
       didPersist &&
       recovery.reconciliation.conflicts.length === 0 &&

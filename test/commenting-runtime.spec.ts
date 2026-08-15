@@ -300,9 +300,8 @@ test("should retain detached selection text until the reviewer discards it", asy
       window.localStorage.setItem(
         key,
         JSON.stringify({
-          version: 8,
+          version: 9,
           ownerId,
-          adoptedOwnerIds: [],
           updatedAtMs: Date.now(),
           drafts: [],
           resolvedCommentIds: [],
@@ -911,9 +910,8 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 8,
+            version: 9,
             ownerId,
-            adoptedOwnerIds: [],
             updatedAtMs: Date.now(),
             drafts: [
               {
@@ -978,6 +976,176 @@ test.describe("a drafts write prepared against content the store moved past", ()
       .not.toBeNull();
   });
 
+  test("should clear synchronized adoption and offer each later orphan once", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const runtimeBody = "Keep this runtime draft after reviewing an orphan.";
+    await stageComment(page, runtimeBody);
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const runtimeDraft = stored.drafts[0];
+    if (runtimeDraft === undefined)
+      throw new Error("expected one runtime draft");
+    const currentRecoveryKey = await ownedLiveRecoveryKey(page);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => window.localStorage.getItem(key),
+          currentRecoveryKey,
+        ),
+      )
+      .toBeNull();
+    const identity = await page.locator("html").evaluate((root) => ({
+      planId: root.dataset.planId ?? "",
+      sessionId: root.dataset.reviewSession ?? "",
+      snapshot: (() => {
+        const bootstrap: unknown = JSON.parse(
+          root.getAttribute("data-review-bootstrap") ?? "{}",
+        );
+        return typeof bootstrap === "object" &&
+          bootstrap !== null &&
+          "currentSnapshot" in bootstrap &&
+          typeof bootstrap.currentSnapshot === "string"
+          ? bootstrap.currentSnapshot
+          : "";
+      })(),
+    }));
+    const firstOwnerId = randomBytes(8).toString("hex");
+    const secondOwnerId = randomBytes(8).toString("hex");
+    const recoveryPrefix = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}:tab:`;
+    const firstOrphanKey = `${recoveryPrefix}${firstOwnerId}`;
+    const secondOrphanKey = `${recoveryPrefix}${secondOwnerId}`;
+    await page.evaluate(
+      ({ key, ownerId, draft }) => {
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 9,
+            ownerId,
+            updatedAtMs: Date.now(),
+            drafts: [],
+            resolvedCommentIds: [],
+            reconciliation: {
+              base: {
+                draftBodies: { [draft.id]: draft.body },
+                resolvedCommentIds: [],
+              },
+              conflicts: [],
+              runtime: null,
+            },
+            composer: { comment: null, replies: {} },
+          }),
+        );
+      },
+      { key: firstOrphanKey, ownerId: firstOwnerId, draft: runtimeDraft },
+    );
+
+    await page.reload();
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toContainText("Deleted here.");
+    await expect(choice).toContainText(runtimeBody);
+    await choice.getByRole("button", { name: "Keep the deletion" }).click();
+    await expect(choice).toBeHidden();
+    await expect
+      .poll(
+        async () => (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts,
+      )
+      .toEqual([]);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => window.localStorage.getItem(key),
+          currentRecoveryKey,
+        ),
+      )
+      .toBeNull();
+
+    const afterDeletion = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: afterDeletion.version,
+      drafts: [
+        {
+          id: runtimeDraft.id,
+          body: runtimeBody,
+          createdAt: "2026-08-15T12:00:00.000Z",
+          premiseSnapshot: identity.snapshot,
+          target: { type: "document" },
+        },
+      ],
+    });
+
+    const laterBody = "Offer this later orphan after the first one is clean.";
+    await page.evaluate(
+      ({ key, ownerId, snapshot, body }) => {
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 9,
+            ownerId,
+            updatedAtMs: Date.now(),
+            drafts: [
+              {
+                id: "later-orphan-comment",
+                body,
+                createdAt: "2026-08-15T12:00:00.000Z",
+                premiseSnapshot: snapshot,
+                target: { type: "document" },
+              },
+            ],
+            resolvedCommentIds: [],
+            reconciliation: {
+              base: { draftBodies: {}, resolvedCommentIds: [] },
+              conflicts: [],
+              runtime: null,
+            },
+            composer: { comment: null, replies: {} },
+          }),
+        );
+      },
+      {
+        key: secondOrphanKey,
+        ownerId: secondOwnerId,
+        snapshot: identity.snapshot,
+        body: laterBody,
+      },
+    );
+
+    await page.reload();
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(laterBody);
+    await expect(choice).not.toContainText(runtimeBody);
+    await choice.getByRole("button", { name: "Delete it" }).click();
+    await expect(choice).toBeHidden();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => window.localStorage.getItem(key),
+          currentRecoveryKey,
+        ),
+      )
+      .toBeNull();
+
+    await page.reload();
+    await expect(choice).toBeHidden();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          ({ first, second }) => [
+            window.localStorage.getItem(first),
+            window.localStorage.getItem(second),
+          ],
+          { first: firstOrphanKey, second: secondOrphanKey },
+        ),
+      )
+      .not.toContain(null);
+  });
+
   test("should defer an orphaned deletion until runtime state is authoritative", async ({
     page,
     reviewRuntimeUrl,
@@ -1009,9 +1177,8 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 8,
+            version: 9,
             ownerId,
-            adoptedOwnerIds: [],
             updatedAtMs: Date.now(),
             drafts: [],
             resolvedCommentIds: [],
@@ -1084,9 +1251,8 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 8,
+            version: 9,
             ownerId: storedOwnerId,
-            adoptedOwnerIds: [],
             updatedAtMs: Date.now() - 8 * 24 * 60 * 60 * 1000,
             drafts: [
               {
@@ -2053,9 +2219,8 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 8,
+            version: 9,
             ownerId,
-            adoptedOwnerIds: [],
             updatedAtMs: Date.now(),
             drafts: [
               {
@@ -2164,9 +2329,8 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 8,
+            version: 9,
             ownerId,
-            adoptedOwnerIds: [],
             updatedAtMs: Date.now(),
             drafts: [
               {
