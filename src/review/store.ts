@@ -836,26 +836,11 @@ const writeJson = async ({
 }: {
   readonly path: string;
   readonly value: unknown;
-}): Promise<void> => {
-  const temporaryPath = join(
-    dirname(path),
-    `.${basename(path)}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`,
-  );
-  try {
-    // Readers either retain the previous complete snapshot or open the next
-    // complete snapshot; they never observe writeFile's truncate-and-rewrite
-    // window and mistake a live review or agent for a disconnected one.
-    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
-      flag: "wx",
-      mode: FILE_MODE,
-    });
-    await chmod(temporaryPath, FILE_MODE);
-    await rename(temporaryPath, path);
-  } catch (error: unknown) {
-    await unlink(temporaryPath).catch(() => undefined);
-    throw error;
-  }
-};
+}): Promise<void> =>
+  writeFileAtomically({
+    path,
+    contents: `${JSON.stringify(value, null, 2)}\n`,
+  });
 
 /** Reads a stored comment list back through the caller's own validator. */
 export const readComments = async ({
@@ -1350,14 +1335,56 @@ const asProgressEvent = ({
 // over, because the one thing this must never do is answer from a history that
 // is no longer on disk.
 type ProgressLogCache = {
-  readonly sizeBytes: number;
-  readonly mtimeMs: number;
+  readonly version: ProgressFileVersion;
   /** Bytes ending at the last complete line, which is all that was parsed. */
   readonly parsedBytes: number;
   readonly values: ReadonlyArray<unknown>;
 };
 
+type ProgressFileVersion = {
+  readonly device: number;
+  readonly inode: number;
+  readonly sizeBytes: number;
+  readonly mtimeMs: number;
+  readonly ctimeMs: number;
+};
+
 const progressLogCaches = new Map<string, ProgressLogCache>();
+const progressCompactionChecks = new Map<string, number>();
+
+const progressFileVersion = ({
+  dev,
+  ino,
+  size,
+  mtimeMs,
+  ctimeMs,
+}: {
+  readonly dev: number;
+  readonly ino: number;
+  readonly size: number;
+  readonly mtimeMs: number;
+  readonly ctimeMs: number;
+}): ProgressFileVersion => ({
+  device: dev,
+  inode: ino,
+  sizeBytes: size,
+  mtimeMs,
+  ctimeMs,
+});
+
+const sameProgressFile = (
+  left: ProgressFileVersion,
+  right: ProgressFileVersion,
+): boolean => left.device === right.device && left.inode === right.inode;
+
+const sameProgressVersion = (
+  left: ProgressFileVersion,
+  right: ProgressFileVersion,
+): boolean =>
+  sameProgressFile(left, right) &&
+  left.sizeBytes === right.sizeBytes &&
+  left.mtimeMs === right.mtimeMs &&
+  left.ctimeMs === right.ctimeMs;
 
 const parseProgressLines = (raw: string): ReadonlyArray<unknown> => {
   const values: Array<unknown> = [];
@@ -1373,23 +1400,90 @@ const parseProgressLines = (raw: string): ReadonlyArray<unknown> => {
   return values;
 };
 
-/** Reads bytes `[from, to)` so an append costs only the appended bytes. */
-const readAppendedProgressBytes = async ({
+/** Reads a stable prefix of the file currently published at `path`. */
+const readProgressBytes = async ({
   path,
   from,
-  to,
+  expected,
 }: {
   readonly path: string;
   readonly from: number;
-  readonly to: number;
-}): Promise<Buffer> => {
-  const handle = await open(path, "r");
+  readonly expected?: ProgressFileVersion;
+}): Promise<
+  { readonly bytes: Buffer; readonly version: ProgressFileVersion } | undefined
+> => {
+  let handle;
   try {
-    const buffer = Buffer.alloc(to - from);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, from);
-    return buffer.subarray(0, bytesRead);
+    handle = await open(path, "r");
+  } catch {
+    return undefined;
+  }
+  try {
+    let before: ProgressFileVersion;
+    try {
+      before = progressFileVersion(await handle.stat());
+    } catch {
+      return undefined;
+    }
+    if (
+      (expected !== undefined && !sameProgressVersion(before, expected)) ||
+      from > before.sizeBytes
+    ) {
+      return undefined;
+    }
+    const buffer = Buffer.alloc(before.sizeBytes - from);
+    let offset = 0;
+    while (offset < buffer.length) {
+      const { bytesRead } = await handle.read(
+        buffer,
+        offset,
+        buffer.length - offset,
+        from + offset,
+      );
+      if (bytesRead === 0) return undefined;
+      offset += bytesRead;
+    }
+    let after: ProgressFileVersion;
+    let published: ProgressFileVersion;
+    try {
+      after = progressFileVersion(await handle.stat());
+      published = progressFileVersion(await stat(path));
+    } catch {
+      return undefined;
+    }
+    if (
+      !sameProgressFile(before, after) ||
+      !sameProgressFile(before, published) ||
+      after.sizeBytes < before.sizeBytes ||
+      published.sizeBytes < before.sizeBytes ||
+      (after.sizeBytes === before.sizeBytes &&
+        !sameProgressVersion(before, after)) ||
+      (published.sizeBytes === before.sizeBytes &&
+        !sameProgressVersion(before, published))
+    ) {
+      return undefined;
+    }
+    return { bytes: buffer, version: before };
   } finally {
     await handle.close();
+  }
+};
+
+const readWholeProgressBytes = async (
+  path: string,
+): Promise<
+  { readonly bytes: Buffer; readonly version: ProgressFileVersion } | undefined
+> => {
+  try {
+    const before = progressFileVersion(await stat(path));
+    const bytes = await readFile(path);
+    const after = progressFileVersion(await stat(path));
+    return bytes.length === before.sizeBytes &&
+      sameProgressVersion(before, after)
+      ? { bytes, version: before }
+      : undefined;
+  } catch {
+    return undefined;
   }
 };
 
@@ -1397,59 +1491,100 @@ const readAppendedProgressBytes = async ({
 const readProgressValues = async (
   path: string,
 ): Promise<ReadonlyArray<unknown>> => {
-  let info;
-  try {
-    info = await stat(path);
-  } catch {
-    progressLogCaches.delete(path);
-    return [];
-  }
-  const cached = progressLogCaches.get(path);
-  if (
-    cached !== undefined &&
-    cached.sizeBytes === info.size &&
-    cached.mtimeMs === info.mtimeMs
-  ) {
-    return cached.values;
-  }
-  if (cached !== undefined && info.size > cached.sizeBytes) {
-    const appended = await readAppendedProgressBytes({
-      path,
-      from: cached.parsedBytes,
-      to: info.size,
-    });
-    // A reader can arrive between a writer's append and its flush, so only
-    // whole lines are parsed and the rest is left for the next read.
-    const lastBreak = appended.lastIndexOf(0x0a);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    let version: ProgressFileVersion;
+    try {
+      version = progressFileVersion(await stat(path));
+    } catch {
+      progressLogCaches.delete(path);
+      progressCompactionChecks.delete(path);
+      return [];
+    }
+    const cached = progressLogCaches.get(path);
+    if (cached !== undefined && sameProgressVersion(cached.version, version)) {
+      return cached.values;
+    }
+    if (
+      cached !== undefined &&
+      sameProgressFile(cached.version, version) &&
+      version.sizeBytes > cached.version.sizeBytes
+    ) {
+      const appended = await readProgressBytes({
+        path,
+        from: cached.parsedBytes,
+        expected: version,
+      });
+      if (appended !== undefined) {
+        const lastBreak = appended.bytes.lastIndexOf(0x0a);
+        const complete =
+          lastBreak === -1
+            ? Buffer.alloc(0)
+            : appended.bytes.subarray(0, lastBreak + 1);
+        const values = [
+          ...cached.values,
+          ...parseProgressLines(complete.toString("utf8")),
+        ];
+        progressLogCaches.set(path, {
+          version: appended.version,
+          parsedBytes: cached.parsedBytes + complete.length,
+          values,
+        });
+        return values;
+      }
+    }
+    const whole = await readWholeProgressBytes(path);
+    if (whole === undefined) continue;
+    const lastBreak = whole.bytes.lastIndexOf(0x0a);
     const complete =
-      lastBreak === -1 ? Buffer.alloc(0) : appended.subarray(0, lastBreak + 1);
-    const values = [
-      ...cached.values,
-      ...parseProgressLines(complete.toString("utf8")),
-    ];
+      lastBreak === -1
+        ? Buffer.alloc(0)
+        : whole.bytes.subarray(0, lastBreak + 1);
+    const values = parseProgressLines(complete.toString("utf8"));
+    if (cached !== undefined) progressCompactionChecks.delete(path);
     progressLogCaches.set(path, {
-      sizeBytes: info.size,
-      mtimeMs: info.mtimeMs,
-      parsedBytes: cached.parsedBytes + complete.length,
+      version: whole.version,
+      parsedBytes: complete.length,
       values,
     });
     return values;
   }
-  let raw: string;
-  try {
-    raw = await readFile(path, "utf8");
-  } catch {
-    progressLogCaches.delete(path);
-    return [];
+  throw new Error(`Progress log changed repeatedly while reading ${path}`);
+};
+
+type ReadableProgressEntry = {
+  readonly event: ProgressEvent;
+  readonly index: number;
+};
+
+type ReadableProgressHistory = {
+  readonly entries: Array<ReadableProgressEntry>;
+  highestSequence: number;
+};
+
+const readableProgressHistories = (
+  values: ReadonlyArray<unknown>,
+): ReadonlyMap<string, ReadableProgressHistory> => {
+  const histories = new Map<string, ReadableProgressHistory>();
+  for (const [index, value] of values.entries()) {
+    const sessionId =
+      typeof value === "object" &&
+      value !== null &&
+      "sessionId" in value &&
+      typeof value.sessionId === "string"
+        ? value.sessionId
+        : undefined;
+    if (sessionId === undefined) continue;
+    const event = asProgressEvent({ value, sessionId });
+    const history = histories.get(sessionId) ?? {
+      entries: [],
+      highestSequence: 0,
+    };
+    if (event === undefined || event.seq <= history.highestSequence) continue;
+    history.highestSequence = event.seq;
+    history.entries.push({ event, index });
+    histories.set(sessionId, history);
   }
-  const values = parseProgressLines(raw);
-  progressLogCaches.set(path, {
-    sizeBytes: info.size,
-    mtimeMs: info.mtimeMs,
-    parsedBytes: raw.lastIndexOf("\n") === -1 ? 0 : Buffer.byteLength(raw),
-    values,
-  });
-  return values;
+  return histories;
 };
 
 /**
@@ -1467,17 +1602,15 @@ const readProgressHistory = async ({
   readonly events: ReadonlyArray<ProgressEvent>;
   readonly highestSequence: number;
 }> => {
-  const accepted: Array<ProgressEvent> = [];
-  let highest = 0;
-  for (const value of await readProgressValues(store.progressPath)) {
-    const event = asProgressEvent({ value, sessionId });
-    if (event === undefined || event.seq <= highest) {
-      continue;
-    }
-    highest = event.seq;
-    accepted.push(event);
-  }
-  return { events: accepted, highestSequence: highest };
+  const history = readableProgressHistories(
+    await readProgressValues(store.progressPath),
+  ).get(sessionId);
+  return history === undefined
+    ? { events: [], highestSequence: 0 }
+    : {
+        events: history.entries.map((entry) => entry.event),
+        highestSequence: history.highestSequence,
+      };
 };
 
 export const readProgress = async ({
@@ -1519,10 +1652,8 @@ export const appendProgressValue = async ({
   await chmod(store.progressPath, FILE_MODE);
 };
 
-// Past this many lines the log is rewritten. The bound is a multiple of the
-// window a reader sees, so an ordinary session never pays for compaction and a
-// long one pays for it rarely.
-const PROGRESS_COMPACTION_LIMIT = PROGRESS_EVENT_LIMIT * 5;
+const PROGRESS_COMPACTION_CHECK = PROGRESS_EVENT_LIMIT * 5;
+const PROGRESS_COMPACTION_RECLAIM = PROGRESS_EVENT_LIMIT;
 
 /**
  * Rewrites the log as the tail every reader would already have been given:
@@ -1539,30 +1670,35 @@ export const compactProgressLog = async ({
   readonly store: ReviewStore;
 }): Promise<boolean> => {
   const values = await readProgressValues(store.progressPath);
-  if (values.length <= PROGRESS_COMPACTION_LIMIT) return false;
-  const kept = new Map<string, Array<unknown>>();
-  for (const value of values) {
-    const sessionId =
-      typeof value === "object" &&
-      value !== null &&
-      "sessionId" in value &&
-      typeof value.sessionId === "string"
-        ? value.sessionId
-        : undefined;
-    if (sessionId === undefined) continue;
-    const forSession = kept.get(sessionId) ?? [];
-    forSession.push(value);
-    kept.set(sessionId, forSession.slice(-PROGRESS_EVENT_LIMIT));
+  const nextCheck =
+    progressCompactionChecks.get(store.progressPath) ??
+    PROGRESS_COMPACTION_CHECK + 1;
+  if (values.length < nextCheck) return false;
+  const compacted = [...readableProgressHistories(values).values()]
+    .flatMap((history) => history.entries.slice(-PROGRESS_EVENT_LIMIT))
+    .sort((left, right) => left.index - right.index)
+    .map((entry) => entry.event);
+  const reclaimable = values.length - compacted.length;
+  if (reclaimable < PROGRESS_COMPACTION_RECLAIM) {
+    progressCompactionChecks.set(
+      store.progressPath,
+      values.length +
+        Math.max(
+          PROGRESS_EVENT_LIMIT,
+          PROGRESS_COMPACTION_RECLAIM - reclaimable,
+        ),
+    );
+    return false;
   }
-  const retained = new Set(
-    [...kept.values()].flatMap((forSession) => forSession),
-  );
-  const compacted = values.filter((value) => retained.has(value));
   await writeFileAtomically({
     path: store.progressPath,
     contents: compacted.map((value) => `${JSON.stringify(value)}\n`).join(""),
   });
   progressLogCaches.delete(store.progressPath);
+  progressCompactionChecks.set(
+    store.progressPath,
+    compacted.length + PROGRESS_COMPACTION_CHECK,
+  );
   return true;
 };
 

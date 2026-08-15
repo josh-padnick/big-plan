@@ -25,10 +25,12 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   };
 });
 
-const { prepareStore, reviewStoreFor } = await import("./store.js");
+const { prepareStore, reviewStoreFor, writeAgentResponseValue } =
+  await import("./store.js");
 const {
   commentsFromExchange,
   feedbackAgentRequest,
+  messageAgentRequest,
   outstandingAgentRequests,
   readAgentCommentHistory,
   readAgentExchange,
@@ -142,6 +144,44 @@ const answer = async ({
   });
 };
 
+const answeredChat = async ({
+  store,
+  index,
+}: {
+  readonly store: Awaited<ReturnType<typeof temporaryStore>>;
+  readonly index: number;
+}): Promise<string> => {
+  const id = requestId(index);
+  const createdAt = new Date(1_800_000_000_000 + index * 1_000).toISOString();
+  const request = {
+    ...messageAgentRequest({
+      kind: "chat",
+      requestId: id,
+      sessionId: SESSION,
+      planId: PLAN_ID,
+      premiseSnapshot: SNAPSHOT,
+      createdAt,
+      body: `Question ${index}`,
+    }),
+    baselineSnapshot: SNAPSHOT,
+    claimedAt: createdAt,
+  };
+  await writeAgentRequest({ store, request });
+  await writeAgentResponseValue({
+    store,
+    requestId: id,
+    value: validateAgentResponseDraft({
+      value: { requestId: id, message: `Answer ${index}` },
+      request,
+      commentsById: new Map(),
+      changedBlocks: new Set(),
+      currentSnapshot: SNAPSHOT,
+      now: new Date(1_800_000_500_000 + index * 1_000).toISOString(),
+    }),
+  });
+  return id;
+};
+
 describe("the agent exchange read window", () => {
   it("should read only the responses of the comment it was asked about", async () => {
     const store = await temporaryStore();
@@ -199,6 +239,30 @@ describe("the agent exchange read window", () => {
       outstandingAgentRequests(snapshot).map((request) => request.requestId),
     ).toEqual([forgotten]);
     expect(snapshot.responses).toHaveLength(3);
+  });
+
+  it("should not resurrect an answered request outside the response window", async () => {
+    const store = await temporaryStore();
+    const answered: Array<string> = [];
+    for (let index = 1; index <= 401; index += 1) {
+      answered.push(await answeredChat({ store, index }));
+    }
+
+    counters.responseReads = [];
+    const snapshot = await readAgentExchange({
+      store,
+      sessionId: SESSION,
+      planId: PLAN_ID,
+    });
+
+    expect(snapshot.requests.map((request) => request.requestId)).toEqual(
+      answered.slice(-400),
+    );
+    expect(snapshot.responses.map((response) => response.requestId)).toEqual(
+      answered.slice(-400),
+    );
+    expect(outstandingAgentRequests(snapshot)).toEqual([]);
+    expect(counters.responseReads).toHaveLength(400);
   });
 
   it("should not read a response whose request the snapshot never keeps", async () => {

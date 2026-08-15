@@ -3,13 +3,24 @@
 // and every appended event allocates its sequence from it. These tests hold it
 // to reading each line once and to staying bounded (BIG-44).
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import type * as FsPromises from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const counters = vi.hoisted(() => ({ fullFileReads: 0 }));
+const counters = vi.hoisted(() => ({
+  beforeProgressOpen: undefined as (() => Promise<void>) | undefined,
+  fullFileReads: 0,
+  progressReplacements: 0,
+}));
 
 // The filesystem is the boundary this measures, so it is the boundary that is
 // wrapped: everything still reaches the real disk, and only the count of
@@ -24,6 +35,22 @@ vi.mock("node:fs/promises", async (importOriginal) => {
         counters.fullFileReads += 1;
       }
       return actual.readFile(...args);
+    },
+    open: async (...args: Parameters<typeof actual.open>) => {
+      const [path] = args;
+      if (typeof path === "string" && path.endsWith("progress.jsonl")) {
+        const beforeOpen = counters.beforeProgressOpen;
+        counters.beforeProgressOpen = undefined;
+        await beforeOpen?.();
+      }
+      return actual.open(...args);
+    },
+    rename: async (...args: Parameters<typeof actual.rename>) => {
+      const [, target] = args;
+      if (typeof target === "string" && target.endsWith("progress.jsonl")) {
+        counters.progressReplacements += 1;
+      }
+      return actual.rename(...args);
     },
   };
 });
@@ -82,6 +109,9 @@ const lineCount = async (path: string): Promise<number> =>
 const directories: Array<string> = [];
 
 afterEach(async () => {
+  counters.beforeProgressOpen = undefined;
+  counters.fullFileReads = 0;
+  counters.progressReplacements = 0;
   await Promise.all(
     directories
       .splice(0)
@@ -133,6 +163,45 @@ describe("the progress log", () => {
     expect(await nextProgressSequence({ store, sessionId: SESSION })).toBe(6);
   });
 
+  it("should finish a partial line after a cold read", async () => {
+    const { directory, store } = await temporaryStore(
+      "big-plan-progress-partial-",
+    );
+    directories.push(directory);
+    const first = JSON.stringify({
+      sessionId: SESSION,
+      seq: 1,
+      stepCode: "agent-note",
+      step: "First",
+      state: "live",
+    });
+    const second = JSON.stringify({
+      sessionId: SESSION,
+      seq: 2,
+      stepCode: "agent-note",
+      step: "Second",
+      state: "live",
+    });
+    const splitAt = Math.floor(second.length / 2);
+    await writeFile(
+      store.progressPath,
+      `${first}\n${second.slice(0, splitAt)}`,
+    );
+
+    expect(
+      (await readProgress({ store, sessionId: SESSION })).map(
+        (event) => event.step,
+      ),
+    ).toEqual(["First"]);
+    await appendFile(store.progressPath, `${second.slice(splitAt)}\n`);
+
+    expect(
+      (await readProgress({ store, sessionId: SESSION })).map(
+        (event) => event.step,
+      ),
+    ).toEqual(["First", "Second"]);
+  });
+
   it("should answer from the file after it is rewritten underneath", async () => {
     const { directory, store } = await temporaryStore(
       "big-plan-progress-swap-",
@@ -156,6 +225,34 @@ describe("the progress log", () => {
 
     const events = await readProgress({ store, sessionId: SESSION });
     expect(events.map((event) => event.step)).toEqual(["Only survivor"]);
+  });
+
+  it("should discard a cached tail when the file is replaced during its read", async () => {
+    const { directory, store } = await temporaryStore(
+      "big-plan-progress-race-",
+    );
+    directories.push(directory);
+    await seed({ store, count: 3 });
+    expect(await readProgress({ store, sessionId: SESSION })).toHaveLength(3);
+    await seed({ store, count: 1, from: 4 });
+    const replacementPath = `${store.progressPath}.replacement`;
+    counters.beforeProgressOpen = async () => {
+      await writeFile(
+        replacementPath,
+        `${JSON.stringify({
+          sessionId: SESSION,
+          seq: 9,
+          stepCode: "agent-note",
+          step: "Replacement",
+          state: "live",
+        })}\n`,
+      );
+      await rename(replacementPath, store.progressPath);
+    };
+
+    const events = await readProgress({ store, sessionId: SESSION });
+
+    expect(events.map((event) => event.step)).toEqual(["Replacement"]);
   });
 
   it("should compact the log beyond its bound and keep the readable tail", async () => {
@@ -207,5 +304,68 @@ describe("the progress log", () => {
       theirs,
     );
     expect(await lineCount(store.progressPath)).toBe(400);
+  });
+
+  it("should compact the same readable history when invalid values follow it", async () => {
+    const { directory, store } = await temporaryStore(
+      "big-plan-progress-invalid-",
+    );
+    directories.push(directory);
+    const values = Array.from({ length: 1_200 }, (_, index) => ({
+      sessionId: SESSION,
+      seq: index + 1,
+      stepCode: "agent-note",
+      step: `Step ${index + 1}`,
+      state: "live",
+    }));
+    const outOfOrder = Array.from({ length: 200 }, () => ({
+      sessionId: SESSION,
+      seq: 1,
+      stepCode: "agent-note",
+      step: "Stale",
+      state: "live",
+    }));
+    await writeFile(
+      store.progressPath,
+      [...values, ...outOfOrder]
+        .map((value) => `${JSON.stringify(value)}\n`)
+        .join(""),
+    );
+    const before = await readProgress({ store, sessionId: SESSION });
+
+    await expect(compactProgressLog({ store })).resolves.toBe(true);
+
+    expect(await readProgress({ store, sessionId: SESSION })).toEqual(before);
+    expect(await lineCount(store.progressPath)).toBe(200);
+  });
+
+  it("should not rewrite retained multi-session tails after every append", async () => {
+    const { directory, store } = await temporaryStore(
+      "big-plan-progress-repeated-",
+    );
+    directories.push(directory);
+    for (let index = 0; index < 6; index += 1) {
+      await seed({
+        store,
+        count: 200,
+        sessionId: index.toString(16).repeat(16),
+      });
+    }
+    counters.progressReplacements = 0;
+
+    for (let index = 0; index < 50; index += 1) {
+      await appendProgressEvent({
+        store,
+        event: {
+          sessionId: SESSION,
+          stepCode: "agent-note",
+          step: `Later ${index}`,
+          state: "live",
+        },
+      });
+    }
+
+    expect(counters.progressReplacements).toBe(0);
+    expect(await lineCount(store.progressPath)).toBe(1_250);
   });
 });

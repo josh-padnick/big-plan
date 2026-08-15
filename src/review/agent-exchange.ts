@@ -765,21 +765,19 @@ const readAcceptedAgentRequests = async ({
  * listing, so choosing the window costs one listing rather than the reads it
  * exists to avoid.
  *
- * `select` receives every accepted request, oldest first, and names the ones
- * whose responses are worth reading. It must include every request that could
- * still be outstanding, because a request whose response is never read is a
- * request that reads as unanswered.
+ * `retain` receives every accepted request, oldest first, and names the ones
+ * the caller will keep. Response files are opened only for retained requests.
  */
 const readCompleteAgentExchange = async ({
   store,
   sessionId,
   planId,
-  select,
+  retain,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly planId: string;
-  readonly select?: (input: {
+  readonly retain?: (input: {
     readonly requests: ReadonlyArray<AgentRequest>;
     readonly answeredRequestIds: ReadonlySet<string>;
   }) => ReadonlySet<string>;
@@ -790,19 +788,22 @@ const readCompleteAgentExchange = async ({
     planId,
   });
   const commentsById = commentsFromRequests(requests);
-  const requestById = new Map(
-    requests.map((request) => [request.requestId, request]),
-  );
   const answeredRequestIds = new Set(await listAgentResponseRequestIds(store));
-  const wanted =
-    select === undefined
-      ? new Set(requestById.keys())
-      : select({ requests, answeredRequestIds });
+  const retainedRequestIds =
+    retain === undefined
+      ? new Set(requests.map((request) => request.requestId))
+      : retain({ requests, answeredRequestIds });
+  const retainedRequests = requests.filter((request) =>
+    retainedRequestIds.has(request.requestId),
+  );
+  const requestById = new Map(
+    retainedRequests.map((request) => [request.requestId, request]),
+  );
   const responses: Array<AgentResponse> = [];
   const responseRequestIds = new Set<string>();
-  const readable = [...wanted].filter((requestId) =>
-    answeredRequestIds.has(requestId),
-  );
+  const readable = retainedRequests
+    .map((request) => request.requestId)
+    .filter((requestId) => answeredRequestIds.has(requestId));
   for (const value of await readAgentResponseValuesFor({
     store,
     requestIds: readable,
@@ -825,7 +826,7 @@ const readCompleteAgentExchange = async ({
     if (chronological !== 0) return chronological;
     return left.requestId.localeCompare(right.requestId);
   });
-  return { requests, responses };
+  return { requests: retainedRequests, responses };
 };
 
 /**
@@ -947,20 +948,24 @@ export const readAgentExchange = async ({
     store,
     sessionId,
     planId,
-    // Everything the window below keeps, decided before any response is read:
-    // every request that has no answer on disk, which is every request that
-    // could still be outstanding however old it is, plus the newest answered
-    // ones the snapshot retains. An answered request older than that window is
-    // dropped here exactly as it was dropped after being read.
-    select: ({ requests, answeredRequestIds }) => {
-      const unanswered = requests.filter(
-        (request) => !answeredRequestIds.has(request.requestId),
+    // Terminality for windowing comes from cancellation state and the response
+    // directory, before any response is read. Pending requests remain unbounded
+    // while only the newest terminal requests reach the snapshot.
+    retain: ({ requests, answeredRequestIds }) => {
+      const pending = requests.filter(
+        (request) =>
+          request.canceledAt === undefined &&
+          !answeredRequestIds.has(request.requestId),
       );
-      const answered = requests
-        .filter((request) => answeredRequestIds.has(request.requestId))
+      const terminal = requests
+        .filter(
+          (request) =>
+            request.canceledAt !== undefined ||
+            answeredRequestIds.has(request.requestId),
+        )
         .slice(-EXCHANGE_LIMIT);
       return new Set(
-        [...unanswered, ...answered].map((request) => request.requestId),
+        [...pending, ...terminal].map((request) => request.requestId),
       );
     },
   });
@@ -1005,7 +1010,7 @@ export const readAgentCommentHistory = async ({
     planId,
     // This history answers questions about one comment, so the responses of
     // every other comment's requests are read for nothing.
-    select: ({ requests }) =>
+    retain: ({ requests }) =>
       new Set(requests.filter(forComment).map((request) => request.requestId)),
   });
   const requests = complete.requests.filter(forComment);
