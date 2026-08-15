@@ -33,6 +33,13 @@ const readEffectiveHooksPath = (repoRoot) => {
   }
 };
 
+const readDefaultHooksDirectory = (repoRoot) =>
+  execFileSync(
+    "git",
+    ["rev-parse", "--path-format=absolute", "--git-path", "hooks"],
+    { cwd: repoRoot, encoding: "utf8" },
+  ).trim();
+
 const nextBackupName = (hooksDirectory, hookName) => {
   const baseName = `${hookName}.before-big-plan`;
   let candidate = baseName;
@@ -144,9 +151,19 @@ export const installGitHooks = (repoRoot) => {
     { cwd: repoRoot, encoding: "utf8" },
   ).trim();
   const effectiveHooksPath = readEffectiveHooksPath(repoRoot);
+  const defaultHooksDirectory = effectiveHooksPath
+    ? null
+    : readDefaultHooksDirectory(repoRoot);
+  const hasDefaultHooks =
+    defaultHooksDirectory !== null &&
+    hookNames.some((hookName) =>
+      existsSync(join(defaultHooksDirectory, hookName)),
+    );
   const effectiveHooksDirectory = effectiveHooksPath
     ? resolve(repoRoot, effectiveHooksPath)
-    : committedHooksDirectory;
+    : hasDefaultHooks
+      ? defaultHooksDirectory
+      : committedHooksDirectory;
 
   if (effectiveHooksDirectory === committedHooksDirectory) {
     execFileSync("git", ["config", "core.hooksPath", ".githooks"], {
@@ -163,7 +180,7 @@ export const installGitHooks = (repoRoot) => {
   for (const hookName of hookNames) {
     deployCompositeHook(effectiveHooksDirectory, hookName, commonDirectory);
   }
-  return effectiveHooksPath;
+  return effectiveHooksPath ?? effectiveHooksDirectory;
 };
 
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);

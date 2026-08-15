@@ -132,6 +132,54 @@ test("the package prepare lifecycle activates the committed hooks", () => {
   }
 });
 
+test("should compose default hooks when core.hooksPath is unset", () => {
+  const dir = makeScratchRepo((scratchRepo) => {
+    const hooksDirectory = git(scratchRepo, [
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-path",
+      "hooks",
+    ]).trim();
+    for (const hookName of ["prepare-commit-msg", "commit-msg"]) {
+      const hookPath = join(hooksDirectory, hookName);
+      const validation =
+        hookName === "commit-msg"
+          ? `grep -q '^Signed-off-by:' "$1"
+grep -Fq "No commit body was supplied" "$1"
+`
+          : "";
+      writeFileSync(
+        hookPath,
+        `#!/bin/sh
+set -eu
+${validation}printf x >> default-${hookName}-ran
+`,
+        { mode: 0o755 },
+      );
+    }
+  });
+
+  try {
+    git(dir, ["commit", "--allow-empty", "-m", "default hooks commit"]);
+    const message = commitMessage(dir);
+    assert.ok(message.includes(GENERATED_BODY_NOTE));
+    assert.match(
+      message,
+      /Signed-off-by: Scratch Committer <scratch@example\.com>/,
+    );
+    assert.equal(
+      readFileSync(join(dir, "default-prepare-commit-msg-ran"), "utf8"),
+      "x",
+    );
+    assert.equal(
+      readFileSync(join(dir, "default-commit-msg-ran"), "utf8"),
+      "x",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("an editor-authored subject is normalized after the editor closes", () => {
   const dir = makeScratchRepo();
   try {
