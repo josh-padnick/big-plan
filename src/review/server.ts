@@ -23,6 +23,13 @@
 //    the plan directory, and neither path can contain a dot-prefixed segment.
 //    The opened file must match the accepted path, must be a regular file, and
 //    must stay inside the image size limit.
+//  - One local filesystem limit is accepted. Node does not provide a file-open
+//    operation relative to an already-open directory handle. An attacker who
+//    can write in the reviewer's plan directory can replace an ancestor
+//    directory between path validation and file open. The attacker can then
+//    make the plan-picture route open a file outside the plan directory. This
+//    limit is accepted because the attacker already has access to the
+//    reviewer's local files, and this server listens only on loopback.
 //  - The document is always rendered in-process from the authoritative MDX. A
 //    pre-existing .html is never served, because arbitrary HTML is arbitrary
 //    script running on this runtime's own origin.

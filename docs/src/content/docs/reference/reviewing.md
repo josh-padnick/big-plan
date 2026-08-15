@@ -133,17 +133,25 @@ fuzzy matching or silently attach it to nearby prose.
 
 ## Trust boundaries
 
-Loopback is not an authentication boundary. The runtime therefore:
+Loopback is not an authentication boundary.
+The runtime binds only `127.0.0.1` on an ephemeral port and exposes a fixed route-and-method allow-list.
+It checks the `Host` header on every request and refuses a value that is not its own address.
 
-- binds only `127.0.0.1` on an ephemeral port;
-- requires a per-session token in a request header;
-- refuses an unexpected `Host`, foreign `Origin`, or cross-site request;
-- exposes a fixed route-and-method allow-list;
-- renders the selected MDX itself instead of serving arbitrary HTML;
-- validates every agent response against its pending request and the computed
-  snapshot diff; and
-- keeps requests, responses, heartbeats, and source snapshots in the
-  owner-only ignored review store.
+Three types of read-only GET request do not use the per-session token, `Origin`, or `Sec-Fetch-Site` checks:
+
+- the document route `/`, which renders the selected MDX instead of serving arbitrary HTML;
+- plan-picture requests, which accept only supported picture file types; and
+- stored review-image requests at `/review-images/<digest>`, which use a validated content digest.
+
+For a plan-picture request, both the requested path and its real path must stay in the plan's own directory.
+Neither path can contain a dot-prefixed segment.
+The opened target must be a regular file, must match the accepted path, and must stay inside the image size limit.
+For a stored review-image request, the metadata and picture must be regular files and must stay inside their explicit size limits.
+
+All API routes require the per-session token in a request header.
+They refuse a foreign `Origin` or a cross-site request.
+The runtime also validates every agent response against its pending request and the computed snapshot diff.
+It keeps requests, responses, heartbeats, and source snapshots in the owner-only ignored review store.
 
 Reviewer and plan text remain plain, untrusted data in the browser and in the
 agent brief. Sending a package grants only authority to consider the notes
