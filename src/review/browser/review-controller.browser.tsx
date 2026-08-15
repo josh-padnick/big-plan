@@ -4393,36 +4393,43 @@ export const ReviewController = () => {
     if (identity === null) return;
     let current = true;
     let pending = false;
+    let latestPollSequence = 0;
     const refresh = async () => {
       if (pending) return;
       pending = true;
-      // Capture before the requests so a slow sibling cannot move the observed
-      // contact loss past a deadline that was still future when polling began.
+      const pollSequence = ++latestPollSequence;
+      // Stamp before requests so aggregate latency cannot move contact loss past
+      // a remembered deadline. Commit only the latest session response
+      // independently as soon as it arrives; aggregate health still waits for all.
       const pollStartedAtMs = Date.now();
       try {
+        const sessionPromise = requestJson({
+          path: "/api/session",
+          identity,
+        }).then((value) => {
+          const session = parseRuntimeSession({
+            value,
+            sessionId: identity.sessionId,
+          });
+          if (session === null) {
+            throw new Error(
+              "This page is not connected to its review runtime.",
+            );
+          }
+          if (current && pollSequence === latestPollSequence) {
+            setRuntimeSession(session);
+          }
+          return session;
+        });
         const [sessionResult, agentResult, progressResult] =
           await Promise.allSettled([
-            requestJson({ path: "/api/session", identity }),
+            sessionPromise,
             requestJson({ path: "/api/agent", identity }),
             requestJson({ path: "/api/progress", identity }),
           ]);
         if (current) {
           const failures: Array<unknown> = [];
-          // Commit a valid session independently so a sibling timeout cannot
-          // leave the page diagnosing from an older deadline or replacement URL.
-          if (sessionResult.status === "fulfilled") {
-            const session = parseRuntimeSession({
-              value: sessionResult.value,
-              sessionId: identity.sessionId,
-            });
-            if (session === null) {
-              failures.push(
-                new Error("This page is not connected to its review runtime."),
-              );
-            } else {
-              setRuntimeSession(session);
-            }
-          } else {
+          if (sessionResult.status === "rejected") {
             failures.push(sessionResult.reason);
           }
           const now = Date.now();

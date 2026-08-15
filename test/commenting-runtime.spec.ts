@@ -256,7 +256,11 @@ test("should preserve deadline recovery when a sibling poll fails", async ({
       response,
       json: {
         ...value,
-        expiresAtMs: 0,
+        expiresAtMs:
+          route.request().headers()["x-big-plan-test-poll-phase"] ===
+          "fresh-session"
+            ? Date.now() + 60_000
+            : 0,
         latestReviewUrl,
       },
     });
@@ -269,14 +273,39 @@ test("should preserve deadline recovery when a sibling poll fails", async ({
     .fill("Keep this browser-only input safe.");
   await page.evaluate(() => {
     const fetchFromRuntime = window.fetch.bind(window);
+    let shouldHangAgentPoll = false;
+    let releaseAgentPoll = (): void => undefined;
+    document.addEventListener("bigplan-test:hang-agent-poll", () => {
+      shouldHangAgentPoll = true;
+    });
+    document.addEventListener("bigplan-test:release-agent-poll", () => {
+      shouldHangAgentPoll = false;
+      releaseAgentPoll();
+    });
     window.fetch = (input, init) => {
       const url = new URL(
         input instanceof Request ? input.url : input,
         window.location.href,
       );
-      return url.pathname === "/api/agent"
-        ? Promise.reject(new TypeError("Failed to fetch"))
-        : fetchFromRuntime(input, init);
+      if (!shouldHangAgentPoll) {
+        return url.pathname === "/api/agent"
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : fetchFromRuntime(input, init);
+      }
+      const headers = new Headers(
+        init?.headers ??
+          (input instanceof Request ? input.headers : undefined),
+      );
+      headers.set("x-big-plan-test-poll-phase", "fresh-session");
+      const phasedInit = { ...init, headers };
+      if (url.pathname !== "/api/agent") {
+        return fetchFromRuntime(input, phasedInit);
+      }
+      return new Promise<Response>((resolve, reject) => {
+        releaseAgentPoll = () => {
+          void fetchFromRuntime(input, phasedInit).then(resolve, reject);
+        };
+      });
     };
   });
 
@@ -299,6 +328,20 @@ test("should preserve deadline recovery when a sibling poll fails", async ({
   await expect(banner).not.toContainText(
     /ended|expired|closed|timed out|may|might|possibly|likely/u,
   );
+
+  await page.evaluate(() => {
+    document.dispatchEvent(new CustomEvent("bigplan-test:hang-agent-poll"));
+  });
+  await expect(banner).toContainText(
+    "This tab lost contact with the local review server. Refresh to try reconnecting.",
+    { timeout: 4_000 },
+  );
+  await expect(banner).not.toContainText(
+    "The deadline this tab last knew has since passed.",
+  );
+  await page.evaluate(() => {
+    document.dispatchEvent(new CustomEvent("bigplan-test:release-agent-poll"));
+  });
 });
 
 test("should expire a held connected snapshot when the reviewer returns", async ({
