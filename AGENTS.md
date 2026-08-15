@@ -121,7 +121,7 @@ The exact dependency allow-list and completeness guard live in `eslint.config.mj
 | `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                                                       |
 | `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                                                        |
 | `test/`                  | Critical browser journeys over complete rendered documents. Keep pure behavior in colocated unit tests.                                                                                                                                                                 |
-| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. It does not own internal source-placement rules.                                                                                                         |
+| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. The subsystem definitions and boundary rules live in `docs/subsystems.md`; otherwise, docs do not own internal source-placement rules.                   |
 
 Use these placement tests:
 
@@ -133,6 +133,21 @@ Use these placement tests:
 - Local comments, agent exchange, snapshot comparison, and review-only browser behavior belong in `src/review/`; shared browser-server contracts stay framework-free.
 - A pure rule gets a colocated unit test; only a critical integrated reading journey gets a Playwright spec in `test/`.
 - A public authoring change updates its validated example and the appropriate human or agent-facing product documentation.
+
+## Subsystems
+
+Big Plan's product work is partitioned into seven subsystems, grounded in the codebase's module boundaries rather than issue-tracker categories.
+Full definitions, code anchors, and boundary rules live in [docs/subsystems.md](docs/subsystems.md).
+
+- **Change Engine** - the change set (baseline, current, acceptance, provenance, and its optional conversation) that a diff-and-accept review loop operates on.
+- **Session Reliability** - keeping the browser, server, and agent connected and honest about liveness, with no message lost or double-processed.
+- **Commenting Surface** - the browser chrome for reading and writing comments.
+- **Element-Level Commenting** - stable comment addresses for elements inside a component, such as one wireframe screen or diagram node.
+- **Renderer Fidelity** - faithful, comfortable rendering of authored content and the affordances every container gets.
+- **Chat Modality** - how much the agent says, and cheap on-demand explanations outside the comment flow.
+- **Authoring Guidance** - what agents are taught to author, and keeping its citations from breaking.
+
+State which subsystem new work belongs to before starting it; when work spans more than one, say so explicitly.
 
 ## Pre-release compatibility
 
@@ -162,7 +177,8 @@ Route by the kind of fact:
 - A repeatable whole-task workflow becomes a skill only after the workflow has repeated and proven easy to get wrong.
 - The installable Big Plan agent skill shell is authored at `assets/skill/SKILL.md`, embedded by `scripts/gen-skill.mjs`, and delivered by `big-plan skill`; live authoring rules stay in `big-plan guidance` (see `docs/src/content/docs/for-agents/use-the-skill.md`).
 - Future work, sequencing, and delivery status live in temporary planning artifacts or issue tracking.
-- Product orientation, cross-directory architecture, repository-wide vocabulary, and cross-cutting conventions with no deeper owner live in this guide.
+- The seven-subsystem partition, including its code anchors and boundary rules, lives in [docs/subsystems.md](docs/subsystems.md).
+- Product orientation, cross-directory architecture outside the subsystem partition, repository-wide vocabulary, and cross-cutting conventions with no deeper owner live in this guide.
 - The gold-standard plan-quality testing workflow (context-free generation, co-refine, backport, re-verify) lives in this guide under [Gold-standard plan-quality testing](#gold-standard-plan-quality-testing).
 
 ### README principles
