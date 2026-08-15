@@ -1,6 +1,5 @@
-// Owns how one review's idle lifetime is spoken. The runtime's stop reason,
-// the command's help, and the browser's ended-session banner all name the same
-// duration, so they share this one phrasing instead of each formatting it.
+// Owns how one review's idle lifetime is spoken. The runtime's stop reason and
+// the review command's help share this phrasing instead of each formatting it.
 
 /**
  * Names an idle lifetime the way a reader should hear it. Whole minutes read
