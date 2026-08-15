@@ -7,6 +7,7 @@ import {
   agentProjectionForReviewPoll,
   INITIAL_REVIEW_POLL_HEALTH,
   reviewPollIsOffline,
+  reviewRuntimeAcceptsWrites,
   reviewRuntimeCanWrite,
   reviewRuntimeIsDown,
   transitionReviewPollHealth,
@@ -136,5 +137,36 @@ describe("review poll health", () => {
     expect(reviewPollIsOffline(health)).toBe(false);
     expect(reviewRuntimeIsDown(health)).toBe(false);
     expect(reviewRuntimeCanWrite(health)).toBe(true);
+  });
+});
+
+describe("review runtime write acceptance", () => {
+  it("should accept writes while the runtime is reachable and reports no stall", () => {
+    expect(
+      reviewRuntimeAcceptsWrites({
+        health: INITIAL_REVIEW_POLL_HEALTH,
+        writesStalledMs: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  it("should refuse writes to a reachable runtime that reports a stall", () => {
+    // The whole point: every polled read still succeeds here, so reachability
+    // alone would keep the page sending changes that cannot be saved.
+    const healthy = INITIAL_REVIEW_POLL_HEALTH;
+    expect(reviewRuntimeCanWrite(healthy)).toBe(true);
+    expect(
+      reviewRuntimeAcceptsWrites({ health: healthy, writesStalledMs: 30_001 }),
+    ).toBe(false);
+  });
+
+  it("should refuse writes to an unreachable runtime whatever it last reported", () => {
+    const down = transition(["runtime-unavailable", "runtime-unavailable"]);
+
+    for (const writesStalledMs of [undefined, 30_001]) {
+      expect(
+        reviewRuntimeAcceptsWrites({ health: down, writesStalledMs }),
+      ).toBe(false);
+    }
   });
 });

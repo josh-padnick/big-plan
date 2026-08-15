@@ -114,6 +114,7 @@ import {
   agentProjectionForReviewPoll,
   INITIAL_REVIEW_POLL_HEALTH,
   reviewPollIsOffline,
+  reviewRuntimeAcceptsWrites,
   reviewRuntimeCanWrite,
   reviewRuntimeIsDown,
   transitionReviewPollHealth,
@@ -3787,14 +3788,22 @@ export const ReviewController = () => {
   });
   const agentConnected = agentConnection.connected;
   const runtimeCanWrite = reviewRuntimeCanWrite(pollHealth);
+  // Reachability and acceptance are different questions once a runtime can
+  // stall: every write path asks this one, so the page stops sending changes
+  // the runtime has already reported it will refuse.
+  const runtimeAcceptsWrites = reviewRuntimeAcceptsWrites({
+    health: pollHealth,
+    writesStalledMs: runtimeSession?.writesStalledMs,
+  });
   const canSendToAgent =
     identity !== null &&
     threadRuntime === "online" &&
-    runtimeCanWrite &&
+    runtimeAcceptsWrites &&
     runtimeSession?.authoritative !== false;
   const commentSubmitAvailability = deriveReviewCommentSubmitAvailability({
     canSubmit: identity === null || canSendToAgent,
     runtimeCanWrite,
+    writesStalled: !runtimeAcceptsWrites && runtimeCanWrite,
   });
   const unresolvedDrafts = useMemo(
     () => drafts.filter((comment) => !resolvedCommentIds.has(comment.id)),
@@ -4243,7 +4252,9 @@ export const ReviewController = () => {
       recovery: { drafts, resolvedCommentIds },
       baseFingerprint: recoveryBaseFingerprint,
     });
-    if (!runtimeCanWrite) return;
+    // The recovery snapshot above is written first and unconditionally, so a
+    // runtime that cannot take this change still cannot lose it.
+    if (!runtimeAcceptsWrites) return;
     void serializeRuntimeWrite(async () => {
       const runtimeSnapshot = parseSnapshot(
         await requestJson({ path: "/api/drafts", identity }),
@@ -4329,7 +4340,7 @@ export const ReviewController = () => {
     pollHealth.state,
     persistedReviewState,
     resolvedCommentIds,
-    runtimeCanWrite,
+    runtimeAcceptsWrites,
     runtimeSession?.authoritative,
     serializeRuntimeWrite,
   ]);
@@ -4527,6 +4538,7 @@ export const ReviewController = () => {
         const availability = deriveReviewCommentSubmitAvailability({
           canSubmit: false,
           runtimeCanWrite,
+          writesStalled: !runtimeAcceptsWrites && runtimeCanWrite,
         });
         if (availability.state === "unavailable") {
           setStatus(availability.status);
@@ -4565,7 +4577,14 @@ export const ReviewController = () => {
         setIsSending(false);
       }
     },
-    [canSendToAgent, identity, isOpen, runtimeCanWrite, serializeRuntimeWrite],
+    [
+      canSendToAgent,
+      identity,
+      isOpen,
+      runtimeAcceptsWrites,
+      runtimeCanWrite,
+      serializeRuntimeWrite,
+    ],
   );
 
   useEffect(() => {

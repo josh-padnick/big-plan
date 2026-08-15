@@ -40,4 +40,39 @@ describe("review comment submit availability", () => {
       }),
     ).toEqual({ state: "available" });
   });
+  it("should tell a reviewer to restart when the runtime stopped accepting changes", () => {
+    const availability = deriveReviewCommentSubmitAvailability({
+      canSubmit: false,
+      runtimeCanWrite: true,
+      writesStalled: true,
+    });
+
+    expect(availability).toEqual({
+      state: "unavailable",
+      reason: "review-runtime",
+      label: "Review session stalled",
+      status:
+        "The review session has stopped accepting changes. Your comment is saved; restart the review runtime to send it.",
+    });
+  });
+
+  it("should report an unreachable runtime as offline rather than stalled", () => {
+    const availability = deriveReviewCommentSubmitAvailability({
+      canSubmit: false,
+      runtimeCanWrite: false,
+      writesStalled: true,
+    });
+
+    expect(availability).toMatchObject({ label: "Review session offline" });
+  });
+
+  it("should stay available when a stalled runtime can still submit", () => {
+    expect(
+      deriveReviewCommentSubmitAvailability({
+        canSubmit: true,
+        runtimeCanWrite: true,
+        writesStalled: true,
+      }),
+    ).toEqual({ state: "available" });
+  });
 });
