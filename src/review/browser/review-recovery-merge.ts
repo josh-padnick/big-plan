@@ -33,14 +33,12 @@ export type ReviewRecoveryBase = {
 export type ReviewRecoveryConflict =
   | {
       readonly kind: "draft";
-      readonly origin: "runtime" | "recovery";
       readonly commentId: string;
       readonly localBody: string | null;
       readonly runtimeBody: string | null;
     }
   | {
       readonly kind: "sent";
-      readonly origin: "runtime" | "recovery";
       readonly commentId: string;
       readonly localBody: string;
       readonly runtimeBody: string;
@@ -179,7 +177,6 @@ export const mergeLiveReviewRecovery = ({
       drafts.push(localDraft);
       conflicts.push({
         kind: "sent",
-        origin: "runtime",
         commentId: id,
         localBody: localDraft.body,
         runtimeBody: sentBody,
@@ -205,7 +202,6 @@ export const mergeLiveReviewRecovery = ({
       drafts.push(localDraft);
       conflicts.push({
         kind: "draft",
-        origin: "runtime",
         commentId: id,
         localBody: localDraft.body,
         runtimeBody: runtimeDraft.body,
@@ -223,7 +219,6 @@ export const mergeLiveReviewRecovery = ({
       drafts.push(localDraft);
       conflicts.push({
         kind: "draft",
-        origin: "runtime",
         commentId: id,
         localBody: localDraft.body,
         runtimeBody: null,
@@ -238,7 +233,6 @@ export const mergeLiveReviewRecovery = ({
     if (runtimeDraft.body === baseBody) continue;
     conflicts.push({
       kind: "draft",
-      origin: "runtime",
       commentId: id,
       localBody: null,
       runtimeBody: runtimeDraft.body,
@@ -257,103 +251,49 @@ export const mergeLiveReviewRecovery = ({
   };
 };
 
-const recoveryRuntimeForConflicts = ({
-  state,
-  conflicts,
-  stored,
-  incoming,
+/** Offers unsynchronized work adopted from an orphaned tab before applying it. */
+export const adoptLiveReviewRecovery = ({
+  recovery,
+  runtime,
+  sent = [],
 }: {
-  readonly state: ReviewRecoveryState;
-  readonly conflicts: ReadonlyArray<ReviewRecoveryConflict>;
-  readonly stored: LiveReviewRecovery;
-  readonly incoming: LiveReviewRecovery;
-}): ReviewRecoveryState => {
-  let drafts = [...state.drafts];
-  const candidates = [
-    stored.reconciliation.runtime,
-    incoming.reconciliation.runtime,
-    stored,
-    incoming,
-  ].filter((candidate): candidate is ReviewRecoveryState => candidate !== null);
-  for (const conflict of conflicts) {
-    if (conflict.runtimeBody === null) {
-      drafts = drafts.filter((draft) => draft.id !== conflict.commentId);
-      continue;
-    }
-    const runtimeDraft = candidates
-      .flatMap((candidate) => candidate.drafts)
-      .find(
-        (draft) =>
-          draft.id === conflict.commentId &&
-          draft.body === conflict.runtimeBody,
-      );
-    const localDraft = drafts.find((draft) => draft.id === conflict.commentId);
-    const replacement =
-      runtimeDraft ??
-      (localDraft === undefined
-        ? undefined
-        : { ...localDraft, body: conflict.runtimeBody });
-    if (replacement === undefined) continue;
-    drafts = drafts.some((draft) => draft.id === conflict.commentId)
-      ? drafts.map((draft) =>
-          draft.id === conflict.commentId ? replacement : draft,
-        )
-      : [...drafts, replacement];
-  }
-  return { drafts, resolvedCommentIds: state.resolvedCommentIds };
-};
-
-export const mergeLiveReviewRecoverySnapshots = ({
-  stored,
-  incoming,
-}: {
-  readonly stored: LiveReviewRecovery;
-  readonly incoming: LiveReviewRecovery;
-}): LiveReviewRecovery => {
+  readonly recovery: LiveReviewRecovery;
+  readonly runtime: ReviewRecoveryState;
+  readonly sent?: ReadonlyArray<ReviewComment>;
+}): ReviewRecoveryMerge => {
   const merged = mergeLiveReviewRecovery({
-    base: stored.reconciliation.base,
-    local: incoming,
-    runtime: stored,
+    base: recovery.reconciliation.base,
+    local: recovery,
+    runtime,
+    sent,
   });
-  const conflictsById = new Map<string, ReviewRecoveryConflict>();
-  for (const conflict of stored.reconciliation.conflicts) {
-    conflictsById.set(conflict.commentId, conflict);
-  }
-  for (const conflict of incoming.reconciliation.conflicts) {
-    if (!conflictsById.has(conflict.commentId)) {
-      conflictsById.set(conflict.commentId, conflict);
-    }
-  }
-  for (const conflict of merged.conflicts) {
-    conflictsById.set(conflict.commentId, {
-      ...conflict,
-      origin: "recovery",
+  const conflicts = new Map(
+    merged.conflicts.map((conflict) => [conflict.commentId, conflict]),
+  );
+  const localDrafts = new Map(
+    recovery.drafts.map((draft) => [draft.id, draft]),
+  );
+  const runtimeDrafts = new Map(
+    runtime.drafts.map((draft) => [draft.id, draft]),
+  );
+  const sentIds = new Set(sent.map((comment) => comment.id));
+  for (const commentId of new Set([
+    ...recovery.reconciliation.base.draftBodies.keys(),
+    ...localDrafts.keys(),
+  ])) {
+    if (conflicts.has(commentId) || sentIds.has(commentId)) continue;
+    const baseBody = recovery.reconciliation.base.draftBodies.get(commentId);
+    const localBody = localDrafts.get(commentId)?.body ?? null;
+    const runtimeBody = runtimeDrafts.get(commentId)?.body ?? null;
+    if (localBody === (baseBody ?? null) || localBody === runtimeBody) continue;
+    conflicts.set(commentId, {
+      kind: "draft",
+      commentId,
+      localBody,
+      runtimeBody,
     });
   }
-  const localBodies = new Map(
-    merged.state.drafts.map((draft) => [draft.id, draft.body]),
-  );
-  const conflicts = [...conflictsById.values()].map((conflict) =>
-    conflict.kind === "draft"
-      ? { ...conflict, localBody: localBodies.get(conflict.commentId) ?? null }
-      : conflict,
-  );
-  return {
-    ...merged.state,
-    reconciliation: {
-      base: stored.reconciliation.base,
-      conflicts,
-      runtime:
-        conflicts.length === 0
-          ? null
-          : recoveryRuntimeForConflicts({
-              state: merged.state,
-              conflicts,
-              stored,
-              incoming,
-            }),
-    },
-  };
+  return { state: merged.state, conflicts: [...conflicts.values()] };
 };
 
 /** Applies one answered conflict, keeping the side the reviewer chose. */
@@ -430,21 +370,12 @@ export const reviewRecoveryBaseAfterConflictAnswers = ({
   readonly answeredConflicts: ReadonlyArray<ReviewRecoveryConflict>;
   readonly remainingConflicts: ReadonlyArray<ReviewRecoveryConflict>;
 }): ReviewRecoveryBase => {
-  const authoritativeAnswers = answeredConflicts.filter(
-    (conflict) => conflict.origin === "runtime",
-  );
-  if (authoritativeAnswers.length === 0) return base;
-  if (
-    remainingConflicts.length === 0 &&
-    authoritativeAnswers.length === answeredConflicts.length
-  ) {
-    return reviewRecoveryBase(runtime);
-  }
+  if (remainingConflicts.length === 0) return reviewRecoveryBase(runtime);
   const draftBodies = new Map(base.draftBodies);
   const runtimeDrafts = new Map(
     runtime.drafts.map((draft) => [draft.id, draft.body]),
   );
-  for (const conflict of authoritativeAnswers) {
+  for (const conflict of answeredConflicts) {
     const runtimeBody = runtimeDrafts.get(conflict.commentId);
     if (runtimeBody === undefined) draftBodies.delete(conflict.commentId);
     else draftBodies.set(conflict.commentId, runtimeBody);

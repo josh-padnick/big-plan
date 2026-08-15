@@ -164,7 +164,7 @@ test("should keep unsent comment text separate across two tabs", async ({
     const expandThread = thread.getByRole("button", {
       name: `Expand queued comment: ${sentBody}`,
     });
-    if (await expandThread.isVisible()) await expandThread.click();
+    await expandThread.click();
     await thread.getByPlaceholder("Reply to the agent…").fill(replyBody);
 
     const slide = targetPage.locator("[data-slide]").first();
@@ -214,7 +214,7 @@ test("should keep unsent comment text separate across two tabs", async ({
   const duplicatePagePromise = context.waitForEvent("page");
   await page.evaluate((url) => window.open(url, "_blank"), reviewRuntimeUrl);
   const duplicatePage = await duplicatePagePromise;
-  await duplicatePage.waitForLoadState();
+  await duplicatePage.waitForURL(reviewRuntimeUrl);
   const duplicateComposer = "Keep the duplicated tab's composer text.";
   const duplicateReply = "Keep the duplicated tab's reply text.";
   await typeAndReload({
@@ -261,6 +261,7 @@ test("should retain detached selection text until the reviewer discards it", asy
     origin: new URL(reviewRuntimeUrl).origin,
   });
   await page.goto(reviewRuntimeUrl);
+  const recoveryKey = await ownedLiveRecoveryKey(page);
   const recovery = await page
     .locator("[data-block-kind='paragraph']")
     .first()
@@ -268,7 +269,6 @@ test("should retain detached selection text until the reviewer discards it", asy
       const root = document.documentElement;
       const text = block.textContent ?? "";
       return {
-        key: `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}:composer`,
         snapshot: (() => {
           const bootstrap: unknown = JSON.parse(
             root.getAttribute("data-review-bootstrap") ?? "{}",
@@ -296,10 +296,20 @@ test("should retain detached selection text until the reviewer discards it", asy
   const body = "Do not attach this selection comment to only half its range.";
   await page.evaluate(
     ({ key, snapshot, target, recoveredBody }) => {
-      window.sessionStorage.setItem(
+      const ownerId = key.slice(key.lastIndexOf(":") + 1);
+      window.localStorage.setItem(
         key,
         JSON.stringify({
-          version: 1,
+          version: 7,
+          ownerId,
+          updatedAtMs: Date.now(),
+          drafts: [],
+          resolvedCommentIds: [],
+          reconciliation: {
+            base: { draftBodies: {}, resolvedCommentIds: [] },
+            conflicts: [],
+            runtime: null,
+          },
           composer: {
             comment: {
               target,
@@ -311,7 +321,7 @@ test("should retain detached selection text until the reviewer discards it", asy
         }),
       );
     },
-    { ...recovery, recoveredBody: body },
+    { ...recovery, key: recoveryKey, recoveredBody: body },
   );
 
   await page.reload();
@@ -344,7 +354,7 @@ test("should retain detached selection text until the reviewer discards it", asy
   await expect
     .poll(() =>
       page.evaluate((key) => {
-        const raw = window.sessionStorage.getItem(key);
+        const raw = window.localStorage.getItem(key);
         if (raw === null) return null;
         const parsed: unknown = JSON.parse(raw);
         return typeof parsed === "object" &&
@@ -359,7 +369,7 @@ test("should retain detached selection text until the reviewer discards it", asy
           typeof parsed.composer.comment.body === "string"
           ? parsed.composer.comment.body
           : null;
-      }, recovery.key),
+      }, recoveryKey),
     )
     .toBe(body);
 
@@ -367,7 +377,7 @@ test("should retain detached selection text until the reviewer discards it", asy
   await expect
     .poll(() =>
       page.evaluate((key) => {
-        const raw = window.sessionStorage.getItem(key);
+        const raw = window.localStorage.getItem(key);
         if (raw === null) return null;
         const parsed: unknown = JSON.parse(raw);
         return typeof parsed === "object" &&
@@ -378,7 +388,7 @@ test("should retain detached selection text until the reviewer discards it", asy
           "comment" in parsed.composer
           ? parsed.composer.comment
           : null;
-      }, recovery.key),
+      }, recoveryKey),
     )
     .toBeNull();
 });
@@ -552,6 +562,17 @@ const reviewToken = async (page: Page): Promise<string> => {
   return token;
 };
 
+const ownedLiveRecoveryKey = async (page: Page): Promise<string> => {
+  const readKey = () =>
+    page.locator("html").evaluate((root) => {
+      const prefix = `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}`;
+      const ownerId = window.sessionStorage.getItem(`${prefix}:owner`);
+      return ownerId === null ? "" : `${prefix}:tab:${ownerId}`;
+    });
+  await expect.poll(readKey).not.toBe("");
+  return readKey();
+};
+
 test.describe("a drafts write prepared against content the store moved past", () => {
   // The refused write is the mechanism under test, and the browser reports a
   // refusal as a failed resource load.
@@ -559,7 +580,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
     allowedConsoleErrors: [/Failed to load resource:.*(?:400|409|503)/u],
   });
 
-  test("should preserve another tab's offline draft during composer recovery", async ({
+  test("should keep each tab's recovery record isolated", async ({
     context,
     page,
     reviewRuntimeUrl,
@@ -578,11 +599,13 @@ test.describe("a drafts write prepared against content the store moved past", ()
 
     const secondPage = await context.newPage();
     await secondPage.goto(reviewRuntimeUrl);
-    const recoveryKeys = await page.locator("html").evaluate((root) => {
-      const shared = `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}`;
-      return { shared, composer: `${shared}:composer` };
-    });
-    const storedRecoveryBodies = (targetPage: Page): Promise<string[]> =>
+    const firstRecoveryKey = await ownedLiveRecoveryKey(page);
+    const secondRecoveryKey = await ownedLiveRecoveryKey(secondPage);
+    expect(secondRecoveryKey).not.toBe(firstRecoveryKey);
+    const storedRecoveryBodies = (
+      targetPage: Page,
+      key: string,
+    ): Promise<string[]> =>
       targetPage.evaluate((key) => {
         const raw = window.localStorage.getItem(key);
         if (raw === null) return [];
@@ -600,7 +623,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
                 : [],
             )
           : [];
-      }, recoveryKeys.shared);
+      }, key);
     const blockRuntimeFetch = (): void => {
       const runtimeFetch = window.fetch.bind(window);
       window.fetch = (input, init) => {
@@ -625,7 +648,9 @@ test.describe("a drafts write prepared against content the store moved past", ()
     const offlineBody = "Keep this edit owned only by the offline tab.";
     await rail.getByLabel("Edit comment").fill(offlineBody);
     await rail.getByRole("button", { name: "Save" }).click();
-    await expect.poll(() => storedRecoveryBodies(page)).toEqual([offlineBody]);
+    await expect
+      .poll(() => storedRecoveryBodies(page, firstRecoveryKey))
+      .toEqual([offlineBody]);
 
     const slide = secondPage.locator("[data-slide]").first();
     await slide.hover();
@@ -638,8 +663,8 @@ test.describe("a drafts write prepared against content the store moved past", ()
     await expect
       .poll(() =>
         secondPage.evaluate(
-          (key) => window.sessionStorage.getItem(key),
-          recoveryKeys.composer,
+          (key) => window.localStorage.getItem(key),
+          secondRecoveryKey,
         ),
       )
       .toContain(composerBody);
@@ -647,22 +672,8 @@ test.describe("a drafts write prepared against content the store moved past", ()
       .getByRole("dialog", { name: /Comment on/u })
       .getByRole("button", { name: "Cancel" })
       .click();
-    await secondPage
-      .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
-      .click();
-    const secondRail = secondPage.getByRole("complementary", {
-      name: "Feedback",
-    });
-    await secondRail
-      .getByRole("button", { name: `Expand staged comment: ${original}` })
-      .click();
-    await secondRail
-      .getByRole("button", { name: "Edit staged comment" })
-      .click();
-    await secondRail.getByLabel("Edit comment").fill(original);
-    await secondRail.getByRole("button", { name: "Save" }).click();
     await expect
-      .poll(() => storedRecoveryBodies(secondPage))
+      .poll(() => storedRecoveryBodies(secondPage, firstRecoveryKey))
       .toEqual([offlineBody]);
 
     await page.reload();
@@ -675,27 +686,28 @@ test.describe("a drafts write prepared against content the store moved past", ()
     await secondPage.close();
   });
 
-  test("should merge different offline edits from two tabs", async ({
+  test("should restore each tab's own offline edits", async ({
     context,
     page,
     reviewRuntimeUrl,
   }) => {
     await page.goto(reviewRuntimeUrl);
     const token = await reviewToken(page);
-    const originalX = "Keep the first shared draft.";
-    const originalY = "Keep the second shared draft.";
-    await stageComment(page, originalX);
-    await stageComment(page, originalY);
+    const original = "Keep this shared draft.";
+    await stageComment(page, original);
     await expect
       .poll(async () =>
         (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
           (draft) => draft.body,
         ),
       )
-      .toEqual([originalX, originalY]);
+      .toEqual([original]);
 
     const secondPage = await context.newPage();
     await secondPage.goto(reviewRuntimeUrl);
+    await expect(
+      secondPage.getByRole("button", { name: "Feedback 1" }),
+    ).toBeVisible();
     const blockRuntimeFetch = (): void => {
       const runtimeFetch = window.fetch.bind(window);
       window.fetch = (input, init) => {
@@ -743,19 +755,21 @@ test.describe("a drafts write prepared against content the store moved past", ()
     };
     const editedX = "Keep the first tab's offline edit.";
     const editedY = "Keep the second tab's offline edit.";
-    await editDraft({ targetPage: page, before: originalX, after: editedX });
+    await editDraft({ targetPage: page, before: original, after: editedX });
     await editDraft({
       targetPage: secondPage,
-      before: originalY,
+      before: original,
       after: editedY,
     });
     const secondRail = secondPage.getByRole("complementary", {
       name: "Feedback",
     });
-    await expect(secondRail.getByText(editedX)).toBeVisible();
     await expect(secondRail.getByText(editedY)).toBeVisible();
 
-    for (const targetPage of [page, secondPage]) {
+    for (const [targetPage, ownEdit] of [
+      [page, editedX],
+      [secondPage, editedY],
+    ] as const) {
       await targetPage.reload();
       const feedbackButton = targetPage.getByRole("button", {
         name: /^Feedback(?: \d+)?$/u,
@@ -766,13 +780,12 @@ test.describe("a drafts write prepared against content the store moved past", ()
       const rail = targetPage.getByRole("complementary", {
         name: "Feedback",
       });
-      await expect(rail.getByText(editedX)).toBeVisible();
-      await expect(rail.getByText(editedY)).toBeVisible();
+      await expect(rail.getByText(ownEdit)).toBeVisible();
     }
     await secondPage.close();
   });
 
-  test("should ask once when two offline tabs edit the same draft", async ({
+  test("should reconcile two tab-owned edits through the runtime once", async ({
     context,
     page,
     reviewRuntimeUrl,
@@ -791,42 +804,6 @@ test.describe("a drafts write prepared against content the store moved past", ()
 
     const secondPage = await context.newPage();
     await secondPage.goto(reviewRuntimeUrl);
-    const recoveryKey = await page
-      .locator("html")
-      .evaluate(
-        (root) =>
-          `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}`,
-      );
-    const storedRecovery = (targetPage: Page) =>
-      targetPage.evaluate((key) => {
-        const raw = window.localStorage.getItem(key);
-        if (raw === null) return null;
-        const parsed: unknown = JSON.parse(raw);
-        if (
-          typeof parsed !== "object" ||
-          parsed === null ||
-          !("drafts" in parsed) ||
-          !Array.isArray(parsed.drafts) ||
-          !("reconciliation" in parsed) ||
-          typeof parsed.reconciliation !== "object" ||
-          parsed.reconciliation === null ||
-          !("conflicts" in parsed.reconciliation) ||
-          !Array.isArray(parsed.reconciliation.conflicts)
-        ) {
-          return null;
-        }
-        return {
-          bodies: parsed.drafts.flatMap((draft) =>
-            typeof draft === "object" &&
-            draft !== null &&
-            "body" in draft &&
-            typeof draft.body === "string"
-              ? [draft.body]
-              : [],
-          ),
-          conflicts: parsed.reconciliation.conflicts.length,
-        };
-      }, recoveryKey);
     const blockRuntimeFetch = (): void => {
       const runtimeFetch = window.fetch.bind(window);
       window.fetch = (input, init) => {
@@ -839,10 +816,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
           : runtimeFetch(input, init);
       };
     };
-    for (const targetPage of [page, secondPage]) {
-      await targetPage.addInitScript(blockRuntimeFetch);
-      await targetPage.evaluate(blockRuntimeFetch);
-    }
+    await page.evaluate(blockRuntimeFetch);
     const editDraft = async (targetPage: Page, body: string): Promise<void> => {
       await targetPage
         .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
@@ -857,51 +831,181 @@ test.describe("a drafts write prepared against content the store moved past", ()
       await rail.getByLabel("Edit comment").fill(body);
       await rail.getByRole("button", { name: "Save" }).click();
     };
-    const firstBody = "Keep the owner chosen in the first offline tab.";
-    const secondBody = "Keep the owner chosen in the second offline tab.";
+    const firstBody = "Keep the edit recovered from the first tab.";
+    const secondBody = "Keep the edit accepted from the second tab.";
     await editDraft(page, firstBody);
-    await expect
-      .poll(() => storedRecovery(page))
-      .toEqual({ bodies: [firstBody], conflicts: 0 });
     await editDraft(secondPage, secondBody);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([secondBody]);
 
-    const choice = secondPage.getByRole("alertdialog", {
+    await page.reload();
+
+    const choice = page.getByRole("alertdialog", {
       name: "Two versions of this comment",
     });
     await expect(choice).toBeVisible();
     await expect(choice).toContainText(firstBody);
     await expect(choice).toContainText(secondBody);
-    await secondPage.keyboard.press("Escape");
-    await secondPage.reload();
+    await page.keyboard.press("Escape");
+    await page.reload();
     await expect(choice).toBeVisible();
     await expect(choice).toContainText(firstBody);
     await expect(choice).toContainText(secondBody);
     await choice.getByRole("button", { name: "Keep mine" }).click();
     await expect(choice).toBeHidden();
     await expect
-      .poll(() => storedRecovery(secondPage))
-      .toEqual({ bodies: [secondBody], conflicts: 0 });
-
-    for (const targetPage of [secondPage, page]) {
-      await targetPage.reload();
-      await expect(
-        targetPage.getByRole("alertdialog", {
-          name: "Two versions of this comment",
-        }),
-      ).toBeHidden();
-      const feedbackButton = targetPage.getByRole("button", {
-        name: /^Feedback(?: \d+)?$/u,
-      });
-      if ((await feedbackButton.getAttribute("aria-expanded")) !== "true") {
-        await feedbackButton.click();
-      }
-      await expect(
-        targetPage
-          .getByRole("complementary", { name: "Feedback" })
-          .getByText(secondBody),
-      ).toBeVisible();
-    }
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([firstBody]);
+    await page.reload();
+    await expect(choice).toBeHidden();
     await secondPage.close();
+  });
+
+  test("should offer unsynchronized work adopted from a closed tab", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const identity = await page.locator("html").evaluate((root) => ({
+      planId: root.dataset.planId ?? "",
+      sessionId: root.dataset.reviewSession ?? "",
+      snapshot: (() => {
+        const bootstrap: unknown = JSON.parse(
+          root.getAttribute("data-review-bootstrap") ?? "{}",
+        );
+        return typeof bootstrap === "object" &&
+          bootstrap !== null &&
+          "currentSnapshot" in bootstrap &&
+          typeof bootstrap.currentSnapshot === "string"
+          ? bootstrap.currentSnapshot
+          : "";
+      })(),
+    }));
+    const recoveredBody = "Offer this draft left by the closed tab.";
+    const composerBody = "Restore this composer left by the closed tab.";
+    const orphanOwnerId = randomBytes(8).toString("hex");
+    const orphanKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}:tab:${orphanOwnerId}`;
+    await page.evaluate(
+      ({ key, ownerId, snapshot, recovered, composer }) => {
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 7,
+            ownerId,
+            updatedAtMs: Date.now(),
+            drafts: [
+              {
+                id: "orphan-comment",
+                body: recovered,
+                createdAt: "2026-08-15T12:00:00.000Z",
+                premiseSnapshot: snapshot,
+                target: { type: "document" },
+              },
+            ],
+            resolvedCommentIds: [],
+            reconciliation: {
+              base: { draftBodies: {}, resolvedCommentIds: [] },
+              conflicts: [],
+              runtime: null,
+            },
+            composer: {
+              comment: {
+                target: { type: "document" },
+                premiseSnapshot: snapshot,
+                body: composer,
+              },
+              replies: {},
+            },
+          }),
+        );
+      },
+      {
+        key: orphanKey,
+        ownerId: orphanOwnerId,
+        snapshot: identity.snapshot,
+        recovered: recoveredBody,
+        composer: composerBody,
+      },
+    );
+
+    await page.reload();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toContainText(recoveredBody);
+    await expect(
+      page
+        .getByRole("dialog", { name: /Comment on/u })
+        .getByLabel("Add a comment"),
+    ).toHaveValue(composerBody);
+    await expect
+      .poll(() =>
+        page.evaluate((key) => window.localStorage.getItem(key), orphanKey),
+      )
+      .toBeNull();
+  });
+
+  test("should discard expired orphaned recovery instead of offering it", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const identity = await page.locator("html").evaluate((root) => ({
+      planId: root.dataset.planId ?? "",
+      sessionId: root.dataset.reviewSession ?? "",
+    }));
+    const ownerId = randomBytes(8).toString("hex");
+    const orphanKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}:tab:${ownerId}`;
+    await page.evaluate(
+      ({ key, storedOwnerId }) => {
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 7,
+            ownerId: storedOwnerId,
+            updatedAtMs: Date.now() - 8 * 24 * 60 * 60 * 1000,
+            drafts: [
+              {
+                id: "expired-comment",
+                body: "Do not offer this expired recovery.",
+                createdAt: "2026-08-01T12:00:00.000Z",
+                premiseSnapshot: "",
+                target: { type: "document" },
+              },
+            ],
+            resolvedCommentIds: [],
+            reconciliation: {
+              base: { draftBodies: {}, resolvedCommentIds: [] },
+              conflicts: [],
+              runtime: null,
+            },
+            composer: { comment: null, replies: {} },
+          }),
+        );
+      },
+      { key: orphanKey, storedOwnerId: ownerId },
+    );
+
+    await page.reload();
+
+    await expect(
+      page.getByRole("alertdialog", { name: "Two versions of this comment" }),
+    ).toBeHidden();
+    await expect
+      .poll(() =>
+        page.evaluate((key) => window.localStorage.getItem(key), orphanKey),
+      )
+      .toBeNull();
   });
 
   test("should keep a concurrent runtime comment when this browser writes", async ({
@@ -1774,31 +1878,33 @@ test.describe("a drafts write prepared against content the store moved past", ()
     );
     expect(await deleteOnce()).toBe(200);
     await expect(thread).toHaveCount(0);
+    const recoveryKey = await ownedLiveRecoveryKey(page);
     await expect
       .poll(() =>
-        page.evaluate((expected) => {
-          const root = document.documentElement;
-          const key = `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}:composer`;
-          const raw = window.sessionStorage.getItem(key);
-          if (raw === null) return { expected, keys: [] };
-          const recovery: unknown = JSON.parse(raw);
-          if (
-            typeof recovery !== "object" ||
-            recovery === null ||
-            !("composer" in recovery) ||
-            typeof recovery.composer !== "object" ||
-            recovery.composer === null ||
-            !("replies" in recovery.composer) ||
-            typeof recovery.composer.replies !== "object" ||
-            recovery.composer.replies === null
-          ) {
-            return { expected, keys: [] };
-          }
-          return {
-            expected,
-            keys: Object.keys(recovery.composer.replies),
-          };
-        }, sentComment.id),
+        page.evaluate(
+          ({ expected, key }) => {
+            const raw = window.localStorage.getItem(key);
+            if (raw === null) return { expected, keys: [] };
+            const recovery: unknown = JSON.parse(raw);
+            if (
+              typeof recovery !== "object" ||
+              recovery === null ||
+              !("composer" in recovery) ||
+              typeof recovery.composer !== "object" ||
+              recovery.composer === null ||
+              !("replies" in recovery.composer) ||
+              typeof recovery.composer.replies !== "object" ||
+              recovery.composer.replies === null
+            ) {
+              return { expected, keys: [] };
+            }
+            return {
+              expected,
+              keys: Object.keys(recovery.composer.replies),
+            };
+          },
+          { expected: sentComment.id, key: recoveryKey },
+        ),
       )
       .toEqual({ expected: sentComment.id, keys: [] });
   });
@@ -1826,13 +1932,16 @@ test.describe("a drafts write prepared against content the store moved past", ()
       };
     });
     const recoveredBody = "Recovered before the runtime version was known.";
+    const recoveryKey = await ownedLiveRecoveryKey(page);
     await page.evaluate(
-      ({ identity: storedIdentity, body, id }) => {
-        const key = `big-plan:review:live-recovery:${storedIdentity.planId}:${storedIdentity.sessionId}`;
+      ({ identity: storedIdentity, key, body, id }) => {
+        const ownerId = key.slice(key.lastIndexOf(":") + 1);
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 6,
+            version: 7,
+            ownerId,
+            updatedAtMs: Date.now(),
             drafts: [
               {
                 id,
@@ -1848,11 +1957,13 @@ test.describe("a drafts write prepared against content the store moved past", ()
               conflicts: [],
               runtime: null,
             },
+            composer: { comment: null, replies: {} },
           }),
         );
       },
       {
         identity,
+        key: recoveryKey,
         body: recoveredBody,
         id: randomBytes(8).toString("hex"),
       },
@@ -1931,13 +2042,16 @@ test.describe("a drafts write prepared against content the store moved past", ()
       };
     });
     const recoveredBody = "Submit this after the runtime recovers.";
+    const recoveryKey = await ownedLiveRecoveryKey(page);
     await page.evaluate(
-      ({ identity: storedIdentity, body, id }) => {
-        const key = `big-plan:review:live-recovery:${storedIdentity.planId}:${storedIdentity.sessionId}`;
+      ({ identity: storedIdentity, key, body, id }) => {
+        const ownerId = key.slice(key.lastIndexOf(":") + 1);
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 6,
+            version: 7,
+            ownerId,
+            updatedAtMs: Date.now(),
             drafts: [
               {
                 id,
@@ -1953,11 +2067,13 @@ test.describe("a drafts write prepared against content the store moved past", ()
               conflicts: [],
               runtime: null,
             },
+            composer: { comment: null, replies: {} },
           }),
         );
       },
       {
         identity,
+        key: recoveryKey,
         body: recoveredBody,
         id: randomBytes(8).toString("hex"),
       },
@@ -2034,7 +2150,7 @@ test("should merge an outage-time draft with newer runtime state", async ({
           : "",
     };
   });
-  const recoveryKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}`;
+  const recoveryKey = await ownedLiveRecoveryKey(page);
   const runtimePaths = new Set([
     "/api/agent",
     "/api/drafts",
