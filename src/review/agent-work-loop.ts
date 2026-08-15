@@ -23,10 +23,10 @@ import {
 } from "./agent-exchange.js";
 import type { AgentRequest } from "./agent-exchange.js";
 import {
-  AgentClaimContended,
   appendProgressEvent,
   claimAgentRequest,
   commitRequestTerminal,
+  RetryableAgentClaimRejected,
 } from "./request-mailbox.js";
 import {
   anchorReviewStore,
@@ -513,7 +513,7 @@ const nextWork = async ({
         },
       });
     } catch (error: unknown) {
-      if (error instanceof AgentClaimContended) {
+      if (error instanceof RetryableAgentClaimRejected) {
         if (resumingClaim) {
           claimedBy = randomId(8);
           resumingClaim = false;

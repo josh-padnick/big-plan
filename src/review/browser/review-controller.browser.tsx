@@ -3032,14 +3032,14 @@ const SentThread = ({
           status={
             resolved
               ? "Resolved"
-              : group === "working"
-                ? "Working"
-                : group === "ready"
-                  ? "Ready for review"
-                  : group === "needs-input"
-                    ? "Respond"
-                    : latestCanceled
-                      ? "Canceled"
+              : latestCanceled
+                ? "Canceled"
+                : group === "working"
+                  ? "Working"
+                  : group === "ready"
+                    ? "Ready for review"
+                    : group === "needs-input"
+                      ? "Respond"
                       : "Queued"
           }
           statusSpinner={group === "working"}

@@ -47,7 +47,11 @@ import type {
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
 
-export class AgentClaimContended extends AgentExchangeRejected {}
+export class RetryableAgentClaimRejected extends AgentExchangeRejected {}
+
+export class AgentClaimContended extends RetryableAgentClaimRejected {}
+
+export class AgentClaimSelectionStale extends RetryableAgentClaimRejected {}
 
 /** Runs one request change while the request file is locked. */
 const withRequestLock = async <TResult>({
@@ -225,12 +229,12 @@ export const claimAgentRequest = async ({
         requestId,
       });
       if (request.canceledAt !== undefined) {
-        throw new AgentExchangeRejected(
+        throw new AgentClaimSelectionStale(
           "The request was canceled by the reviewer",
         );
       }
       if (request.answeredAt !== undefined) {
-        throw new AgentExchangeRejected(
+        throw new AgentClaimSelectionStale(
           "The agent has already answered this request",
         );
       }

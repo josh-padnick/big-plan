@@ -162,8 +162,16 @@ describe("thread projection", () => {
         ...base,
         requests: [canceled],
         responses: [],
-      }).canDeleteCanceled,
-    ).toBe(true);
+      }),
+    ).toMatchObject({
+      group: "ready",
+      latestCanceled: true,
+      latestStatus: {
+        label: "Canceled",
+        headline: "Request canceled",
+      },
+      canDeleteCanceled: true,
+    });
 
     const canceledReply = request({
       requestId: "cccccccccccccccc",

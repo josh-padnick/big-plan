@@ -444,7 +444,8 @@ export const projectCommentThread = <
       ? "needs-input"
       : latestExchange?.outcome !== undefined
         ? "ready"
-        : latestExchange?.request.answeredAt !== undefined
+        : latestExchange !== undefined &&
+            requestIsTerminal(latestExchange.request)
           ? "ready"
           : latestStatus?.stage === "working" ||
               latestStatus?.stage === "stalled"

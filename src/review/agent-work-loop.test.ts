@@ -1055,6 +1055,103 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it.each(["answered", "canceled"] as const)(
+    "should move past a request %s during pickup preparation",
+    async (terminalState) => {
+      const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-stale-"));
+      const planPath = join(directory, "plan.mdx");
+      const source =
+        "# Plan\n\nConcurrent terminal transitions are expected.\n";
+      await writeFile(planPath, source);
+      const review = await startReviewRuntime({ planPath });
+      const premiseSnapshot = deriveSnapshotDigest(source);
+      const staleRequest = messageAgentRequest({
+        kind: "chat",
+        requestId: "abababababababab",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: "2026-08-12T12:00:00.000Z",
+        body: "This request becomes terminal during preparation.",
+      });
+      const nextRequest = messageAgentRequest({
+        kind: "chat",
+        requestId: "cdcdcdcdcdcdcdcd",
+        sessionId: review.sessionId,
+        planId: review.planId,
+        premiseSnapshot,
+        createdAt: "2026-08-12T12:00:01.000Z",
+        body: "Continue with this request.",
+      });
+      await writeAgentRequest({ store: review.store, request: staleRequest });
+      await writeAgentRequest({ store: review.store, request: nextRequest });
+      let terminalized = false;
+      const heartbeat = vi
+        .spyOn(reviewStore, "writeAgentHeartbeat")
+        .mockImplementation(async (input) => {
+          if (
+            terminalized ||
+            input.state !== "working" ||
+            input.requestId !== staleRequest.requestId
+          ) {
+            return;
+          }
+          terminalized = true;
+          const now = new Date().toISOString();
+          if (terminalState === "canceled") {
+            await cancelAgentRequest({
+              store: review.store,
+              requestId: staleRequest.requestId,
+              now,
+            });
+            return;
+          }
+          const claimed = await claimAgentRequest({
+            store: review.store,
+            activeSessionId: review.sessionId,
+            requestId: staleRequest.requestId,
+            claimedBy: "eeeeeeeeeeeeeeee",
+            baselineSnapshot: premiseSnapshot,
+            now,
+          });
+          await commitRequestTerminal({
+            store: review.store,
+            claimedBy: "eeeeeeeeeeeeeeee",
+            response: validateAgentResponseDraft({
+              value: {
+                requestId: staleRequest.requestId,
+                message: "Another agent completed this request.",
+              },
+              request: claimed,
+              commentsById: new Map(),
+              changedBlocks: new Set(),
+              currentSnapshot: premiseSnapshot,
+              now,
+            }),
+            now,
+          });
+        });
+
+      try {
+        await expect(
+          runAgentWorkLoopAction({
+            kind: "next",
+            planPath,
+            shouldWait: true,
+            executablePath,
+          }),
+        ).resolves.toMatchObject({
+          pending: true,
+          work: { requestId: nextRequest.requestId },
+        });
+      } finally {
+        heartbeat.mockRestore();
+        await review.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("should mint a new token when an old pickup is already terminal", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
     const planPath = join(directory, "plan.mdx");
