@@ -129,7 +129,6 @@ import {
   reviewEndObservation,
   type ReviewEndObservation,
 } from "./review-expiry.js";
-import { quoteShellArgument } from "../shared/agent-command.js";
 import {
   isReviewRuntimeUnavailable,
   normalizeReviewRuntimeRequestError,
@@ -712,17 +711,21 @@ const ServerGoneBanner = ({
   readonly canRefresh: boolean;
   readonly onRefresh: () => void;
   readonly endObservation: ReviewEndObservation;
-  readonly restartCommand: string;
+  readonly restartCommand: string | undefined;
 }) => {
   const unsavedInputWarning = canRefresh
     ? ""
     : " Keep this tab open because the latest review input has not reached the local review server.";
   if (endObservation.kind === "deadline-passed") {
+    const restartInstruction =
+      restartCommand === undefined
+        ? "Restart the review runtime for this plan, then open the new address it prints to continue reviewing."
+        : `Restart it with ${restartCommand}, then open the new address it prints to continue reviewing.`;
     return (
       <RuntimeAlertBanner
         scope="data-review-server-gone"
         heading="This review session ended while this tab was out of contact"
-        detail={`This tab lost contact with the local review server, and the deadline it last knew has passed. Restart it with ${restartCommand}, then open the new address it prints to continue reviewing.${unsavedInputWarning}`}
+        detail={`This tab lost contact with the local review server, and the deadline it last knew has passed. ${restartInstruction}${unsavedInputWarning}`}
       />
     );
   }
@@ -3789,12 +3792,6 @@ export const ReviewController = () => {
     idleTimeoutMs: runtimeSession?.idleTimeoutMs,
     nowMs: runtimeDownSinceMs ?? statusNowMs,
   });
-  // Naming the actual plan beats a placeholder the reader has to translate,
-  // but a session that never reported its path still needs a usable sentence.
-  const restartReviewCommand =
-    runtimeSession === null || runtimeSession.plan === ""
-      ? "big-plan review <plan>"
-      : `big-plan review ${quoteShellArgument(runtimeSession.plan)}`;
   const threadRuntime: ThreadRuntime =
     identity === null ? "static" : pollIsOffline ? "offline" : "online";
   const agentProjection = agentProjectionForReviewPoll({
@@ -5167,7 +5164,7 @@ export const ReviewController = () => {
           canRefresh={canRefreshReview}
           onRefresh={() => window.location.reload()}
           endObservation={endObservation}
-          restartCommand={restartReviewCommand}
+          restartCommand={runtimeSession?.restartCommand}
         />
       ) : null}
       {writesStalled ? <WritesStalledBanner /> : null}

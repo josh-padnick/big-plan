@@ -94,6 +94,7 @@ import { buildSnapshotDiff } from "./snapshot-diff.js";
 import {
   agentConnectCommand,
   agentRecoveryPrompt,
+  reviewRestartCommand,
 } from "./shared/agent-command.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import {
@@ -382,6 +383,10 @@ export const startReviewRuntime = async ({
     executablePath,
     planPath: resolvedPlanPath,
   });
+  const restartCommand = reviewRestartCommand({
+    executablePath,
+    planPath: resolvedPlanPath,
+  });
   const recoveryPrompt = agentRecoveryPrompt({
     executablePath,
     planPath: resolvedPlanPath,
@@ -642,6 +647,7 @@ export const startReviewRuntime = async ({
     sessionId,
     resolvedPlanPath,
     agentCommand,
+    restartCommand,
     recoveryPrompt,
     planRenderer: createPlanRenderer({
       store,

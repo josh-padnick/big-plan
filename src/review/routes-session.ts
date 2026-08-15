@@ -27,6 +27,7 @@ export const readRuntimeSession = async (
     value: encodeRuntimeSession({
       ...sessionView,
       ...(writesStalledMs === undefined ? {} : { writesStalledMs }),
+      restartCommand: context.restartCommand,
       idleTimeoutMs: context.activityClock.idleTimeoutMs,
       ...(expiresAtMs === undefined ? {} : { expiresAtMs }),
     }),

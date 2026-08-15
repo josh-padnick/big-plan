@@ -355,6 +355,32 @@ describe("review wire contract", () => {
     expect(malformed).not.toHaveProperty("expiresAtMs");
   });
 
+  it("should keep only a non-empty review restart command", () => {
+    const identity = {
+      sessionId: "abcd1234",
+      planId: "plan-1",
+      plan: "/plans/checkout.mdx",
+      authoritative: true,
+    };
+    const restartCommand =
+      "node '/tools/big-plan.mjs' review '/plans/checkout.mdx'";
+
+    expect(
+      decodeRuntimeSession({
+        value: { ...identity, restartCommand },
+        sessionId: identity.sessionId,
+      }),
+    ).toMatchObject({ restartCommand });
+
+    for (const malformedCommand of ["", "   ", 42, null]) {
+      const decoded = decodeRuntimeSession({
+        value: { ...identity, restartCommand: malformedCommand },
+        sessionId: identity.sessionId,
+      });
+      expect(decoded).not.toHaveProperty("restartCommand");
+    }
+  });
+
   it("should preserve stable progress semantics and reject unknown codes", () => {
     const event = {
       seq: 1,
