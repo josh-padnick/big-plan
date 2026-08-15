@@ -718,13 +718,10 @@ const RuntimeAlertBanner = ({
   </div>
 );
 
-// Two wordings, because "the server stopped responding" is true and useless to
-// a reader who left this page open overnight. The second one says only what
-// this tab can defend - it lost contact, and the deadline it last knew has
-// since passed - and never why, because the runtime may have been stopped by
-// hand or may still be serving another tab. Recovery stays non-destructive for
-// the same reason: starting a runtime seizes custody and would make a live
-// review and its agent read-only, so this banner never proposes it.
+// The page says only what this tab can defend: it lost contact and, when known,
+// the deadline it last received has passed. Recovery stays non-destructive
+// because starting a runtime seizes custody and could make a live review and
+// its agent read-only, so this banner never proposes it.
 const ServerGoneBanner = ({
   canRefresh,
   onRefresh,
@@ -739,9 +736,6 @@ const ServerGoneBanner = ({
   const unsavedInputWarning = canRefresh
     ? ""
     : " Keep this tab open because the latest review input has not reached the local review server.";
-  const refreshRecoveryDetail = canRefresh
-    ? " Refresh when it is running again to continue reviewing. This is separate from the agent connection."
-    : `${unsavedInputWarning} This is separate from the agent connection.`;
   const refreshAction = {
     label: "Refresh",
     onAct: onRefresh,
@@ -751,26 +745,19 @@ const ServerGoneBanner = ({
     latestReviewUrl === undefined
       ? undefined
       : { href: latestReviewUrl, label: "Open latest review" };
-  if (endReason.kind === "deadline-passed") {
-    const continuation =
-      replacementLink === undefined
-        ? " Refresh to check whether it is still running."
-        : " This review continues at the linked address.";
-    return (
-      <RuntimeAlertBanner
-        scope="data-review-server-gone"
-        heading="This tab lost contact with this review session"
-        detail={`The deadline this tab last knew has since passed.${continuation}${unsavedInputWarning} This is separate from the agent connection.`}
-        action={refreshAction}
-        {...(replacementLink === undefined ? {} : { link: replacementLink })}
-      />
-    );
-  }
+  const contactDetail =
+    endReason.kind === "deadline-passed"
+      ? `The deadline this tab last knew has since passed.${
+          replacementLink === undefined
+            ? " Refresh to try reconnecting."
+            : " A newer review session for this plan was recorded at the linked address."
+        }`
+      : "This tab lost contact with the local review server. Refresh to try reconnecting.";
   return (
     <RuntimeAlertBanner
       scope="data-review-server-gone"
-      heading="This review session is no longer online"
-      detail={`The local review server stopped responding.${refreshRecoveryDetail}`}
+      heading="This tab lost contact with this review session"
+      detail={`${contactDetail}${unsavedInputWarning} This is separate from the agent connection.`}
       action={refreshAction}
       {...(replacementLink === undefined ? {} : { link: replacementLink })}
     />
@@ -4410,30 +4397,58 @@ export const ReviewController = () => {
       if (pending) return;
       pending = true;
       try {
-        const [sessionValue, agentValue, progressValue] = await Promise.all([
-          requestJson({ path: "/api/session", identity }),
-          requestJson({ path: "/api/agent", identity }),
-          requestJson({ path: "/api/progress", identity }),
-        ]);
+        const [sessionResult, agentResult, progressResult] =
+          await Promise.allSettled([
+            requestJson({ path: "/api/session", identity }),
+            requestJson({ path: "/api/agent", identity }),
+            requestJson({ path: "/api/progress", identity }),
+          ]);
         if (current) {
-          const session = parseRuntimeSession({
-            value: sessionValue,
-            sessionId: identity.sessionId,
-          });
-          if (session === null) {
-            throw new Error(
-              "This page is not connected to its review runtime.",
+          const failures: Array<unknown> = [];
+          // Commit a valid session independently so a sibling timeout cannot
+          // leave the page diagnosing from an older deadline or replacement URL.
+          if (sessionResult.status === "fulfilled") {
+            const session = parseRuntimeSession({
+              value: sessionResult.value,
+              sessionId: identity.sessionId,
+            });
+            if (session === null) {
+              failures.push(
+                new Error("This page is not connected to its review runtime."),
+              );
+            } else {
+              setRuntimeSession(session);
+            }
+          } else {
+            failures.push(sessionResult.reason);
+          }
+          const now = Date.now();
+          if (agentResult.status === "fulfilled") {
+            acceptAgentSnapshot(parseAgentSnapshot(agentResult.value));
+            setLastObservableAgentAtMs(now);
+          } else {
+            failures.push(agentResult.reason);
+          }
+          if (progressResult.status === "fulfilled") {
+            setProgress(parseProgress(progressResult.value));
+          } else {
+            failures.push(progressResult.reason);
+          }
+          if (failures.length === 0) {
+            setPollHealth(INITIAL_REVIEW_POLL_HEALTH);
+          } else {
+            const result: ReviewPollResult = failures.some((failure) =>
+              isReviewRuntimeUnavailable(failure),
+            )
+              ? "runtime-unavailable"
+              : "poll-failed";
+            setPollHealth((health) =>
+              transitionReviewPollHealth({ health, result, nowMs: now }),
             );
           }
-          setRuntimeSession(session);
-          acceptAgentSnapshot(parseAgentSnapshot(agentValue));
-          setProgress(parseProgress(progressValue));
-          setPollHealth(INITIAL_REVIEW_POLL_HEALTH);
-          const now = Date.now();
           setStatusNowMs(now);
-          setLastObservableAgentAtMs(now);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         if (current) {
           const result: ReviewPollResult = isReviewRuntimeUnavailable(error)
             ? "runtime-unavailable"
