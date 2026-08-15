@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+import { run } from "../scripts/git-hooks/prepare-commit-msg.mjs";
+import { runManagedDefaultHook } from "../scripts/git-hooks/install.mjs";
+
+const argv = process.argv.slice(2);
+if (!runManagedDefaultHook("commit-msg", argv)) run(argv);
