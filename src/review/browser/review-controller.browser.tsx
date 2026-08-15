@@ -153,6 +153,8 @@ import {
 import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import {
   mergeLiveReviewRecovery,
+  rebaseLocalDraftsAgainstSent,
+  repliesForSentComments,
   resolveReviewRecoveryConflict,
   reviewRecoveryBase,
 } from "./review-recovery-merge.js";
@@ -635,24 +637,6 @@ const writeLiveReviewRecovery = ({
   }
 };
 
-/**
- * The version the next conditional write must carry. A write answers with the
- * version it produced; only a runtime that answered without one costs a read.
- */
-const draftsWriteVersion = async ({
-  identity,
-  written,
-}: {
-  readonly identity: RuntimeIdentity;
-  readonly written: unknown;
-}): Promise<string> =>
-  isRecord(written) &&
-  typeof written.version === "string" &&
-  written.version !== ""
-    ? written.version
-    : parseSnapshot(await requestJson({ path: "/api/drafts", identity }))
-        .version;
-
 /** Places the composer beside its target, at a vertical position it is given. */
 const composePlacement = ({
   target,
@@ -758,6 +742,28 @@ const clearLiveReviewRecovery = ({
   } catch {
     // The runtime now owns the state, so stale recovery cleanup is best effort.
   }
+};
+
+const removeLiveReviewRecoveryReply = ({
+  identity,
+  commentId,
+}: {
+  readonly identity: RuntimeIdentity;
+  readonly commentId: string;
+}): void => {
+  const recovery = readLiveReviewRecovery(identity);
+  if (recovery === null || !recovery.composer.replies.has(commentId)) return;
+  const replies = new Map(recovery.composer.replies);
+  replies.delete(commentId);
+  writeLiveReviewRecovery({
+    identity,
+    recovery: {
+      drafts: recovery.drafts,
+      resolvedCommentIds: recovery.resolvedCommentIds,
+      base: recovery.base,
+      composer: { ...recovery.composer, replies },
+    },
+  });
 };
 
 const requestJson = async ({
@@ -4167,6 +4173,59 @@ export const ReviewController = () => {
     },
     [],
   );
+  const reconcileAuthoritativeReviewSnapshot = useCallback(
+    ({
+      snapshot,
+      base,
+      local,
+      preferredSent = [],
+      submittedBodies,
+    }: {
+      readonly snapshot: ReviewSnapshot;
+      readonly base: ReviewRecoveryBase;
+      readonly local: ReviewRecoveryState;
+      readonly preferredSent?: ReadonlyArray<ReviewComment>;
+      readonly submittedBodies?: ReadonlyMap<string, string>;
+    }) => {
+      const runtime = adoptRuntimeReviewState(snapshot);
+      const rebasedLocal = rebaseLocalDraftsAgainstSent({
+        base,
+        local,
+        sent: snapshot.sent,
+        submittedBodies,
+        createId: randomId,
+      });
+      const merged = mergeLiveReviewRecovery({
+        base,
+        local: rebasedLocal,
+        runtime,
+      });
+      markPersistedReviewState(persistedReviewFingerprint(runtime));
+      applyReviewState(merged.state);
+      setSent((current) => {
+        const localById = new Map(
+          [...current, ...preferredSent].map((comment) => [
+            comment.id,
+            comment,
+          ]),
+        );
+        return snapshot.sent.map(
+          (comment) => localById.get(comment.id) ?? comment,
+        );
+      });
+      setReplyDrafts((current) =>
+        repliesForSentComments({ replies: current, sent: snapshot.sent }),
+      );
+      if (merged.conflicts.length > 0) {
+        recoveryConflictsRef.current = merged.conflicts;
+        setRecoveryConflicts(merged.conflicts);
+        setConflictRuntimeState(runtime);
+        setStatus("Two versions of a comment need your choice.");
+      }
+      return merged;
+    },
+    [adoptRuntimeReviewState, applyReviewState, markPersistedReviewState],
+  );
   const changeReplyDraft = useCallback((commentId: string, body: string) => {
     setReplyDrafts((current) => {
       if ((current.get(commentId) ?? "") === body) return current;
@@ -4511,9 +4570,15 @@ export const ReviewController = () => {
           let conflicted = false;
           let detached = false;
           if (recovery !== null) {
-            const merged = mergeLiveReviewRecovery({
+            const local = rebaseLocalDraftsAgainstSent({
               base: recovery.base,
               local: recovery,
+              sent: snapshot.sent,
+              createId: randomId,
+            });
+            const merged = mergeLiveReviewRecovery({
+              base: recovery.base,
+              local,
               runtime: runtimeReviewState,
             });
             restoredReviewState = merged.state;
@@ -4523,7 +4588,14 @@ export const ReviewController = () => {
               setRecoveryConflicts(merged.conflicts);
               setConflictRuntimeState(runtimeReviewState);
             }
-            detached = restoreComposer(recovery.composer) === "detached";
+            detached =
+              restoreComposer({
+                ...recovery.composer,
+                replies: repliesForSentComments({
+                  replies: recovery.composer.replies,
+                  sent: snapshot.sent,
+                }),
+              }) === "detached";
           }
           setDrafts(restoredReviewState.drafts);
           setSent(snapshot.sent);
@@ -4629,21 +4701,12 @@ export const ReviewController = () => {
         const snapshot = parseSnapshot(
           await requestJson({ path: "/api/drafts", identity }),
         );
-        const runtime = adoptRuntimeReviewState(snapshot);
-        const merged = mergeLiveReviewRecovery({
+        const merged = reconcileAuthoritativeReviewSnapshot({
+          snapshot,
           base: preparedBase,
-          local: prepared.state,
-          runtime,
+          local: latestReviewStateRef.current.state,
         });
-        markPersistedReviewState(persistedReviewFingerprint(runtime));
-        applyReviewState(merged.state);
-        if (merged.conflicts.length > 0) {
-          recoveryConflictsRef.current = merged.conflicts;
-          setRecoveryConflicts(merged.conflicts);
-          setConflictRuntimeState(runtime);
-          setStatus("Two versions of a comment need your choice.");
-          return;
-        }
+        if (merged.conflicts.length > 0) return;
         prepared = latestReviewStateRef.current;
         preparedBase = recoveryBaseRef.current;
       }
@@ -4658,12 +4721,12 @@ export const ReviewController = () => {
             version: runtimeVersionRef.current,
           },
         });
-        runtimeVersionRef.current = await draftsWriteVersion({
-          identity,
-          written,
+        const accepted = parseSnapshot(written);
+        reconcileAuthoritativeReviewSnapshot({
+          snapshot: accepted,
+          base: reviewRecoveryBase(prepared.state),
+          local: latestReviewStateRef.current.state,
         });
-        recoveryBaseRef.current = reviewRecoveryBase(prepared.state);
-        markPersistedReviewState(prepared.fingerprint);
       } catch (error) {
         // Both refusals below are a 409, so the code the runtime named this
         // one by is what tells them apart.
@@ -4673,20 +4736,18 @@ export const ReviewController = () => {
         const snapshot = parseSnapshot(
           await requestJson({ path: "/api/drafts", identity }),
         );
-        const runtime: ReviewRecoveryState = {
-          drafts: snapshot.drafts,
-          resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
-        };
-        runtimeVersionRef.current = snapshot.version;
-        recoveryBaseRef.current = reviewRecoveryBase(runtime);
-        markPersistedReviewState(persistedReviewFingerprint(runtime));
         if (!isReviewRuntimeRefusal(error, STALE_REVIEW_STATE_CODE)) {
           // The runtime refuses the whole write when a resolve contradicts
           // outstanding agent work, so the resolved set returns to what it
           // stored. Local drafts are untouched and persist on the next write.
+          const merged = reconcileAuthoritativeReviewSnapshot({
+            snapshot,
+            base: preparedBase,
+            local: latestReviewStateRef.current.state,
+          });
           applyReviewState({
-            drafts: latestReviewStateRef.current.state.drafts,
-            resolvedCommentIds: runtime.resolvedCommentIds,
+            drafts: merged.state.drafts,
+            resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
           });
           const reason = errorMessage(error);
           setResolveRefusal(reason);
@@ -4695,30 +4756,23 @@ export const ReviewController = () => {
         }
         // A stale version is the fact that tells a local edit the runtime has
         // not seen from a local copy the runtime has already moved past.
-        const merged = mergeLiveReviewRecovery({
+        reconcileAuthoritativeReviewSnapshot({
+          snapshot,
           base: preparedBase,
           local: latestReviewStateRef.current.state,
-          runtime,
         });
-        applyReviewState(merged.state);
-        if (merged.conflicts.length === 0) return;
-        recoveryConflictsRef.current = merged.conflicts;
-        setRecoveryConflicts(merged.conflicts);
-        setConflictRuntimeState(runtime);
-        setStatus("Two versions of a comment need your choice.");
       }
     }).catch((error: unknown) => setStatus(errorMessage(error)));
   }, [
-    adoptRuntimeReviewState,
     applyReviewState,
     drafts,
     identity,
     isHydrated,
-    markPersistedReviewState,
     planId,
     pollHealth.state,
     persistedReviewState,
     recoveryConflicts,
+    reconcileAuthoritativeReviewSnapshot,
     resolvedCommentIds,
     runtimeAcceptsWrites,
     runtimeSession?.authoritative,
@@ -4967,62 +5021,70 @@ export const ReviewController = () => {
       }
       setIsSending(true);
       try {
-        // A send moves comments out of drafts, so the browser reads back the
-        // state the runtime now holds instead of guessing at it. Reading it
-        // inside the same serialized write is what keeps the version the next
-        // conditional write carries current.
         const result = await serializeRuntimeWrite(async () => {
           const base = recoveryBaseRef.current;
-          const ids = new Set(comments.map((comment) => comment.id));
-          await requestJson({
-            path: "/api/feedback",
-            identity,
-            method: "POST",
-            body: { comments },
-          });
-          const snapshot = parseSnapshot(
-            await requestJson({ path: "/api/drafts", identity }),
+          const preparedGeneration = latestReviewStateRef.current.generation;
+          const submittedBodies = new Map(
+            comments.map((comment) => [comment.id, comment.body]),
           );
-          const local = latestReviewStateRef.current.state;
-          const localAfterSend: ReviewRecoveryState = {
-            drafts: local.drafts.filter((comment) => !ids.has(comment.id)),
-            resolvedCommentIds: local.resolvedCommentIds,
-          };
-          const runtime = adoptRuntimeReviewState(snapshot);
-          const merged = mergeLiveReviewRecovery({
-            base,
-            local: localAfterSend,
-            runtime,
-          });
-          markPersistedReviewState(persistedReviewFingerprint(runtime));
-          applyReviewState(merged.state);
-          if (merged.conflicts.length > 0) {
-            recoveryConflictsRef.current = merged.conflicts;
-            setRecoveryConflicts(merged.conflicts);
-            setConflictRuntimeState(runtime);
-            setStatus("Two versions of a comment need your choice.");
+          try {
+            const snapshot = parseSnapshot(
+              await requestJson({
+                path: "/api/feedback",
+                identity,
+                method: "POST",
+                body: {
+                  comments,
+                  version: runtimeVersionRef.current,
+                },
+              }),
+            );
+            const latest = latestReviewStateRef.current;
+            const merged = reconcileAuthoritativeReviewSnapshot({
+              snapshot,
+              base,
+              local: latest.state,
+              preferredSent: comments,
+              submittedBodies:
+                latest.generation === preparedGeneration
+                  ? undefined
+                  : submittedBodies,
+            });
+            return {
+              submitted: true,
+              conflicted: merged.conflicts.length > 0,
+            };
+          } catch (error) {
+            if (!isReviewRuntimeRefusal(error, STALE_REVIEW_STATE_CODE)) {
+              throw error;
+            }
+            const snapshot = parseSnapshot(
+              await requestJson({ path: "/api/drafts", identity }),
+            );
+            reconcileAuthoritativeReviewSnapshot({
+              snapshot,
+              base,
+              local: latestReviewStateRef.current.state,
+            });
+            return { submitted: false, conflicted: false };
           }
-          return snapshot;
         });
+        if (!result.submitted) {
+          setStatus(
+            "The review changed before submission. Review the latest comments and send again.",
+          );
+          return;
+        }
         const ids = new Set(comments.map((comment) => comment.id));
         justSubmittedCommentIds.current = new Set([
           ...justSubmittedCommentIds.current,
           ...ids,
         ]);
-        // Sent comments keep the identity this browser gave them, because the
-        // stored copy may carry canonicalized target metadata that resolves to
-        // different elements than the ones the reviewer is looking at.
-        setSent((current) => {
-          const localById = new Map(
-            [...current, ...comments].map((comment) => [comment.id, comment]),
+        if (!result.conflicted) {
+          setStatus(
+            `${comments.length} comment${comments.length === 1 ? "" : "s"} submitted.`,
           );
-          return result.sent.map(
-            (comment) => localById.get(comment.id) ?? comment,
-          );
-        });
-        setStatus(
-          `${comments.length} comment${comments.length === 1 ? "" : "s"} submitted.`,
-        );
+        }
       } catch (error) {
         setStatus(errorMessage(error));
       } finally {
@@ -5032,8 +5094,7 @@ export const ReviewController = () => {
     [
       canSendToAgent,
       identity,
-      applyReviewState,
-      markPersistedReviewState,
+      reconcileAuthoritativeReviewSnapshot,
       runtimeAcceptsWrites,
       runtimeCanWrite,
       serializeRuntimeWrite,
@@ -5158,23 +5219,57 @@ export const ReviewController = () => {
     setPendingDelete(null);
     setStatus("Deleting the comment…");
     try {
-      await serializeRuntimeWrite(() =>
-        requestJson({
-          path: "/api/comments-delete",
-          identity,
-          method: "POST",
-          body: { commentId },
-        }),
+      const deleted = await serializeRuntimeWrite(async () => {
+        const base = recoveryBaseRef.current;
+        try {
+          const snapshot = parseSnapshot(
+            await requestJson({
+              path: "/api/comments-delete",
+              identity,
+              method: "POST",
+              body: {
+                commentId,
+                version: runtimeVersionRef.current,
+              },
+            }),
+          );
+          reconcileAuthoritativeReviewSnapshot({
+            snapshot,
+            base,
+            local: latestReviewStateRef.current.state,
+          });
+          return true;
+        } catch (error) {
+          if (!isReviewRuntimeRefusal(error, STALE_REVIEW_STATE_CODE)) {
+            throw error;
+          }
+          const snapshot = parseSnapshot(
+            await requestJson({ path: "/api/drafts", identity }),
+          );
+          reconcileAuthoritativeReviewSnapshot({
+            snapshot,
+            base,
+            local: latestReviewStateRef.current.state,
+          });
+          return false;
+        }
+      });
+      if (!deleted) {
+        setStatus(
+          "The review changed before deletion. Review the latest comments and try again.",
+        );
+        return;
+      }
+      setReplyDrafts((current) => {
+        if (!current.has(commentId)) return current;
+        const next = new Map(current);
+        next.delete(commentId);
+        return next;
+      });
+      removeLiveReviewRecoveryReply({ identity, commentId });
+      acceptAgentSnapshot(
+        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
       );
-      const [snapshotValue, agentValue] = await Promise.all([
-        requestJson({ path: "/api/drafts", identity }),
-        requestJson({ path: "/api/agent", identity }),
-      ]);
-      const snapshot = parseSnapshot(snapshotValue);
-      const runtimeReviewState = adoptRuntimeReviewState(snapshot);
-      setSent(snapshot.sent);
-      setResolvedCommentIds(runtimeReviewState.resolvedCommentIds);
-      acceptAgentSnapshot(parseAgentSnapshot(agentValue));
       setThreadOpenState((current) =>
         setThreadOpen({
           state: current,

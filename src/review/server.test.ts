@@ -91,28 +91,42 @@ afterAll(async () => {
   await rm(planDirectory, { recursive: true, force: true });
 });
 
-const call = ({
+const call = async ({
   path,
   method = "GET",
   headers = {},
   body,
+  prepareReviewState = true,
 }: {
   readonly path: string;
   readonly method?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: unknown;
-}) =>
-  fetch(`${runtime.url.replace(/\/$/, "")}${path}`, {
+  readonly prepareReviewState?: boolean;
+}) => {
+  const needsReviewStateVersion =
+    prepareReviewState &&
+    (path === "/api/feedback" || path === "/api/comments-delete") &&
+    typeof body === "object" &&
+    body !== null &&
+    !("version" in body);
+  const requestBody = needsReviewStateVersion
+    ? { ...body, version: await draftsVersionOf(runtime, token) }
+    : body;
+  return fetch(`${runtime.url.replace(/\/$/, "")}${path}`, {
     method,
     headers: {
       "x-big-plan-review-token": token,
       "sec-fetch-site": "same-origin",
       origin: runtime.url.replace(/\/$/, ""),
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
+      ...(requestBody === undefined
+        ? {}
+        : { "content-type": "application/json" }),
       ...headers,
     },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(requestBody === undefined ? {} : { body: JSON.stringify(requestBody) }),
   });
+};
 
 /** Reads the conditional-write version any runtime is currently at. */
 const draftsVersionOf = async (
@@ -690,7 +704,7 @@ describe("review runtime feedback", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      drafts: 1,
+      drafts: [{ id: "11aa22bb" }],
       // The version the write produced, so the next write needs no re-read.
       version: await draftsVersion(),
     });
@@ -743,6 +757,146 @@ describe("review runtime feedback", () => {
     ).resolves.toMatchObject({ drafts: [{ id: "33cc44dd" }] });
   });
 
+  it("should refuse feedback prepared before a newer draft edit", async () => {
+    const original = {
+      id: "71aa82bb",
+      body: "Original feedback body.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" },
+    };
+    expect(
+      (
+        await call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: {
+            drafts: [original],
+            resolvedCommentIds: [],
+            version: await draftsVersion(),
+          },
+        })
+      ).status,
+    ).toBe(200);
+    const held = await draftsVersion();
+    const newer = { ...original, body: "Newer feedback body." };
+    expect(
+      (
+        await call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: { drafts: [newer], resolvedCommentIds: [], version: held },
+        })
+      ).status,
+    ).toBe(200);
+
+    const stale = await call({
+      path: "/api/feedback",
+      method: "POST",
+      body: { comments: [original], version: held },
+    });
+
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      code: "stale-review-state",
+    });
+    await expect(
+      (await call({ path: "/api/drafts" })).json(),
+    ).resolves.toMatchObject({
+      drafts: [{ id: original.id, body: newer.body }],
+      sent: expect.not.arrayContaining([
+        expect.objectContaining({ id: original.id }),
+      ]),
+    });
+  });
+
+  it("should return the authoritative state after filtering a sent draft", async () => {
+    const sent = {
+      id: "93cc04dd",
+      body: "Already submitted feedback.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" },
+    };
+    expect(
+      (
+        await call({
+          path: "/api/feedback",
+          method: "POST",
+          body: { comments: [sent] },
+        })
+      ).status,
+    ).toBe(200);
+
+    const response = await call({
+      path: "/api/drafts",
+      method: "PUT",
+      body: {
+        drafts: [{ ...sent, body: "A stale edit of submitted feedback." }],
+        resolvedCommentIds: [],
+        version: await draftsVersion(),
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      drafts: [],
+      sent: expect.arrayContaining([
+        expect.objectContaining({ id: sent.id, body: sent.body }),
+      ]),
+      version: await draftsVersion(),
+    });
+  });
+
+  it("should refuse deletion prepared before a newer draft edit", async () => {
+    const sent = {
+      id: "15ee26ff",
+      body: "Keep this queued feedback.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" },
+    };
+    expect(
+      (
+        await call({
+          path: "/api/feedback",
+          method: "POST",
+          body: { comments: [sent] },
+        })
+      ).status,
+    ).toBe(200);
+    const held = await draftsVersion();
+    const newer = {
+      id: "37aa48bb",
+      body: "A concurrent staged comment.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" },
+    };
+    expect(
+      (
+        await call({
+          path: "/api/drafts",
+          method: "PUT",
+          body: { drafts: [newer], resolvedCommentIds: [], version: held },
+        })
+      ).status,
+    ).toBe(200);
+
+    const stale = await call({
+      path: "/api/comments-delete",
+      method: "POST",
+      body: { commentId: sent.id, version: held },
+    });
+
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      code: "stale-review-state",
+    });
+    await expect(
+      (await call({ path: "/api/drafts" })).json(),
+    ).resolves.toMatchObject({
+      drafts: [expect.objectContaining({ id: newer.id })],
+      sent: expect.arrayContaining([expect.objectContaining({ id: sent.id })]),
+    });
+  });
+
   it("should refuse a drafts write that names no version", async () => {
     const response = await call({
       path: "/api/drafts",
@@ -751,6 +905,36 @@ describe("review runtime feedback", () => {
     });
 
     expect(response.status).toBe(400);
+  });
+
+  it("should refuse feedback and deletion that name no version", async () => {
+    const comment = {
+      id: "59cc60dd",
+      body: "This mutation has no prepared state.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" },
+    };
+
+    expect(
+      (
+        await call({
+          path: "/api/feedback",
+          method: "POST",
+          body: { comments: [comment] },
+          prepareReviewState: false,
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await call({
+          path: "/api/comments-delete",
+          method: "POST",
+          body: { commentId: comment.id },
+          prepareReviewState: false,
+        })
+      ).status,
+    ).toBe(400);
   });
 
   it("should hold an anchored draft alongside state another vintage left behind", async () => {
@@ -850,7 +1034,10 @@ describe("review runtime feedback", () => {
           },
         })
       ).json(),
-    ).resolves.toMatchObject({ drafts: 1, version: expect.any(String) });
+    ).resolves.toMatchObject({
+      drafts: [{ id: "cc33dd44" }],
+      version: expect.any(String),
+    });
     await expect(
       (await call({ path: "/api/drafts" })).json(),
     ).resolves.toMatchObject({
@@ -1155,6 +1342,7 @@ describe("review runtime feedback", () => {
     const isolated = await startReviewRuntime({ planPath });
     try {
       const isolatedToken = await readSessionToken(isolated);
+      const version = await draftsVersionOf(isolated, isolatedToken);
       const post = () =>
         fetch(`${isolated.url}api/feedback`, {
           method: "POST",
@@ -1165,6 +1353,7 @@ describe("review runtime feedback", () => {
             origin: isolated.url.replace(/\/$/, ""),
           },
           body: JSON.stringify({
+            version,
             comments: [
               {
                 id: "ee44ff55",
@@ -1248,6 +1437,7 @@ describe("review runtime feedback", () => {
         typeof descriptor.token === "string"
           ? descriptor.token
           : "";
+      const version = await draftsVersionOf(isolated, isolatedToken);
 
       // Blocks the package write the way the resume test blocks the sent
       // comments: the directory cannot hold the files the package needs.
@@ -1266,6 +1456,7 @@ describe("review runtime feedback", () => {
           origin: isolated.url.replace(/\/$/, ""),
         },
         body: JSON.stringify({
+          version,
           comments: [
             {
               id: "ab12cd34",

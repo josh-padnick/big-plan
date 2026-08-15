@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "../shared/comment.js";
 import {
   mergeLiveReviewRecovery,
+  rebaseLocalDraftsAgainstSent,
+  repliesForSentComments,
   resolveReviewRecoveryConflict,
   reviewRecoveryBase,
 } from "./review-recovery-merge.js";
@@ -107,6 +109,56 @@ describe("live review recovery merge", () => {
 
     expect(merged.conflicts).toEqual([]);
     expect(merged.state.drafts).toEqual([]);
+  });
+
+  it("should not restore an unchanged draft after it was sent", () => {
+    const agreed = state([comment("c1", "agreed")]);
+
+    expect(
+      rebaseLocalDraftsAgainstSent({
+        base: reviewRecoveryBase(agreed),
+        local: agreed,
+        sent: [comment("c1", "agreed")],
+        createId: () => "c2",
+      }).drafts,
+    ).toEqual([]);
+  });
+
+  it("should preserve a newer edit made while its prior body was sent", () => {
+    expect(
+      rebaseLocalDraftsAgainstSent({
+        base: reviewRecoveryBase(state([])),
+        local: state([comment("c1", "newer edit")]),
+        sent: [comment("c1", "submitted body")],
+        submittedBodies: new Map([["c1", "submitted body"]]),
+        createId: () => "c2",
+      }).drafts,
+    ).toEqual([comment("c2", "newer edit")]);
+  });
+
+  it("should keep an edit made before another browser sent its base", () => {
+    const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
+
+    expect(
+      rebaseLocalDraftsAgainstSent({
+        base,
+        local: state([comment("c1", "edited here")]),
+        sent: [comment("c1", "agreed")],
+        createId: () => "c2",
+      }).drafts,
+    ).toEqual([comment("c2", "edited here")]);
+  });
+
+  it("should remove reply text when its sent thread is deleted", () => {
+    expect(
+      repliesForSentComments({
+        replies: new Map([
+          ["c1", "reply to deleted thread"],
+          ["c2", "reply to retained thread"],
+        ]),
+        sent: [comment("c2", "retained thread")],
+      }),
+    ).toEqual(new Map([["c2", "reply to retained thread"]]));
   });
 
   it("should report a conflict when one side edited what the other removed", () => {

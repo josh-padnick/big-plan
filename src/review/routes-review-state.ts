@@ -2,13 +2,10 @@
 // comments sent to the agent, the deletions applied to them, and the revert
 // that puts the plan back to the baseline a response was built on.
 //
-// The drafts write is conditional. A reviewer state read carries the version of
-// the content it came from, and a write must carry the version it was prepared
-// against; a write prepared against content the store has since moved past is
-// refused rather than applied. Without that, a read-check-write sequence has a
-// window in which another tab, or the runtime itself, can change the store
-// between the check and the write, and the write replaces their change with no
-// sign that anything was lost.
+// Reviewer-state mutations are conditional. A state read carries the version
+// of the content it came from, and each mutation must carry the version it was
+// prepared against; one prepared against content the store has since moved
+// past is refused rather than applied.
 
 import { createHash, randomBytes } from "node:crypto";
 import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
@@ -65,18 +62,71 @@ import {
   STALE_REVIEW_STATE_CODE,
 } from "./shared/review-wire.js";
 
-/** The version a write must carry, derived from what the store holds now. */
-const currentReviewStateVersion = async ({
-  store,
-  planRenderer,
-}: ReviewRouteContext): Promise<string> =>
-  reviewStateVersion({
-    drafts: await planRenderer.readStoredComments(store.draftsPath),
-    resolvedCommentIds: await readResolvedCommentIds({
-      store,
-      validate: validateResolvedCommentIds,
-    }),
+const storedReviewSnapshot = async ({
+  context,
+  store = context.store,
+}: {
+  readonly context: ReviewRouteContext;
+  readonly store?: ReviewRouteContext["store"];
+}) => {
+  const drafts = await context.planRenderer.readStoredComments(
+    store.draftsPath,
+  );
+  const resolvedCommentIds = await readResolvedCommentIds({
+    store,
+    validate: validateResolvedCommentIds,
   });
+  return encodeReviewSnapshot({
+    drafts,
+    sent: await context.planRenderer.readStoredComments(store.sentPath),
+    resolvedCommentIds,
+    version: reviewStateVersion({ drafts, resolvedCommentIds }),
+  });
+};
+
+const currentReviewStateVersion = async ({
+  context,
+  store = context.store,
+}: {
+  readonly context: ReviewRouteContext;
+  readonly store?: ReviewRouteContext["store"];
+}): Promise<string> => {
+  const drafts = await context.planRenderer.readStoredComments(
+    store.draftsPath,
+  );
+  const resolvedCommentIds = await readResolvedCommentIds({
+    store,
+    validate: validateResolvedCommentIds,
+  });
+  return reviewStateVersion({ drafts, resolvedCommentIds });
+};
+
+const conditionalReviewStateRefusal = async ({
+  context,
+  store = context.store,
+  payload,
+  operation,
+}: {
+  readonly context: ReviewRouteContext;
+  readonly store?: ReviewRouteContext["store"];
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly operation: string;
+}): Promise<ReviewRouteResponse | undefined> => {
+  if (typeof payload.version !== "string" || payload.version === "") {
+    return refusal({
+      status: 400,
+      reason: `${operation} must carry the review-state version it was prepared against`,
+    });
+  }
+  const version = await currentReviewStateVersion({ context, store });
+  return payload.version === version
+    ? undefined
+    : refusal({
+        status: 409,
+        reason: "The review state changed since this mutation was prepared",
+        code: STALE_REVIEW_STATE_CODE,
+      });
+};
 
 /**
  * Replaces the plan through a same-directory temporary file so a reader never
@@ -249,23 +299,13 @@ const storedFeedbackSubmission = ({
 export const readReviewState = async (
   context: ReviewRouteContext,
 ): Promise<ReviewRouteResponse> => {
-  const { store, planRenderer } = context;
+  const { planRenderer } = context;
   // The document must exist before drafts can be resolved, because the
   // block map is what makes a stored target meaningful.
   await planRenderer.renderPlan();
-  const drafts = await planRenderer.readStoredComments(store.draftsPath);
-  const resolvedCommentIds = await readResolvedCommentIds({
-    store,
-    validate: validateResolvedCommentIds,
-  });
   return jsonResponse({
     status: 200,
-    value: encodeReviewSnapshot({
-      drafts,
-      sent: await planRenderer.readStoredComments(store.sentPath),
-      resolvedCommentIds,
-      version: reviewStateVersion({ drafts, resolvedCommentIds }),
-    }),
+    value: await storedReviewSnapshot({ context }),
   });
 };
 
@@ -276,19 +316,12 @@ export const updateReviewState = async (
 ): Promise<ReviewRouteResponse> => {
   const { store, planId, sessionId, planRenderer } = context;
   const payload = payloadOf(body);
-  if (typeof payload.version !== "string" || payload.version === "") {
-    return refusal({
-      status: 400,
-      reason: "A drafts write must carry the version it was prepared against",
-    });
-  }
-  if (payload.version !== (await currentReviewStateVersion(context))) {
-    return refusal({
-      status: 409,
-      reason: "The review state changed since this write was prepared",
-      code: STALE_REVIEW_STATE_CODE,
-    });
-  }
+  const versionRefusal = await conditionalReviewStateRefusal({
+    context,
+    payload,
+    operation: "A drafts write",
+  });
+  if (versionRefusal !== undefined) return versionRefusal;
   const drafts = await planRenderer.validateUpdates(payload.drafts);
   const resolvedCommentIds = validateResolvedCommentIds(
     payload.resolvedCommentIds,
@@ -321,12 +354,7 @@ export const updateReviewState = async (
   await writeResolvedCommentIds({ store, ids: resolvedCommentIds });
   return jsonResponse({
     status: 200,
-    // The version the write produced, so the browser can prepare its next
-    // write without re-reading the whole snapshot first.
-    value: {
-      drafts: unsentDrafts.length,
-      version: await currentReviewStateVersion(context),
-    },
+    value: await storedReviewSnapshot({ context }),
   });
 };
 
@@ -342,11 +370,18 @@ export const submitFeedback = async (
   const { planId, sessionId, resolvedPlanPath, planRenderer } = context;
   let { store } = context;
   const payload = payloadOf(body);
+  store = await (await anchorReviewStore(store)).resolveStore();
+  const versionRefusal = await conditionalReviewStateRefusal({
+    context,
+    store,
+    payload,
+    operation: "A feedback submission",
+  });
+  if (versionRefusal !== undefined) return versionRefusal;
   const comments = await planRenderer.validateUpdates(payload.comments);
   if (comments.length === 0) {
     return refusal({ status: 400, reason: "Nothing to send" });
   }
-  store = await (await anchorReviewStore(store)).resolveStore();
   const alreadySent = await planRenderer.readStoredComments(store.sentPath);
   const sentById = new Map(alreadySent.map((comment) => [comment.id, comment]));
   if (
@@ -373,7 +408,14 @@ export const submitFeedback = async (
       path: store.draftsPath,
       comments: remainingDrafts,
     });
-    return jsonResponse({ status: 200, value: { comments: 0, retried: true } });
+    return jsonResponse({
+      status: 200,
+      value: {
+        comments: 0,
+        retried: true,
+        ...(await storedReviewSnapshot({ context, store })),
+      },
+    });
   }
   const submissionId = feedbackSubmissionId({
     planId,
@@ -496,6 +538,7 @@ export const submitFeedback = async (
       package: written.jsonPath,
       brief: written.briefPath,
       agentRequest,
+      ...(await storedReviewSnapshot({ context, store })),
     },
   });
 };
@@ -601,6 +644,12 @@ export const deleteSentComment = async (
 ): Promise<ReviewRouteResponse> => {
   const { store, planId, sessionId, resolvedPlanPath, planRenderer } = context;
   const payload = payloadOf(body);
+  const versionRefusal = await conditionalReviewStateRefusal({
+    context,
+    payload,
+    operation: "A comment deletion",
+  });
+  if (versionRefusal !== undefined) return versionRefusal;
   const commentId = payload.commentId;
   if (typeof commentId !== "string") {
     return refusal({ status: 400, reason: "A comment id is required" });
@@ -714,5 +763,8 @@ export const deleteSentComment = async (
       state: "done",
     },
   });
-  return jsonResponse({ status: 200, value: { commentId } });
+  return jsonResponse({
+    status: 200,
+    value: { commentId, ...(await storedReviewSnapshot({ context })) },
+  });
 };

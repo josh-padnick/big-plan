@@ -49,6 +49,54 @@ export const reviewRecoveryBase = (
   resolvedCommentIds: new Set(state.resolvedCommentIds),
 });
 
+export const rebaseLocalDraftsAgainstSent = ({
+  base,
+  local,
+  sent,
+  submittedBodies = new Map(),
+  createId,
+}: {
+  readonly base: ReviewRecoveryBase;
+  readonly local: ReviewRecoveryState;
+  readonly sent: ReadonlyArray<ReviewComment>;
+  readonly submittedBodies?: ReadonlyMap<string, string>;
+  readonly createId: () => string;
+}): ReviewRecoveryState => {
+  const sentBodies = new Map(sent.map((comment) => [comment.id, comment.body]));
+  const resolvedCommentIds = new Set(local.resolvedCommentIds);
+  const drafts: Array<ReviewComment> = [];
+  for (const draft of local.drafts) {
+    const sentBody = sentBodies.get(draft.id);
+    if (sentBody === undefined) {
+      drafts.push(draft);
+      continue;
+    }
+    const priorBody =
+      submittedBodies.get(draft.id) ??
+      base.draftBodies.get(draft.id) ??
+      sentBody;
+    if (draft.body === priorBody) continue;
+    const id = createId();
+    drafts.push({ ...draft, id });
+    if (local.resolvedCommentIds.has(draft.id)) resolvedCommentIds.add(id);
+  }
+  return {
+    drafts,
+    resolvedCommentIds,
+  };
+};
+
+export const repliesForSentComments = ({
+  replies,
+  sent,
+}: {
+  readonly replies: ReadonlyMap<string, string>;
+  readonly sent: ReadonlyArray<ReviewComment>;
+}): ReadonlyMap<string, string> => {
+  const sentIds = new Set(sent.map((comment) => comment.id));
+  return new Map([...replies].filter(([commentId]) => sentIds.has(commentId)));
+};
+
 const mergeResolvedCommentIds = ({
   base,
   local,
