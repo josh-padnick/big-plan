@@ -101,6 +101,49 @@ describe("review wire contract", () => {
     });
   });
 
+  it.each([
+    {
+      name: "partial claim",
+      state: { claimExpiresAtMs: 1_775_000_000_000 },
+    },
+    {
+      name: "answer without a claim",
+      state: { answeredAt: "2026-08-10T12:01:00.000Z" },
+    },
+    {
+      name: "two terminal states",
+      state: {
+        answeredAt: "2026-08-10T12:01:00.000Z",
+        canceledAt: "2026-08-10T12:01:01.000Z",
+        baselineSnapshot: "a".repeat(16),
+        claimedAt: "2026-08-10T12:00:30.000Z",
+        claimedBy: "b".repeat(16),
+        claimExpiresAtMs: 1_775_000_000_000,
+      },
+    },
+  ])("should reject a $name at the browser boundary", ({ state }) => {
+    expect(
+      decodeAgentSnapshot({
+        currentSnapshot: "a".repeat(16),
+        presence: { connected: false, state: "waiting" },
+        requests: [
+          {
+            requestId: "1".repeat(16),
+            premiseSnapshot: "a".repeat(16),
+            createdAt: "2026-08-10T12:00:00.000Z",
+            kind: "chat",
+            ...state,
+          },
+        ],
+        responses: [],
+        connectionLog: [],
+        plan: "/tmp/plan.mdx",
+        agentCommand: "big-plan agent /tmp/plan.mdx",
+        recoveryPrompt: "Reconnect this review",
+      }).requests,
+    ).toEqual([]);
+  });
+
   it("should carry the connector's reported model identity to the browser", () => {
     const encoded = encodeAgentSnapshot({
       currentSnapshot: "a".repeat(16),

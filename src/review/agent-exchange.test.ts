@@ -17,6 +17,7 @@ import {
   readAgentExchange,
   requestBaselineSnapshot,
   validateAgentResponseDraft,
+  validateAgentRequest,
   writeAgentRequest,
 } from "./agent-exchange.js";
 import type { AgentExchangeSnapshot } from "./agent-exchange.js";
@@ -207,7 +208,14 @@ describe("agent exchange response contract", () => {
           // The first request carries its own terminal mark. A reader never
           // infers that from the response beside it.
           requests: [
-            { ...request, answeredAt: "2026-08-02T12:01:00.000Z" },
+            {
+              ...request,
+              baselineSnapshot: request.premiseSnapshot,
+              claimedAt: "2026-08-02T12:00:30.000Z",
+              claimedBy: agentSessionId,
+              claimExpiresAtMs: 1_775_000_000_000,
+              answeredAt: "2026-08-02T12:01:00.000Z",
+            },
             reply,
           ],
           responses: [
@@ -233,6 +241,15 @@ describe("agent exchange response contract", () => {
         viewer(),
       ),
     ).toEqual(reply);
+  });
+
+  it("should reject an answered request without a complete claim", () => {
+    expect(() =>
+      validateAgentRequest({
+        ...request,
+        answeredAt: "2026-08-02T12:01:00.000Z",
+      }),
+    ).toThrow(/answered request must carry a complete claim/);
   });
 
   it("should collect original comments as reply validation context", () => {
@@ -550,7 +567,7 @@ describe("agent exchange filesystem", () => {
       claimedBy: agentSessionId,
       store,
       response,
-      now: new Date(startedAt + 402).toISOString(),
+      now: new Date(startedAt + 403).toISOString(),
     });
 
     const bounded = await readAgentExchange({ store, sessionId, planId });

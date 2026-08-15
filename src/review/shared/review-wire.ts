@@ -191,6 +191,9 @@ export const isReviewWireRecord = (
 ): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const isWireTimestamp = (value: unknown): value is string =>
+  typeof value === "string" && !Number.isNaN(Date.parse(value));
+
 /** Recognizes the bounded comment identity needed by browser persistence. */
 export const isReviewCommentValue = (
   value: unknown,
@@ -267,32 +270,53 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
         ) {
           return [];
         }
+        const rawClaim = [
+          request.baselineSnapshot,
+          request.claimedAt,
+          request.claimedBy,
+          request.claimExpiresAtMs,
+        ];
+        const hasAnyClaim = rawClaim.some((field) => field !== undefined);
+        const hasCompleteClaim =
+          typeof request.baselineSnapshot === "string" &&
+          /^[a-f0-9]{16,64}$/.test(request.baselineSnapshot) &&
+          isWireTimestamp(request.claimedAt) &&
+          typeof request.claimedBy === "string" &&
+          /^[a-f0-9]{16}$/.test(request.claimedBy) &&
+          typeof request.claimExpiresAtMs === "number" &&
+          Number.isSafeInteger(request.claimExpiresAtMs) &&
+          request.claimExpiresAtMs > 0;
+        const answeredAt = isWireTimestamp(request.answeredAt)
+          ? request.answeredAt
+          : undefined;
+        const canceledAt = isWireTimestamp(request.canceledAt)
+          ? request.canceledAt
+          : undefined;
+        if (
+          (hasAnyClaim && !hasCompleteClaim) ||
+          (request.answeredAt !== undefined && answeredAt === undefined) ||
+          (request.canceledAt !== undefined && canceledAt === undefined) ||
+          (answeredAt !== undefined && canceledAt !== undefined) ||
+          (answeredAt !== undefined && !hasCompleteClaim)
+        ) {
+          return [];
+        }
         return [
           {
             requestId: request.requestId,
             premiseSnapshot: request.premiseSnapshot,
             createdAt: request.createdAt,
             kind: request.kind,
-            ...(typeof request.baselineSnapshot === "string"
-              ? { baselineSnapshot: request.baselineSnapshot }
+            ...(hasCompleteClaim
+              ? {
+                  baselineSnapshot: request.baselineSnapshot as string,
+                  claimedAt: request.claimedAt as string,
+                  claimedBy: request.claimedBy as string,
+                  claimExpiresAtMs: request.claimExpiresAtMs as number,
+                }
               : {}),
-            ...(typeof request.claimedAt === "string"
-              ? { claimedAt: request.claimedAt }
-              : {}),
-            // The browser derives "picked up" from the live claim, so the
-            // lease has to cross the wire or every request reads as waiting.
-            ...(typeof request.claimedBy === "string"
-              ? { claimedBy: request.claimedBy }
-              : {}),
-            ...(typeof request.claimExpiresAtMs === "number"
-              ? { claimExpiresAtMs: request.claimExpiresAtMs }
-              : {}),
-            ...(typeof request.answeredAt === "string"
-              ? { answeredAt: request.answeredAt }
-              : {}),
-            ...(typeof request.canceledAt === "string"
-              ? { canceledAt: request.canceledAt }
-              : {}),
+            ...(answeredAt === undefined ? {} : { answeredAt }),
+            ...(canceledAt === undefined ? {} : { canceledAt }),
             ...(typeof request.body === "string" ? { body: request.body } : {}),
             ...(typeof request.commentId === "string"
               ? { commentId: request.commentId }

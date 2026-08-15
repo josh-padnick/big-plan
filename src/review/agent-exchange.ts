@@ -447,6 +447,11 @@ const requestBase = (
       '"baselineSnapshot", "claimedAt", "claimedBy", and "claimExpiresAtMs" must appear together',
     );
   }
+  if (answeredAt !== undefined && baselineSnapshot === undefined) {
+    throw new AgentExchangeRejected(
+      "An answered request must carry a complete claim",
+    );
+  }
   const requestAttachments = validateRequestAttachments({
     attachmentManifest: value.attachmentManifest,
     attachments: value.attachments,

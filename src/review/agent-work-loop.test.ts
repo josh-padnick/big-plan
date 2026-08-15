@@ -47,6 +47,44 @@ const executablePath = fileURLToPath(
   new URL("../../bin/big-plan.mjs", import.meta.url),
 );
 
+const deferred = (): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+} => {
+  let resolve = (): void => undefined;
+  const promise = new Promise<void>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+};
+
+const holdAgentRequestLock = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewRuntime["store"];
+  readonly requestId: string;
+}): Promise<() => Promise<void>> => {
+  const acquired = deferred();
+  const released = deferred();
+  const lock = reviewStore.withReviewStoreLock({
+    lockPath: join(store.agentRequestDirectory, `.${requestId}.lock`),
+    change: async () => {
+      acquired.resolve();
+      await released.promise;
+    },
+    timeoutError: () => new Error("Timed out holding the agent request lock"),
+  });
+  await acquired.promise;
+  let settled = false;
+  return async () => {
+    if (settled) return;
+    settled = true;
+    released.resolve();
+    await lock;
+  };
+};
+
 beforeAll(async () => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-command-"));
   const sourcePath = fileURLToPath(
@@ -127,6 +165,9 @@ describe("agent work loop", () => {
     expect(result.agent_prompt).toContain("You are the coding agent");
     expect(result.agent_prompt).toContain("agent next");
     expect(result.agent_prompt).toContain("agent note");
+    expect(result.agent_prompt).toContain("Retain the agent_token");
+    expect(result.agent_prompt).toContain("agent next --agent <token>");
+    expect(result.agent_prompt).toContain("--agent <agent_token>");
     expect(result.agent_prompt).toContain(runtime.planPath);
     expect(result.codex).toContain('codex "$(cat ');
     expect(result.claude).toContain('claude "$(cat ');
@@ -1019,21 +1060,62 @@ describe("agent work loop lifecycle", () => {
     await writeAgentRequest({ store: review.store, request: firstRequest });
     await writeAgentRequest({ store: review.store, request: secondRequest });
 
+    let releaseLock: (() => Promise<void>) | undefined;
     try {
-      const pickups = await Promise.all([
-        runAgentWorkLoopAction({
-          kind: "next",
-          planPath,
-          shouldWait: true,
-          executablePath,
-        }),
-        runAgentWorkLoopAction({
-          kind: "next",
-          planPath,
-          shouldWait: true,
-          executablePath,
-        }),
-      ]);
+      releaseLock = await holdAgentRequestLock({
+        store: review.store,
+        requestId: firstRequest.requestId,
+      });
+      const firstPickup = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "Race agent one",
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({
+            state: "working",
+            requestId: firstRequest.requestId,
+            model: { name: "Race agent one" },
+          });
+        },
+        { timeout: 5_000 },
+      );
+      const secondPickup = runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: true,
+        executablePath,
+        modelName: "Race agent two",
+      });
+      await vi.waitFor(
+        async () => {
+          expect(
+            await reviewStore.readAgentPresence({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).toMatchObject({
+            state: "working",
+            requestId: firstRequest.requestId,
+            model: { name: "Race agent two" },
+          });
+        },
+        { timeout: 5_000 },
+      );
+      // The persisted heartbeat barrier proves both public pickups selected the
+      // same unclaimed request. With retry handling removed, one pickup rejects
+      // here instead of moving to request two; that counterfactual was verified.
+      await releaseLock();
+      releaseLock = undefined;
+      const pickups = await Promise.all([firstPickup, secondPickup]);
       expect(pickups).toEqual([
         expect.objectContaining({ pending: true }),
         expect.objectContaining({ pending: true }),
@@ -1050,6 +1132,7 @@ describe("agent work loop lifecycle", () => {
         ),
       ).toEqual(new Set([firstRequest.requestId, secondRequest.requestId]));
     } finally {
+      await releaseLock?.();
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }
@@ -1085,67 +1168,57 @@ describe("agent work loop lifecycle", () => {
       });
       await writeAgentRequest({ store: review.store, request: staleRequest });
       await writeAgentRequest({ store: review.store, request: nextRequest });
-      let terminalized = false;
-      const heartbeat = vi
-        .spyOn(reviewStore, "writeAgentHeartbeat")
-        .mockImplementation(async (input) => {
-          if (
-            terminalized ||
-            input.state !== "working" ||
-            input.requestId !== staleRequest.requestId
-          ) {
-            return;
-          }
-          terminalized = true;
-          const now = new Date().toISOString();
-          if (terminalState === "canceled") {
-            await cancelAgentRequest({
-              store: review.store,
-              requestId: staleRequest.requestId,
-              now,
-            });
-            return;
-          }
-          const claimed = await claimAgentRequest({
-            store: review.store,
-            activeSessionId: review.sessionId,
-            requestId: staleRequest.requestId,
-            claimedBy: "eeeeeeeeeeeeeeee",
-            baselineSnapshot: premiseSnapshot,
-            now,
-          });
-          await commitRequestTerminal({
-            store: review.store,
-            claimedBy: "eeeeeeeeeeeeeeee",
-            response: validateAgentResponseDraft({
-              value: {
-                requestId: staleRequest.requestId,
-                message: "Another agent completed this request.",
-              },
-              request: claimed,
-              commentsById: new Map(),
-              changedBlocks: new Set(),
-              currentSnapshot: premiseSnapshot,
-              now,
-            }),
-            now,
-          });
-        });
-
+      let releaseLock: (() => Promise<void>) | undefined;
       try {
-        await expect(
-          runAgentWorkLoopAction({
-            kind: "next",
-            planPath,
-            shouldWait: true,
-            executablePath,
-          }),
-        ).resolves.toMatchObject({
+        releaseLock = await holdAgentRequestLock({
+          store: review.store,
+          requestId: staleRequest.requestId,
+        });
+        const pickup = runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: true,
+          executablePath,
+          modelName: "Stale selection agent",
+        });
+        await vi.waitFor(
+          async () => {
+            expect(
+              await reviewStore.readAgentPresence({
+                store: review.store,
+                sessionId: review.sessionId,
+              }),
+            ).toMatchObject({
+              state: "working",
+              requestId: staleRequest.requestId,
+              model: { name: "Stale selection agent" },
+            });
+          },
+          { timeout: 5_000 },
+        );
+        const now = new Date().toISOString();
+        await writeAgentRequest({
+          store: review.store,
+          request:
+            terminalState === "canceled"
+              ? { ...staleRequest, canceledAt: now }
+              : {
+                  ...staleRequest,
+                  baselineSnapshot: premiseSnapshot,
+                  claimedAt: now,
+                  claimedBy: "eeeeeeeeeeeeeeee",
+                  claimExpiresAtMs: Date.now() + AGENT_CLAIM_LEASE_MS,
+                  answeredAt: now,
+                },
+        });
+        await releaseLock();
+        releaseLock = undefined;
+        await expect(pickup).resolves.toMatchObject({
           pending: true,
           work: { requestId: nextRequest.requestId },
         });
       } finally {
-        heartbeat.mockRestore();
+        await releaseLock?.();
         await review.close();
         await rm(directory, { recursive: true, force: true });
       }
@@ -1298,9 +1371,7 @@ describe("agent work loop lifecycle", () => {
       baselineSnapshot: request.premiseSnapshot,
       now: new Date(Date.now() - AGENT_CLAIM_LEASE_MS - 1).toISOString(),
     });
-    const appendProgress = vi
-      .spyOn(reviewStore, "appendProgressValue")
-      .mockRejectedValue(new Error("Progress channel unavailable"));
+    await mkdir(review.store.progressPath);
 
     try {
       const pickup = await runAgentWorkLoopAction({
@@ -1345,7 +1416,6 @@ describe("agent work loop lifecycle", () => {
         ],
       });
     } finally {
-      appendProgress.mockRestore();
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }

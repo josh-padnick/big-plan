@@ -307,6 +307,7 @@ const agentPrompt = async (
     executablePath: binPath,
     planPath: session.planPath,
   });
+  const resumeCommand = `${nextCommand} --agent <agent_token>`;
   const prompt = `You are the coding agent responsible for the live Big Plan review of:
 ${session.planPath}
 
@@ -327,7 +328,8 @@ For each returned work item:
    - declined: explain the principled reason you will not revise the plan.
 5. For a plan-wide chat request, answer the question without editing unless an edit is genuinely requested.
 6. Write the returned response_template shape to response_file, then run the returned respond_command. That command validates the revised MDX and the complete response before publishing it to the reviewer.
-7. Repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
+7. Retain the agent_token returned with each work item. If this agent process restarts before responding, use the \`agent next --agent <token>\` resume path to continue that still-open pickup by running ${resumeCommand}.
+8. After responding, repeat ${nextCommand} so replies continue in the same agent session. Stay in this loop until the reviewer says the review is complete or the review server stops.
 
 Reviewer image references included in a changed plan are materialized into source-owned ./assets files during response validation. Never edit rendered HTML. Never invent a Changed outcome without changing the plan source.`;
   await writeAgentPrompt({ store: session.store, prompt });
