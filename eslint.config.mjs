@@ -85,6 +85,7 @@ export default tseslint.config(
           "src/components/database-table-schema/parse-table-schema*.ts",
           "src/components/wireframe/catalog*.ts",
           "src/components/wireframe/model*.ts",
+          "src/components/wireframe/wireframe-fit*.ts",
         ],
         imports: [
           "**/components/_authoring/**",
@@ -99,6 +100,7 @@ export default tseslint.config(
           "**/components/database-table-schema/parse-table-schema.js",
           "**/components/wireframe/catalog.js",
           "**/components/wireframe/model.js",
+          "**/components/wireframe/wireframe-fit.js",
         ],
         mayImport: ["planVocabulary"],
       },

@@ -29,6 +29,12 @@
 // template and cannot import it, so a change to those attribute spellings
 // changes the strings here too.
 //
+// fitWireframeScreen is authored once in components/wireframe/wireframe-fit.ts
+// and embedded here as text (the same .toString() trick used for
+// compareDataTableValues below), because the review diff lens imports that
+// module directly while this string template cannot. Both callers therefore
+// fit a maximized wireframe screen identically.
+//
 // RE-WIRING. The review island replaces the whole article in place when the
 // agent publishes a revision and announces it with a document-level
 // "bigplan:article-replaced" event. Every leg therefore captures its nodes
@@ -38,9 +44,11 @@
 // through small registries, and module state that pointed into the replaced
 // article is cleared rather than resurrected.
 import { compareDataTableValues } from "../../components/data-table/sort-values.js";
+import { fitWireframeScreen } from "../../components/wireframe/wireframe-fit.js";
 import { DIAGRAM_SCRIPT } from "./diagram-script.js";
 
 const COMPARE_DATA_TABLE_VALUES_SOURCE = compareDataTableValues.toString();
+const FIT_WIREFRAME_SCREEN_SOURCE = fitWireframeScreen.toString();
 
 export const VIEWER_SCRIPT = `<script>
 const setColumnDragState = ({ pressed, dragging }) => {
@@ -1203,60 +1211,7 @@ const wireCommentDraft = () => {
     }
   });
 };
-const fitWireframeScreen = (screen) => {
-  const card = screen.querySelector(":scope > .wireframe-frame-card");
-  const frame = card === null ? null : card.querySelector(":scope > .wireframe-frame");
-  if (card === null || frame === null || screen.clientWidth === 0) return;
-  const caption = screen.querySelector(":scope > .wireframe-screen-caption");
-  // offsetWidth stays in the frame's unscaled coordinate space. Writing a
-  // numeric zoom avoids relying on unsupported length division in CSS.
-  frame.style.zoom = "1";
-  // The card's padding and border sit outside the frame, so the space
-  // available to the frame is the screen's width minus that inset - read
-  // from computed style rather than a duplicated constant, so the two
-  // never drift out of sync.
-  const cardStyle = getComputedStyle(card);
-  const inset =
-    parseFloat(cardStyle.paddingLeft) +
-    parseFloat(cardStyle.paddingRight) +
-    parseFloat(cardStyle.borderLeftWidth) +
-    parseFloat(cardStyle.borderRightWidth);
-  const widthScale = (screen.clientWidth - inset) / frame.offsetWidth;
-  // Height only constrains a maximized figure. At rest the document owns
-  // vertical scrolling and the screen box grows with the drawing, so its
-  // height carries no budget to fit into; fitting to it there would shrink
-  // every phone and tablet away from the true size they are drawn at.
-  //
-  // A maximized panel is the opposite: its height is fixed, and fitting only
-  // the width means a short wide window scrolls the device out of view - the
-  // reader opened the figure to see all of it at once, and instead gets a
-  // scrollbar and a cut-off frame. Both axes have to fit.
-  let scale = Math.min(1, widthScale);
-  if (screen.closest("[data-figure-maximized]") !== null) {
-    const verticalInset =
-      parseFloat(cardStyle.paddingTop) +
-      parseFloat(cardStyle.paddingBottom) +
-      parseFloat(cardStyle.borderTopWidth) +
-      parseFloat(cardStyle.borderBottomWidth);
-    // The caption is a block spanning the screen, so its height does not
-    // depend on the scale being computed and one pass settles. A caption
-    // pinned to the frame's painted width would reintroduce that circularity
-    // and need to iterate.
-    let captionHeight = 0;
-    if (caption !== null) {
-      const captionStyle = getComputedStyle(caption);
-      captionHeight =
-        caption.getBoundingClientRect().height +
-        parseFloat(captionStyle.marginTop) +
-        parseFloat(captionStyle.marginBottom);
-    }
-    const heightScale =
-      (screen.clientHeight - captionHeight - verticalInset) /
-      frame.offsetHeight;
-    scale = Math.min(scale, heightScale);
-  }
-  frame.style.zoom = String(scale);
-};
+const fitWireframeScreen = ${FIT_WIREFRAME_SCREEN_SOURCE};
 // Maximizing (or restoring) changes the width available to the active frame
 // without firing a window resize event, and the expanded rail narrows it
 // further still. One shared observer on every screen's own box catches all of
