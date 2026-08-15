@@ -107,7 +107,8 @@ word-level edits for close rewrites and stacked **Was**/**Now** bands for
 larger rewrites, additions, removals, tables, and code. Decision, diagram, and
 file-tree changes retain their compiled component presentation behind a
 **Was**/**Now** switch instead of flattening their structure into prose.
-Wireframe changes add a per-screen selector for **Added**, **Removed**, **Updated**, **Moved**, and **Initial screen** changes, keep the full device frame visible behind interactive **Was**/**Now** controls, and carry the shared maximize control into the diff lens.
+When either revision contains multiple screens, wireframe changes add a per-screen selector for **Added**, **Removed**, **Updated**, **Moved**, and **Initial screen** changes.
+They keep the full device frame visible behind interactive **Was**/**Now** controls and carry the shared maximize control into the diff lens.
 An added or replaced picture shows the picture itself in its band, because a
 picture carries no words for a text comparison to show.
 Changes inside `QuickSummary`, `HttpEndpoint`, `GraphqlOperation`, `GrpcMethod`,
