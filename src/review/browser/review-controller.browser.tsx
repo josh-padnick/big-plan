@@ -5277,6 +5277,15 @@ export const ReviewController = () => {
           </button>
         </Tooltip>
       )}
+      {resolveRefusal === null ? null : (
+        <p
+          className="fixed top-14 right-3 left-3 z-50 mx-auto m-0 max-w-2xl min-w-0 rounded-lg border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-xs font-semibold text-[var(--callout-danger-c)] shadow-floating [overflow-wrap:anywhere]"
+          role="alert"
+          data-review-resolve-refusal
+        >
+          {resolveRefusal}
+        </p>
+      )}
       {feedbackHost === null
         ? null
         : createPortal(
@@ -5749,15 +5758,6 @@ export const ReviewController = () => {
                       : currentAgentActivity.supporting}
                   </p>
                 </div>
-              )}
-              {resolveRefusal === null ? null : (
-                <p
-                  className="m-0 text-xs font-semibold text-danger"
-                  role="alert"
-                  data-review-resolve-refusal
-                >
-                  {resolveRefusal}
-                </p>
               )}
             </div>
           ) : null}

@@ -800,6 +800,23 @@ const readCompleteAgentExchange = async ({
   return { requests, responses };
 };
 
+/**
+ * The requests the agent still owes an answer, oldest first. This is the one
+ * definition of outstanding work: every caller that must not contradict a
+ * queued message reads it from here rather than re-deriving terminality.
+ */
+export const outstandingAgentRequests = (
+  snapshot: AgentExchangeSnapshot,
+): ReadonlyArray<AgentRequest> => {
+  const answered = new Set(
+    snapshot.responses.map((response) => response.requestId),
+  );
+  return snapshot.requests.filter(
+    (request) =>
+      request.canceledAt === undefined && !answered.has(request.requestId),
+  );
+};
+
 /** A source digest shared by request creation, response validation, and polling. */
 export const deriveSnapshotDigest = (source: string): string =>
   createHash("sha256").update(source).digest("hex").slice(0, 16);
@@ -903,20 +920,12 @@ export const readAgentExchange = async ({
     sessionId,
     planId,
   });
-  const answeredRequestIds = new Set(
-    complete.responses.map((response) => response.requestId),
-  );
-  const pending = complete.requests.filter(
-    (request) =>
-      request.canceledAt === undefined &&
-      !answeredRequestIds.has(request.requestId),
+  const pending = outstandingAgentRequests(complete);
+  const pendingRequestIds = new Set(
+    pending.map((request) => request.requestId),
   );
   const terminal = complete.requests
-    .filter(
-      (request) =>
-        request.canceledAt !== undefined ||
-        answeredRequestIds.has(request.requestId),
-    )
+    .filter((request) => !pendingRequestIds.has(request.requestId))
     .slice(-EXCHANGE_LIMIT);
   const retainedRequestIds = new Set(
     [...pending, ...terminal].map((request) => request.requestId),
@@ -987,23 +996,6 @@ export const readValidatedAgentResponse = async ({
   } catch {
     return undefined;
   }
-};
-
-/**
- * The requests the agent still owes an answer, oldest first. This is the one
- * definition of outstanding work: every caller that must not contradict a
- * queued message reads it from here rather than re-deriving terminality.
- */
-export const outstandingAgentRequests = (
-  snapshot: AgentExchangeSnapshot,
-): ReadonlyArray<AgentRequest> => {
-  const answered = new Set(
-    snapshot.responses.map((response) => response.requestId),
-  );
-  return snapshot.requests.filter(
-    (request) =>
-      request.canceledAt === undefined && !answered.has(request.requestId),
-  );
 };
 
 /** Returns the oldest request that does not yet have a validated response. */
