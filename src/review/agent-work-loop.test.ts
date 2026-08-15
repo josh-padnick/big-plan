@@ -37,6 +37,7 @@ import {
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import { reviewImageId } from "./shared/review-image.js";
+import { reviewSessionIsRunning } from "./session-authority.js";
 import { readProgress } from "./store.js";
 import * as reviewStore from "./store.js";
 import { renderDocument } from "../render/render-document.js";
@@ -2339,7 +2340,7 @@ describe("agent work loop lifecycle", () => {
     await writeFile(planPath, source);
     const review = await startReviewRuntime({
       planPath,
-      idleTimeoutMs: 400,
+      idleTimeoutMs: 100,
     });
     const premiseSnapshot = deriveSnapshotDigest(source);
     const blocker = messageAgentRequest({
@@ -2362,7 +2363,7 @@ describe("agent work loop lifecycle", () => {
     });
     await writeAgentRequest({ store: review.store, request: blocker });
     await writeAgentRequest({ store: review.store, request: queued });
-    const leaseClock = Date.now() - AGENT_CLAIM_LEASE_MS + 900;
+    const leaseClock = Date.now() - AGENT_CLAIM_LEASE_MS + 250;
     await claimAgentRequest({
       store: review.store,
       activeSessionId: review.sessionId,
@@ -2379,9 +2380,9 @@ describe("agent work loop lifecycle", () => {
     });
 
     try {
-      // Without idle shutdown consulting the canceled live writer, the 400ms
-      // timeout ends this wait before the 900ms remaining lease lapses. That
-      // counterfactual was verified before this test passed.
+      // Without the queued-work extension, the first 100ms idle tick after the
+      // 250ms lease lapses stops the runtime before the waiter's 500ms poll.
+      // That counterfactual was verified before this test passed.
       await expect(
         runAgentWorkLoopAction({
           kind: "next",
@@ -2393,6 +2394,61 @@ describe("agent work loop lifecycle", () => {
         pending: true,
         work: { requestId: queued.requestId },
       });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should bound the idle extension for queued work without an agent", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-idle-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nDo not keep an unattended queue alive forever.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({
+      planPath,
+      idleTimeoutMs: 100,
+      queuedWorkIdleTimeoutMs: 300,
+    });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "abababababababab",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: new Date().toISOString(),
+      body: "Wait for an agent that never connects.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+
+    try {
+      const firstIdleTick = Date.now() + 180;
+      await vi.waitFor(
+        () => {
+          expect(Date.now()).toBeGreaterThan(firstIdleTick);
+        },
+        { timeout: 1_000, interval: 20 },
+      );
+      // Without the state-based extension, the runtime is already stopped at
+      // this first assertion. Without its deadline, the final assertion never
+      // passes. Both counterfactuals were verified before this test passed.
+      await expect(
+        reviewSessionIsRunning({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toMatchObject({ running: true });
+      await vi.waitFor(
+        async () => {
+          await expect(
+            reviewSessionIsRunning({
+              store: review.store,
+              sessionId: review.sessionId,
+            }),
+          ).resolves.toMatchObject({ running: false });
+        },
+        { timeout: 2_000, interval: 25 },
+      );
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

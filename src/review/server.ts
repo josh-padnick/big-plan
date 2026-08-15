@@ -56,6 +56,7 @@ import {
   readAgentExchange,
   readValidatedAgentRequests,
   requestBlocksPlanPickup,
+  requestIsTerminal,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
@@ -93,6 +94,7 @@ import {
   agentConnectCommand,
   agentRecoveryPrompt,
 } from "./shared/agent-command.js";
+import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import {
   activateReviewSession,
   REVIEW_HEARTBEAT_INTERVAL_MS,
@@ -361,13 +363,18 @@ export const startReviewRuntime = async ({
   diffPreviewSource,
   idleTimeoutMs = DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
   writeStallMs = MUTATION_STALL_MS,
+  queuedWorkIdleTimeoutMs = AGENT_CLAIM_LEASE_MS,
 }: {
   readonly planPath: string;
   readonly diffPreviewSource?: string;
   readonly idleTimeoutMs?: number;
   /** How long one mutation may run before this runtime gives up on it. */
   readonly writeStallMs?: number;
+  readonly queuedWorkIdleTimeoutMs?: number;
 }): Promise<ReviewRuntime> => {
+  const queuedWorkIdleLimitMs = Number.isFinite(queuedWorkIdleTimeoutMs)
+    ? Math.max(0, Math.min(AGENT_CLAIM_LEASE_MS, queuedWorkIdleTimeoutMs))
+    : AGENT_CLAIM_LEASE_MS;
   const resolvedPlanPath = resolve(planPath);
   const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
   const agentCommand = agentConnectCommand({
@@ -1035,6 +1042,12 @@ export const startReviewRuntime = async ({
 
   let closed = false;
   let idleTimer: ReturnType<typeof setInterval> | undefined;
+  let queuedWorkIdleState:
+    | {
+        readonly requestKey: string;
+        readonly expiresAtMs: number;
+      }
+    | undefined;
   const closeRuntime = async (
     reason = "The review session was stopped.",
     sessionAlreadyStopped = false,
@@ -1104,7 +1117,28 @@ export const startReviewRuntime = async ({
                   requestBlocksPlanPickup({ request, nowMs }),
                 )
               ) {
+                queuedWorkIdleState = undefined;
                 context.activityClock.touch();
+                return false;
+              }
+              const queuedRequestKey = requests
+                .filter((request) => !requestIsTerminal(request))
+                .map((request) => request.requestId)
+                .sort()
+                .join(":");
+              if (queuedRequestKey.length === 0) {
+                queuedWorkIdleState = undefined;
+                return true;
+              }
+              if (queuedWorkIdleState?.requestKey !== queuedRequestKey) {
+                queuedWorkIdleState = {
+                  requestKey: queuedRequestKey,
+                  expiresAtMs: nowMs + queuedWorkIdleLimitMs,
+                };
+                context.activityClock.touch();
+                return false;
+              }
+              if (nowMs < queuedWorkIdleState.expiresAtMs) {
                 return false;
               }
               return true;
