@@ -127,6 +127,7 @@ import {
 } from "./review-poll-health.js";
 import {
   reviewContactLossObservation,
+  reviewContactLossRecovery,
   type ReviewContactLossObservation,
 } from "./review-expiry.js";
 import {
@@ -662,11 +663,16 @@ const RuntimeAlertBanner = ({
   scope,
   heading,
   detail,
+  link,
   action,
 }: {
   readonly scope: string;
   readonly heading: string;
   readonly detail: string;
+  readonly link?: {
+    readonly href: string;
+    readonly label: string;
+  };
   readonly action?: {
     readonly label: string;
     readonly onAct: () => void;
@@ -686,7 +692,16 @@ const RuntimeAlertBanner = ({
         {detail}
       </p>
     </div>
-    {action === undefined ? null : (
+    {link !== undefined ? (
+      <a
+        className="shrink-0 rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        href={link.href}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {link.label}
+      </a>
+    ) : action === undefined ? null : (
       <button
         type="button"
         className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--callout-danger-c)]"
@@ -706,21 +721,38 @@ const ServerGoneBanner = ({
   canRefresh,
   onRefresh,
   contactLossObservation,
+  latestReviewUrl,
   restartCommand,
 }: {
   readonly canRefresh: boolean;
   readonly onRefresh: () => void;
   readonly contactLossObservation: ReviewContactLossObservation;
+  readonly latestReviewUrl: string | undefined;
   readonly restartCommand: string | undefined;
 }) => {
   const unsavedInputWarning = canRefresh
     ? ""
     : " Keep this tab open because the latest review input has not reached the local review server.";
-  if (contactLossObservation.kind === "deadline-passed") {
+  const recovery = reviewContactLossRecovery({
+    observation: contactLossObservation,
+    latestReviewUrl,
+    restartCommand,
+  });
+  if (recovery !== undefined) {
+    if (recovery.kind === "replacement") {
+      return (
+        <RuntimeAlertBanner
+          scope="data-review-server-gone"
+          heading="This tab lost contact with this review session"
+          detail={`This tab lost contact with the local review server, and the deadline it last knew has passed. This review continues at the latest address.${unsavedInputWarning}`}
+          link={{ href: recovery.href, label: "Open latest review" }}
+        />
+      );
+    }
     const restartInstruction =
-      restartCommand === undefined
-        ? "Restart the review runtime for this plan, then open the new address it prints to continue reviewing."
-        : `Restart it with ${restartCommand}, then open the new address it prints to continue reviewing.`;
+      recovery.kind === "restart-command"
+        ? `Restart it with ${recovery.command}, then open the new address it prints to continue reviewing.`
+        : "Restart the review runtime for this plan, then open the new address it prints to continue reviewing.";
     return (
       <RuntimeAlertBanner
         scope="data-review-server-gone"
@@ -5164,6 +5196,7 @@ export const ReviewController = () => {
           canRefresh={canRefreshReview}
           onRefresh={() => window.location.reload()}
           contactLossObservation={contactLossObservation}
+          latestReviewUrl={runtimeSession?.latestReviewUrl}
           restartCommand={runtimeSession?.restartCommand}
         />
       ) : null}

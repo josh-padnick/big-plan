@@ -7,6 +7,11 @@
 export type ReviewContactLossObservation =
   { readonly kind: "unexplained" } | { readonly kind: "deadline-passed" };
 
+export type ReviewContactLossRecovery =
+  | { readonly kind: "replacement"; readonly href: string }
+  | { readonly kind: "restart-command"; readonly command: string }
+  | { readonly kind: "no-restart-command" };
+
 /**
  * Classifies the remembered deadline after an already-open page loses contact.
  *
@@ -30,4 +35,24 @@ export const reviewContactLossObservation = ({
   }
   if (nowMs < expiresAtMs) return { kind: "unexplained" };
   return { kind: "deadline-passed" };
+};
+
+/** Chooses recovery without superseding a replacement runtime. */
+export const reviewContactLossRecovery = ({
+  observation,
+  latestReviewUrl,
+  restartCommand,
+}: {
+  readonly observation: ReviewContactLossObservation;
+  readonly latestReviewUrl: string | undefined;
+  readonly restartCommand: string | undefined;
+}): ReviewContactLossRecovery | undefined => {
+  if (observation.kind !== "deadline-passed") return undefined;
+  if (latestReviewUrl !== undefined) {
+    return { kind: "replacement", href: latestReviewUrl };
+  }
+  if (restartCommand !== undefined) {
+    return { kind: "restart-command", command: restartCommand };
+  }
+  return { kind: "no-restart-command" };
 };
