@@ -152,7 +152,7 @@ const verifyRequestAttachments = async ({
         `Attachment ${firstAttachment.id} is outside the request attachment directory`,
       );
     }
-    fail(
+    return fail(
       `Attachment ${firstAttachment.id} could not be opened during agent pickup`,
     );
   }
@@ -176,7 +176,7 @@ const verifyRequestAttachments = async ({
           `Attachment ${attachment.id} is outside the request attachment directory`,
         );
       }
-      fail(
+      return fail(
         `Attachment ${attachment.id} could not be opened during agent pickup`,
       );
     }
@@ -184,7 +184,7 @@ const verifyRequestAttachments = async ({
     try {
       bytes = Uint8Array.from(await readFile(attachmentPath));
     } catch {
-      fail(
+      return fail(
         `Attachment ${attachment.id} could not be opened during agent pickup`,
       );
     }

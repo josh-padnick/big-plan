@@ -643,7 +643,9 @@ export const startReviewRuntime = async ({
         process.stderr.write(
           `${message} for session ${sessionId}:\n${describeRuntimeFailure({ error, secrets: [token] })}\n`,
         );
-      } catch {}
+      } catch {
+        // A diagnostic sink failure must not fail the review request.
+      }
     },
   };
   const { planRenderer } = context;
