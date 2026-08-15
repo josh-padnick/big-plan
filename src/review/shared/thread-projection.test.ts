@@ -315,6 +315,25 @@ describe("thread projection", () => {
     });
   });
 
+  it("should not offer queued deletion after an earlier pickup", () => {
+    const expiredClaim = liveClaim(NOW - AGENT_CLAIM_LEASE_MS - 1);
+    expect(
+      projectCommentThread({
+        comment,
+        requests: [request(expiredClaim)],
+        responses: [],
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({
+      group: "queued",
+      canDeleteQueued: false,
+    });
+  });
+
   it("should derive one request status from progress and presence", () => {
     expect(
       projectRequestStatus({

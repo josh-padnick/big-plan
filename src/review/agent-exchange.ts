@@ -714,6 +714,11 @@ const validateStoredResponse = ({
   readonly request: AgentRequest;
   readonly commentsById: ReadonlyMap<string, ReviewComment>;
 }): AgentResponse => {
+  if (request.answeredAt === undefined) {
+    throw new AgentExchangeRejected(
+      "A stored agent response has not reached its terminal commit",
+    );
+  }
   if (!agentOwnsRequest(request) || request.baselineSnapshot === undefined) {
     throw new AgentExchangeRejected(
       "A stored agent response cannot answer an unclaimed request",

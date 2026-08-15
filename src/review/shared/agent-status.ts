@@ -4,17 +4,20 @@
 
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
-import { agentOwnsRequest } from "./request-ownership.js";
+import { claimIsLive, type ClaimedRequest } from "./agent-claim.js";
+import {
+  AGENT_STALL_MS,
+  AGENT_STALL_WINDOW_LABEL,
+} from "./agent-timing.js";
 import type { BrowserConnectionEvent } from "./review-wire.js";
 import { compactDurationLabel } from "./time-label.js";
 
 // Agents are expected to send a progress note at least once per minute while
 // working. The extra 15 seconds absorbs scheduling and filesystem jitter, but
 // still marks a killed agent disconnected well before a two-minute wait.
-export const AGENT_STALL_MS = 75_000;
-export const AGENT_STALL_WINDOW_LABEL = "75 seconds";
+export { AGENT_STALL_MS, AGENT_STALL_WINDOW_LABEL } from "./agent-timing.js";
 
-export type AgentActivityRequest = {
+export type AgentActivityRequest = ClaimedRequest & {
   readonly requestId: string;
   readonly kind: "feedback" | "reply" | "chat";
   readonly createdAt: string;
@@ -276,6 +279,16 @@ export const deriveCurrentAgentActivity = ({
   }
 
   const facts = requestFacts(request);
+  if (!claimIsLive({ request, nowMs: now })) {
+    return {
+      ...facts,
+      state: "waiting",
+      tone: "neutral",
+      headline: "Waiting for agent",
+      supporting:
+        "Feedback is queued and will start when the agent is available.",
+    };
+  }
   const failed = progressEvents
     .filter(
       (event) =>
@@ -298,21 +311,6 @@ export const deriveCurrentAgentActivity = ({
     meaningfulWork(event, request.requestId),
   );
   const latest = meaningful.at(-1);
-  if (
-    !agentOwnsRequest(request) &&
-    request.baselineSnapshot === undefined &&
-    latest === undefined
-  ) {
-    return {
-      ...facts,
-      state: "waiting",
-      tone: "neutral",
-      headline: "Waiting for agent",
-      supporting:
-        "Feedback is queued and will start when the agent is available.",
-    };
-  }
-
   const observedAt = Math.max(
     0,
     latest?.atMs ?? 0,

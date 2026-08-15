@@ -415,7 +415,11 @@ export const projectCommentThread = <
     canDeleteQueued:
       group === "queued" &&
       latestPending &&
-      exchanges.every((exchange) => exchange.response === undefined),
+      exchanges.every(
+        (exchange) =>
+          exchange.response === undefined &&
+          exchange.request.claimedAt === undefined,
+      ),
     canDeleteCanceled:
       (latestExchange?.canceled ?? false) &&
       exchanges.every(

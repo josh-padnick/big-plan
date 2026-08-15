@@ -22,7 +22,9 @@ import {
   feedbackAgentRequest,
   messageAgentRequest,
   nextPendingAgentRequest,
+  readAgentCommentHistory,
   readAgentExchange,
+  readValidatedAgentResponse,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
@@ -34,6 +36,7 @@ import {
   claimAgentRequest,
   deleteQueuedRequest,
   commitRequestTerminal,
+  ensureAgentRequest,
   recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
   reviseQueuedRequest,
@@ -178,6 +181,7 @@ describe("request mailbox", () => {
         claimAgentRequest({
           store,
           requestId: request.requestId,
+          claimedBy: agentA,
           baselineSnapshot: snapshot,
           now: "2026-08-10T12:00:01.000Z",
         }),
@@ -214,6 +218,7 @@ describe("request mailbox", () => {
         claimAgentRequest({
           store,
           requestId: request.requestId,
+          claimedBy: agentA,
           baselineSnapshot: snapshot,
           now: "2026-08-10T12:00:01.000Z",
         }),
@@ -242,6 +247,7 @@ describe("request mailbox", () => {
     const claimed = await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -426,6 +432,203 @@ describe("request mailbox", () => {
     expect(events.map((event) => event.stepCode)).toContain(
       "request-reclaimed",
     );
+  });
+
+  it("should hide a staged response until its request commits", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Do not reveal a partial commit.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+    await writeAgentResponseValue({
+      store,
+      requestId: request.requestId,
+      value: response,
+    });
+
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ responses: [] });
+    await expect(
+      readAgentCommentHistory({
+        store,
+        sessionId,
+        planId,
+        commentId: comment.id,
+      }),
+    ).resolves.toMatchObject({ responses: [] });
+    await expect(
+      readValidatedAgentResponse({ store, request: claimed }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("should reject an answer after its lease expires", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Reject a stale worker.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:01:16.000Z",
+    });
+
+    await expect(
+      commitRequestTerminal({
+        store,
+        response,
+        claimedBy: agentA,
+        now: "2026-08-10T12:01:16.000Z",
+      }),
+    ).rejects.toThrow(/claim/);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ responses: [] });
+  });
+
+  it("should reject a claim after its request is answered", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Do not revive this request.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    await commitRequestTerminal({
+      store,
+      response,
+      claimedBy: agentA,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    await expect(
+      claimAgentRequest({
+        store,
+        requestId: request.requestId,
+        claimedBy: agentB,
+        baselineSnapshot: snapshot,
+        now: "2026-08-10T12:01:20.000Z",
+      }),
+    ).rejects.toThrow(/already answered/);
+  });
+
+  it("should preserve terminal lifecycle fields on submission retry", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Retry this completed submission.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    await commitRequestTerminal({
+      store,
+      response,
+      claimedBy: agentA,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    await expect(
+      ensureAgentRequest({ store, request }),
+    ).resolves.toMatchObject({
+      requestId: request.requestId,
+      answeredAt: "2026-08-10T12:00:01.000Z",
+    });
   });
 
   it("should commit either cancellation or response when they race", async () => {
@@ -939,6 +1142,7 @@ describe("request mailbox", () => {
     await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -1000,6 +1204,7 @@ describe("request mailbox", () => {
       claimAgentRequest({
         store,
         requestId: request.requestId,
+        claimedBy: agentA,
         baselineSnapshot: snapshot,
         now: "2026-08-10T12:00:01.000Z",
       }),
@@ -1042,6 +1247,7 @@ describe("request mailbox", () => {
     await claimAgentRequest({
       store,
       requestId: request.requestId,
+      claimedBy: agentA,
       baselineSnapshot: snapshot,
       now: "2026-08-10T12:00:01.000Z",
     });
@@ -1062,6 +1268,7 @@ describe("request mailbox", () => {
       claimAgentRequest({
         store,
         requestId: request.requestId,
+        claimedBy: agentA,
         baselineSnapshot: snapshot,
         now: "2026-08-10T12:00:01.000Z",
       }),

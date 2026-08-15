@@ -36,6 +36,7 @@ import {
 } from "./store.js";
 import {
   claimIsHeldByAnother,
+  claimIsLive,
   claimLeaseExpiryMs,
 } from "./shared/agent-claim.js";
 import type {
@@ -140,6 +141,7 @@ const requestCreation = (request: AgentRequest): string => {
   delete created.claimedAt;
   delete created.claimedBy;
   delete created.claimExpiresAtMs;
+  delete created.answeredAt;
   delete created.canceledAt;
   return JSON.stringify(created);
 };
@@ -360,9 +362,12 @@ export const commitRequestTerminal = async ({
       // Only the holder may answer. Without this the lease would guard pickup
       // but not delivery, and a session that lost its claim could still
       // overwrite the holder's work at the last step.
-      if (request.claimedBy !== claimedBy) {
+      if (
+        request.claimedBy !== claimedBy ||
+        !claimIsLive({ request, nowMs: Date.parse(now) })
+      ) {
         throw new AgentExchangeRejected(
-          "Another agent session holds the claim on this request",
+          "This agent session does not hold a live claim on this request",
         );
       }
       if (!responseMatchesRequest({ value: response, request })) {

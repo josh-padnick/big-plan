@@ -14,6 +14,7 @@ import {
   nextPendingAgentRequest,
   outstandingAgentRequests,
   readAgentCommentHistory,
+  requestIsTerminal,
   requestBaselineSnapshot,
   readAgentExchange,
   responseTemplateFor,
@@ -374,17 +375,32 @@ const nextWork = async ({
     }
     throw error;
   }
-  const claimedBy = agentToken ?? randomId(8);
+  let claimedBy = randomId(8);
+  let resumeToken = agentToken;
   while (true) {
     let snapshot = await readAgentExchange({
       store: session.store,
       sessionId: session.sessionId,
       planId: session.planId,
     });
-    let request = nextPendingAgentRequest(snapshot, {
-      claimedBy,
-      nowMs: Date.now(),
-    });
+    const resumedRequest =
+      resumeToken === undefined
+        ? undefined
+        : snapshot.requests.find(
+            (candidate) =>
+              candidate.claimedBy === resumeToken &&
+              !requestIsTerminal(candidate),
+          );
+    if (resumedRequest !== undefined && resumeToken !== undefined) {
+      claimedBy = resumeToken;
+    }
+    resumeToken = undefined;
+    let request =
+      resumedRequest ??
+      nextPendingAgentRequest(snapshot, {
+        claimedBy,
+        nowMs: Date.now(),
+      });
     while (request === undefined && shouldWait) {
       await writeAgentHeartbeat({
         store: session.store,
@@ -577,10 +593,8 @@ const respond = async ({
   }
   if (
     request === undefined ||
-    nextPendingAgentRequest(snapshot, {
-      claimedBy: agentToken,
-      nowMs: Date.now(),
-    })?.requestId !== request.requestId
+    requestIsTerminal(request) ||
+    request.claimedBy !== agentToken
   ) {
     return fail("The response does not answer the current pending request");
   }
@@ -739,25 +753,40 @@ const note = async ({
     sessionId: session.sessionId,
     planId: session.planId,
   });
-  const active = snapshot.requests.find(
-    (candidate) => candidate.claimedBy === agentToken,
+  const request = snapshot.requests.find(
+    (candidate) =>
+      candidate.claimedBy === agentToken && !requestIsTerminal(candidate),
   );
-  if (active?.canceledAt !== undefined) {
+  if (
+    request === undefined &&
+    snapshot.requests.some(
+      (candidate) =>
+        candidate.claimedBy === agentToken &&
+        candidate.canceledAt !== undefined,
+    )
+  ) {
     return fail("The reviewer canceled this agent request");
   }
-  const request =
-    active ??
-    nextPendingAgentRequest(snapshot, {
-      claimedBy: agentToken,
-      nowMs: Date.now(),
-    });
   if (request === undefined)
     return fail("There is no pending request to update");
+  let renewed: AgentRequest;
+  try {
+    renewed = await claimAgentRequest({
+      store: session.store,
+      requestId: request.requestId,
+      claimedBy: agentToken,
+      baselineSnapshot: requestBaselineSnapshot(request),
+      now: new Date().toISOString(),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return fail(error.message);
+  }
   await appendProgressEvent({
     store: session.store,
     event: {
       sessionId: session.sessionId,
-      requestId: request.requestId,
+      requestId: renewed.requestId,
       atMs: Date.now(),
       stepCode: "agent-note",
       step: message,
@@ -768,24 +797,10 @@ const note = async ({
     store: session.store,
     sessionId: session.sessionId,
     state: "working",
-    requestId: request.requestId,
+    requestId: renewed.requestId,
     ...(model === undefined ? {} : { model }),
   });
-  if (request.claimedBy === agentToken) {
-    try {
-      await claimAgentRequest({
-        store: session.store,
-        requestId: request.requestId,
-        claimedBy: agentToken,
-        baselineSnapshot: requestBaselineSnapshot(request),
-        now: new Date().toISOString(),
-      });
-    } catch (error: unknown) {
-      if (!(error instanceof AgentExchangeRejected)) throw error;
-      return fail(error.message);
-    }
-  }
-  return { noted: message, requestId: request.requestId };
+  return { noted: message, requestId: renewed.requestId };
 };
 
 /** Runs one checked action through the complete coding-agent review loop. */

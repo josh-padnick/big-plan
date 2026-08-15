@@ -354,6 +354,59 @@ test("should show the connector's reported model identity, or none, on the agent
   ).toContainText("Agent connected");
 });
 
+test("should keep progress-only requests waiting in chat and agent status", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const session = await liveReviewSession(page);
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const request = messageAgentRequest({
+    kind: "chat",
+    requestId: "dddddddddddddddd",
+    sessionId: session.sessionId,
+    planId: session.planId,
+    premiseSnapshot: deriveSnapshotDigest(await readFile(session.plan, "utf8")),
+    createdAt: new Date().toISOString(),
+    body: "Is this request actually claimed?",
+  });
+  await writeAgentRequest({ store, request });
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "working",
+    requestId: request.requestId,
+  });
+  await appendProgressEvent({
+    store,
+    event: {
+      sessionId: session.sessionId,
+      requestId: request.requestId,
+      atMs: Date.now(),
+      stepCode: "agent-note",
+      step: "This event has no durable claim",
+      state: "live",
+    },
+  });
+
+  const sessionButton = page.getByRole("button", {
+    name: "Agent session active",
+  });
+  await expect(sessionButton).toBeVisible();
+  await sessionButton.click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(
+    rail.locator("[data-review-current-activity='waiting']"),
+  ).toContainText("Waiting for agent");
+  await rail.getByRole("tab", { name: "Chat" }).click();
+  await expect(
+    rail.locator("li").filter({ hasText: request.body }),
+  ).toContainText("Waiting for an agent");
+});
+
 test("should pause a nonstandard request behind an explicit warning", async ({
   page,
   reviewRuntimeUrl,

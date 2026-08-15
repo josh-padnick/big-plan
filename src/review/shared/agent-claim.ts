@@ -3,7 +3,7 @@
 // the current time. It stores no state and does not depend on the browser or
 // Node.
 
-import { AGENT_STALL_MS } from "./agent-status.js";
+import { AGENT_STALL_MS } from "./agent-timing.js";
 
 // A claim lasts exactly as long as the window after which the reviewer is
 // already told the agent has stopped. Taking a claim the reviewer has been

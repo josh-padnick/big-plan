@@ -649,14 +649,13 @@ describe("agent work loop lifecycle", () => {
     await writeAgentRequest({ store: review.store, request });
     try {
       const canonicalAttachmentPath = await realpath(attachments[0].path);
-      await expect(
-        runAgentWorkLoopAction({
-          kind: "next",
-          planPath,
-          executablePath,
-          shouldWait: false,
-        }),
-      ).resolves.toMatchObject({
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        executablePath,
+        shouldWait: false,
+      });
+      await expect(Promise.resolve(pickup)).resolves.toMatchObject({
         pending: true,
         work: {
           requestId,
@@ -664,6 +663,9 @@ describe("agent work loop lifecycle", () => {
           attachmentManifest: [{ path: canonicalAttachmentPath }],
         },
       });
+      if (typeof pickup.agent_token !== "string") {
+        throw new Error("The pending request did not provide an agent token");
+      }
       await rm(attachments[0].path);
       await expect(
         runAgentWorkLoopAction({
@@ -671,6 +673,7 @@ describe("agent work loop lifecycle", () => {
           planPath,
           executablePath,
           shouldWait: false,
+          agentToken: pickup.agent_token,
         }),
       ).rejects.toThrow(/could not be opened during agent pickup/);
     } finally {
@@ -962,6 +965,7 @@ describe("agent work loop lifecycle", () => {
         await commitRequestTerminal({
           store: review.store,
           response,
+          claimedBy: review.sessionId,
           now: "2026-08-12T12:00:03.000Z",
         });
         return selectedValues;
@@ -980,6 +984,126 @@ describe("agent work loop lifecycle", () => {
       });
     } finally {
       readRequests.mockRestore();
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should mint a new token when an old pickup is already terminal", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-resume-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer two questions in order.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const premiseSnapshot = deriveSnapshotDigest(source);
+    const firstRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Answer this first.",
+    });
+    const secondRequest = messageAgentRequest({
+      kind: "chat",
+      requestId: "eeeeeeeeeeeeeeee",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot,
+      createdAt: "2026-08-12T12:00:01.000Z",
+      body: "Answer this second.",
+    });
+    await writeAgentRequest({ store: review.store, request: firstRequest });
+    await writeAgentRequest({ store: review.store, request: secondRequest });
+
+    try {
+      const firstPickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof firstPickup.agent_token !== "string" ||
+        typeof firstPickup.response_file !== "string"
+      ) {
+        throw new Error("The first pickup did not provide its response contract");
+      }
+      await writeFile(
+        firstPickup.response_file,
+        JSON.stringify({
+          requestId: firstRequest.requestId,
+          message: "The first answer is complete.",
+        }),
+      );
+      await runAgentWorkLoopAction({
+        kind: "respond",
+        planPath,
+        responsePath: firstPickup.response_file,
+        executablePath,
+        agentToken: firstPickup.agent_token,
+      });
+
+      const secondPickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+        agentToken: firstPickup.agent_token,
+      });
+      expect(secondPickup).toMatchObject({
+        pending: true,
+        work: { requestId: secondRequest.requestId },
+      });
+      expect(secondPickup.agent_token).toEqual(expect.any(String));
+      expect(secondPickup.agent_token).not.toBe(firstPickup.agent_token);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should reject a progress note from a token without a claim", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-note-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nWait for a real pickup.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Do not narrate this before pickup.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "note",
+          planPath,
+          detail: "Reading the plan",
+          agentToken: "ffff2222ffff2222",
+        }),
+      ).rejects.toThrow(/no pending request to update/i);
+      await expect(
+        readProgress({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            requestId: request.requestId,
+            stepCode: "agent-note",
+          }),
+        ]),
+      );
+    } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }
@@ -1014,7 +1138,7 @@ describe("agent work loop lifecycle", () => {
       requestId: request.requestId,
       claimedBy: review.sessionId,
       baselineSnapshot: deriveSnapshotDigest(source),
-      now: "2026-08-12T12:00:01.000Z",
+      now: new Date().toISOString(),
     });
     await writeFile(
       planPath,
@@ -1379,6 +1503,7 @@ describe("agent work loop lifecycle", () => {
         kind: "note",
         planPath: "/tmp/no-review-session.mdx",
         detail: "   ",
+        agentToken: "ffff2222ffff2222",
       }),
     ).rejects.toThrow(/Progress must be between 1 and 160 characters/);
   });
