@@ -153,6 +153,7 @@ import {
 import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import {
   mergeLiveReviewRecovery,
+  mergeLiveReviewRecoverySnapshots,
   refreshReviewRecoveryConflicts,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
@@ -160,8 +161,10 @@ import {
   reviewRecoveryBaseAfterConflictAnswers,
 } from "./review-recovery-merge.js";
 import type {
+  LiveReviewRecovery,
   ReviewRecoveryBase,
   ReviewRecoveryConflict,
+  ReviewRecoveryReconciliation,
   ReviewRecoveryState,
 } from "./review-recovery-merge.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
@@ -545,23 +548,13 @@ const EMPTY_RECOVERED_COMPOSER: RecoveredComposer = {
   replies: new Map(),
 };
 
-type ReviewRecoveryReconciliation = {
-  readonly base: ReviewRecoveryBase;
-  readonly conflicts: ReadonlyArray<ReviewRecoveryConflict>;
-  readonly runtime: ReviewRecoveryState | null;
-};
-
-type LiveReviewRecovery = ReviewRecoveryState & {
-  readonly reconciliation: ReviewRecoveryReconciliation;
-};
-
 const emptyReviewRecoveryReconciliation = (): ReviewRecoveryReconciliation => ({
   base: { draftBodies: new Map(), resolvedCommentIds: new Set() },
   conflicts: [],
   runtime: null,
 });
 
-const LIVE_RECOVERY_SNAPSHOT_VERSION = 5;
+const LIVE_RECOVERY_SNAPSHOT_VERSION = 6;
 const LIVE_COMPOSER_RECOVERY_VERSION = 1;
 
 const isStringRecord = (
@@ -600,10 +593,11 @@ const isStoredReviewRecoveryConflict = (
     return false;
   }
   return (
-    value.kind === "draft" ||
-    (value.kind === "sent" &&
-      typeof value.localBody === "string" &&
-      typeof value.runtimeBody === "string")
+    (value.origin === "runtime" || value.origin === "recovery") &&
+    (value.kind === "draft" ||
+      (value.kind === "sent" &&
+        typeof value.localBody === "string" &&
+        typeof value.runtimeBody === "string"))
   );
 };
 
@@ -709,43 +703,16 @@ const serializedLiveReviewRecovery = (recovery: LiveReviewRecovery): string =>
     },
   });
 
-const incomingRecoveryCoversStored = ({
-  stored,
-  incoming,
-}: {
-  readonly stored: LiveReviewRecovery;
-  readonly incoming: LiveReviewRecovery;
-}): boolean => {
-  const storedFingerprint = persistedReviewFingerprint(stored);
-  const incomingFingerprint = persistedReviewFingerprint(incoming);
-  if (storedFingerprint === incomingFingerprint) {
-    return (
-      serializedLiveReviewRecovery(stored) ===
-      serializedLiveReviewRecovery(incoming)
-    );
-  }
-  if (
-    stored.reconciliation.conflicts.length > 0 &&
-    JSON.stringify(stored.reconciliation.conflicts) !==
-      JSON.stringify(incoming.reconciliation.conflicts)
-  ) {
-    return false;
-  }
-  const merged = mergeLiveReviewRecovery({
-    base: stored.reconciliation.base,
-    local: stored,
-    runtime: incoming,
-  });
-  return (
-    merged.conflicts.length === 0 &&
-    persistedReviewFingerprint(merged.state) === incomingFingerprint
-  );
+type LiveReviewRecoveryWrite = {
+  readonly didPersist: boolean;
+  readonly recovery: LiveReviewRecovery;
+  readonly storageValue: string | null;
 };
 
 /**
  * The record is shared by every tab in the session, and one tab may hold work
- * another has never seen, so this writer reconciles and never assigns over an
- * unfamiliar snapshot.
+ * another has never seen, so this writer merges stored and incoming state and
+ * never assigns, never refuses, and never clears work it cannot account for.
  */
 const writeLiveReviewRecovery = ({
   identity,
@@ -755,24 +722,29 @@ const writeLiveReviewRecovery = ({
   readonly identity: RuntimeIdentity;
   readonly recovery: LiveReviewRecovery;
   readonly ownedStorageValue: string | null;
-}): string | null => {
+}): LiveReviewRecoveryWrite => {
   try {
     const key = liveRecoveryStorageKey(identity);
     const storedValue = localStorage.getItem(key);
+    let nextRecovery = recovery;
     if (storedValue !== ownedStorageValue) {
       const stored = readLiveReviewRecovery(identity);
-      if (
-        stored !== null &&
-        !incomingRecoveryCoversStored({ stored, incoming: recovery })
-      ) {
-        return ownedStorageValue;
+      if (stored !== null) {
+        nextRecovery = mergeLiveReviewRecoverySnapshots({
+          stored,
+          incoming: recovery,
+        });
       }
     }
-    const incomingValue = serializedLiveReviewRecovery(recovery);
-    localStorage.setItem(key, incomingValue);
-    return incomingValue;
+    const storageValue = serializedLiveReviewRecovery(nextRecovery);
+    localStorage.setItem(key, storageValue);
+    return { didPersist: true, recovery: nextRecovery, storageValue };
   } catch {
-    return ownedStorageValue;
+    return {
+      didPersist: false,
+      recovery,
+      storageValue: ownedStorageValue,
+    };
   }
 };
 
@@ -5019,7 +4991,7 @@ export const ReviewController = () => {
       liveRecoveryOwnershipRef.current?.key === key
         ? liveRecoveryOwnershipRef.current.storageValue
         : null;
-    const storageValue = writeLiveReviewRecovery({
+    const written = writeLiveReviewRecovery({
       identity,
       recovery: {
         ...reviewState,
@@ -5027,10 +4999,28 @@ export const ReviewController = () => {
       },
       ownedStorageValue,
     });
-    liveRecoveryOwnershipRef.current = { key, storageValue };
+    liveRecoveryOwnershipRef.current = {
+      key,
+      storageValue: written.storageValue,
+    };
     if (
-      recoveryReconciliation.conflicts.length === 0 &&
-      persistedReviewState === persistedReviewFingerprint(reviewState) &&
+      serializedLiveReviewRecovery(written.recovery) !==
+      serializedLiveReviewRecovery({
+        ...reviewState,
+        reconciliation: recoveryReconciliation,
+      })
+    ) {
+      applyReviewState(written.recovery);
+      replaceRecoveryReconciliation(written.recovery.reconciliation);
+      if (written.recovery.reconciliation.conflicts.length > 0) {
+        setIsRecoveryConflictOpen(true);
+        setStatus(RECOVERY_CONFLICT_STATUS);
+      }
+    }
+    if (
+      written.didPersist &&
+      written.recovery.reconciliation.conflicts.length === 0 &&
+      persistedReviewState === persistedReviewFingerprint(written.recovery) &&
       clearLiveReviewRecovery({
         identity,
         fingerprint: persistedReviewState,
@@ -5042,8 +5032,10 @@ export const ReviewController = () => {
     drafts,
     identity,
     isHydrated,
+    applyReviewState,
     persistedReviewState,
     recoveryReconciliation,
+    replaceRecoveryReconciliation,
     resolvedCommentIds,
   ]);
 

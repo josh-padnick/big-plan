@@ -2,11 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "../shared/comment.js";
 import {
   mergeLiveReviewRecovery,
+  mergeLiveReviewRecoverySnapshots,
   refreshReviewRecoveryConflicts,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
   reviewRecoveryBase,
   reviewRecoveryBaseAfterConflictAnswers,
+} from "./review-recovery-merge.js";
+import type {
+  LiveReviewRecovery,
+  ReviewRecoveryBase,
 } from "./review-recovery-merge.js";
 
 const comment = (id: string, body: string): ReviewComment => ({
@@ -22,7 +27,64 @@ const state = (
   resolvedCommentIds: ReadonlyArray<string> = [],
 ) => ({ drafts, resolvedCommentIds: new Set(resolvedCommentIds) });
 
+const recovery = ({
+  base,
+  drafts,
+}: {
+  readonly base: ReviewRecoveryBase;
+  readonly drafts: ReadonlyArray<ReviewComment>;
+}): LiveReviewRecovery => ({
+  ...state(drafts),
+  reconciliation: { base, conflicts: [], runtime: null },
+});
+
 describe("live review recovery merge", () => {
+  it("should merge different edits recovered from separate tabs", () => {
+    const base = reviewRecoveryBase(
+      state([comment("x", "agreed x"), comment("y", "agreed y")]),
+    );
+
+    const merged = mergeLiveReviewRecoverySnapshots({
+      stored: recovery({
+        base,
+        drafts: [comment("x", "first tab x"), comment("y", "agreed y")],
+      }),
+      incoming: recovery({
+        base,
+        drafts: [comment("x", "agreed x"), comment("y", "second tab y")],
+      }),
+    });
+
+    expect(merged.drafts).toEqual([
+      comment("x", "first tab x"),
+      comment("y", "second tab y"),
+    ]);
+    expect(merged.reconciliation.conflicts).toEqual([]);
+  });
+
+  it("should retain both bodies when separate tabs edit the same comment", () => {
+    const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
+
+    const merged = mergeLiveReviewRecoverySnapshots({
+      stored: recovery({ base, drafts: [comment("c1", "first tab")] }),
+      incoming: recovery({ base, drafts: [comment("c1", "second tab")] }),
+    });
+
+    expect(merged.drafts).toEqual([comment("c1", "second tab")]);
+    expect(merged.reconciliation.conflicts).toEqual([
+      {
+        kind: "draft",
+        origin: "recovery",
+        commentId: "c1",
+        localBody: "second tab",
+        runtimeBody: "first tab",
+      },
+    ]);
+    expect(merged.reconciliation.runtime?.drafts).toEqual([
+      comment("c1", "first tab"),
+    ]);
+  });
+
   it("should report a conflict when both sides changed the same comment", () => {
     // The case no rule can settle: choosing either side here throws away work
     // the reviewer did, so the merge must hand the choice back.
@@ -37,6 +99,7 @@ describe("live review recovery merge", () => {
     expect(merged.conflicts).toEqual([
       {
         kind: "draft",
+        origin: "runtime",
         commentId: "c1",
         localBody: "typed here",
         runtimeBody: "typed elsewhere",
@@ -134,6 +197,27 @@ describe("live review recovery merge", () => {
     ]);
   });
 
+  it("should keep the agreed base after answering a recovery conflict", () => {
+    const agreed = state([comment("c1", "agreed")]);
+    const base = reviewRecoveryBase(agreed);
+    const conflict = {
+      kind: "draft" as const,
+      origin: "recovery" as const,
+      commentId: "c1",
+      localBody: "typed in this tab",
+      runtimeBody: "typed in another tab",
+    };
+
+    expect(
+      reviewRecoveryBaseAfterConflictAnswers({
+        base,
+        runtime: state([comment("c1", "typed in another tab")]),
+        answeredConflicts: [conflict],
+        remainingConflicts: [],
+      }),
+    ).toEqual(base);
+  });
+
   it("should refresh the local conflict body before either answer is applied", () => {
     const base = reviewRecoveryBase(state([comment("c1", "agreed")]));
     const runtime = state([comment("c1", "typed elsewhere")]);
@@ -203,6 +287,7 @@ describe("live review recovery merge", () => {
 
     expect(conflict).toEqual({
       kind: "draft",
+      origin: "runtime",
       commentId: "c1",
       localBody: null,
       runtimeBody: "typed elsewhere",
@@ -321,6 +406,7 @@ describe("live review recovery merge", () => {
     expect(merged.conflicts).toEqual([
       {
         kind: "sent",
+        origin: "runtime",
         commentId: "c1",
         localBody: "edited here",
         runtimeBody: "agreed",
@@ -341,6 +427,7 @@ describe("live review recovery merge", () => {
     expect(merged.conflicts).toEqual([
       {
         kind: "sent",
+        origin: "runtime",
         commentId: "c1",
         localBody: "newer edit",
         runtimeBody: "submitted body",
@@ -402,6 +489,7 @@ describe("live review recovery merge", () => {
     expect(merged.conflicts).toEqual([
       {
         kind: "draft",
+        origin: "runtime",
         commentId: "c1",
         localBody: "edited while it was deleted",
         runtimeBody: null,

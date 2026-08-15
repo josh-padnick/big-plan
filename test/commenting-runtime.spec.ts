@@ -675,6 +675,235 @@ test.describe("a drafts write prepared against content the store moved past", ()
     await secondPage.close();
   });
 
+  test("should merge different offline edits from two tabs", async ({
+    context,
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const originalX = "Keep the first shared draft.";
+    const originalY = "Keep the second shared draft.";
+    await stageComment(page, originalX);
+    await stageComment(page, originalY);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([originalX, originalY]);
+
+    const secondPage = await context.newPage();
+    await secondPage.goto(reviewRuntimeUrl);
+    const blockRuntimeFetch = (): void => {
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        return url.pathname.startsWith("/api/")
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : runtimeFetch(input, init);
+      };
+    };
+    for (const targetPage of [page, secondPage]) {
+      await targetPage.addInitScript(blockRuntimeFetch);
+      await targetPage.evaluate(blockRuntimeFetch);
+    }
+    const editDraft = async ({
+      targetPage,
+      before,
+      after,
+    }: {
+      readonly targetPage: Page;
+      readonly before: string;
+      readonly after: string;
+    }): Promise<void> => {
+      const feedbackButton = targetPage.getByRole("button", {
+        name: /^Feedback(?: \d+)?$/u,
+      });
+      if ((await feedbackButton.getAttribute("aria-expanded")) !== "true") {
+        await feedbackButton.click();
+      }
+      const rail = targetPage.getByRole("complementary", {
+        name: "Feedback",
+      });
+      await rail
+        .getByRole("button", { name: `Expand staged comment: ${before}` })
+        .click();
+      await rail
+        .locator(".review-staged-card")
+        .filter({ hasText: before })
+        .getByRole("button", { name: "Edit staged comment" })
+        .click();
+      await rail.getByLabel("Edit comment").fill(after);
+      await rail.getByRole("button", { name: "Save" }).click();
+    };
+    const editedX = "Keep the first tab's offline edit.";
+    const editedY = "Keep the second tab's offline edit.";
+    await editDraft({ targetPage: page, before: originalX, after: editedX });
+    await editDraft({
+      targetPage: secondPage,
+      before: originalY,
+      after: editedY,
+    });
+    const secondRail = secondPage.getByRole("complementary", {
+      name: "Feedback",
+    });
+    await expect(secondRail.getByText(editedX)).toBeVisible();
+    await expect(secondRail.getByText(editedY)).toBeVisible();
+
+    for (const targetPage of [page, secondPage]) {
+      await targetPage.reload();
+      const feedbackButton = targetPage.getByRole("button", {
+        name: /^Feedback(?: \d+)?$/u,
+      });
+      if ((await feedbackButton.getAttribute("aria-expanded")) !== "true") {
+        await feedbackButton.click();
+      }
+      const rail = targetPage.getByRole("complementary", {
+        name: "Feedback",
+      });
+      await expect(rail.getByText(editedX)).toBeVisible();
+      await expect(rail.getByText(editedY)).toBeVisible();
+    }
+    await secondPage.close();
+  });
+
+  test("should ask once when two offline tabs edit the same draft", async ({
+    context,
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Choose one owner for this shared draft.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const secondPage = await context.newPage();
+    await secondPage.goto(reviewRuntimeUrl);
+    const recoveryKey = await page
+      .locator("html")
+      .evaluate(
+        (root) =>
+          `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}`,
+      );
+    const storedRecovery = (targetPage: Page) =>
+      targetPage.evaluate((key) => {
+        const raw = window.localStorage.getItem(key);
+        if (raw === null) return null;
+        const parsed: unknown = JSON.parse(raw);
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          !("drafts" in parsed) ||
+          !Array.isArray(parsed.drafts) ||
+          !("reconciliation" in parsed) ||
+          typeof parsed.reconciliation !== "object" ||
+          parsed.reconciliation === null ||
+          !("conflicts" in parsed.reconciliation) ||
+          !Array.isArray(parsed.reconciliation.conflicts)
+        ) {
+          return null;
+        }
+        return {
+          bodies: parsed.drafts.flatMap((draft) =>
+            typeof draft === "object" &&
+            draft !== null &&
+            "body" in draft &&
+            typeof draft.body === "string"
+              ? [draft.body]
+              : [],
+          ),
+          conflicts: parsed.reconciliation.conflicts.length,
+        };
+      }, recoveryKey);
+    const blockRuntimeFetch = (): void => {
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        return url.pathname.startsWith("/api/")
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : runtimeFetch(input, init);
+      };
+    };
+    for (const targetPage of [page, secondPage]) {
+      await targetPage.addInitScript(blockRuntimeFetch);
+      await targetPage.evaluate(blockRuntimeFetch);
+    }
+    const editDraft = async (targetPage: Page, body: string): Promise<void> => {
+      await targetPage
+        .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+        .click();
+      const rail = targetPage.getByRole("complementary", {
+        name: "Feedback",
+      });
+      await rail
+        .getByRole("button", { name: `Expand staged comment: ${original}` })
+        .click();
+      await rail.getByRole("button", { name: "Edit staged comment" }).click();
+      await rail.getByLabel("Edit comment").fill(body);
+      await rail.getByRole("button", { name: "Save" }).click();
+    };
+    const firstBody = "Keep the owner chosen in the first offline tab.";
+    const secondBody = "Keep the owner chosen in the second offline tab.";
+    await editDraft(page, firstBody);
+    await expect
+      .poll(() => storedRecovery(page))
+      .toEqual({ bodies: [firstBody], conflicts: 0 });
+    await editDraft(secondPage, secondBody);
+
+    const choice = secondPage.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(firstBody);
+    await expect(choice).toContainText(secondBody);
+    await secondPage.keyboard.press("Escape");
+    await secondPage.reload();
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(firstBody);
+    await expect(choice).toContainText(secondBody);
+    await choice.getByRole("button", { name: "Keep mine" }).click();
+    await expect(choice).toBeHidden();
+    await expect
+      .poll(() => storedRecovery(secondPage))
+      .toEqual({ bodies: [secondBody], conflicts: 0 });
+
+    for (const targetPage of [secondPage, page]) {
+      await targetPage.reload();
+      await expect(
+        targetPage.getByRole("alertdialog", {
+          name: "Two versions of this comment",
+        }),
+      ).toBeHidden();
+      const feedbackButton = targetPage.getByRole("button", {
+        name: /^Feedback(?: \d+)?$/u,
+      });
+      if ((await feedbackButton.getAttribute("aria-expanded")) !== "true") {
+        await feedbackButton.click();
+      }
+      await expect(
+        targetPage
+          .getByRole("complementary", { name: "Feedback" })
+          .getByText(secondBody),
+      ).toBeVisible();
+    }
+    await secondPage.close();
+  });
+
   test("should keep a concurrent runtime comment when this browser writes", async ({
     page,
     reviewRuntimeUrl,
@@ -1603,7 +1832,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 5,
+            version: 6,
             drafts: [
               {
                 id,
@@ -1708,7 +1937,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 5,
+            version: 6,
             drafts: [
               {
                 id,
