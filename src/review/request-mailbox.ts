@@ -61,10 +61,19 @@ const withRequestLock = async <TResult>({
   let lockedStore: ReviewStore;
   try {
     const anchoredStore = await anchorReviewStore(store);
-    lockedStore = await anchoredStore.resolveStoreDirectories([
-      "agentRequestDirectory",
-      "agentResponseDirectory",
+    const [requestDirectory, responseDirectory] = await Promise.all([
+      anchoredStore.resolveDirectoryPath({
+        directory: "agentRequestDirectory",
+      }),
+      anchoredStore.resolveDirectoryPath({
+        directory: "agentResponseDirectory",
+      }),
     ]);
+    lockedStore = {
+      ...store,
+      agentRequestDirectory: requestDirectory.path,
+      agentResponseDirectory: responseDirectory.path,
+    };
   } catch (error: unknown) {
     if (!(error instanceof ReviewStorePathRejected)) throw error;
     throw new AgentExchangeRejected("The request mailbox is unavailable");
@@ -76,6 +85,8 @@ const withRequestLock = async <TResult>({
       new AgentExchangeRejected(
         "Another process is changing this request. Try again.",
       ),
+    invalidLockError: () =>
+      new AgentExchangeRejected("The request mailbox is unavailable"),
   });
 };
 

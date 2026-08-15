@@ -189,6 +189,42 @@ describe("request mailbox", () => {
     }
   });
 
+  it("should refuse a symlinked request lock before touching its target", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Do not touch the lock target.");
+    await writeAgentRequest({ store, request });
+    const outsideDirectory = join(store.planDirectory, "outside-lock");
+    const sentinelPath = join(outsideDirectory, "sentinel.txt");
+    const lockPath = join(
+      store.agentRequestDirectory,
+      `.${request.requestId}.lock`,
+    );
+    await mkdir(outsideDirectory);
+    await writeFile(sentinelPath, "untouched\n");
+    await symlink(outsideDirectory, lockPath);
+
+    try {
+      await expect(
+        claimAgentRequest({
+          store,
+          requestId: request.requestId,
+          baselineSnapshot: snapshot,
+          now: "2026-08-10T12:00:01.000Z",
+        }),
+      ).rejects.toMatchObject({
+        name: "AgentExchangeRejected",
+        message: "The request mailbox is unavailable",
+      });
+      await expect(readFile(sentinelPath, "utf8")).resolves.toBe("untouched\n");
+      await expect(readdir(outsideDirectory)).resolves.toEqual([
+        "sentinel.txt",
+      ]);
+    } finally {
+      await rm(lockPath, { force: true });
+      await rm(outsideDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("should refuse a symlinked response mailbox before publishing", async () => {
     const { store } = await preparedReview();
     const comment = reviewComment({

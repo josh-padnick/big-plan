@@ -24,6 +24,7 @@ import {
   type ProgressEventDraft,
 } from "./request-mailbox.js";
 import {
+  anchorReviewStore,
   freezeRequestAttachments,
   randomId,
   readAgentConnectionEvents,
@@ -107,7 +108,8 @@ export const sendAgentRequest = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
-  const { store, planId, sessionId, resolvedPlanPath, planRenderer } = context;
+  const { planId, sessionId, resolvedPlanPath, planRenderer } = context;
+  let { store } = context;
   const payload = payloadOf(body);
   const kind = payload.kind;
   if (kind !== "reply" && kind !== "chat") {
@@ -170,6 +172,7 @@ export const sendAgentRequest = async (
       value: { requestId, kind: revised.kind, request: revised },
     });
   }
+  store = await (await anchorReviewStore(store)).resolveStore();
   const source = await readFile(resolvedPlanPath, "utf8");
   const premiseSnapshot = deriveSnapshotDigest(source);
   await writeSnapshot({ store, snapshot: premiseSnapshot, source });

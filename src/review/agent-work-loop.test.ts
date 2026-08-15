@@ -4,6 +4,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   realpath,
   rename,
   rm,
@@ -610,6 +611,56 @@ describe("agent work loop lifecycle", () => {
         }),
       ).resolves.toEqual({ attachmentCleanup: "complete" });
     } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse pickup before writing through a symlinked snapshot store", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-snapshot-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Keep the pickup snapshot inside the review store.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    const displacedDirectory = `${review.store.snapshotDirectory}.displaced`;
+    const outsideDirectory = join(directory, "outside-snapshots");
+    const sentinelPath = join(outsideDirectory, "sentinel.txt");
+    await rename(review.store.snapshotDirectory, displacedDirectory);
+    await mkdir(outsideDirectory);
+    await writeFile(sentinelPath, "untouched\n");
+    await symlink(outsideDirectory, review.store.snapshotDirectory);
+
+    try {
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          executablePath,
+          shouldWait: false,
+        }),
+      ).rejects.toThrow(/anchored directory/);
+      await expect(readdir(outsideDirectory)).resolves.toEqual([
+        "sentinel.txt",
+      ]);
+      await expect(
+        deleteQueuedRequest({
+          store: review.store,
+          requestId: request.requestId,
+        }),
+      ).resolves.toEqual({ attachmentCleanup: "complete" });
+    } finally {
+      await rm(review.store.snapshotDirectory, { force: true });
+      await rename(displacedDirectory, review.store.snapshotDirectory);
       await review.close();
       await rm(directory, { recursive: true, force: true });
     }

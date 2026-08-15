@@ -4,6 +4,7 @@ import {
   mkdtemp,
   open,
   readFile,
+  realpath,
   rename,
   rm,
   stat,
@@ -70,6 +71,7 @@ describe("review store placement", () => {
   it("should put every artifact under one .big-plan beside the plan", async () => {
     const { directory, planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    const canonicalDirectory = await realpath(directory);
     for (const path of [
       store.reviewDirectory,
       store.feedbackDirectory,
@@ -89,7 +91,7 @@ describe("review store placement", () => {
       store.sessionLockPath,
       store.agentHeartbeatPath,
     ]) {
-      expect(path.startsWith(join(directory, ".big-plan"))).toBe(true);
+      expect(path.startsWith(join(canonicalDirectory, ".big-plan"))).toBe(true);
     }
   });
 

@@ -34,6 +34,7 @@ import {
   removeCommentFromQueuedFeedbackRequest,
 } from "./request-mailbox.js";
 import {
+  anchorReviewStore,
   freezeRequestAttachments,
   readFeedbackSubmissionValue,
   readResolvedCommentIds,
@@ -289,12 +290,14 @@ export const submitFeedback = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
-  const { store, planId, sessionId, resolvedPlanPath, planRenderer } = context;
+  const { planId, sessionId, resolvedPlanPath, planRenderer } = context;
+  let { store } = context;
   const payload = payloadOf(body);
   const comments = await planRenderer.validateUpdates(payload.comments);
   if (comments.length === 0) {
     return refusal({ status: 400, reason: "Nothing to send" });
   }
+  store = await (await anchorReviewStore(store)).resolveStore();
   const alreadySent = await planRenderer.readStoredComments(store.sentPath);
   const sentById = new Map(alreadySent.map((comment) => [comment.id, comment]));
   if (

@@ -355,7 +355,20 @@ const nextWork = async ({
   readonly modelName?: string;
 }): Promise<Record<string, unknown>> => {
   const model = modelName === undefined ? undefined : { name: modelName };
-  const session = await readPlanSession(planPath);
+  let session: Awaited<ReturnType<typeof readPlanSession>>;
+  try {
+    session = await readPlanSession(planPath);
+  } catch (error: unknown) {
+    if (
+      error instanceof ReviewStorePathRejected &&
+      error.reason === "outside"
+    ) {
+      return fail(
+        "The review store is outside the request attachment directory or another anchored directory",
+      );
+    }
+    throw error;
+  }
   while (true) {
     let snapshot = await readAgentExchange({
       store: session.store,
