@@ -27,6 +27,13 @@ export const readRuntimeSession = async (
     value: encodeRuntimeSession({
       ...sessionView,
       ...(writesStalledMs === undefined ? {} : { writesStalledMs }),
+      // The runtime owns this command because only it knows how it was
+      // launched; a browser reconstructing shell syntax guesses wrong for an
+      // npx or checkout install. No banner renders it today: recovery must
+      // stay non-destructive, and starting a runtime seizes custody from one
+      // that may still be live. It is published for surfaces that can first
+      // establish the old runtime is gone.
+      restartCommand: context.restartCommand,
       idleTimeoutMs: context.activityClock.idleTimeoutMs,
       ...(expiresAtMs === undefined ? {} : { expiresAtMs }),
     }),

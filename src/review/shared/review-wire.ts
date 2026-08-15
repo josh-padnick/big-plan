@@ -149,6 +149,7 @@ export type RuntimeSession = {
   readonly plan: string;
   readonly authoritative: boolean;
   readonly latestReviewUrl?: string;
+  readonly restartCommand?: string;
   /**
    * How long this runtime's oldest stalled write has been stuck, present only
    * while one is. Every route the page polls is a read, and reads keep
@@ -181,6 +182,7 @@ export type RuntimeSessionSource = {
   readonly plan: string;
   readonly authoritative: boolean;
   readonly latestReviewUrl?: string;
+  readonly restartCommand?: string;
   readonly writesStalledMs?: number;
   readonly idleTimeoutMs?: number;
   readonly expiresAtMs?: number;
@@ -528,6 +530,10 @@ export const decodeRuntimeSession = ({
     authoritative: value.authoritative !== false,
     ...(typeof value.latestReviewUrl === "string"
       ? { latestReviewUrl: value.latestReviewUrl }
+      : {}),
+    ...(typeof value.restartCommand === "string" &&
+    value.restartCommand.trim() !== ""
+      ? { restartCommand: value.restartCommand }
       : {}),
     // A stall is only ever reported as a positive age. Anything else is not a
     // smaller stall, it is an absent one, and must not raise the banner.

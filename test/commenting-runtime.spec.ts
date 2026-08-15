@@ -118,9 +118,12 @@ test("should merge an outage-time draft with newer runtime state", async ({
   }, Array.from(runtimePaths));
 
   const banner = page.getByRole("alert").filter({
-    hasText: "This review session is no longer online",
+    hasText: "This tab lost contact with this review session",
   });
   await expect(banner).toBeVisible({ timeout: 6_000 });
+  await expect(banner).toContainText(
+    "This tab lost contact with the local review server. Refresh to try reconnecting.",
+  );
   const refresh = banner.getByRole("button", { name: "Refresh" });
   const slide = page.locator("[data-slide]").first();
   await slide.hover();
@@ -217,6 +220,127 @@ test("should merge an outage-time draft with newer runtime state", async ({
       page.evaluate((key) => window.localStorage.getItem(key), recoveryKey),
     )
     .toBeNull();
+});
+
+test("should preserve deadline recovery when a sibling poll fails", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const session: unknown = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("restartCommand" in session) ||
+    typeof session.restartCommand !== "string" ||
+    session.restartCommand.trim() === ""
+  ) {
+    throw new Error("The review runtime did not publish its restart command");
+  }
+  const latestReviewUrl = new URL("latest-review", reviewRuntimeUrl).href;
+  await page.route("**/api/session", async (route) => {
+    const response = await route.fetch();
+    const value: unknown = await response.json();
+    if (typeof value !== "object" || value === null) {
+      throw new Error("The session route did not return an object");
+    }
+    await route.fulfill({
+      response,
+      json: {
+        ...value,
+        expiresAtMs:
+          route.request().headers()["x-big-plan-test-poll-phase"] ===
+          "fresh-session"
+            ? Date.now() + 60_000
+            : 0,
+        latestReviewUrl,
+      },
+    });
+  });
+
+  await page.getByRole("button", { name: "Comment on slide" }).first().click();
+  await page
+    .getByRole("dialog", { name: /Comment on/u })
+    .getByLabel("Add a comment")
+    .fill("Keep this browser-only input safe.");
+  await page.evaluate(() => {
+    const fetchFromRuntime = window.fetch.bind(window);
+    let shouldHangAgentPoll = false;
+    let releaseAgentPoll = (): void => undefined;
+    document.addEventListener("bigplan-test:hang-agent-poll", () => {
+      shouldHangAgentPoll = true;
+    });
+    document.addEventListener("bigplan-test:release-agent-poll", () => {
+      shouldHangAgentPoll = false;
+      releaseAgentPoll();
+    });
+    window.fetch = (input, init) => {
+      const url = new URL(
+        input instanceof Request ? input.url : input,
+        window.location.href,
+      );
+      if (!shouldHangAgentPoll) {
+        return url.pathname === "/api/agent"
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : fetchFromRuntime(input, init);
+      }
+      const headers = new Headers(
+        init?.headers ?? (input instanceof Request ? input.headers : undefined),
+      );
+      headers.set("x-big-plan-test-poll-phase", "fresh-session");
+      const phasedInit = { ...init, headers };
+      if (url.pathname !== "/api/agent") {
+        return fetchFromRuntime(input, phasedInit);
+      }
+      return new Promise<Response>((resolve, reject) => {
+        releaseAgentPoll = () => {
+          void fetchFromRuntime(input, phasedInit).then(resolve, reject);
+        };
+      });
+    };
+  });
+
+  const banner = page.getByRole("alert").filter({
+    hasText: "This tab lost contact with this review session",
+  });
+  await expect(banner).toBeVisible({ timeout: 6_000 });
+  await expect(banner).toContainText(
+    "The deadline this tab last knew has since passed. A newer review session for this plan was recorded at the linked address.",
+  );
+  await expect(banner).toContainText(
+    "Keep this tab open because the latest review input has not reached the local review server.",
+  );
+  await expect(
+    banner.getByRole("link", { name: "Open latest review" }),
+  ).toHaveAttribute("href", latestReviewUrl);
+  await expect(banner.getByRole("button", { name: "Refresh" })).toBeDisabled();
+  await expect(banner).not.toContainText(session.restartCommand);
+  await expect(banner).not.toContainText(/\b(?:run|start|restart)\b/u);
+  await expect(banner).not.toContainText(
+    /ended|expired|closed|timed out|may|might|possibly|likely/u,
+  );
+
+  await page.evaluate(() => {
+    document.dispatchEvent(new CustomEvent("bigplan-test:hang-agent-poll"));
+  });
+  await expect(banner).toContainText(
+    "This tab lost contact with the local review server. Refresh to try reconnecting.",
+    { timeout: 4_000 },
+  );
+  await expect(banner).not.toContainText(
+    "The deadline this tab last knew has since passed.",
+  );
+  await page.evaluate(() => {
+    document.dispatchEvent(new CustomEvent("bigplan-test:release-agent-poll"));
+  });
 });
 
 test("should expire a held connected snapshot when the reviewer returns", async ({

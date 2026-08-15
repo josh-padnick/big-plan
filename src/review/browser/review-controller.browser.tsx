@@ -119,17 +119,20 @@ import {
   reviewPollIsOffline,
   reviewRuntimeAcceptsWrites,
   reviewRuntimeCanWrite,
+  reviewRuntimeDownSinceMs,
   reviewRuntimeIsDown,
   transitionReviewPollHealth,
   type ReviewPollHealth,
   type ReviewPollResult,
 } from "./review-poll-health.js";
+import { reviewEndReason, type ReviewEndReason } from "./review-expiry.js";
 import {
   isReviewRuntimeUnavailable,
   normalizeReviewRuntimeRequestError,
   reviewRuntimeRefusal,
   reviewRuntimeRefusalStatus,
 } from "./review-runtime-request.js";
+import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
   AlertDialog,
@@ -652,16 +655,24 @@ const requestJson = async ({
   }
 };
 
-/** The one place a runtime failure interrupts reading, whatever the failure. */
+/**
+ * The one place a runtime failure interrupts reading, whatever the failure.
+ * Its action and link are independent and may appear together.
+ */
 const RuntimeAlertBanner = ({
   scope,
   heading,
   detail,
+  link,
   action,
 }: {
   readonly scope: string;
   readonly heading: string;
   readonly detail: string;
+  readonly link?: {
+    readonly href: string;
+    readonly label: string;
+  };
   readonly action?: {
     readonly label: string;
     readonly onAct: () => void;
@@ -669,7 +680,7 @@ const RuntimeAlertBanner = ({
   };
 }) => (
   <div
-    className="fixed top-14 right-3 left-3 z-50 mx-auto flex max-w-2xl min-w-0 items-start gap-3 rounded-lg border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-sm text-[var(--callout-danger-c)] shadow-floating"
+    className="fixed top-14 right-3 left-3 z-50 mx-auto flex max-w-2xl min-w-0 flex-wrap items-start gap-3 rounded-lg border border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] p-3 text-sm text-[var(--callout-danger-c)] shadow-floating"
     role="alert"
     aria-live="assertive"
     {...{ [scope]: "" }}
@@ -681,37 +692,78 @@ const RuntimeAlertBanner = ({
         {detail}
       </p>
     </div>
-    {action === undefined ? null : (
-      <button
-        type="button"
-        className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--callout-danger-c)]"
-        onClick={action.onAct}
-        disabled={!action.enabled}
-      >
-        {action.label}
-      </button>
+    {link === undefined && action === undefined ? null : (
+      <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2 max-sm:basis-full">
+        {link === undefined ? null : (
+          <a
+            className="shrink-0 rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {link.label}
+          </a>
+        )}
+        {action === undefined ? null : (
+          <button
+            type="button"
+            className="shrink-0 cursor-pointer rounded-md border border-[var(--callout-danger-c)] bg-transparent px-2 py-1 text-xs font-semibold text-[var(--callout-danger-c)] hover:bg-[var(--callout-danger-c)] hover:text-[var(--callout-danger-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--callout-danger-c)]"
+            onClick={action.onAct}
+            disabled={!action.enabled}
+          >
+            {action.label}
+          </button>
+        )}
+      </div>
     )}
   </div>
 );
 
+// The page says only what this tab can defend: it lost contact and, when known,
+// the deadline it last received has passed. Recovery stays non-destructive
+// because starting a runtime seizes custody and could make a live review and
+// its agent read-only, so this banner never proposes it.
 const ServerGoneBanner = ({
   canRefresh,
   onRefresh,
+  endReason,
+  latestReviewUrl,
 }: {
   readonly canRefresh: boolean;
   readonly onRefresh: () => void;
-}) => (
-  <RuntimeAlertBanner
-    scope="data-review-server-gone"
-    heading="This review session is no longer online"
-    detail={
-      canRefresh
-        ? "The local review server stopped responding. Refresh when it is running again to continue reviewing. This is separate from the agent connection."
-        : "The local review server stopped responding. Keep this tab open because the latest review input has not reached the local review server. This is separate from the agent connection."
-    }
-    action={{ label: "Refresh", onAct: onRefresh, enabled: canRefresh }}
-  />
-);
+  readonly endReason: ReviewEndReason;
+  readonly latestReviewUrl: string | undefined;
+}) => {
+  const unsavedInputWarning = canRefresh
+    ? ""
+    : " Keep this tab open because the latest review input has not reached the local review server.";
+  const refreshAction = {
+    label: "Refresh",
+    onAct: onRefresh,
+    enabled: canRefresh,
+  };
+  const replacementLink =
+    latestReviewUrl === undefined
+      ? undefined
+      : { href: latestReviewUrl, label: "Open latest review" };
+  const contactDetail =
+    endReason.kind === "deadline-passed"
+      ? `The deadline this tab last knew has since passed.${
+          replacementLink === undefined
+            ? " Refresh to try reconnecting."
+            : " A newer review session for this plan was recorded at the linked address."
+        }`
+      : "This tab lost contact with the local review server. Refresh to try reconnecting.";
+  return (
+    <RuntimeAlertBanner
+      scope="data-review-server-gone"
+      heading="This tab lost contact with this review session"
+      detail={`${contactDetail}${unsavedInputWarning} This is separate from the agent connection.`}
+      action={refreshAction}
+      {...(replacementLink === undefined ? {} : { link: replacementLink })}
+    />
+  );
+};
 
 // The failure this exists for answers reads perfectly: the server is up, so
 // nothing else on the page looks wrong, and a reviewer would keep writing
@@ -3707,6 +3759,16 @@ export const ReviewController = () => {
   const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(
     null,
   );
+  const runtimeSessionOrder = useMemo(createRuntimeSessionOrder, []);
+  const acceptRuntimeSession = useCallback(
+    ({ sequence, session }: { sequence: number; session: RuntimeSession }) => {
+      const decision = runtimeSessionOrder.decide({ sequence, session });
+      if (decision.kind === "apply") {
+        setRuntimeSession(decision.session);
+      }
+    },
+    [runtimeSessionOrder],
+  );
   const [pollHealth, setPollHealth] = useState<ReviewPollHealth>(
     INITIAL_REVIEW_POLL_HEALTH,
   );
@@ -3753,6 +3815,15 @@ export const ReviewController = () => {
   // with the banner for a runtime that has gone entirely.
   const writesStalled =
     !serverGone && runtimeSession?.writesStalledMs !== undefined;
+  // Evaluate the remembered deadline from when contact was actually lost. The
+  // live status clock would otherwise change this observation after the banner
+  // appeared by advancing past a deadline that was still future at contact loss.
+  const runtimeDownSinceMs = reviewRuntimeDownSinceMs(pollHealth);
+  const endReason = reviewEndReason({
+    expiresAtMs: runtimeSession?.expiresAtMs,
+    idleTimeoutMs: runtimeSession?.idleTimeoutMs,
+    nowMs: runtimeDownSinceMs ?? statusNowMs,
+  });
   const threadRuntime: ThreadRuntime =
     identity === null ? "static" : pollIsOffline ? "offline" : "online";
   const agentProjection = agentProjectionForReviewPoll({
@@ -4140,6 +4211,7 @@ export const ReviewController = () => {
         return;
       }
       try {
+        const sessionSequence = runtimeSessionOrder.issueRequest();
         const session = parseRuntimeSession({
           value: await requestJson({ path: "/api/session", identity }),
           sessionId: identity.sessionId,
@@ -4147,7 +4219,9 @@ export const ReviewController = () => {
         if (session === null) {
           throw new Error("This page is not connected to its review runtime.");
         }
-        setRuntimeSession(session);
+        if (current) {
+          acceptRuntimeSession({ sequence: sessionSequence, session });
+        }
         const snapshot = parseSnapshot(
           await requestJson({ path: "/api/drafts", identity }),
         );
@@ -4215,7 +4289,7 @@ export const ReviewController = () => {
     return () => {
       current = false;
     };
-  }, [identity, planId]);
+  }, [acceptRuntimeSession, identity, planId, runtimeSessionOrder]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -4336,15 +4410,18 @@ export const ReviewController = () => {
     const refresh = async () => {
       if (pending) return;
       pending = true;
+      const sessionSequence = runtimeSessionOrder.issueRequest();
+      // Stamp before requests so aggregate latency cannot move contact loss past
+      // a remembered deadline. The shared order owner applies only the latest
+      // session response immediately; aggregate health still waits for all.
+      const pollStartedAtMs = Date.now();
       try {
-        const [sessionValue, agentValue, progressValue] = await Promise.all([
-          requestJson({ path: "/api/session", identity }),
-          requestJson({ path: "/api/agent", identity }),
-          requestJson({ path: "/api/progress", identity }),
-        ]);
-        if (current) {
+        const sessionPromise = requestJson({
+          path: "/api/session",
+          identity,
+        }).then((value) => {
           const session = parseRuntimeSession({
-            value: sessionValue,
+            value,
             sessionId: identity.sessionId,
           });
           if (session === null) {
@@ -4352,23 +4429,66 @@ export const ReviewController = () => {
               "This page is not connected to its review runtime.",
             );
           }
-          setRuntimeSession(session);
-          acceptAgentSnapshot(parseAgentSnapshot(agentValue));
-          setProgress(parseProgress(progressValue));
-          setPollHealth(INITIAL_REVIEW_POLL_HEALTH);
+          if (current) {
+            acceptRuntimeSession({ sequence: sessionSequence, session });
+          }
+          return session;
+        });
+        const [sessionResult, agentResult, progressResult] =
+          await Promise.allSettled([
+            sessionPromise,
+            requestJson({ path: "/api/agent", identity }),
+            requestJson({ path: "/api/progress", identity }),
+          ]);
+        if (current) {
+          const failures: Array<unknown> = [];
+          if (sessionResult.status === "rejected") {
+            failures.push(sessionResult.reason);
+          }
           const now = Date.now();
+          if (agentResult.status === "fulfilled") {
+            acceptAgentSnapshot(parseAgentSnapshot(agentResult.value));
+            setLastObservableAgentAtMs(now);
+          } else {
+            failures.push(agentResult.reason);
+          }
+          if (progressResult.status === "fulfilled") {
+            setProgress(parseProgress(progressResult.value));
+          } else {
+            failures.push(progressResult.reason);
+          }
+          if (failures.length === 0) {
+            setPollHealth(INITIAL_REVIEW_POLL_HEALTH);
+          } else {
+            const result: ReviewPollResult = failures.some((failure) =>
+              isReviewRuntimeUnavailable(failure),
+            )
+              ? "runtime-unavailable"
+              : "poll-failed";
+            setPollHealth((health) =>
+              transitionReviewPollHealth({
+                health,
+                result,
+                nowMs: pollStartedAtMs,
+              }),
+            );
+          }
           setStatusNowMs(now);
-          setLastObservableAgentAtMs(now);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         if (current) {
           const result: ReviewPollResult = isReviewRuntimeUnavailable(error)
             ? "runtime-unavailable"
             : "poll-failed";
+          const now = Date.now();
           setPollHealth((health) =>
-            transitionReviewPollHealth({ health, result }),
+            transitionReviewPollHealth({
+              health,
+              result,
+              nowMs: pollStartedAtMs,
+            }),
           );
-          setStatusNowMs(Date.now());
+          setStatusNowMs(now);
         }
       } finally {
         pending = false;
@@ -4383,7 +4503,12 @@ export const ReviewController = () => {
       current = false;
       window.clearInterval(timer);
     };
-  }, [acceptAgentSnapshot, identity]);
+  }, [
+    acceptAgentSnapshot,
+    acceptRuntimeSession,
+    identity,
+    runtimeSessionOrder,
+  ]);
 
   useEffect(() => {
     if (identity === null) return;
@@ -5123,6 +5248,8 @@ export const ReviewController = () => {
         <ServerGoneBanner
           canRefresh={canRefreshReview}
           onRefresh={() => window.location.reload()}
+          endReason={endReason}
+          latestReviewUrl={runtimeSession?.latestReviewUrl}
         />
       ) : null}
       {writesStalled ? <WritesStalledBanner /> : null}

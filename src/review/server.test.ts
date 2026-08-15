@@ -2460,6 +2460,18 @@ describe("review runtime shutdown", () => {
     }
   }, 10_000);
 
+  it("should publish a launchable restart command for this plan", async () => {
+    const session = (await (await call({ path: "/api/session" })).json()) as {
+      readonly restartCommand?: unknown;
+    };
+    expect(session.restartCommand).toEqual(
+      expect.stringMatching(/^node '.+' review '.+'$/),
+    );
+    expect(session.restartCommand).toEqual(
+      expect.stringContaining(`review '${runtime.planPath}'`),
+    );
+  });
+
   it("should publish its lifetime and deadline on the session route", async () => {
     const before = (await (await call({ path: "/api/session" })).json()) as {
       readonly idleTimeoutMs?: unknown;

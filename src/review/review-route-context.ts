@@ -158,6 +158,7 @@ export type ReviewRouteContext = {
   readonly sessionId: string;
   readonly resolvedPlanPath: string;
   readonly agentCommand: string;
+  readonly restartCommand: string;
   readonly recoveryPrompt: string;
   readonly planRenderer: PlanRenderer;
   readonly readerProgress: ReaderProgress;

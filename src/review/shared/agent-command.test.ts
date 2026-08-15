@@ -4,6 +4,7 @@ import {
   agentNextCommand,
   agentRecoveryPrompt,
   quoteShellArgument,
+  reviewRestartCommand,
 } from "./agent-command.js";
 
 describe("agent commands", () => {
@@ -14,7 +15,10 @@ describe("agent commands", () => {
     expect(quoteShellArgument(planPath)).toBe(`'/tmp/captain'"'"'s plan.mdx'`);
   });
 
-  it("should compose the connect and waiting commands in one place", () => {
+  it("should compose the review and agent commands in one place", () => {
+    expect(reviewRestartCommand({ executablePath, planPath })).toBe(
+      `node '/tmp/big plan/bin/big-plan.mjs' review '/tmp/captain'"'"'s plan.mdx'`,
+    );
     expect(agentConnectCommand({ executablePath, planPath })).toBe(
       `node '/tmp/big plan/bin/big-plan.mjs' agent '/tmp/captain'"'"'s plan.mdx'`,
     );

@@ -1,6 +1,6 @@
-// Owns the shell commands and recovery text that connect a coding agent to a
-// live review. Callers provide paths; this module owns command shape and shell
-// quoting so the browser guidance and agent loop cannot drift apart.
+// Owns the shell commands and recovery text for a live review and its coding
+// agent. Callers provide paths; this module owns command shape and shell
+// quoting so browser guidance and runtime output cannot drift apart.
 
 /** Quotes trusted text as one literal POSIX-shell argument. */
 export const quoteShellArgument = (value: string): string =>
@@ -14,6 +14,15 @@ export const agentConnectCommand = ({
   readonly planPath: string;
 }): string =>
   `node ${quoteShellArgument(executablePath)} agent ${quoteShellArgument(planPath)}`;
+
+export const reviewRestartCommand = ({
+  executablePath,
+  planPath,
+}: {
+  readonly executablePath: string;
+  readonly planPath: string;
+}): string =>
+  `node ${quoteShellArgument(executablePath)} review ${quoteShellArgument(planPath)}`;
 
 export const agentNextCommand = ({
   executablePath,

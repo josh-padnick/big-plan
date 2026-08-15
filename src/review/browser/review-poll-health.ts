@@ -6,6 +6,7 @@ export type ReviewPollHealth =
   | {
       readonly state: "runtime-unavailable";
       readonly consecutiveFailures: number;
+      readonly firstFailureAtMs: number;
     }
   | {
       readonly state: "poll-failed";
@@ -23,11 +24,24 @@ export const INITIAL_REVIEW_POLL_HEALTH = {
 export const transitionReviewPollHealth = ({
   health,
   result,
+  nowMs,
 }: {
   readonly health: ReviewPollHealth;
   readonly result: ReviewPollResult;
+  readonly nowMs: number;
 }): ReviewPollHealth => {
   if (result === "success") return INITIAL_REVIEW_POLL_HEALTH;
+  if (result === "runtime-unavailable") {
+    return {
+      state: result,
+      consecutiveFailures:
+        health.state === result
+          ? Math.min(2, health.consecutiveFailures + 1)
+          : 1,
+      firstFailureAtMs:
+        health.state === result ? health.firstFailureAtMs : nowMs,
+    };
+  }
   return {
     state: result,
     consecutiveFailures:
@@ -37,6 +51,13 @@ export const transitionReviewPollHealth = ({
 
 export const reviewRuntimeIsDown = (health: ReviewPollHealth): boolean =>
   health.state === "runtime-unavailable" && health.consecutiveFailures >= 2;
+
+export const reviewRuntimeDownSinceMs = (
+  health: ReviewPollHealth,
+): number | undefined =>
+  reviewRuntimeIsDown(health) && health.state === "runtime-unavailable"
+    ? health.firstFailureAtMs
+    : undefined;
 
 export const reviewRuntimeCanWrite = (health: ReviewPollHealth): boolean =>
   !reviewRuntimeIsDown(health);
