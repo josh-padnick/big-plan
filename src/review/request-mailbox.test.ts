@@ -1902,6 +1902,63 @@ describe("request mailbox", () => {
     ).resolves.toEqual([]);
   });
 
+  it("should heal the stored resolved set before the terminal answer commits", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Look at this again.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({
+      store,
+      request: { ...request, reopenedCommentIds: [comment.id] },
+    });
+    await writeResolvedCommentIds({ store, ids: [comment.id] });
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+    });
+    await mkdir(
+      join(store.agentResponseDirectory, `${request.requestId}.json`),
+    );
+
+    await expect(
+      commitRequestTerminal({
+        store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: request.requestId,
+            outcomes: [
+              {
+                commentId: comment.id,
+                state: "declined",
+                message: "No plan revision is needed.",
+              },
+            ],
+          },
+          request: claimed,
+          commentsById: new Map([[comment.id, comment]]),
+          changedBlocks: new Set(),
+          currentSnapshot: snapshot,
+          now: "2026-08-10T12:00:01.000Z",
+        }),
+        claimedBy: agentA,
+        now: "2026-08-10T12:00:01.000Z",
+      }),
+    ).rejects.toThrow();
+
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests[0]?.answeredAt).toBeUndefined();
+    await expect(
+      readEffectiveResolvedCommentIds({ store, sessionId, planId }),
+    ).resolves.toEqual([]);
+  });
+
   it("should remove only the named threads from the stored resolved set", async () => {
     const { store } = await preparedReview();
     const commentId = "4444444444444444";

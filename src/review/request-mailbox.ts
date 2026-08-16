@@ -556,10 +556,11 @@ export const cancelAgentRequest = async ({
   });
 
 /**
- * Answers one request and marks it terminal as a single commit. Leaving the
- * outstanding set also clears the request's reopened threads from the stored
- * resolved set, so a crash between the request write and the create-time clear
- * cannot resurrect a stale resolution once the work is answered.
+ * Answers one request and marks it terminal as a single commit. The request's
+ * reopened threads are cleared from the stored resolved set before the
+ * terminal writes, so outstanding-set suppression never lifts on an unhealed
+ * set: a crash after the clear leaves the request claimed but unanswered, and
+ * the commit retry converges with the clear as a no-op.
  */
 export const commitRequestTerminal = async ({
   store,
@@ -626,6 +627,10 @@ export const commitRequestTerminal = async ({
             ...request,
             answeredAt: now,
           });
+          await clearResolvedComments({
+            store: lockedStore,
+            commentIds: request.reopenedCommentIds ?? [],
+          });
           await writeAgentResponseValue({
             store: lockedStore,
             requestId: response.requestId,
@@ -635,10 +640,6 @@ export const commitRequestTerminal = async ({
             store: lockedStore,
             requestId: response.requestId,
             value: answered,
-          });
-          await clearResolvedComments({
-            store: lockedStore,
-            commentIds: answered.reopenedCommentIds ?? [],
           });
           return answered;
         },
