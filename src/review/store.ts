@@ -192,6 +192,9 @@ export type AnchoredReviewStore = {
     readonly targetPath?: string;
     readonly allowMissingRequestDirectory?: boolean;
   }) => Promise<AnchoredStorePath>;
+  readonly resolveFilePath: (
+    path: ReviewStorePathKey,
+  ) => Promise<AnchoredStorePath>;
 };
 
 const isReviewStoreDirectoryKey = (
@@ -343,36 +346,36 @@ export const anchorReviewStore = async (
     return resolved;
   };
   await resolveDirectory("reviewDirectory");
+  const resolveLocationPath = async (
+    location: ReviewStorePathKey,
+  ): Promise<AnchoredStorePath> => {
+    const lexicalLocation = resolve(store[location]);
+    const step = relative(lexicalPlanDirectory, lexicalLocation);
+    if (
+      step.startsWith("..") ||
+      resolve(lexicalPlanDirectory, step) !== lexicalLocation
+    ) {
+      throw new ReviewStorePathRejected("outside");
+    }
+    return resolveAnchoredSegments({
+      base: planDirectory,
+      segments: step === "" ? [] : step.split(sep),
+      allowMissingLast: true,
+    });
+  };
   return {
     resolveStore: async () => {
       const resolvedLocations: Record<string, string> = {};
       await Promise.all(
         reviewStoreLocationKeys(store).map(async (location) => {
-          if (isReviewStoreDirectoryKey(location)) {
-            resolvedLocations[location] = (
-              await resolveDirectory(location)
-            ).path;
-            return;
-          }
-          const lexicalLocation = resolve(store[location]);
-          const step = relative(lexicalPlanDirectory, lexicalLocation);
-          if (
-            step.startsWith("..") ||
-            resolve(lexicalPlanDirectory, step) !== lexicalLocation
-          ) {
-            throw new ReviewStorePathRejected("outside");
-          }
-          resolvedLocations[location] = (
-            await resolveAnchoredSegments({
-              base: planDirectory,
-              segments: step === "" ? [] : step.split(sep),
-              allowMissingLast: true,
-            })
-          ).path;
+          resolvedLocations[location] = isReviewStoreDirectoryKey(location)
+            ? (await resolveDirectory(location)).path
+            : (await resolveLocationPath(location)).path;
         }),
       );
       return { ...store, ...resolvedLocations };
     },
+    resolveFilePath: resolveLocationPath,
     resolveDirectoryPath: async ({
       directory,
       requestId,

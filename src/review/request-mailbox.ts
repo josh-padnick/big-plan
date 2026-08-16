@@ -68,6 +68,11 @@ const namedCommentIds = (request: AgentRequest): ReadonlyArray<string> =>
 /**
  * Serializes resolved-set mutations so a request create and a drafts persist
  * cannot interleave into outstanding work on a still-resolved thread.
+ *
+ * Anchors only the lock and resolved-set locations this critical section
+ * writes. Nested mutations anchor the paths they touch themselves, so damage
+ * elsewhere in the store - a symlinked attachments directory, say - refuses
+ * the operation that would traverse it, not every resolved-set commit.
  */
 const withResolvedCommentLock = async <TResult>({
   store,
@@ -78,7 +83,16 @@ const withResolvedCommentLock = async <TResult>({
 }): Promise<TResult> => {
   let lockedStore: ReviewStore;
   try {
-    lockedStore = await (await anchorReviewStore(store)).resolveStore();
+    const anchoredStore = await anchorReviewStore(store);
+    const [reviewDirectory, resolvedPath] = await Promise.all([
+      anchoredStore.resolveDirectoryPath({ directory: "reviewDirectory" }),
+      anchoredStore.resolveFilePath("resolvedPath"),
+    ]);
+    lockedStore = {
+      ...store,
+      reviewDirectory: reviewDirectory.path,
+      resolvedPath: resolvedPath.path,
+    };
   } catch (error: unknown) {
     if (!(error instanceof ReviewStorePathRejected)) throw error;
     throw new AgentExchangeRejected("The request mailbox is unavailable");
