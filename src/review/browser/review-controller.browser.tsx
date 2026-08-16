@@ -4339,10 +4339,7 @@ export const ReviewController = () => {
     [applyLocalReviewState, changeReplyDraft, identity, writeAvailability],
   );
   const acceptAgentSnapshot = useCallback(
-    (
-      snapshot: AgentSnapshot,
-      pollStartedFingerprint?: string | null,
-    ) => {
+    (snapshot: AgentSnapshot, pollStartedFingerprint?: string | null) => {
       setHasObservedAgentSnapshot(true);
       setAgent(snapshot);
       setCancelPendingRequestIds((current) =>
