@@ -436,13 +436,47 @@ describe("session authority", () => {
         takeover: true,
         now: 11_000,
       }),
-    ).resolves.toEqual({ activated: true });
+    ).resolves.toEqual({ activated: true, displaced: holder });
     await expect(readCurrentReviewSession({ store })).resolves.toEqual(
       challenger,
     );
     await expect(
       reviewSessionOwnsMailbox({ store, sessionId: holder.sessionId }),
     ).resolves.toBe(false);
+  });
+
+  it("should report no displacement when a takeover finds no live holder", async () => {
+    const store = await preparedStore();
+    const holder = descriptor({
+      sessionId: "2222222222222222",
+      url: "http://127.0.0.1:61000/",
+    });
+    const challenger = descriptor({
+      sessionId: "3333333333333333",
+      url: "http://127.0.0.1:62000/",
+    });
+    await activateReviewSession({ store, descriptor: holder });
+    await refreshReviewSessionHeartbeat({
+      store,
+      sessionId: holder.sessionId,
+      running: true,
+      now: 10_000,
+    });
+
+    const activation = await activateReviewSession({
+      store,
+      descriptor: challenger,
+      takeover: true,
+      now: 20_000,
+    });
+
+    expect(activation).toEqual({ activated: true });
+    expect(
+      activation.activated ? activation.displaced : undefined,
+    ).toBeUndefined();
+    await expect(readCurrentReviewSession({ store })).resolves.toEqual(
+      challenger,
+    );
   });
 
   it("should treat a just-written descriptor as live before its first heartbeat", async () => {

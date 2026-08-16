@@ -239,7 +239,7 @@ export const liveReviewCustody = async ({
 };
 
 export type ReviewSessionActivation =
-  | { readonly activated: true }
+  | { readonly activated: true; readonly displaced?: ReviewSessionDescriptor }
   | { readonly activated: false; readonly live: ReviewSessionDescriptor };
 
 /**
@@ -247,9 +247,11 @@ export type ReviewSessionActivation =
  *
  * Custody is refused while another live runtime holds it, because taking it
  * makes that reviewer's open page and its connected agent read-only with
- * nothing said to either of them. `takeover` is the deliberate case. The check
- * runs inside the custody lock so two simultaneous starts cannot both conclude
- * the other is absent.
+ * nothing said to either of them. `takeover` is the deliberate case, and the
+ * activation reports the live session it actually displaced. The check runs
+ * inside the custody lock so two simultaneous starts cannot both conclude the
+ * other is absent, and so the displaced session is the one the write replaced
+ * rather than a pre-lock guess.
  */
 export const activateReviewSession = async ({
   store,
@@ -269,16 +271,18 @@ export const activateReviewSession = async ({
   return withReviewStoreLock({
     lockPath: store.sessionLockPath,
     change: async (): Promise<ReviewSessionActivation> => {
-      if (!takeover) {
-        const live = await liveReviewCustody({
-          store,
-          planId: checked.planId,
-          plan: checked.plan,
-          ...(now === undefined ? {} : { now }),
-        });
-        if (live !== undefined && live.sessionId !== checked.sessionId) {
+      const live = await liveReviewCustody({
+        store,
+        planId: checked.planId,
+        plan: checked.plan,
+        ...(now === undefined ? {} : { now }),
+      });
+      if (live !== undefined && live.sessionId !== checked.sessionId) {
+        if (!takeover) {
           return { activated: false, live };
         }
+        await writeSessionDescriptorValue({ store, value: checked });
+        return { activated: true, displaced: live };
       }
       await writeSessionDescriptorValue({ store, value: checked });
       return { activated: true };

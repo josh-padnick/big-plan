@@ -1211,7 +1211,9 @@ export const startReviewRuntime = async ({
     planId,
     planPath: resolvedPlanPath,
     store,
-    ...(liveAtStart === undefined ? {} : { replacedSession: liveAtStart }),
+    ...(activation.displaced === undefined
+      ? {}
+      : { replacedSession: activation.displaced }),
     close: closeRuntime,
     diagnostics,
     diagnosticGrowth,
