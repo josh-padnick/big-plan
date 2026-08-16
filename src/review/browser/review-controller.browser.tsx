@@ -520,6 +520,22 @@ const sameReviewComment = (
 const STALE_SUBMISSION_STATUS =
   "The review changed before submission. Review the latest comments and send again.";
 const RECOVERY_CONFLICT_STATUS = "Two versions of a comment need your choice.";
+
+/**
+ * An unresolved conflict pauses reviewer-state writes, but the pause itself is
+ * not permission to raise the conflict prompt: only a reviewer-initiated write
+ * may answer this rejection by opening it, while background persistence lets
+ * it pass silently.
+ */
+class RecoveryConflictPauseError extends Error {
+  constructor() {
+    super(RECOVERY_CONFLICT_STATUS);
+    this.name = "RecoveryConflictPauseError";
+  }
+}
+
+const isRecoveryConflictPause = (error: unknown): boolean =>
+  error instanceof RecoveryConflictPauseError;
 const LIVE_RECOVERY_UNAVAILABLE_STATUS =
   "Browser recovery is unavailable. The live review remains usable, but browser-only drafts cannot be recovered after a reload.";
 
@@ -4272,13 +4288,13 @@ export const ReviewController = () => {
   // Drafts, feedback, and comment deletion share this reviewer-state gate.
   // Change Engine reverts intentionally use serialization alone because their
   // semantics are independent of unresolved reviewer-state recovery choices.
+  // The gate only pauses: whether the conflict prompt is on screen is each
+  // caller's decision, so a background persist cannot reopen a dismissal.
   const serializeReviewerStateWrite = useCallback(
     <Value,>(write: () => Promise<Value>): Promise<Value> =>
       serializeRuntimeWrite(() => {
         if (recoveryReconciliationRef.current.conflicts.length > 0) {
-          setStatus(RECOVERY_CONFLICT_STATUS);
-          setIsRecoveryConflictOpen(true);
-          return Promise.reject(new Error(RECOVERY_CONFLICT_STATUS));
+          return Promise.reject(new RecoveryConflictPauseError());
         }
         return write();
       }),
@@ -4791,6 +4807,7 @@ export const ReviewController = () => {
     // runtime is doing, so a runtime that cannot take this change still
     // cannot lose it.
     if (!runtimeAcceptsWrites) return;
+    if (recoveryConflicts.length > 0) return;
     void serializeReviewerStateWrite(async () => {
       let prepared = latestReviewStateRef.current;
       if (persistedReviewStateRef.current === prepared.fingerprint) return;
@@ -4860,7 +4877,10 @@ export const ReviewController = () => {
           local: latestReviewStateRef.current.state,
         });
       }
-    }).catch((error: unknown) => setStatus(errorMessage(error)));
+    }).catch((error: unknown) => {
+      if (isRecoveryConflictPause(error)) return;
+      setStatus(errorMessage(error));
+    });
   }, [
     applyReviewState,
     drafts,
@@ -5230,6 +5250,7 @@ export const ReviewController = () => {
         }
       } catch (error) {
         setStatus(errorMessage(error));
+        if (isRecoveryConflictPause(error)) setIsRecoveryConflictOpen(true);
       } finally {
         setIsSending(false);
       }
@@ -5457,6 +5478,7 @@ export const ReviewController = () => {
       );
     } catch (error) {
       setStatus(errorMessage(error));
+      if (isRecoveryConflictPause(error)) setIsRecoveryConflictOpen(true);
     }
   };
   const revertAgentChanges = async () => {

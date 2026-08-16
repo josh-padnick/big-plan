@@ -86,6 +86,49 @@ describe("live review recovery merge", () => {
     ]);
   });
 
+  it("should keep this browser's target when the stored copy was canonicalized", () => {
+    // The runtime rewrites target kind and label from the block map on first
+    // save, so the stored copy of a slide comment comes back as its heading
+    // block. Adopting that copy wholesale regressed slide association; the
+    // merge keeps the browser's own copy and only ever takes the body.
+    const local: ReviewComment = {
+      ...comment("c1", "same body"),
+      target: {
+        type: "block",
+        blockId: "section/delivery/heading-1",
+        kind: "slide",
+        label: "Delivery",
+      },
+    };
+    const stored: ReviewComment = {
+      ...comment("c1", "same body"),
+      target: {
+        type: "block",
+        blockId: "section/delivery/heading-1",
+        kind: "heading",
+        label: "Delivery",
+      },
+    };
+
+    const agreed = mergeLiveReviewRecovery({
+      base: reviewRecoveryBase(state([local])),
+      local: state([local]),
+      runtime: state([stored]),
+    });
+    expect(agreed.conflicts).toEqual([]);
+    expect(agreed.state.drafts).toEqual([local]);
+
+    const runtimeEdited = mergeLiveReviewRecovery({
+      base: reviewRecoveryBase(state([local])),
+      local: state([local]),
+      runtime: state([{ ...stored, body: "edited in the runtime" }]),
+    });
+    expect(runtimeEdited.conflicts).toEqual([]);
+    expect(runtimeEdited.state.drafts).toEqual([
+      { ...local, body: "edited in the runtime" },
+    ]);
+  });
+
   it("should not mistake an adopted sibling runtime change for a local edit", () => {
     const base = reviewRecoveryBase(
       state([comment("x", "agreed x"), comment("y", "agreed y")]),

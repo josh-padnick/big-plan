@@ -261,15 +261,18 @@ export const mergeLiveReviewRecovery = ({
       continue;
     }
     if (localDraft !== undefined && runtimeDraft !== undefined) {
-      // Target metadata is runtime-owned and may be canonicalized on first
-      // save, so a matching body is the same comment even when the browser's
-      // display kind differs from the stored block kind.
+      // Stored target metadata may be canonicalized on first save, so a
+      // matching body is the same comment even when the browser's display
+      // kind differs from the stored block kind. The browser's copy keeps the
+      // identity this browser gave it: adopting the stored copy wholesale
+      // downgrades a slide target to its heading block and silently breaks
+      // slide association, so only the body ever comes from the runtime.
       if (localDraft.body === runtimeDraft.body) {
-        drafts.push(runtimeDraft);
+        drafts.push(localDraft);
         continue;
       }
       if (baseBody !== undefined && localDraft.body === baseBody) {
-        drafts.push(runtimeDraft);
+        drafts.push({ ...localDraft, body: runtimeDraft.body });
         continue;
       }
       if (baseBody !== undefined && runtimeDraft.body === baseBody) {
@@ -477,9 +480,14 @@ export const resolveReviewRecoveryConflict = ({
     (draft) => draft.id === conflict.commentId,
   );
   return {
+    // Keeping the runtime's version means keeping its body; the local draft's
+    // target keeps the identity this browser gave it, because the stored
+    // target may have been canonicalized on first save.
     drafts: replaced
       ? state.drafts.map((draft) =>
-          draft.id === conflict.commentId ? runtimeDraft : draft,
+          draft.id === conflict.commentId
+            ? { ...draft, body: runtimeDraft.body }
+            : draft,
         )
       : [...state.drafts, runtimeDraft],
     resolvedCommentIds: state.resolvedCommentIds,

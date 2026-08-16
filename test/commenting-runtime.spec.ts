@@ -1109,6 +1109,15 @@ test.describe("a drafts write prepared against content the store moved past", ()
       .click();
     await rail.getByLabel("Edit comment").fill(latestBrowserBody);
     await rail.getByRole("button", { name: "Save" }).click();
+    // A background persist of the refreshed conflicted draft may not reopen
+    // the dismissed prompt; only the explicit send below asks again.
+    await expect(
+      rail
+        .locator(".review-staged-card")
+        .filter({ hasText: latestBrowserBody }),
+    ).toBeVisible();
+    await expect(choice).toBeHidden();
+    await expect(pendingChoice).toBeVisible();
     let feedbackWrites = 0;
     page.on("request", (request) => {
       if (

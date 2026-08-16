@@ -109,7 +109,13 @@ const liveRecoveryStorageKey = ({
 const liveRecoveryOwnerSessionKey = (scope: LiveRecoveryScope): string =>
   `${liveRecoveryStoragePrefix(scope)}:owner`;
 
-/** Canonicalizes the reviewer state used by recovery cleanup decisions. */
+/**
+ * Canonicalizes the reviewer state used by sync and recovery cleanup
+ * decisions. Only the content the runtime owns takes part: stored target
+ * metadata is canonicalized on first save while the browser keeps its own
+ * display copy, so a fingerprint over whole comments would report an
+ * already-accepted state as forever unsynchronized.
+ */
 export const persistedReviewFingerprint = ({
   drafts,
   resolvedCommentIds,
@@ -118,7 +124,7 @@ export const persistedReviewFingerprint = ({
   readonly resolvedCommentIds: ReadonlySet<string>;
 }): string =>
   JSON.stringify({
-    drafts,
+    drafts: drafts.map(({ id, body }) => ({ id, body })),
     resolvedCommentIds: Array.from(resolvedCommentIds).sort(),
   });
 
