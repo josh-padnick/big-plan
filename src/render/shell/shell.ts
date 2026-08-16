@@ -20,6 +20,7 @@ import { X_ICON } from "../../icons/lucide/x.js";
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
 import { escapeHtml } from "../escape-html.js";
 import { GLOBAL_CSS } from "../global.generated.js";
+import { PALETTES, type Palette } from "../preferences.js";
 import { lucideIconToHtml } from "./lucide-icon-html.js";
 import { PREFERENCES_SCRIPT } from "./preferences-script.js";
 import { VIEWER_SCRIPT } from "./viewer-script.js";
@@ -206,9 +207,44 @@ const renderPreferenceOption = ({
 </span>
 </label>`;
 
-// The dialog is intentionally a focused appearance chooser. Future settings
-// join only when actionable, so an unavailable roadmap item never competes
-// with the reviewer's one current decision.
+// The colour themes, in the order the sheet offers them: the product's own
+// palette first, then the guests. PALETTES owns the ids; this list adds only
+// the reviewer-facing name, which is the one fact the contract has no opinion
+// about. Each name is the upstream project's own spelling, accents included.
+const PALETTE_TITLES = {
+  default: "Default",
+  "rose-pine": "Rosé Pine",
+  nord: "Nord",
+  catppuccin: "Catppuccin",
+  brutalist: "Brutalist",
+} as const satisfies Readonly<Record<Palette, string>>;
+
+const PALETTE_OPTIONS = PALETTES.map((palette) => ({
+  palette,
+  title: PALETTE_TITLES[palette],
+}));
+
+// A row rather than a card: five themes read faster stacked than wrapped, and
+// the strip does the describing so the name never has to. The swatch carries
+// its own theme, so each strip shows that theme's shades whatever the document
+// is currently painted in.
+const renderPaletteOption = ({
+  palette,
+  title,
+}: {
+  readonly palette: Palette;
+  readonly title: string;
+}): string =>
+  `<label class="group relative flex min-h-11 min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-edge bg-paper px-3 py-2 text-ink transition-colors hover:bg-surface has-[:checked]:border-accent has-[:checked]:bg-surface has-[:checked]:text-accent has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-accent">
+<input class="order-last size-4 shrink-0 accent-accent" id="big-plan-palette-${palette}" type="radio" name="big-plan-palette" value="${palette}" data-preference-palette="${palette}" aria-label="${escapeHtml(title)}">
+<span class="flex shrink-0 overflow-hidden rounded-sm border border-edge" data-palette-swatch data-palette="${palette}" aria-hidden="true"><span data-swatch="paper"></span><span data-swatch="edge"></span><span data-swatch="accent"></span><span data-swatch="ink"></span></span>
+<span class="min-w-0 grow truncate text-sm font-semibold leading-tight">${escapeHtml(title)}</span>
+</label>`;
+
+// The dialog is intentionally a focused presentation chooser: how light the
+// page is, and whose colours fill it. Future settings join only when
+// actionable, so an unavailable roadmap item never competes with the
+// reviewer's current decisions.
 const renderPreferencesDialog = (): string =>
   `<div class="fixed inset-0 z-50 flex items-center justify-center bg-backdrop/70 p-3 wide:grid wide:place-items-center wide:p-4" data-preferences-backdrop hidden>
 <section class="max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-edge bg-paper p-4 text-ink shadow-floating wide:max-h-[calc(100dvh-2rem)] wide:p-8" data-preferences-dialog role="dialog" aria-modal="true" aria-labelledby="big-plan-preferences-title">
@@ -227,6 +263,14 @@ const renderPreferencesDialog = (): string =>
 ${renderPreferenceOption({ mode: "light", title: "Light", description: "Always light", icon: SUN_ICON })}
 ${renderPreferenceOption({ mode: "dark", title: "Dark", description: "Always dark", icon: MOON_ICON })}
 ${renderPreferenceOption({ mode: "system", title: "System", description: "Match device", icon: MONITOR_ICON })}
+</fieldset>
+</div>
+<div class="mt-4 border-t border-edge pt-4 wide:mt-6 wide:pt-6">
+<h3 class="m-0 text-sm font-semibold" id="big-plan-palette-label">Color theme</h3>
+<p class="mt-1 text-sm leading-normal text-muted">Choose which colors Big Plan uses. Each theme works in both light and dark.</p>
+<fieldset class="mt-3 grid min-w-0 grid-cols-1 gap-2 border-0 p-0 wide:mt-4" aria-labelledby="big-plan-palette-label" role="radiogroup">
+<legend class="sr-only">Color theme</legend>
+${PALETTE_OPTIONS.map(renderPaletteOption).join("\n")}
 </fieldset>
 <p class="mt-3 flex items-center gap-2 text-xs leading-normal text-muted wide:mt-4" data-preferences-status>${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes apply immediately and are saved automatically.</span></p>
 </div>
