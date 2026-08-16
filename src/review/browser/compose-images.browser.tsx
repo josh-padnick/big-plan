@@ -18,7 +18,6 @@ import {
 } from "../shared/review-image.js";
 import { ReviewImage } from "./review-image.browser.js";
 import {
-  REVIEW_WRITES_AVAILABLE,
   reviewWriteRefusal,
   type ReviewWriteAvailability,
 } from "./review-write-availability.js";
@@ -33,7 +32,7 @@ export const ComposeImages = ({
   body,
   onBodyChange,
   identity,
-  writeAvailability = REVIEW_WRITES_AVAILABLE,
+  writeAvailability,
   label,
   placeholder,
   maxLength,
@@ -49,8 +48,14 @@ export const ComposeImages = ({
    * Whether a write sent now could still be accepted. An upload is a write, so
    * it asks the same shared question every other mutation path asks rather than
    * discovering the refusal after the reviewer has watched it upload.
+   *
+   * Required, and deliberately without a default: defaulting to "available"
+   * would let a composer added later bypass the gate by saying nothing, which
+   * is the failure this shared question exists to remove. A missing answer is
+   * a compile error instead of a silent upload through a runtime that has
+   * already refused.
    */
-  readonly writeAvailability?: ReviewWriteAvailability;
+  readonly writeAvailability: ReviewWriteAvailability;
   readonly label: string;
   readonly placeholder: string;
   readonly maxLength: number;
