@@ -107,8 +107,13 @@ const buildTouchedRevertLoss = async () => {
   await put(root, "src/shared.ts", "export const shared = 'branch';\n");
   await commit(root, "feat: rework the shared module\n\nA branch experiment.");
   await put(root, "src/shared.ts", "export const shared = 'fork';\n");
-  await commit(root, "revert: restore the shared module\n\nBack to fork state.");
-  const branchTree = (await git(root, "rev-parse", "feature^{tree}")).stdout.trim();
+  await commit(
+    root,
+    "revert: restore the shared module\n\nBack to fork state.",
+  );
+  const branchTree = (
+    await git(root, "rev-parse", "feature^{tree}")
+  ).stdout.trim();
   const branchCommit = (await git(root, "rev-parse", "feature")).stdout.trim();
 
   await git(root, "checkout", "--quiet", "main");
@@ -288,11 +293,19 @@ test("should report unresolved when the comparison cannot read a repository obje
   try {
     await git(root, "checkout", "--quiet", "-b", "feature");
     await put(root, "src/extra/only.ts", "export const only = true;\n");
-    await commit(root, "feat: add an extra module\n\nAdds work in a new folder.");
-    const treeSha = (await git(root, "rev-parse", "feature:src/extra")).stdout.trim();
-    await rm(join(root, ".git", "objects", treeSha.slice(0, 2), treeSha.slice(2)), {
-      force: true,
-    });
+    await commit(
+      root,
+      "feat: add an extra module\n\nAdds work in a new folder.",
+    );
+    const treeSha = (
+      await git(root, "rev-parse", "feature:src/extra")
+    ).stdout.trim();
+    await rm(
+      join(root, ".git", "objects", treeSha.slice(0, 2), treeSha.slice(2)),
+      {
+        force: true,
+      },
+    );
 
     const result = await checkMergeGuard({ repoRoot: root });
     assert.equal(result.status, "unresolved");
@@ -348,7 +361,10 @@ test("should pass when the branch reworks a file and keeps its change while main
     await commit(root, "feat: add the shared module\n\nThe fork-point state.");
     await git(root, "checkout", "--quiet", "-b", "feature");
     await put(root, "src/shared.ts", "export const shared = 'branch';\n");
-    await commit(root, "feat: rework the shared module\n\nThe branch keeps this.");
+    await commit(
+      root,
+      "feat: rework the shared module\n\nThe branch keeps this.",
+    );
     await git(root, "checkout", "--quiet", "main");
     await put(root, "docs/notes.md", "New notes.\n");
     await commit(root, "docs: add notes\n\nLands on main.");
@@ -369,9 +385,15 @@ test("should pass when the fork point is main itself and the branch reverts its 
     await commit(root, "feat: add the shared module\n\nLands on main.");
     await git(root, "checkout", "--quiet", "-b", "feature");
     await put(root, "src/shared.ts", "export const shared = 'branch';\n");
-    await commit(root, "feat: rework the shared module\n\nA branch experiment.");
+    await commit(
+      root,
+      "feat: rework the shared module\n\nA branch experiment.",
+    );
     await put(root, "src/shared.ts", "export const shared = 'main';\n");
-    await commit(root, "revert: restore the shared module\n\nBack to main state.");
+    await commit(
+      root,
+      "revert: restore the shared module\n\nBack to main state.",
+    );
 
     const result = await checkMergeGuard({ repoRoot: root });
     assert.equal(result.status, "passed");
