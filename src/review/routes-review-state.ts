@@ -62,7 +62,7 @@ import {
   STALE_REVIEW_STATE_CODE,
 } from "./shared/review-wire.js";
 
-const storedReviewSnapshot = async ({
+const readStoredReviewerState = async ({
   context,
   store = context.store,
 }: {
@@ -76,29 +76,25 @@ const storedReviewSnapshot = async ({
     store,
     validate: validateResolvedCommentIds,
   });
-  return encodeReviewSnapshot({
+  return {
     drafts,
-    sent: await context.planRenderer.readStoredComments(store.sentPath),
     resolvedCommentIds,
     version: reviewStateVersion({ drafts, resolvedCommentIds }),
-  });
+  };
 };
 
-const currentReviewStateVersion = async ({
+const storedReviewSnapshot = async ({
   context,
   store = context.store,
 }: {
   readonly context: ReviewRouteContext;
   readonly store?: ReviewRouteContext["store"];
-}): Promise<string> => {
-  const drafts = await context.planRenderer.readStoredComments(
-    store.draftsPath,
-  );
-  const resolvedCommentIds = await readResolvedCommentIds({
-    store,
-    validate: validateResolvedCommentIds,
+}) => {
+  const reviewerState = await readStoredReviewerState({ context, store });
+  return encodeReviewSnapshot({
+    ...reviewerState,
+    sent: await context.planRenderer.readStoredComments(store.sentPath),
   });
-  return reviewStateVersion({ drafts, resolvedCommentIds });
 };
 
 const conditionalReviewStateRefusal = async ({
@@ -118,7 +114,7 @@ const conditionalReviewStateRefusal = async ({
       reason: `${operation} must carry the review-state version it was prepared against`,
     });
   }
-  const version = await currentReviewStateVersion({ context, store });
+  const { version } = await readStoredReviewerState({ context, store });
   return payload.version === version
     ? undefined
     : refusal({

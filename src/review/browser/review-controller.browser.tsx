@@ -151,6 +151,7 @@ import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import {
   adoptLiveReviewRecovery,
   mergeLiveReviewRecovery,
+  mergeReviewStateAfterHydration,
   refreshReviewRecoveryConflicts,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
@@ -168,6 +169,7 @@ import {
   claimLiveRecoveryOwner,
   clearLiveReviewRecovery,
   EMPTY_RECOVERED_COMPOSER,
+  mergeRecoveredComposerAfterHydration,
   persistedReviewFingerprint,
   recordLiveRecoveryAdoption,
   selectLiveReviewRecovery,
@@ -4039,6 +4041,8 @@ export const ReviewController = () => {
     }),
     [compose, composeBody, detachedComposer, replyDrafts],
   );
+  const composerRecoveryRef = useRef(composerRecovery);
+  composerRecoveryRef.current = composerRecovery;
   /** Gives back typed comment text, and says when it had nowhere to go. */
   const restoreComposer = useCallback(
     (composer: RecoveredComposer): "restored" | "detached" => {
@@ -4567,6 +4571,8 @@ export const ReviewController = () => {
 
   useEffect(() => {
     let current = true;
+    const reviewStateBeforeHydration = latestReviewStateRef.current.state;
+    const composerBeforeHydration = composerRecoveryRef.current;
     void (async () => {
       if (identity === null) {
         setDrafts(planId === "" ? [] : readLocalDrafts(planId));
@@ -4611,7 +4617,7 @@ export const ReviewController = () => {
             persistedReviewFingerprint(runtimeReviewState),
           );
           let restoredReviewState = runtimeReviewState;
-          let conflicted = false;
+          let conflicts: ReadonlyArray<ReviewRecoveryConflict> = [];
           if (recovery !== null) {
             const merged =
               selection.source === "orphan"
@@ -4633,39 +4639,48 @@ export const ReviewController = () => {
               });
             }
             restoredReviewState = merged.state;
-            conflicted = merged.conflicts.length > 0;
-            if (conflicted) {
-              replaceRecoveryReconciliation({
-                base: reviewRecoveryBase(runtimeReviewState),
-                conflicts: merged.conflicts,
-                runtime: runtimeReviewState,
-              });
-              setIsRecoveryConflictOpen(true);
-            } else {
-              replaceRecoveryReconciliation({
-                base: reviewRecoveryBase(runtimeReviewState),
-                conflicts: [],
-                runtime: null,
-              });
-            }
+            conflicts = merged.conflicts;
+          }
+          restoredReviewState = mergeReviewStateAfterHydration({
+            before: reviewStateBeforeHydration,
+            current: latestReviewStateRef.current.state,
+            restored: restoredReviewState,
+          });
+          conflicts = refreshReviewRecoveryConflicts({
+            conflicts,
+            local: restoredReviewState,
+          }).conflicts;
+          const conflicted = conflicts.length > 0;
+          if (conflicted) {
+            replaceRecoveryReconciliation({
+              base: reviewRecoveryBase(runtimeReviewState),
+              conflicts,
+              runtime: runtimeReviewState,
+            });
+            setIsRecoveryConflictOpen(true);
           } else {
             replaceRecoveryReconciliation({
               base: reviewRecoveryBase(runtimeReviewState),
               conflicts: [],
               runtime: null,
             });
+            setIsRecoveryConflictOpen(false);
           }
-          const detached =
-            restoreComposer({
+          const composerAfterHydration = mergeRecoveredComposerAfterHydration({
+            before: composerBeforeHydration,
+            current: composerRecoveryRef.current,
+            recovered: {
               ...recoveredComposer,
               replies: repliesForSentComments({
                 replies: recoveredComposer.replies,
                 sent: snapshot.sent,
               }),
-            }) === "detached";
-          setDrafts(restoredReviewState.drafts);
+            },
+          });
+          const detached =
+            restoreComposer(composerAfterHydration) === "detached";
+          applyReviewState(restoredReviewState);
           setSent(snapshot.sent);
-          setResolvedCommentIds(restoredReviewState.resolvedCommentIds);
           setStatus(
             conflicted
               ? RECOVERY_CONFLICT_STATUS
@@ -4679,14 +4694,38 @@ export const ReviewController = () => {
         }
       } catch (error) {
         if (current) {
+          let restoredReviewState = latestReviewStateRef.current.state;
+          let conflicts: ReadonlyArray<ReviewRecoveryConflict> = [];
           if (recovery !== null) {
             if (selection.source === "owned") {
-              replaceRecoveryReconciliation(recovery.reconciliation);
-              setDrafts(recovery.drafts);
-              setResolvedCommentIds(recovery.resolvedCommentIds);
-              setIsRecoveryConflictOpen(
-                recovery.reconciliation.conflicts.length > 0,
-              );
+              restoredReviewState = mergeReviewStateAfterHydration({
+                before: reviewStateBeforeHydration,
+                current: latestReviewStateRef.current.state,
+                restored: recovery,
+              });
+              const refreshed = refreshReviewRecoveryConflicts({
+                conflicts: recovery.reconciliation.conflicts,
+                local: restoredReviewState,
+              });
+              conflicts = refreshed.conflicts;
+              const runtime = recovery.reconciliation.runtime;
+              const base =
+                runtime !== null && refreshed.settledConflicts.length > 0
+                  ? reviewRecoveryBaseAfterConflictAnswers({
+                      base: recovery.reconciliation.base,
+                      runtime,
+                      answeredConflicts: refreshed.settledConflicts,
+                      remainingConflicts: conflicts,
+                    })
+                  : recovery.reconciliation.base;
+              replaceRecoveryReconciliation({
+                ...recovery.reconciliation,
+                base,
+                conflicts,
+                runtime: conflicts.length === 0 ? null : runtime,
+              });
+              applyReviewState(restoredReviewState);
+              setIsRecoveryConflictOpen(conflicts.length > 0);
             }
           } else {
             markPersistedReviewState(
@@ -4696,11 +4735,15 @@ export const ReviewController = () => {
               }),
             );
           }
-          restoreComposer(
-            selection.source === "orphan"
-              ? EMPTY_RECOVERED_COMPOSER
-              : recoveredComposer,
-          );
+          const composerAfterHydration = mergeRecoveredComposerAfterHydration({
+            before: composerBeforeHydration,
+            current: composerRecoveryRef.current,
+            recovered:
+              selection.source === "orphan"
+                ? EMPTY_RECOVERED_COMPOSER
+                : recoveredComposer,
+          });
+          restoreComposer(composerAfterHydration);
           setStatus(errorMessage(error));
           setIsHydrated(true);
         }
@@ -4712,6 +4755,7 @@ export const ReviewController = () => {
   }, [
     acceptRuntimeSession,
     adoptRuntimeReviewState,
+    applyReviewState,
     identity,
     markPersistedReviewState,
     observeRuntimeReviewState,

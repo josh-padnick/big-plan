@@ -184,6 +184,67 @@ test("should keep unsent comment text through a reload", async ({
   ).toHaveValue(replyBody);
 });
 
+test("should keep reviewer input created while hydration is pending", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const token = await reviewToken(page);
+  const runtimeBody = "Restore this runtime comment around newer input.";
+  await stageComment(page, runtimeBody);
+  await expect
+    .poll(async () =>
+      (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+        (draft) => draft.body,
+      ),
+    )
+    .toEqual([runtimeBody]);
+
+  let releaseHydration = (): void => undefined;
+  const hydrationMayFinish = new Promise<void>((resolve) => {
+    releaseHydration = resolve;
+  });
+  let markHydrationStarted = (): void => undefined;
+  const hydrationStarted = new Promise<void>((resolve) => {
+    markHydrationStarted = resolve;
+  });
+  await page.route(
+    "**/api/drafts",
+    async (route) => {
+      const response = await route.fetch();
+      markHydrationStarted();
+      await hydrationMayFinish;
+      await route.fulfill({ response });
+    },
+    { times: 1 },
+  );
+
+  const reload = page.reload();
+  await hydrationStarted;
+  const stagedWhileLoading = "Keep this comment staged while loading.";
+  await stageComment(page, stagedWhileLoading);
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composerBody = "Keep this composer text typed while loading.";
+  await page
+    .getByRole("dialog", { name: /Comment on/u })
+    .getByLabel("Add a comment")
+    .fill(composerBody);
+  releaseHydration();
+  await reload;
+
+  await expect(
+    page
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByLabel("Add a comment"),
+  ).toHaveValue(composerBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).toContainText(runtimeBody);
+  await expect(rail).toContainText(stagedWhileLoading);
+});
+
 test("should keep unsent comment text separate across two tabs", async ({
   context,
   page,
@@ -1388,60 +1449,6 @@ test.describe("a drafts write prepared against content the store moved past", ()
         page.evaluate((key) => window.localStorage.getItem(key), orphanKey),
       )
       .not.toBeNull();
-  });
-
-  test("should discard expired orphaned recovery instead of offering it", async ({
-    page,
-    reviewRuntimeUrl,
-  }) => {
-    await page.goto(reviewRuntimeUrl);
-    const identity = await page.locator("html").evaluate((root) => ({
-      planId: root.dataset.planId ?? "",
-      sessionId: root.dataset.reviewSession ?? "",
-    }));
-    const ownerId = randomBytes(8).toString("hex");
-    const orphanKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}:tab:${ownerId}`;
-    await page.evaluate(
-      ({ key, storedOwnerId }) => {
-        window.localStorage.setItem(
-          key,
-          JSON.stringify({
-            version: 10,
-            ownerId: storedOwnerId,
-            updatedAtMs: Date.now() - 8 * 24 * 60 * 60 * 1000,
-            pendingAdoption: null,
-            drafts: [
-              {
-                id: "expired-comment",
-                body: "Do not offer this expired recovery.",
-                createdAt: "2026-08-01T12:00:00.000Z",
-                premiseSnapshot: "",
-                target: { type: "document" },
-              },
-            ],
-            resolvedCommentIds: [],
-            reconciliation: {
-              base: { draftBodies: {}, resolvedCommentIds: [] },
-              conflicts: [],
-              runtime: null,
-            },
-            composer: { comment: null, replies: {} },
-          }),
-        );
-      },
-      { key: orphanKey, storedOwnerId: ownerId },
-    );
-
-    await page.reload();
-
-    await expect(
-      page.getByRole("alertdialog", { name: "Two versions of this comment" }),
-    ).toBeHidden();
-    await expect
-      .poll(() =>
-        page.evaluate((key) => window.localStorage.getItem(key), orphanKey),
-      )
-      .toBeNull();
   });
 
   test("should keep a concurrent runtime comment when this browser writes", async ({

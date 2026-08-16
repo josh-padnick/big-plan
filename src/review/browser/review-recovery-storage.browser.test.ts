@@ -1,11 +1,12 @@
 // Proves the persisted recovery contract rejects corrupt data and applies its
-// orphan expiry and adoption-selection policy without depending on the review
+// orphan demotion and adoption-selection policy without depending on the review
 // UI.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearLiveReviewRecovery,
   LIVE_RECOVERY_EXPIRY_MS,
+  mergeRecoveredComposerAfterHydration,
   persistedReviewFingerprint,
   readLiveReviewRecovery,
   recordLiveRecoveryAdoption,
@@ -128,7 +129,43 @@ describe("live review recovery storage", () => {
     ).toBeNull();
   });
 
-  it("should preserve stale owned recovery while expiring stale orphan candidates", () => {
+  it("should keep browser-only input created while hydration is pending", () => {
+    const before = {
+      comment: null,
+      replies: new Map([["existing", "before"]]),
+    };
+    const current = {
+      comment: {
+        target: { type: "document" } as const,
+        premiseSnapshot: "snapshot",
+        body: "typed while loading",
+      },
+      replies: new Map([
+        ["existing", "edited while loading"],
+        ["new", "new reply"],
+      ]),
+    };
+    const recovered = {
+      comment: null,
+      replies: new Map([
+        ["existing", "recovered"],
+        ["restored", "restored reply"],
+      ]),
+    };
+
+    expect(
+      mergeRecoveredComposerAfterHydration({ before, current, recovered }),
+    ).toEqual({
+      comment: current.comment,
+      replies: new Map([
+        ["existing", "edited while loading"],
+        ["new", "new reply"],
+        ["restored", "restored reply"],
+      ]),
+    });
+  });
+
+  it("should demote stale foreign recovery without deleting its owner's work", () => {
     const nowMs = LIVE_RECOVERY_EXPIRY_MS + 1_000;
     localStorage.setItem(
       recoveryKey("owned"),
@@ -151,7 +188,16 @@ describe("live review recovery storage", () => {
 
     expect(selected.source).toBe("owned");
     expect(selected.recovery?.ownerId).toBe("owned");
-    expect(localStorage.getItem(recoveryKey("expired-orphan"))).toBeNull();
+    expect(localStorage.getItem(recoveryKey("expired-orphan"))).not.toBeNull();
+
+    localStorage.removeItem(recoveryKey("owned"));
+    const returnedOwner = selectLiveReviewRecovery({
+      scope,
+      owner: { ownerId: "expired-orphan", recoveryAvailable: true },
+      nowMs,
+    });
+    expect(returnedOwner.source).toBe("owned");
+    expect(returnedOwner.recovery?.ownerId).toBe("expired-orphan");
   });
 
   it("should skip an adopted revision and report a failed ledger write", () => {
@@ -176,6 +222,7 @@ describe("live review recovery storage", () => {
         nowMs,
       }).recovery,
     ).toBeNull();
+    expect(localStorage.getItem(recoveryKey("orphan"))).toBeNull();
 
     const blockedStorage = new MemoryStorage();
     blockedStorage.failWritesMatching = () => true;

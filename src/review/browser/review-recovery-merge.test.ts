@@ -3,6 +3,7 @@ import type { ReviewComment } from "../shared/comment.js";
 import {
   adoptLiveReviewRecovery,
   mergeLiveReviewRecovery,
+  mergeReviewStateAfterHydration,
   refreshReviewRecoveryConflicts,
   repliesForSentComments,
   resolveReviewRecoveryConflict,
@@ -37,6 +38,43 @@ const recovery = ({
 });
 
 describe("live review recovery merge", () => {
+  it("should keep reviewer state created while hydration is pending", () => {
+    const before = state([comment("existing", "before")]);
+    const current = state(
+      [comment("existing", "edited while loading"), comment("new", "staged")],
+      ["existing"],
+    );
+    const restored = state(
+      [comment("existing", "runtime"), comment("restored", "recovered")],
+      ["restored"],
+    );
+
+    expect(
+      mergeReviewStateAfterHydration({ before, current, restored }),
+    ).toEqual(
+      state(
+        [
+          comment("existing", "edited while loading"),
+          comment("restored", "recovered"),
+          comment("new", "staged"),
+        ],
+        ["existing", "restored"],
+      ),
+    );
+  });
+
+  it("should keep a deletion made while hydration is pending", () => {
+    const before = state([comment("deleted", "before")]);
+
+    expect(
+      mergeReviewStateAfterHydration({
+        before,
+        current: state([]),
+        restored: state([comment("deleted", "runtime")]),
+      }).drafts,
+    ).toEqual([]);
+  });
+
   it("should offer an orphaned tab's unsynchronized draft before applying it", () => {
     const agreed = state([comment("c1", "agreed")]);
     const merged = adoptLiveReviewRecovery({

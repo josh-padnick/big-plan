@@ -1,7 +1,8 @@
 // Owns browser persistence policy for live review recovery so storage keys,
-// validation, tab ownership, orphan-candidate expiry, and adoption history
-// cannot drift across the review controller's orchestration paths. Returning
-// owners keep their work indefinitely; only records without their owner expire.
+// validation, tab ownership, orphan-candidate demotion, and adoption history
+// cannot drift across the review controller's orchestration paths. Age only
+// stops a foreign record from being offered: the browser cannot distinguish a
+// closed owner from a suspended one, so a timer never deletes its work.
 
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { isStoredCommentTarget } from "../shared/comment.js";
@@ -39,6 +40,43 @@ export type RecoveredComposer = {
 export const EMPTY_RECOVERED_COMPOSER: RecoveredComposer = {
   comment: null,
   replies: new Map(),
+};
+
+const sameRecoveredComment = (
+  left: RecoveredComposer["comment"],
+  right: RecoveredComposer["comment"],
+): boolean => JSON.stringify(left) === JSON.stringify(right);
+
+/** Keeps browser-only input created after hydration began ahead of recovery. */
+export const mergeRecoveredComposerAfterHydration = ({
+  before,
+  current,
+  recovered,
+}: {
+  readonly before: RecoveredComposer;
+  readonly current: RecoveredComposer;
+  readonly recovered: RecoveredComposer;
+}): RecoveredComposer => {
+  const replies = new Map<string, string>();
+  for (const commentId of new Set([
+    ...before.replies.keys(),
+    ...current.replies.keys(),
+    ...recovered.replies.keys(),
+  ])) {
+    const beforeBody = before.replies.get(commentId);
+    const currentBody = current.replies.get(commentId);
+    const body =
+      currentBody === beforeBody
+        ? recovered.replies.get(commentId)
+        : currentBody;
+    if (body !== undefined) replies.set(commentId, body);
+  }
+  return {
+    comment: sameRecoveredComment(current.comment, before.comment)
+      ? recovered.comment
+      : current.comment,
+    replies,
+  };
 };
 
 export type PendingLiveRecoveryAdoption = {
@@ -421,7 +459,7 @@ export const claimLiveRecoveryOwner = (
   }
 };
 
-/** Selects continuity first, then the newest unexpired recovery candidate. */
+/** Selects continuity first, then the newest recent recovery candidate. */
 export const selectLiveReviewRecovery = ({
   scope,
   owner,
@@ -446,20 +484,23 @@ export const selectLiveReviewRecovery = ({
       if (key === null || !key.startsWith(prefix)) continue;
       const recovery = readLiveReviewRecovery(key);
       if (recovery === null || recovery.ownerId === owner.ownerId) continue;
-      if (nowMs - recovery.updatedAtMs > LIVE_RECOVERY_EXPIRY_MS) {
+      const adoptedRevision = adoptedRevisions.get(recovery.ownerId);
+      if (
+        adoptedRevision !== undefined &&
+        adoptedRevision >= recovery.updatedAtMs
+      ) {
         localStorage.removeItem(key);
         index -= 1;
         continue;
       }
-      if (
-        (adoptedRevisions.get(recovery.ownerId) ?? 0) >= recovery.updatedAtMs
-      ) {
+      // Age demotes a foreign record from adoption instead of destroying it.
+      // Its owner may only be suspended and must still recover on return.
+      if (nowMs - recovery.updatedAtMs > LIVE_RECOVERY_EXPIRY_MS) {
         continue;
       }
       candidates.push(recovery);
     }
     // A returning owner never loses its own unsynchronized work to a timer.
-    // Expiry applies only when a record is being considered as an orphan.
     if (owned !== null) {
       return { recovery: owned, source: "owned", recoveryAvailable: true };
     }

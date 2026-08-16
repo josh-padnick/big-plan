@@ -70,6 +70,64 @@ export type ReviewRecoveryConflictRefresh = {
   readonly settledConflicts: ReadonlyArray<ReviewRecoveryConflict>;
 };
 
+const sameComment = (
+  left: ReviewComment | undefined,
+  right: ReviewComment | undefined,
+): boolean => JSON.stringify(left) === JSON.stringify(right);
+
+/** Keeps reviewer input created after hydration began ahead of its restore. */
+export const mergeReviewStateAfterHydration = ({
+  before,
+  current,
+  restored,
+}: {
+  readonly before: ReviewRecoveryState;
+  readonly current: ReviewRecoveryState;
+  readonly restored: ReviewRecoveryState;
+}): ReviewRecoveryState => {
+  const beforeDrafts = new Map(before.drafts.map((draft) => [draft.id, draft]));
+  const currentDrafts = new Map(
+    current.drafts.map((draft) => [draft.id, draft]),
+  );
+  const restoredDrafts = new Map(
+    restored.drafts.map((draft) => [draft.id, draft]),
+  );
+  const drafts: Array<ReviewComment> = [];
+  const ids = [
+    ...restored.drafts.map((draft) => draft.id),
+    ...current.drafts
+      .map((draft) => draft.id)
+      .filter((id) => !restoredDrafts.has(id)),
+    ...before.drafts
+      .map((draft) => draft.id)
+      .filter((id) => !restoredDrafts.has(id) && !currentDrafts.has(id)),
+  ];
+  for (const id of ids) {
+    const currentDraft = currentDrafts.get(id);
+    const draft = sameComment(currentDraft, beforeDrafts.get(id))
+      ? restoredDrafts.get(id)
+      : currentDraft;
+    if (draft !== undefined) drafts.push(draft);
+  }
+  const resolvedCommentIds = new Set<string>();
+  for (const id of new Set([
+    ...before.resolvedCommentIds,
+    ...current.resolvedCommentIds,
+    ...restored.resolvedCommentIds,
+  ])) {
+    const changedDuringHydration =
+      current.resolvedCommentIds.has(id) !== before.resolvedCommentIds.has(id);
+    if (
+      changedDuringHydration
+        ? current.resolvedCommentIds.has(id)
+        : restored.resolvedCommentIds.has(id)
+    ) {
+      resolvedCommentIds.add(id);
+    }
+  }
+  return { drafts, resolvedCommentIds };
+};
+
 const reviewRecoveryConflictKey = (conflict: ReviewRecoveryConflict): string =>
   `${conflict.kind === "resolution" ? "resolution" : "body"}:${conflict.commentId}`;
 
