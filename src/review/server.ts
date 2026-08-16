@@ -698,11 +698,21 @@ export const startReviewRuntime = async ({
     typeof address === "object" && address !== null ? address.port : 0;
   const url = `http://127.0.0.1:${port}/`;
   const closeListener = async (): Promise<void> => {
-    await new Promise<void>((settle) => {
+    const closedServer = new Promise<void>((settle) => {
       server.close(() => {
         settle();
       });
     });
+    server.closeIdleConnections();
+    const forceClose = setTimeout(() => {
+      server.closeAllConnections();
+    }, SHUTDOWN_GRACE_MS);
+    forceClose.unref();
+    try {
+      await closedServer;
+    } finally {
+      clearTimeout(forceClose);
+    }
   };
 
   // The early check cannot settle a tie: two runtimes may both have passed it
@@ -736,8 +746,40 @@ export const startReviewRuntime = async ({
     throw new ReviewCustodyHeld(activation.live);
   }
 
+  let heartbeatWrite = Promise.resolve();
+  let heartbeatFailureReported = false;
+  const queueHeartbeat = (
+    running: boolean,
+    stopReason?: string,
+  ): Promise<void> => {
+    heartbeatWrite = heartbeatWrite
+      .catch(() => undefined)
+      .then(async () => {
+        await refreshReviewSessionHeartbeat({
+          store,
+          sessionId,
+          running,
+          ...(stopReason === undefined ? {} : { stopReason }),
+        });
+      })
+      .catch((error: unknown) => {
+        if (heartbeatFailureReported) return;
+        heartbeatFailureReported = true;
+        process.stderr.write(
+          `Review heartbeat failed for session ${sessionId} (${resolvedPlanPath}): ${String(error)}\n`,
+        );
+      });
+    return heartbeatWrite;
+  };
+  // The first heartbeat lands before any owned-state work so liveness rests on
+  // the heartbeat itself, not on the descriptor's start-up grace, however long
+  // initialization takes.
+  await queueHeartbeat(true);
+
   // Everything below mutates state this session now owns. A failure gives the
-  // port back rather than leaving a bound socket behind.
+  // port back rather than leaving a bound socket behind, and records a stopped
+  // heartbeat so custody is released immediately instead of after the grace
+  // window.
   const initialExchange = await initializeOwnedReviewState({
     store,
     planId,
@@ -747,6 +789,10 @@ export const startReviewRuntime = async ({
     initialSnapshot,
     ...(diffPreviewSource === undefined ? {} : { diffPreviewSource }),
   }).catch(async (error: unknown) => {
+    await queueHeartbeat(
+      false,
+      "The review runtime failed while starting and never served this plan.",
+    );
     await closeListener();
     throw error;
   });
@@ -1030,32 +1076,6 @@ export const startReviewRuntime = async ({
     void handle({ request, response });
   });
 
-  let heartbeatWrite = Promise.resolve();
-  let heartbeatFailureReported = false;
-  const queueHeartbeat = (
-    running: boolean,
-    stopReason?: string,
-  ): Promise<void> => {
-    heartbeatWrite = heartbeatWrite
-      .catch(() => undefined)
-      .then(async () => {
-        await refreshReviewSessionHeartbeat({
-          store,
-          sessionId,
-          running,
-          ...(stopReason === undefined ? {} : { stopReason }),
-        });
-      })
-      .catch((error: unknown) => {
-        if (heartbeatFailureReported) return;
-        heartbeatFailureReported = true;
-        process.stderr.write(
-          `Review heartbeat failed for session ${sessionId} (${resolvedPlanPath}): ${String(error)}\n`,
-        );
-      });
-    return heartbeatWrite;
-  };
-  await queueHeartbeat(true);
   const heartbeatTimer = setInterval(() => {
     void queueHeartbeat(true);
   }, REVIEW_HEARTBEAT_INTERVAL_MS);
