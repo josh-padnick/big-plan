@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   activateReviewSession,
+  liveReviewCustody,
   liveReviewSessionForPlan,
   readCurrentReviewSession,
   refreshReviewSessionHeartbeat,
@@ -33,9 +34,11 @@ const planId = "1111111111111111";
 const descriptor = ({
   sessionId,
   url,
+  startedAt = "2026-08-10T12:00:00.000Z",
 }: {
   readonly sessionId: string;
   readonly url: string;
+  readonly startedAt?: string;
 }): ReviewSessionDescriptor => ({
   version: 1,
   sessionId,
@@ -44,7 +47,7 @@ const descriptor = ({
   url,
   port: 61_000,
   pid: 123,
-  startedAt: "2026-08-10T12:00:00.000Z",
+  startedAt,
   token: "A".repeat(43),
 });
 
@@ -356,6 +359,146 @@ describe("session authority", () => {
       }),
     ).resolves.toEqual({ authoritative: false, reason: "stopped" });
     expect(changed).toBe(false);
+  });
+
+  it("should refuse custody while a live runtime still serves the plan", async () => {
+    const store = await preparedStore();
+    const holder = descriptor({
+      sessionId: "2222222222222222",
+      url: "http://127.0.0.1:61000/",
+    });
+    const challenger = descriptor({
+      sessionId: "3333333333333333",
+      url: "http://127.0.0.1:62000/",
+    });
+    await activateReviewSession({ store, descriptor: holder });
+    await refreshReviewSessionHeartbeat({
+      store,
+      sessionId: holder.sessionId,
+      running: true,
+      now: 10_000,
+    });
+
+    await expect(
+      activateReviewSession({ store, descriptor: challenger, now: 11_000 }),
+    ).resolves.toEqual({ activated: false, live: holder });
+    await expect(readCurrentReviewSession({ store })).resolves.toEqual(holder);
+  });
+
+  it("should take custody once the holder's heartbeat has gone stale", async () => {
+    const store = await preparedStore();
+    const holder = descriptor({
+      sessionId: "2222222222222222",
+      url: "http://127.0.0.1:61000/",
+    });
+    const challenger = descriptor({
+      sessionId: "3333333333333333",
+      url: "http://127.0.0.1:62000/",
+    });
+    await activateReviewSession({ store, descriptor: holder });
+    await refreshReviewSessionHeartbeat({
+      store,
+      sessionId: holder.sessionId,
+      running: true,
+      now: 10_000,
+    });
+
+    await expect(
+      activateReviewSession({ store, descriptor: challenger, now: 20_000 }),
+    ).resolves.toEqual({ activated: true });
+    await expect(readCurrentReviewSession({ store })).resolves.toEqual(
+      challenger,
+    );
+  });
+
+  it("should take custody from a live holder only when takeover is explicit", async () => {
+    const store = await preparedStore();
+    const holder = descriptor({
+      sessionId: "2222222222222222",
+      url: "http://127.0.0.1:61000/",
+    });
+    const challenger = descriptor({
+      sessionId: "3333333333333333",
+      url: "http://127.0.0.1:62000/",
+    });
+    await activateReviewSession({ store, descriptor: holder });
+    await refreshReviewSessionHeartbeat({
+      store,
+      sessionId: holder.sessionId,
+      running: true,
+      now: 10_000,
+    });
+
+    await expect(
+      activateReviewSession({
+        store,
+        descriptor: challenger,
+        takeover: true,
+        now: 11_000,
+      }),
+    ).resolves.toEqual({ activated: true });
+    await expect(readCurrentReviewSession({ store })).resolves.toEqual(
+      challenger,
+    );
+    await expect(
+      reviewSessionOwnsMailbox({ store, sessionId: holder.sessionId }),
+    ).resolves.toBe(false);
+  });
+
+  it("should treat a just-written descriptor as live before its first heartbeat", async () => {
+    const store = await preparedStore();
+    const holder = descriptor({
+      sessionId: "2222222222222222",
+      url: "http://127.0.0.1:61000/",
+      startedAt: new Date(9_000).toISOString(),
+    });
+    const challenger = descriptor({
+      sessionId: "3333333333333333",
+      url: "http://127.0.0.1:62000/",
+    });
+    await activateReviewSession({ store, descriptor: holder });
+
+    await expect(
+      liveReviewCustody({
+        store,
+        planId,
+        plan: holder.plan,
+        now: 10_000,
+      }),
+    ).resolves.toEqual(holder);
+    await expect(
+      activateReviewSession({ store, descriptor: challenger, now: 10_000 }),
+    ).resolves.toEqual({ activated: false, live: holder });
+    // The grace lasts one freshness window, not forever: a runtime that died
+    // before its first heartbeat must not hold the plan hostage.
+    await expect(
+      activateReviewSession({ store, descriptor: challenger, now: 20_000 }),
+    ).resolves.toEqual({ activated: true });
+  });
+
+  it("should not grant start-up grace to a session that reported stopping", async () => {
+    const store = await preparedStore();
+    const holder = descriptor({
+      sessionId: "2222222222222222",
+      url: "http://127.0.0.1:61000/",
+      startedAt: new Date(9_000).toISOString(),
+    });
+    const challenger = descriptor({
+      sessionId: "3333333333333333",
+      url: "http://127.0.0.1:62000/",
+    });
+    await activateReviewSession({ store, descriptor: holder });
+    await refreshReviewSessionHeartbeat({
+      store,
+      sessionId: holder.sessionId,
+      running: false,
+      stopReason: "The review session was stopped by the reviewer.",
+      now: 9_500,
+    });
+
+    await expect(
+      activateReviewSession({ store, descriptor: challenger, now: 10_000 }),
+    ).resolves.toEqual({ activated: true });
   });
 
   it("should keep reviewer authority until shutdown is durably committed", async () => {
