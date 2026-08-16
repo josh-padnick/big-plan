@@ -96,6 +96,7 @@ Runtime-backed staged comments live under `.big-plan/review/<plan-id>/` beside t
 The review id comes from the resolved source path, so staged comments survive the plan revision the agent creates in response to feedback.
 Comment text that is typed but not yet staged or sent is kept in a recovery record owned by its browser tab, so reloading or reopening after a crash gives back the tab's staged drafts, open comment composer, and half-written thread replies.
 Each tab keeps exactly one record, written and cleared only by the tab that owns it, and read once when the page loads.
+The one exception is a record this build can no longer read: any tab claiming its writer identity removes such dead records so they cannot fill browser storage, while readable records from other tabs are never removed.
 A reload merges that record against the runtime's authoritative state automatically, or asks which version to keep when both sides changed the same comment.
 Tabs never read or adopt each other's records; two tabs converge through the runtime instead of through browser storage.
 A composer whose place in the plan no longer exists is not reattached, and the review retains its text for copying until the reviewer discards it.
