@@ -31,6 +31,7 @@ import {
 } from "./agent-exchange.js";
 import {
   appendProgressEvent,
+  cancelAgentRequest,
   claimAgentRequest,
   commitRequestTerminal,
 } from "./request-mailbox.js";
@@ -1359,6 +1360,70 @@ describe("review runtime feedback", () => {
     expect(matchingRequests(exchangeAfterRetry)).toHaveLength(1);
   });
 
+  it("should refuse a retried feedback submission whose request was canceled", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-cancel-retry-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const isolated = await startReviewRuntime({ planPath });
+    try {
+      const isolatedToken = await readSessionToken(isolated);
+      const version = await draftsVersionOf(isolated, isolatedToken);
+      const post = () =>
+        fetch(`${isolated.url}api/feedback`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-big-plan-review-token": isolatedToken,
+            "sec-fetch-site": "same-origin",
+            origin: isolated.url.replace(/\/$/, ""),
+          },
+          body: JSON.stringify({
+            version,
+            comments: [
+              {
+                id: "d5e6f7a8",
+                body: "Cancel this submission, then retry it.",
+                premiseSnapshot: PLAN_SNAPSHOT,
+                target: { type: "document" },
+              },
+            ],
+          }),
+        });
+
+      await mkdir(isolated.store.sentPath);
+      expect((await post()).status).toBe(500);
+      const afterFailure = await readAgentExchange({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+      });
+      const created = afterFailure.requests.find(
+        (request) =>
+          request.kind === "feedback" &&
+          request.comments.some((comment) => comment.id === "d5e6f7a8"),
+      );
+      if (created === undefined) {
+        throw new Error("Partial publication did not reach the mailbox");
+      }
+      await cancelAgentRequest({
+        store: isolated.store,
+        requestId: created.requestId,
+        now: new Date().toISOString(),
+      });
+      await rm(isolated.store.sentPath, { recursive: true });
+
+      const retried = await post();
+
+      expect(retried.status).toBe(409);
+      expect(await retried.json()).toMatchObject({
+        error: "The feedback submission was canceled by the reviewer",
+      });
+    } finally {
+      await isolated.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should resume a partially published feedback submission once", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-retry-"));
     const planPath = join(directory, "plan.mdx");
@@ -2031,15 +2096,15 @@ The dashboard shows the retry backlog.
         })
       ).status,
     ).toBe(200);
-    expect(
-      (
-        await call({
-          path: "/api/feedback",
-          method: "POST",
-          body: { comments: [comment] },
-        })
-      ).status,
-    ).toBe(500);
+    const resubmission = await call({
+      path: "/api/feedback",
+      method: "POST",
+      body: { comments: [comment] },
+    });
+    expect(resubmission.status).toBe(409);
+    expect(await resubmission.json()).toMatchObject({
+      error: "The feedback submission was canceled by the reviewer",
+    });
     const afterResubmission: unknown = await (
       await call({ path: "/api/drafts" })
     ).json();

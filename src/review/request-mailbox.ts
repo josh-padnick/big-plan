@@ -505,9 +505,11 @@ export const claimAgentRequest = async ({
 
 /**
  * Marks one request terminal. A later pickup or response cannot revive it.
- * Leaving the outstanding set also clears the request's reopened threads from
- * the stored resolved set, so a crash between the request write and the
- * create-time clear cannot resurrect a stale resolution once the work is gone.
+ * A fresh cancel clears the request's reopened threads from the stored
+ * resolved set before the cancel write, so a crash between the request write
+ * and the create-time clear cannot resurrect a stale resolution, while a
+ * retry of an already-canceled request never touches the resolved set and a
+ * resolve recorded after the first cancel survives.
  */
 export const cancelAgentRequest = async ({
   store,
@@ -529,18 +531,16 @@ export const cancelAgentRequest = async ({
             store: lockedStore,
             requestId,
           });
-          if (request.canceledAt !== undefined) {
-            await clearResolvedComments({
-              store: lockedStore,
-              commentIds: request.reopenedCommentIds ?? [],
-            });
-            return request;
-          }
+          if (request.canceledAt !== undefined) return request;
           if (request.answeredAt !== undefined) {
             throw new AgentExchangeRejected(
               "The agent has already answered this request",
             );
           }
+          await clearResolvedComments({
+            store: lockedStore,
+            commentIds: request.reopenedCommentIds ?? [],
+          });
           const canceled = validateAgentRequest({
             ...request,
             canceledAt: now,
@@ -549,10 +549,6 @@ export const cancelAgentRequest = async ({
             store: lockedStore,
             requestId,
             value: canceled,
-          });
-          await clearResolvedComments({
-            store: lockedStore,
-            commentIds: canceled.reopenedCommentIds ?? [],
           });
           return canceled;
         },
@@ -747,6 +743,11 @@ export const reviseQueuedRequest = async ({
  * Removes one waiting message outright. Cancel and delete are distinct: cancel
  * stops work the agent started, delete removes a message that never started,
  * including one the reviewer already canceled.
+ *
+ * Deleting a still-queued message clears its reopened threads from the stored
+ * resolved set before the request file - the recoverable reopen commit - is
+ * destroyed. A canceled message already cleared them when it was canceled, so
+ * deleting one leaves the resolved set alone.
  */
 export const deleteQueuedRequest = async ({
   store,
@@ -755,18 +756,28 @@ export const deleteQueuedRequest = async ({
   readonly store: ReviewStore;
   readonly requestId: string;
 }): Promise<AgentRequestDeletionResult> =>
-  withRequestLock({
+  withResolvedCommentLock({
     store,
-    requestId,
-    change: async (lockedStore) => {
-      await readQueuedMessage({
-        store: lockedStore,
+    change: (resolvedStore) =>
+      withRequestLock({
+        store: resolvedStore,
         requestId,
-        verb: "deleted",
-        allowCanceled: true,
-      });
-      return deleteAgentRequestValue({ store: lockedStore, requestId });
-    },
+        change: async (lockedStore) => {
+          const request = await readQueuedMessage({
+            store: lockedStore,
+            requestId,
+            verb: "deleted",
+            allowCanceled: true,
+          });
+          if (request.canceledAt === undefined) {
+            await clearResolvedComments({
+              store: lockedStore,
+              commentIds: request.reopenedCommentIds ?? [],
+            });
+          }
+          return deleteAgentRequestValue({ store: lockedStore, requestId });
+        },
+      }),
   });
 
 /** Removes one comment before an agent claims its feedback request. */

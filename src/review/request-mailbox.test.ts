@@ -1913,6 +1913,75 @@ describe("request mailbox", () => {
     await expect(storedResolvedCommentIds(store)).resolves.toEqual([otherId]);
   });
 
+  it("should keep a post-cancel resolve when a cancel retry arrives", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const request = replyRequest({ commentId });
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+    await ensureAgentRequest({ store, request });
+    await cancelAgentRequest({
+      store,
+      requestId: request.requestId,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    await replaceResolvedCommentIds({
+      store,
+      sessionId,
+      planId,
+      ids: [commentId],
+    });
+
+    await cancelAgentRequest({
+      store,
+      requestId: request.requestId,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([commentId]);
+  });
+
+  it("should clear a stale stored resolution when a reopened queued message is deleted", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const request = replyRequest({ commentId });
+    // Simulate a crash between the reopen record and the resolved-set clear.
+    await writeAgentRequest({
+      store,
+      request: { ...request, reopenedCommentIds: [commentId] },
+    });
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    await deleteQueuedRequest({ store, requestId: request.requestId });
+
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([]);
+    await expect(
+      readEffectiveResolvedCommentIds({ store, sessionId, planId }),
+    ).resolves.toEqual([]);
+  });
+
+  it("should keep a post-cancel resolve when a canceled message is deleted", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const request = replyRequest({ commentId });
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+    await ensureAgentRequest({ store, request });
+    await cancelAgentRequest({
+      store,
+      requestId: request.requestId,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    await replaceResolvedCommentIds({
+      store,
+      sessionId,
+      planId,
+      ids: [commentId],
+    });
+
+    await deleteQueuedRequest({ store, requestId: request.requestId });
+
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([commentId]);
+  });
+
   it("should hide a stored resolution while outstanding work names the thread", async () => {
     const { store } = await preparedReview();
     const commentId = "4444444444444444";

@@ -495,13 +495,19 @@ export const submitFeedback = async (
     brief: renderBrief(feedback),
   });
   await writeSnapshot({ store, snapshot: premiseSnapshot, source });
-  const agentRequest = await ensureAgentRequest({
-    store,
-    request: feedbackAgentRequest({
-      feedback,
-      premiseSnapshot,
-    }),
-  });
+  let agentRequest;
+  try {
+    agentRequest = await ensureAgentRequest({
+      store,
+      request: feedbackAgentRequest({
+        feedback,
+        premiseSnapshot,
+      }),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
   await writeComments({
     path: store.sentPath,
     comments: [...alreadySent, ...feedback.comments],
