@@ -3214,6 +3214,170 @@ test("should contain working comments when resolved threads expand", async ({
   );
 });
 
+// The race this journey reproduces: a poll snapshot is computed by the runtime
+// before a resolve lands, but arrives after that resolve was acknowledged. The
+// persisted-equals-latest stall guard alone cannot see the difference, so only
+// holding a real in-flight poll across a landed write proves the stale set is
+// dropped instead of adopted and written back.
+test("should keep a resolve that lands while a poll snapshot is in flight", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await stageComment(page, "Keep this resolve ahead of the stale poll.");
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submitted).ok()).toBe(true);
+
+  const session: unknown = await page.evaluate(async () => {
+    const root = document.documentElement;
+    const response = await fetch("/api/session", {
+      headers: {
+        "x-big-plan-review-token": root.dataset.reviewToken ?? "",
+      },
+    });
+    return response.json();
+  });
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    !("sessionId" in session) ||
+    !("planId" in session) ||
+    !("plan" in session) ||
+    typeof session.sessionId !== "string" ||
+    typeof session.planId !== "string" ||
+    typeof session.plan !== "string"
+  ) {
+    throw new Error("The stale-poll journey requires a live review session");
+  }
+  const store = reviewStoreFor({
+    planPath: session.plan,
+    planId: session.planId,
+  });
+  const exchange = await readAgentExchange({
+    store,
+    sessionId: session.sessionId,
+    planId: session.planId,
+  });
+  const request = nextPendingAgentRequest(exchange, agentViewer());
+  if (request === undefined || request.kind !== "feedback") {
+    throw new Error("The stale-poll journey did not create feedback work");
+  }
+  const source = await readFile(session.plan, "utf8");
+  const claimed = await claimAgentRequest({
+    store,
+    activeSessionId: session.sessionId,
+    requestId: request.requestId,
+    claimedBy: agentSessionId,
+    baselineSnapshot: deriveSnapshotDigest(source),
+    now: new Date().toISOString(),
+  });
+  await commitRequestTerminal({
+    claimedBy: agentSessionId,
+    store,
+    response: validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: request.comments.map((comment) => ({
+          commentId: comment.id,
+          state: "warning",
+          summary: "Needs the reviewer's confirmation",
+          message: "The completed feedback needs confirmation.",
+        })),
+      },
+      request: claimed,
+      commentsById: commentsFromExchange({
+        requests: [claimed],
+        responses: [],
+      }),
+      changedBlocks: new Set(),
+      currentSnapshot: deriveSnapshotDigest(source),
+      now: new Date().toISOString(),
+    }),
+    now: new Date().toISOString(),
+  });
+  // The answer must be on screen before the held poll is armed, so the held
+  // read is the only in-flight snapshot when the resolve lands.
+  await expect(
+    rail.getByRole("button", { name: "Resolve thread" }).first(),
+  ).toBeVisible();
+
+  // Hold the next poll after the runtime has computed its answer. The held
+  // body is then a genuine read that predates the resolve about to land.
+  let holdNextPoll = true;
+  let staleResolvedIds: unknown = null;
+  let signalHeld = (): void => undefined;
+  const held = new Promise<void>((resolve) => {
+    signalHeld = resolve;
+  });
+  let releasePoll = (): void => undefined;
+  const released = new Promise<void>((resolve) => {
+    releasePoll = resolve;
+  });
+  await page.route("**/api/agent", async (route) => {
+    if (route.request().method() !== "GET" || !holdNextPoll) {
+      await route.fallback();
+      return;
+    }
+    holdNextPoll = false;
+    const staleResponse = await route.fetch();
+    const body: unknown = await staleResponse.json();
+    staleResolvedIds =
+      typeof body === "object" && body !== null && "resolvedCommentIds" in body
+        ? body.resolvedCommentIds
+        : null;
+    signalHeld();
+    await released;
+    await route.fulfill({ response: staleResponse, json: body as object });
+  });
+  await held;
+  // The held snapshot must predate the resolve, or the journey proves nothing.
+  expect(staleResolvedIds).toEqual([]);
+
+  const resolutionPersisted = page.waitForResponse(
+    (candidate) =>
+      candidate.url().endsWith("/api/drafts") &&
+      candidate.request().method() === "PUT",
+  );
+  await rail.getByRole("button", { name: "Resolve thread" }).first().click();
+  await expect(rail.getByText("Resolved (1)")).toBeVisible();
+  expect((await resolutionPersisted).ok()).toBe(true);
+  // Give the acknowledged write a beat to mark itself persisted, so the
+  // released poll faces exactly the landed-write state the guard must detect.
+  await page.evaluate(() => new Promise((settle) => setTimeout(settle, 250)));
+
+  const heldPollDelivered = page.waitForResponse(
+    (candidate) =>
+      candidate.url().endsWith("/api/agent") &&
+      candidate.request().method() === "GET",
+  );
+  releasePoll();
+  expect((await heldPollDelivered).ok()).toBe(true);
+  // A browser that adopted the stale set writes it back on its next
+  // persistence pass, so the follow-up poll bounds when that damage would be
+  // visible.
+  const followUpPoll = page.waitForResponse(
+    (candidate) =>
+      candidate.url().endsWith("/api/agent") &&
+      candidate.request().method() === "GET",
+  );
+  expect((await followUpPoll).ok()).toBe(true);
+
+  await expect(rail.getByText("Resolved (1)")).toBeVisible();
+  const token = await reviewToken(page);
+  expect(
+    (await readRuntimeDrafts(reviewRuntimeUrl, token)).resolvedCommentIds,
+  ).toHaveLength(1);
+});
+
 // The defect this journey guards was invisible: resolving a thread silently
 // threw away the message waiting on it. Only a real browser can prove the
 // reviewer now sees the refusal and keeps the queued message.
