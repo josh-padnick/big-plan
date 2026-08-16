@@ -4338,20 +4338,23 @@ export const ReviewController = () => {
     },
     [applyLocalReviewState, changeReplyDraft, identity, writeAvailability],
   );
-  const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
-    setHasObservedAgentSnapshot(true);
-    setAgent(snapshot);
-    setCancelPendingRequestIds((current) =>
-      reconcilePendingCancellations({
-        pendingRequestIds: current,
-        requests: snapshot.requests,
-      }),
-    );
-    applyReviewState({
-      drafts: latestReviewStateRef.current.state.drafts,
-      resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
-    });
-  }, [applyReviewState]);
+  const acceptAgentSnapshot = useCallback(
+    (snapshot: AgentSnapshot) => {
+      setHasObservedAgentSnapshot(true);
+      setAgent(snapshot);
+      setCancelPendingRequestIds((current) =>
+        reconcilePendingCancellations({
+          pendingRequestIds: current,
+          requests: snapshot.requests,
+        }),
+      );
+      applyReviewState({
+        drafts: latestReviewStateRef.current.state.drafts,
+        resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
+      });
+    },
+    [applyReviewState],
+  );
   const serializeRuntimeWrite = useCallback(
     <Value,>(write: () => Promise<Value>): Promise<Value> => {
       const result = persistenceQueue.current.then(write, write);

@@ -72,9 +72,7 @@ export const readAgentSnapshot = async (
   }
   const presence = await readAgentPresence({ store, sessionId });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
-  const sent = await context.planRenderer.readStoredComments(
-    store.sentPath,
-  );
+  const sent = await context.planRenderer.readStoredComments(store.sentPath);
   const currentCommentIds = new Set(sent.map((comment) => comment.id));
   const resolvedCommentIds = await readEffectiveResolvedCommentIds({
     store,
