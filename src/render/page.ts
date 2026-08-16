@@ -12,18 +12,26 @@ import {
   PREFERENCES_RECORD_VERSION,
   PREFERENCES_STORAGE_KEY,
   STORED_APPEARANCE_MODES,
+  STORED_PALETTES,
 } from "./preferences.js";
 
-// Reads only the validated render-mode field before styles are parsed, so a
-// stored choice never flashes the other palette on the first frame.
+// Reads only the two validated presentation fields before styles are parsed, so
+// a stored choice never flashes the other appearance or the other colour theme
+// on the first frame. It runs once and watches nothing: the visual-history
+// capture sets data-theme itself after load, and a second apply would fight it.
 const PREFERENCES_HEAD_SCRIPT = `(() => {
   try {
     const raw = localStorage.getItem(${JSON.stringify(PREFERENCES_STORAGE_KEY)});
     if (raw === null) return;
     const record = JSON.parse(raw);
-    if (record?.version !== ${PREFERENCES_RECORD_VERSION}) return;
+    if (record?.version !== ${PREFERENCES_RECORD_VERSION} ||
+        (record.mode !== undefined && ${JSON.stringify(STORED_APPEARANCE_MODES)}.indexOf(record.mode) === -1) ||
+        (record.palette !== undefined && ${JSON.stringify(STORED_PALETTES)}.indexOf(record.palette) === -1)) return;
     if (${JSON.stringify(STORED_APPEARANCE_MODES)}.indexOf(record.mode) !== -1) {
       document.documentElement.setAttribute("data-theme", record.mode);
+    }
+    if (${JSON.stringify(STORED_PALETTES)}.indexOf(record.palette) !== -1) {
+      document.documentElement.setAttribute("data-palette", record.palette);
     }
   } catch (_) {}
 })();`;

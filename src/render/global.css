@@ -2,13 +2,14 @@
 CSS escape hatch: token definitions and document-wide behavior.
 The stylesheet entry point, authored for Tailwind v4 and compiled by
 scripts/gen-css.mjs into an inlined <style> block, so rendered documents stay
-fully self-contained. This file owns the design system: the shade palette, the
+fully self-contained. This file owns the design system: the shade palettes, the
 type scale, the spacing scale, the elevation scale, the light and dark role
 tokens built from those scales, the layout breakpoint, and page-level rules.
 _internal/DESIGN_PRINCIPLES.md owns the rules for choosing among these tokens.
 It imports prose, syntax-token, and component styles colocated with the
 modules that emit their markup.
-Light and dark follow the reader's OS in inert exports.
+Appearance follows the reader's OS and colour defaults to the warm paper
+palette in inert exports.
 */
 
 /* Ordinary escape-hatch CSS yields to local utilities; exceptional state
@@ -73,8 +74,13 @@ fourteen on the dark one, which moved every dark surface at once. The ramp is
 anchored on the approved shades instead, and the steps between them are
 interpolated. They stay warm through the whole range, which is what makes the
 reading surface read as paper rather than as white.
+
+Every ramp block, here and in THE PALETTES below, matches any element rather
+than only the root, so a settings swatch can carry one theme's shades inside a
+document painted in another and never restate a colour to preview it.
 */
-:root {
+:root,
+[data-palette="default"] {
   --grey-0: #ffffff;
   --grey-25: #fefdfb;
   --grey-50: #f7f5f0;
@@ -174,6 +180,9 @@ reading surface read as paper rather than as white.
      is scoped to that one role and never becomes a utility. */
   --neutral-100: #eeeeee;
   --neutral-800: #2b2b2b;
+
+  /* The one role a palette carries with its ramps; THE PALETTES says why. */
+  --ink-c: light-dark(var(--grey-925), var(--grey-150));
 }
 
 /*
@@ -338,6 +347,345 @@ its light counterpart so the three-deep ladder keeps the same separation.
 
 :root[data-theme="dark"] {
   color-scheme: dark;
+}
+
+/*
+THE PALETTES
+
+`data-theme` and `data-palette` are two attributes doing two jobs. The mode
+decides which half of every `light-dark()` above is used; the palette decides
+what the shades in both halves are. A palette is therefore a set of ramps behind
+one shared role mapping, so a role added above is themed everywhere at once and
+a palette costs one block rather than two. The sole role exception is --ink-c,
+explained below.
+
+The absent attribute, and the `default` id, both mean the warm paper ramps at
+the top of this file, so a document with no stored preference renders exactly
+what Big Plan has always rendered.
+
+Each theme below is an adaptation, not a port. A terminal palette names a
+foreground, a background, and eight accents; Big Plan names surfaces, three
+weights of text, edges, and six semantic families across two modes. Anchors come
+from the official palette; steps between them are interpolated, and any step
+that would fail WCAG AA against a ground the renderer can put it on is moved
+along its own hue until it passes. scripts/design-system/palettes.mjs enforces
+both halves of that promise: every ramp step the roles reach is declared here,
+and every pairing clears AA.
+
+One role is declared per palette rather than derived. Light primary text is the
+only role whose two halves cannot share a ramp position: the default palette's
+ink happens to be a dark surface shade, while a themed palette's light text is
+its own mid-dark colour and would be far too light to serve as the dark hunk
+band that shares `--grey-925`.
+*/
+
+/* Rosé Pine: Dawn for light, Main for dark (https://rosepinetheme.com).
+   Rosé Pine has no green, so the tip and pro family is a sage derived from foam
+   rather than a colour the palette ships. */
+[data-palette="rose-pine"] {
+  --grey-0: #fffaf3;
+  --grey-25: #fffaf3;
+  --grey-50: #faf4ed;
+  --grey-75: #f8f2ea;
+  --grey-100: #f4ede8;
+  --grey-125: #f2e9e1;
+  --grey-150: #e0def4;
+  --grey-200: #dfdad9;
+  --grey-250: #c0bbc9;
+  --grey-300: #b6b2c9;
+  --grey-400: #908caa;
+  --grey-500: #817d99;
+  --grey-600: #6e6a86;
+  --grey-700: #575279;
+  --grey-750: #575074;
+  --grey-800: #403d52;
+  --grey-875: #302c47;
+  --grey-900: #26233a;
+  --grey-925: #1f1d2e;
+  --grey-950: #191724;
+
+  --primary-50: #edeaf0;
+  --primary-100: #dfd7ea;
+  --primary-300: #c4a7e7;
+  --primary-700: #785f93;
+  --primary-900: #271839;
+
+  --success-50: #e8f2ee;
+  --success-100: #d9e8e0;
+  --success-300: #8fd3b0;
+  --success-700: #306f58;
+  --success-800: #21453a;
+  --success-900: #1c3528;
+
+  --warning-50: #f8efe2;
+  --warning-100: #efe3d2;
+  --warning-300: #f6c177;
+  --warning-700: #995f10;
+  --warning-900: #422d10;
+
+  --danger-50: #f2e8eb;
+  --danger-100: #edd4db;
+  --danger-300: #eb6f92;
+  --danger-700: #a44f67;
+  --danger-900: #3e131f;
+
+  --info-50: #e6f0f4;
+  --info-100: #d9e6e8;
+  --info-300: #9ccfd8;
+  --info-700: #286983;
+  --info-900: #1c3135;
+
+  --note-50: #f4e7e6;
+  --note-100: #ead8d7;
+  --note-300: #ebbcba;
+  --note-400: #d7827e;
+  --note-500: #b83f39;
+  --note-900: #391a19;
+
+  --neutral-100: #efe6de;
+  --neutral-800: #2b2740;
+
+  --ink-c: light-dark(#403a5e, var(--grey-150));
+}
+
+/* Nord: Snow Storm for light, Polar Night for dark, with Frost on the accent
+   and Aurora on the semantic families (https://www.nordtheme.com). */
+[data-palette="nord"] {
+  --grey-0: #ffffff;
+  --grey-25: #f7f9fc;
+  --grey-50: #eceff4;
+  --grey-75: #e8ecf2;
+  --grey-100: #e5e9f0;
+  --grey-125: #dfe4ec;
+  --grey-150: #eceff4;
+  --grey-200: #d8dee9;
+  --grey-250: #b6c1d3;
+  --grey-300: #d8dee9;
+  --grey-400: #aebacd;
+  --grey-500: #8794aa;
+  --grey-600: #5c6880;
+  --grey-700: #4c566a;
+  --grey-750: #4c566a;
+  --grey-800: #434c5e;
+  --grey-875: #414a5b;
+  --grey-900: #3b4252;
+  --grey-925: #333a47;
+  --grey-950: #2e3440;
+
+  --primary-50: #e9edf1;
+  --primary-100: #d9e4e8;
+  --primary-300: #88c0d0;
+  --primary-700: #4b6a91;
+  --primary-900: #1c3035;
+
+  --success-50: #edf1e9;
+  --success-100: #e0e5dc;
+  --success-300: #a3be8c;
+  --success-700: #516b3b;
+  --success-800: #38492b;
+  --success-900: #283121;
+
+  --warning-50: #f7f0e4;
+  --warning-100: #ece4d5;
+  --warning-300: #ebcb8b;
+  --warning-700: #866117;
+  --warning-900: #3d3015;
+
+  --danger-50: #f3e7e9;
+  --danger-100: #e8d9db;
+  --danger-300: #d89fa4;
+  --danger-700: #ae4750;
+  --danger-900: #351d1f;
+
+  --info-50: #e9edf2;
+  --info-100: #dbe0e6;
+  --info-300: #97b2cc;
+  --info-700: #476b90;
+  --info-900: #1f2933;
+
+  --note-50: #f0eaef;
+  --note-100: #e4dde3;
+  --note-300: #c3a5be;
+  --note-400: #b48ead;
+  --note-500: #875a7f;
+  --note-900: #2f232c;
+
+  --neutral-100: #e3e7ee;
+  --neutral-800: #39404f;
+
+  --ink-c: light-dark(#2e3440, var(--grey-150));
+}
+
+/* Catppuccin: Latte for light, Mocha for dark
+   (https://github.com/catppuccin/catppuccin). */
+[data-palette="catppuccin"] {
+  --grey-0: #fbfcfe;
+  --grey-25: #f7f8fb;
+  --grey-50: #eff1f5;
+  --grey-75: #e9ebf1;
+  --grey-100: #e6e9ef;
+  --grey-125: #dce0e8;
+  --grey-150: #cdd6f4;
+  --grey-200: #ccd0da;
+  --grey-250: #acb0be;
+  --grey-300: #bac2de;
+  --grey-400: #a6adc8;
+  --grey-500: #8388a0;
+  --grey-600: #66697e;
+  --grey-700: #5c5f77;
+  --grey-750: #585b70;
+  --grey-800: #45475a;
+  --grey-875: #3a3c4f;
+  --grey-900: #313244;
+  --grey-925: #26263a;
+  --grey-950: #1e1e2e;
+
+  --primary-50: #ece2f9;
+  --primary-100: #dfd2ee;
+  --primary-300: #cba6f7;
+  --primary-700: #8534ef;
+  --primary-900: #271141;
+
+  --success-50: #e8f5e5;
+  --success-100: #d9ead7;
+  --success-300: #a6e3a1;
+  --success-700: #2c741c;
+  --success-800: #245822;
+  --success-900: #1c3819;
+
+  --warning-50: #f7efe3;
+  --warning-100: #efe6d2;
+  --warning-300: #f9e2af;
+  --warning-700: #925d13;
+  --warning-900: #413210;
+
+  --danger-50: #f9e2e7;
+  --danger-100: #eed3da;
+  --danger-300: #f38ba8;
+  --danger-700: #cd0f38;
+  --danger-900: #40121f;
+
+  --info-50: #e1e9f9;
+  --info-100: #d1ddf0;
+  --info-300: #89b4fa;
+  --info-700: #0d5af4;
+  --info-900: #0f2343;
+
+  --note-50: #e0e4fa;
+  --note-100: #d0d4f1;
+  --note-300: #b4befe;
+  --note-400: #7287fd;
+  --note-500: #314ffc;
+  --note-900: #0d1545;
+
+  --neutral-100: #e2e5ec;
+  --neutral-800: #2b2c3f;
+
+  --ink-c: light-dark(#4c4f69, var(--grey-150));
+}
+
+/* Brutalist: newsprint and black ink, or near-black and bone, with one loud
+   signal red. The only theme that restates more than its ramps - see the shape
+   block at the end of it. */
+[data-palette="brutalist"] {
+  --grey-0: #ffffff;
+  --grey-25: #faf8f1;
+  --grey-50: #f2f0e7;
+  --grey-75: #eae7db;
+  --grey-100: #e6e2d4;
+  --grey-125: #ddd9c8;
+  --grey-150: #f7f5ec;
+  --grey-200: #8a8574;
+  --grey-250: #4c4a40;
+  --grey-300: #dedbd0;
+  --grey-400: #b3b0a4;
+  --grey-500: #86837a;
+  --grey-600: #4c4a40;
+  --grey-700: #2b2a24;
+  --grey-750: #9a9a9a;
+  --grey-800: #6b6b6b;
+  --grey-875: #242424;
+  --grey-900: #1a1a1a;
+  --grey-925: #131313;
+  --grey-950: #0a0a0a;
+
+  --primary-50: #f4edec;
+  --primary-100: #f1d7d0;
+  --primary-300: #ff6a3d;
+  --primary-700: #be2c0e;
+  --primary-900: #301912;
+
+  --success-50: #edf2ed;
+  --success-100: #d5ecd9;
+  --success-300: #3ddc57;
+  --success-700: #1d741d;
+  --success-800: #16491a;
+  --success-900: #172c1a;
+
+  --warning-50: #f4f1eb;
+  --warning-100: #f1e9d0;
+  --warning-300: #ffc300;
+  --warning-700: #8f5600;
+  --warning-900: #302912;
+
+  --danger-50: #f3ecec;
+  --danger-100: #f1d0d0;
+  --danger-300: #ff4d4d;
+  --danger-700: #c01313;
+  --danger-900: #301212;
+
+  --info-50: #eceff4;
+  --info-100: #d0dff1;
+  --info-300: #4d9dff;
+  --info-700: #0b57c2;
+  --info-900: #122030;
+
+  --note-50: #f2ecf3;
+  --note-100: #e9d0f1;
+  --note-300: #e07bff;
+  --note-400: #8c1ca8;
+  --note-500: #8c1ca8;
+  --note-900: #291230;
+
+  --neutral-100: #e2ded0;
+  --neutral-800: #1f1f1f;
+
+  --ink-c: light-dark(#0b0b09, var(--grey-150));
+
+  /*
+    Brutalist is the sanctioned exception to "a theme is only its ramps": a
+    stark reading surface is a shape as much as a colour, so it also restates
+    the closed radius, weight, tracking, and elevation scales. Beyond the
+    documented --ink-c exception, it restates no role, so nothing here can
+    drift from the role vocabulary.
+  */
+
+  /* Corners are square. Every card, control, band, and figure follows. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+
+  /* One step heavier everywhere the type scale asks for emphasis. */
+  --font-weight-medium: 600;
+  --font-weight-semibold: 700;
+  --font-weight-bold: 800;
+
+  /* Headings set tighter; chrome labels give back a little of their opening. */
+  --tracking-tight: -0.03em;
+  --tracking-caps: 0.08em;
+
+  /*
+    No soft light source. Depth is a hard offset slab and a structural line,
+    which is why every step is zero-blur. The focus halo keeps the one width
+    the rest of the product uses and only drops its transparency.
+  */
+  --elevation-raised: 2px 2px 0 0 var(--edge-c);
+  --elevation-lifted: 3px 3px 0 0 var(--edge-c);
+  --elevation-floating: 5px 5px 0 0 light-dark(var(--grey-700), var(--grey-300));
+  --elevation-pressed: inset 2px 2px 0 0 var(--edge-c);
+  --elevation-well: inset 0 0 0 1px var(--edge-c);
+  --elevation-focus: 0 0 0 3px var(--accent-c);
 }
 
 @layer components {

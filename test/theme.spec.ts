@@ -1,6 +1,7 @@
-// Browser tests of the rendered export's appearance preferences: the document
-// follows the OS by default, supports a live explicit mode, and persists one
-// global record. Render-health failures are enforced by the fixtures module.
+// Browser tests of the rendered export's appearance and colour-theme
+// preferences: the document follows the OS and warm-paper defaults, supports
+// live explicit choices, and persists one global record. Render-health failures
+// are enforced by the fixtures module.
 
 import {
   PREFERENCES_STORAGE_KEY,
@@ -76,7 +77,7 @@ test("should choose and persist appearance from the settings dialog", async ({
           PREFERENCES_STORAGE_KEY,
         ),
       )
-      .toBe(serializePreferencesRecord("dark"));
+      .toBe(serializePreferencesRecord({ mode: "dark", palette: "default" }));
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -93,7 +94,7 @@ test("should choose and persist appearance from the settings dialog", async ({
           PREFERENCES_STORAGE_KEY,
         ),
       )
-      .toBe(serializePreferencesRecord("system"));
+      .toBe(serializePreferencesRecord({ mode: "system", palette: "default" }));
     const lightBackground = await page
       .locator("body")
       .evaluate((body) => getComputedStyle(body).backgroundColor);
@@ -139,9 +140,9 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
     await settings.click();
     const geometry = await dialog.evaluate((element) => {
       const rect = element.getBoundingClientRect();
-      const options = Array.from(element.querySelectorAll("label")).map(
-        (option) => option.getBoundingClientRect().height,
-      );
+      const options = Array.from(
+        element.querySelectorAll("[data-preference-mode]"),
+      ).map((option) => option.closest("label").getBoundingClientRect().height);
       return {
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
@@ -165,12 +166,14 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
   await test.step("desktop keeps the three appearance cards", async () => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await settings.click();
-    const cards = await dialog.locator("label").evaluateAll((options) =>
-      options.map((option) => {
-        const rect = option.getBoundingClientRect();
-        return { height: rect.height, left: rect.left, top: rect.top };
-      }),
-    );
+    const cards = await dialog
+      .locator("label:has([data-preference-mode])")
+      .evaluateAll((options) =>
+        options.map((option) => {
+          const rect = option.getBoundingClientRect();
+          return { height: rect.height, left: rect.left, top: rect.top };
+        }),
+      );
     expect(cards.map(({ height }) => height)).toEqual([112, 112, 112]);
     expect(new Set(cards.map(({ left }) => left)).size).toBe(3);
     expect(new Set(cards.map(({ top }) => top)).size).toBe(1);
