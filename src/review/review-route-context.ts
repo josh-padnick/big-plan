@@ -226,10 +226,12 @@ export const createPlanRenderer = ({
 
   const readBootstrap = async (markdown: string): Promise<string> => {
     const drafts = await readStoredComments(store.draftsPath);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
     const resolvedCommentIds = await readEffectiveResolvedCommentIds({
       store,
       sessionId,
       planId,
+      exchange,
     });
     return JSON.stringify({
       ...encodeReviewSnapshot({
@@ -238,7 +240,7 @@ export const createPlanRenderer = ({
         resolvedCommentIds,
         version: reviewStateVersion({ drafts, resolvedCommentIds }),
       }),
-      agent: await readAgentExchange({ store, sessionId, planId }),
+      agent: exchange,
       currentSnapshot: deriveSnapshotDigest(markdown),
       diffPreview: isDiffPreview,
     });
