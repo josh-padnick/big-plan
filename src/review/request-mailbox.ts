@@ -282,9 +282,7 @@ export const ensureAgentRequest = async ({
 }): Promise<AgentRequest> => {
   const intended = validateAgentRequest(request);
   const commentIds = namedCommentIds(intended);
-  const accept = async (
-    lockedStore: ReviewStore,
-  ): Promise<AgentRequest> => {
+  const accept = async (lockedStore: ReviewStore): Promise<AgentRequest> => {
     const value = await readAgentRequestValue({
       store: lockedStore,
       requestId: intended.requestId,
@@ -326,10 +324,7 @@ export const ensureAgentRequest = async ({
       commentIds.includes(commentId),
     );
     const reopenedCommentIds = [
-      ...new Set([
-        ...(accepted.reopenedCommentIds ?? []),
-        ...newlyReopened,
-      ]),
+      ...new Set([...(accepted.reopenedCommentIds ?? []), ...newlyReopened]),
     ];
     const recorded =
       reopenedCommentIds.length === 0
@@ -508,7 +503,12 @@ export const claimAgentRequest = async ({
   return takeover.request;
 };
 
-/** Marks one request terminal. A later pickup or response cannot revive it. */
+/**
+ * Marks one request terminal. A later pickup or response cannot revive it.
+ * Leaving the outstanding set also clears the request's reopened threads from
+ * the stored resolved set, so a crash between the request write and the
+ * create-time clear cannot resurrect a stale resolution once the work is gone.
+ */
 export const cancelAgentRequest = async ({
   store,
   requestId,
@@ -518,31 +518,53 @@ export const cancelAgentRequest = async ({
   readonly requestId: string;
   readonly now: string;
 }): Promise<AgentRequest> =>
-  withRequestLock({
+  withResolvedCommentLock({
     store,
-    requestId,
-    change: async (lockedStore) => {
-      const request = await readCurrentRequest({
-        store: lockedStore,
+    change: (resolvedStore) =>
+      withRequestLock({
+        store: resolvedStore,
         requestId,
-      });
-      if (request.canceledAt !== undefined) return request;
-      if (request.answeredAt !== undefined) {
-        throw new AgentExchangeRejected(
-          "The agent has already answered this request",
-        );
-      }
-      const canceled = validateAgentRequest({ ...request, canceledAt: now });
-      await writeAgentRequestValue({
-        store: lockedStore,
-        requestId,
-        value: canceled,
-      });
-      return canceled;
-    },
+        change: async (lockedStore) => {
+          const request = await readCurrentRequest({
+            store: lockedStore,
+            requestId,
+          });
+          if (request.canceledAt !== undefined) {
+            await clearResolvedComments({
+              store: lockedStore,
+              commentIds: request.reopenedCommentIds ?? [],
+            });
+            return request;
+          }
+          if (request.answeredAt !== undefined) {
+            throw new AgentExchangeRejected(
+              "The agent has already answered this request",
+            );
+          }
+          const canceled = validateAgentRequest({
+            ...request,
+            canceledAt: now,
+          });
+          await writeAgentRequestValue({
+            store: lockedStore,
+            requestId,
+            value: canceled,
+          });
+          await clearResolvedComments({
+            store: lockedStore,
+            commentIds: canceled.reopenedCommentIds ?? [],
+          });
+          return canceled;
+        },
+      }),
   });
 
-/** Answers one request and marks it terminal as a single commit. */
+/**
+ * Answers one request and marks it terminal as a single commit. Leaving the
+ * outstanding set also clears the request's reopened threads from the stored
+ * resolved set, so a crash between the request write and the create-time clear
+ * cannot resurrect a stale resolution once the work is answered.
+ */
 export const commitRequestTerminal = async ({
   store,
   response,
@@ -556,64 +578,75 @@ export const commitRequestTerminal = async ({
   readonly now: string;
   readonly clock?: Clock;
 }): Promise<AgentRequest> =>
-  withRequestLock({
+  withResolvedCommentLock({
     store,
-    requestId: response.requestId,
-    change: async (lockedStore) => {
-      const request = await readCurrentRequest({
-        store: lockedStore,
+    change: (resolvedStore) =>
+      withRequestLock({
+        store: resolvedStore,
         requestId: response.requestId,
-      });
-      if (request.canceledAt !== undefined) {
-        throw new AgentExchangeRejected(
-          "The request was canceled by the reviewer",
-        );
-      }
-      if (
-        request.claimedAt === undefined ||
-        request.baselineSnapshot === undefined
-      ) {
-        throw new AgentExchangeRejected(
-          "The request must be claimed before it can be answered",
-        );
-      }
-      // Answered first: a replay of a settled request is better reported as
-      // settled than as a claim dispute, whoever replays it.
-      if (request.answeredAt !== undefined) {
-        throw new AgentExchangeRejected(
-          "The agent has already answered this request",
-        );
-      }
-      // Only the holder may answer. Without this the lease would guard pickup
-      // but not delivery, and a session that lost its claim could still
-      // overwrite the holder's work at the last step.
-      const nowMs = readClock(clock);
-      if (request.claimedBy !== claimedBy || !claimIsLive({ request, nowMs })) {
-        throw new AgentExchangeRejected(
-          "This agent session does not hold a live claim on this request",
-        );
-      }
-      if (!responseMatchesRequest({ value: response, request })) {
-        throw new AgentExchangeRejected(
-          "The agent response does not match its request",
-        );
-      }
-      const answered = validateAgentRequest({
-        ...request,
-        answeredAt: now,
-      });
-      await writeAgentResponseValue({
-        store: lockedStore,
-        requestId: response.requestId,
-        value: response,
-      });
-      await writeAgentRequestValue({
-        store: lockedStore,
-        requestId: response.requestId,
-        value: answered,
-      });
-      return answered;
-    },
+        change: async (lockedStore) => {
+          const request = await readCurrentRequest({
+            store: lockedStore,
+            requestId: response.requestId,
+          });
+          if (request.canceledAt !== undefined) {
+            throw new AgentExchangeRejected(
+              "The request was canceled by the reviewer",
+            );
+          }
+          if (
+            request.claimedAt === undefined ||
+            request.baselineSnapshot === undefined
+          ) {
+            throw new AgentExchangeRejected(
+              "The request must be claimed before it can be answered",
+            );
+          }
+          // Answered first: a replay of a settled request is better reported as
+          // settled than as a claim dispute, whoever replays it.
+          if (request.answeredAt !== undefined) {
+            throw new AgentExchangeRejected(
+              "The agent has already answered this request",
+            );
+          }
+          // Only the holder may answer. Without this the lease would guard pickup
+          // but not delivery, and a session that lost its claim could still
+          // overwrite the holder's work at the last step.
+          const nowMs = readClock(clock);
+          if (
+            request.claimedBy !== claimedBy ||
+            !claimIsLive({ request, nowMs })
+          ) {
+            throw new AgentExchangeRejected(
+              "This agent session does not hold a live claim on this request",
+            );
+          }
+          if (!responseMatchesRequest({ value: response, request })) {
+            throw new AgentExchangeRejected(
+              "The agent response does not match its request",
+            );
+          }
+          const answered = validateAgentRequest({
+            ...request,
+            answeredAt: now,
+          });
+          await writeAgentResponseValue({
+            store: lockedStore,
+            requestId: response.requestId,
+            value: response,
+          });
+          await writeAgentRequestValue({
+            store: lockedStore,
+            requestId: response.requestId,
+            value: answered,
+          });
+          await clearResolvedComments({
+            store: lockedStore,
+            commentIds: answered.reopenedCommentIds ?? [],
+          });
+          return answered;
+        },
+      }),
   });
 
 const AGENT_STARTED = "The agent already started on this message";
@@ -831,6 +864,27 @@ export const replaceResolvedCommentIds = async ({
       await writeResolvedCommentIds({ store: lockedStore, ids });
     },
   });
+
+/**
+ * Drops threads from the resolved set under the same lock every other stored
+ * resolved-set mutation takes, so a removal cannot interleave with a request
+ * create's reopen commit and write a stale resolution back.
+ */
+export const removeResolvedComments = async ({
+  store,
+  commentIds,
+}: {
+  readonly store: ReviewStore;
+  readonly commentIds: ReadonlyArray<string>;
+}): Promise<void> => {
+  if (commentIds.length === 0) return;
+  await withResolvedCommentLock({
+    store,
+    change: async (lockedStore) => {
+      await clearResolvedComments({ store: lockedStore, commentIds });
+    },
+  });
+};
 
 /**
  * Stored resolved ids minus any still suppressed by outstanding reopen

@@ -37,18 +37,17 @@ import {
   ensureAgentRequest,
   readEffectiveResolvedCommentIds,
   removeCommentFromQueuedFeedbackRequest,
+  removeResolvedComments,
   replaceResolvedCommentIds,
 } from "./request-mailbox.js";
 import {
   anchorReviewStore,
   freezeRequestAttachments,
   readFeedbackSubmissionValue,
-  readResolvedCommentIds,
   readSnapshot,
   writeComments,
   writeFeedbackPackage,
   writeFeedbackSubmissionValue,
-  writeResolvedCommentIds,
   writeSnapshot,
 } from "./store.js";
 import {
@@ -739,14 +738,7 @@ export const deleteSentComment = async (
     path: store.sentPath,
     comments: sent.filter((comment) => comment.id !== commentId),
   });
-  const resolvedCommentIds = await readResolvedCommentIds({
-    store,
-    validate: validateResolvedCommentIds,
-  });
-  await writeResolvedCommentIds({
-    store,
-    ids: resolvedCommentIds.filter((id) => id !== commentId),
-  });
+  await removeResolvedComments({ store, commentIds: [commentId] });
   await appendProgressEvent({
     store,
     event: {
