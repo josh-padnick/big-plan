@@ -109,6 +109,9 @@ const liveRecoveryStorageKey = ({
 const liveRecoveryOwnerSessionKey = (scope: LiveRecoveryScope): string =>
   `${liveRecoveryStoragePrefix(scope)}:owner`;
 
+const liveRecoveryPlanPrefix = (scope: LiveRecoveryScope): string =>
+  `big-plan:review:live-recovery:${scope.planId}:`;
+
 /**
  * Canonicalizes the reviewer state used by sync and recovery cleanup
  * decisions. Only the content the runtime owns takes part: stored target
@@ -294,6 +297,34 @@ const randomRecoveryOwnerId = (): string => {
 };
 
 /**
+ * Drops records no code path here can read: a stored snapshot version this
+ * build no longer understands, or a record that fails validation. Those can
+ * never be recovered, so without this they accumulate across sessions until
+ * the storage quota is reached and recovery stops working.
+ *
+ * A readable record belonging to another tab is deliberately left alone. The
+ * browser cannot tell a closed owner from a suspended one, and deleting a live
+ * tab's unsynchronized work is the loss this whole feature exists to prevent;
+ * reclaiming those needs the cross-tab identity semantics issue #99 owns.
+ */
+const pruneUnreadableRecoveryRecords = (scope: LiveRecoveryScope): void => {
+  try {
+    const prefix = liveRecoveryPlanPrefix(scope);
+    const unreadable: Array<string> = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key === null || !key.startsWith(prefix) || !key.includes(":tab:")) {
+        continue;
+      }
+      if (readRecoveryRecord(key) === null) unreadable.push(key);
+    }
+    for (const key of unreadable) localStorage.removeItem(key);
+  } catch {
+    // Reclaiming space is best effort; recovery still works without it.
+  }
+};
+
+/**
  * Takes this tab's writer identity, reusing it across a reload so a refresh
  * recovers what the same tab was holding. Nothing here inspects, claims, or
  * infers anything about another tab.
@@ -313,6 +344,7 @@ export const claimLiveRecoveryOwner = (
         ? previousOwnerId
         : randomRecoveryOwnerId();
     sessionStorage.setItem(sessionKey, ownerId);
+    pruneUnreadableRecoveryRecords(scope);
     return { ownerId, recoveryAvailable: true };
   } catch {
     return { ownerId: randomRecoveryOwnerId(), recoveryAvailable: false };

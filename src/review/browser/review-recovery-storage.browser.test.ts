@@ -3,6 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  claimLiveRecoveryOwner,
   clearLiveReviewRecovery,
   mergeRecoveredComposerAfterHydration,
   persistedReviewFingerprint,
@@ -182,6 +183,29 @@ describe("live review recovery storage", () => {
       clearLiveReviewRecovery({ scope, ownerId: "synced", fingerprint }),
     ).toBe(true);
     expect(localStorage.getItem(recoveryKey("synced"))).toBeNull();
+  });
+
+  it("should reclaim unreadable records without touching a readable one", () => {
+    // Records this build cannot read can never be recovered, so leaving them
+    // accumulates until the quota stops recovery. A readable record belonging
+    // to another tab stays: a suspended owner must still get its work back.
+    const sessionValues = new MemoryStorage();
+    vi.stubGlobal("sessionStorage", sessionValues);
+    vi.stubGlobal("crypto", { getRandomValues: (bytes: Uint8Array) => bytes });
+    vi.stubGlobal("performance", { getEntriesByType: () => [] });
+    vi.stubGlobal("PerformanceNavigationTiming", class {});
+    localStorage.setItem(
+      recoveryKey("old-version"),
+      JSON.stringify({ version: 1, drafts: [], resolvedCommentIds: [] }),
+    );
+    localStorage.setItem(recoveryKey("corrupt"), "{not json");
+    localStorage.setItem(recoveryKey("other-live-tab"), recoveryRecord());
+
+    claimLiveRecoveryOwner(scope);
+
+    expect(localStorage.getItem(recoveryKey("old-version"))).toBeNull();
+    expect(localStorage.getItem(recoveryKey("corrupt"))).toBeNull();
+    expect(localStorage.getItem(recoveryKey("other-live-tab"))).not.toBeNull();
   });
 
   it("should keep browser-only input created while hydration is pending", () => {

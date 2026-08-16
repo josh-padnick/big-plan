@@ -536,6 +536,8 @@ class RecoveryConflictPauseError extends Error {
 
 const isRecoveryConflictPause = (error: unknown): boolean =>
   error instanceof RecoveryConflictPauseError;
+const RECOVERED_TEXT_COPY_FAILED_STATUS =
+  "The recovered comment text could not be copied. Select and copy it from the notice.";
 const LIVE_RECOVERY_UNAVAILABLE_STATUS =
   "Browser recovery is unavailable. The live review remains usable, but browser-only drafts cannot be recovered after a reload.";
 
@@ -3986,13 +3988,18 @@ export const ReviewController = () => {
     fingerprint: currentReviewState,
     state: { drafts, resolvedCommentIds },
   });
-  if (latestReviewStateRef.current.fingerprint !== currentReviewState) {
+  // Render must stay pure: React may replay or discard a render, and a
+  // generation bumped there could describe state that never committed and then
+  // reach a conditional write. Every reader of this ref runs after commit, and
+  // this effect is declared before them, so they still see the current value.
+  useEffect(() => {
+    if (latestReviewStateRef.current.fingerprint === currentReviewState) return;
     latestReviewStateRef.current = {
       generation: latestReviewStateRef.current.generation + 1,
       fingerprint: currentReviewState,
       state: { drafts, resolvedCommentIds },
     };
-  }
+  }, [currentReviewState, drafts, resolvedCommentIds]);
   const markPersistedReviewState = useCallback((fingerprint: string): void => {
     persistedReviewStateRef.current = fingerprint;
     setPersistedReviewState(fingerprint);
@@ -4052,7 +4059,10 @@ export const ReviewController = () => {
     [compose, composeBody, detachedComposer, replyDrafts],
   );
   const composerRecoveryRef = useRef(composerRecovery);
-  composerRecoveryRef.current = composerRecovery;
+  // Kept out of render for the same reason as the review-state ref above.
+  useEffect(() => {
+    composerRecoveryRef.current = composerRecovery;
+  }, [composerRecovery]);
   /** Gives back typed comment text, and says when it had nowhere to go. */
   const restoreComposer = useCallback(
     (composer: RecoveredComposer): "restored" | "detached" => {
@@ -6496,14 +6506,19 @@ export const ReviewController = () => {
                       variant="outline"
                       size="micro"
                       onClick={() => {
+                        // A review served over plain http by LAN address is not
+                        // a secure context, so the clipboard API is absent
+                        // rather than merely refusing. The notice already
+                        // offers the text for manual selection.
+                        if (navigator.clipboard === undefined) {
+                          setStatus(RECOVERED_TEXT_COPY_FAILED_STATUS);
+                          return;
+                        }
                         void navigator.clipboard
                           .writeText(detachedComposer.body)
                           .then(
                             () => setStatus("Recovered comment text copied."),
-                            () =>
-                              setStatus(
-                                "The recovered comment text could not be copied. Select and copy it from the notice.",
-                              ),
+                            () => setStatus(RECOVERED_TEXT_COPY_FAILED_STATUS),
                           );
                       }}
                     >
