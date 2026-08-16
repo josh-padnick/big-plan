@@ -1,17 +1,33 @@
-// Covers the two pieces of runtime state whose meaning is not obvious from
-// their shape: the snapshot the browser is allowed to reload advances on the
-// first sighting of an agent response and never again, and the write gate
-// gives up on one mutation rather than on the whole session (BIG-44).
+// Covers the pieces of runtime state whose meaning is not obvious from their
+// shape: the snapshot the browser is allowed to reload advances on the first
+// sighting of an agent response and never again, the write gate gives up on
+// one mutation rather than on the whole session (BIG-44), and the decision
+// answer revision a runtime serves never moves backwards.
 
-import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createDecisionAnswers,
   createReaderProgress,
   createWriteGate,
 } from "./review-route-context.js";
+import { prepareStore, reviewStoreFor } from "./store.js";
 import {
   createMutationRegistry,
   ReviewWriteStalled,
 } from "./runtime-watchdog.js";
+
+const created: Array<string> = [];
+
+afterEach(async () => {
+  await Promise.all(
+    created
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
 
 describe("createReaderProgress", () => {
   it("starts at the snapshot the runtime opened on", () => {
@@ -85,6 +101,60 @@ describe("createReaderProgress", () => {
     progress.accept("aaaa");
 
     expect(progress.currentSnapshot()).toBe("aaaa");
+  });
+});
+
+describe("createDecisionAnswers", () => {
+  const answersFor = async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-context-"));
+    created.push(directory);
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, "# Plan\n");
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const diagnostics: Array<string> = [];
+    const answers = createDecisionAnswers({
+      store,
+      resolvedPlanPath: planPath,
+      reportDiagnostic: ({ message }) => {
+        diagnostics.push(message);
+      },
+    });
+    return { store, answers, diagnostics };
+  };
+
+  it("holds the served revision when the record becomes unreadable", async () => {
+    const { store, answers, diagnostics } = await answersFor();
+    await answers.write({ version: 1, revision: 3, answers: [] });
+    await writeFile(store.inputsPath, "not json");
+
+    const served = await answers.read();
+
+    expect(served.revision).toBe(3);
+    expect(served.answers).toEqual([]);
+    expect(diagnostics).toHaveLength(1);
+  });
+
+  it("holds the served revision over an out-of-band older record", async () => {
+    const { store, answers } = await answersFor();
+    await answers.write({ version: 1, revision: 3, answers: [] });
+    await writeFile(
+      store.inputsPath,
+      `${JSON.stringify({ version: 1, revision: 1, answers: [] })}\n`,
+    );
+
+    expect((await answers.read()).revision).toBe(3);
+  });
+
+  it("serves the stored revision once it catches back up", async () => {
+    const { store, answers } = await answersFor();
+    await answers.write({ version: 1, revision: 2, answers: [] });
+    await writeFile(
+      store.inputsPath,
+      `${JSON.stringify({ version: 1, revision: 5, answers: [] })}\n`,
+    );
+
+    expect((await answers.read()).revision).toBe(5);
   });
 });
 

@@ -22,7 +22,6 @@ import {
 } from "./plan-inputs-store.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
 import type { DecisionInventory } from "./decision-inventory.js";
-import { writeStagedInputs } from "./store.js";
 import { encodeReviewState } from "./shared/review-wire.js";
 
 const answerState = ({
@@ -60,7 +59,7 @@ export const stageDecisionAnswer = async (
   context: ReviewRouteContext,
   request: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
-  const { decisionAnswers, store } = context;
+  const { decisionAnswers } = context;
   const inventory = await decisionAnswers.inventory();
   try {
     const mutation = validateStagedInputMutation({
@@ -72,7 +71,7 @@ export const stageDecisionAnswer = async (
       inputs: await decisionAnswers.read(),
       mutation,
     });
-    await writeStagedInputs({ store, inputs });
+    await decisionAnswers.write(inputs);
     return answerState({ inputs, inventory });
   } catch (error: unknown) {
     if (error instanceof PlanInputsRejected) {

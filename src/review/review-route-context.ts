@@ -22,6 +22,7 @@ import {
   readComments,
   readResolvedCommentIds,
   readStagedInputs,
+  writeStagedInputs,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import {
@@ -175,6 +176,7 @@ export type WriteGate = {
 export type DecisionAnswers = {
   readonly inventory: () => Promise<DecisionInventory>;
   readonly read: () => Promise<StagedInputs>;
+  readonly write: (inputs: StagedInputs) => Promise<void>;
 };
 
 /** The review's one lifetime policy and its current activity. */
@@ -301,13 +303,20 @@ export const createPlanRenderer = ({
 };
 
 /**
- * Owns the compiled decision inventory and every read of the answer record.
+ * Owns the compiled decision inventory and every read and write of the answer
+ * record.
  *
  * The inventory is recompiled only when the plan source changes, keyed by the
  * same digest the rest of the runtime identifies a revision by. A record that
  * cannot be read is total answer loss, so it is reported once per runtime
  * rather than silently answered as empty: repeating it on every later read
  * would be noise, and the next accepted write replaces the evidence anyway.
+ *
+ * The revision a browser has applied is its guard against stale responses, so
+ * within one runtime the revision this object answers with never decreases:
+ * a record that resets underneath the session - unreadable and answered as
+ * empty, or replaced out of band - is served at the highest revision already
+ * handed out, and the next accepted write advances from there.
  */
 export const createDecisionAnswers = ({
   store,
@@ -321,6 +330,7 @@ export const createDecisionAnswers = ({
   let inventoryDigest: string | undefined;
   let inventory: DecisionInventory = new Map();
   let reportedUnreadable = false;
+  let revisionFloor = 0;
   return {
     inventory: async () => {
       const markdown = await readFile(resolvedPlanPath, "utf8");
@@ -347,7 +357,15 @@ export const createDecisionAnswers = ({
           error: new Error(unreadable),
         });
       }
+      if (inputs.revision < revisionFloor) {
+        return { ...inputs, revision: revisionFloor };
+      }
+      revisionFloor = inputs.revision;
       return inputs;
+    },
+    write: async (inputs) => {
+      await writeStagedInputs({ store, inputs });
+      revisionFloor = Math.max(revisionFloor, inputs.revision);
     },
   };
 };
