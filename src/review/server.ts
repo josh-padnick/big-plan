@@ -858,6 +858,14 @@ export const startReviewRuntime = async ({
         });
       }
     } catch (error: unknown) {
+      if (response.headersSent) {
+        // A dispatch that answered and then failed leaves nothing to refuse
+        // with. Writing a second status would throw ERR_HTTP_HEADERS_SENT out
+        // of this handler, and the caller runs it with `void`, so that throw
+        // would become an unhandled rejection and end the CLI process.
+        response.destroy();
+        return;
+      }
       if (error instanceof CommentRejected) {
         refuse({ response, status: 400, reason: error.message });
         return;
