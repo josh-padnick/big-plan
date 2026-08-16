@@ -63,6 +63,70 @@ export const MERMAID_THEME_TOKENS = {
   },
 } as const;
 
+// Mermaid bakes its colours into the SVG at compile time, which would freeze a
+// diagram in the palette that rendered it. Every token above whose value IS a
+// role is therefore rewritten back to that role in the delivered SVG, so one
+// compiled diagram follows whichever colour theme the reviewer later picks.
+//
+// The four secondary and tertiary tints have no role of their own and stay
+// literal; they appear only on the alternate node classes some diagram types
+// use, and giving them a role would move pixels in the default palette.
+export const MERMAID_ROLE_TOKENS = {
+  background: "--bg",
+  edgeLabelBackground: "--bg",
+  mainBkg: "--surface-c",
+  primaryColor: "--surface-c",
+  clusterBkg: "--surface-c",
+  nodeBorder: "--edge-strong-c",
+  primaryBorderColor: "--edge-strong-c",
+  clusterBorder: "--edge-strong-c",
+  nodeTextColor: "--ink-c",
+  textColor: "--ink-c",
+  primaryTextColor: "--ink-c",
+  secondaryTextColor: "--ink-c",
+  tertiaryTextColor: "--ink-c",
+  lineColor: "--subtle-c",
+} as const satisfies Partial<
+  Record<keyof (typeof MERMAID_THEME_TOKENS)["light"], string>
+>;
+
+type MermaidThemeVariant = keyof typeof MERMAID_THEME_TOKENS;
+
+/** Maps one variant's baked colours to the roles they were taken from. */
+const roleSubstitutions = (
+  variant: MermaidThemeVariant,
+): ReadonlyMap<string, string> => {
+  const substitutions = new Map<string, string>();
+  for (const [token, role] of Object.entries(MERMAID_ROLE_TOKENS)) {
+    const literal =
+      MERMAID_THEME_TOKENS[variant][
+        token as keyof (typeof MERMAID_THEME_TOKENS)[typeof variant]
+      ];
+    const existing = substitutions.get(literal.toLowerCase());
+    if (existing !== undefined && existing !== `var(${role})`) {
+      throw new Error(
+        `Mermaid theme token "${token}" shares ${literal} with a different role`,
+      );
+    }
+    substitutions.set(literal.toLowerCase(), `var(${role})`);
+  }
+  return substitutions;
+};
+
+const COLOUR_BEARING_ATTRIBUTES = ["fill", "stroke", "style"];
+
+const substituteColours = ({
+  value,
+  substitutions,
+}: {
+  readonly value: string;
+  readonly substitutions: ReadonlyMap<string, string>;
+}): string =>
+  value.replace(
+    /#[0-9a-fA-F]{6}\b/gu,
+    (literal) => substitutions.get(literal.toLowerCase()) ?? literal,
+  );
+
 const require = createRequire(import.meta.url);
 const MERMAID_SCRIPT_PATH = require.resolve("mermaid/dist/mermaid.min.js");
 const PLAYWRIGHT_PATH = require.resolve("@playwright/test");
@@ -362,13 +426,50 @@ const sanitizeNode = (node: Element): void => {
   }
 };
 
-const sanitizeSvg = (svg: string): string => {
+/** Rewrites every baked role colour, in attributes and in the SVG's own CSS. */
+const applyRoleColours = ({
+  node,
+  substitutions,
+}: {
+  readonly node: Element;
+  readonly substitutions: ReadonlyMap<string, string>;
+}): void => {
+  for (const attribute of COLOUR_BEARING_ATTRIBUTES) {
+    const value = node.properties[attribute];
+    if (typeof value === "string") {
+      node.properties[attribute] = substituteColours({ value, substitutions });
+    }
+  }
+  for (const child of node.children) {
+    if (isElement(child)) {
+      applyRoleColours({ node: child, substitutions });
+      continue;
+    }
+    // Only the SVG's own stylesheet, never a plan-authored label: a diagram
+    // caption that happened to spell a hex must not become a colour reference.
+    if (child.type === "text" && node.tagName === "style") {
+      child.value = substituteColours({ value: child.value, substitutions });
+    }
+  }
+};
+
+const sanitizeSvg = ({
+  svg,
+  variant,
+}: {
+  readonly svg: string;
+  readonly variant: MermaidThemeVariant;
+}): string => {
   const root = fromHtml(svg, { fragment: true }).children.filter(isElement);
   if (root.length !== 1 || root[0]?.tagName !== "svg") {
     throw new Error("Mermaid returned a document without one SVG root");
   }
   const element = root[0];
   sanitizeNode(element);
+  applyRoleColours({
+    node: element,
+    substitutions: roleSubstitutions(variant),
+  });
   if (element.properties["viewBox"] === undefined) {
     throw new Error("Mermaid returned an SVG without a viewBox");
   }
@@ -1109,7 +1210,10 @@ export const renderMermaidSources = (
   return rendered.map((result) =>
     isMermaidRenderFailure(result)
       ? result
-      : { light: sanitizeSvg(result.light), dark: sanitizeSvg(result.dark) },
+      : {
+          light: sanitizeSvg({ svg: result.light, variant: "light" }),
+          dark: sanitizeSvg({ svg: result.dark, variant: "dark" }),
+        },
   );
 };
 

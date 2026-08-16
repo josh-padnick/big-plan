@@ -4,6 +4,8 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import {
   MERMAID_BROWSER_VERSION,
+  MERMAID_ROLE_TOKENS,
+  MERMAID_THEME_TOKENS,
   MERMAID_FONT_FAMILY,
   MERMAID_VERSION,
   isMermaidRenderFailure,
@@ -54,6 +56,38 @@ describe(
       expect(rendered.dark).toContain("<svg");
       expect(rendered.light).not.toContain("foreignObject");
       expect(rendered.dark).not.toContain("foreignObject");
+    });
+
+    it("delivers a diagram in colour roles so it follows the reviewer's theme", () => {
+      const rendered = success(
+        renderMermaidSources([
+          { source: "flowchart LR\n  a[Alpha] --> b[Beta]" },
+        ])[0],
+      );
+      for (const variant of [rendered.light, rendered.dark] as const) {
+        expect(variant).toContain("var(--surface-c)");
+        expect(variant).toContain("var(--edge-strong-c)");
+        expect(variant).toContain("var(--ink-c)");
+        expect(variant).toContain("var(--subtle-c)");
+      }
+      // Every literal a role owns is gone, in both variants: a colour left
+      // baked in would freeze that part of the diagram in the palette that
+      // compiled it.
+      for (const [variant, svg] of [
+        ["light", rendered.light],
+        ["dark", rendered.dark],
+      ] as const) {
+        for (const token of Object.keys(MERMAID_ROLE_TOKENS)) {
+          const literal =
+            MERMAID_THEME_TOKENS[variant][
+              token as keyof (typeof MERMAID_THEME_TOKENS)[typeof variant]
+            ];
+          expect(
+            svg.toLowerCase(),
+            `${variant} still bakes ${token}`,
+          ).not.toContain(literal);
+        }
+      }
     });
 
     it("keeps arrowhead markers and presentation attributes through sanitization", () => {
