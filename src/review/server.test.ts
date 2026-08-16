@@ -1359,6 +1359,74 @@ describe("review runtime feedback", () => {
     expect(matchingRequests(exchangeAfterRetry)).toHaveLength(1);
   });
 
+  it("should resume a reordered retry as the same feedback submission", async () => {
+    // A submission carries a set of comments, not a sequence. A retry that
+    // sends the same comments in another order used to reach a second
+    // submission id, which published a duplicate package and raised a second
+    // agent request for feedback the reviewer sent once.
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-reorder-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const isolated = await startReviewRuntime({ planPath });
+    try {
+      const isolatedToken = await readSessionToken(isolated);
+      const version = await draftsVersionOf(isolated, isolatedToken);
+      const sent = [
+        {
+          id: "bb22bb22",
+          body: "This comment arrives second on the retry.",
+          premiseSnapshot: PLAN_SNAPSHOT,
+          target: { type: "document" },
+        },
+        {
+          id: "aa11aa11",
+          body: "This comment arrives first on the retry.",
+          premiseSnapshot: PLAN_SNAPSHOT,
+          target: { type: "document" },
+        },
+      ];
+      const post = (comments: ReadonlyArray<unknown>) =>
+        fetch(`${isolated.url}api/feedback`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-big-plan-review-token": isolatedToken,
+            "sec-fetch-site": "same-origin",
+            origin: isolated.url.replace(/\/$/, ""),
+          },
+          body: JSON.stringify({ version, comments }),
+        });
+
+      // The sent record cannot be written, so the first attempt publishes the
+      // package and the agent request and then fails. Only that partial state
+      // makes the retry reach the submission id again.
+      await mkdir(isolated.store.sentPath);
+      expect((await post(sent)).status).toBe(500);
+      await rm(isolated.store.sentPath, { recursive: true });
+
+      expect((await post([...sent].reverse())).status).toBe(200);
+      const exchange = await readAgentExchange({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+      });
+      expect(
+        exchange.requests.filter(
+          (request) =>
+            request.kind === "feedback" &&
+            request.comments.some((comment) => comment.id === "aa11aa11"),
+        ),
+      ).toHaveLength(1);
+      expect(
+        await readdir(isolated.store.feedbackSubmissionDirectory),
+      ).toHaveLength(1);
+      expect(await readdir(isolated.store.feedbackDirectory)).toHaveLength(2);
+    } finally {
+      await isolated.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should resume a partially published feedback submission once", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-retry-"));
     const planPath = join(directory, "plan.mdx");

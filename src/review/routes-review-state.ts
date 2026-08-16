@@ -153,6 +153,26 @@ type FeedbackSubmission = {
   readonly premiseSnapshot: string;
 };
 
+// One submission carries a set of comments, not a sequence, so a retry that
+// sends the same comments in a different order has to reach the same stored
+// submission instead of duplicating the artifacts and the agent request.
+const canonicalSubmissionComments = (
+  comments: ReadonlyArray<ReviewComment>,
+): ReadonlyArray<{
+  readonly id: string;
+  readonly body: string;
+  readonly premiseSnapshot: string;
+  readonly target: ReviewComment["target"];
+}> =>
+  [...comments]
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map(({ id, body, premiseSnapshot, target }) => ({
+      id,
+      body,
+      premiseSnapshot,
+      target,
+    }));
+
 // A submission is identified by what it says, not when it was sent, so a retry
 // of the same comments resolves to the same package instead of a second one.
 const feedbackSubmissionId = ({
@@ -166,12 +186,7 @@ const feedbackSubmissionId = ({
     .update(
       JSON.stringify({
         planId,
-        comments: comments.map(({ id, body, premiseSnapshot, target }) => ({
-          id,
-          body,
-          premiseSnapshot,
-          target,
-        })),
+        comments: canonicalSubmissionComments(comments),
       }),
     )
     .digest("hex")
@@ -179,15 +194,7 @@ const feedbackSubmissionId = ({
 
 const feedbackSubmissionContent = (
   comments: ReadonlyArray<ReviewComment>,
-): string =>
-  JSON.stringify(
-    comments.map(({ id, body, premiseSnapshot, target }) => ({
-      id,
-      body,
-      premiseSnapshot,
-      target,
-    })),
-  );
+): string => JSON.stringify(canonicalSubmissionComments(comments));
 
 /**
  * Validates a previously stored submission and proves it describes this same
