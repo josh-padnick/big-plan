@@ -8,6 +8,7 @@ import {
 } from "./agent-model.js";
 import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
+import type { ThreadReopenState } from "./thread-reopen.js";
 
 export type ReviewSnapshot = {
   readonly drafts: ReadonlyArray<ReviewComment>;
@@ -51,6 +52,7 @@ export type AgentRequest = TerminalAgentRequest & {
   readonly body?: string;
   readonly commentId?: string;
   readonly commentIds: ReadonlyArray<string>;
+  readonly reopenedCommentIds?: ReadonlyArray<string>;
   readonly targetLabel?: string;
 };
 
@@ -86,6 +88,8 @@ export type AgentSnapshot = {
   readonly plan: string;
   readonly agentCommand: string;
   readonly recoveryPrompt: string;
+  readonly resolvedCommentIds: ReadonlyArray<string>;
+  readonly threadReopenStates: ReadonlyArray<ThreadReopenState>;
 };
 
 export type ProgressEvent = {
@@ -187,6 +191,8 @@ export type AgentSnapshotSource = {
   readonly plan: string;
   readonly agentCommand: string;
   readonly recoveryPrompt: string;
+  readonly resolvedCommentIds: ReadonlyArray<string>;
+  readonly threadReopenStates: ReadonlyArray<ThreadReopenState>;
 };
 
 export type RuntimeSessionSource = {
@@ -262,6 +268,8 @@ export const emptyAgentSnapshot = (): AgentSnapshot => ({
   plan: "",
   agentCommand: "",
   recoveryPrompt: "",
+  resolvedCommentIds: [],
+  threadReopenStates: [],
 });
 
 /** Encodes the runtime-owned exchange in the shape consumed by the browser. */
@@ -339,6 +347,13 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
             ...(typeof request.body === "string" ? { body: request.body } : {}),
             ...(typeof request.commentId === "string"
               ? { commentId: request.commentId }
+              : {}),
+            ...(Array.isArray(request.reopenedCommentIds)
+              ? {
+                  reopenedCommentIds: request.reopenedCommentIds.filter(
+                    (id): id is string => typeof id === "string",
+                  ),
+                }
               : {}),
             commentIds: Array.isArray(request.comments)
               ? request.comments.flatMap((comment): ReadonlyArray<string> =>
@@ -471,6 +486,19 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
       typeof value.agentCommand === "string" ? value.agentCommand : "",
     recoveryPrompt:
       typeof value.recoveryPrompt === "string" ? value.recoveryPrompt : "",
+    resolvedCommentIds: Array.isArray(value.resolvedCommentIds)
+      ? value.resolvedCommentIds.filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [],
+    threadReopenStates: Array.isArray(value.threadReopenStates)
+      ? value.threadReopenStates.flatMap(
+          (entry): ReadonlyArray<ThreadReopenState> =>
+            isReviewWireRecord(entry) && typeof entry.commentId === "string"
+              ? [{ commentId: entry.commentId }]
+              : [],
+        )
+      : [],
   };
 };
 

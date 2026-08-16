@@ -33,6 +33,7 @@ export type ThreadRequest = CancelableRequest &
     readonly kind: "feedback" | "reply" | "chat";
     readonly body?: string;
     readonly commentId?: string;
+    readonly reopenedCommentIds?: ReadonlyArray<string>;
     readonly commentIds?: ReadonlyArray<string>;
     readonly comments?: ReadonlyArray<ReviewComment>;
   };
@@ -94,6 +95,8 @@ export type ProjectedThreadExchange<
   readonly canReviseMessage: boolean;
   /** Whether the reviewer may still remove this waiting message. */
   readonly canDeleteMessage: boolean;
+  /** Whether accepting this request reopened this resolved thread. */
+  readonly reopenedByNewWork: boolean;
 };
 
 export type CommentThreadProjection<
@@ -407,6 +410,9 @@ export const projectCommentThread = <
           canceled,
         }),
         canDeleteMessage: canDeleteQueuedMessage({ request, response }),
+        reopenedByNewWork: (request.reopenedCommentIds ?? []).includes(
+          comment.id,
+        ),
       };
     });
   const latestExchange = exchanges.at(-1);

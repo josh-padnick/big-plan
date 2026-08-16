@@ -14,12 +14,13 @@ import {
   deriveSnapshotDigest,
   messageAgentRequest,
   readAgentExchange,
-  writeAgentRequest,
 } from "./agent-exchange.js";
 import {
   appendProgressEvent,
   cancelAgentRequest,
   deleteQueuedRequest,
+  ensureAgentRequest,
+  readEffectiveResolvedCommentIds,
   reviseQueuedRequest,
   type ProgressEventDraft,
 } from "./request-mailbox.js";
@@ -39,6 +40,7 @@ import {
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
+import { projectThreadReopenStates } from "./shared/thread-reopen.js";
 
 const appendProgressBestEffort = async ({
   context,
@@ -70,6 +72,15 @@ export const readAgentSnapshot = async (
   }
   const presence = await readAgentPresence({ store, sessionId });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
+  const sent = await context.planRenderer.readStoredComments(
+    store.sentPath,
+  );
+  const currentCommentIds = new Set(sent.map((comment) => comment.id));
+  const resolvedCommentIds = await readEffectiveResolvedCommentIds({
+    store,
+    sessionId,
+    planId,
+  });
   return jsonResponse({
     status: 200,
     value: encodeAgentSnapshot({
@@ -85,6 +96,11 @@ export const readAgentSnapshot = async (
       recoveryPrompt: context.recoveryPrompt,
       requests: exchange.requests,
       responses: exchange.responses,
+      resolvedCommentIds,
+      threadReopenStates: projectThreadReopenStates({
+        requests: exchange.requests,
+        currentCommentIds,
+      }),
     }),
   });
 };
@@ -233,7 +249,12 @@ export const sendAgentRequest = async (
       });
     }
   }
-  await writeAgentRequest({ store, request: agentRequest });
+  try {
+    await ensureAgentRequest({ store, request: agentRequest });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
   await appendProgressBestEffort({
     context,
     event: {

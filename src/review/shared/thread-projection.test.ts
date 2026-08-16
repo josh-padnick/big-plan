@@ -126,6 +126,20 @@ describe("thread projection", () => {
     ).toBe("ready");
   });
 
+  it("should mark an exchange reopened when the request reopened the thread", () => {
+    const projection = projectCommentThread({
+      comment,
+      requests: [request({ reopenedCommentIds: [comment.id] })],
+      responses: [],
+      progressEvents: [],
+      presence,
+      runtime: "online",
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set<string>(),
+    });
+    expect(projection.latestExchange?.reopenedByNewWork).toBe(true);
+  });
+
   it("should preserve baseline and pending cancel facts", () => {
     const projection = projectCommentThread({
       comment,

@@ -14,11 +14,11 @@ import { renderDocument } from "../render/render-document.js";
 import type { BlockMapEntry, ReviewComment } from "./shared/comment.js";
 import {
   validateCommentUpdates,
-  validateResolvedCommentIds,
   validateStoredComments,
 } from "./shared/comment.js";
 import { deriveSnapshotDigest, readAgentExchange } from "./agent-exchange.js";
-import { readComments, readResolvedCommentIds } from "./store.js";
+import { readEffectiveResolvedCommentIds } from "./request-mailbox.js";
+import { readComments } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import {
   MUTATION_STALL_MS,
@@ -226,9 +226,10 @@ export const createPlanRenderer = ({
 
   const readBootstrap = async (markdown: string): Promise<string> => {
     const drafts = await readStoredComments(store.draftsPath);
-    const resolvedCommentIds = await readResolvedCommentIds({
+    const resolvedCommentIds = await readEffectiveResolvedCommentIds({
       store,
-      validate: validateResolvedCommentIds,
+      sessionId,
+      planId,
     });
     return JSON.stringify({
       ...encodeReviewSnapshot({

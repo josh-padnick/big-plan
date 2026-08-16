@@ -56,6 +56,8 @@ type AgentRequestBase = TerminalAgentRequest & {
   readonly claimExpiresAtMs?: number;
   readonly attachmentManifest: ReadonlyArray<ReviewImageAttachment>;
   readonly attachments: ReadonlyArray<ReviewImageAttachment>;
+  /** Threads this request reopened by creating outstanding work. */
+  readonly reopenedCommentIds?: ReadonlyArray<string>;
 };
 
 export type AgentFeedbackRequest = AgentRequestBase & {
@@ -165,6 +167,22 @@ const exchangeCommentId = (value: unknown, field: string): string => {
     );
   }
   return candidate;
+};
+
+const commentIdList = (value: unknown): ReadonlyArray<string> | undefined => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new AgentExchangeRejected(
+      '"reopenedCommentIds" must be a list of comment ids',
+    );
+  }
+  const ids = value.map((entry, index) =>
+    exchangeCommentId(entry, `reopenedCommentIds[${index}]`),
+  );
+  if (new Set(ids).size !== ids.length) {
+    throw new AgentExchangeRejected('"reopenedCommentIds" must be unique');
+  }
+  return ids;
 };
 
 const timestamp = (value: unknown): string => {
@@ -473,6 +491,7 @@ const requestBase = (
     attachmentManifest: value.attachmentManifest,
     attachments: value.attachments,
   });
+  const reopenedCommentIds = commentIdList(value.reopenedCommentIds);
   return {
     version: 2,
     requestId: id(value.requestId, "requestId"),
@@ -495,6 +514,7 @@ const requestBase = (
         }),
     ...(answeredAt === undefined ? {} : { answeredAt }),
     ...(canceledAt === undefined ? {} : { canceledAt }),
+    ...(reopenedCommentIds === undefined ? {} : { reopenedCommentIds }),
     ...requestAttachments,
   };
 };

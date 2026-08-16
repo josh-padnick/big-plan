@@ -3462,6 +3462,7 @@ const SentThread = ({
                 status: requestStatus,
                 delivery,
                 activity,
+                reopenedByNewWork,
               }) => {
                 const sharedConnectionState =
                   surface === "rail" &&
@@ -3469,6 +3470,11 @@ const SentThread = ({
                     requestStatus.stage === "offline");
                 return (
                   <div key={request.requestId}>
+                    {reopenedByNewWork ? (
+                      <p className="mt-2 mb-0 text-2xs text-muted">
+                        Reopened because new work arrived
+                      </p>
+                    ) : null}
                     <MessageTurn
                       role="user"
                       surface="thread"
@@ -4311,6 +4317,15 @@ export const ReviewController = () => {
         if ((replyDraftsRef.current.get(commentId) ?? "").trim() === body) {
           changeReplyDraft(commentId, "");
         }
+        const current = latestReviewStateRef.current.state;
+        if (current.resolvedCommentIds.has(commentId)) {
+          const nextResolved = new Set(current.resolvedCommentIds);
+          nextResolved.delete(commentId);
+          applyLocalReviewState({
+            drafts: current.drafts,
+            resolvedCommentIds: nextResolved,
+          });
+        }
         setStatus("Reply sent to the coding agent.");
       } catch (error) {
         setStatus(errorMessage(error));
@@ -4321,7 +4336,7 @@ export const ReviewController = () => {
         setReplyPendingCommentIds(remaining);
       }
     },
-    [changeReplyDraft, identity, writeAvailability],
+    [applyLocalReviewState, changeReplyDraft, identity, writeAvailability],
   );
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
@@ -4332,7 +4347,11 @@ export const ReviewController = () => {
         requests: snapshot.requests,
       }),
     );
-  }, []);
+    applyReviewState({
+      drafts: latestReviewStateRef.current.state.drafts,
+      resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
+    });
+  }, [applyReviewState]);
   const serializeRuntimeWrite = useCallback(
     <Value,>(write: () => Promise<Value>): Promise<Value> => {
       const result = persistenceQueue.current.then(write, write);
@@ -5301,6 +5320,18 @@ export const ReviewController = () => {
           ...justSubmittedCommentIds.current,
           ...ids,
         ]);
+        const current = latestReviewStateRef.current.state;
+        const nextResolved = new Set(current.resolvedCommentIds);
+        let reopened = false;
+        for (const id of ids) {
+          if (nextResolved.delete(id)) reopened = true;
+        }
+        if (reopened) {
+          applyLocalReviewState({
+            drafts: current.drafts,
+            resolvedCommentIds: nextResolved,
+          });
+        }
         if (!result.conflicted) {
           setStatus(
             `${result.comments.length} comment${result.comments.length === 1 ? "" : "s"} submitted.`,
@@ -5314,6 +5345,7 @@ export const ReviewController = () => {
       }
     },
     [
+      applyLocalReviewState,
       canSendToAgent,
       identity,
       reconcileAuthoritativeReviewSnapshot,

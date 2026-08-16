@@ -132,6 +132,8 @@ describe("review wire contract", () => {
       plan: "/tmp/plan.mdx",
       agentCommand: "big-plan agent /tmp/plan.mdx",
       recoveryPrompt: "Reconnect this review",
+      resolvedCommentIds: [],
+      threadReopenStates: [],
     });
 
     expect(decodeAgentSnapshot(encoded)).toMatchObject({
@@ -146,6 +148,42 @@ describe("review wire contract", () => {
       ],
       connectionLog: [{ eventId: "event-1", connected: true }],
       plan: "/tmp/plan.mdx",
+      resolvedCommentIds: [],
+      threadReopenStates: [],
+    });
+  });
+
+  it("should carry effective resolved ids and reopen records on the agent poll", () => {
+    const encoded = encodeAgentSnapshot({
+      currentSnapshot: "a".repeat(16),
+      presence: { connected: false, state: "waiting" },
+      requests: [
+        {
+          requestId: "1".repeat(16),
+          premiseSnapshot: "a".repeat(16),
+          createdAt: "2026-08-10T12:00:00.000Z",
+          kind: "reply",
+          commentId: "comment-1",
+          reopenedCommentIds: ["comment-1"],
+        },
+      ],
+      responses: [],
+      connectionLog: [],
+      plan: "/tmp/plan.mdx",
+      agentCommand: "big-plan agent /tmp/plan.mdx",
+      recoveryPrompt: "Reconnect this review",
+      resolvedCommentIds: [],
+      threadReopenStates: [{ commentId: "comment-1" }],
+    });
+
+    expect(decodeAgentSnapshot(encoded)).toMatchObject({
+      resolvedCommentIds: [],
+      threadReopenStates: [{ commentId: "comment-1" }],
+      requests: [
+        expect.objectContaining({
+          reopenedCommentIds: ["comment-1"],
+        }),
+      ],
     });
   });
 
@@ -218,6 +256,8 @@ describe("review wire contract", () => {
       plan: "/tmp/plan.mdx",
       agentCommand: "big-plan agent /tmp/plan.mdx",
       recoveryPrompt: "Reconnect this review",
+      resolvedCommentIds: [],
+      threadReopenStates: [],
     });
 
     const decoded = decodeAgentSnapshot(encoded);
@@ -249,6 +289,8 @@ describe("review wire contract", () => {
       plan: "/tmp/plan.mdx",
       agentCommand: "big-plan agent /tmp/plan.mdx",
       recoveryPrompt: "Reconnect this review",
+      resolvedCommentIds: [],
+      threadReopenStates: [],
     });
 
     expect(decodeAgentSnapshot(encoded).requests).toEqual([]);

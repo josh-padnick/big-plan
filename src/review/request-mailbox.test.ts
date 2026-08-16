@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./shared/comment.js";
+import { validateResolvedCommentIds } from "./shared/comment.js";
 import {
   deriveSnapshotDigest,
   feedbackAgentRequest,
@@ -37,7 +38,9 @@ import {
   deleteQueuedRequest,
   commitRequestTerminal,
   ensureAgentRequest,
+  readEffectiveResolvedCommentIds,
   recordAgentConnectionState,
+  replaceResolvedCommentIds,
   removeCommentFromQueuedFeedbackRequest,
   reviseQueuedRequest,
 } from "./request-mailbox.js";
@@ -45,9 +48,12 @@ import {
   prepareStore,
   readAgentConnectionEvents,
   readProgress,
+  readResolvedCommentIds,
   reviewStoreFor,
   withReviewStoreLock,
   writeAgentResponseValue,
+  writeResolvedCommentIds,
+  type ReviewStore,
 } from "./store.js";
 import {
   buildReviewImageReference,
@@ -161,6 +167,46 @@ const chatRequest = (
     createdAt: "2026-08-10T12:00:00.000Z",
     body,
     attachments,
+  });
+
+const requestWithPackage = (
+  nextPackageId: string,
+  comments: ReadonlyArray<ReviewComment>,
+) =>
+  feedbackAgentRequest({
+    feedback: buildFeedbackPackage({
+      sessionId,
+      packageId: nextPackageId,
+      planId,
+      planPath: "/tmp/plan.mdx",
+      createdAt: "2026-08-10T12:00:00.000Z",
+      comments,
+    }),
+    premiseSnapshot: snapshot,
+  });
+
+const replyRequest = ({
+  commentId,
+  requestId = "6666666666666666",
+}: {
+  readonly commentId: string;
+  readonly requestId?: string;
+}) =>
+  messageAgentRequest({
+    kind: "reply",
+    requestId,
+    sessionId,
+    planId,
+    premiseSnapshot: snapshot,
+    createdAt: "2026-08-10T12:00:00.000Z",
+    body: "Please look at this again.",
+    commentId,
+  });
+
+const storedResolvedCommentIds = (store: ReviewStore) =>
+  readResolvedCommentIds({
+    store,
+    validate: validateResolvedCommentIds,
   });
 
 const preparedReview = async () => {
@@ -1664,5 +1710,186 @@ describe("request mailbox", () => {
       { connected: true },
       { connected: false, reason: "Heartbeat timed out" },
     ]);
+  });
+
+  it("should un-resolve a thread when feedback creates new work on it", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    const accepted = await ensureAgentRequest({
+      store,
+      request: requestWith([
+        reviewComment({ id: commentId, body: "Look at this again." }),
+      ]),
+    });
+
+    expect(accepted.requestId).toBe(packageId);
+    expect(accepted.reopenedCommentIds).toEqual([commentId]);
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([]);
+  });
+
+  it("should un-resolve a thread when a reply creates new work on it", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const requestId = "7777777777777777";
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    const accepted = await ensureAgentRequest({
+      store,
+      request: replyRequest({ commentId, requestId }),
+    });
+
+    expect(accepted.reopenedCommentIds).toEqual([commentId]);
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([]);
+  });
+
+  it("should leave unrelated resolved threads resolved when new work arrives", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const otherId = "5555555555555555";
+    await writeResolvedCommentIds({ store, ids: [commentId, otherId] });
+
+    await ensureAgentRequest({
+      store,
+      request: replyRequest({ commentId }),
+    });
+
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([otherId]);
+  });
+
+  it("should not record a reopen when a plan question arrives", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    const accepted = await ensureAgentRequest({
+      store,
+      request: chatRequest("What is the retry boundary?"),
+    });
+
+    expect(accepted.reopenedCommentIds).toBeUndefined();
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([commentId]);
+  });
+
+  it("should keep a thread resolved when its request commit fails", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const requestId = "7777777777777777";
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+    await mkdir(join(store.agentRequestDirectory, `${requestId}.json`));
+
+    await expect(
+      ensureAgentRequest({
+        store,
+        request: replyRequest({ commentId, requestId }),
+      }),
+    ).rejects.toThrow();
+
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([commentId]);
+  });
+
+  it("should not reopen a thread for an identical terminal retry", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const request = replyRequest({ commentId });
+    await writeAgentRequest({
+      store,
+      request: {
+        ...request,
+        baselineSnapshot: snapshot,
+        claimedAt: "2026-08-10T12:00:01.000Z",
+        claimedBy: agentA,
+        claimExpiresAtMs: Date.parse("2026-08-10T12:05:01.000Z"),
+        answeredAt: "2026-08-10T12:00:02.000Z",
+      },
+    });
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    const accepted = await ensureAgentRequest({ store, request });
+
+    expect(accepted.answeredAt).toBe("2026-08-10T12:00:02.000Z");
+    expect(accepted.reopenedCommentIds).toBeUndefined();
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([commentId]);
+  });
+
+  it("should reopen a thread for an identical outstanding retry", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const request = replyRequest({ commentId });
+    await ensureAgentRequest({ store, request });
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    const accepted = await ensureAgentRequest({ store, request });
+
+    expect(accepted.reopenedCommentIds).toEqual([commentId]);
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([]);
+  });
+
+  it("should hide a stored resolution while outstanding work names the thread", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const request = replyRequest({ commentId });
+    await ensureAgentRequest({ store, request });
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([commentId]);
+    await expect(
+      readEffectiveResolvedCommentIds({ store, sessionId, planId }),
+    ).resolves.toEqual([]);
+  });
+
+  it("should allow a completed reopened thread to resolve again", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const request = replyRequest({ commentId });
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+    await ensureAgentRequest({ store, request });
+    await cancelAgentRequest({
+      store,
+      requestId: request.requestId,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    await replaceResolvedCommentIds({
+      store,
+      sessionId,
+      planId,
+      ids: [commentId],
+    });
+
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([commentId]);
+    await expect(
+      readEffectiveResolvedCommentIds({ store, sessionId, planId }),
+    ).resolves.toEqual([commentId]);
+  });
+
+  it("should keep resolution and outstanding work mutually exclusive when two creates race", async () => {
+    const { store } = await preparedReview();
+    const firstId = "4444444444444444";
+    const secondId = "5555555555555555";
+    await writeResolvedCommentIds({ store, ids: [firstId, secondId] });
+
+    await Promise.all([
+      ensureAgentRequest({
+        store,
+        request: requestWithPackage("aaaaaaaaaaaaaaaa", [
+          reviewComment({ id: firstId, body: "First thread again." }),
+        ]),
+      }),
+      ensureAgentRequest({
+        store,
+        request: replyRequest({
+          commentId: secondId,
+          requestId: "bbbbbbbbbbbbbbbb",
+        }),
+      }),
+    ]);
+
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([]);
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(
+      exchange.requests.map((request) => request.requestId).sort(),
+    ).toEqual(["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"]);
   });
 });

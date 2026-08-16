@@ -1,12 +1,17 @@
 // Owns locked changes to stored agent requests and the plan-wide claim gate.
+// Request creation is the only place new work can land, so it also clears
+// resolution for any thread that work names - resolution and outstanding work
+// stay mutually exclusive from both directions.
 
 import { join } from "node:path";
 import {
   AgentExchangeRejected,
   outstandingAgentRequests,
   readAgentCommentHistory,
+  readAgentExchange,
   readValidatedAgentRequests,
   requestBlocksPlanPickup,
+  requestIsTerminal,
   validateAgentRequest,
 } from "./agent-exchange.js";
 import type {
@@ -30,16 +35,19 @@ import {
   nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
+  readResolvedCommentIds,
   ReviewStorePathRejected,
   withReviewStoreLock,
   writeAgentRequestValue,
   writeAgentResponseValue,
+  writeResolvedCommentIds,
 } from "./store.js";
 import {
   claimIsHeldByAnother,
   claimIsLive,
   claimLeaseExpiryMs,
 } from "./shared/agent-claim.js";
+import { validateResolvedCommentIds } from "./shared/comment.js";
 import type { AgentModelIdentity } from "./shared/agent-model.js";
 import type {
   AgentRequestDeletionResult,
@@ -48,6 +56,69 @@ import type {
 } from "./store.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
+
+/** Comment threads a request can reopen by creating outstanding work. */
+const namedCommentIds = (request: AgentRequest): ReadonlyArray<string> =>
+  request.kind === "feedback"
+    ? request.comments.map((comment) => comment.id)
+    : request.kind === "reply"
+      ? [request.commentId]
+      : [];
+
+/**
+ * Serializes resolved-set mutations so a request create and a drafts persist
+ * cannot interleave into outstanding work on a still-resolved thread.
+ */
+const withResolvedCommentLock = async <TResult>({
+  store,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly change: (store: ReviewStore) => Promise<TResult>;
+}): Promise<TResult> => {
+  let lockedStore: ReviewStore;
+  try {
+    lockedStore = await (await anchorReviewStore(store)).resolveStore();
+  } catch (error: unknown) {
+    if (!(error instanceof ReviewStorePathRejected)) throw error;
+    throw new AgentExchangeRejected("The request mailbox is unavailable");
+  }
+  return withReviewStoreLock({
+    lockPath: join(lockedStore.reviewDirectory, ".resolved.lock"),
+    change: () => change(lockedStore),
+    timeoutError: () =>
+      new AgentExchangeRejected(
+        "Another process is updating resolved threads. Try again.",
+      ),
+    invalidLockError: () =>
+      new AgentExchangeRejected("The request mailbox is unavailable"),
+  });
+};
+
+/**
+ * Drops the named threads from the resolved set. The request file carries the
+ * matching reopen records, so a crash after that write still cannot leave
+ * outstanding work looking resolved.
+ */
+const clearResolvedComments = async ({
+  store,
+  commentIds,
+}: {
+  readonly store: ReviewStore;
+  readonly commentIds: ReadonlyArray<string>;
+}): Promise<ReadonlyArray<string>> => {
+  if (commentIds.length === 0) return [];
+  const current = await readResolvedCommentIds({
+    store,
+    validate: validateResolvedCommentIds,
+  });
+  const named = new Set(commentIds);
+  const remaining = current.filter((commentId) => !named.has(commentId));
+  const reopened = current.filter((commentId) => named.has(commentId));
+  if (reopened.length === 0) return [];
+  await writeResolvedCommentIds({ store, ids: remaining });
+  return reopened;
+};
 
 export class RetryableAgentClaimRejected extends AgentExchangeRejected {}
 
@@ -192,9 +263,16 @@ const requestCreation = (request: AgentRequest): string => {
   delete created.claimExpiresAtMs;
   delete created.answeredAt;
   delete created.canceledAt;
+  delete created.reopenedCommentIds;
   return JSON.stringify(created);
 };
 
+/**
+ * Writes one request, or returns the stored copy of an identical retry.
+ * Accepting new or still-outstanding work for a resolved thread writes the
+ * reopen records onto the request first, then clears those ids from the
+ * resolved set in the same lock.
+ */
 export const ensureAgentRequest = async ({
   store,
   request,
@@ -203,22 +281,16 @@ export const ensureAgentRequest = async ({
   readonly request: AgentRequest;
 }): Promise<AgentRequest> => {
   const intended = validateAgentRequest(request);
-  return withRequestLock({
-    store,
-    requestId: intended.requestId,
-    change: async (lockedStore) => {
-      const value = await readAgentRequestValue({
-        store: lockedStore,
-        requestId: intended.requestId,
-      });
-      if (value === undefined) {
-        await writeAgentRequestValue({
-          store: lockedStore,
-          requestId: intended.requestId,
-          value: intended,
-        });
-        return intended;
-      }
+  const commentIds = namedCommentIds(intended);
+  const accept = async (
+    lockedStore: ReviewStore,
+  ): Promise<AgentRequest> => {
+    const value = await readAgentRequestValue({
+      store: lockedStore,
+      requestId: intended.requestId,
+    });
+    let accepted = intended;
+    if (value !== undefined) {
       const existing = validateAgentRequest(value);
       if (
         existing.requestId !== intended.requestId ||
@@ -233,9 +305,64 @@ export const ensureAgentRequest = async ({
           "The feedback submission was canceled by the reviewer",
         );
       }
-      return existing;
-    },
-  });
+      if (requestIsTerminal(existing)) return existing;
+      accepted = existing;
+    }
+    if (commentIds.length === 0) {
+      if (value === undefined) {
+        await writeAgentRequestValue({
+          store: lockedStore,
+          requestId: intended.requestId,
+          value: intended,
+        });
+      }
+      return accepted;
+    }
+    const currentResolved = await readResolvedCommentIds({
+      store: lockedStore,
+      validate: validateResolvedCommentIds,
+    });
+    const newlyReopened = currentResolved.filter((commentId) =>
+      commentIds.includes(commentId),
+    );
+    const reopenedCommentIds = [
+      ...new Set([
+        ...(accepted.reopenedCommentIds ?? []),
+        ...newlyReopened,
+      ]),
+    ];
+    const recorded =
+      reopenedCommentIds.length === 0
+        ? accepted
+        : validateAgentRequest({ ...accepted, reopenedCommentIds });
+    if (value === undefined || newlyReopened.length > 0) {
+      await writeAgentRequestValue({
+        store: lockedStore,
+        requestId: intended.requestId,
+        value: recorded,
+      });
+    }
+    await clearResolvedComments({
+      store: lockedStore,
+      commentIds: newlyReopened,
+    });
+    return recorded;
+  };
+  return commentIds.length === 0
+    ? withRequestLock({
+        store,
+        requestId: intended.requestId,
+        change: accept,
+      })
+    : withResolvedCommentLock({
+        store,
+        change: (resolvedStore) =>
+          withRequestLock({
+            store: resolvedStore,
+            requestId: intended.requestId,
+            change: accept,
+          }),
+      });
 };
 
 /**
@@ -666,6 +793,74 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
       return updated;
     },
   });
+
+/**
+ * Replaces the resolved-thread set after refusing any new resolve that would
+ * contradict outstanding work. Already-resolved ids are skipped so unrelated
+ * review state can persist.
+ */
+export const replaceResolvedCommentIds = async ({
+  store,
+  sessionId,
+  planId,
+  ids,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+  readonly ids: ReadonlyArray<string>;
+}): Promise<void> =>
+  withResolvedCommentLock({
+    store,
+    change: async (lockedStore) => {
+      const alreadyResolved = new Set(
+        await readResolvedCommentIds({
+          store: lockedStore,
+          validate: validateResolvedCommentIds,
+        }),
+      );
+      for (const commentId of ids) {
+        if (alreadyResolved.has(commentId)) continue;
+        await assertResolvableComment({
+          store: lockedStore,
+          sessionId,
+          planId,
+          commentId,
+        });
+      }
+      await writeResolvedCommentIds({ store: lockedStore, ids });
+    },
+  });
+
+/**
+ * Stored resolved ids minus any still suppressed by outstanding reopen
+ * records. Readers use this so a crash between the request write and the
+ * resolved-set write cannot show outstanding work as resolved.
+ */
+export const readEffectiveResolvedCommentIds = async ({
+  store,
+  sessionId,
+  planId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+}): Promise<ReadonlyArray<string>> => {
+  const [stored, exchange] = await Promise.all([
+    readResolvedCommentIds({
+      store,
+      validate: validateResolvedCommentIds,
+    }),
+    readAgentExchange({ store, sessionId, planId }),
+  ]);
+  const suppressed = new Set(
+    outstandingAgentRequests(exchange).flatMap((request) => [
+      ...(request.reopenedCommentIds ?? []),
+      ...namedCommentIds(request),
+    ]),
+  );
+  return stored.filter((commentId) => !suppressed.has(commentId));
+};
 
 /**
  * Refuses a resolve that would contradict outstanding work. Resolution and an

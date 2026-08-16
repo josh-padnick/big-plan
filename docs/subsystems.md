@@ -48,7 +48,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 ### B. Session Reliability
 
-**Problem set.** The browser, the loopback server, and the agent stay connected and honest about liveness, and no message is ever lost, double-processed, or run inside a resolved thread.
+**Problem set.** The browser, the loopback server, and the agent stay connected and honest about liveness, and no message is ever lost, double-processed, or left outstanding on a resolved thread.
 
 **Code anchors.** `src/review/server.ts`, `src/review/review-route-context.ts`, `src/review/routes-*.ts`, `src/review/runtime-watchdog.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, `src/review/agent-work-loop.ts`, `src/review/agent-exchange.ts`, `src/review/review-state-version.ts`, `src/review/browser/review-poll-health.ts`, `src/review/browser/review-write-availability.ts`, `src/review/browser/review-runtime-request.ts`, `src/review/browser/review-recovery-merge.ts`, `src/review/browser/review-recovery-storage.browser.ts`, `src/review/shared/agent-status.ts`, `src/cli/review/command.ts`, `src/cli/agent/`.
 
@@ -61,6 +61,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   The CLI requires a nonzero `--idle-timeout` to be at least 1 minute, while `--idle-timeout 0` disables expiry entirely; the agent work loop exits when the session heartbeat it follows dies.
   Symptoms that look unrelated (an agent disconnecting, a preview expiring) can share this one cause.
 - A thread-resolution action that conflicts with a queued or in-flight message for that thread is a request-lifecycle invariant, enforced where request claims and terminal states land (`request-mailbox.ts`), not a thread-semantics concern.
+  The same mailbox commit that accepts new work for a resolved thread writes reopen records onto the request, then clears that thread's resolved state, so the two stay mutually exclusive from both directions.
 
 ### C. Commenting Surface
 

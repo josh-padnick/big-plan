@@ -33,10 +33,11 @@ import {
 } from "./agent-exchange.js";
 import {
   appendProgressEvent,
-  assertResolvableComment,
   cancelAgentRequest,
   ensureAgentRequest,
+  readEffectiveResolvedCommentIds,
   removeCommentFromQueuedFeedbackRequest,
+  replaceResolvedCommentIds,
 } from "./request-mailbox.js";
 import {
   anchorReviewStore,
@@ -72,9 +73,10 @@ const readStoredReviewerState = async ({
   const drafts = await context.planRenderer.readStoredComments(
     store.draftsPath,
   );
-  const resolvedCommentIds = await readResolvedCommentIds({
+  const resolvedCommentIds = await readEffectiveResolvedCommentIds({
     store,
-    validate: validateResolvedCommentIds,
+    sessionId: context.sessionId,
+    planId: context.planId,
   });
   return {
     drafts,
@@ -324,21 +326,18 @@ export const updateReviewState = async (
   );
   // A newly resolved thread must not contradict outstanding agent work. The
   // check runs before any write, so a refusal leaves the whole review state
-  // untouched rather than half applied.
-  const alreadyResolved = new Set(
-    await readResolvedCommentIds({
+  // untouched rather than half applied. Already-resolved ids stay skipped so
+  // unrelated drafts can persist.
+  try {
+    await replaceResolvedCommentIds({
       store,
-      validate: validateResolvedCommentIds,
-    }),
-  );
-  for (const commentId of resolvedCommentIds) {
-    if (alreadyResolved.has(commentId)) continue;
-    try {
-      await assertResolvableComment({ store, sessionId, planId, commentId });
-    } catch (error: unknown) {
-      if (!(error instanceof AgentExchangeRejected)) throw error;
-      return refusal({ status: 409, reason: error.message });
-    }
+      sessionId,
+      planId,
+      ids: resolvedCommentIds,
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
   }
   const sentIds = new Set(
     (await planRenderer.readStoredComments(store.sentPath)).map(
@@ -347,7 +346,6 @@ export const updateReviewState = async (
   );
   const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
   await writeComments({ path: store.draftsPath, comments: unsentDrafts });
-  await writeResolvedCommentIds({ store, ids: resolvedCommentIds });
   return jsonResponse({
     status: 200,
     value: await storedReviewSnapshot({ context }),
