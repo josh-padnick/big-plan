@@ -18,6 +18,14 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The merge guard compares this branch against main, so it needs the
+          # full history and the origin/main remote-tracking ref.
+          fetch-depth: 0
+      # Runs before the toolchain because it is pure git and takes under a
+      # second. A branch that would delete merged main work should fail fast.
+      - name: Merged main work must not disappear
+        run: node scripts/merge-guard/check.mjs
       - uses: oven-sh/setup-bun@v2
         with:
           # Reads the packageManager field so CI and local bun stay in lockstep.
