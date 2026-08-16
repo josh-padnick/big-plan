@@ -87,7 +87,7 @@ export const reviewRuntimeRefusal = async ({
  * refusal forever instead of telling the reader what happened. A 5xx is the
  * runtime failing at a request it accepted, which is worth trying again.
  */
-export const isReviewRuntimeRefusal = (error: unknown): boolean => {
+export const isTerminalReviewRuntimeRefusal = (error: unknown): boolean => {
   const status = reviewRuntimeRefusalStatus(error);
   return status !== undefined && status < 500;
 };

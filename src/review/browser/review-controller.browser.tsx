@@ -156,6 +156,7 @@ import { RESOLVED_THREAD_NEW_WORK_ERROR } from "../shared/resolved-thread-work.j
 import {
   isReviewRuntimeRefusal,
   isReviewRuntimeUnavailable,
+  isTerminalReviewRuntimeRefusal,
   normalizeReviewRuntimeRequestError,
   reviewRuntimeRefusal,
   reviewRuntimeRefusalStatus,
@@ -4556,7 +4557,7 @@ export const ReviewController = () => {
             // The runtime looked at this mutation and refused it, so the
             // reader is owed its reason rather than a retry loop that will
             // collect the same refusal for as long as the page is open.
-            if (isReviewRuntimeRefusal(error)) {
+            if (isTerminalReviewRuntimeRefusal(error)) {
               pendingDecisionInputs.current.delete(decisionId);
               dispatchDecisionPersistenceState(decisionId, "failed");
               toast.error("Decision answer not saved", {
