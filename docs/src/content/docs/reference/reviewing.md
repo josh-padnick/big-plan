@@ -121,9 +121,28 @@ shadcn/ui primitives. The plan content stays server-rendered HTML: React adds
 controls beside that content, and a live revision swaps in the next
 server-rendered article without client-rendering or gating the plan.
 
+## Decision answers
+
+An open decision card - a `Decision`, a `QuickDecision`, or a `DecisionAnalysis` with `interaction="choose"` - can be answered during a live review.
+A confirmed choice is saved with the review: it survives reload and runtime restarts, and your agent receives it when you approve the plan.
+The card's caption always states what is true right now: saving, saved with this review, or noted for this reading session only.
+If a save fails, the card says the answer is not saved yet and retries automatically; keep the page open until it reports the answer saved.
+
+The review runtime alone decides which answers are current.
+It compiles the plan, accepts only decision and option ids the current plan asks, and records with each answer a digest of that decision's full compiled content.
+An answer is served only while its decision still asks exactly that content, so editing the decision's own question, options, summaries, considerations, or context masks its answer, while an edit elsewhere in the plan leaves it alone.
+A card whose stored answer stopped applying says so on the card itself and asks to be answered again.
+Nothing is deleted: restoring the decision's exact content revives the original answer.
+Choose **Change**, then **Clear answer**, to leave a decision deliberately unanswered.
+
+A read-only review page - one whose plan a newer review session took custody of - cannot record answers: every answering control is disabled, with a note beside it saying why.
+A confirm made before the page has learned whether it may write is held rather than guessed at: it is saved once the session proves writable, and kept as a reading-session note when the session proves read-only.
+A proposed alternative approach is a reading-session note either way; send it to the agent through the feedback flow.
+In a standalone rendered document, an answer lasts only for the reading session and is not recorded for your agent.
+
 ## Persistence
 
-Runtime-backed staged comments live under `.big-plan/review/<plan-id>/` beside the plan.
+Runtime-backed staged comments and recorded decision answers live under `.big-plan/review/<plan-id>/` beside the plan.
 The review id comes from the resolved source path, so staged comments survive the plan revision the agent creates in response to feedback.
 Comment text that is typed but not yet staged or sent is kept in a recovery record owned by its browser tab, so reloading or reopening after a crash gives back the tab's staged drafts, open comment composer, and half-written thread replies.
 Each tab keeps exactly one record, written and cleared only by the tab that owns it, and read once when the page loads.
