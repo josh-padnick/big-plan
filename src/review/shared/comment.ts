@@ -368,6 +368,31 @@ const validateStoredTarget = (value: unknown): CommentTarget => {
   };
 };
 
+/** Recognizes a complete stored target without requiring its block to exist. */
+export const isStoredCommentTarget = (
+  value: unknown,
+): value is CommentTarget => {
+  try {
+    validateStoredTarget(value);
+    const target = asRecord({ value, field: "target" });
+    if (target.type === "document" || target.type === "block") return true;
+    if (
+      typeof target.quote !== "string" ||
+      typeof target.isQuoteExcerpt !== "boolean"
+    ) {
+      return false;
+    }
+    return (
+      target.type !== "selection" ||
+      target.imageBlockIds === undefined ||
+      (Array.isArray(target.imageBlockIds) &&
+        target.imageBlockIds.every((id) => typeof id === "string"))
+    );
+  } catch {
+    return false;
+  }
+};
+
 /** Validates one bounded batch through selected target and timestamp policies. */
 const validateCommentList = ({
   value,

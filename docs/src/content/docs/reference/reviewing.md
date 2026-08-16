@@ -94,8 +94,21 @@ server-rendered article without client-rendering or gating the plan.
 
 Runtime-backed staged comments live under `.big-plan/review/<plan-id>/` beside the plan.
 The review id comes from the resolved source path, so staged comments survive the plan revision the agent creates in response to feedback.
+Comment text that is typed but not yet staged or sent is kept in a recovery record owned by its browser tab, so reloading or reopening after a crash gives back the tab's staged drafts, open comment composer, and half-written thread replies.
+Each tab keeps exactly one record, written and cleared only by the tab that owns it, and read once when the page loads.
+The one exception is a record this build can no longer read: any tab claiming its writer identity removes such dead records so they cannot fill browser storage, while readable records from other tabs are never removed.
+A reload merges that record against the runtime's authoritative state automatically, or asks which version to keep when both sides changed the same comment.
+Tabs never read or adopt each other's records; two tabs converge through the runtime instead of through browser storage.
+A composer whose place in the plan no longer exists is not reattached, and the review retains its text for copying until the reviewer discards it.
 Text currently being typed in the plan-wide **Chat** composer exists only in the current page and does not survive a reload.
 Static `big-plan render` documents use browser storage for their document-level comment draft.
+
+Every write of the reviewer's own state is conditional on the state the page last read, so a second tab or the runtime itself cannot have its work replaced without notice.
+When a write finds the state has moved on, the page reconciles comment by comment.
+If the same comment really was changed in two places, the review shows both versions and asks which one to keep.
+If one copy was submitted while another copy was still being edited, the review asks before staging that edit as new feedback.
+Two tabs that are both offline converge only after one reaches the runtime.
+Cross-tab offline convergence without the runtime remains part of the wider consistency consolidation because it requires causal versions, durable resolution markers, and cross-tab serialization.
 
 The `.big-plan/` directory is created for the reviewer only and ignored by
 version control. Feedback packages and their Markdown briefs live under

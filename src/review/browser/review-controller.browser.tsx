@@ -1,6 +1,18 @@
 // Mounts Big Plan's typed React review interaction island over the inert,
 // server-rendered plan. React owns only review chrome; authored content stays
 // server-rendered and readable when this island is unavailable.
+//
+// The consistency model for the reviewer's own state - drafts, resolved ids,
+// and the comment text no comment holds yet - is one loop. Every write is
+// conditional on the version this browser last read, so a write prepared
+// against content the store has moved past is refused rather than applied; a
+// refusal is the fact that tells an unsynchronized newer edit from a stale
+// superseded one. On refusal the browser re-reads and merges against the base
+// it recorded per comment at the last agreed point, and hands back any comment
+// both sides changed instead of picking a side. Everything not yet agreed -
+// including comment text with no runtime home - is mirrored into a per-tab
+// recovery snapshot, so a reload gives back what was on screen without making
+// browser tabs reconcile with one another behind the runtime's back.
 
 import {
   useCallback,
@@ -78,11 +90,13 @@ import {
   emptyAgentSnapshot,
   isReviewCommentValue as isComment,
   isReviewWireRecord as isRecord,
+  STALE_REVIEW_STATE_CODE,
   type AgentRequest,
   type AgentResponse,
   type AgentSnapshot,
   type SnapshotDiff,
   type ProgressEvent,
+  type ReviewSnapshot,
   type RuntimeSession,
 } from "../shared/review-wire.js";
 import { AgentHealthAlert } from "./agent-connection.browser.js";
@@ -127,12 +141,40 @@ import {
 } from "./review-poll-health.js";
 import { reviewEndReason, type ReviewEndReason } from "./review-expiry.js";
 import {
+  isReviewRuntimeRefusal,
   isReviewRuntimeUnavailable,
   normalizeReviewRuntimeRequestError,
   reviewRuntimeRefusal,
   reviewRuntimeRefusalStatus,
 } from "./review-runtime-request.js";
 import { createRuntimeSessionOrder } from "./runtime-session-order.js";
+import {
+  mergeLiveReviewRecovery,
+  mergeReviewStateAfterHydration,
+  refreshReviewRecoveryConflicts,
+  repliesForSentComments,
+  resolveReviewRecoveryConflict,
+  resumeLiveReviewRecovery,
+  reviewRecoveryBase,
+  reviewRecoveryBaseAfterConflictAnswers,
+} from "./review-recovery-merge.js";
+import type {
+  ReviewRecoveryBase,
+  ReviewRecoveryConflict,
+  ReviewRecoveryReconciliation,
+  ReviewRecoveryState,
+} from "./review-recovery-merge.js";
+import {
+  claimLiveRecoveryOwner,
+  clearLiveReviewRecovery,
+  EMPTY_RECOVERED_COMPOSER,
+  mergeRecoveredComposerAfterHydration,
+  persistedReviewFingerprint,
+  readLiveReviewRecovery,
+  writeLiveReviewRecovery,
+  type RecoveredComposer,
+  type StoredLiveReviewRecovery,
+} from "./review-recovery-storage.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
   AlertDialog,
@@ -418,9 +460,6 @@ const bootstrapSnapshot = (): string => {
 const localStorageKey = (planId: string): string =>
   `big-plan:review:drafts:${planId}`;
 
-const liveRecoveryStorageKey = (identity: RuntimeIdentity): string =>
-  `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}`;
-
 const archivedChatStorageKey = (planId: string): string =>
   `big-plan:review:archived-chat:${planId}`;
 
@@ -473,139 +512,149 @@ const writeLocalDrafts = (
   }
 };
 
-const persistedReviewFingerprint = ({
-  drafts,
-  resolvedCommentIds,
-}: {
-  readonly drafts: ReadonlyArray<ReviewComment>;
-  readonly resolvedCommentIds: ReadonlySet<string>;
-}): string =>
-  JSON.stringify({
-    drafts,
-    resolvedCommentIds: Array.from(resolvedCommentIds).sort(),
-  });
+const sameReviewComment = (
+  left: ReviewComment,
+  right: ReviewComment,
+): boolean => JSON.stringify(left) === JSON.stringify(right);
 
-type LiveReviewRecovery = {
-  readonly drafts: ReadonlyArray<ReviewComment>;
-  readonly resolvedCommentIds: ReadonlySet<string>;
-  readonly baseFingerprint: string | null;
-};
+const STALE_SUBMISSION_STATUS =
+  "The review changed before submission. Review the latest comments and send again.";
+const RECOVERY_CONFLICT_STATUS = "Two versions of a comment need your choice.";
 
-/** Reads a session-scoped recovery snapshot without accepting partial data. */
-const readLiveReviewRecovery = (
-  identity: RuntimeIdentity,
-): LiveReviewRecovery | null => {
-  try {
-    const raw = localStorage.getItem(liveRecoveryStorageKey(identity));
-    const parsed: unknown = raw === null ? null : JSON.parse(raw);
-    if (
-      !isRecord(parsed) ||
-      (parsed.version !== 1 && parsed.version !== 2) ||
-      !Array.isArray(parsed.drafts) ||
-      !parsed.drafts.every(isComment) ||
-      !Array.isArray(parsed.resolvedCommentIds) ||
-      !parsed.resolvedCommentIds.every(
-        (value): value is string => typeof value === "string",
-      ) ||
-      (parsed.version === 2 &&
-        parsed.baseFingerprint !== null &&
-        typeof parsed.baseFingerprint !== "string")
-    ) {
-      return null;
-    }
-    return {
-      drafts: parsed.drafts,
-      resolvedCommentIds: new Set(parsed.resolvedCommentIds),
-      baseFingerprint:
-        parsed.version === 2 && typeof parsed.baseFingerprint === "string"
-          ? parsed.baseFingerprint
-          : null,
-    };
-  } catch {
-    return null;
+/**
+ * An unresolved conflict pauses reviewer-state writes, but the pause itself is
+ * not permission to raise the conflict prompt: only a reviewer-initiated write
+ * may answer this rejection by opening it, while background persistence lets
+ * it pass silently.
+ */
+class RecoveryConflictPauseError extends Error {
+  constructor() {
+    super(RECOVERY_CONFLICT_STATUS);
+    this.name = "RecoveryConflictPauseError";
   }
+}
+
+const isRecoveryConflictPause = (error: unknown): boolean =>
+  error instanceof RecoveryConflictPauseError;
+const RECOVERED_TEXT_COPY_FAILED_STATUS =
+  "The recovered comment text could not be copied. Select and copy it from the notice.";
+const LIVE_RECOVERY_UNAVAILABLE_STATUS =
+  "Browser recovery is unavailable. The live review remains usable, but browser-only drafts cannot be recovered after a reload.";
+
+const emptyReviewRecoveryReconciliation = (): ReviewRecoveryReconciliation => ({
+  base: { draftBodies: new Map(), resolvedCommentIds: new Set() },
+  conflicts: [],
+  runtime: null,
+});
+
+/** Places the composer beside its target, at a vertical position it is given. */
+const composePlacement = ({
+  target,
+  top,
+}: {
+  readonly target: CommentTarget;
+  readonly top: number;
+}): { readonly top: number; readonly left: number } => {
+  const targetRect = targetElement(target)?.getBoundingClientRect();
+  const composerWidth = 17 * 16;
+  const edge = 24;
+  const overlap = 12;
+  const viewportWidth = document.documentElement.clientWidth;
+  return {
+    top: window.scrollY + Math.max(56, Math.min(top, window.innerHeight - 360)),
+    left: Math.max(
+      edge + window.scrollX,
+      Math.min(
+        (targetRect?.right ?? viewportWidth) + window.scrollX - overlap,
+        window.scrollX + viewportWidth - composerWidth - edge,
+      ),
+    ),
+  };
 };
 
-/** Saves unsynchronized live review state before a runtime write is attempted. */
-const writeLiveReviewRecovery = ({
-  identity,
-  recovery,
-  baseFingerprint,
+/**
+ * The one place a merge cannot decide: this comment was changed here and in
+ * the review session while the two were apart. Both versions are shown, and
+ * neither is applied until the reviewer says which one to keep.
+ */
+const RecoveryConflictDialog = ({
+  conflict,
+  onKeep,
+  onDismiss,
 }: {
-  readonly identity: RuntimeIdentity;
-  readonly recovery: Omit<LiveReviewRecovery, "baseFingerprint">;
-  readonly baseFingerprint: string | null;
-}): boolean => {
-  try {
-    localStorage.setItem(
-      liveRecoveryStorageKey(identity),
-      JSON.stringify({
-        version: 2,
-        drafts: recovery.drafts,
-        resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
-        baseFingerprint,
-      }),
-    );
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const reconcileLiveReviewRecovery = ({
-  runtime,
-  recovery,
-}: {
-  readonly runtime: Omit<LiveReviewRecovery, "baseFingerprint">;
-  readonly recovery: Omit<LiveReviewRecovery, "baseFingerprint">;
-}): Omit<LiveReviewRecovery, "baseFingerprint"> => {
-  const drafts = [...runtime.drafts];
-  const runtimeDrafts = new Map(
-    runtime.drafts.map((comment) => [comment.id, comment]),
-  );
-  const resolvedCommentIds = new Set(runtime.resolvedCommentIds);
-  for (const recovered of recovery.drafts) {
-    const current = runtimeDrafts.get(recovered.id);
-    if (current === undefined) {
-      drafts.push(recovered);
-      if (recovery.resolvedCommentIds.has(recovered.id)) {
-        resolvedCommentIds.add(recovered.id);
+  readonly conflict: ReviewRecoveryConflict | undefined;
+  readonly onKeep: (keep: "local" | "runtime") => void;
+  readonly onDismiss: () => void;
+}) => {
+  if (conflict === undefined) return null;
+  const description =
+    conflict.kind === "resolution"
+      ? `This thread was ${conflict.localResolved ? "resolved" : "unresolved"} in the recovered review and ${conflict.runtimeResolved ? "resolved" : "unresolved"} in the review session. Keep one state.`
+      : conflict.kind === "sent"
+        ? "This comment was sent in the review session while you kept editing it here. Keep the submitted version, or stage your edit as new feedback."
+        : conflict.runtimeBody === null
+          ? "You changed this comment here, and it was deleted in the review session. Keep your version, or let the deletion stand."
+          : conflict.localBody === null
+            ? "You deleted this comment here, and it was changed in the review session. Keep the deletion, or take the version from the review session."
+            : "This comment was changed here and in the review session while the two were apart. Keep one of them.";
+  return (
+    <AlertDialog
+      open
+      tone="neutral"
+      title="Two versions of this comment"
+      description={description}
+      cancelLabel={
+        conflict.kind === "resolution"
+          ? `Keep ${conflict.localResolved ? "resolved" : "unresolved"}`
+          : conflict.kind === "sent"
+            ? "Stage mine as new feedback"
+            : conflict.localBody === null
+              ? "Keep the deletion"
+              : "Keep mine"
       }
-      continue;
-    }
-    // Target metadata is runtime-owned and may be canonicalized on first save.
-    // A matching body therefore represents the same immutable comment even
-    // when the browser's display kind differs from the stored block kind.
-    if (current.body === recovered.body) continue;
-    const recoveredId = randomId();
-    drafts.push({ ...recovered, id: recoveredId });
-    if (recovery.resolvedCommentIds.has(recovered.id)) {
-      resolvedCommentIds.add(recoveredId);
-    }
-  }
-  return { drafts, resolvedCommentIds };
-};
-
-/** Clears only the recovery snapshot confirmed by the completed runtime write. */
-const clearLiveReviewRecovery = ({
-  identity,
-  fingerprint,
-}: {
-  readonly identity: RuntimeIdentity;
-  readonly fingerprint: string;
-}): void => {
-  const recovery = readLiveReviewRecovery(identity);
-  if (
-    recovery === null ||
-    persistedReviewFingerprint(recovery) !== fingerprint
-  ) {
-    return;
-  }
-  try {
-    localStorage.removeItem(liveRecoveryStorageKey(identity));
-  } catch {
-    // The runtime now owns the state, so stale recovery cleanup is best effort.
-  }
+      actionLabel={
+        conflict.kind === "resolution"
+          ? "Use the review session's state"
+          : conflict.kind === "sent"
+            ? "Keep submitted version"
+            : conflict.runtimeBody === null
+              ? "Delete it"
+              : "Use the review session's version"
+      }
+      onCancel={() => onKeep("local")}
+      onAction={() => onKeep("runtime")}
+      onDismiss={onDismiss}
+    >
+      <div className="mt-4 grid gap-3">
+        <div>
+          <p className="m-0 text-2xs font-semibold text-subtle uppercase">
+            Yours
+          </p>
+          <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
+            {conflict.kind === "resolution"
+              ? conflict.localResolved
+                ? "Resolved"
+                : "Unresolved"
+              : (conflict.localBody ?? "Deleted here.")}
+          </p>
+        </div>
+        <div>
+          <p className="m-0 text-2xs font-semibold text-subtle uppercase">
+            {conflict.kind === "sent"
+              ? "Submitted in the review session"
+              : "In the review session"}
+          </p>
+          <p className="m-0 mt-1 border border-edge bg-surface p-2 text-sm text-ink [overflow-wrap:anywhere]">
+            {conflict.kind === "resolution"
+              ? conflict.runtimeResolved
+                ? "Resolved"
+                : "Unresolved"
+              : (conflict.runtimeBody ?? "Deleted there.")}
+          </p>
+        </div>
+      </div>
+    </AlertDialog>
+  );
 };
 
 const requestJson = async ({
@@ -1198,16 +1247,15 @@ const selectionRange = (
     block: HTMLElement,
     targetOffset: number,
   ): { readonly node: Text; readonly offset: number } | null => {
+    if (targetOffset < 0) return null;
     const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
     let consumed = 0;
-    let last: Text | null = null;
     let node = walker.nextNode();
     while (node !== null) {
       if (!(node instanceof Text)) {
         node = walker.nextNode();
         continue;
       }
-      last = node;
       const length = node.data.length;
       if (targetOffset <= consumed + length) {
         return { node, offset: Math.max(0, targetOffset - consumed) };
@@ -1215,7 +1263,7 @@ const selectionRange = (
       consumed += length;
       node = walker.nextNode();
     }
-    return last === null ? null : { node: last, offset: last.data.length };
+    return null;
   };
   const start = textPoint(startBlock, target.start);
   const end = textPoint(endBlock, target.end);
@@ -1228,6 +1276,32 @@ const selectionRange = (
   } catch {
     return null;
   }
+};
+
+const selectionTargetResolves = (target: SelectionTarget): boolean => {
+  const range = selectionRange(target);
+  if (range === null) return false;
+  const images: Array<HTMLElement> = [];
+  for (const imageId of target.imageBlockIds ?? []) {
+    const image = foundElement(liveBlock(imageId));
+    if (
+      image === null ||
+      image.dataset.blockKind !== "image" ||
+      !range.intersectsNode(image)
+    ) {
+      return false;
+    }
+    images.push(image);
+  }
+  const imageEvidence = images
+    .map((image) => `[Image: ${image.dataset.blockLabel ?? "Image"}]`)
+    .join("\n");
+  const selected = [range.toString(), imageEvidence]
+    .filter((part) => part.trim() !== "")
+    .join("\n");
+  return target.isQuoteExcerpt
+    ? selected.startsWith(target.quote)
+    : selected === target.quote;
 };
 
 const targetHighlightRange = (target: CommentTarget): Range | null => {
@@ -2937,8 +3011,10 @@ const SentThread = ({
   onDelete,
   onRevert,
   currentSnapshot,
-  unsavedInputKey,
-  onUnsavedInputChange,
+  reply,
+  onReplyChange,
+  isReplying,
+  onReply,
   compact = false,
   queuePosition,
   suppressPendingStatus = false,
@@ -2961,19 +3037,19 @@ const SentThread = ({
   readonly onDelete: () => void;
   readonly onRevert: (requestId: string, commentId: string) => void;
   readonly currentSnapshot: string;
-  readonly unsavedInputKey: string;
-  readonly onUnsavedInputChange: UnsavedInputChange;
+  /**
+   * Reply text is owned above this card, because one thread can be on screen
+   * twice - in the rail and inline - and because unsent reply text is part of
+   * what a reload must give back.
+   */
+  readonly reply: string;
+  readonly onReplyChange: (body: string) => void;
+  readonly isReplying: boolean;
+  readonly onReply: (body: string) => void;
   readonly compact?: boolean;
   readonly queuePosition?: number;
   readonly suppressPendingStatus?: boolean;
 }) => {
-  const [reply, setReply] = useState("");
-  const [isReplying, setIsReplying] = useState(false);
-  const hasUnsavedReply = reply !== "";
-  useEffect(() => {
-    onUnsavedInputChange(unsavedInputKey, hasUnsavedReply);
-    return () => onUnsavedInputChange(unsavedInputKey, false);
-  }, [hasUnsavedReply, onUnsavedInputChange, unsavedInputKey]);
   const {
     exchanges,
     latestExchange,
@@ -3049,24 +3125,10 @@ const SentThread = ({
       ? "Delete canceled comment"
       : "Delete queued comment";
 
-  const sendReply = async (bodyOverride?: string) => {
+  const sendReply = (bodyOverride?: string) => {
     const body = (bodyOverride ?? reply).trim();
     if (identity === null || body === "") return;
-    setIsReplying(true);
-    try {
-      await requestJson({
-        path: "/api/agent-requests",
-        identity,
-        method: "POST",
-        body: { kind: "reply", commentId: comment.id, body },
-      });
-      setReply("");
-      onReplySent("Reply sent to the coding agent.");
-    } catch (error) {
-      onReplySent(errorMessage(error));
-    } finally {
-      setIsReplying(false);
-    }
+    onReply(body);
   };
 
   if (!expanded) {
@@ -3613,7 +3675,7 @@ const SentThread = ({
               body={reply}
               maxLength={BODY_LIMIT}
               placeholder="Reply to the agent…"
-              onBodyChange={setReply}
+              onBodyChange={onReplyChange}
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                   event.preventDefault();
@@ -3728,6 +3790,8 @@ export const ReviewController = () => {
   const [resolveRefusal, setResolveRefusal] = useState<string | null>(null);
   const [compose, setCompose] = useState<ComposeState | null>(null);
   const [composeBody, setComposeBody] = useState("");
+  const [detachedComposer, setDetachedComposer] =
+    useState<RecoveredComposer["comment"]>(null);
   const [pendingCompose, setPendingCompose] = useState<ComposeState | null>(
     null,
   );
@@ -3748,6 +3812,30 @@ export const ReviewController = () => {
   const [unsavedInputKeys, setUnsavedInputKeys] = useState<ReadonlySet<string>>(
     new Set(),
   );
+  // Only threads with text are held, so emptiness is a size check rather than
+  // a scan, and the recovery snapshot never carries blank entries.
+  const [replyDrafts, setReplyDrafts] = useState<ReadonlyMap<string, string>>(
+    new Map(),
+  );
+  const replyDraftsRef = useRef<ReadonlyMap<string, string>>(new Map());
+  const [replyPendingCommentIds, setReplyPendingCommentIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const replyPendingCommentIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const [recoveryReconciliation, setRecoveryReconciliation] =
+    useState<ReviewRecoveryReconciliation>(emptyReviewRecoveryReconciliation);
+  const recoveryReconciliationRef = useRef<ReviewRecoveryReconciliation>(
+    recoveryReconciliation,
+  );
+  const replaceRecoveryReconciliation = useCallback(
+    (next: ReviewRecoveryReconciliation): void => {
+      recoveryReconciliationRef.current = next;
+      setRecoveryReconciliation(next);
+    },
+    [],
+  );
+  const recoveryConflicts = recoveryReconciliation.conflicts;
+  const [isRecoveryConflictOpen, setIsRecoveryConflictOpen] = useState(false);
   const [agent, setAgent] = useState<AgentSnapshot>(emptyAgentSnapshot);
   const [hasObservedAgentSnapshot, setHasObservedAgentSnapshot] =
     useState(false);
@@ -3877,17 +3965,64 @@ export const ReviewController = () => {
     [resolvedCommentIds, sent, unresolvedDrafts],
   );
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
+  const [liveRecoveryOwnerId, setLiveRecoveryOwnerId] = useState<string | null>(
+    null,
+  );
+  const [isLiveRecoveryAvailable, setIsLiveRecoveryAvailable] = useState(true);
+  // The version the next conditional write must carry.
+  const runtimeVersionRef = useRef("");
   const [persistedReviewState, setPersistedReviewState] = useState<
     string | null
   >(null);
+  const persistedReviewStateRef = useRef<string | null>(null);
   const currentReviewState = persistedReviewFingerprint({
     drafts,
     resolvedCommentIds,
   });
+  const latestReviewStateRef = useRef<{
+    readonly generation: number;
+    readonly fingerprint: string;
+    readonly state: ReviewRecoveryState;
+  }>({
+    generation: 0,
+    fingerprint: currentReviewState,
+    state: { drafts, resolvedCommentIds },
+  });
+  // Render must stay pure: React may replay or discard a render, and a
+  // generation bumped there could describe state that never committed and then
+  // reach a conditional write. Every reader of this ref runs after commit, and
+  // this effect is declared before them, so they still see the current value.
+  useEffect(() => {
+    if (latestReviewStateRef.current.fingerprint === currentReviewState) return;
+    latestReviewStateRef.current = {
+      generation: latestReviewStateRef.current.generation + 1,
+      fingerprint: currentReviewState,
+      state: { drafts, resolvedCommentIds },
+    };
+  }, [currentReviewState, drafts, resolvedCommentIds]);
+  const markPersistedReviewState = useCallback((fingerprint: string): void => {
+    persistedReviewStateRef.current = fingerprint;
+    setPersistedReviewState(fingerprint);
+  }, []);
+  const applyReviewState = useCallback((state: ReviewRecoveryState): void => {
+    const fingerprint = persistedReviewFingerprint(state);
+    const current = latestReviewStateRef.current;
+    latestReviewStateRef.current = {
+      generation:
+        current.fingerprint === fingerprint
+          ? current.generation
+          : current.generation + 1,
+      fingerprint,
+      state,
+    };
+    setDrafts(state.drafts);
+    setResolvedCommentIds(state.resolvedCommentIds);
+  }, []);
   const canRefreshReview =
     persistedReviewState === currentReviewState &&
     composeBody === "" &&
     chatBody === "" &&
+    replyDrafts.size === 0 &&
     unsavedInputKeys.size === 0;
   const justSubmittedCommentIds = useRef<ReadonlySet<string>>(new Set());
   const onUnsavedInputChange = useCallback<UnsavedInputChange>(
@@ -3901,6 +4036,243 @@ export const ReviewController = () => {
       });
     },
     [],
+  );
+  const replaceReplyDrafts = useCallback(
+    (replies: ReadonlyMap<string, string>): void => {
+      replyDraftsRef.current = replies;
+      setReplyDrafts(replies);
+    },
+    [],
+  );
+  const composerRecovery = useMemo<RecoveredComposer>(
+    () => ({
+      comment:
+        compose === null || composeBody === ""
+          ? detachedComposer
+          : {
+              target: compose.target,
+              premiseSnapshot: compose.premiseSnapshot,
+              body: composeBody,
+            },
+      replies: replyDrafts,
+    }),
+    [compose, composeBody, detachedComposer, replyDrafts],
+  );
+  const composerRecoveryRef = useRef(composerRecovery);
+  // Kept out of render for the same reason as the review-state ref above.
+  useEffect(() => {
+    composerRecoveryRef.current = composerRecovery;
+  }, [composerRecovery]);
+  /** Gives back typed comment text, and says when it had nowhere to go. */
+  const restoreComposer = useCallback(
+    (composer: RecoveredComposer): "restored" | "detached" => {
+      replaceReplyDrafts(composer.replies);
+      const recovered = composer.comment;
+      if (recovered === null) return "restored";
+      // A comment is written against a place in the plan. If that place is
+      // gone, the text has nowhere to attach, and saying so beats reattaching
+      // it to whatever happens to be there now.
+      const element = targetElement(recovered.target);
+      if (
+        element === null ||
+        (recovered.target.type === "selection" &&
+          !selectionTargetResolves(recovered.target))
+      ) {
+        setCompose(null);
+        setComposeBody("");
+        setDetachedComposer(recovered);
+        return "detached";
+      }
+      setDetachedComposer(null);
+      setCompose({
+        target: recovered.target,
+        premiseSnapshot: recovered.premiseSnapshot,
+        ...composePlacement({
+          target: recovered.target,
+          top: element.getBoundingClientRect().top,
+        }),
+      });
+      setComposeBody(recovered.body);
+      return "restored";
+    },
+    [replaceReplyDrafts],
+  );
+  /** Takes the runtime's answer as the version the next write must carry. */
+  const observeRuntimeReviewState = useCallback(
+    (snapshot: ReviewSnapshot): ReviewRecoveryState => {
+      const state: ReviewRecoveryState = {
+        drafts: snapshot.drafts,
+        resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
+      };
+      runtimeVersionRef.current = snapshot.version;
+      return state;
+    },
+    [],
+  );
+  const reconcileAuthoritativeReviewSnapshot = useCallback(
+    ({
+      snapshot,
+      base,
+      local,
+      preferredSent = [],
+      submittedBodies,
+    }: {
+      readonly snapshot: ReviewSnapshot;
+      readonly base: ReviewRecoveryBase;
+      readonly local: ReviewRecoveryState;
+      readonly preferredSent?: ReadonlyArray<ReviewComment>;
+      readonly submittedBodies?: ReadonlyMap<string, string>;
+    }) => {
+      const runtime = observeRuntimeReviewState(snapshot);
+      const merged = mergeLiveReviewRecovery({
+        base,
+        local,
+        runtime,
+        sent: snapshot.sent,
+        submittedBodies,
+      });
+      markPersistedReviewState(persistedReviewFingerprint(runtime));
+      applyReviewState(merged.state);
+      setSent((current) => {
+        const localById = new Map(
+          [...current, ...preferredSent].map((comment) => [
+            comment.id,
+            comment,
+          ]),
+        );
+        return snapshot.sent.map(
+          (comment) => localById.get(comment.id) ?? comment,
+        );
+      });
+      replaceReplyDrafts(
+        repliesForSentComments({
+          replies: replyDraftsRef.current,
+          sent: snapshot.sent,
+        }),
+      );
+      if (merged.conflicts.length > 0) {
+        replaceRecoveryReconciliation({
+          base: reviewRecoveryBase(runtime),
+          conflicts: merged.conflicts,
+          runtime,
+        });
+        setIsRecoveryConflictOpen(true);
+        setStatus(RECOVERY_CONFLICT_STATUS);
+      } else {
+        replaceRecoveryReconciliation({
+          base: reviewRecoveryBase(runtime),
+          conflicts: [],
+          runtime: null,
+        });
+        setIsRecoveryConflictOpen(false);
+      }
+      return merged;
+    },
+    [
+      applyReviewState,
+      markPersistedReviewState,
+      observeRuntimeReviewState,
+      replaceRecoveryReconciliation,
+      replaceReplyDrafts,
+    ],
+  );
+  const applyLocalReviewState = useCallback(
+    (state: ReviewRecoveryState): void => {
+      const reconciliation = recoveryReconciliationRef.current;
+      const currentConflicts = reconciliation.conflicts;
+      if (currentConflicts.length === 0) {
+        applyReviewState(state);
+        return;
+      }
+      const refreshed = refreshReviewRecoveryConflicts({
+        conflicts: currentConflicts,
+        local: state,
+      });
+      let nextState = state;
+      let nextBase = reconciliation.base;
+      if (reconciliation.runtime !== null) {
+        for (const conflict of refreshed.settledConflicts) {
+          nextState = resolveReviewRecoveryConflict({
+            state: nextState,
+            runtime: reconciliation.runtime,
+            conflict,
+            keep: "runtime",
+          });
+        }
+        if (refreshed.settledConflicts.length > 0) {
+          nextBase = reviewRecoveryBaseAfterConflictAnswers({
+            base: reconciliation.base,
+            runtime: reconciliation.runtime,
+            answeredConflicts: refreshed.settledConflicts,
+            remainingConflicts: refreshed.conflicts,
+          });
+        }
+      }
+      applyReviewState(nextState);
+      replaceRecoveryReconciliation({
+        base: nextBase,
+        conflicts: refreshed.conflicts,
+        runtime:
+          refreshed.conflicts.length === 0 ? null : reconciliation.runtime,
+      });
+      if (refreshed.conflicts.length === 0) {
+        setIsRecoveryConflictOpen(false);
+      }
+    },
+    [applyReviewState, replaceRecoveryReconciliation],
+  );
+  const stageReviewComment = useCallback(
+    (comment: ReviewComment): void => {
+      const current = latestReviewStateRef.current.state;
+      applyLocalReviewState({
+        drafts: [...current.drafts, comment],
+        resolvedCommentIds: current.resolvedCommentIds,
+      });
+    },
+    [applyLocalReviewState],
+  );
+  const changeReplyDraft = useCallback((commentId: string, body: string) => {
+    const current = replyDraftsRef.current;
+    if ((current.get(commentId) ?? "") === body) return;
+    const next = new Map(current);
+    if (body === "") next.delete(commentId);
+    else next.set(commentId, body);
+    replyDraftsRef.current = next;
+    setReplyDrafts(next);
+  }, []);
+  const sendThreadReply = useCallback(
+    async (commentId: string, body: string): Promise<void> => {
+      if (
+        identity === null ||
+        body === "" ||
+        replyPendingCommentIdsRef.current.has(commentId)
+      ) {
+        return;
+      }
+      const pending = new Set(replyPendingCommentIdsRef.current).add(commentId);
+      replyPendingCommentIdsRef.current = pending;
+      setReplyPendingCommentIds(pending);
+      try {
+        await requestJson({
+          path: "/api/agent-requests",
+          identity,
+          method: "POST",
+          body: { kind: "reply", commentId, body },
+        });
+        if ((replyDraftsRef.current.get(commentId) ?? "").trim() === body) {
+          changeReplyDraft(commentId, "");
+        }
+        setStatus("Reply sent to the coding agent.");
+      } catch (error) {
+        setStatus(errorMessage(error));
+      } finally {
+        const remaining = new Set(replyPendingCommentIdsRef.current);
+        remaining.delete(commentId);
+        replyPendingCommentIdsRef.current = remaining;
+        setReplyPendingCommentIds(remaining);
+      }
+    },
+    [changeReplyDraft, identity],
   );
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
@@ -3922,6 +4294,21 @@ export const ReviewController = () => {
       return result;
     },
     [],
+  );
+  // Drafts, feedback, and comment deletion share this reviewer-state gate.
+  // Change Engine reverts intentionally use serialization alone because their
+  // semantics are independent of unresolved reviewer-state recovery choices.
+  // The gate only pauses: whether the conflict prompt is on screen is each
+  // caller's decision, so a background persist cannot reopen a dismissal.
+  const serializeReviewerStateWrite = useCallback(
+    <Value,>(write: () => Promise<Value>): Promise<Value> =>
+      serializeRuntimeWrite(() => {
+        if (recoveryReconciliationRef.current.conflicts.length > 0) {
+          return Promise.reject(new RecoveryConflictPauseError());
+        }
+        return write();
+      }),
+    [serializeRuntimeWrite],
   );
   const inlineComposeHost = useInlineComposeHost(compose, isOpen);
   const threadHosts = useThreadHosts(reviewComments, isOpen);
@@ -4204,12 +4591,25 @@ export const ReviewController = () => {
 
   useEffect(() => {
     let current = true;
+    const reviewStateBeforeHydration = latestReviewStateRef.current.state;
+    const composerBeforeHydration = composerRecoveryRef.current;
     void (async () => {
       if (identity === null) {
         setDrafts(planId === "" ? [] : readLocalDrafts(planId));
         setIsHydrated(true);
         return;
       }
+      const claimedOwner = claimLiveRecoveryOwner(identity);
+      if (!current) return;
+      setLiveRecoveryOwnerId(claimedOwner.ownerId);
+      setIsLiveRecoveryAvailable(claimedOwner.recoveryAvailable);
+      // Only this tab's own record. Two tabs reconcile through the runtime,
+      // never through each other's browser storage; issue #99 owns that.
+      const recovery = readLiveReviewRecovery({
+        scope: identity,
+        owner: claimedOwner,
+      });
+      const recoveredComposer = recovery?.composer ?? EMPTY_RECOVERED_COMPOSER;
       try {
         const sessionSequence = runtimeSessionOrder.issueRequest();
         const session = parseRuntimeSession({
@@ -4226,61 +4626,117 @@ export const ReviewController = () => {
           await requestJson({ path: "/api/drafts", identity }),
         );
         if (current) {
-          const runtimeResolvedCommentIds = new Set(
-            snapshot.resolvedCommentIds,
+          const runtimeReviewState = observeRuntimeReviewState(snapshot);
+          markPersistedReviewState(
+            persistedReviewFingerprint(runtimeReviewState),
           );
-          const runtimeFingerprint = persistedReviewFingerprint({
-            drafts: snapshot.drafts,
-            resolvedCommentIds: runtimeResolvedCommentIds,
-          });
-          setPersistedReviewState(runtimeFingerprint);
-          const recovery = readLiveReviewRecovery(identity);
-          const recoveryFingerprint =
-            recovery === null ? null : persistedReviewFingerprint(recovery);
-          let restoredReviewState: Omit<LiveReviewRecovery, "baseFingerprint"> =
-            {
-              drafts: snapshot.drafts,
-              resolvedCommentIds: runtimeResolvedCommentIds,
-            };
-          if (recoveryFingerprint === runtimeFingerprint) {
-            clearLiveReviewRecovery({
-              identity,
-              fingerprint: runtimeFingerprint,
+          let restoredReviewState = runtimeReviewState;
+          let conflicts: ReadonlyArray<ReviewRecoveryConflict> = [];
+          if (recovery !== null) {
+            const merged = resumeLiveReviewRecovery({
+              recovery,
+              runtime: runtimeReviewState,
+              sent: snapshot.sent,
             });
-          } else if (recovery !== null) {
-            restoredReviewState =
-              recovery.baseFingerprint === runtimeFingerprint
-                ? recovery
-                : reconcileLiveReviewRecovery({
-                    runtime: restoredReviewState,
-                    recovery,
-                  });
-            writeLiveReviewRecovery({
-              identity,
-              recovery: restoredReviewState,
-              baseFingerprint: runtimeFingerprint,
-            });
+            restoredReviewState = merged.state;
+            conflicts = merged.conflicts;
           }
-          setDrafts(restoredReviewState.drafts);
+          restoredReviewState = mergeReviewStateAfterHydration({
+            before: reviewStateBeforeHydration,
+            current: latestReviewStateRef.current.state,
+            restored: restoredReviewState,
+          });
+          conflicts = refreshReviewRecoveryConflicts({
+            conflicts,
+            local: restoredReviewState,
+          }).conflicts;
+          const conflicted = conflicts.length > 0;
+          if (conflicted) {
+            replaceRecoveryReconciliation({
+              base: reviewRecoveryBase(runtimeReviewState),
+              conflicts,
+              runtime: runtimeReviewState,
+            });
+            setIsRecoveryConflictOpen(true);
+          } else {
+            replaceRecoveryReconciliation({
+              base: reviewRecoveryBase(runtimeReviewState),
+              conflicts: [],
+              runtime: null,
+            });
+            setIsRecoveryConflictOpen(false);
+          }
+          const composerAfterHydration = mergeRecoveredComposerAfterHydration({
+            before: composerBeforeHydration,
+            current: composerRecoveryRef.current,
+            recovered: {
+              ...recoveredComposer,
+              replies: repliesForSentComments({
+                replies: recoveredComposer.replies,
+                sent: snapshot.sent,
+              }),
+            },
+          });
+          const detached =
+            restoreComposer(composerAfterHydration) === "detached";
+          applyReviewState(restoredReviewState);
           setSent(snapshot.sent);
-          setResolvedCommentIds(restoredReviewState.resolvedCommentIds);
-          setStatus("Connected to the local review runtime.");
+          setStatus(
+            conflicted
+              ? RECOVERY_CONFLICT_STATUS
+              : detached
+                ? "The comment you were writing could not be reattached: its place in the plan is gone."
+                : claimedOwner.recoveryAvailable
+                  ? "Connected to the local review runtime."
+                  : "Connected to the local review runtime. Browser recovery is unavailable.",
+          );
           setIsHydrated(true);
         }
       } catch (error) {
         if (current) {
-          const recovery = readLiveReviewRecovery(identity);
           if (recovery !== null) {
-            setDrafts(recovery.drafts);
-            setResolvedCommentIds(recovery.resolvedCommentIds);
+            const restoredReviewState = mergeReviewStateAfterHydration({
+              before: reviewStateBeforeHydration,
+              current: latestReviewStateRef.current.state,
+              restored: recovery,
+            });
+            const refreshed = refreshReviewRecoveryConflicts({
+              conflicts: recovery.reconciliation.conflicts,
+              local: restoredReviewState,
+            });
+            const conflicts = refreshed.conflicts;
+            const runtime = recovery.reconciliation.runtime;
+            const base =
+              runtime !== null && refreshed.settledConflicts.length > 0
+                ? reviewRecoveryBaseAfterConflictAnswers({
+                    base: recovery.reconciliation.base,
+                    runtime,
+                    answeredConflicts: refreshed.settledConflicts,
+                    remainingConflicts: conflicts,
+                  })
+                : recovery.reconciliation.base;
+            replaceRecoveryReconciliation({
+              ...recovery.reconciliation,
+              base,
+              conflicts,
+              runtime: conflicts.length === 0 ? null : runtime,
+            });
+            applyReviewState(restoredReviewState);
+            setIsRecoveryConflictOpen(conflicts.length > 0);
           } else {
-            setPersistedReviewState(
+            markPersistedReviewState(
               persistedReviewFingerprint({
                 drafts: [],
                 resolvedCommentIds: new Set(),
               }),
             );
           }
+          const composerAfterHydration = mergeRecoveredComposerAfterHydration({
+            before: composerBeforeHydration,
+            current: composerRecoveryRef.current,
+            recovered: recoveredComposer,
+          });
+          restoreComposer(composerAfterHydration);
           setStatus(errorMessage(error));
           setIsHydrated(true);
         }
@@ -4289,7 +4745,63 @@ export const ReviewController = () => {
     return () => {
       current = false;
     };
-  }, [acceptRuntimeSession, identity, planId, runtimeSessionOrder]);
+  }, [
+    acceptRuntimeSession,
+    applyReviewState,
+    identity,
+    markPersistedReviewState,
+    observeRuntimeReviewState,
+    planId,
+    replaceRecoveryReconciliation,
+    restoreComposer,
+    runtimeSessionOrder,
+  ]);
+
+  useEffect(() => {
+    if (
+      !isHydrated ||
+      identity === null ||
+      liveRecoveryOwnerId === null ||
+      !isLiveRecoveryAvailable
+    )
+      return;
+    const reviewState = { drafts, resolvedCommentIds };
+    const recovery: StoredLiveReviewRecovery = {
+      ...reviewState,
+      composer: composerRecovery,
+      reconciliation: recoveryReconciliation,
+    };
+    const didPersist = writeLiveReviewRecovery({
+      scope: identity,
+      ownerId: liveRecoveryOwnerId,
+      recovery,
+    });
+    if (!didPersist) {
+      setIsLiveRecoveryAvailable(false);
+      setStatus(LIVE_RECOVERY_UNAVAILABLE_STATUS);
+      return;
+    }
+    if (
+      recovery.reconciliation.conflicts.length === 0 &&
+      persistedReviewState === persistedReviewFingerprint(recovery) &&
+      clearLiveReviewRecovery({
+        scope: identity,
+        ownerId: liveRecoveryOwnerId,
+        fingerprint: persistedReviewState,
+      })
+    )
+      return;
+  }, [
+    composerRecovery,
+    drafts,
+    identity,
+    isHydrated,
+    isLiveRecoveryAvailable,
+    liveRecoveryOwnerId,
+    persistedReviewState,
+    recoveryReconciliation,
+    resolvedCommentIds,
+  ]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -4298,109 +4810,101 @@ export const ReviewController = () => {
       return;
     }
     if (runtimeSession?.authoritative === false) return;
-    const fingerprint = persistedReviewFingerprint({
-      drafts,
-      resolvedCommentIds,
-    });
+    const local: ReviewRecoveryState = { drafts, resolvedCommentIds };
+    const fingerprint = persistedReviewFingerprint(local);
     if (persistedReviewState === fingerprint) return;
-    const existingRecovery = readLiveReviewRecovery(identity);
-    const recoveryBaseFingerprint =
-      existingRecovery?.baseFingerprint ?? persistedReviewState;
-    writeLiveReviewRecovery({
-      identity,
-      recovery: { drafts, resolvedCommentIds },
-      baseFingerprint: recoveryBaseFingerprint,
-    });
-    // The recovery snapshot above is written first and unconditionally, so a
-    // runtime that cannot take this change still cannot lose it.
+    // The recovery snapshot has its own writer above and runs whatever the
+    // runtime is doing, so a runtime that cannot take this change still
+    // cannot lose it.
     if (!runtimeAcceptsWrites) return;
-    void serializeRuntimeWrite(async () => {
-      const runtimeSnapshot = parseSnapshot(
-        await requestJson({ path: "/api/drafts", identity }),
-      );
-      const runtimeReviewState = {
-        drafts: runtimeSnapshot.drafts,
-        resolvedCommentIds: new Set(runtimeSnapshot.resolvedCommentIds),
-      };
-      const runtimeFingerprint = persistedReviewFingerprint(runtimeReviewState);
-      if (runtimeFingerprint === fingerprint) {
-        return { state: "persisted" as const, fingerprint };
-      }
-      if (recoveryBaseFingerprint !== runtimeFingerprint) {
-        const reconciled = reconcileLiveReviewRecovery({
-          runtime: runtimeReviewState,
-          recovery: { drafts, resolvedCommentIds },
+    if (recoveryConflicts.length > 0) return;
+    void serializeReviewerStateWrite(async () => {
+      let prepared = latestReviewStateRef.current;
+      if (persistedReviewStateRef.current === prepared.fingerprint) return;
+      let preparedBase = recoveryReconciliationRef.current.base;
+      if (runtimeVersionRef.current === "") {
+        const snapshot = parseSnapshot(
+          await requestJson({ path: "/api/drafts", identity }),
+        );
+        const merged = reconcileAuthoritativeReviewSnapshot({
+          snapshot,
+          base: preparedBase,
+          local: latestReviewStateRef.current.state,
         });
-        const reconciledFingerprint = persistedReviewFingerprint(reconciled);
-        if (reconciledFingerprint === runtimeFingerprint) {
-          clearLiveReviewRecovery({ identity, fingerprint });
-        } else {
-          writeLiveReviewRecovery({
-            identity,
-            recovery: reconciled,
-            baseFingerprint: runtimeFingerprint,
-          });
-        }
-        return {
-          state: "reconciled" as const,
-          reviewState: reconciled,
-          runtimeFingerprint,
-        };
+        if (merged.conflicts.length > 0) return;
+        prepared = latestReviewStateRef.current;
+        preparedBase = recoveryReconciliationRef.current.base;
       }
       try {
-        await requestJson({
+        const written = await requestJson({
           path: "/api/drafts",
           identity,
           method: "PUT",
           body: {
-            drafts,
-            resolvedCommentIds: Array.from(resolvedCommentIds),
+            drafts: prepared.state.drafts,
+            resolvedCommentIds: Array.from(prepared.state.resolvedCommentIds),
+            version: runtimeVersionRef.current,
           },
         });
-      } catch (error: unknown) {
-        // The runtime refuses the whole write when a resolve contradicts
-        // outstanding agent work, so the resolved set returns to what it stored.
-        // Local drafts are untouched and persist on the next write.
-        if (reviewRuntimeRefusalStatus(error) !== 409) throw error;
-        return {
-          state: "refused" as const,
-          reason: errorMessage(error),
-          resolvedCommentIds: runtimeReviewState.resolvedCommentIds,
-        };
-      }
-      return { state: "persisted" as const, fingerprint };
-    })
-      .then((result) => {
-        if (result.state === "refused") {
-          setResolvedCommentIds(result.resolvedCommentIds);
-          setResolveRefusal(result.reason);
-          setStatus(result.reason);
-          return;
-        }
-        if (result.state === "reconciled") {
-          setPersistedReviewState(result.runtimeFingerprint);
-          setDrafts(result.reviewState.drafts);
-          setResolvedCommentIds(result.reviewState.resolvedCommentIds);
-          return;
-        }
-        setPersistedReviewState(result.fingerprint);
-        clearLiveReviewRecovery({
-          identity,
-          fingerprint: result.fingerprint,
+        const accepted = parseSnapshot(written);
+        reconcileAuthoritativeReviewSnapshot({
+          snapshot: accepted,
+          base: reviewRecoveryBase(prepared.state),
+          local: latestReviewStateRef.current.state,
         });
-      })
-      .catch((error: unknown) => setStatus(errorMessage(error)));
+      } catch (error) {
+        // Both refusals below are a 409, so the code the runtime named this
+        // one by is what tells them apart.
+        if (reviewRuntimeRefusalStatus(error) !== 409) throw error;
+        // Someone else wrote, or the write contradicts outstanding agent work.
+        // Either way the browser now needs what the runtime actually holds.
+        const snapshot = parseSnapshot(
+          await requestJson({ path: "/api/drafts", identity }),
+        );
+        if (!isReviewRuntimeRefusal(error, STALE_REVIEW_STATE_CODE)) {
+          // The runtime refuses the whole write when a resolve contradicts
+          // outstanding agent work, so the resolved set returns to what it
+          // stored. Local drafts are untouched and persist on the next write.
+          const merged = reconcileAuthoritativeReviewSnapshot({
+            snapshot,
+            base: preparedBase,
+            local: latestReviewStateRef.current.state,
+          });
+          applyReviewState({
+            drafts: merged.state.drafts,
+            resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
+          });
+          const reason = errorMessage(error);
+          setResolveRefusal(reason);
+          setStatus(reason);
+          return;
+        }
+        // A stale version is the fact that tells a local edit the runtime has
+        // not seen from a local copy the runtime has already moved past.
+        reconcileAuthoritativeReviewSnapshot({
+          snapshot,
+          base: preparedBase,
+          local: latestReviewStateRef.current.state,
+        });
+      }
+    }).catch((error: unknown) => {
+      if (isRecoveryConflictPause(error)) return;
+      setStatus(errorMessage(error));
+    });
   }, [
+    applyReviewState,
     drafts,
     identity,
     isHydrated,
     planId,
     pollHealth.state,
     persistedReviewState,
+    recoveryConflicts,
+    reconcileAuthoritativeReviewSnapshot,
     resolvedCommentIds,
     runtimeAcceptsWrites,
     runtimeSession?.authoritative,
-    serializeRuntimeWrite,
+    serializeReviewerStateWrite,
   ]);
 
   useEffect(() => {
@@ -4592,30 +5096,21 @@ export const ReviewController = () => {
         setTab("agent");
         return;
       }
+      if (detachedComposer !== null) {
+        setIsOpen(true);
+        setTab("comments");
+        return;
+      }
       if (
         compose !== null &&
         targetAddress(compose.target) === targetAddress(target)
       ) {
         return;
       }
-      const targetRect = targetElement(target)?.getBoundingClientRect();
-      const composerWidth = 17 * 16;
-      const edge = 24;
-      const overlap = 12;
-      const viewportWidth = document.documentElement.clientWidth;
       const next = {
         target,
         premiseSnapshot: displayedSnapshot,
-        top:
-          window.scrollY +
-          Math.max(56, Math.min(rect.top, window.innerHeight - 360)),
-        left: Math.max(
-          edge + window.scrollX,
-          Math.min(
-            (targetRect?.right ?? viewportWidth) + window.scrollX - overlap,
-            window.scrollX + viewportWidth - composerWidth - edge,
-          ),
-        ),
+        ...composePlacement({ target, top: rect.top }),
       };
       if (compose === null || composeBody.trim() === "") {
         setComposeBody("");
@@ -4624,7 +5119,13 @@ export const ReviewController = () => {
       }
       setPendingCompose(next);
     },
-    [compose, composeBody, displayedSnapshot, runtimeSession?.authoritative],
+    [
+      compose,
+      composeBody,
+      detachedComposer,
+      displayedSnapshot,
+      runtimeSession?.authoritative,
+    ],
   );
 
   useEffect(() => {
@@ -4659,32 +5160,107 @@ export const ReviewController = () => {
       }
       setIsSending(true);
       try {
-        const result = parseSnapshot(
-          await serializeRuntimeWrite(() =>
-            requestJson({
-              path: "/api/feedback",
-              identity,
-              method: "POST",
-              body: { comments },
-            }),
-          ),
-        );
-        const ids = new Set(comments.map((comment) => comment.id));
+        const result = await serializeReviewerStateWrite(async () => {
+          let base = recoveryReconciliationRef.current.base;
+          if (runtimeVersionRef.current === "") {
+            const current = parseSnapshot(
+              await requestJson({ path: "/api/drafts", identity }),
+            );
+            const preflight = reconcileAuthoritativeReviewSnapshot({
+              snapshot: current,
+              base,
+              local: latestReviewStateRef.current.state,
+            });
+            if (preflight.conflicts.length > 0) {
+              return { submitted: false, conflicted: true, comments: [] };
+            }
+            base = recoveryReconciliationRef.current.base;
+          }
+          const latestDraftsById = new Map(
+            latestReviewStateRef.current.state.drafts.map((comment) => [
+              comment.id,
+              comment,
+            ]),
+          );
+          const preparedComments = comments.flatMap((requested) => {
+            const latest = latestDraftsById.get(requested.id);
+            return latest !== undefined && sameReviewComment(latest, requested)
+              ? [latest]
+              : [];
+          });
+          if (preparedComments.length !== comments.length) {
+            return { submitted: false, conflicted: false, comments: [] };
+          }
+          const submittedBodies = new Map(
+            preparedComments.map((comment) => [comment.id, comment.body]),
+          );
+          try {
+            const snapshot = parseSnapshot(
+              await requestJson({
+                path: "/api/feedback",
+                identity,
+                method: "POST",
+                body: {
+                  comments: preparedComments,
+                  version: runtimeVersionRef.current,
+                },
+              }),
+            );
+            const latest = latestReviewStateRef.current;
+            const merged = reconcileAuthoritativeReviewSnapshot({
+              snapshot,
+              base,
+              local: latest.state,
+              preferredSent: preparedComments,
+              submittedBodies,
+            });
+            return {
+              submitted: true,
+              conflicted: merged.conflicts.length > 0,
+              comments: preparedComments,
+            };
+          } catch (error) {
+            if (!isReviewRuntimeRefusal(error, STALE_REVIEW_STATE_CODE)) {
+              throw error;
+            }
+            const snapshot = parseSnapshot(
+              await requestJson({ path: "/api/drafts", identity }),
+            );
+            reconcileAuthoritativeReviewSnapshot({
+              snapshot,
+              base,
+              local: latestReviewStateRef.current.state,
+            });
+            return {
+              submitted: false,
+              conflicted:
+                recoveryReconciliationRef.current.conflicts.length > 0,
+              comments: [],
+            };
+          }
+        });
+        if (!result.submitted) {
+          if (result.conflicted) {
+            setStatus(RECOVERY_CONFLICT_STATUS);
+            setIsRecoveryConflictOpen(true);
+          } else {
+            setStatus(STALE_SUBMISSION_STATUS);
+          }
+          return;
+        }
+        const ids = new Set(result.comments.map((comment) => comment.id));
         justSubmittedCommentIds.current = new Set([
           ...justSubmittedCommentIds.current,
           ...ids,
         ]);
-        setDrafts((current) =>
-          current.filter((comment) => !ids.has(comment.id)),
-        );
-        setSent((current) =>
-          result.sent.length > 0 ? result.sent : [...current, ...comments],
-        );
-        setStatus(
-          `${comments.length} comment${comments.length === 1 ? "" : "s"} submitted.`,
-        );
+        if (!result.conflicted) {
+          setStatus(
+            `${result.comments.length} comment${result.comments.length === 1 ? "" : "s"} submitted.`,
+          );
+        }
       } catch (error) {
         setStatus(errorMessage(error));
+        if (isRecoveryConflictPause(error)) setIsRecoveryConflictOpen(true);
       } finally {
         setIsSending(false);
       }
@@ -4692,10 +5268,10 @@ export const ReviewController = () => {
     [
       canSendToAgent,
       identity,
-      isOpen,
+      reconcileAuthoritativeReviewSnapshot,
       runtimeAcceptsWrites,
       runtimeCanWrite,
-      serializeRuntimeWrite,
+      serializeReviewerStateWrite,
     ],
   );
 
@@ -4739,7 +5315,7 @@ export const ReviewController = () => {
           premiseSnapshot: displayedSnapshot,
           target: block === null ? { type: "document" } : targetForBlock(block),
         };
-        setDrafts((current) => [...current, comment]);
+        stageReviewComment(comment);
         setIsOpen(true);
         setTab("comments");
         setStatus(
@@ -4762,7 +5338,7 @@ export const ReviewController = () => {
       };
       if (previous === undefined) delete feedbackWindow.bigPlan.feedback;
     };
-  }, [displayedSnapshot, isHydrated, sendComments]);
+  }, [displayedSnapshot, isHydrated, sendComments, stageReviewComment]);
 
   const saveComment = (body: string, submitRightAway: boolean) => {
     if (compose === null) return;
@@ -4773,7 +5349,7 @@ export const ReviewController = () => {
       premiseSnapshot: compose.premiseSnapshot,
       target: compose.target,
     };
-    setDrafts((current) => [...current, comment]);
+    stageReviewComment(comment);
     setCompose(null);
     setComposeBody("");
     setTab("comments");
@@ -4781,13 +5357,56 @@ export const ReviewController = () => {
     if (submitRightAway) void sendComments([comment]);
   };
 
+  const answerRecoveryConflict = (keep: "local" | "runtime") => {
+    const reconciliation = recoveryReconciliationRef.current;
+    const [conflict, ...remaining] = reconciliation.conflicts;
+    if (conflict === undefined) return;
+    if (reconciliation.runtime !== null) {
+      const next = resolveReviewRecoveryConflict({
+        state: latestReviewStateRef.current.state,
+        runtime: reconciliation.runtime,
+        conflict,
+        keep,
+        ...(conflict.kind === "sent" && keep === "local"
+          ? { replacementCommentId: randomId() }
+          : {}),
+      });
+      applyReviewState(next);
+      replaceRecoveryReconciliation({
+        base: reviewRecoveryBaseAfterConflictAnswers({
+          base: reconciliation.base,
+          runtime: reconciliation.runtime,
+          answeredConflicts: [conflict],
+          remainingConflicts: remaining,
+        }),
+        conflicts: remaining,
+        runtime: remaining.length === 0 ? null : reconciliation.runtime,
+      });
+    } else {
+      replaceRecoveryReconciliation({
+        base: reconciliation.base,
+        conflicts: remaining,
+        runtime: null,
+      });
+    }
+    setIsRecoveryConflictOpen(remaining.length > 0);
+  };
+
   const deleteDraft = (id: string) => {
-    setDrafts((current) => current.filter((comment) => comment.id !== id));
+    const current = latestReviewStateRef.current.state;
+    applyLocalReviewState({
+      drafts: current.drafts.filter((comment) => comment.id !== id),
+      resolvedCommentIds: current.resolvedCommentIds,
+    });
     setPendingDelete(null);
     setStatus("Staged comment deleted.");
   };
   const deleteAllDrafts = () => {
-    setDrafts([]);
+    const current = latestReviewStateRef.current.state;
+    applyLocalReviewState({
+      drafts: [],
+      resolvedCommentIds: current.resolvedCommentIds,
+    });
     setPendingDelete(null);
     setStatus("All staged comments deleted.");
   };
@@ -4800,22 +5419,55 @@ export const ReviewController = () => {
     setPendingDelete(null);
     setStatus("Deleting the comment…");
     try {
-      await serializeRuntimeWrite(() =>
-        requestJson({
-          path: "/api/comments-delete",
-          identity,
-          method: "POST",
-          body: { commentId },
-        }),
+      const deleted = await serializeReviewerStateWrite(async () => {
+        const base = recoveryReconciliationRef.current.base;
+        try {
+          const snapshot = parseSnapshot(
+            await requestJson({
+              path: "/api/comments-delete",
+              identity,
+              method: "POST",
+              body: {
+                commentId,
+                version: runtimeVersionRef.current,
+              },
+            }),
+          );
+          reconcileAuthoritativeReviewSnapshot({
+            snapshot,
+            base,
+            local: latestReviewStateRef.current.state,
+          });
+          return "deleted";
+        } catch (error) {
+          if (!isReviewRuntimeRefusal(error, STALE_REVIEW_STATE_CODE)) {
+            throw error;
+          }
+          const snapshot = parseSnapshot(
+            await requestJson({ path: "/api/drafts", identity }),
+          );
+          reconcileAuthoritativeReviewSnapshot({
+            snapshot,
+            base,
+            local: latestReviewStateRef.current.state,
+          });
+          return "stale";
+        }
+      });
+      if (deleted === "stale") {
+        setStatus(
+          "The review changed before deletion. Review the latest comments and try again.",
+        );
+        return;
+      }
+      if (replyDraftsRef.current.has(commentId)) {
+        const next = new Map(replyDraftsRef.current);
+        next.delete(commentId);
+        replaceReplyDrafts(next);
+      }
+      acceptAgentSnapshot(
+        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
       );
-      const [snapshotValue, agentValue] = await Promise.all([
-        requestJson({ path: "/api/drafts", identity }),
-        requestJson({ path: "/api/agent", identity }),
-      ]);
-      const snapshot = parseSnapshot(snapshotValue);
-      setSent(snapshot.sent);
-      setResolvedCommentIds(new Set(snapshot.resolvedCommentIds));
-      acceptAgentSnapshot(parseAgentSnapshot(agentValue));
       setThreadOpenState((current) =>
         setThreadOpen({
           state: current,
@@ -4836,6 +5488,7 @@ export const ReviewController = () => {
       );
     } catch (error) {
       setStatus(errorMessage(error));
+      if (isRecoveryConflictPause(error)) setIsRecoveryConflictOpen(true);
     }
   };
   const revertAgentChanges = async () => {
@@ -4886,11 +5539,13 @@ export const ReviewController = () => {
     });
   };
   const updateDraft = (id: string, body: string) => {
-    setDrafts((current) =>
-      current.map((comment) =>
+    const current = latestReviewStateRef.current.state;
+    applyLocalReviewState({
+      drafts: current.drafts.map((comment) =>
         comment.id === id ? { ...comment, body } : comment,
       ),
-    );
+      resolvedCommentIds: current.resolvedCommentIds,
+    });
     setStatus("Comment updated locally.");
   };
 
@@ -5159,10 +5814,11 @@ export const ReviewController = () => {
   // refusal is what the reviewer sees.
   const toggleResolvedComment = (commentId: string) => {
     setResolveRefusal(null);
-    if (!resolvedCommentIds.has(commentId)) {
+    const current = latestReviewStateRef.current.state;
+    if (!current.resolvedCommentIds.has(commentId)) {
       closeTour();
       if (selectedCommentId === commentId) setSelectedCommentId(null);
-      const comment = [...drafts, ...sent].find(
+      const comment = [...current.drafts, ...sent].find(
         (candidate) => candidate.id === commentId,
       );
       if (
@@ -5185,11 +5841,15 @@ export const ReviewController = () => {
         );
       }
     }
-    setResolvedCommentIds((current) => {
-      const next = new Set(current);
-      if (next.has(commentId)) next.delete(commentId);
-      else next.add(commentId);
-      return next;
+    const nextResolvedCommentIds = new Set(current.resolvedCommentIds);
+    if (nextResolvedCommentIds.has(commentId)) {
+      nextResolvedCommentIds.delete(commentId);
+    } else {
+      nextResolvedCommentIds.add(commentId);
+    }
+    applyLocalReviewState({
+      drafts: current.drafts,
+      resolvedCommentIds: nextResolvedCommentIds,
     });
   };
   const viewAgentRequest = (requestId: string, kind: string) => {
@@ -5735,8 +6395,12 @@ export const ReviewController = () => {
                         setPendingRevert({ requestId, commentId })
                       }
                       currentSnapshot={currentSnapshot}
-                      unsavedInputKey={`reply:rail:${comment.id}`}
-                      onUnsavedInputChange={onUnsavedInputChange}
+                      reply={replyDrafts.get(comment.id) ?? ""}
+                      onReplyChange={(body) =>
+                        changeReplyDraft(comment.id, body)
+                      }
+                      isReplying={replyPendingCommentIds.has(comment.id)}
+                      onReply={(body) => void sendThreadReply(comment.id, body)}
                       compact={compact}
                       queuePosition={queuePosition}
                       suppressPendingStatus={activeBatchCommentIds.includes(
@@ -5745,10 +6409,12 @@ export const ReviewController = () => {
                     />
                   );
                 },
-                onResolveAll: () =>
-                  setResolvedCommentIds(
-                    new Set([
-                      ...resolvedCommentIds,
+                onResolveAll: () => {
+                  const current = latestReviewStateRef.current.state;
+                  applyLocalReviewState({
+                    drafts: current.drafts,
+                    resolvedCommentIds: new Set([
+                      ...current.resolvedCommentIds,
                       ...unresolvedSent
                         .filter(
                           (comment) =>
@@ -5757,7 +6423,8 @@ export const ReviewController = () => {
                         )
                         .map((comment) => comment.id),
                     ]),
-                  ),
+                  });
+                },
                 onDeleteAll: () =>
                   setPendingDelete({
                     kind: "all",
@@ -5822,6 +6489,77 @@ export const ReviewController = () => {
               >
                 {isSending ? "Sending…" : "Send all comments to agent"}
               </Button>
+              {detachedComposer === null ? null : (
+                <div
+                  className="rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]"
+                  role="status"
+                >
+                  <p className="m-0">
+                    The comment you were writing could not be reattached: its
+                    place in the plan is gone.
+                  </p>
+                  <p className="mt-2 mb-0 whitespace-pre-wrap rounded-sm bg-paper/60 p-2 text-ink [overflow-wrap:anywhere]">
+                    {detachedComposer.body}
+                  </p>
+                  <div className="mt-2 flex justify-end gap-1">
+                    <Button
+                      variant="outline"
+                      size="micro"
+                      onClick={() => {
+                        // A review served over plain http by LAN address is not
+                        // a secure context, so the clipboard API is absent
+                        // rather than merely refusing. The notice already
+                        // offers the text for manual selection.
+                        if (navigator.clipboard === undefined) {
+                          setStatus(RECOVERED_TEXT_COPY_FAILED_STATUS);
+                          return;
+                        }
+                        void navigator.clipboard
+                          .writeText(detachedComposer.body)
+                          .then(
+                            () => setStatus("Recovered comment text copied."),
+                            () => setStatus(RECOVERED_TEXT_COPY_FAILED_STATUS),
+                          );
+                      }}
+                    >
+                      Copy text
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="micro"
+                      onClick={() => {
+                        setDetachedComposer(null);
+                      }}
+                    >
+                      Discard text
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {identity !== null &&
+              (status === STALE_SUBMISSION_STATUS ||
+                !isLiveRecoveryAvailable) ? (
+                <p
+                  className="m-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]"
+                  role="status"
+                >
+                  {status === STALE_SUBMISSION_STATUS ? `${status} ` : ""}
+                  {!isLiveRecoveryAvailable
+                    ? LIVE_RECOVERY_UNAVAILABLE_STATUS
+                    : ""}
+                </p>
+              ) : null}
+              {identity !== null &&
+              recoveryConflicts.length > 0 &&
+              !isRecoveryConflictOpen ? (
+                <Button
+                  variant="outline"
+                  size="micro"
+                  onClick={() => setIsRecoveryConflictOpen(true)}
+                >
+                  Review comment versions
+                </Button>
+              ) : null}
               {identity === null ? (
                 <p className="m-0 text-xs text-support" role="status">
                   {status}
@@ -5985,8 +6723,10 @@ export const ReviewController = () => {
                   setPendingRevert({ requestId, commentId })
                 }
                 currentSnapshot={currentSnapshot}
-                unsavedInputKey={`reply:thread:${comment.id}`}
-                onUnsavedInputChange={onUnsavedInputChange}
+                reply={replyDrafts.get(comment.id) ?? ""}
+                onReplyChange={(body) => changeReplyDraft(comment.id, body)}
+                isReplying={replyPendingCommentIds.has(comment.id)}
+                onReply={(body) => void sendThreadReply(comment.id, body)}
               />
             );
           },
@@ -6062,6 +6802,11 @@ export const ReviewController = () => {
           setComposeBody("");
           setPendingCompose(null);
         }}
+      />
+      <RecoveryConflictDialog
+        conflict={isRecoveryConflictOpen ? recoveryConflicts[0] : undefined}
+        onKeep={answerRecoveryConflict}
+        onDismiss={() => setIsRecoveryConflictOpen(false)}
       />
       <AlertDialog
         open={pendingRevert !== null}

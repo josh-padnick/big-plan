@@ -64,6 +64,2175 @@ test("should keep one staged comment after reloading the live review", async ({
   ).toHaveCount(1);
 });
 
+test("should hydrate when browser recovery storage is blocked", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.addInitScript(() => {
+    const blocked = (): never => {
+      throw new DOMException("Storage is blocked", "SecurityError");
+    };
+    Object.defineProperty(Storage.prototype, "getItem", {
+      configurable: true,
+      value: blocked,
+    });
+    Object.defineProperty(Storage.prototype, "setItem", {
+      configurable: true,
+      value: blocked,
+    });
+  });
+  await page.goto(reviewRuntimeUrl);
+
+  await page.getByRole("button", { name: "Feedback" }).click();
+  await expect(
+    page.getByText(
+      "Browser recovery is unavailable. The live review remains usable, but browser-only drafts cannot be recovered after a reload.",
+    ),
+  ).toBeVisible();
+  const token = await reviewToken(page);
+  const body = "Keep the review usable without browser storage.";
+  await stageComment(page, body);
+  await expect
+    .poll(async () =>
+      (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+        (draft) => draft.body,
+      ),
+    )
+    .toEqual([body]);
+});
+
+test("should disclose a recovery write failure after hydration", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  await page.getByRole("button", { name: "Feedback" }).click();
+  await page.evaluate(() => {
+    Object.defineProperty(Storage.prototype, "setItem", {
+      configurable: true,
+      value: (): never => {
+        throw new DOMException("Storage is blocked", "SecurityError");
+      },
+    });
+  });
+
+  await page.getByRole("button", { name: "Comment on slide" }).first().click();
+  await page
+    .getByRole("dialog", { name: /Comment on/u })
+    .getByLabel("Add a comment")
+    .fill("This text no longer has durable browser recovery.");
+
+  await expect(
+    page.getByText(
+      "Browser recovery is unavailable. The live review remains usable, but browser-only drafts cannot be recovered after a reload.",
+    ),
+  ).toBeVisible();
+});
+
+test("should keep unsent comment text through a reload", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  // Text that is typed but not yet sent has no home on the runtime, so a
+  // reload is the whole test: the reviewer must get back what was on screen.
+  await page.goto(reviewRuntimeUrl);
+  const sentBody = "Send this so the thread has a reply box.";
+  await stageComment(page, sentBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const submission = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submission).ok()).toBe(true);
+
+  const thread = rail.locator("[data-review-sent-thread]").first();
+  await thread
+    .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+    .click();
+  const replyBody = "Keep this half-written reply through the reload.";
+  await thread.getByPlaceholder("Reply to the agent…").fill(replyBody);
+
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  const composerBody = "Keep this half-written comment through the reload.";
+  await composer.getByLabel("Add a comment").fill(composerBody);
+
+  await page.reload();
+
+  await expect(
+    page
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByLabel("Add a comment"),
+  ).toHaveValue(composerBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const restoredThread = page
+    .getByRole("complementary", { name: "Feedback" })
+    .locator("[data-review-sent-thread]")
+    .first();
+  await restoredThread
+    .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+    .click();
+  await expect(
+    restoredThread.getByPlaceholder("Reply to the agent…"),
+  ).toHaveValue(replyBody);
+});
+
+test("should keep reviewer input created while hydration is pending", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const token = await reviewToken(page);
+  const runtimeBody = "Restore this runtime comment around newer input.";
+  await stageComment(page, runtimeBody);
+  await expect
+    .poll(async () =>
+      (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+        (draft) => draft.body,
+      ),
+    )
+    .toEqual([runtimeBody]);
+
+  let releaseHydration = (): void => undefined;
+  const hydrationMayFinish = new Promise<void>((resolve) => {
+    releaseHydration = resolve;
+  });
+  let markHydrationStarted = (): void => undefined;
+  const hydrationStarted = new Promise<void>((resolve) => {
+    markHydrationStarted = resolve;
+  });
+  await page.route(
+    "**/api/drafts",
+    async (route) => {
+      const response = await route.fetch();
+      markHydrationStarted();
+      await hydrationMayFinish;
+      await route.fulfill({ response });
+    },
+    { times: 1 },
+  );
+
+  const reload = page.reload();
+  await hydrationStarted;
+  const stagedWhileLoading = "Keep this comment staged while loading.";
+  await stageComment(page, stagedWhileLoading);
+  const slide = page.locator("[data-slide]").first();
+  await slide.hover();
+  await slide.getByRole("button", { name: "Comment on slide" }).click();
+  const composerBody = "Keep this composer text typed while loading.";
+  await page
+    .getByRole("dialog", { name: /Comment on/u })
+    .getByLabel("Add a comment")
+    .fill(composerBody);
+  releaseHydration();
+  await reload;
+
+  await expect(
+    page
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByLabel("Add a comment"),
+  ).toHaveValue(composerBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await expect(rail).toContainText(runtimeBody);
+  await expect(rail).toContainText(stagedWhileLoading);
+});
+
+test("should keep unsent comment text separate across two tabs", async ({
+  context,
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const sentBody = "Give both tabs the same thread to reply to.";
+  await stageComment(page, sentBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const firstRail = page.getByRole("complementary", { name: "Feedback" });
+  const submission = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await firstRail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submission).ok()).toBe(true);
+
+  const secondPage = await context.newPage();
+  await secondPage.goto(reviewRuntimeUrl);
+
+  const typeAndReload = async ({
+    targetPage,
+    composerBody,
+    replyBody,
+  }: {
+    readonly targetPage: Page;
+    readonly composerBody: string;
+    readonly replyBody: string;
+  }): Promise<void> => {
+    const feedbackButton = targetPage.getByRole("button", {
+      name: /^Feedback(?: \d+)?$/u,
+    });
+    if ((await feedbackButton.getAttribute("aria-expanded")) !== "true") {
+      await feedbackButton.click();
+    }
+    const rail = targetPage.getByRole("complementary", { name: "Feedback" });
+    const thread = rail
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: sentBody });
+    const expandThread = thread.getByRole("button", {
+      name: `Expand queued comment: ${sentBody}`,
+    });
+    await expandThread.click();
+    await thread.getByPlaceholder("Reply to the agent…").fill(replyBody);
+
+    const slide = targetPage.locator("[data-slide]").first();
+    await slide.hover();
+    await slide.getByRole("button", { name: "Comment on slide" }).click();
+    await targetPage
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByLabel("Add a comment")
+      .fill(composerBody);
+
+    await targetPage.reload();
+    await expect(
+      targetPage
+        .getByRole("dialog", { name: /Comment on/u })
+        .getByLabel("Add a comment"),
+    ).toHaveValue(composerBody);
+    await targetPage
+      .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+      .click();
+    const restoredThread = targetPage
+      .getByRole("complementary", { name: "Feedback" })
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: sentBody });
+    await restoredThread
+      .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+      .click();
+    await expect(
+      restoredThread.getByPlaceholder("Reply to the agent…"),
+    ).toHaveValue(replyBody);
+  };
+
+  const firstComposer = "Keep the first tab's composer text.";
+  const firstReply = "Keep the first tab's reply text.";
+  await typeAndReload({
+    targetPage: page,
+    composerBody: firstComposer,
+    replyBody: firstReply,
+  });
+  const secondComposer = "Keep the second tab's composer text.";
+  const secondReply = "Keep the second tab's reply text.";
+  await typeAndReload({
+    targetPage: secondPage,
+    composerBody: secondComposer,
+    replyBody: secondReply,
+  });
+
+  const duplicatePagePromise = context.waitForEvent("page");
+  await page.evaluate((url) => window.open(url, "_blank"), reviewRuntimeUrl);
+  const duplicatePage = await duplicatePagePromise;
+  await duplicatePage.waitForURL(reviewRuntimeUrl);
+  const duplicateComposer = "Keep the duplicated tab's composer text.";
+  const duplicateReply = "Keep the duplicated tab's reply text.";
+  await typeAndReload({
+    targetPage: duplicatePage,
+    composerBody: duplicateComposer,
+    replyBody: duplicateReply,
+  });
+
+  for (const [targetPage, composerBody, replyBody] of [
+    [page, firstComposer, firstReply],
+    [secondPage, secondComposer, secondReply],
+    [duplicatePage, duplicateComposer, duplicateReply],
+  ] as const) {
+    await targetPage.reload();
+    await expect(
+      targetPage
+        .getByRole("dialog", { name: /Comment on/u })
+        .getByLabel("Add a comment"),
+    ).toHaveValue(composerBody);
+    await targetPage
+      .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+      .click();
+    const thread = targetPage
+      .getByRole("complementary", { name: "Feedback" })
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: sentBody });
+    await thread
+      .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+      .click();
+    await expect(thread.getByPlaceholder("Reply to the agent…")).toHaveValue(
+      replyBody,
+    );
+  }
+  await duplicatePage.close();
+  await secondPage.close();
+});
+
+test("should retain detached selection text until the reviewer discards it", async ({
+  context,
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: new URL(reviewRuntimeUrl).origin,
+  });
+  await page.goto(reviewRuntimeUrl);
+  const recoveryKey = await ownedLiveRecoveryKey(page);
+  const recovery = await page
+    .locator("[data-block-kind='paragraph']")
+    .first()
+    .evaluate((block) => {
+      const root = document.documentElement;
+      const text = block.textContent ?? "";
+      return {
+        snapshot: (() => {
+          const bootstrap: unknown = JSON.parse(
+            root.getAttribute("data-review-bootstrap") ?? "{}",
+          );
+          return typeof bootstrap === "object" &&
+            bootstrap !== null &&
+            "currentSnapshot" in bootstrap &&
+            typeof bootstrap.currentSnapshot === "string"
+            ? bootstrap.currentSnapshot
+            : "";
+        })(),
+        target: {
+          type: "selection" as const,
+          blockId: block.getAttribute("data-block-id") ?? "",
+          endBlockId: "missing/paragraph",
+          kind: block.getAttribute("data-block-kind") ?? "paragraph",
+          label: block.getAttribute("data-block-label") ?? "Paragraph",
+          start: 0,
+          end: 1,
+          quote: text.slice(0, 1),
+          isQuoteExcerpt: false,
+        },
+      };
+    });
+  const body = "Do not attach this selection comment to only half its range.";
+  await page.evaluate(
+    ({ key, snapshot, target, recoveredBody }) => {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 11,
+          drafts: [],
+          resolvedCommentIds: [],
+          reconciliation: {
+            base: { draftBodies: {}, resolvedCommentIds: [] },
+            conflicts: [],
+            runtime: null,
+          },
+          composer: {
+            comment: {
+              target,
+              premiseSnapshot: snapshot,
+              body: recoveredBody,
+            },
+            replies: {},
+          },
+        }),
+      );
+    },
+    { ...recovery, key: recoveryKey, recoveredBody: body },
+  );
+
+  await page.reload();
+
+  await expect(page.getByRole("dialog", { name: /Comment on/u })).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const feedback = page.getByRole("complementary", { name: "Feedback" });
+  const detachedNotice = feedback.getByRole("status").filter({
+    hasText:
+      "The comment you were writing could not be reattached: its place in the plan is gone.",
+  });
+  await expect(detachedNotice).toContainText(
+    "The comment you were writing could not be reattached: its place in the plan is gone.",
+  );
+  await expect(detachedNotice).toContainText(body);
+  await detachedNotice.getByRole("button", { name: "Copy text" }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe(body);
+
+  await page.reload();
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const restoredNotice = page
+    .getByRole("complementary", { name: "Feedback" })
+    .getByRole("status")
+    .filter({ hasText: body });
+  await expect(restoredNotice).toContainText(body);
+  await expect
+    .poll(() =>
+      page.evaluate((key) => {
+        const raw = window.localStorage.getItem(key);
+        if (raw === null) return null;
+        const parsed: unknown = JSON.parse(raw);
+        return typeof parsed === "object" &&
+          parsed !== null &&
+          "composer" in parsed &&
+          typeof parsed.composer === "object" &&
+          parsed.composer !== null &&
+          "comment" in parsed.composer &&
+          typeof parsed.composer.comment === "object" &&
+          parsed.composer.comment !== null &&
+          "body" in parsed.composer.comment &&
+          typeof parsed.composer.comment.body === "string"
+          ? parsed.composer.comment.body
+          : null;
+      }, recoveryKey),
+    )
+    .toBe(body);
+
+  await restoredNotice.getByRole("button", { name: "Discard text" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate((key) => {
+        const raw = window.localStorage.getItem(key);
+        if (raw === null) return null;
+        const parsed: unknown = JSON.parse(raw);
+        return typeof parsed === "object" &&
+          parsed !== null &&
+          "composer" in parsed &&
+          typeof parsed.composer === "object" &&
+          parsed.composer !== null &&
+          "comment" in parsed.composer
+          ? parsed.composer.comment
+          : null;
+      }, recoveryKey),
+    )
+    .toBeNull();
+});
+
+test("should share pending reply state across the rail and inline thread", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const sentBody = "Show this thread in both commenting surfaces.";
+  await stageComment(page, sentBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await submitted).ok()).toBe(true);
+
+  const railThread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: sentBody });
+  await railThread
+    .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+    .click();
+  const commentId = await railThread.getAttribute("data-review-comment-id");
+  if (commentId === null) throw new Error("The sent thread has no comment id");
+  const inlineThread = page.locator(
+    `[data-review-thread-for="${commentId}"] [data-review-comment-id="${commentId}"]`,
+  );
+  await inlineThread
+    .getByRole("button", { name: `Expand comment: ${sentBody}` })
+    .click();
+
+  const replyBody = "Only post this shared reply once.";
+  await railThread.getByPlaceholder("Reply to the agent…").fill(replyBody);
+  await expect(
+    inlineThread.getByPlaceholder("Reply to the agent…"),
+  ).toHaveValue(replyBody);
+  let releaseReply = (): void => undefined;
+  const replyMayFinish = new Promise<void>((resolve) => {
+    releaseReply = resolve;
+  });
+  let markReplyStarted = (): void => undefined;
+  const replyStarted = new Promise<void>((resolve) => {
+    markReplyStarted = resolve;
+  });
+  let replyRequests = 0;
+  await page.route("**/api/agent-requests", async (route) => {
+    replyRequests += 1;
+    markReplyStarted();
+    await replyMayFinish;
+    await route.continue();
+  });
+  const replied = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/agent-requests") &&
+      response.request().method() === "POST",
+  );
+
+  await railThread.getByRole("button", { name: "Reply" }).click();
+  await replyStarted;
+  await expect(
+    inlineThread.getByRole("button", { name: "Sending…" }),
+  ).toBeDisabled();
+  const newerReplyBody = "Keep this newer reply text for another send.";
+  await inlineThread
+    .getByPlaceholder("Reply to the agent…")
+    .fill(newerReplyBody);
+  releaseReply();
+  expect((await replied).ok()).toBe(true);
+  expect(replyRequests).toBe(1);
+  await expect(railThread.getByPlaceholder("Reply to the agent…")).toHaveValue(
+    newerReplyBody,
+  );
+  await expect(
+    inlineThread.getByPlaceholder("Reply to the agent…"),
+  ).toHaveValue(newerReplyBody);
+});
+
+/** Reads the reviewer state the runtime holds, outside the browser under test. */
+const readRuntimeDrafts = async (
+  reviewRuntimeUrl: string,
+  token: string,
+): Promise<{
+  readonly version: string;
+  readonly drafts: ReadonlyArray<{
+    readonly id: string;
+    readonly body: string;
+  }>;
+  readonly sent: ReadonlyArray<{
+    readonly id: string;
+    readonly body: string;
+  }>;
+  readonly resolvedCommentIds: ReadonlyArray<string>;
+}> => {
+  const answer: unknown = await (
+    await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
+      headers: { "x-big-plan-review-token": token },
+    })
+  ).json();
+  if (
+    typeof answer !== "object" ||
+    answer === null ||
+    !("version" in answer) ||
+    typeof answer.version !== "string" ||
+    !("drafts" in answer) ||
+    !Array.isArray(answer.drafts) ||
+    !("sent" in answer) ||
+    !Array.isArray(answer.sent) ||
+    !("resolvedCommentIds" in answer) ||
+    !Array.isArray(answer.resolvedCommentIds) ||
+    !answer.resolvedCommentIds.every(
+      (commentId): commentId is string => typeof commentId === "string",
+    )
+  ) {
+    throw new Error("The review runtime did not answer with its drafts");
+  }
+  return {
+    version: answer.version,
+    drafts: answer.drafts as ReadonlyArray<{
+      readonly id: string;
+      readonly body: string;
+    }>,
+    sent: answer.sent as ReadonlyArray<{
+      readonly id: string;
+      readonly body: string;
+    }>,
+    resolvedCommentIds: answer.resolvedCommentIds,
+  };
+};
+
+const writeRuntimeDrafts = async ({
+  reviewRuntimeUrl,
+  token,
+  version,
+  drafts,
+  resolvedCommentIds = [],
+}: {
+  readonly reviewRuntimeUrl: string;
+  readonly token: string;
+  readonly version: string;
+  readonly drafts: ReadonlyArray<unknown>;
+  readonly resolvedCommentIds?: ReadonlyArray<string>;
+}): Promise<void> => {
+  const written = await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      "x-big-plan-review-token": token,
+    },
+    body: JSON.stringify({ drafts, resolvedCommentIds, version }),
+  });
+  expect(written.ok).toBe(true);
+};
+
+/** The plan revision the page was rendered against, as the runtime named it. */
+const currentSnapshot = (page: Page): Promise<string> =>
+  page.evaluate(() => {
+    const bootstrap: unknown = JSON.parse(
+      document.documentElement.getAttribute("data-review-bootstrap") ?? "{}",
+    );
+    return typeof bootstrap === "object" &&
+      bootstrap !== null &&
+      "currentSnapshot" in bootstrap &&
+      typeof bootstrap.currentSnapshot === "string"
+      ? bootstrap.currentSnapshot
+      : "";
+  });
+
+const reviewToken = async (page: Page): Promise<string> => {
+  const token = await page.locator("html").getAttribute("data-review-token");
+  if (token === null) {
+    throw new Error("The review runtime did not expose its request token");
+  }
+  return token;
+};
+
+const ownedLiveRecoveryKey = async (page: Page): Promise<string> => {
+  const readKey = () =>
+    page.locator("html").evaluate((root) => {
+      const prefix = `big-plan:review:live-recovery:${root.dataset.planId ?? ""}:${root.dataset.reviewSession ?? ""}`;
+      const ownerId = window.sessionStorage.getItem(`${prefix}:owner`);
+      return ownerId === null ? "" : `${prefix}:tab:${ownerId}`;
+    });
+  await expect.poll(readKey).not.toBe("");
+  return readKey();
+};
+
+test.describe("a drafts write prepared against content the store moved past", () => {
+  // The refused write is the mechanism under test, and the browser reports a
+  // refusal as a failed resource load.
+  test.use({
+    allowedConsoleErrors: [/Failed to load resource:.*(?:400|409|503)/u],
+  });
+
+  test("should keep each tab's recovery record isolated", async ({
+    context,
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Keep this draft before either tab goes offline.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const secondPagePromise = context.waitForEvent("page");
+    await page.evaluate(() => window.open(window.location.href, "_blank"));
+    const secondPage = await secondPagePromise;
+    await secondPage.waitForLoadState("domcontentloaded");
+    const firstRecoveryKey = await ownedLiveRecoveryKey(page);
+    const secondRecoveryKey = await ownedLiveRecoveryKey(secondPage);
+    expect(secondRecoveryKey).not.toBe(firstRecoveryKey);
+    const storedRecoveryBodies = (
+      targetPage: Page,
+      key: string,
+    ): Promise<string[]> =>
+      targetPage.evaluate((key) => {
+        const raw = window.localStorage.getItem(key);
+        if (raw === null) return [];
+        const parsed: unknown = JSON.parse(raw);
+        return typeof parsed === "object" &&
+          parsed !== null &&
+          "drafts" in parsed &&
+          Array.isArray(parsed.drafts)
+          ? parsed.drafts.flatMap((draft) =>
+              typeof draft === "object" &&
+              draft !== null &&
+              "body" in draft &&
+              typeof draft.body === "string"
+                ? [draft.body]
+                : [],
+            )
+          : [];
+      }, key);
+    const blockRuntimeFetch = (): void => {
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        return url.pathname.startsWith("/api/")
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : runtimeFetch(input, init);
+      };
+    };
+    await page.addInitScript(blockRuntimeFetch);
+    await page.evaluate(blockRuntimeFetch);
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: `Expand staged comment: ${original}` })
+      .click();
+    await rail.getByRole("button", { name: "Edit staged comment" }).click();
+    const offlineBody = "Keep this edit owned only by the offline tab.";
+    await rail.getByLabel("Edit comment").fill(offlineBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    await expect
+      .poll(() => storedRecoveryBodies(page, firstRecoveryKey))
+      .toEqual([offlineBody]);
+
+    const slide = secondPage.locator("[data-slide]").first();
+    await slide.hover();
+    await slide.getByRole("button", { name: "Comment on slide" }).click();
+    const composerBody = "Typing here must not clear another tab's recovery.";
+    await secondPage
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByLabel("Add a comment")
+      .fill(composerBody);
+    await expect
+      .poll(() =>
+        secondPage.evaluate(
+          (key) => window.localStorage.getItem(key),
+          secondRecoveryKey,
+        ),
+      )
+      .toContain(composerBody);
+    await secondPage
+      .getByRole("dialog", { name: /Comment on/u })
+      .getByRole("button", { name: "Cancel" })
+      .click();
+    await expect
+      .poll(() => storedRecoveryBodies(secondPage, firstRecoveryKey))
+      .toEqual([offlineBody]);
+
+    await page.reload();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await expect(
+      page
+        .getByRole("complementary", { name: "Feedback" })
+        .getByText(offlineBody),
+    ).toBeVisible();
+    await secondPage.close();
+  });
+
+  test("should restore each tab's own offline edits", async ({
+    context,
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Keep this shared draft.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const secondPage = await context.newPage();
+    await secondPage.goto(reviewRuntimeUrl);
+    await expect(
+      secondPage.getByRole("button", { name: "Feedback 1" }),
+    ).toBeVisible();
+    const blockRuntimeFetch = (): void => {
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        return url.pathname.startsWith("/api/")
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : runtimeFetch(input, init);
+      };
+    };
+    for (const targetPage of [page, secondPage]) {
+      await targetPage.addInitScript(blockRuntimeFetch);
+      await targetPage.evaluate(blockRuntimeFetch);
+    }
+    const editDraft = async ({
+      targetPage,
+      before,
+      after,
+    }: {
+      readonly targetPage: Page;
+      readonly before: string;
+      readonly after: string;
+    }): Promise<void> => {
+      const feedbackButton = targetPage.getByRole("button", {
+        name: /^Feedback(?: \d+)?$/u,
+      });
+      if ((await feedbackButton.getAttribute("aria-expanded")) !== "true") {
+        await feedbackButton.click();
+      }
+      const rail = targetPage.getByRole("complementary", {
+        name: "Feedback",
+      });
+      await rail
+        .getByRole("button", { name: `Expand staged comment: ${before}` })
+        .click();
+      await rail
+        .locator(".review-staged-card")
+        .filter({ hasText: before })
+        .getByRole("button", { name: "Edit staged comment" })
+        .click();
+      await rail.getByLabel("Edit comment").fill(after);
+      await rail.getByRole("button", { name: "Save" }).click();
+    };
+    const editedX = "Keep the first tab's offline edit.";
+    const editedY = "Keep the second tab's offline edit.";
+    await editDraft({ targetPage: page, before: original, after: editedX });
+    await editDraft({
+      targetPage: secondPage,
+      before: original,
+      after: editedY,
+    });
+    const secondRail = secondPage.getByRole("complementary", {
+      name: "Feedback",
+    });
+    await expect(secondRail.getByText(editedY)).toBeVisible();
+
+    for (const [targetPage, ownEdit] of [
+      [page, editedX],
+      [secondPage, editedY],
+    ] as const) {
+      await targetPage.reload();
+      const feedbackButton = targetPage.getByRole("button", {
+        name: /^Feedback(?: \d+)?$/u,
+      });
+      if ((await feedbackButton.getAttribute("aria-expanded")) !== "true") {
+        await feedbackButton.click();
+      }
+      const rail = targetPage.getByRole("complementary", {
+        name: "Feedback",
+      });
+      await expect(rail.getByText(ownEdit)).toBeVisible();
+    }
+    await secondPage.close();
+  });
+
+  test("should reconcile two tab-owned edits through the runtime once", async ({
+    context,
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Choose one owner for this shared draft.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const secondPage = await context.newPage();
+    await secondPage.goto(reviewRuntimeUrl);
+    const blockRuntimeFetch = (): void => {
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        return url.pathname.startsWith("/api/")
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : runtimeFetch(input, init);
+      };
+    };
+    await page.evaluate(blockRuntimeFetch);
+    const editDraft = async (targetPage: Page, body: string): Promise<void> => {
+      await targetPage
+        .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+        .click();
+      const rail = targetPage.getByRole("complementary", {
+        name: "Feedback",
+      });
+      await rail
+        .getByRole("button", { name: `Expand staged comment: ${original}` })
+        .click();
+      await rail.getByRole("button", { name: "Edit staged comment" }).click();
+      await rail.getByLabel("Edit comment").fill(body);
+      await rail.getByRole("button", { name: "Save" }).click();
+    };
+    const firstBody = "Keep the edit recovered from the first tab.";
+    const secondBody = "Keep the edit accepted from the second tab.";
+    await editDraft(page, firstBody);
+    await editDraft(secondPage, secondBody);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([secondBody]);
+
+    await page.reload();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(firstBody);
+    await expect(choice).toContainText(secondBody);
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(firstBody);
+    await expect(choice).toContainText(secondBody);
+    await choice.getByRole("button", { name: "Keep mine" }).click();
+    await expect(choice).toBeHidden();
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([firstBody]);
+    await page.reload();
+    await expect(choice).toBeHidden();
+    await secondPage.close();
+  });
+
+  test("should keep a concurrent runtime comment when this browser writes", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    // Risk 4: the browser prepares a write, another writer changes the store
+    // first, and the browser's write used to replace it wholesale.
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const before = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const concurrentBody =
+      "Written straight into the runtime, not this browser.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: before.version,
+      drafts: [
+        {
+          id: randomBytes(8).toString("hex"),
+          body: concurrentBody,
+          createdAt: new Date().toISOString(),
+          premiseSnapshot: await currentSnapshot(page),
+          target: { type: "document" },
+        },
+      ],
+    });
+
+    const browserBody = "Staged in this browser after the other write.";
+    await stageComment(page, browserBody);
+
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts
+          .map((draft) => draft.body)
+          .sort(),
+      )
+      .toEqual([browserBody, concurrentBody].sort());
+  });
+
+  test("should ask which version to keep when both sides changed one comment", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    // Risks 2 and 3: without a per-comment base this reappeared as a second
+    // comment nobody wrote, instead of as a question with two real answers.
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Name the rollback owner.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const draft = stored.drafts[0];
+    if (draft === undefined)
+      throw new Error("The staged comment was not stored");
+    const runtimeBody = "Name the rollback owner and the rollback window.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: stored.version,
+      drafts: [
+        {
+          ...draft,
+          body: runtimeBody,
+        },
+      ],
+    });
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: `Expand staged comment: ${original}` })
+      .click();
+    await rail.getByRole("button", { name: "Edit staged comment" }).click();
+    const browserBody = "Name the rollback owner and who signs it off.";
+    await rail.getByLabel("Edit comment").fill(browserBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(browserBody);
+    await expect(choice).toContainText(runtimeBody);
+    await page.keyboard.press("Escape");
+    await expect(choice).toBeHidden();
+    const pendingChoice = rail.getByRole("button", {
+      name: "Review comment versions",
+    });
+    await expect(pendingChoice).toBeVisible();
+    const latestBrowserBody =
+      "Name the rollback owner, approver, and escalation path.";
+    const conflictedCard = rail
+      .locator(".review-staged-card")
+      .filter({ hasText: browserBody });
+    await conflictedCard
+      .getByRole("button", { name: "Edit staged comment" })
+      .click();
+    await rail.getByLabel("Edit comment").fill(latestBrowserBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    // A background persist of the refreshed conflicted draft may not reopen
+    // the dismissed prompt; only the explicit send below asks again.
+    await expect(
+      rail
+        .locator(".review-staged-card")
+        .filter({ hasText: latestBrowserBody }),
+    ).toBeVisible();
+    await expect(choice).toBeHidden();
+    await expect(pendingChoice).toBeVisible();
+    let feedbackWrites = 0;
+    page.on("request", (request) => {
+      if (
+        request.url().endsWith("/api/feedback") &&
+        request.method() === "POST"
+      ) {
+        feedbackWrites += 1;
+      }
+    });
+    await rail
+      .locator(".review-staged-card")
+      .filter({ hasText: latestBrowserBody })
+      .getByRole("button", { name: "Send this" })
+      .click();
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(latestBrowserBody);
+    await expect(choice).not.toContainText(browserBody);
+    expect(feedbackWrites).toBe(0);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (item) => item.body,
+        ),
+      )
+      .toEqual([runtimeBody]);
+    await page.keyboard.press("Escape");
+    await rail.getByRole("button", { name: "Review comment versions" }).click();
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(latestBrowserBody);
+    await expect(choice).not.toContainText(browserBody);
+    await expect(choice).toContainText(runtimeBody);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (item) => item.body,
+        ),
+      )
+      .toEqual([runtimeBody]);
+    await page.reload();
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(latestBrowserBody);
+    await expect(choice).not.toContainText(browserBody);
+    await expect(choice).toContainText(runtimeBody);
+    await choice
+      .getByRole("button", { name: "Use the review session's version" })
+      .click();
+
+    await expect(choice).toBeHidden();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await expect(rail).toContainText(runtimeBody);
+    // Exactly one comment survives: the superseded body is not resurrected.
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (item) => item.body,
+        ),
+      )
+      .toEqual([runtimeBody]);
+    const offlineKey = "big-plan:test:runtime-choice-offline";
+    await page.addInitScript((key) => {
+      let offline: boolean;
+      try {
+        offline = window.sessionStorage.getItem(key) === "true";
+      } catch {
+        return;
+      }
+      if (!offline) return;
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        return url.pathname.startsWith("/api/")
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : runtimeFetch(input, init);
+      };
+    }, offlineKey);
+    await page.evaluate(
+      (key) => window.sessionStorage.setItem(key, "true"),
+      offlineKey,
+    );
+    await page.reload();
+    await expect(choice).toBeHidden();
+  });
+
+  test("should pause unrelated feedback while any conflict is unresolved", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Keep the conflicted runtime body authoritative.";
+    const unrelated = "Do not submit this unrelated comment yet.";
+    await stageComment(page, original);
+    await stageComment(page, unrelated);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original, unrelated]);
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const conflictedDraft = stored.drafts[0];
+    const unrelatedDraft = stored.drafts[1];
+    if (conflictedDraft === undefined || unrelatedDraft === undefined) {
+      throw new Error("Expected two stored drafts");
+    }
+    const recoveryKey = await ownedLiveRecoveryKey(page);
+    const ownerId = recoveryKey.split(":tab:")[1];
+    if (ownerId === undefined) throw new Error("Expected a recovery owner");
+    const localBody = "Keep this unsynchronized local version.";
+    await page.evaluate(
+      ({ key, local, other }) => {
+        const { baseBody, ...localDraft } = local;
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 11,
+            drafts: [localDraft, other],
+            resolvedCommentIds: [],
+            reconciliation: {
+              base: {
+                draftBodies: {
+                  [local.id]: baseBody,
+                  [other.id]: other.body,
+                },
+                resolvedCommentIds: [],
+              },
+              conflicts: [],
+              runtime: null,
+            },
+            composer: { comment: null, replies: {} },
+          }),
+        );
+      },
+      {
+        key: recoveryKey,
+        local: {
+          ...conflictedDraft,
+          body: localBody,
+          baseBody: original,
+        },
+        other: unrelatedDraft,
+      },
+    );
+    const runtimeBody = "Keep this newer runtime version.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: stored.version,
+      drafts: [{ ...conflictedDraft, body: runtimeBody }, unrelatedDraft],
+    });
+
+    await page.reload();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toContainText(localBody);
+    await expect(choice).toContainText(runtimeBody);
+    await page.keyboard.press("Escape");
+    await expect(choice).toBeHidden();
+    const feedbackButton = page.getByRole("button", {
+      name: /^Feedback(?: \d+)?$/u,
+    });
+    if ((await feedbackButton.getAttribute("aria-expanded")) !== "true") {
+      await feedbackButton.click();
+    }
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", {
+        name: `Expand staged comment: ${unrelated}`,
+      })
+      .click();
+    let feedbackWrites = 0;
+    page.on("request", (request) => {
+      if (
+        request.url().endsWith("/api/feedback") &&
+        request.method() === "POST"
+      ) {
+        feedbackWrites += 1;
+      }
+    });
+    await rail
+      .locator(".review-staged-card")
+      .filter({ hasText: unrelated })
+      .getByRole("button", { name: "Send this" })
+      .click();
+    await expect(choice).toBeVisible();
+    expect(feedbackWrites).toBe(0);
+    await expect
+      .poll(async () => {
+        const snapshot = await readRuntimeDrafts(reviewRuntimeUrl, token);
+        return {
+          drafts: snapshot.drafts.map((draft) => draft.body),
+          sent: snapshot.sent.map((comment) => comment.body),
+        };
+      })
+      .toEqual({ drafts: [runtimeBody, unrelated], sent: [] });
+  });
+
+  test("should submit an unsynchronized local edit without a conflict", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Name the owner before submission.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const failedWritesKey = "big-plan:test:failed-unsynchronized-write";
+    await page.evaluate((key) => {
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        const method =
+          init?.method ?? (input instanceof Request ? input.method : "GET");
+        if (
+          url.pathname === "/api/drafts" &&
+          method === "PUT" &&
+          window.sessionStorage.getItem(key) === null
+        ) {
+          window.sessionStorage.setItem(key, "1");
+          return Promise.reject(new TypeError("Failed to fetch"));
+        }
+        return runtimeFetch(input, init);
+      };
+    }, failedWritesKey);
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", { name: `Expand staged comment: ${original}` })
+      .click();
+    await rail.getByRole("button", { name: "Edit staged comment" }).click();
+    const localBody = "Name the owner and escalation contact.";
+    await rail.getByLabel("Edit comment").fill(localBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => Number(window.sessionStorage.getItem(key) ?? "0"),
+          failedWritesKey,
+        ),
+      )
+      .toBe(1);
+
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .locator(".review-staged-card")
+      .filter({ hasText: localBody })
+      .getByRole("button", { name: "Send this" })
+      .click();
+    expect((await submitted).ok()).toBe(true);
+
+    await expect(
+      page.getByRole("alertdialog", {
+        name: "Two versions of this comment",
+      }),
+    ).toBeHidden();
+    await expect
+      .poll(async () => {
+        const snapshot = await readRuntimeDrafts(reviewRuntimeUrl, token);
+        return {
+          drafts: snapshot.drafts.map((draft) => draft.body),
+          sent: snapshot.sent.map((comment) => comment.body),
+        };
+      })
+      .toEqual({ drafts: [], sent: [localBody] });
+  });
+
+  test("should remember conflict answers across failed and offline recovery", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const originalX = "Agreed owner for the rollback.";
+    const originalY = "Agreed window for the rollback.";
+    await stageComment(page, originalX);
+    await stageComment(page, originalY);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([originalX, originalY]);
+
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const draftX = stored.drafts[0];
+    const draftY = stored.drafts[1];
+    if (draftX === undefined || draftY === undefined) {
+      throw new Error("Expected two stored drafts");
+    }
+    const runtimeX = "Runtime owner for the rollback.";
+    const runtimeY = "Runtime window for the rollback.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: stored.version,
+      drafts: [
+        { ...draftX, body: runtimeX },
+        { ...draftY, body: runtimeY },
+      ],
+    });
+
+    let releaseResponse = (): void => undefined;
+    const responseMayFinish = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    let markStaleResponse = (): void => undefined;
+    const staleResponseReachedBrowser = new Promise<void>((resolve) => {
+      markStaleResponse = resolve;
+    });
+    await page.route(
+      "**/api/drafts",
+      async (route) => {
+        const response = await route.fetch();
+        markStaleResponse();
+        await responseMayFinish;
+        await route.fulfill({ response });
+      },
+      { times: 1 },
+    );
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const editDraft = async (before: string, after: string): Promise<void> => {
+      const expand = rail.getByRole("button", {
+        name: `Expand staged comment: ${before}`,
+      });
+      if (await expand.isVisible()) await expand.click();
+      await rail
+        .locator(".review-staged-card")
+        .filter({ hasText: before })
+        .getByRole("button", { name: "Edit staged comment" })
+        .click();
+      await rail.getByLabel("Edit comment").fill(after);
+      await rail.getByRole("button", { name: "Save" }).click();
+    };
+    const localX = "Local owner for the rollback.";
+    const localY = "Local window for the rollback.";
+    await editDraft(originalX, localX);
+    await staleResponseReachedBrowser;
+    await editDraft(originalY, localY);
+    releaseResponse();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toContainText(localX);
+    await expect(choice).toContainText(runtimeX);
+    await choice.getByRole("button", { name: "Keep mine" }).click();
+    await expect(choice).toContainText(localY);
+    await expect(choice).toContainText(runtimeY);
+
+    await page.reload();
+    await expect(choice).toBeVisible();
+    await expect(choice).toContainText(localY);
+    await expect(choice).toContainText(runtimeY);
+    await expect(choice).not.toContainText(localX);
+    await expect(choice).not.toContainText(runtimeX);
+
+    const failedWritesKey = "big-plan:test:failed-recovery-writes";
+    await page.evaluate((key) => {
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        const method =
+          init?.method ?? (input instanceof Request ? input.method : "GET");
+        if (url.pathname === "/api/drafts" && method === "PUT") {
+          const failed = Number(window.sessionStorage.getItem(key) ?? "0");
+          window.sessionStorage.setItem(key, String(failed + 1));
+          return Promise.reject(new TypeError("Failed to fetch"));
+        }
+        return runtimeFetch(input, init);
+      };
+    }, failedWritesKey);
+    await choice.getByRole("button", { name: "Keep mine" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => Number(window.sessionStorage.getItem(key) ?? "0"),
+          failedWritesKey,
+        ),
+      )
+      .toBe(1);
+
+    const offlineKey = "big-plan:test:recovery-offline";
+    await page.addInitScript((key) => {
+      let offline: boolean;
+      try {
+        offline = window.sessionStorage.getItem(key) === "true";
+      } catch {
+        return;
+      }
+      if (!offline) return;
+      const runtimeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(
+          input instanceof Request ? input.url : input,
+          window.location.href,
+        );
+        return url.pathname.startsWith("/api/")
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : runtimeFetch(input, init);
+      };
+    }, offlineKey);
+    await page.evaluate(
+      (key) => window.sessionStorage.setItem(key, "true"),
+      offlineKey,
+    );
+    await page.reload();
+    await expect(choice).toBeHidden();
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    await expect(rail).toContainText(localX);
+    await expect(rail).toContainText(localY);
+    await page.evaluate(
+      (key) => window.sessionStorage.setItem(key, "false"),
+      offlineKey,
+    );
+
+    await page.reload();
+    await expect(choice).toBeHidden();
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([localX, localY]);
+  });
+
+  test("should merge a stale result against the latest browser edit", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const original = "Original queued edit.";
+    await stageComment(page, original);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([original]);
+
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const draft = stored.drafts[0];
+    if (draft === undefined)
+      throw new Error("The staged comment was not stored");
+    const runtimeBody = "Edited by the concurrent runtime.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: stored.version,
+      drafts: [{ ...draft, body: runtimeBody }],
+    });
+
+    let releaseResponse = (): void => undefined;
+    const responseMayFinish = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    let markStaleResponse = (): void => undefined;
+    const staleResponseReachedBrowser = new Promise<void>((resolve) => {
+      markStaleResponse = resolve;
+    });
+    await page.route(
+      "**/api/drafts",
+      async (route) => {
+        const response = await route.fetch();
+        markStaleResponse();
+        await responseMayFinish;
+        await route.fulfill({ response });
+      },
+      { times: 1 },
+    );
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const openEditor = async (body: string): Promise<void> => {
+      const expand = rail.getByRole("button", {
+        name: `Expand staged comment: ${body}`,
+      });
+      if (await expand.isVisible()) await expand.click();
+      const card = rail
+        .locator(".review-staged-card")
+        .filter({ hasText: body });
+      await card.getByRole("button", { name: "Edit staged comment" }).click();
+    };
+    const firstLocalBody = "First browser edit waiting on the stale response.";
+    await openEditor(original);
+    await rail.getByLabel("Edit comment").fill(firstLocalBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    await staleResponseReachedBrowser;
+
+    const latestLocalBody = "Latest browser edit must win the queue race.";
+    await openEditor(firstLocalBody);
+    await rail.getByLabel("Edit comment").fill(latestLocalBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    releaseResponse();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toContainText(latestLocalBody);
+    await expect(choice).not.toContainText(firstLocalBody);
+    await choice.getByRole("button", { name: "Keep mine" }).click();
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (item) => item.body,
+        ),
+      )
+      .toEqual([latestLocalBody]);
+  });
+
+  test("should not submit a captured body after queued reconciliation", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const capturedBody = "Do not send this body after reconciliation.";
+    const unrelatedBody = "Edit this draft to start the queued write.";
+    await stageComment(page, capturedBody);
+    await stageComment(page, unrelatedBody);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts
+          .map((draft) => draft.body)
+          .sort(),
+      )
+      .toEqual([capturedBody, unrelatedBody].sort());
+
+    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const capturedDraft = stored.drafts.find(
+      (draft) => draft.body === capturedBody,
+    );
+    const unrelatedDraft = stored.drafts.find(
+      (draft) => draft.body === unrelatedBody,
+    );
+    if (capturedDraft === undefined || unrelatedDraft === undefined) {
+      throw new Error("Expected both staged comments in the runtime");
+    }
+    const reconciledBody = "Keep this newer runtime body as a draft.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: stored.version,
+      drafts: [{ ...capturedDraft, body: reconciledBody }, unrelatedDraft],
+    });
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    for (const body of [capturedBody, unrelatedBody]) {
+      const expand = rail.getByRole("button", {
+        name: `Expand staged comment: ${body}`,
+      });
+      if (await expand.isVisible()) await expand.click();
+    }
+
+    let releaseResponse = (): void => undefined;
+    const responseMayFinish = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    let markStaleResponse = (): void => undefined;
+    const staleResponseReachedBrowser = new Promise<void>((resolve) => {
+      markStaleResponse = resolve;
+    });
+    await page.route(
+      "**/api/drafts",
+      async (route) => {
+        const response = await route.fetch();
+        markStaleResponse();
+        await responseMayFinish;
+        await route.fulfill({ response });
+      },
+      { times: 1 },
+    );
+
+    const unrelatedCard = rail
+      .locator(".review-staged-card")
+      .filter({ hasText: unrelatedBody });
+    await unrelatedCard
+      .getByRole("button", { name: "Edit staged comment" })
+      .click();
+    const latestUnrelatedBody = "Persist this unrelated browser edit.";
+    await rail.getByLabel("Edit comment").fill(latestUnrelatedBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    await staleResponseReachedBrowser;
+
+    const capturedCard = rail
+      .locator(".review-staged-card")
+      .filter({ hasText: capturedBody });
+    await capturedCard.getByRole("button", { name: "Send this" }).click();
+    releaseResponse();
+
+    await expect(rail).toContainText(
+      "The review changed before submission. Review the latest comments and send again.",
+    );
+    await expect
+      .poll(async () => {
+        const snapshot = await readRuntimeDrafts(reviewRuntimeUrl, token);
+        return {
+          drafts: snapshot.drafts.map((draft) => draft.body).sort(),
+          sent: snapshot.sent.map((comment) => comment.body),
+        };
+      })
+      .toEqual({
+        drafts: [latestUnrelatedBody, reconciledBody].sort(),
+        sent: [],
+      });
+  });
+
+  test("should adopt other submitted comments after sending one draft", async ({
+    context,
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const initial = await readRuntimeDrafts(reviewRuntimeUrl, token);
+    const snapshot = await currentSnapshot(page);
+    const firstBody = "Submit this from the first tab.";
+    const secondBody = "Submit this from the second tab.";
+    const firstComment = {
+      id: randomBytes(8).toString("hex"),
+      body: firstBody,
+      createdAt: new Date().toISOString(),
+      premiseSnapshot: snapshot,
+      target: { type: "document" },
+    };
+    const secondComment = {
+      ...firstComment,
+      id: randomBytes(8).toString("hex"),
+      body: secondBody,
+    };
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: initial.version,
+      drafts: [firstComment, secondComment],
+    });
+    await page.reload();
+    const secondPage = await context.newPage();
+    await secondPage.goto(reviewRuntimeUrl);
+
+    const sendOne = async (targetPage: Page, body: string): Promise<number> => {
+      await targetPage
+        .getByRole("button", { name: /^Feedback(?: \d+)?$/u })
+        .click();
+      const rail = targetPage.getByRole("complementary", { name: "Feedback" });
+      const expand = rail.getByRole("button", {
+        name: `Expand staged comment: ${body}`,
+      });
+      if (await expand.isVisible()) await expand.click();
+      const card = rail
+        .locator(".review-staged-card")
+        .filter({ hasText: body });
+      const submitted = targetPage.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/feedback") &&
+          response.request().method() === "POST",
+      );
+      await card.getByRole("button", { name: "Send this" }).click();
+      return (await submitted).status();
+    };
+
+    expect(await sendOne(secondPage, secondBody)).toBe(200);
+    expect(await sendOne(page, firstBody)).toBe(409);
+
+    const firstRail = page.getByRole("complementary", { name: "Feedback" });
+    await expect(
+      firstRail.locator(".review-staged-card").filter({ hasText: secondBody }),
+    ).toHaveCount(0);
+    await expect(
+      firstRail.locator("[data-review-sent-thread]").filter({
+        hasText: secondBody,
+      }),
+    ).toHaveCount(1);
+    await expect(
+      firstRail.locator(".review-staged-card").filter({ hasText: firstBody }),
+    ).toHaveCount(1);
+    const retry = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    const sendAll = firstRail.getByRole("button", {
+      name: "Send all comments to agent",
+    });
+    await expect(sendAll).toBeEnabled();
+    await sendAll.click();
+    expect((await retry).status()).toBe(200);
+    await secondPage.close();
+  });
+
+  test("should preserve an edit made while feedback is being submitted", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const submittedBody = "Submit this body while its response is delayed.";
+    await stageComment(page, submittedBody);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([submittedBody]);
+
+    let releaseResponse = (): void => undefined;
+    const responseMayFinish = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    let markAccepted = (): void => undefined;
+    const acceptedByRuntime = new Promise<void>((resolve) => {
+      markAccepted = resolve;
+    });
+    await page.route(
+      "**/api/feedback",
+      async (route) => {
+        const response = await route.fetch();
+        markAccepted();
+        await responseMayFinish;
+        await route.fulfill({ response });
+      },
+      { times: 1 },
+    );
+
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", {
+        name: `Expand staged comment: ${submittedBody}`,
+      })
+      .click();
+    const card = rail
+      .locator(".review-staged-card")
+      .filter({ hasText: submittedBody });
+    await card.getByRole("button", { name: "Send this" }).click();
+    await acceptedByRuntime;
+
+    await card.getByRole("button", { name: "Edit staged comment" }).click();
+    const newerBody = "Preserve this newer edit as unsent feedback.";
+    await rail.getByLabel("Edit comment").fill(newerBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    releaseResponse();
+
+    const choice = page.getByRole("alertdialog", {
+      name: "Two versions of this comment",
+    });
+    await expect(choice).toContainText(newerBody);
+    await expect(choice).toContainText(submittedBody);
+    await choice
+      .getByRole("button", { name: "Stage mine as new feedback" })
+      .click();
+
+    await expect
+      .poll(async () => {
+        const snapshot = await readRuntimeDrafts(reviewRuntimeUrl, token);
+        return {
+          drafts: snapshot.drafts.map((draft) => draft.body),
+          sent: snapshot.sent.map((comment) => comment.body),
+        };
+      })
+      .toEqual({ drafts: [newerBody], sent: [submittedBody] });
+    await expect(choice).toBeHidden();
+  });
+
+  test("should reconcile drafts and replies across conditional deletion", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const sentBody = "Delete this queued thread after reconciliation.";
+    await stageComment(page, sentBody);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    expect((await submitted).status()).toBe(200);
+
+    const originalDraft = "The draft another tab will update.";
+    await stageComment(page, originalDraft);
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([originalDraft]);
+    const beforeConcurrentWrite = await readRuntimeDrafts(
+      reviewRuntimeUrl,
+      token,
+    );
+    const sentComment = beforeConcurrentWrite.sent.find(
+      (comment) => comment.body === sentBody,
+    );
+    if (sentComment === undefined) throw new Error("Expected a sent comment");
+    const storedDraft = beforeConcurrentWrite.drafts[0];
+    if (storedDraft === undefined) throw new Error("Expected a stored draft");
+
+    const thread = rail
+      .locator("[data-review-sent-thread]")
+      .filter({ hasText: sentBody });
+    await thread
+      .getByRole("button", { name: `Expand queued comment: ${sentBody}` })
+      .click();
+    const replyBody = "Do not leave this reply behind after deletion.";
+    await thread.getByPlaceholder("Reply to the agent…").fill(replyBody);
+
+    const newerDraft = "The newer draft from the other tab.";
+    await writeRuntimeDrafts({
+      reviewRuntimeUrl,
+      token,
+      version: beforeConcurrentWrite.version,
+      drafts: [{ ...storedDraft, body: newerDraft }],
+    });
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([newerDraft]);
+
+    const deleteOnce = async (): Promise<number> => {
+      await thread
+        .getByRole("button", { name: "Delete queued comment" })
+        .click();
+      const response = page.waitForResponse(
+        (candidate) =>
+          candidate.url().endsWith("/api/comments-delete") &&
+          candidate.request().method() === "POST",
+      );
+      await page
+        .getByRole("alertdialog", { name: "Delete queued comment?" })
+        .getByRole("button", { name: "Delete" })
+        .click();
+      return (await response).status();
+    };
+
+    expect(await deleteOnce()).toBe(409);
+    await expect(rail).toContainText(newerDraft);
+    await expect(thread.getByPlaceholder("Reply to the agent…")).toHaveValue(
+      replyBody,
+    );
+    expect(await deleteOnce()).toBe(200);
+    await expect(thread).toHaveCount(0);
+    const recoveryKey = await ownedLiveRecoveryKey(page);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          ({ expected, key }) => {
+            const raw = window.localStorage.getItem(key);
+            if (raw === null) return { expected, keys: [] };
+            const recovery: unknown = JSON.parse(raw);
+            if (
+              typeof recovery !== "object" ||
+              recovery === null ||
+              !("composer" in recovery) ||
+              typeof recovery.composer !== "object" ||
+              recovery.composer === null ||
+              !("replies" in recovery.composer) ||
+              typeof recovery.composer.replies !== "object" ||
+              recovery.composer.replies === null
+            ) {
+              return { expected, keys: [] };
+            }
+            return {
+              expected,
+              keys: Object.keys(recovery.composer.replies),
+            };
+          },
+          { expected: sentComment.id, key: recoveryKey },
+        ),
+      )
+      .toEqual({ expected: sentComment.id, keys: [] });
+  });
+
+  test("should read a runtime version before writing recovered state", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const token = await reviewToken(page);
+    const identity = await page.locator("html").evaluate((root) => {
+      const bootstrap: unknown = JSON.parse(
+        root.getAttribute("data-review-bootstrap") ?? "{}",
+      );
+      return {
+        planId: root.getAttribute("data-plan-id") ?? "",
+        sessionId: root.getAttribute("data-review-session") ?? "",
+        currentSnapshot:
+          typeof bootstrap === "object" &&
+          bootstrap !== null &&
+          "currentSnapshot" in bootstrap &&
+          typeof bootstrap.currentSnapshot === "string"
+            ? bootstrap.currentSnapshot
+            : "",
+      };
+    });
+    const recoveredBody = "Recovered before the runtime version was known.";
+    const recoveryKey = await ownedLiveRecoveryKey(page);
+    await page.evaluate(
+      ({ identity: storedIdentity, key, body, id }) => {
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 11,
+            drafts: [
+              {
+                id,
+                body,
+                createdAt: "2026-08-10T12:00:00.000Z",
+                premiseSnapshot: storedIdentity.currentSnapshot,
+                target: { type: "document" },
+              },
+            ],
+            resolvedCommentIds: [],
+            reconciliation: {
+              base: { draftBodies: {}, resolvedCommentIds: [] },
+              conflicts: [],
+              runtime: null,
+            },
+            composer: { comment: null, replies: {} },
+          }),
+        );
+      },
+      {
+        identity,
+        key: recoveryKey,
+        body: recoveredBody,
+        id: randomBytes(8).toString("hex"),
+      },
+    );
+    let requestCount = 0;
+    let releasePreflight = (): void => undefined;
+    const preflightMayFinish = new Promise<void>((resolve) => {
+      releasePreflight = resolve;
+    });
+    let markPreflight = (): void => undefined;
+    const preflightStarted = new Promise<void>((resolve) => {
+      markPreflight = resolve;
+    });
+    await page.route(
+      "**/api/drafts",
+      async (route) => {
+        requestCount += 1;
+        if (requestCount === 1) {
+          await route.fulfill({ status: 503, body: "Unavailable once" });
+          return;
+        }
+        const response = await route.fetch();
+        markPreflight();
+        await preflightMayFinish;
+        await route.fulfill({ response });
+      },
+      { times: 2 },
+    );
+
+    await page.reload();
+    await preflightStarted;
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail
+      .getByRole("button", {
+        name: `Expand staged comment: ${recoveredBody}`,
+      })
+      .click();
+    const card = rail
+      .locator(".review-staged-card")
+      .filter({ hasText: recoveredBody });
+    await card.getByRole("button", { name: "Edit staged comment" }).click();
+    const newerBody = "The newest edit made during version recovery.";
+    await rail.getByLabel("Edit comment").fill(newerBody);
+    await rail.getByRole("button", { name: "Save" }).click();
+    releasePreflight();
+
+    await expect
+      .poll(async () =>
+        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
+          (draft) => draft.body,
+        ),
+      )
+      .toEqual([newerBody]);
+  });
+
+  test("should read a runtime version before submitting recovered feedback", async ({
+    page,
+    reviewRuntimeUrl,
+  }) => {
+    await page.goto(reviewRuntimeUrl);
+    const identity = await page.locator("html").evaluate((root) => {
+      const bootstrap: unknown = JSON.parse(
+        root.getAttribute("data-review-bootstrap") ?? "{}",
+      );
+      return {
+        planId: root.getAttribute("data-plan-id") ?? "",
+        sessionId: root.getAttribute("data-review-session") ?? "",
+        currentSnapshot:
+          typeof bootstrap === "object" &&
+          bootstrap !== null &&
+          "currentSnapshot" in bootstrap &&
+          typeof bootstrap.currentSnapshot === "string"
+            ? bootstrap.currentSnapshot
+            : "",
+      };
+    });
+    const recoveredBody = "Submit this after the runtime recovers.";
+    const recoveryKey = await ownedLiveRecoveryKey(page);
+    await page.evaluate(
+      ({ identity: storedIdentity, key, body, id }) => {
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            version: 11,
+            drafts: [
+              {
+                id,
+                body,
+                createdAt: "2026-08-10T12:00:00.000Z",
+                premiseSnapshot: storedIdentity.currentSnapshot,
+                target: { type: "document" },
+              },
+            ],
+            resolvedCommentIds: [],
+            reconciliation: {
+              base: { draftBodies: {}, resolvedCommentIds: [] },
+              conflicts: [],
+              runtime: null,
+            },
+            composer: { comment: null, replies: {} },
+          }),
+        );
+      },
+      {
+        identity,
+        key: recoveryKey,
+        body: recoveredBody,
+        id: randomBytes(8).toString("hex"),
+      },
+    );
+    let draftsReads = 0;
+    await page.route(
+      "**/api/drafts",
+      async (route) => {
+        draftsReads += 1;
+        await route.fulfill({ status: 503, body: "Unavailable during load" });
+      },
+      { times: 2 },
+    );
+
+    await page.reload();
+    await expect.poll(() => draftsReads).toBe(2);
+    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    const submitted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/feedback") &&
+        response.request().method() === "POST",
+    );
+    await rail
+      .getByRole("button", { name: "Send all comments to agent" })
+      .click();
+    const response = await submitted;
+
+    expect(response.status()).toBe(200);
+    const request: unknown = response.request().postDataJSON();
+    expect(request).toMatchObject({ version: expect.any(String) });
+    if (
+      typeof request !== "object" ||
+      request === null ||
+      !("version" in request) ||
+      typeof request.version !== "string"
+    ) {
+      throw new Error("Feedback did not carry a review-state version");
+    }
+    expect(request.version).not.toBe("");
+  });
+});
+
 test("should keep feedback tabs clickable above the mobile contents bar", async ({
   page,
   reviewRuntimeUrl,
@@ -97,7 +2266,7 @@ test("should merge an outage-time draft with newer runtime state", async ({
           : "",
     };
   });
-  const recoveryKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}`;
+  const recoveryKey = await ownedLiveRecoveryKey(page);
   const runtimePaths = new Set([
     "/api/agent",
     "/api/drafts",
@@ -156,6 +2325,13 @@ test("should merge an outage-time draft with newer runtime state", async ({
   if (reviewToken === null) {
     throw new Error("The review runtime did not expose its request token");
   }
+  // A drafts write is conditional on the version it was prepared against, so
+  // another writer reads the current one first.
+  const runtimeVersion: unknown = await (
+    await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
+      headers: { "x-big-plan-review-token": reviewToken },
+    })
+  ).json();
   const runtimeUpdate = await fetch(new URL("/api/drafts", reviewRuntimeUrl), {
     method: "PUT",
     headers: {
@@ -163,6 +2339,12 @@ test("should merge an outage-time draft with newer runtime state", async ({
       "x-big-plan-review-token": reviewToken,
     },
     body: JSON.stringify({
+      version:
+        typeof runtimeVersion === "object" &&
+        runtimeVersion !== null &&
+        "version" in runtimeVersion
+          ? runtimeVersion.version
+          : "",
       drafts: [
         {
           id: randomBytes(8).toString("hex"),

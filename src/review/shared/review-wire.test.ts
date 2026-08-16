@@ -37,7 +37,55 @@ describe("review wire contract", () => {
       drafts: [expect.objectContaining({ id: "aabbccdd" })],
       sent: [],
       resolvedCommentIds: ["11223344"],
+      // State stored before conditional writes existed names no version, and
+      // an empty one is refused rather than accepted as a claim about the
+      // content this state came from.
+      version: "",
     });
+  });
+
+  it("should carry the version a conditional write must be prepared against", () => {
+    expect(
+      decodeReviewSnapshot({
+        drafts: [],
+        sent: [],
+        resolvedCommentIds: [],
+        version: "0123456789abcdef",
+      }).version,
+    ).toBe("0123456789abcdef");
+    expect(
+      decodeReviewSnapshot({ drafts: [], sent: [], resolvedCommentIds: [] })
+        .version,
+    ).toBe("");
+  });
+
+  it("should reject a comment whose target is malformed", () => {
+    expect(
+      decodeReviewSnapshot({
+        drafts: [
+          {
+            id: "aabbccdd",
+            body: "Malformed target",
+            createdAt: "2026-08-10T12:00:00.000Z",
+            premiseSnapshot: "a".repeat(16),
+            target: {
+              type: "selection",
+              blockId: "slide-1",
+              imageBlockIds: [42],
+              kind: "paragraph",
+              label: "Overview",
+              start: 0,
+              end: 1,
+              quote: "A",
+              isQuoteExcerpt: false,
+            },
+          },
+        ],
+        sent: [],
+        resolvedCommentIds: [],
+        version: "0123456789abcdef",
+      }).drafts,
+    ).toEqual([]);
   });
 
   it("should round-trip a server agent snapshot into the browser projection", () => {
