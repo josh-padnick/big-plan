@@ -2016,6 +2016,94 @@ describe("request mailbox", () => {
     ).resolves.toEqual([]);
   });
 
+  it("should let a thread resolve again after its comment is removed from a queued feedback request", async () => {
+    const { store } = await preparedReview();
+    const reopenedId = "4444444444444444";
+    const keptId = "5555555555555555";
+    const request = requestWith([
+      reviewComment({ id: reopenedId, body: "Look at this again." }),
+      reviewComment({ id: keptId, body: "Keep this one queued." }),
+    ]);
+    await writeResolvedCommentIds({ store, ids: [reopenedId] });
+    await ensureAgentRequest({ store, request });
+
+    const updated = await removeCommentFromQueuedFeedbackRequest({
+      store,
+      requestId: request.requestId,
+      commentId: reopenedId,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+    await replaceResolvedCommentIds({
+      store,
+      sessionId,
+      planId,
+      ids: [reopenedId],
+    });
+
+    expect(updated.reopenedCommentIds).toBeUndefined();
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([
+      reopenedId,
+    ]);
+    await expect(
+      readEffectiveResolvedCommentIds({ store, sessionId, planId }),
+    ).resolves.toEqual([reopenedId]);
+  });
+
+  it("should clear a stale stored resolution when a reopened comment is removed from a queued request", async () => {
+    const { store } = await preparedReview();
+    const reopenedId = "4444444444444444";
+    const keptId = "5555555555555555";
+    const request = requestWith([
+      reviewComment({ id: reopenedId, body: "Look at this again." }),
+      reviewComment({ id: keptId, body: "Keep this one queued." }),
+    ]);
+    // Simulate a crash between the reopen record and the resolved-set clear.
+    await writeAgentRequest({
+      store,
+      request: { ...request, reopenedCommentIds: [reopenedId] },
+    });
+    await writeResolvedCommentIds({ store, ids: [reopenedId] });
+
+    await removeCommentFromQueuedFeedbackRequest({
+      store,
+      requestId: request.requestId,
+      commentId: reopenedId,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([]);
+    await expect(
+      readEffectiveResolvedCommentIds({ store, sessionId, planId }),
+    ).resolves.toEqual([]);
+  });
+
+  it("should heal a stale stored resolution when removing the last queued comment cancels the request", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const request = requestWith([
+      reviewComment({ id: commentId, body: "Look at this again." }),
+    ]);
+    // Simulate a crash between the reopen record and the resolved-set clear.
+    await writeAgentRequest({
+      store,
+      request: { ...request, reopenedCommentIds: [commentId] },
+    });
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    const canceled = await removeCommentFromQueuedFeedbackRequest({
+      store,
+      requestId: request.requestId,
+      commentId,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    expect(canceled.canceledAt).toBe("2026-08-10T12:00:01.000Z");
+    await expect(storedResolvedCommentIds(store)).resolves.toEqual([]);
+    await expect(
+      readEffectiveResolvedCommentIds({ store, sessionId, planId }),
+    ).resolves.toEqual([]);
+  });
+
   it("should keep a post-cancel resolve when a canceled message is deleted", async () => {
     const { store } = await preparedReview();
     const commentId = "4444444444444444";

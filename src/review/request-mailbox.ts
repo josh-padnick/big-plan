@@ -16,6 +16,7 @@ import {
 } from "./agent-exchange.js";
 import type {
   AgentChatRequest,
+  AgentExchangeSnapshot,
   AgentFeedbackRequest,
   AgentReplyRequest,
   AgentRequest,
@@ -795,7 +796,13 @@ export const deleteQueuedRequest = async ({
       }),
   });
 
-/** Removes one comment before an agent claims its feedback request. */
+/**
+ * Removes one comment before an agent claims its feedback request. The request
+ * stops being outstanding for the removed thread, so its reopen record is
+ * dropped and any leftover stored resolution is cleared under the resolved
+ * lock, mirroring cancel and delete; removing the last comment cancels the
+ * request with the same heal a direct cancel performs.
+ */
 export const removeCommentFromQueuedFeedbackRequest = async ({
   store,
   requestId,
@@ -807,50 +814,86 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
   readonly commentId: string;
   readonly now: string;
 }): Promise<AgentFeedbackRequest> =>
-  withRequestLock({
+  withResolvedCommentLock({
     store,
-    requestId,
-    change: async (lockedStore) => {
-      const request = await readCurrentRequest({
-        store: lockedStore,
+    change: (resolvedStore) =>
+      withRequestLock({
+        store: resolvedStore,
         requestId,
-      });
-      if (request.kind !== "feedback") {
-        throw new AgentExchangeRejected(
-          "Only a feedback request can remove a queued comment",
-        );
-      }
-      if (agentOwnsRequest(request)) {
-        throw new AgentExchangeRejected(
-          "The agent has already picked up this feedback request",
-        );
-      }
-      if (request.canceledAt !== undefined) return request;
-      const comments = request.comments.filter(
-        (comment) => comment.id !== commentId,
-      );
-      if (comments.length === request.comments.length) {
-        throw new AgentExchangeRejected(
-          "The queued feedback request does not contain this comment",
-        );
-      }
-      const updated = validateAgentRequest(
-        comments.length === 0
-          ? { ...request, canceledAt: now }
-          : { ...request, comments },
-      );
-      if (updated.kind !== "feedback") {
-        throw new AgentExchangeRejected(
-          "Removing a queued comment changed the request kind",
-        );
-      }
-      await writeAgentRequestValue({
-        store: lockedStore,
-        requestId,
-        value: updated,
-      });
-      return updated;
-    },
+        change: async (lockedStore) => {
+          const request = await readCurrentRequest({
+            store: lockedStore,
+            requestId,
+          });
+          if (request.kind !== "feedback") {
+            throw new AgentExchangeRejected(
+              "Only a feedback request can remove a queued comment",
+            );
+          }
+          if (agentOwnsRequest(request)) {
+            throw new AgentExchangeRejected(
+              "The agent has already picked up this feedback request",
+            );
+          }
+          if (request.canceledAt !== undefined) return request;
+          const comments = request.comments.filter(
+            (comment) => comment.id !== commentId,
+          );
+          if (comments.length === request.comments.length) {
+            throw new AgentExchangeRejected(
+              "The queued feedback request does not contain this comment",
+            );
+          }
+          const reopened = request.reopenedCommentIds ?? [];
+          if (comments.length === 0) {
+            await clearResolvedComments({
+              store: lockedStore,
+              commentIds: reopened,
+            });
+            const canceled = validateAgentRequest({
+              ...request,
+              canceledAt: now,
+            });
+            if (canceled.kind !== "feedback") {
+              throw new AgentExchangeRejected(
+                "Removing a queued comment changed the request kind",
+              );
+            }
+            await writeAgentRequestValue({
+              store: lockedStore,
+              requestId,
+              value: canceled,
+            });
+            return canceled;
+          }
+          await clearResolvedComments({
+            store: lockedStore,
+            commentIds: reopened.filter(
+              (reopenedId) => reopenedId === commentId,
+            ),
+          });
+          const remainingReopened = reopened.filter(
+            (reopenedId) => reopenedId !== commentId,
+          );
+          const updated = validateAgentRequest({
+            ...request,
+            comments,
+            reopenedCommentIds:
+              remainingReopened.length === 0 ? undefined : remainingReopened,
+          });
+          if (updated.kind !== "feedback") {
+            throw new AgentExchangeRejected(
+              "Removing a queued comment changed the request kind",
+            );
+          }
+          await writeAgentRequestValue({
+            store: lockedStore,
+            requestId,
+            value: updated,
+          });
+          return updated;
+        },
+      }),
   });
 
 /**
@@ -915,23 +958,26 @@ export const removeResolvedComments = async ({
 /**
  * Stored resolved ids minus any still suppressed by outstanding reopen
  * records. Readers use this so a crash between the request write and the
- * resolved-set write cannot show outstanding work as resolved.
+ * resolved-set write cannot show outstanding work as resolved. A caller that
+ * already holds a freshly read exchange may pass it to skip the second scan.
  */
 export const readEffectiveResolvedCommentIds = async ({
   store,
   sessionId,
   planId,
+  exchange: preReadExchange,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly planId: string;
+  readonly exchange?: AgentExchangeSnapshot;
 }): Promise<ReadonlyArray<string>> => {
   const [stored, exchange] = await Promise.all([
     readResolvedCommentIds({
       store,
       validate: validateResolvedCommentIds,
     }),
-    readAgentExchange({ store, sessionId, planId }),
+    preReadExchange ?? readAgentExchange({ store, sessionId, planId }),
   ]);
   const suppressed = new Set(
     outstandingAgentRequests(exchange).flatMap((request) => [

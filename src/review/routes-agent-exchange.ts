@@ -75,6 +75,7 @@ export const readAgentSnapshot = async (
     store,
     sessionId,
     planId,
+    exchange,
   });
   return jsonResponse({
     status: 200,
