@@ -6,11 +6,17 @@ import type { KeyboardEvent, ReactNode } from "react";
 import type { AgentStatus } from "../shared/agent-status.js";
 import { AgentStatePill } from "./agent-message.browser.js";
 import { ComposeImages } from "./compose-images.browser.js";
+import {
+  reviewWriteBlock,
+  type ReviewWriteAvailability,
+} from "./review-write-availability.js";
 import { Button, Card } from "./ui.browser.js";
 
 export type ChatSurfaceModel = {
   readonly hasRuntime: boolean;
   readonly identity: { readonly token: string } | null;
+  /** Whether a question sent now could still reach the agent. */
+  readonly writeAvailability: ReviewWriteAvailability;
   readonly status: AgentStatus;
   readonly body: string;
   readonly bodyLimit: number;
@@ -30,7 +36,11 @@ export const ChatSurface = ({
 }: {
   readonly model: ChatSurfaceModel;
 }) => {
-  const canSend = model.body.trim() !== "" && !model.isSending;
+  // Asking is a write, so it is held back by the same answer every other
+  // mutation path asks. The typed question stays in the box either way.
+  const block = reviewWriteBlock(model.writeAvailability);
+  const canSend =
+    model.body.trim() !== "" && !model.isSending && block === undefined;
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (canSend && (event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
@@ -69,6 +79,7 @@ export const ChatSurface = ({
             </div>
             <ComposeImages
               identity={model.identity}
+              writeAvailability={model.writeAvailability}
               id="review-agent-chat"
               label="Plan-wide chat"
               placeholder="Ask about the plan as a whole…"
@@ -82,12 +93,17 @@ export const ChatSurface = ({
                 variant="outline"
                 size="sm"
                 disabled={!canSend}
-                data-tooltip={`Send · ${model.shortcutLabel}`}
+                data-tooltip={block?.cause ?? `Send · ${model.shortcutLabel}`}
                 data-tooltip-delay="1s"
                 onClick={model.onSend}
               >
                 {model.isSending ? "Sending…" : "Send"}
               </Button>
+              {block === undefined ? null : (
+                <span className="text-2xs font-semibold text-danger">
+                  {block.label}
+                </span>
+              )}
             </div>
           </div>
           {model.hasExchanges ? (

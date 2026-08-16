@@ -1,4 +1,14 @@
 // Owns the review view's comment-submit availability and user-facing reason.
+// Why a write cannot land is not this module's question: it defers to the
+// shared write-availability predicate so the composer and every other mutation
+// path blame the same condition in the same words.
+
+import {
+  reviewWriteBlock,
+  reviewWriteBlockedStatus,
+  reviewWritePathOutcome,
+  type ReviewWriteAvailability,
+} from "./review-write-availability.js";
 
 export type ReviewCommentSubmitAvailability =
   | { readonly state: "available" }
@@ -9,42 +19,31 @@ export type ReviewCommentSubmitAvailability =
       readonly status: string;
     };
 
+/** What becomes of a comment the reviewer cannot send yet. */
+const COMMENT_OUTCOME = reviewWritePathOutcome("submit-comment");
+
 export const deriveReviewCommentSubmitAvailability = ({
   canSubmit,
-  runtimeCanWrite,
-  writesStalled = false,
+  writeAvailability,
 }: {
   readonly canSubmit: boolean;
-  readonly runtimeCanWrite: boolean;
-  /** The runtime is answering but has stopped accepting changes (BIG-44). */
-  readonly writesStalled?: boolean;
+  readonly writeAvailability: ReviewWriteAvailability;
 }): ReviewCommentSubmitAvailability => {
   if (canSubmit) return { state: "available" };
-  // A stalled runtime is not offline, and waiting will not fix it: this is the
-  // one unavailable state whose recovery is an action the reviewer must take.
-  if (runtimeCanWrite && writesStalled) {
+  const block = reviewWriteBlock(writeAvailability);
+  // Writes can land, so the runtime is not what is missing: the agent is.
+  if (block === undefined) {
     return {
       state: "unavailable",
-      reason: "review-runtime",
-      label: "Review session stalled",
-      status:
-        "The review session has stopped accepting changes. Your comment is saved; restart the review runtime to send it.",
-    };
-  }
-  if (!runtimeCanWrite) {
-    return {
-      state: "unavailable",
-      reason: "review-runtime",
-      label: "Review session offline",
-      status:
-        "The review session is offline. Your comment is saved and can be sent after reconnecting.",
+      reason: "agent",
+      label: "Agent disconnected",
+      status: `Agent disconnected. ${COMMENT_OUTCOME} It can be sent after reconnecting.`,
     };
   }
   return {
     state: "unavailable",
-    reason: "agent",
-    label: "Agent disconnected",
-    status:
-      "Agent disconnected. Your comment is saved and can be sent after reconnecting.",
+    reason: "review-runtime",
+    label: block.label,
+    status: reviewWriteBlockedStatus({ block, outcome: COMMENT_OUTCOME }),
   };
 };

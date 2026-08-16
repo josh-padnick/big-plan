@@ -132,7 +132,6 @@ import {
   INITIAL_REVIEW_POLL_HEALTH,
   reviewPollIsOffline,
   reviewRuntimeAcceptsWrites,
-  reviewRuntimeCanWrite,
   reviewRuntimeDownSinceMs,
   reviewRuntimeIsDown,
   transitionReviewPollHealth,
@@ -140,6 +139,12 @@ import {
   type ReviewPollResult,
 } from "./review-poll-health.js";
 import { reviewEndReason, type ReviewEndReason } from "./review-expiry.js";
+import {
+  reviewWriteAvailability,
+  reviewWriteBlock,
+  reviewWriteRefusal,
+  type ReviewWriteAvailability,
+} from "./review-write-availability.js";
 import {
   isReviewRuntimeRefusal,
   isReviewRuntimeUnavailable,
@@ -1981,6 +1986,7 @@ const CommentComposer = ({
   inline,
   submitRightAway,
   identity,
+  writeAvailability,
   submitAvailability,
   onCancel,
   onBodyChange,
@@ -1993,6 +1999,7 @@ const CommentComposer = ({
   readonly inline: boolean;
   readonly submitRightAway: boolean;
   readonly identity: RuntimeIdentity | null;
+  readonly writeAvailability: ReviewWriteAvailability;
   readonly submitAvailability: ReviewCommentSubmitAvailability;
   readonly onCancel: () => void;
   readonly onBodyChange: (body: string) => void;
@@ -2079,6 +2086,7 @@ const CommentComposer = ({
         </p>
         <ComposeImages
           identity={identity}
+          writeAvailability={writeAvailability}
           autoFocus
           label="Add a comment"
           textareaClassName="bg-input!"
@@ -3015,6 +3023,7 @@ const SentThread = ({
   onReplyChange,
   isReplying,
   onReply,
+  writeAvailability,
   compact = false,
   queuePosition,
   suppressPendingStatus = false,
@@ -3046,6 +3055,8 @@ const SentThread = ({
   readonly onReplyChange: (body: string) => void;
   readonly isReplying: boolean;
   readonly onReply: (body: string) => void;
+  /** Whether a reply, delete, revert, or cancel from this thread can land. */
+  readonly writeAvailability: ReviewWriteAvailability;
   readonly compact?: boolean;
   readonly queuePosition?: number;
   readonly suppressPendingStatus?: boolean;
@@ -3125,6 +3136,10 @@ const SentThread = ({
       ? "Delete canceled comment"
       : "Delete queued comment";
 
+  // Every control in this thread that writes - replying, deleting, reverting,
+  // and canceling - is held back by the same answer, so a reviewer is told the
+  // session cannot take a change before acting rather than after.
+  const replyBlock = reviewWriteBlock(writeAvailability);
   const sendReply = (bodyOverride?: string) => {
     const body = (bodyOverride ?? reply).trim();
     if (identity === null || body === "") return;
@@ -3670,6 +3685,7 @@ const SentThread = ({
             <ComposeImages
               id={`reply-${comment.id}`}
               identity={identity}
+              writeAvailability={writeAvailability}
               label="Reply to the agent"
               textareaClassName="mt-1 min-h-20"
               body={reply}
@@ -3683,11 +3699,22 @@ const SentThread = ({
                 }
               }}
             />
-            <div className="mt-2 flex justify-end">
-              <Tooltip label={`Reply · ${MODIFIER_SHORTCUT}`}>
+            <div className="mt-2 flex items-center justify-end gap-2">
+              {replyBlock === undefined ? null : (
+                <span className="text-2xs font-semibold text-danger">
+                  {replyBlock.label}
+                </span>
+              )}
+              <Tooltip
+                label={replyBlock?.cause ?? `Reply · ${MODIFIER_SHORTCUT}`}
+              >
                 <Button
                   size="compact"
-                  disabled={reply.trim() === "" || isReplying}
+                  disabled={
+                    reply.trim() === "" ||
+                    isReplying ||
+                    replyBlock !== undefined
+                  }
                   onClick={() => void sendReply()}
                 >
                   {isReplying ? "Sending…" : "Reply"}
@@ -3931,7 +3958,6 @@ export const ReviewController = () => {
     events: agent.connectionLog,
   });
   const agentConnected = agentConnection.connected;
-  const runtimeCanWrite = reviewRuntimeCanWrite(pollHealth);
   // Reachability and acceptance are different questions once a runtime can
   // stall: every write path asks this one, so the page stops sending changes
   // the runtime has already reported it will refuse.
@@ -3939,15 +3965,31 @@ export const ReviewController = () => {
     health: pollHealth,
     writesStalledMs: runtimeSession?.writesStalledMs,
   });
+  // The one answer every explicit mutation path consults before submitting.
+  // Memoized because handlers and effects depend on it, and a fresh object per
+  // render would re-run the writers this is meant to hold back.
+  const writeAvailability = useMemo(
+    () =>
+      reviewWriteAvailability({
+        hasReviewSession: identity !== null,
+        health: pollHealth,
+        writesStalledMs: runtimeSession?.writesStalledMs,
+        authoritative: runtimeSession?.authoritative,
+      }),
+    [
+      identity,
+      pollHealth,
+      runtimeSession?.authoritative,
+      runtimeSession?.writesStalledMs,
+    ],
+  );
   const canSendToAgent =
     identity !== null &&
     threadRuntime === "online" &&
-    runtimeAcceptsWrites &&
-    runtimeSession?.authoritative !== false;
+    writeAvailability.state === "available";
   const commentSubmitAvailability = deriveReviewCommentSubmitAvailability({
     canSubmit: identity === null || canSendToAgent,
-    runtimeCanWrite,
-    writesStalled: !runtimeAcceptsWrites && runtimeCanWrite,
+    writeAvailability,
   });
   const unresolvedDrafts = useMemo(
     () => drafts.filter((comment) => !resolvedCommentIds.has(comment.id)),
@@ -4242,13 +4284,20 @@ export const ReviewController = () => {
   }, []);
   const sendThreadReply = useCallback(
     async (commentId: string, body: string): Promise<void> => {
-      if (
-        identity === null ||
-        body === "" ||
-        replyPendingCommentIdsRef.current.has(commentId)
-      ) {
+      if (body === "" || replyPendingCommentIdsRef.current.has(commentId)) {
         return;
       }
+      // The reply text is owned above this handler and is only cleared on
+      // success, so refusing here keeps every typed character.
+      const refusal = reviewWriteRefusal({
+        path: "reply",
+        availability: writeAvailability,
+      });
+      if (refusal !== undefined) {
+        setStatus(refusal);
+        return;
+      }
+      if (identity === null) return;
       const pending = new Set(replyPendingCommentIdsRef.current).add(commentId);
       replyPendingCommentIdsRef.current = pending;
       setReplyPendingCommentIds(pending);
@@ -4272,7 +4321,7 @@ export const ReviewController = () => {
         setReplyPendingCommentIds(remaining);
       }
     },
-    [changeReplyDraft, identity],
+    [changeReplyDraft, identity, writeAvailability],
   );
   const acceptAgentSnapshot = useCallback((snapshot: AgentSnapshot) => {
     setHasObservedAgentSnapshot(true);
@@ -5150,8 +5199,7 @@ export const ReviewController = () => {
       if (!canSendToAgent || identity === null) {
         const availability = deriveReviewCommentSubmitAvailability({
           canSubmit: false,
-          runtimeCanWrite,
-          writesStalled: !runtimeAcceptsWrites && runtimeCanWrite,
+          writeAvailability,
         });
         if (availability.state === "unavailable") {
           setStatus(availability.status);
@@ -5269,9 +5317,8 @@ export const ReviewController = () => {
       canSendToAgent,
       identity,
       reconcileAuthoritativeReviewSnapshot,
-      runtimeAcceptsWrites,
-      runtimeCanWrite,
       serializeReviewerStateWrite,
+      writeAvailability,
     ],
   );
 
@@ -5411,6 +5458,17 @@ export const ReviewController = () => {
     setStatus("All staged comments deleted.");
   };
   const deleteSentComment = async (commentId: string) => {
+    const refusal = reviewWriteRefusal({
+      path: "delete-comment",
+      availability: writeAvailability,
+    });
+    if (refusal !== undefined) {
+      // Close the confirmation too: leaving it up would invite a second click
+      // at a runtime that has already said it cannot take the first.
+      setPendingDelete(null);
+      setStatus(refusal);
+      return;
+    }
     if (identity === null) return;
     // Close the confirmation and say what is happening before the round-trip.
     // Leaving the dialog up until the runtime answers reads as a dead button,
@@ -5492,7 +5550,17 @@ export const ReviewController = () => {
     }
   };
   const revertAgentChanges = async () => {
-    if (identity === null || pendingRevert === null) return;
+    if (pendingRevert === null) return;
+    const refusal = reviewWriteRefusal({
+      path: "revert-changes",
+      availability: writeAvailability,
+    });
+    if (refusal !== undefined) {
+      setPendingRevert(null);
+      setStatus(refusal);
+      return;
+    }
+    if (identity === null) return;
     const revert = pendingRevert;
     // Same reason as deletion: acknowledge the confirmed action immediately,
     // then let the refreshed plan or the error message report how it went.
@@ -5551,11 +5619,17 @@ export const ReviewController = () => {
 
   const sendChat = async () => {
     const body = chatBody.trim();
-    if (identity === null) {
-      setStatus("Start `big-plan review` to ask the coding agent.");
+    if (body === "") return;
+    // The chat box is only cleared once the runtime has taken the question.
+    const refusal = reviewWriteRefusal({
+      path: "chat",
+      availability: writeAvailability,
+    });
+    if (refusal !== undefined) {
+      setStatus(refusal);
       return;
     }
-    if (body === "") return;
+    if (identity === null) return;
     setIsSendingChat(true);
     try {
       await requestJson({
@@ -5577,6 +5651,16 @@ export const ReviewController = () => {
   };
 
   const cancelRequest = async (requestId: string) => {
+    const refusal = reviewWriteRefusal({
+      path: "cancel-request",
+      availability: writeAvailability,
+    });
+    if (refusal !== undefined) {
+      // Never mark the request cancel-pending here: the runtime has not been
+      // asked, so showing it as canceling would be a lie the page never undoes.
+      setStatus(refusal);
+      return;
+    }
     if (identity === null) return;
     setCancelPendingRequestIds((current) => new Set([...current, requestId]));
     try {
@@ -6401,6 +6485,7 @@ export const ReviewController = () => {
                       }
                       isReplying={replyPendingCommentIds.has(comment.id)}
                       onReply={(body) => void sendThreadReply(comment.id, body)}
+                      writeAvailability={writeAvailability}
                       compact={compact}
                       queuePosition={queuePosition}
                       suppressPendingStatus={activeBatchCommentIds.includes(
@@ -6438,6 +6523,7 @@ export const ReviewController = () => {
               model={{
                 hasRuntime: identity !== null,
                 identity,
+                writeAvailability,
                 status: agentStatus,
                 body: chatBody,
                 bodyLimit: BODY_LIMIT,
@@ -6727,6 +6813,7 @@ export const ReviewController = () => {
                 onReplyChange={(body) => changeReplyDraft(comment.id, body)}
                 isReplying={replyPendingCommentIds.has(comment.id)}
                 onReply={(body) => void sendThreadReply(comment.id, body)}
+                writeAvailability={writeAvailability}
               />
             );
           },
@@ -6744,6 +6831,7 @@ export const ReviewController = () => {
           body={composeBody}
           submitRightAway={submitRightAway}
           identity={identity}
+          writeAvailability={writeAvailability}
           submitAvailability={commentSubmitAvailability}
           onCancel={() => {
             setCompose(null);
@@ -6767,6 +6855,7 @@ export const ReviewController = () => {
             body={composeBody}
             submitRightAway={submitRightAway}
             identity={identity}
+            writeAvailability={writeAvailability}
             submitAvailability={commentSubmitAvailability}
             onCancel={() => {
               setCompose(null);
