@@ -871,7 +871,12 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         message.type() === "error" &&
         !allowedConsoleErrors.some((allowed) => allowed.test(message.text()))
       ) {
-        renderHealthErrors.push(message.text());
+        // A failed resource load logs only a status line, so the offending
+        // URL has to come from the message location to be diagnosable.
+        const url = message.location().url;
+        renderHealthErrors.push(
+          url === "" ? message.text() : `${message.text()} (${url})`,
+        );
       }
     });
     page.on("pageerror", (error) => {
