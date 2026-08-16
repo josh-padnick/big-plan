@@ -133,7 +133,6 @@ describe("review wire contract", () => {
       agentCommand: "big-plan agent /tmp/plan.mdx",
       recoveryPrompt: "Reconnect this review",
       resolvedCommentIds: [],
-      threadReopenStates: [],
     });
 
     expect(decodeAgentSnapshot(encoded)).toMatchObject({
@@ -149,11 +148,10 @@ describe("review wire contract", () => {
       connectionLog: [{ eventId: "event-1", connected: true }],
       plan: "/tmp/plan.mdx",
       resolvedCommentIds: [],
-      threadReopenStates: [],
     });
   });
 
-  it("should carry effective resolved ids and reopen records on the agent poll", () => {
+  it("should carry effective resolved ids and request reopen records on the agent poll", () => {
     const encoded = encodeAgentSnapshot({
       currentSnapshot: "a".repeat(16),
       presence: { connected: false, state: "waiting" },
@@ -173,12 +171,10 @@ describe("review wire contract", () => {
       agentCommand: "big-plan agent /tmp/plan.mdx",
       recoveryPrompt: "Reconnect this review",
       resolvedCommentIds: [],
-      threadReopenStates: [{ commentId: "comment-1" }],
     });
 
     expect(decodeAgentSnapshot(encoded)).toMatchObject({
       resolvedCommentIds: [],
-      threadReopenStates: [{ commentId: "comment-1" }],
       requests: [
         expect.objectContaining({
           reopenedCommentIds: ["comment-1"],
@@ -257,7 +253,6 @@ describe("review wire contract", () => {
       agentCommand: "big-plan agent /tmp/plan.mdx",
       recoveryPrompt: "Reconnect this review",
       resolvedCommentIds: [],
-      threadReopenStates: [],
     });
 
     const decoded = decodeAgentSnapshot(encoded);
@@ -290,7 +285,6 @@ describe("review wire contract", () => {
       agentCommand: "big-plan agent /tmp/plan.mdx",
       recoveryPrompt: "Reconnect this review",
       resolvedCommentIds: [],
-      threadReopenStates: [],
     });
 
     expect(decodeAgentSnapshot(encoded).requests).toEqual([]);

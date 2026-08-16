@@ -8,7 +8,6 @@ import {
 } from "./agent-model.js";
 import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
-import type { ThreadReopenState } from "./thread-reopen.js";
 
 export type ReviewSnapshot = {
   readonly drafts: ReadonlyArray<ReviewComment>;
@@ -89,7 +88,6 @@ export type AgentSnapshot = {
   readonly agentCommand: string;
   readonly recoveryPrompt: string;
   readonly resolvedCommentIds: ReadonlyArray<string>;
-  readonly threadReopenStates: ReadonlyArray<ThreadReopenState>;
 };
 
 export type ProgressEvent = {
@@ -192,7 +190,6 @@ export type AgentSnapshotSource = {
   readonly agentCommand: string;
   readonly recoveryPrompt: string;
   readonly resolvedCommentIds: ReadonlyArray<string>;
-  readonly threadReopenStates: ReadonlyArray<ThreadReopenState>;
 };
 
 export type RuntimeSessionSource = {
@@ -269,7 +266,6 @@ export const emptyAgentSnapshot = (): AgentSnapshot => ({
   agentCommand: "",
   recoveryPrompt: "",
   resolvedCommentIds: [],
-  threadReopenStates: [],
 });
 
 /** Encodes the runtime-owned exchange in the shape consumed by the browser. */
@@ -489,14 +485,6 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
     resolvedCommentIds: Array.isArray(value.resolvedCommentIds)
       ? value.resolvedCommentIds.filter(
           (id): id is string => typeof id === "string",
-        )
-      : [],
-    threadReopenStates: Array.isArray(value.threadReopenStates)
-      ? value.threadReopenStates.flatMap(
-          (entry): ReadonlyArray<ThreadReopenState> =>
-            isReviewWireRecord(entry) && typeof entry.commentId === "string"
-              ? [{ commentId: entry.commentId }]
-              : [],
         )
       : [],
   };

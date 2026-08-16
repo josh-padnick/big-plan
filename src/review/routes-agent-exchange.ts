@@ -40,7 +40,6 @@ import {
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
-import { projectThreadReopenStates } from "./shared/thread-reopen.js";
 
 const appendProgressBestEffort = async ({
   context,
@@ -72,8 +71,6 @@ export const readAgentSnapshot = async (
   }
   const presence = await readAgentPresence({ store, sessionId });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
-  const sent = await context.planRenderer.readStoredComments(store.sentPath);
-  const currentCommentIds = new Set(sent.map((comment) => comment.id));
   const resolvedCommentIds = await readEffectiveResolvedCommentIds({
     store,
     sessionId,
@@ -95,10 +92,6 @@ export const readAgentSnapshot = async (
       requests: exchange.requests,
       responses: exchange.responses,
       resolvedCommentIds,
-      threadReopenStates: projectThreadReopenStates({
-        requests: exchange.requests,
-        currentCommentIds,
-      }),
     }),
   });
 };

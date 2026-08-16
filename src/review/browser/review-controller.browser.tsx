@@ -4348,8 +4348,10 @@ export const ReviewController = () => {
           requests: snapshot.requests,
         }),
       );
+      const latest = latestReviewStateRef.current;
+      if (persistedReviewStateRef.current !== latest.fingerprint) return;
       applyReviewState({
-        drafts: latestReviewStateRef.current.state.drafts,
+        drafts: latest.state.drafts,
         resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
       });
     },
