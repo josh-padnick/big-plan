@@ -4339,7 +4339,10 @@ export const ReviewController = () => {
     [applyLocalReviewState, changeReplyDraft, identity, writeAvailability],
   );
   const acceptAgentSnapshot = useCallback(
-    (snapshot: AgentSnapshot) => {
+    (
+      snapshot: AgentSnapshot,
+      pollStartedFingerprint?: string | null,
+    ) => {
       setHasObservedAgentSnapshot(true);
       setAgent(snapshot);
       setCancelPendingRequestIds((current) =>
@@ -4349,7 +4352,18 @@ export const ReviewController = () => {
         }),
       );
       const latest = latestReviewStateRef.current;
-      if (persistedReviewStateRef.current !== latest.fingerprint) return;
+      const persisted = persistedReviewStateRef.current;
+      // A poll GET is issued against whatever the runtime held at start.
+      // After a later write lands, persisted matches latest again, so the
+      // stall guard alone would apply that stale set. Require the fingerprint
+      // captured when this poll started.
+      if (persisted !== latest.fingerprint) return;
+      if (
+        pollStartedFingerprint !== undefined &&
+        persisted !== pollStartedFingerprint
+      ) {
+        return;
+      }
       applyReviewState({
         drafts: latest.state.drafts,
         resolvedCommentIds: new Set(snapshot.resolvedCommentIds),
@@ -4987,6 +5001,7 @@ export const ReviewController = () => {
     const refresh = async () => {
       if (pending) return;
       pending = true;
+      const pollStartedFingerprint = persistedReviewStateRef.current;
       const sessionSequence = runtimeSessionOrder.issueRequest();
       // Stamp before requests so aggregate latency cannot move contact loss past
       // a remembered deadline. The shared order owner applies only the latest
@@ -5024,7 +5039,10 @@ export const ReviewController = () => {
           }
           const now = Date.now();
           if (agentResult.status === "fulfilled") {
-            acceptAgentSnapshot(parseAgentSnapshot(agentResult.value));
+            acceptAgentSnapshot(
+              parseAgentSnapshot(agentResult.value),
+              pollStartedFingerprint,
+            );
             setLastObservableAgentAtMs(now);
           } else {
             failures.push(agentResult.reason);
