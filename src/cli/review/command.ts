@@ -25,12 +25,13 @@ import {
   DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
   startReviewRuntime,
 } from "../../review/server.js";
+import { ReviewCustodyHeld } from "../../review/session-authority.js";
 import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { reviewIdleDurationLabel } from "../../review/shared/review-lifetime.js";
 import { renderDocument } from "../../render/render-document.js";
 
 const USAGE =
-  "Usage: big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]";
+  "Usage: big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]";
 
 const reviewArguments = (
   args: ReadonlyArray<string>,
@@ -42,7 +43,7 @@ const reviewArguments = (
   let idleMinutes = DEFAULT_REVIEW_IDLE_TIMEOUT_MS / 60_000;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === "--diff-preview") continue;
+    if (argument === "--diff-preview" || argument === "--takeover") continue;
     if (argument === "--idle-timeout") {
       const value = args[index + 1];
       const parsed = Number(value);
@@ -78,6 +79,7 @@ export const reviewCommand = async (
   // Temporary development chrome: keep the product contract independent of
   // this gallery seed so the flag can disappear without a migration.
   const diffPreview = args.includes("--diff-preview");
+  const takeover = args.includes("--takeover");
   const parsedArguments = reviewArguments(args);
   const { inputPath } = parseInputCommandArguments({
     args: parsedArguments.positional,
@@ -100,6 +102,7 @@ export const reviewCommand = async (
     runtime = await startReviewRuntime({
       planPath: inputPath,
       idleTimeoutMs: parsedArguments.idleTimeoutMs,
+      takeover,
       ...(diffPreview
         ? {
             diffPreviewSource: await readFile(
@@ -115,6 +118,24 @@ export const reviewCommand = async (
         : {}),
     });
   } catch (error: unknown) {
+    // Custody is held, not broken. Starting a second runtime here is what would
+    // break something, so report the address already serving this plan and
+    // leave that session, its open page, and its connected agent untouched.
+    if (error instanceof ReviewCustodyHeld) {
+      return {
+        review: error.live.url,
+        plan: error.live.plan,
+        session: error.live.sessionId,
+        custody: "held",
+        help: [
+          ...warnings,
+          `A live review runtime already serves this plan at ${error.live.url} (session ${error.live.sessionId}, process ${error.live.pid})`,
+          `Open ${error.live.url} in your browser to review and comment`,
+          "No second runtime started, so that session's open page and connected agent keep working",
+          `Run \`big-plan review ${quoteShellArgument(error.live.plan)} --takeover\` only to replace it; the live session keeps listening but loses write custody, so its open page and connected agent go read-only until each moves to the new address`,
+        ],
+      };
+    }
     throw new AxiError(
       `Cannot start the review runtime: ${String(error)}`,
       "INTERNAL_ERROR",
@@ -156,8 +177,14 @@ export const reviewCommand = async (
     plan: runtime.planPath,
     session: runtime.sessionId,
     feedback: runtime.store.feedbackDirectory,
+    custody: runtime.replacedSession === undefined ? "activated" : "seized",
     help: [
       ...warnings,
+      ...(runtime.replacedSession === undefined
+        ? []
+        : [
+            `Took custody with --takeover from the live session ${runtime.replacedSession.sessionId} at ${runtime.replacedSession.url}; that session's open page and connected agent are now read-only until each moves to this address`,
+          ]),
       `Open ${runtime.url} in your browser to review and comment`,
       "Comments stay on this machine; Send writes a feedback package under .big-plan/feedback/",
       `In another terminal, run \`big-plan agent ${quoteShellArgument(runtime.planPath)}\`, then run its returned codex or claude command`,
