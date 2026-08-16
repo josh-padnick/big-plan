@@ -5843,13 +5843,20 @@ ${reorderedWorkspace}
     await test.step("shrink the maximized frame by height, not just width", async () => {
       await maximize.click();
       await expect(snapshot).toHaveAttribute("data-figure-maximized", "");
-      await page.setViewportSize({ width: 1855, height: 1200 });
       const readZoom = () =>
         highlightedScreen.evaluate((node) => {
           const frame = node.querySelector<HTMLElement>(".wireframe-frame");
           return Number.parseFloat(frame?.style.zoom || "1");
         });
-      await expect.poll(readZoom).toBeGreaterThan(0);
+      // The refit after a viewport resize is asynchronous, so anchor each
+      // zoom read to a change from the previous fit: first the sub-1 fit for
+      // the 600px-tall viewport, then a strictly larger fit once both axes
+      // grow. Reading tallZoom before that refit lands captures the stale
+      // 600px fit and inverts the final comparison.
+      await expect.poll(readZoom).toBeLessThan(1);
+      const initialZoom = await readZoom();
+      await page.setViewportSize({ width: 1855, height: 1200 });
+      await expect.poll(readZoom).toBeGreaterThan(initialZoom);
       const tallZoom = await readZoom();
       await page.setViewportSize({ width: 1855, height: 700 });
       await expect.poll(readZoom).toBeLessThan(tallZoom);
