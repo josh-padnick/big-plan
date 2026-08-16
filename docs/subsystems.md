@@ -50,7 +50,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 **Problem set.** The browser, the loopback server, and the agent stay connected and honest about liveness, and no message is ever lost, double-processed, or run inside a resolved thread.
 
-**Code anchors.** `src/review/server.ts`, `src/review/review-route-context.ts`, `src/review/routes-*.ts`, `src/review/runtime-watchdog.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, `src/review/agent-work-loop.ts`, `src/review/agent-exchange.ts`, `src/review/browser/review-poll-health.ts`, `src/review/browser/review-runtime-request.ts`, `src/review/shared/agent-status.ts`, `src/cli/review/command.ts`, `src/cli/agent/`.
+**Code anchors.** `src/review/server.ts`, `src/review/review-route-context.ts`, `src/review/routes-*.ts`, `src/review/runtime-watchdog.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, `src/review/agent-work-loop.ts`, `src/review/agent-exchange.ts`, `src/review/review-state-version.ts`, `src/review/browser/review-poll-health.ts`, `src/review/browser/review-runtime-request.ts`, `src/review/browser/review-recovery-merge.ts`, `src/review/browser/review-recovery-storage.browser.ts`, `src/review/shared/agent-status.ts`, `src/cli/review/command.ts`, `src/cli/agent/`.
 
 **Boundary rules.**
 
