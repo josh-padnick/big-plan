@@ -66,7 +66,7 @@ is styled by its owning module, not here.
      normal: the approved plan title reads better upright, and the captain's
      preference outranks the book's rule for tightening large type. */
   article :is(h1, h2, h3, h4, h5, h6)[data-authored-prose] {
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     margin: 2rem 0 0.75rem;
   }
   article h1[data-authored-prose] {
@@ -155,7 +155,7 @@ is styled by its owning module, not here.
     max-width: 100%;
     height: auto;
     margin: 0 0 1rem;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-lg);
     background: var(--raised-c);
     box-shadow: var(--elevation-raised);
   }
@@ -171,7 +171,7 @@ is styled by its owning module, not here.
      has to track whatever text the code interrupts. */
   article code[data-authored-prose] {
     background: var(--color-surface);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     padding: 0.1em 0.35em;
   }
   /* A fenced block is an inset code surface, not a slab. The diff hunk ground
@@ -181,7 +181,7 @@ is styled by its owning module, not here.
   article pre[data-authored-prose] {
     background: var(--diff-hunk-bg);
     border: 1px solid var(--color-edge);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     padding: 1rem 1.5rem;
     overflow-x: auto;
     font-size: var(--text-sm);
@@ -202,7 +202,7 @@ is styled by its owning module, not here.
     margin: 0 0 1rem;
     padding: 0.75rem 1rem 0.75rem 2.5rem;
     border-left: 3px solid var(--color-accent);
-    border-radius: 0 0.5rem 0.5rem 0;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
     background: var(--color-surface);
     color: var(--color-muted);
   }
@@ -301,7 +301,7 @@ is styled by its owning module, not here.
   }
   article th[data-authored-prose] {
     background: var(--color-surface);
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
   }
   article
     tbody[data-authored-prose]
@@ -329,7 +329,7 @@ is styled by its owning module, not here.
     border-bottom: 0;
     padding-bottom: 0;
     font-size: var(--text-2xs);
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     letter-spacing: var(--tracking-caps);
     text-transform: uppercase;
     color: var(--color-subtle);

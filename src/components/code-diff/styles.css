@@ -121,7 +121,7 @@
     display: inline-block;
     width: 1.25ch;
     content: " ";
-    font-weight: 700;
+    font-weight: var(--font-weight-bold);
     user-select: none;
   }
   article [data-diff-line="add"] {

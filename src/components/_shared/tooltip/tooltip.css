@@ -24,12 +24,12 @@ loses nothing when the hint never renders.
     right: 0;
     z-index: 50;
     padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
+    border-radius: var(--radius-sm);
     background: var(--ink-c);
     color: var(--bg);
     font-family: var(--font-sans);
     font-size: 0.6875rem;
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     line-height: 1.35;
     white-space: nowrap;
     pointer-events: none;
