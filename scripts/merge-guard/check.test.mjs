@@ -315,6 +315,73 @@ test("should report unresolved when the comparison cannot read a repository obje
   }
 });
 
+test("should report unresolved when the merge computation breaks without a conflict", async () => {
+  const root = await createRepo();
+  try {
+    await put(
+      root,
+      "src/shared.ts",
+      "export const top = 'fork';\nexport const middle = 'calm';\nexport const bottom = 'fork';\n",
+    );
+    await commit(root, "feat: add the shared module\n\nThe fork-point state.");
+    await git(root, "checkout", "--quiet", "-b", "feature");
+    await put(
+      root,
+      "src/shared.ts",
+      "export const top = 'branch';\nexport const middle = 'calm';\nexport const bottom = 'fork';\n",
+    );
+    await commit(root, "feat: edit the top\n\nThe branch edits one end.");
+    await git(root, "checkout", "--quiet", "main");
+    await put(
+      root,
+      "src/shared.ts",
+      "export const top = 'fork';\nexport const middle = 'calm';\nexport const bottom = 'main';\n",
+    );
+    await commit(root, "feat: edit the bottom\n\nMain edits the other end.");
+    await git(root, "checkout", "--quiet", "feature");
+
+    // Remove the fork-point blob so the merge computation itself dies with a
+    // fatal read error instead of a conflict. The guard must not call that a
+    // conflict and skip.
+    const baseBlob = (
+      await git(root, "rev-parse", "main~1:src/shared.ts")
+    ).stdout.trim();
+    await rm(
+      join(root, ".git", "objects", baseBlob.slice(0, 2), baseBlob.slice(2)),
+      { force: true },
+    );
+
+    const result = await checkMergeGuard({ repoRoot: root });
+    assert.equal(result.status, "unresolved");
+    assert.match(result.reason, /git merge-tree --write-tree/);
+    assert.match(result.reason, /exit code 128/);
+    assert.match(result.reason, /cannot judge/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("should skip when the merge with main genuinely has conflicts", async () => {
+  const root = await createRepo();
+  try {
+    await put(root, "src/shared.ts", "export const shared = 'fork';\n");
+    await commit(root, "feat: add the shared module\n\nThe fork-point state.");
+    await git(root, "checkout", "--quiet", "-b", "feature");
+    await put(root, "src/shared.ts", "export const shared = 'branch';\n");
+    await commit(root, "feat: rework the shared module\n\nThe branch side.");
+    await git(root, "checkout", "--quiet", "main");
+    await put(root, "src/shared.ts", "export const shared = 'main';\n");
+    await commit(root, "feat: rework the shared module\n\nThe main side.");
+    await git(root, "checkout", "--quiet", "feature");
+
+    const result = await checkMergeGuard({ repoRoot: root });
+    assert.equal(result.status, "skipped");
+    assert.match(result.reason, /conflicts/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("should fail with the fork point named when the branch reverts a file it edits while main changed it", async () => {
   const { root, forkPoint } = await buildTouchedRevertLoss();
   try {

@@ -37,8 +37,12 @@
 //
 // The check reads git only. It never calls the GitHub API, so it works the
 // same on a push-triggered CI run, on a fork, and on a laptop. Every git call
-// whose failure could hide a loss fails closed: the check reports
-// "unresolved" and exits non-zero instead of passing on a broken comparison.
+// whose failure could hide a loss fails closed, without exception: the check
+// reports "unresolved" and exits non-zero instead of passing on a broken
+// comparison. Only one condition skips the comparison: a merge that genuinely
+// has conflicts, which git merge-tree reports with exit code 1. Every other
+// merge-tree failure, such as exit code 129 from a git too old to know
+// --write-tree, or a spawn failure with no exit code, is "unresolved".
 //
 // What this check does NOT catch, by design:
 //   - A landing that re-authors a file with stale content. PR #117 (dbb48d80)
@@ -116,7 +120,14 @@ const gitOrThrow = async (repoRoot, args, operation) => {
 const splitNul = (stdout) =>
   stdout === null ? [] : stdout.split("\0").filter((entry) => entry !== "");
 
-/** Reports whether ancestor is reachable from descendant. */
+/** Reads the exit code from a failed child process, or null when it never exited. */
+const exitCodeOf = (error) =>
+  typeof error?.code === "number" ? error.code : null;
+
+/**
+ * Reports whether ancestor is reachable from descendant. git answers no with
+ * exit code 1; any other failure throws GitFailure so the check fails closed.
+ */
 const isAncestor = async (repoRoot, ancestor, descendant) => {
   try {
     await run("git", [
@@ -128,8 +139,16 @@ const isAncestor = async (repoRoot, ancestor, descendant) => {
       descendant,
     ]);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    const exitCode = exitCodeOf(error);
+    if (exitCode === 1) {
+      return false;
+    }
+    throw new GitFailure(
+      exitCode === null
+        ? `run "git merge-base --is-ancestor"`
+        : `run "git merge-base --is-ancestor" (exit code ${exitCode})`,
+    );
   }
 };
 
@@ -169,11 +188,20 @@ const resolveResultTree = async (repoRoot, mainCommit, headCommit) => {
       { maxBuffer: 64 * 1024 * 1024 },
     );
     return { tree: stdout.split("\n")[0].trim(), reason: null };
-  } catch {
-    return {
-      tree: null,
-      reason: "the merge with main has conflicts, so no result tree exists yet",
-    };
+  } catch (error) {
+    const exitCode = exitCodeOf(error);
+    if (exitCode === 1) {
+      return {
+        tree: null,
+        reason:
+          "the merge with main has conflicts, so no result tree exists yet",
+      };
+    }
+    throw new GitFailure(
+      exitCode === null
+        ? `run "git merge-tree --write-tree"`
+        : `run "git merge-tree --write-tree" (exit code ${exitCode})`,
+    );
   }
 };
 
@@ -433,20 +461,20 @@ export const checkMergeGuard = async ({
   if (headCommit === main.commit) {
     return { status: "skipped", reason: `the head is ${main.ref} itself` };
   }
-  if (await isAncestor(root, headCommit, main.commit)) {
-    return {
-      status: "skipped",
-      reason: `the head is already merged into ${main.ref}`,
-    };
-  }
 
   try {
+    if (await isAncestor(root, headCommit, main.commit)) {
+      return {
+        status: "skipped",
+        reason: `the head is already merged into ${main.ref}`,
+      };
+    }
     return await compareResultAgainstMain(root, main, headCommit);
   } catch (error) {
     if (error instanceof GitFailure) {
       return {
         status: "unresolved",
-        reason: `${error.message}, so the guard cannot compare this branch against ${main.ref}.`,
+        reason: `${error.message}, so the guard cannot judge this branch against ${main.ref}.`,
       };
     }
     throw error;
