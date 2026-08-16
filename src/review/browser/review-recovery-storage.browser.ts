@@ -6,7 +6,9 @@
 // it, read once at hydration. Records are never scanned, merged, or adopted
 // across tabs: the runtime is the only place two tabs reconcile, and making
 // them converge with each other while both are offline needs causal versions
-// and cross-tab serialization that belong to issue #99, not here.
+// and cross-tab serialization that belong to issue #99, not here. The one
+// exception is dropping records no path here can read; see
+// pruneUnreadableRecoveryRecords.
 
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { isStoredCommentTarget } from "../shared/comment.js";
