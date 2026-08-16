@@ -11,6 +11,34 @@ The workflow is intentionally light:
 - **Checks.** Run `bun run lint`, `bun run build`, `bun run test`, and `bun run test:e2e` before opening a pull request; CI enforces the same checks on branches pushed to this repository.
 - **License.** Big Plan is [MIT](LICENSE) licensed; contributions are accepted under the same license.
 
+## Do not overwrite merged work
+
+A pull request must not remove work that is already on `main`.
+CI runs a merge guard on every push (`scripts/merge-guard/check.mjs`, also available as `bun run check:merge-guard`).
+The guard enforces one rule: the merge result may differ from `main` only in files that the branch's own non-merge commits touch.
+
+The guard fails when a file changes with no commit on the branch to explain the change.
+This happens most often when a contributor merges `main` into a long-lived branch and resolves the conflicts by hand.
+A bad resolution keeps the branch's older version, so a landed feature disappears and Git records no deletion.
+
+When the guard fails, it names each file, the commit on `main` that owns it, and the number of lines at risk.
+Repair the branch in one of two ways.
+
+1. **Restore the work.** Run the `git checkout main -- <paths>` command that the failure prints, then commit the result.
+2. **Declare the removal.** Remove the work on purpose and record the decision in a commit trailer on the branch:
+
+   ```text
+   Overwrites-main: <path> [<path> ...]
+   ```
+
+   Put the reason in the commit body, and name the pull request or commit whose work you remove.
+   Any commit on the branch may carry the trailer, and a branch may carry several.
+   Paths must be exact and repository-relative; the guard accepts no wildcards, so each removal stays visible to a reviewer.
+   The failure message prints a ready `git commit --allow-empty` command with the correct trailer lines.
+
+The guard is deliberately narrow to keep false alarms near zero.
+The file header in `scripts/merge-guard/check.mjs` states what it does not catch, such as partial loss inside a file that the branch also edits.
+
 ## Styling changes
 
 There is no pixel-history CI gate and no visual contract in commit subjects.
