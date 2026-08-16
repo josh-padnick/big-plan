@@ -164,6 +164,29 @@ const readSessionToken = async (target: ReviewRuntime): Promise<string> => {
 const draftsVersion = async (): Promise<string> =>
   draftsVersionOf(runtime, token);
 
+type IsolatedCall = (input: {
+  readonly path: string;
+  readonly method?: string;
+  readonly body?: unknown;
+}) => Promise<Response>;
+
+/** Reads the version an isolated runtime's next reviewer-state write needs. */
+const isolatedReviewStateVersion = async (
+  isolatedCall: IsolatedCall,
+): Promise<string> => {
+  const snapshot: unknown = await (
+    await isolatedCall({ path: "/api/drafts" })
+  ).json();
+  const version =
+    typeof snapshot === "object" && snapshot !== null
+      ? (snapshot as { readonly version?: unknown }).version
+      : undefined;
+  if (typeof version !== "string" || version === "") {
+    throw new Error("The drafts snapshot carried no version");
+  }
+  return version;
+};
+
 const uploadImage = (bytes: Uint8Array = TINY_PNG) =>
   fetch(`${runtime.url.replace(/\/$/u, "")}/api/review-images`, {
     method: "POST",
@@ -1175,10 +1198,11 @@ describe("review runtime feedback", () => {
       planId: runtime.planId,
     });
     expect(
-      nextPendingAgentRequest(exchange, {
-        claimedBy: runtime.sessionId,
-        nowMs: Date.now(),
-      }),
+      exchange.requests.find(
+        (candidate) =>
+          candidate.kind === "feedback" &&
+          candidate.comments.some((entry) => entry.id === "55667788"),
+      ),
     ).toMatchObject({
       kind: "feedback",
       comments: [{ id: "55667788" }],
@@ -2061,11 +2085,15 @@ The dashboard shows the retry backlog.
         premiseSnapshot: deriveSnapshotDigest(baseline),
         target: { type: "document" as const },
       };
+      // This block's helper only speaks POST, so the conditional-write version
+      // is read straight from the isolated runtime.
+      const isolatedVersion = (): Promise<string> =>
+        draftsVersionOf(isolated, isolatedToken);
       expect(
         (
           await isolatedCall({
             path: "/api/feedback",
-            body: { comments: [comment] },
+            body: { comments: [comment], version: await isolatedVersion() },
           })
         ).status,
       ).toBe(200);
@@ -2135,7 +2163,7 @@ The dashboard shows the retry backlog.
         (
           await isolatedCall({
             path: "/api/comments-delete",
-            body: { commentId: comment.id },
+            body: { commentId: comment.id, version: await isolatedVersion() },
           })
         ).status,
       ).toBe(200);
@@ -2350,29 +2378,16 @@ describe("review runtime resolve invariant", () => {
     return request.requestId;
   };
 
-  const resolveWrite = async (
-    isolatedCall: (input: {
-      readonly path: string;
-      readonly method?: string;
-      readonly body?: unknown;
-    }) => Promise<Response>,
-  ): Promise<Response> => {
-    const snapshot: unknown = await (
-      await isolatedCall({ path: "/api/drafts" })
-    ).json();
-    return isolatedCall({
+  const resolveWrite = async (isolatedCall: IsolatedCall): Promise<Response> =>
+    isolatedCall({
       path: "/api/drafts",
       method: "PUT",
       body: {
         drafts: [],
         resolvedCommentIds: [commentId],
-        version:
-          typeof snapshot === "object" && snapshot !== null
-            ? (snapshot as { readonly version?: unknown }).version
-            : "",
+        version: await isolatedReviewStateVersion(isolatedCall),
       },
     });
-  };
 
   it("should refuse a drafts write that resolves a comment with a queued message", async () => {
     const { isolated, isolatedCall, close } = await isolatedRuntime(
@@ -2384,7 +2399,10 @@ describe("review runtime resolve invariant", () => {
           await isolatedCall({
             path: "/api/feedback",
             method: "POST",
-            body: { comments: [comment] },
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
           })
         ).status,
       ).toBe(200);
@@ -2415,7 +2433,10 @@ describe("review runtime resolve invariant", () => {
           await isolatedCall({
             path: "/api/feedback",
             method: "POST",
-            body: { comments: [comment] },
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
           })
         ).status,
       ).toBe(200);
@@ -2457,7 +2478,10 @@ describe("review runtime resolve invariant", () => {
           await isolatedCall({
             path: "/api/feedback",
             method: "POST",
-            body: { comments: [comment] },
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
           })
         ).status,
       ).toBe(200);

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "../shared/comment.js";
 import {
-  adoptLiveReviewRecovery,
   mergeLiveReviewRecovery,
   mergeReviewStateAfterHydration,
   refreshReviewRecoveryConflicts,
@@ -11,7 +10,6 @@ import {
   reviewRecoveryBase,
   reviewRecoveryBaseAfterConflictAnswers,
 } from "./review-recovery-merge.js";
-import type { LiveReviewRecovery } from "./review-recovery-merge.js";
 
 const comment = (id: string, body: string): ReviewComment => ({
   id,
@@ -25,17 +23,6 @@ const state = (
   drafts: ReadonlyArray<ReviewComment>,
   resolvedCommentIds: ReadonlyArray<string> = [],
 ) => ({ drafts, resolvedCommentIds: new Set(resolvedCommentIds) });
-
-const recovery = ({
-  base,
-  drafts,
-}: {
-  readonly base: ReturnType<typeof reviewRecoveryBase>;
-  readonly drafts: ReadonlyArray<ReviewComment>;
-}): LiveReviewRecovery => ({
-  ...state(drafts),
-  reconciliation: { base, conflicts: [], runtime: null },
-});
 
 describe("live review recovery merge", () => {
   it("should keep reviewer state created while hydration is pending", () => {
@@ -73,40 +60,6 @@ describe("live review recovery merge", () => {
         restored: state([comment("deleted", "runtime")]),
       }).drafts,
     ).toEqual([]);
-  });
-
-  it("should offer an orphaned tab's unsynchronized draft before applying it", () => {
-    const agreed = state([comment("c1", "agreed")]);
-    const merged = adoptLiveReviewRecovery({
-      recovery: recovery({
-        base: reviewRecoveryBase(agreed),
-        drafts: [comment("c1", "recovered")],
-      }),
-      runtime: agreed,
-    });
-
-    expect(merged.state.drafts).toEqual([comment("c1", "recovered")]);
-    expect(merged.conflicts).toEqual([
-      {
-        kind: "draft",
-        commentId: "c1",
-        localBody: "recovered",
-        runtimeBody: "agreed",
-      },
-    ]);
-  });
-
-  it("should not offer unchanged work adopted from an orphaned tab", () => {
-    const agreed = state([comment("c1", "agreed")]);
-    const merged = adoptLiveReviewRecovery({
-      recovery: recovery({
-        base: reviewRecoveryBase(agreed),
-        drafts: agreed.drafts,
-      }),
-      runtime: agreed,
-    });
-
-    expect(merged.conflicts).toEqual([]);
   });
 
   it("should report a conflict when both sides changed the same comment", () => {
@@ -542,24 +495,6 @@ describe("live review recovery merge", () => {
 
     expect(resolved.drafts).toEqual([comment("c2", "edited here")]);
     expect([...resolved.resolvedCommentIds]).toEqual(["c1"]);
-  });
-
-  it("should offer an adopted deletion against authoritative runtime state", () => {
-    const agreed = state([comment("c1", "agreed")]);
-    const merged = adoptLiveReviewRecovery({
-      recovery: recovery({ base: reviewRecoveryBase(agreed), drafts: [] }),
-      runtime: agreed,
-    });
-
-    expect(merged.state.drafts).toEqual([]);
-    expect(merged.conflicts).toEqual([
-      {
-        kind: "draft",
-        commentId: "c1",
-        localBody: null,
-        runtimeBody: "agreed",
-      },
-    ]);
   });
 
   it("should remove reply text when its sent thread is deleted", () => {

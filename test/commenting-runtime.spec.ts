@@ -422,14 +422,10 @@ test("should retain detached selection text until the reviewer discards it", asy
   const body = "Do not attach this selection comment to only half its range.";
   await page.evaluate(
     ({ key, snapshot, target, recoveredBody }) => {
-      const ownerId = key.slice(key.lastIndexOf(":") + 1);
       window.localStorage.setItem(
         key,
         JSON.stringify({
-          version: 10,
-          ownerId,
-          updatedAtMs: Date.now(),
-          pendingAdoption: null,
+          version: 11,
           drafts: [],
           resolvedCommentIds: [],
           reconciliation: {
@@ -1008,449 +1004,6 @@ test.describe("a drafts write prepared against content the store moved past", ()
     await secondPage.close();
   });
 
-  test("should offer unsynchronized work adopted from a closed tab", async ({
-    page,
-    reviewRuntimeUrl,
-  }) => {
-    await page.goto(reviewRuntimeUrl);
-    const currentRecoveryKey = await ownedLiveRecoveryKey(page);
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (key) => window.localStorage.getItem(key),
-          currentRecoveryKey,
-        ),
-      )
-      .toBeNull();
-    const identity = await page.locator("html").evaluate((root) => ({
-      planId: root.dataset.planId ?? "",
-      sessionId: root.dataset.reviewSession ?? "",
-      snapshot: (() => {
-        const bootstrap: unknown = JSON.parse(
-          root.getAttribute("data-review-bootstrap") ?? "{}",
-        );
-        return typeof bootstrap === "object" &&
-          bootstrap !== null &&
-          "currentSnapshot" in bootstrap &&
-          typeof bootstrap.currentSnapshot === "string"
-          ? bootstrap.currentSnapshot
-          : "";
-      })(),
-    }));
-    const recoveredBody = "Offer this draft left by the closed tab.";
-    const composerBody = "Restore this composer left by the closed tab.";
-    const orphanOwnerId = randomBytes(8).toString("hex");
-    const orphanKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}:tab:${orphanOwnerId}`;
-    await page.evaluate(
-      ({ key, ownerId, snapshot, recovered, composer }) => {
-        window.localStorage.setItem(
-          key,
-          JSON.stringify({
-            version: 10,
-            ownerId,
-            updatedAtMs: Date.now(),
-            pendingAdoption: null,
-            drafts: [
-              {
-                id: "orphan-comment",
-                body: recovered,
-                createdAt: "2026-08-15T12:00:00.000Z",
-                premiseSnapshot: snapshot,
-                target: { type: "document" },
-              },
-            ],
-            resolvedCommentIds: [],
-            reconciliation: {
-              base: { draftBodies: {}, resolvedCommentIds: [] },
-              conflicts: [],
-              runtime: null,
-            },
-            composer: {
-              comment: {
-                target: { type: "document" },
-                premiseSnapshot: snapshot,
-                body: composer,
-              },
-              replies: {},
-            },
-          }),
-        );
-      },
-      {
-        key: orphanKey,
-        ownerId: orphanOwnerId,
-        snapshot: identity.snapshot,
-        recovered: recoveredBody,
-        composer: composerBody,
-      },
-    );
-
-    await page.reload();
-
-    const choice = page.getByRole("alertdialog", {
-      name: "Two versions of this comment",
-    });
-    await expect(choice).toContainText(recoveredBody);
-    await expect(
-      page
-        .getByRole("dialog", { name: /Comment on/u })
-        .getByLabel("Add a comment"),
-    ).toHaveValue(composerBody);
-    await choice.getByRole("button", { name: "Keep mine" }).click();
-    await expect(choice).toBeHidden();
-    await page.reload();
-    await expect(choice).toBeHidden();
-    await page.getByRole("button", { name: "Feedback 1" }).click();
-    await expect(
-      page
-        .getByRole("complementary", { name: "Feedback" })
-        .getByText(recoveredBody),
-    ).toBeVisible();
-    await expect
-      .poll(() =>
-        page.evaluate((key) => window.localStorage.getItem(key), orphanKey),
-      )
-      .not.toBeNull();
-  });
-
-  test("should clear synchronized adoption and offer each later orphan once", async ({
-    page,
-    reviewRuntimeUrl,
-  }) => {
-    await page.goto(reviewRuntimeUrl);
-    const token = await reviewToken(page);
-    const runtimeBody = "Keep this runtime draft after reviewing an orphan.";
-    await stageComment(page, runtimeBody);
-    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
-    const runtimeDraft = stored.drafts[0];
-    if (runtimeDraft === undefined)
-      throw new Error("expected one runtime draft");
-    const currentRecoveryKey = await ownedLiveRecoveryKey(page);
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (key) => window.localStorage.getItem(key),
-          currentRecoveryKey,
-        ),
-      )
-      .toBeNull();
-    const identity = await page.locator("html").evaluate((root) => ({
-      planId: root.dataset.planId ?? "",
-      sessionId: root.dataset.reviewSession ?? "",
-      snapshot: (() => {
-        const bootstrap: unknown = JSON.parse(
-          root.getAttribute("data-review-bootstrap") ?? "{}",
-        );
-        return typeof bootstrap === "object" &&
-          bootstrap !== null &&
-          "currentSnapshot" in bootstrap &&
-          typeof bootstrap.currentSnapshot === "string"
-          ? bootstrap.currentSnapshot
-          : "";
-      })(),
-    }));
-    const firstOwnerId = randomBytes(8).toString("hex");
-    const secondOwnerId = randomBytes(8).toString("hex");
-    const recoveryPrefix = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}:tab:`;
-    const firstOrphanKey = `${recoveryPrefix}${firstOwnerId}`;
-    const secondOrphanKey = `${recoveryPrefix}${secondOwnerId}`;
-    await page.evaluate(
-      ({ key, ownerId, draft }) => {
-        window.localStorage.setItem(
-          key,
-          JSON.stringify({
-            version: 10,
-            ownerId,
-            updatedAtMs: Date.now(),
-            pendingAdoption: null,
-            drafts: [],
-            resolvedCommentIds: [],
-            reconciliation: {
-              base: {
-                draftBodies: { [draft.id]: draft.body },
-                resolvedCommentIds: [],
-              },
-              conflicts: [],
-              runtime: null,
-            },
-            composer: { comment: null, replies: {} },
-          }),
-        );
-      },
-      { key: firstOrphanKey, ownerId: firstOwnerId, draft: runtimeDraft },
-    );
-
-    await page.reload();
-    const choice = page.getByRole("alertdialog", {
-      name: "Two versions of this comment",
-    });
-    await expect(choice).toContainText("Deleted here.");
-    await expect(choice).toContainText(runtimeBody);
-    await choice.getByRole("button", { name: "Keep the deletion" }).click();
-    await expect(choice).toBeHidden();
-    await expect
-      .poll(
-        async () => (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts,
-      )
-      .toEqual([]);
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (key) => window.localStorage.getItem(key),
-          currentRecoveryKey,
-        ),
-      )
-      .toBeNull();
-
-    const afterDeletion = await readRuntimeDrafts(reviewRuntimeUrl, token);
-    await writeRuntimeDrafts({
-      reviewRuntimeUrl,
-      token,
-      version: afterDeletion.version,
-      drafts: [
-        {
-          id: runtimeDraft.id,
-          body: runtimeBody,
-          createdAt: "2026-08-15T12:00:00.000Z",
-          premiseSnapshot: identity.snapshot,
-          target: { type: "document" },
-        },
-      ],
-    });
-
-    const laterBody = "Offer this later orphan after the first one is clean.";
-    await page.evaluate(
-      ({ key, ownerId, snapshot, body }) => {
-        window.localStorage.setItem(
-          key,
-          JSON.stringify({
-            version: 10,
-            ownerId,
-            updatedAtMs: Date.now(),
-            pendingAdoption: null,
-            drafts: [
-              {
-                id: "later-orphan-comment",
-                body,
-                createdAt: "2026-08-15T12:00:00.000Z",
-                premiseSnapshot: snapshot,
-                target: { type: "document" },
-              },
-            ],
-            resolvedCommentIds: [],
-            reconciliation: {
-              base: { draftBodies: {}, resolvedCommentIds: [] },
-              conflicts: [],
-              runtime: null,
-            },
-            composer: { comment: null, replies: {} },
-          }),
-        );
-      },
-      {
-        key: secondOrphanKey,
-        ownerId: secondOwnerId,
-        snapshot: identity.snapshot,
-        body: laterBody,
-      },
-    );
-
-    await page.reload();
-    await expect(choice).toBeVisible();
-    await expect(choice).toContainText(laterBody);
-    await expect(choice).not.toContainText(runtimeBody);
-    await choice.getByRole("button", { name: "Delete it" }).click();
-    await expect(choice).toBeHidden();
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (key) => window.localStorage.getItem(key),
-          currentRecoveryKey,
-        ),
-      )
-      .toBeNull();
-
-    await page.reload();
-    await expect(choice).toBeHidden();
-    await expect
-      .poll(() =>
-        page.evaluate(
-          ({ first, second }) => [
-            window.localStorage.getItem(first),
-            window.localStorage.getItem(second),
-          ],
-          { first: firstOrphanKey, second: secondOrphanKey },
-        ),
-      )
-      .not.toContain(null);
-  });
-
-  test("should clear an orphaned resolution conflict when local state converges", async ({
-    page,
-    reviewRuntimeUrl,
-  }) => {
-    await page.goto(reviewRuntimeUrl);
-    const token = await reviewToken(page);
-    const body = "Offer the recovered resolution before applying it.";
-    await stageComment(page, body);
-    await expect
-      .poll(async () =>
-        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
-          (draft) => draft.body,
-        ),
-      )
-      .toEqual([body]);
-    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
-    const draft = stored.drafts[0];
-    if (draft === undefined) throw new Error("Expected one stored draft");
-    const identity = await page.locator("html").evaluate((root) => ({
-      planId: root.dataset.planId ?? "",
-      sessionId: root.dataset.reviewSession ?? "",
-    }));
-    const ownerId = randomBytes(8).toString("hex");
-    const orphanKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}:tab:${ownerId}`;
-    await page.evaluate(
-      ({ key, storedOwnerId, storedDraft }) => {
-        window.localStorage.setItem(
-          key,
-          JSON.stringify({
-            version: 10,
-            ownerId: storedOwnerId,
-            updatedAtMs: Date.now(),
-            pendingAdoption: null,
-            drafts: [storedDraft],
-            resolvedCommentIds: [storedDraft.id],
-            reconciliation: {
-              base: {
-                draftBodies: { [storedDraft.id]: storedDraft.body },
-                resolvedCommentIds: [],
-              },
-              conflicts: [],
-              runtime: null,
-            },
-            composer: { comment: null, replies: {} },
-          }),
-        );
-      },
-      { key: orphanKey, storedOwnerId: ownerId, storedDraft: draft },
-    );
-
-    await page.reload();
-
-    const choice = page.getByRole("alertdialog", {
-      name: "Two versions of this comment",
-    });
-    await expect(choice).toBeVisible();
-    await expect(choice).toContainText("Resolved");
-    await expect(choice).toContainText("Unresolved");
-    expect(
-      (await readRuntimeDrafts(reviewRuntimeUrl, token)).resolvedCommentIds,
-    ).toEqual([]);
-    await page.keyboard.press("Escape");
-    await expect(choice).toBeHidden();
-    await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-    const rail = page.getByRole("complementary", { name: "Feedback" });
-    await rail.getByText("Resolved (1)").click();
-    await rail.getByRole("button", { name: "Unresolve thread" }).click();
-    await expect(
-      rail.getByRole("button", { name: "Review comment versions" }),
-    ).toHaveCount(0);
-    await expect(choice).toBeHidden();
-    expect(
-      (await readRuntimeDrafts(reviewRuntimeUrl, token)).resolvedCommentIds,
-    ).toEqual([]);
-  });
-
-  test("should defer an orphaned deletion until runtime state is authoritative", async ({
-    page,
-    reviewRuntimeUrl,
-  }) => {
-    await page.goto(reviewRuntimeUrl);
-    const token = await reviewToken(page);
-    const body = "Keep this runtime draft until deletion is chosen.";
-    await stageComment(page, body);
-    const stored = await readRuntimeDrafts(reviewRuntimeUrl, token);
-    const draft = stored.drafts[0];
-    if (draft === undefined) throw new Error("expected one runtime draft");
-    const currentRecoveryKey = await ownedLiveRecoveryKey(page);
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (key) => window.localStorage.getItem(key),
-          currentRecoveryKey,
-        ),
-      )
-      .toBeNull();
-    const identity = await page.locator("html").evaluate((root) => ({
-      planId: root.dataset.planId ?? "",
-      sessionId: root.dataset.reviewSession ?? "",
-    }));
-    const orphanOwnerId = randomBytes(8).toString("hex");
-    const orphanKey = `big-plan:review:live-recovery:${identity.planId}:${identity.sessionId}:tab:${orphanOwnerId}`;
-    await page.evaluate(
-      ({ key, ownerId, storedDraft }) => {
-        window.localStorage.setItem(
-          key,
-          JSON.stringify({
-            version: 10,
-            ownerId,
-            updatedAtMs: Date.now(),
-            pendingAdoption: null,
-            drafts: [],
-            resolvedCommentIds: [],
-            reconciliation: {
-              base: {
-                draftBodies: { [storedDraft.id]: storedDraft.body },
-                resolvedCommentIds: [],
-              },
-              conflicts: [],
-              runtime: null,
-            },
-            composer: { comment: null, replies: {} },
-          }),
-        );
-      },
-      { key: orphanKey, ownerId: orphanOwnerId, storedDraft: draft },
-    );
-    await page.route(
-      "**/api/drafts",
-      async (route) => {
-        await route.fulfill({ status: 503, body: "Unavailable once" });
-      },
-      { times: 1 },
-    );
-
-    await page.reload();
-    await expect(
-      page.getByRole("alertdialog", { name: "Two versions of this comment" }),
-    ).toBeHidden();
-    await expect
-      .poll(() =>
-        page.evaluate((key) => window.localStorage.getItem(key), orphanKey),
-      )
-      .not.toBeNull();
-
-    await page.reload();
-    const choice = page.getByRole("alertdialog", {
-      name: "Two versions of this comment",
-    });
-    await expect(choice).toBeVisible();
-    await expect(choice).toContainText("Deleted here.");
-    await expect(choice).toContainText(body);
-    await expect
-      .poll(async () =>
-        (await readRuntimeDrafts(reviewRuntimeUrl, token)).drafts.map(
-          (comment) => comment.body,
-        ),
-      )
-      .toEqual([body]);
-    await expect
-      .poll(() =>
-        page.evaluate((key) => window.localStorage.getItem(key), orphanKey),
-      )
-      .not.toBeNull();
-  });
-
   test("should keep a concurrent runtime comment when this browser writes", async ({
     page,
     reviewRuntimeUrl,
@@ -1616,7 +1169,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
       .toEqual([runtimeBody]);
     const offlineKey = "big-plan:test:runtime-choice-offline";
     await page.addInitScript((key) => {
-      let offline = false;
+      let offline: boolean;
       try {
         offline = window.sessionStorage.getItem(key) === "true";
       } catch {
@@ -1670,15 +1223,12 @@ test.describe("a drafts write prepared against content the store moved past", ()
     if (ownerId === undefined) throw new Error("Expected a recovery owner");
     const localBody = "Keep this unsynchronized local version.";
     await page.evaluate(
-      ({ key, storedOwnerId, local, other }) => {
+      ({ key, local, other }) => {
         const { baseBody, ...localDraft } = local;
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 10,
-            ownerId: storedOwnerId,
-            updatedAtMs: Date.now(),
-            pendingAdoption: null,
+            version: 11,
             drafts: [localDraft, other],
             resolvedCommentIds: [],
             reconciliation: {
@@ -1698,7 +1248,6 @@ test.describe("a drafts write prepared against content the store moved past", ()
       },
       {
         key: recoveryKey,
-        storedOwnerId: ownerId,
         local: {
           ...conflictedDraft,
           body: localBody,
@@ -1970,7 +1519,7 @@ test.describe("a drafts write prepared against content the store moved past", ()
 
     const offlineKey = "big-plan:test:recovery-offline";
     await page.addInitScript((key) => {
-      let offline = false;
+      let offline: boolean;
       try {
         offline = window.sessionStorage.getItem(key) === "true";
       } catch {
@@ -2499,14 +2048,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
     const recoveryKey = await ownedLiveRecoveryKey(page);
     await page.evaluate(
       ({ identity: storedIdentity, key, body, id }) => {
-        const ownerId = key.slice(key.lastIndexOf(":") + 1);
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 10,
-            ownerId,
-            updatedAtMs: Date.now(),
-            pendingAdoption: null,
+            version: 11,
             drafts: [
               {
                 id,
@@ -2610,14 +2155,10 @@ test.describe("a drafts write prepared against content the store moved past", ()
     const recoveryKey = await ownedLiveRecoveryKey(page);
     await page.evaluate(
       ({ identity: storedIdentity, key, body, id }) => {
-        const ownerId = key.slice(key.lastIndexOf(":") + 1);
         window.localStorage.setItem(
           key,
           JSON.stringify({
-            version: 10,
-            ownerId,
-            updatedAtMs: Date.now(),
-            pendingAdoption: null,
+            version: 11,
             drafts: [
               {
                 id,

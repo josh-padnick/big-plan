@@ -1,16 +1,13 @@
-// Proves the persisted recovery contract rejects corrupt data and applies its
-// orphan demotion and adoption-selection policy without depending on the review
-// UI.
+// Proves the persisted recovery contract rejects corrupt data and stays scoped
+// to the one record this tab owns, without depending on the review UI.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearLiveReviewRecovery,
-  LIVE_RECOVERY_EXPIRY_MS,
   mergeRecoveredComposerAfterHydration,
   persistedReviewFingerprint,
   readLiveReviewRecovery,
-  recordLiveRecoveryAdoption,
-  selectLiveReviewRecovery,
+  writeLiveReviewRecovery,
 } from "./review-recovery-storage.browser.js";
 
 class MemoryStorage implements Storage {
@@ -46,26 +43,18 @@ class MemoryStorage implements Storage {
 }
 
 const scope = { planId: "plan", sessionId: "session" };
+const owner = (ownerId: string) => ({ ownerId, recoveryAvailable: true });
 const recoveryKey = (ownerId: string): string =>
   `big-plan:review:live-recovery:${scope.planId}:${scope.sessionId}:tab:${ownerId}`;
 
 /** Builds the serialized public recovery record used by browser storage. */
 const recoveryRecord = ({
-  ownerId,
-  updatedAtMs,
   composer = { comment: null, replies: {} },
-  pendingAdoption = null,
 }: {
-  readonly ownerId: string;
-  readonly updatedAtMs: number;
   readonly composer?: unknown;
-  readonly pendingAdoption?: unknown;
-}): string =>
+} = {}): string =>
   JSON.stringify({
-    version: 10,
-    ownerId,
-    updatedAtMs,
-    pendingAdoption,
+    version: 11,
     drafts: [],
     resolvedCommentIds: [],
     reconciliation: {
@@ -75,6 +64,12 @@ const recoveryRecord = ({
     },
     composer,
   });
+
+const emptyReconciliation = {
+  base: { draftBodies: new Map(), resolvedCommentIds: new Set<string>() },
+  conflicts: [],
+  runtime: null,
+};
 
 describe("live review recovery storage", () => {
   beforeEach(() => {
@@ -88,19 +83,11 @@ describe("live review recovery storage", () => {
   it("should reject malformed recovery state and discard an invalid composer target", () => {
     localStorage.setItem(
       recoveryKey("corrupt-state"),
-      JSON.stringify({
-        version: 10,
-        ownerId: "corrupt-state",
-        updatedAtMs: 1,
-        pendingAdoption: null,
-        drafts: "not-drafts",
-      }),
+      JSON.stringify({ version: 11, drafts: "not-drafts" }),
     );
     localStorage.setItem(
       recoveryKey("corrupt-target"),
       recoveryRecord({
-        ownerId: "corrupt-target",
-        updatedAtMs: 2,
         composer: {
           comment: {
             target: {
@@ -123,10 +110,78 @@ describe("live review recovery storage", () => {
       }),
     );
 
-    expect(readLiveReviewRecovery(recoveryKey("corrupt-state"))).toBeNull();
     expect(
-      readLiveReviewRecovery(recoveryKey("corrupt-target"))?.composer.comment,
+      readLiveReviewRecovery({ scope, owner: owner("corrupt-state") }),
     ).toBeNull();
+    expect(
+      readLiveReviewRecovery({ scope, owner: owner("corrupt-target") })
+        ?.composer.comment,
+    ).toBeNull();
+  });
+
+  it("should read only the record this tab owns", () => {
+    // Two tabs of one session keep separate records. They reconcile through
+    // the runtime, never through each other's storage; issue #99 owns the
+    // case where neither reaches the runtime.
+    localStorage.setItem(recoveryKey("other-tab"), recoveryRecord());
+
+    expect(readLiveReviewRecovery({ scope, owner: owner("this-tab") })).toBe(
+      null,
+    );
+    expect(localStorage.getItem(recoveryKey("other-tab"))).not.toBeNull();
+  });
+
+  it("should report a failed write instead of pretending recovery is available", () => {
+    const blocked = new MemoryStorage();
+    blocked.failWritesMatching = () => true;
+    vi.stubGlobal("localStorage", blocked);
+
+    expect(
+      writeLiveReviewRecovery({
+        scope,
+        ownerId: "this-tab",
+        recovery: {
+          drafts: [],
+          resolvedCommentIds: new Set(),
+          composer: { comment: null, replies: new Map() },
+          reconciliation: emptyReconciliation,
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("should recover nothing when storage is unavailable to this tab", () => {
+    localStorage.setItem(recoveryKey("this-tab"), recoveryRecord());
+
+    expect(
+      readLiveReviewRecovery({
+        scope,
+        owner: { ownerId: "this-tab", recoveryAvailable: false },
+      }),
+    ).toBeNull();
+  });
+
+  it("should clear a synchronized record and keep one still holding typed text", () => {
+    const fingerprint = persistedReviewFingerprint({
+      drafts: [],
+      resolvedCommentIds: new Set(),
+    });
+    localStorage.setItem(
+      recoveryKey("typed"),
+      recoveryRecord({
+        composer: { comment: null, replies: { thread: "half written" } },
+      }),
+    );
+    localStorage.setItem(recoveryKey("synced"), recoveryRecord());
+
+    expect(
+      clearLiveReviewRecovery({ scope, ownerId: "typed", fingerprint }),
+    ).toBe(false);
+    expect(localStorage.getItem(recoveryKey("typed"))).not.toBeNull();
+    expect(
+      clearLiveReviewRecovery({ scope, ownerId: "synced", fingerprint }),
+    ).toBe(true);
+    expect(localStorage.getItem(recoveryKey("synced"))).toBeNull();
   });
 
   it("should keep browser-only input created while hydration is pending", () => {
@@ -163,126 +218,5 @@ describe("live review recovery storage", () => {
         ["restored", "restored reply"],
       ]),
     });
-  });
-
-  it("should demote stale foreign recovery without deleting its owner's work", () => {
-    const nowMs = LIVE_RECOVERY_EXPIRY_MS + 1_000;
-    localStorage.setItem(
-      recoveryKey("owned"),
-      recoveryRecord({ ownerId: "owned", updatedAtMs: 100 }),
-    );
-    localStorage.setItem(
-      recoveryKey("newer-orphan"),
-      recoveryRecord({ ownerId: "newer-orphan", updatedAtMs: nowMs }),
-    );
-    localStorage.setItem(
-      recoveryKey("expired-orphan"),
-      recoveryRecord({ ownerId: "expired-orphan", updatedAtMs: 0 }),
-    );
-
-    const selected = selectLiveReviewRecovery({
-      scope,
-      owner: { ownerId: "owned", recoveryAvailable: true },
-      nowMs,
-    });
-
-    expect(selected.source).toBe("owned");
-    expect(selected.recovery?.ownerId).toBe("owned");
-    expect(localStorage.getItem(recoveryKey("expired-orphan"))).not.toBeNull();
-
-    localStorage.removeItem(recoveryKey("owned"));
-    const returnedOwner = selectLiveReviewRecovery({
-      scope,
-      owner: { ownerId: "expired-orphan", recoveryAvailable: true },
-      nowMs,
-    });
-    expect(returnedOwner.source).toBe("owned");
-    expect(returnedOwner.recovery?.ownerId).toBe("expired-orphan");
-  });
-
-  it("should skip an adopted revision and report a failed ledger write", () => {
-    const nowMs = 10_000;
-    localStorage.setItem(
-      recoveryKey("orphan"),
-      recoveryRecord({ ownerId: "orphan", updatedAtMs: 5_000 }),
-    );
-    expect(
-      recordLiveRecoveryAdoption({
-        scope,
-        ownerId: "current",
-        recoveryOwnerId: "orphan",
-        recoveryUpdatedAtMs: 5_000,
-        nowMs,
-      }),
-    ).toBe(true);
-    expect(
-      selectLiveReviewRecovery({
-        scope,
-        owner: { ownerId: "current", recoveryAvailable: true },
-        nowMs,
-      }).recovery,
-    ).toBeNull();
-    expect(localStorage.getItem(recoveryKey("orphan"))).toBeNull();
-
-    const blockedStorage = new MemoryStorage();
-    blockedStorage.failWritesMatching = () => true;
-    vi.stubGlobal("localStorage", blockedStorage);
-    expect(
-      recordLiveRecoveryAdoption({
-        scope,
-        ownerId: "current",
-        recoveryOwnerId: "other",
-        recoveryUpdatedAtMs: 9_000,
-        nowMs,
-      }),
-    ).toBe(false);
-  });
-
-  it("should retain pending adoption provenance until its ledger is durable", () => {
-    const storage = new MemoryStorage();
-    vi.stubGlobal("localStorage", storage);
-    const pendingAdoption = { ownerId: "orphan", updatedAtMs: 5_000 };
-    localStorage.setItem(
-      recoveryKey("current"),
-      recoveryRecord({
-        ownerId: "current",
-        updatedAtMs: 10_000,
-        pendingAdoption,
-      }),
-    );
-    localStorage.setItem(
-      recoveryKey("orphan"),
-      recoveryRecord({ ownerId: "orphan", updatedAtMs: 5_000 }),
-    );
-    storage.failWritesMatching = (key) => key.includes(":adoptions:");
-
-    expect(
-      recordLiveRecoveryAdoption({
-        scope,
-        ownerId: "current",
-        recoveryOwnerId: pendingAdoption.ownerId,
-        recoveryUpdatedAtMs: pendingAdoption.updatedAtMs,
-        nowMs: 10_000,
-      }),
-    ).toBe(false);
-
-    const reloaded = selectLiveReviewRecovery({
-      scope,
-      owner: { ownerId: "current", recoveryAvailable: true },
-      nowMs: 11_000,
-    });
-    expect(reloaded.source).toBe("owned");
-    expect(reloaded.recovery?.pendingAdoption).toEqual(pendingAdoption);
-    expect(
-      clearLiveReviewRecovery({
-        scope,
-        ownerId: "current",
-        fingerprint: persistedReviewFingerprint({
-          drafts: [],
-          resolvedCommentIds: new Set(),
-        }),
-      }),
-    ).toBe(false);
-    expect(localStorage.getItem(recoveryKey("current"))).not.toBeNull();
   });
 });

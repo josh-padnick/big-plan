@@ -1,8 +1,12 @@
-// Owns browser persistence policy for live review recovery so storage keys,
-// validation, tab ownership, orphan-candidate demotion, and adoption history
-// cannot drift across the review controller's orchestration paths. Age only
-// stops a foreign record from being offered: the browser cannot distinguish a
-// closed owner from a suspended one, so a timer never deletes its work.
+// Owns browser persistence policy for live review recovery so storage keys and
+// validation cannot drift across the review controller's orchestration paths.
+//
+// Recovery is a cache of this tab's own unsynchronized work, never a second
+// authority. One record per tab, written and cleared only by the tab that owns
+// it, read once at hydration. Records are never scanned, merged, or adopted
+// across tabs: the runtime is the only place two tabs reconcile, and making
+// them converge with each other while both are offline needs causal versions
+// and cross-tab serialization that belong to issue #99, not here.
 
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
 import { isStoredCommentTarget } from "../shared/comment.js";
@@ -16,9 +20,7 @@ import type {
   ReviewRecoveryState,
 } from "./review-recovery-merge.js";
 
-const LIVE_RECOVERY_SNAPSHOT_VERSION = 10;
-const LIVE_RECOVERY_ADOPTIONS_VERSION = 1;
-export const LIVE_RECOVERY_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+const LIVE_RECOVERY_SNAPSHOT_VERSION = 11;
 
 export type LiveRecoveryScope = {
   readonly planId: string;
@@ -79,32 +81,17 @@ export const mergeRecoveredComposerAfterHydration = ({
   };
 };
 
-export type PendingLiveRecoveryAdoption = {
-  readonly ownerId: string;
-  readonly updatedAtMs: number;
-};
-
 export type StoredLiveReviewRecovery = LiveReviewRecovery & {
-  readonly ownerId: string;
-  readonly updatedAtMs: number;
   readonly composer: RecoveredComposer;
-  readonly pendingAdoption: PendingLiveRecoveryAdoption | null;
 };
 
-type StoredLiveRecoveryAdoptions = {
-  readonly ownerId: string;
-  readonly updatedAtMs: number;
-  readonly recoveryUpdatedAtMsByOwnerId: ReadonlyMap<string, number>;
-};
-
+/**
+ * This tab's writer identity. It exists only to key this tab's own record so
+ * two tabs of one review session cannot overwrite each other's typing; nothing
+ * infers from it whether another tab is alive.
+ */
 export type LiveRecoveryOwner = {
   readonly ownerId: string;
-  readonly recoveryAvailable: boolean;
-};
-
-export type LiveRecoverySelection = {
-  readonly recovery: StoredLiveReviewRecovery | null;
-  readonly source: "owned" | "orphan" | null;
   readonly recoveryAvailable: boolean;
 };
 
@@ -118,14 +105,6 @@ const liveRecoveryStorageKey = ({
   readonly scope: LiveRecoveryScope;
   readonly ownerId: string;
 }): string => `${liveRecoveryStoragePrefix(scope)}:tab:${ownerId}`;
-
-const liveRecoveryAdoptionsStorageKey = ({
-  scope,
-  ownerId,
-}: {
-  readonly scope: LiveRecoveryScope;
-  readonly ownerId: string;
-}): string => `${liveRecoveryStoragePrefix(scope)}:adoptions:${ownerId}`;
 
 const liveRecoveryOwnerSessionKey = (scope: LiveRecoveryScope): string =>
   `${liveRecoveryStoragePrefix(scope)}:owner`;
@@ -213,31 +192,14 @@ const readRecoveredComposer = (value: unknown): RecoveredComposer => {
   };
 };
 
-const readPendingAdoption = (
-  value: unknown,
-): PendingLiveRecoveryAdoption | null =>
-  isRecord(value) &&
-  typeof value.ownerId === "string" &&
-  typeof value.updatedAtMs === "number"
-    ? { ownerId: value.ownerId, updatedAtMs: value.updatedAtMs }
-    : null;
-
-/** Reads one tab-owned recovery snapshot without accepting partial data. */
-export const readLiveReviewRecovery = (
-  key: string,
-): StoredLiveReviewRecovery | null => {
+const readRecoveryRecord = (key: string): StoredLiveReviewRecovery | null => {
   try {
     const raw = localStorage.getItem(key);
     const parsed: unknown = raw === null ? null : JSON.parse(raw);
     const reviewState = readStoredReviewState(parsed);
-    const pendingAdoption = isRecord(parsed)
-      ? readPendingAdoption(parsed.pendingAdoption)
-      : null;
     if (
       !isRecord(parsed) ||
       parsed.version !== LIVE_RECOVERY_SNAPSHOT_VERSION ||
-      typeof parsed.ownerId !== "string" ||
-      typeof parsed.updatedAtMs !== "number" ||
       reviewState === null ||
       !isRecord(parsed.reconciliation) ||
       !isRecord(parsed.reconciliation.base) ||
@@ -247,8 +209,7 @@ export const readLiveReviewRecovery = (
         (value): value is string => typeof value === "string",
       ) ||
       !Array.isArray(parsed.reconciliation.conflicts) ||
-      !parsed.reconciliation.conflicts.every(isStoredReviewRecoveryConflict) ||
-      (parsed.pendingAdoption !== null && pendingAdoption === null)
+      !parsed.reconciliation.conflicts.every(isStoredReviewRecoveryConflict)
     ) {
       return null;
     }
@@ -264,10 +225,7 @@ export const readLiveReviewRecovery = (
     }
     return {
       ...reviewState,
-      ownerId: parsed.ownerId,
-      updatedAtMs: parsed.updatedAtMs,
       composer: readRecoveredComposer(parsed.composer),
-      pendingAdoption,
       reconciliation: {
         base: {
           draftBodies: new Map(
@@ -292,9 +250,6 @@ const serializedLiveReviewRecovery = (
 ): string =>
   JSON.stringify({
     version: LIVE_RECOVERY_SNAPSHOT_VERSION,
-    ownerId: recovery.ownerId,
-    updatedAtMs: recovery.updatedAtMs,
-    pendingAdoption: recovery.pendingAdoption,
     drafts: recovery.drafts,
     resolvedCommentIds: Array.from(recovery.resolvedCommentIds),
     reconciliation: {
@@ -323,111 +278,6 @@ const serializedLiveReviewRecovery = (
     },
   });
 
-/** Reads one tab-owned adoption ledger without accepting partial data. */
-const readLiveRecoveryAdoptions = (
-  key: string,
-): StoredLiveRecoveryAdoptions | null => {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed: unknown = raw === null ? null : JSON.parse(raw);
-    const revisionEntries =
-      isRecord(parsed) && isRecord(parsed.recoveryUpdatedAtMsByOwnerId)
-        ? Object.entries(parsed.recoveryUpdatedAtMsByOwnerId)
-        : [];
-    if (
-      !isRecord(parsed) ||
-      parsed.version !== LIVE_RECOVERY_ADOPTIONS_VERSION ||
-      typeof parsed.ownerId !== "string" ||
-      typeof parsed.updatedAtMs !== "number" ||
-      !isRecord(parsed.recoveryUpdatedAtMsByOwnerId) ||
-      !revisionEntries.every(
-        (entry): entry is [string, number] => typeof entry[1] === "number",
-      )
-    ) {
-      return null;
-    }
-    return {
-      ownerId: parsed.ownerId,
-      updatedAtMs: parsed.updatedAtMs,
-      recoveryUpdatedAtMsByOwnerId: new Map(revisionEntries),
-    };
-  } catch {
-    return null;
-  }
-};
-
-/** Collects adopted orphan revisions while expiring only stale ledgers. */
-const adoptedLiveRecoveryRevisions = ({
-  scope,
-  nowMs,
-}: {
-  readonly scope: LiveRecoveryScope;
-  readonly nowMs: number;
-}): ReadonlyMap<string, number> => {
-  const prefix = `${liveRecoveryStoragePrefix(scope)}:adoptions:`;
-  const revisions = new Map<string, number>();
-  for (let index = 0; index < localStorage.length; index += 1) {
-    const key = localStorage.key(index);
-    if (key === null || !key.startsWith(prefix)) continue;
-    const adoptions = readLiveRecoveryAdoptions(key);
-    if (
-      adoptions === null ||
-      nowMs - adoptions.updatedAtMs > LIVE_RECOVERY_EXPIRY_MS
-    ) {
-      localStorage.removeItem(key);
-      index -= 1;
-      continue;
-    }
-    for (const [
-      ownerId,
-      updatedAtMs,
-    ] of adoptions.recoveryUpdatedAtMsByOwnerId) {
-      revisions.set(
-        ownerId,
-        Math.max(revisions.get(ownerId) ?? 0, updatedAtMs),
-      );
-    }
-  }
-  return revisions;
-};
-
-/** Records one adopted orphan revision in this tab's independent ledger. */
-export const recordLiveRecoveryAdoption = ({
-  scope,
-  ownerId,
-  recoveryOwnerId,
-  recoveryUpdatedAtMs,
-  nowMs,
-}: {
-  readonly scope: LiveRecoveryScope;
-  readonly ownerId: string;
-  readonly recoveryOwnerId: string;
-  readonly recoveryUpdatedAtMs: number;
-  readonly nowMs: number;
-}): boolean => {
-  const key = liveRecoveryAdoptionsStorageKey({ scope, ownerId });
-  const previous = readLiveRecoveryAdoptions(key);
-  const revisions = new Map(previous?.recoveryUpdatedAtMsByOwnerId ?? []);
-  revisions.set(
-    recoveryOwnerId,
-    Math.max(revisions.get(recoveryOwnerId) ?? 0, recoveryUpdatedAtMs),
-  );
-  try {
-    localStorage.setItem(
-      key,
-      JSON.stringify({
-        version: LIVE_RECOVERY_ADOPTIONS_VERSION,
-        ownerId,
-        updatedAtMs: nowMs,
-        recoveryUpdatedAtMsByOwnerId: Object.fromEntries(revisions),
-      }),
-    );
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 /** Mints a writer identity used only by this tab's recovery record. */
 const randomRecoveryOwnerId = (): string => {
   const bytes = new Uint8Array(8);
@@ -437,7 +287,11 @@ const randomRecoveryOwnerId = (): string => {
   );
 };
 
-/** Claims a tab writer identity without inferring whether another tab is live. */
+/**
+ * Takes this tab's writer identity, reusing it across a reload so a refresh
+ * recovers what the same tab was holding. Nothing here inspects, claims, or
+ * infers anything about another tab.
+ */
 export const claimLiveRecoveryOwner = (
   scope: LiveRecoveryScope,
 ): LiveRecoveryOwner => {
@@ -459,61 +313,19 @@ export const claimLiveRecoveryOwner = (
   }
 };
 
-/** Selects continuity first, then the newest recent recovery candidate. */
-export const selectLiveReviewRecovery = ({
+/** Reads the one record this tab owns, and never any other tab's. */
+export const readLiveReviewRecovery = ({
   scope,
   owner,
-  nowMs,
 }: {
   readonly scope: LiveRecoveryScope;
   readonly owner: LiveRecoveryOwner;
-  readonly nowMs: number;
-}): LiveRecoverySelection => {
-  if (!owner.recoveryAvailable) {
-    return { recovery: null, source: null, recoveryAvailable: false };
-  }
-  try {
-    const owned = readLiveReviewRecovery(
-      liveRecoveryStorageKey({ scope, ownerId: owner.ownerId }),
-    );
-    const adoptedRevisions = adoptedLiveRecoveryRevisions({ scope, nowMs });
-    const prefix = `${liveRecoveryStoragePrefix(scope)}:tab:`;
-    const candidates: Array<StoredLiveReviewRecovery> = [];
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const key = localStorage.key(index);
-      if (key === null || !key.startsWith(prefix)) continue;
-      const recovery = readLiveReviewRecovery(key);
-      if (recovery === null || recovery.ownerId === owner.ownerId) continue;
-      const adoptedRevision = adoptedRevisions.get(recovery.ownerId);
-      if (
-        adoptedRevision !== undefined &&
-        adoptedRevision >= recovery.updatedAtMs
-      ) {
-        localStorage.removeItem(key);
-        index -= 1;
-        continue;
-      }
-      // Age demotes a foreign record from adoption instead of destroying it.
-      // Its owner may only be suspended and must still recover on return.
-      if (nowMs - recovery.updatedAtMs > LIVE_RECOVERY_EXPIRY_MS) {
-        continue;
-      }
-      candidates.push(recovery);
-    }
-    // A returning owner never loses its own unsynchronized work to a timer.
-    if (owned !== null) {
-      return { recovery: owned, source: "owned", recoveryAvailable: true };
-    }
-    const orphan = candidates.sort(
-      (left, right) => right.updatedAtMs - left.updatedAtMs,
-    )[0];
-    return orphan === undefined
-      ? { recovery: null, source: null, recoveryAvailable: true }
-      : { recovery: orphan, source: "orphan", recoveryAvailable: true };
-  } catch {
-    return { recovery: null, source: null, recoveryAvailable: false };
-  }
-};
+}): StoredLiveReviewRecovery | null =>
+  owner.recoveryAvailable
+    ? readRecoveryRecord(
+        liveRecoveryStorageKey({ scope, ownerId: owner.ownerId }),
+      )
+    : null;
 
 /** Writes only the record this browser tab owns. */
 export const writeLiveReviewRecovery = ({
@@ -547,11 +359,10 @@ export const clearLiveReviewRecovery = ({
   readonly fingerprint: string;
 }): boolean => {
   const key = liveRecoveryStorageKey({ scope, ownerId });
-  const recovery = readLiveReviewRecovery(key);
+  const recovery = readRecoveryRecord(key);
   if (
     recovery === null ||
     recovery.reconciliation.conflicts.length > 0 ||
-    recovery.pendingAdoption !== null ||
     recovery.composer.comment !== null ||
     recovery.composer.replies.size > 0 ||
     persistedReviewFingerprint(recovery) !== fingerprint

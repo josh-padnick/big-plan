@@ -149,7 +149,6 @@ import {
 } from "./review-runtime-request.js";
 import { createRuntimeSessionOrder } from "./runtime-session-order.js";
 import {
-  adoptLiveReviewRecovery,
   mergeLiveReviewRecovery,
   mergeReviewStateAfterHydration,
   refreshReviewRecoveryConflicts,
@@ -171,10 +170,8 @@ import {
   EMPTY_RECOVERED_COMPOSER,
   mergeRecoveredComposerAfterHydration,
   persistedReviewFingerprint,
-  recordLiveRecoveryAdoption,
-  selectLiveReviewRecovery,
+  readLiveReviewRecovery,
   writeLiveReviewRecovery,
-  type PendingLiveRecoveryAdoption,
   type RecoveredComposer,
   type StoredLiveReviewRecovery,
 } from "./review-recovery-storage.browser.js";
@@ -3954,9 +3951,6 @@ export const ReviewController = () => {
     null,
   );
   const [isLiveRecoveryAvailable, setIsLiveRecoveryAvailable] = useState(true);
-  const [pendingRecoveryAdoption, setPendingRecoveryAdoption] =
-    useState<PendingLiveRecoveryAdoption | null>(null);
-  const isOrphanRecoveryDeferredRef = useRef(false);
   // The version the next conditional write must carry.
   const runtimeVersionRef = useRef("");
   const [persistedReviewState, setPersistedReviewState] = useState<
@@ -4582,19 +4576,13 @@ export const ReviewController = () => {
       const claimedOwner = claimLiveRecoveryOwner(identity);
       if (!current) return;
       setLiveRecoveryOwnerId(claimedOwner.ownerId);
-      const selection = selectLiveReviewRecovery({
+      setIsLiveRecoveryAvailable(claimedOwner.recoveryAvailable);
+      // Only this tab's own record. Two tabs reconcile through the runtime,
+      // never through each other's browser storage; issue #99 owns that.
+      const recovery = readLiveReviewRecovery({
         scope: identity,
         owner: claimedOwner,
-        nowMs: Date.now(),
       });
-      setIsLiveRecoveryAvailable(selection.recoveryAvailable);
-      isOrphanRecoveryDeferredRef.current = selection.source === "orphan";
-      const recovery = selection.recovery;
-      setPendingRecoveryAdoption(
-        selection.source === "owned"
-          ? (recovery?.pendingAdoption ?? null)
-          : null,
-      );
       const recoveredComposer = recovery?.composer ?? EMPTY_RECOVERED_COMPOSER;
       try {
         const sessionSequence = runtimeSessionOrder.issueRequest();
@@ -4619,25 +4607,11 @@ export const ReviewController = () => {
           let restoredReviewState = runtimeReviewState;
           let conflicts: ReadonlyArray<ReviewRecoveryConflict> = [];
           if (recovery !== null) {
-            const merged =
-              selection.source === "orphan"
-                ? adoptLiveReviewRecovery({
-                    recovery,
-                    runtime: runtimeReviewState,
-                    sent: snapshot.sent,
-                  })
-                : resumeLiveReviewRecovery({
-                    recovery,
-                    runtime: runtimeReviewState,
-                    sent: snapshot.sent,
-                  });
-            isOrphanRecoveryDeferredRef.current = false;
-            if (selection.source === "orphan") {
-              setPendingRecoveryAdoption({
-                ownerId: recovery.ownerId,
-                updatedAtMs: recovery.updatedAtMs,
-              });
-            }
+            const merged = resumeLiveReviewRecovery({
+              recovery,
+              runtime: runtimeReviewState,
+              sent: snapshot.sent,
+            });
             restoredReviewState = merged.state;
             conflicts = merged.conflicts;
           }
@@ -4686,7 +4660,7 @@ export const ReviewController = () => {
               ? RECOVERY_CONFLICT_STATUS
               : detached
                 ? "The comment you were writing could not be reattached: its place in the plan is gone."
-                : selection.recoveryAvailable
+                : claimedOwner.recoveryAvailable
                   ? "Connected to the local review runtime."
                   : "Connected to the local review runtime. Browser recovery is unavailable.",
           );
@@ -4694,39 +4668,35 @@ export const ReviewController = () => {
         }
       } catch (error) {
         if (current) {
-          let restoredReviewState = latestReviewStateRef.current.state;
-          let conflicts: ReadonlyArray<ReviewRecoveryConflict> = [];
           if (recovery !== null) {
-            if (selection.source === "owned") {
-              restoredReviewState = mergeReviewStateAfterHydration({
-                before: reviewStateBeforeHydration,
-                current: latestReviewStateRef.current.state,
-                restored: recovery,
-              });
-              const refreshed = refreshReviewRecoveryConflicts({
-                conflicts: recovery.reconciliation.conflicts,
-                local: restoredReviewState,
-              });
-              conflicts = refreshed.conflicts;
-              const runtime = recovery.reconciliation.runtime;
-              const base =
-                runtime !== null && refreshed.settledConflicts.length > 0
-                  ? reviewRecoveryBaseAfterConflictAnswers({
-                      base: recovery.reconciliation.base,
-                      runtime,
-                      answeredConflicts: refreshed.settledConflicts,
-                      remainingConflicts: conflicts,
-                    })
-                  : recovery.reconciliation.base;
-              replaceRecoveryReconciliation({
-                ...recovery.reconciliation,
-                base,
-                conflicts,
-                runtime: conflicts.length === 0 ? null : runtime,
-              });
-              applyReviewState(restoredReviewState);
-              setIsRecoveryConflictOpen(conflicts.length > 0);
-            }
+            const restoredReviewState = mergeReviewStateAfterHydration({
+              before: reviewStateBeforeHydration,
+              current: latestReviewStateRef.current.state,
+              restored: recovery,
+            });
+            const refreshed = refreshReviewRecoveryConflicts({
+              conflicts: recovery.reconciliation.conflicts,
+              local: restoredReviewState,
+            });
+            const conflicts = refreshed.conflicts;
+            const runtime = recovery.reconciliation.runtime;
+            const base =
+              runtime !== null && refreshed.settledConflicts.length > 0
+                ? reviewRecoveryBaseAfterConflictAnswers({
+                    base: recovery.reconciliation.base,
+                    runtime,
+                    answeredConflicts: refreshed.settledConflicts,
+                    remainingConflicts: conflicts,
+                  })
+                : recovery.reconciliation.base;
+            replaceRecoveryReconciliation({
+              ...recovery.reconciliation,
+              base,
+              conflicts,
+              runtime: conflicts.length === 0 ? null : runtime,
+            });
+            applyReviewState(restoredReviewState);
+            setIsRecoveryConflictOpen(conflicts.length > 0);
           } else {
             markPersistedReviewState(
               persistedReviewFingerprint({
@@ -4738,10 +4708,7 @@ export const ReviewController = () => {
           const composerAfterHydration = mergeRecoveredComposerAfterHydration({
             before: composerBeforeHydration,
             current: composerRecoveryRef.current,
-            recovered:
-              selection.source === "orphan"
-                ? EMPTY_RECOVERED_COMPOSER
-                : recoveredComposer,
+            recovered: recoveredComposer,
           });
           restoreComposer(composerAfterHydration);
           setStatus(errorMessage(error));
@@ -4754,7 +4721,6 @@ export const ReviewController = () => {
     };
   }, [
     acceptRuntimeSession,
-    adoptRuntimeReviewState,
     applyReviewState,
     identity,
     markPersistedReviewState,
@@ -4773,14 +4739,10 @@ export const ReviewController = () => {
       !isLiveRecoveryAvailable
     )
       return;
-    if (isOrphanRecoveryDeferredRef.current) return;
     const reviewState = { drafts, resolvedCommentIds };
     const recovery: StoredLiveReviewRecovery = {
       ...reviewState,
-      ownerId: liveRecoveryOwnerId,
-      updatedAtMs: Date.now(),
       composer: composerRecovery,
-      pendingAdoption: pendingRecoveryAdoption,
       reconciliation: recoveryReconciliation,
     };
     const didPersist = writeLiveReviewRecovery({
@@ -4792,22 +4754,6 @@ export const ReviewController = () => {
       setIsLiveRecoveryAvailable(false);
       setStatus(LIVE_RECOVERY_UNAVAILABLE_STATUS);
       return;
-    }
-    const pendingAdoption = pendingRecoveryAdoption;
-    if (pendingAdoption !== null) {
-      const didRecordAdoption = recordLiveRecoveryAdoption({
-        scope: identity,
-        ownerId: liveRecoveryOwnerId,
-        recoveryOwnerId: pendingAdoption.ownerId,
-        recoveryUpdatedAtMs: pendingAdoption.updatedAtMs,
-        nowMs: Date.now(),
-      });
-      if (didRecordAdoption) {
-        setPendingRecoveryAdoption(null);
-        return;
-      } else {
-        return;
-      }
     }
     if (
       recovery.reconciliation.conflicts.length === 0 &&
@@ -4826,7 +4772,6 @@ export const ReviewController = () => {
     isHydrated,
     isLiveRecoveryAvailable,
     liveRecoveryOwnerId,
-    pendingRecoveryAdoption,
     persistedReviewState,
     recoveryReconciliation,
     resolvedCommentIds,
