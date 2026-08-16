@@ -1,8 +1,11 @@
 // Proves the merge guard fails the exact shape of the 2026-08-12 loss, where a
 // merge from main into a long-lived branch silently dropped a landed feature,
-// and proves the declared exception clears the same branch. The other cases
-// hold the false-alarm rate down: an ordinary branch, and a branch that removes
-// a file with a commit of its own, must both stay green.
+// and proves the declared exception clears the same branch. Rule 2's cases
+// prove the fork-point rule catches a branch that edits a file and puts it
+// back while main changed it, which rule 1 cannot see. The other cases hold
+// the false-alarm rate down: an ordinary branch, and a branch that removes or
+// reworks a file with a commit of its own, must all stay green. A broken
+// comparison must report "unresolved", never a false pass.
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -86,6 +89,47 @@ const buildSilentLoss = async () => {
   ]);
   await git(root, "reset", "--hard", "--quiet", merged.stdout.trim());
   return root;
+};
+
+/**
+ * Builds the rule-2 shape: the branch edits a shared file and puts it back to
+ * its fork-point bytes, main changes the same file after the fork, and the
+ * merge resolution keeps the branch's tree. Rule 1 cannot catch this because
+ * the branch's own commits touch the file.
+ */
+const buildTouchedRevertLoss = async () => {
+  const root = await createRepo();
+  await put(root, "src/shared.ts", "export const shared = 'fork';\n");
+  await commit(root, "feat: add the shared module\n\nThe fork-point state.");
+  const forkPoint = (await git(root, "rev-parse", "main")).stdout.trim();
+
+  await git(root, "checkout", "--quiet", "-b", "feature");
+  await put(root, "src/shared.ts", "export const shared = 'branch';\n");
+  await commit(root, "feat: rework the shared module\n\nA branch experiment.");
+  await put(root, "src/shared.ts", "export const shared = 'fork';\n");
+  await commit(root, "revert: restore the shared module\n\nBack to fork state.");
+  const branchTree = (await git(root, "rev-parse", "feature^{tree}")).stdout.trim();
+  const branchCommit = (await git(root, "rev-parse", "feature")).stdout.trim();
+
+  await git(root, "checkout", "--quiet", "main");
+  await put(root, "src/shared.ts", "export const shared = 'main';\n");
+  await commit(root, "feat: improve the shared module\n\nLands on main.");
+  const mainCommit = (await git(root, "rev-parse", "main")).stdout.trim();
+
+  await git(root, "checkout", "--quiet", "feature");
+  const merged = await git(
+    root,
+    "commit-tree",
+    branchTree,
+    "-p",
+    branchCommit,
+    "-p",
+    mainCommit,
+    "-m",
+    "Merge main into feature\n\nResolves the conflicts by hand.",
+  );
+  await git(root, "reset", "--hard", "--quiet", merged.stdout.trim());
+  return { root, forkPoint };
 };
 
 test("should report every lost path when a merge resolution drops main-side files", async () => {
@@ -234,6 +278,119 @@ test("should report an unresolved main branch instead of passing silently", asyn
     });
     assert.equal(result.status, "unresolved");
     assert.match(result.reason, /MERGE_GUARD_MAIN_REF/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("should report unresolved when the comparison cannot read a repository object", async () => {
+  const root = await createRepo();
+  try {
+    await git(root, "checkout", "--quiet", "-b", "feature");
+    await put(root, "src/extra/only.ts", "export const only = true;\n");
+    await commit(root, "feat: add an extra module\n\nAdds work in a new folder.");
+    const treeSha = (await git(root, "rev-parse", "feature:src/extra")).stdout.trim();
+    await rm(join(root, ".git", "objects", treeSha.slice(0, 2), treeSha.slice(2)), {
+      force: true,
+    });
+
+    const result = await checkMergeGuard({ repoRoot: root });
+    assert.equal(result.status, "unresolved");
+    assert.match(result.reason, /git operation/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("should fail with the fork point named when the branch reverts a file it edits while main changed it", async () => {
+  const { root, forkPoint } = await buildTouchedRevertLoss();
+  try {
+    const result = await checkMergeGuard({ repoRoot: root });
+    assert.equal(result.status, "failed");
+    assert.deepEqual(
+      result.losses.map((loss) => loss.path),
+      ["src/shared.ts"],
+    );
+    assert.equal(result.losses[0].rule, 2);
+    assert.match(result.losses[0].ruleReason, /fork point/);
+    assert.ok(result.losses[0].ruleReason.includes(forkPoint.slice(0, 12)));
+    assert.match(result.losses[0].mainOrigin, /improve the shared module/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("should pass when the reverted path carries the Overwrites-main trailer", async () => {
+  const { root } = await buildTouchedRevertLoss();
+  try {
+    await commit(
+      root,
+      [
+        "chore: keep the fork-point shared module on purpose",
+        "",
+        "The main-side rework is superseded by a later change.",
+        "",
+        "Overwrites-main: src/shared.ts",
+      ].join("\n"),
+    );
+    const result = await checkMergeGuard({ repoRoot: root });
+    assert.equal(result.status, "passed");
+    assert.deepEqual(result.excused, ["src/shared.ts"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("should pass when the branch reworks a file and keeps its change while main moves ahead", async () => {
+  const root = await createRepo();
+  try {
+    await put(root, "src/shared.ts", "export const shared = 'fork';\n");
+    await commit(root, "feat: add the shared module\n\nThe fork-point state.");
+    await git(root, "checkout", "--quiet", "-b", "feature");
+    await put(root, "src/shared.ts", "export const shared = 'branch';\n");
+    await commit(root, "feat: rework the shared module\n\nThe branch keeps this.");
+    await git(root, "checkout", "--quiet", "main");
+    await put(root, "docs/notes.md", "New notes.\n");
+    await commit(root, "docs: add notes\n\nLands on main.");
+    await git(root, "checkout", "--quiet", "feature");
+
+    const result = await checkMergeGuard({ repoRoot: root });
+    assert.equal(result.status, "passed");
+    assert.deepEqual(result.excused, []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("should pass when the fork point is main itself and the branch reverts its own edit", async () => {
+  const root = await createRepo();
+  try {
+    await put(root, "src/shared.ts", "export const shared = 'main';\n");
+    await commit(root, "feat: add the shared module\n\nLands on main.");
+    await git(root, "checkout", "--quiet", "-b", "feature");
+    await put(root, "src/shared.ts", "export const shared = 'branch';\n");
+    await commit(root, "feat: rework the shared module\n\nA branch experiment.");
+    await put(root, "src/shared.ts", "export const shared = 'main';\n");
+    await commit(root, "revert: restore the shared module\n\nBack to main state.");
+
+    const result = await checkMergeGuard({ repoRoot: root });
+    assert.equal(result.status, "passed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("should report a path once with rule 1 when both rules find it", async () => {
+  const root = await buildSilentLoss();
+  try {
+    const result = await checkMergeGuard({ repoRoot: root });
+    assert.equal(result.status, "failed");
+    const paths = result.losses.map((loss) => loss.path);
+    assert.equal(new Set(paths).size, paths.length);
+    for (const loss of result.losses) {
+      assert.equal(loss.rule, 1);
+      assert.match(loss.ruleReason, /no commit on this branch edits/);
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
