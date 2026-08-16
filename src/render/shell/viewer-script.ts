@@ -2489,11 +2489,14 @@ const wireDecisions = () => {
 
     const confirm = own("[data-decision-confirm]");
     const change = own("[data-decision-change]");
+    const clear = own("[data-decision-clear]");
     const footer = own("[data-decision-footer]");
     const answer = own("[data-decision-answer]");
     const answerTitle = own("[data-decision-answer-title]");
     const answerLead = own("[data-decision-answer-lead]");
+    const answerCaption = own("[data-decision-answer-caption]");
     const summary = own("[data-decision-selection-summary]");
+    const summaryCopy = own("[data-decision-selection-copy]");
     const rationale = own("[data-decision-rationale]");
     const question = own("[data-decision-question]");
     const proposalText = own("[data-decision-proposal-text]");
@@ -2506,6 +2509,9 @@ const wireDecisions = () => {
     const compareZones = ownAll("[data-decision-compare]");
     const explainZone = own("[data-decision-explain]");
     const weighting = own("[data-decision-weighting]");
+    const persistenceStatus = own("[data-decision-persistence-status]");
+    const supersededNotice = own("[data-decision-superseded]");
+    const lockedNotes = ownAll("[data-decision-locked-note]");
     const picked = () => choices.find((choice) => choice.checked) || null;
     const proposes = (choice) =>
       choice instanceof Element &&
@@ -2528,6 +2534,10 @@ const wireDecisions = () => {
     }
     let previousOptionChoice =
       choices.find((choice) => choice.checked && !proposes(choice)) || null;
+    // True while the reader is changing an answer they already gave. Only then
+    // is there an answer to clear, which is why the exit is offered here and
+    // not to a reader who has merely selected something for the first time.
+    let changingAnswer = false;
 
     // Overlapping the panels freezes the region at the tallest one, so from
     // here on swapping the visible panel cannot move anything below it.
@@ -2744,6 +2754,13 @@ const wireDecisions = () => {
     }
     if (confirm === null || change === null || answer === null) continue;
 
+    // A read-only review cannot record an answer, so the card offers none to
+    // give: every control is inert and the reason sits beside it. The state is
+    // read from the root rather than pushed in, so a card wired after an
+    // article replacement starts out locked too.
+    const readOnlyReview = () =>
+      document.documentElement.hasAttribute("data-review-read-only");
+
     const showPanel = (index) => {
       for (const panel of panels) {
         const shown = panel.getAttribute("data-option-index") === index;
@@ -2761,6 +2778,7 @@ const wireDecisions = () => {
       }
     };
     const sync = () => {
+      const locked = readOnlyReview();
       const choice = picked();
       const proposing = proposes(choice);
       const index = choice === null ? null : choice.getAttribute("data-option-index");
@@ -2770,18 +2788,33 @@ const wireDecisions = () => {
         ? "Include with acceptance"
         : "Confirm choice";
       confirm.disabled =
-        choice === null || (proposing && proposalValue() === "");
+        locked || choice === null || (proposing && proposalValue() === "");
+      change.disabled = locked;
+      for (const candidate of choices) candidate.disabled = locked;
+      if (proposalText !== null) proposalText.disabled = locked;
+      for (const note of lockedNotes) note.hidden = !locked;
       proposalBatch.hidden = !proposing;
       proposalNow.hidden = !proposing;
-      proposalBatch.disabled = proposalValue() === "";
-      proposalNow.disabled = proposalValue() === "";
+      proposalBatch.disabled = locked || proposalValue() === "";
+      proposalNow.disabled = locked || proposalValue() === "";
+      if (clear !== null) {
+        clear.hidden = !changingAnswer;
+        clear.disabled = locked;
+      }
       if (summary !== null) {
-        summary.textContent =
+        const line =
           choice === null
             ? "Select an option to continue."
             : proposing
               ? "Your own approach selected."
               : choice.value + " selected.";
+        // Write into the copy element rather than over the paragraph: the
+        // paragraph also holds the selection mark the picked state reveals,
+        // and replacing its text content deletes that mark on first sync.
+        if (summaryCopy === null) summary.textContent = line;
+        else summaryCopy.textContent = line;
+        if (choice === null) summary.removeAttribute("data-selection-picked");
+        else summary.setAttribute("data-selection-picked", "");
       }
     };
     decision.addEventListener("change", (event) => {
@@ -2796,10 +2829,9 @@ const wireDecisions = () => {
     const handOffProposal = (submit) => {
       const target = window.bigPlan?.feedback;
       if (typeof target?.add !== "function") {
-        if (summary !== null) {
-          summary.textContent =
-            "Open this document in a live review to submit feedback.";
-        }
+        const line = "Open this document in a live review to submit feedback.";
+        if (summaryCopy !== null) summaryCopy.textContent = line;
+        else if (summary !== null) summary.textContent = line;
         return;
       }
       target.add({
@@ -2882,10 +2914,56 @@ const wireDecisions = () => {
       paintColumn(proposing ? null : index, answered);
     };
 
-    confirm.addEventListener("click", () => {
+    const setSuperseded = (shown) => {
+      if (supersededNotice !== null) supersededNotice.hidden = !shown;
+    };
+    const showPersistenceFailure = () => {
+      if (answerLead !== null) answerLead.textContent = "Answer not saved";
+      if (answerCaption !== null) {
+        answerCaption.textContent =
+          "Not saved yet. Big Plan is retrying automatically.";
+      }
+      answer.setAttribute("data-decision-persistence-failed", "");
+      if (persistenceStatus !== null) {
+        persistenceStatus.hidden = decision.hasAttribute(
+          "data-decision-answered",
+        );
+      }
+      decision.setAttribute("data-decision-persistence-failed", "");
+    };
+    const showPersistenceState = (caption) => {
       const choice = picked();
-      if (choice === null || confirm.disabled) return;
+      if (answerLead !== null) {
+        answerLead.textContent = proposes(choice)
+          ? "Proposal recorded"
+          : "Answer recorded";
+      }
+      if (
+        answerCaption !== null &&
+        document.documentElement.hasAttribute("data-review-session")
+      ) {
+        answerCaption.textContent = caption;
+      }
+      if (persistenceStatus !== null) persistenceStatus.hidden = true;
+      answer.removeAttribute("data-decision-persistence-failed");
+      decision.removeAttribute("data-decision-persistence-failed");
+    };
+    const showPersistencePending = () => {
+      showPersistenceState("Saving with this review...");
+    };
+    const showPersistenceSaved = () => {
+      showPersistenceState(
+        "Saved with this review. Your agent receives it when you approve the plan.",
+      );
+    };
+    const showReadingSession = () => {
+      showPersistenceState(
+        "Noted for this reading session. It is not recorded for your agent.",
+      );
+    };
+    const recordAnswer = (choice, replay) => {
       const proposing = proposes(choice);
+      setSuperseded(false);
       if (answerLead !== null) {
         answerLead.textContent = proposing
           ? "Proposal recorded"
@@ -2898,30 +2976,132 @@ const wireDecisions = () => {
       if (proposalText !== null) proposalText.readOnly = proposing;
       decision.setAttribute("data-decision-answered", "");
       compress(true);
-       // Announce and queue the reading-session answer for an embedding host.
+      if (replay) showPersistenceSaved();
+      else if (proposing) showReadingSession();
+      else showPersistencePending();
+      if (replay) return;
+      // Announce and queue the reading-session answer for an embedding host.
       const record = {
         decision: decision.id,
         question: question === null ? "" : question.textContent,
+        optionId: choice.id,
         option: choice.value,
         proposal: proposing ? proposalValue() : "",
       };
       window.bigPlanDecisionAnswers = window.bigPlanDecisionAnswers || [];
       window.bigPlanDecisionAnswers.push(record);
-      document.dispatchEvent(
-        new CustomEvent("bigplan:decision-answered", { detail: record }),
+      decision.dispatchEvent(
+        new CustomEvent("bigplan:decision-answered", {
+          bubbles: true,
+          detail: record,
+        }),
       );
+    };
+    confirm.addEventListener("click", () => {
+      const choice = picked();
+      if (choice === null || confirm.disabled) return;
+      changingAnswer = false;
+      recordAnswer(choice, false);
       change.focus();
     });
+    if (clear !== null) {
+      clear.addEventListener("click", () => {
+        changingAnswer = false;
+        for (const choice of choices) choice.checked = false;
+        previousOptionChoice = null;
+        if (proposalText !== null) {
+          proposalText.readOnly = false;
+          proposalText.value = "";
+        }
+        if (answerTitle !== null) answerTitle.textContent = "";
+        setSuperseded(false);
+        sync();
+        // Confirm is disabled with nothing chosen, so focusing it would drop
+        // the reader out of the card entirely. The first option is where a
+        // keyboard reader continues from here.
+        const first = choices.find((candidate) => !proposes(candidate));
+        if (first !== undefined) first.focus();
+        // Clicking change already retracted the stored answer; announcing it
+        // again keeps the record empty even when the reader reached the
+        // chooser some other way, and repeating a retraction changes nothing.
+        decision.dispatchEvent(
+          new CustomEvent("bigplan:decision-retracted", {
+            bubbles: true,
+            detail: { decision: decision.id },
+          }),
+        );
+      });
+    }
+    decision.addEventListener("bigplan:decision-apply", (event) => {
+      const optionId = event.detail?.optionId;
+      if (typeof optionId !== "string") return;
+      const choice = choices.find(
+        (candidate) => candidate.id === optionId && !proposes(candidate),
+      );
+      if (choice === undefined) return;
+      changingAnswer = false;
+      choice.checked = true;
+      previousOptionChoice = choice;
+      sync();
+      recordAnswer(choice, true);
+    });
+    decision.addEventListener(
+      "bigplan:decision-persistence-failed",
+      showPersistenceFailure,
+    );
+    decision.addEventListener(
+      "bigplan:decision-persistence-pending",
+      showPersistencePending,
+    );
+    decision.addEventListener(
+      "bigplan:decision-persistence-saved",
+      showPersistenceSaved,
+    );
+    decision.addEventListener(
+      "bigplan:decision-persistence-reading",
+      showReadingSession,
+    );
+    decision.addEventListener("bigplan:decision-superseded", () =>
+      setSuperseded(true),
+    );
+    // The record no longer holds an answer for this decision, so the card
+    // returns to the chooser. This is the store telling the card what is true,
+    // not the reader retracting, so it announces nothing back.
+    decision.addEventListener("bigplan:decision-reset", () => {
+      changingAnswer = false;
+      for (const candidate of choices) candidate.checked = false;
+      previousOptionChoice = null;
+      if (proposalText !== null) {
+        proposalText.readOnly = false;
+        proposalText.value = "";
+      }
+      if (answerTitle !== null) answerTitle.textContent = "";
+      decision.removeAttribute("data-decision-answered");
+      for (const header of columnHeaders) {
+        header.removeAttribute("data-option-chosen");
+      }
+      compress(false);
+      sync();
+    });
+    document.addEventListener("bigplan:review-authority", sync);
     change.addEventListener("click", () => {
+      changingAnswer = true;
       decision.removeAttribute("data-decision-answered");
       for (const header of columnHeaders) {
         header.removeAttribute("data-option-chosen");
       }
       compress(false);
       if (proposalText !== null) proposalText.readOnly = false;
+      showReadingSession();
       sync();
       const choice = picked();
       if (choice !== null) choice.focus();
+      decision.dispatchEvent(
+        new CustomEvent("bigplan:decision-retracted", {
+          bubbles: true,
+          detail: { decision: decision.id },
+        }),
+      );
     });
     sync();
   }

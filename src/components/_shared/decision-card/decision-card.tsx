@@ -11,14 +11,16 @@
 // Selection is a native radio group, so choosing survives with the viewer
 // script disabled.
 
-import type {
-  CompiledDecisionCard,
-  CompiledDecisionCardOption,
-  DecisionCardStatus,
-  DecisionCardTone,
+import {
+  isAnswerableDecisionCard,
+  type CompiledDecisionCard,
+  type CompiledDecisionCardOption,
+  type DecisionCardStatus,
+  type DecisionCardTone,
 } from "../../_model/decision-card.js";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
 import { PLUS_ICON } from "../../../icons/lucide/plus.js";
+import { TRIANGLE_ALERT_ICON } from "../../../icons/lucide/triangle-alert.js";
 import { type MatrixToneParity } from "../comparison-matrix/comparison-matrix.js";
 import { BriefLayout, MatrixLayout, RowsLayout } from "./view-layouts.js";
 import { hastContentToReact } from "../hast-content/hast-content.js";
@@ -49,11 +51,6 @@ const statusLabel = (model: CompiledDecisionCard): string =>
   model.status === "open" && model.interaction === "audit"
     ? "Proposed"
     : STATUS_LABELS[model.status];
-
-// The reader is only invited to answer while the question is genuinely open;
-// a settled or deferred decision renders as a record, not as a control.
-const isAnswerable = (model: CompiledDecisionCard): boolean =>
-  model.status === "open" && model.interaction === "choose";
 
 // A settled record explains its outcome; an open question begins with the
 // agent's recommendation without preselecting any radio.
@@ -143,6 +140,44 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
   );
 };
 
+// A read-only review cannot record anything, so the controls are inert and say
+// why beside themselves. It appears twice because both states can be reached in
+// a read-only session: an unanswered card that cannot be answered, and an
+// answered one whose answer cannot be changed.
+const ReadOnlyNote = ({ className = "" }: { readonly className?: string }) => (
+  <p
+    className={`decision-locked-note m-0 flex min-w-0 items-center gap-1.5 text-xs font-medium text-[var(--callout-warning-c)] ${className}`}
+    data-decision-locked-note=""
+    hidden
+  >
+    <span className="inline-flex size-4 shrink-0" aria-hidden="true">
+      {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
+    </span>
+    <span>{"This review is read-only, so no answer can be recorded."}</span>
+  </p>
+);
+
+// A masked answer and an unanswered decision are the same empty card, so the
+// reader who answered this one is told what happened to their answer instead of
+// being left to notice the difference.
+const SupersededNotice = () => (
+  <p
+    className="decision-superseded flex items-start gap-2 bg-[var(--callout-warning-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-warning-c)]"
+    data-decision-superseded=""
+    role="status"
+    hidden
+  >
+    <span className="mt-0.5 inline-flex size-4 shrink-0" aria-hidden="true">
+      {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
+    </span>
+    <span>
+      {
+        "This decision changed after you answered it. Answer it again to record your choice."
+      }
+    </span>
+  </p>
+);
+
 // The confirm row sits directly under the rationale panel rather than at the
 // end of the document, so the action is never screens away from the choice.
 // The whole card is about one screen now, which is why this is close rather
@@ -168,6 +203,19 @@ const AnswerControls = () => (
           {"Select an option to continue."}
         </span>
       </p>
+      {/* Leaving a decision unanswered on purpose is a different question from
+          "which one?", so it is an action beside the options rather than an
+          entry inside them. It appears only after an answer exists, because
+          before that there is nothing to clear. */}
+      <ReadOnlyNote />
+      <button
+        className="decision-clear"
+        type="button"
+        data-decision-clear=""
+        hidden
+      >
+        {"Clear answer"}
+      </button>
       <button
         className="decision-confirm"
         type="button"
@@ -178,25 +226,37 @@ const AnswerControls = () => (
       </button>
     </div>
     <div
-      className="decision-answer gap-3 px-6 py-4"
+      className="decision-answer group gap-3 px-6 py-4 data-[decision-persistence-failed]:bg-[var(--callout-danger-bg)]!"
       data-decision-answer=""
       role="status"
       hidden
     >
       <span
-        className="decision-answer-mark mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--decision-pro-c)] text-paper [&_svg]:size-3"
+        className="decision-answer-mark mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--decision-pro-c)] text-paper group-data-[decision-persistence-failed]:bg-danger group-data-[decision-persistence-failed]:text-danger-ink [&_svg]:size-3"
         aria-hidden="true"
       >
-        {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+        <span className="inline-flex group-data-[decision-persistence-failed]:hidden">
+          {lucideIconToReact({ icon: CHECK_ICON, hidden: false })}
+        </span>
+        <span className="hidden group-data-[decision-persistence-failed]:inline-flex">
+          {lucideIconToReact({ icon: TRIANGLE_ALERT_ICON, hidden: false })}
+        </span>
       </span>
       <div className="min-w-0 flex-1">
-        <p className="m-0 text-base font-semibold text-[var(--decision-pro-ink)]">
+        <p className="m-0 text-base font-semibold text-[var(--decision-pro-ink)] group-data-[decision-persistence-failed]:text-[var(--callout-danger-c)]">
           <span data-decision-answer-lead="">{"Answer recorded"}</span>
           <span className="sr-only" data-decision-answer-title="" />
         </p>
-        <p className="m-0 mt-0.5 text-xs text-[var(--decision-pro-c)]">
+        <p
+          className="m-0 mt-0.5 text-xs text-[var(--decision-pro-c)] group-data-[decision-persistence-failed]:text-[var(--callout-danger-c)]"
+          data-decision-answer-caption=""
+        >
           {"Noted for this reading session."}
         </p>
+        {/* Under the caption rather than beside it: the strip already carries a
+            mark, a record, and a control, and a fourth column squeezes all
+            three at the reading width. */}
+        <ReadOnlyNote className="mt-1" />
       </div>
       <button
         className="decision-change shrink-0"
@@ -206,6 +266,15 @@ const AnswerControls = () => (
         {"Change"}
       </button>
     </div>
+    <p
+      className="m-0 bg-[var(--callout-danger-bg)] px-6 py-3 text-sm font-medium text-[var(--callout-danger-c)]"
+      data-decision-persistence-status=""
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      {"Not saved yet. Big Plan is retrying automatically."}
+    </p>
   </>
 );
 
@@ -260,7 +329,7 @@ export const DecisionCard = ({
 }: {
   readonly model: CompiledDecisionCard;
 }) => {
-  const answerable = isAnswerable(model);
+  const answerable = isAnswerableDecisionCard(model);
   const defaultIndex = defaultPanelIndex(model);
   return (
     <figure
@@ -306,6 +375,7 @@ export const DecisionCard = ({
           {hastContentToReact(model.context)}
         </div>
       )}
+      {answerable ? <SupersededNotice /> : null}
       <fieldset className="decision-fieldset m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">{model.question}</legend>
         <div

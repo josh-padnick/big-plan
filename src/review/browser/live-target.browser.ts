@@ -216,6 +216,13 @@ export const candidateMatchesLivePicture = ({
     candidate.expectedPicture.source === livePicture.source &&
     candidate.expectedPicture.alt === livePicture.alt);
 
+/** Resolves a decision id to its card in the live article, never a lens copy. */
+export const liveDecisionFigure = (decisionId: string): LiveTargetResult => {
+  const article = liveArticle();
+  if (article === null) return { missing: "no-article" };
+  return resolveWithin(article, `#${CSS.escape(decisionId)}[data-decision]`);
+};
+
 /**
  * Reads the text a live block presents to the reader, mirroring what
  * compile-time extraction recorded: screen-reader-only scaffolding and markup

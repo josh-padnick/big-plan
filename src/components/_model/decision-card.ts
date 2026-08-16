@@ -57,3 +57,14 @@ export type CompiledDecisionCard = {
   readonly discriminating: ReadonlyArray<number>;
   readonly reversibility?: CompiledDecisionCardReversibility;
 };
+
+/**
+ * True when the plan is genuinely asking the reader for an answer: a settled or
+ * deferred question renders as a record, and an audited one is presented for
+ * inspection rather than choice. The card renders its controls from this, and
+ * the review runtime derives which answers it will accept from the same fact,
+ * so a decision that cannot be answered can never acquire a stored answer.
+ */
+export const isAnswerableDecisionCard = (
+  model: CompiledDecisionCard,
+): boolean => model.status === "open" && model.interaction === "choose";
