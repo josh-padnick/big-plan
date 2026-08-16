@@ -3083,7 +3083,18 @@ const wireDecisions = () => {
       compress(false);
       sync();
     });
-    document.addEventListener("bigplan:review-authority", sync);
+    // Authority changes arrive at the document, so this is the one listener a
+    // card wires beyond its own subtree. It unhooks itself once the card has
+    // left the document: otherwise every replaced article stays retained
+    // through this closure for the life of the page.
+    const syncAuthority = () => {
+      if (!decision.isConnected) {
+        document.removeEventListener("bigplan:review-authority", syncAuthority);
+        return;
+      }
+      sync();
+    };
+    document.addEventListener("bigplan:review-authority", syncAuthority);
     change.addEventListener("click", () => {
       changingAnswer = true;
       decision.removeAttribute("data-decision-answered");
