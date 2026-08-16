@@ -18,8 +18,18 @@ import {
   validateStoredComments,
 } from "./shared/comment.js";
 import { deriveSnapshotDigest, readAgentExchange } from "./agent-exchange.js";
-import { readComments, readResolvedCommentIds } from "./store.js";
+import {
+  readComments,
+  readResolvedCommentIds,
+  readStagedInputs,
+} from "./store.js";
 import type { ReviewStore } from "./store.js";
+import {
+  deriveDecisionInventory,
+  type DecisionInventory,
+} from "./decision-inventory.js";
+import { validateStagedInputs } from "./plan-inputs-store.js";
+import type { StagedInputs } from "./plan-inputs-store.js";
 import {
   MUTATION_STALL_MS,
   ReviewWriteStalled,
@@ -155,6 +165,18 @@ export type WriteGate = {
   readonly stalledForMs: () => number | undefined;
 };
 
+/**
+ * The decisions the plan currently asks, and the stored answers read against
+ * them. The inventory is what makes the runtime, rather than the browser, the
+ * party that decides which answers are still current, so it is cached by the
+ * digest of the source the document was rendered from and can never describe a
+ * plan the reader was not served.
+ */
+export type DecisionAnswers = {
+  readonly inventory: () => Promise<DecisionInventory>;
+  readonly read: () => Promise<StagedInputs>;
+};
+
 /** The review's one lifetime policy and its current activity. */
 export type ActivityClock = {
   readonly idleTimeoutMs: number;
@@ -172,6 +194,7 @@ export type ReviewRouteContext = {
   readonly restartCommand: string;
   readonly recoveryPrompt: string;
   readonly planRenderer: PlanRenderer;
+  readonly decisionAnswers: DecisionAnswers;
   readonly readerProgress: ReaderProgress;
   readonly writeGate: WriteGate;
   readonly activityClock: ActivityClock;
@@ -275,6 +298,58 @@ export const createPlanRenderer = ({
   };
 
   return { renderPlan, readStoredComments, validateUpdates };
+};
+
+/**
+ * Owns the compiled decision inventory and every read of the answer record.
+ *
+ * The inventory is recompiled only when the plan source changes, keyed by the
+ * same digest the rest of the runtime identifies a revision by. A record that
+ * cannot be read is total answer loss, so it is reported once per runtime
+ * rather than silently answered as empty: repeating it on every later read
+ * would be noise, and the next accepted write replaces the evidence anyway.
+ */
+export const createDecisionAnswers = ({
+  store,
+  resolvedPlanPath,
+  reportDiagnostic,
+}: {
+  readonly store: ReviewStore;
+  readonly resolvedPlanPath: string;
+  readonly reportDiagnostic: ReviewRouteContext["reportDiagnostic"];
+}): DecisionAnswers => {
+  let inventoryDigest: string | undefined;
+  let inventory: DecisionInventory = new Map();
+  let reportedUnreadable = false;
+  return {
+    inventory: async () => {
+      const markdown = await readFile(resolvedPlanPath, "utf8");
+      const digest = deriveSnapshotDigest(markdown);
+      if (inventoryDigest !== digest) {
+        inventory = deriveDecisionInventory({
+          markdown,
+          fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+        });
+        inventoryDigest = digest;
+      }
+      return inventory;
+    },
+    read: async () => {
+      const { inputs, unreadable } = await readStagedInputs({
+        store,
+        validate: validateStagedInputs,
+      });
+      if (unreadable !== undefined && !reportedUnreadable) {
+        reportedUnreadable = true;
+        reportDiagnostic({
+          message:
+            "Stored decision answers could not be read and were treated as empty",
+          error: new Error(unreadable),
+        });
+      }
+      return inputs;
+    },
+  };
 };
 
 /**

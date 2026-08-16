@@ -35,6 +35,7 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { readBoundedRegularFile } from "./bounded-regular-file.js";
 import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
+import type { StagedInputs } from "./plan-inputs-store.js";
 import {
   isReviewImageId,
   isReviewImageWithinLimits,
@@ -103,6 +104,7 @@ export type ReviewStore = {
   readonly agentPromptPath: string;
   readonly snapshotDirectory: string;
   readonly draftsPath: string;
+  readonly inputsPath: string;
   readonly sentPath: string;
   readonly progressPath: string;
   readonly agentConnectionDirectory: string;
@@ -479,6 +481,7 @@ export const reviewStoreFor = ({
       leaf: "snapshots",
     }),
     draftsPath: inside({ base: reviewDirectory, leaf: "drafts.json" }),
+    inputsPath: inside({ base: reviewDirectory, leaf: "inputs.json" }),
     sentPath: inside({ base: reviewDirectory, leaf: "sent.json" }),
     progressPath: inside({ base: reviewDirectory, leaf: "progress.jsonl" }),
     agentConnectionDirectory: inside({
@@ -1190,6 +1193,67 @@ export const writeComments = async ({
   readonly comments: ReadonlyArray<ReviewComment>;
 }): Promise<void> => {
   await writeStoreJson({ path, value: comments });
+};
+
+/**
+ * One read of the staged decision answers. An unreadable record is reported
+ * rather than swallowed: falling back to an empty one is total answer loss, and
+ * the next accepted write overwrites the evidence, so the caller that owns
+ * operational output gets the chance to say so.
+ */
+export type StagedInputsRead = {
+  readonly inputs: StagedInputs;
+  readonly unreadable?: string;
+};
+
+// Absent and unreadable are the same empty record but not the same event, so
+// this store reads its own file rather than through the shared helper, which
+// answers undefined for both.
+const readInputsText = async (path: string): Promise<string | undefined> => {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
+};
+
+/** Reads staged decision answers back through their owned validator. */
+export const readStagedInputs = async ({
+  store,
+  validate,
+}: {
+  readonly store: ReviewStore;
+  readonly validate: (value: unknown) => StagedInputs;
+}): Promise<StagedInputsRead> => {
+  const stored = await readInputsText(store.inputsPath);
+  if (stored === undefined) return { inputs: validate(undefined) };
+  try {
+    return { inputs: validate(JSON.parse(stored)) };
+  } catch (error: unknown) {
+    return {
+      inputs: validate(undefined),
+      unreadable: error instanceof Error ? error.message : String(error),
+    };
+  }
+};
+
+/** Atomically replaces the staged decision-answer record. */
+export const writeStagedInputs = async ({
+  store,
+  inputs,
+}: {
+  readonly store: ReviewStore;
+  readonly inputs: StagedInputs;
+}): Promise<void> => {
+  await writeStoreJson({ path: store.inputsPath, value: inputs });
 };
 
 const snapshotPath = ({
