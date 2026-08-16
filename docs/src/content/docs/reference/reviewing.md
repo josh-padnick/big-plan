@@ -23,7 +23,7 @@ If the deadline the page last knew has also passed, it reports that observation 
 When the page has no unsaved browser-only input, Refresh is offered in either case so you can check whether the review is still running.
 If it does have unsaved input, Refresh stays disabled and the page asks you to keep the tab open instead.
 It does not say why contact was lost, because a page that has lost contact cannot tell an idle expiry from a runtime someone stopped, or from one that is still serving another tab.
-For the same reason it never tells you to start a new review runtime; the command itself is the only place that can tell whether one is still live, and it answers that question for you.
+For the same reason it never tells you to start a new review runtime; the command is the only place that decides whether starting or taking over a runtime is allowed, and it answers that question for you.
 When a newer review session for that plan was recorded before contact was lost, the page also links to it as **Open latest review**.
 Opening an old address after its runtime has already ended still reaches the browser's connection-error page; giving shared links an explicit lifetime remains a separate product decision.
 

@@ -362,71 +362,30 @@ const refuse = ({
 export const DEFAULT_REVIEW_IDLE_TIMEOUT_MS = 30 * 60 * 1_000;
 
 /**
- * Starts the review runtime for one plan and resolves once it is listening.
- * The caller owns the plan path; nothing about a request ever contributes one.
+ * Initializes the durable review state this session has just taken custody of.
+ *
+ * Every write here lands in the plan's shared store, so it runs only after the
+ * locked activation: a runtime that lost a start-up tie, or one that was
+ * refused because another runtime is live, must leave that store exactly as it
+ * found it.
  */
-export const startReviewRuntime = async ({
-  planPath,
+const initializeOwnedReviewState = async ({
+  store,
+  planId,
+  sessionId,
+  resolvedPlanPath,
+  initialSource,
+  initialSnapshot,
   diffPreviewSource,
-  idleTimeoutMs = DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
-  writeStallMs = MUTATION_STALL_MS,
-  queuedWorkIdleTimeoutMs = AGENT_CLAIM_LEASE_MS,
-  takeover = false,
 }: {
-  readonly planPath: string;
+  readonly store: ReviewStore;
+  readonly planId: string;
+  readonly sessionId: string;
+  readonly resolvedPlanPath: string;
+  readonly initialSource: string;
+  readonly initialSnapshot: string;
   readonly diffPreviewSource?: string;
-  readonly idleTimeoutMs?: number;
-  /** How long one mutation may run before this runtime gives up on it. */
-  readonly writeStallMs?: number;
-  readonly queuedWorkIdleTimeoutMs?: number;
-  /** Replaces a live runtime that still holds this plan, instead of yielding. */
-  readonly takeover?: boolean;
-}): Promise<ReviewRuntime> => {
-  const queuedWorkIdleLimitMs = Number.isFinite(queuedWorkIdleTimeoutMs)
-    ? Math.max(0, Math.min(AGENT_CLAIM_LEASE_MS, queuedWorkIdleTimeoutMs))
-    : AGENT_CLAIM_LEASE_MS;
-  const resolvedPlanPath = resolve(planPath);
-  const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
-  const agentCommand = agentConnectCommand({
-    executablePath,
-    planPath: resolvedPlanPath,
-  });
-  const restartCommand = reviewRestartCommand({
-    executablePath,
-    planPath: resolvedPlanPath,
-  });
-  const recoveryPrompt = agentRecoveryPrompt({
-    executablePath,
-    planPath: resolvedPlanPath,
-  });
-  const planId = deriveReviewPlanId({ planPath: resolvedPlanPath });
-  const sessionId = randomId(8);
-  const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
-  await prepareStore(store);
-  // Yield before touching anything shared. A live runtime is serving this plan
-  // to an open page and possibly a connected agent, and every write below - the
-  // snapshot, the diff-preview seed, custody itself - would land in their
-  // state.
-  const liveAtStart = await liveReviewCustody({
-    store,
-    planId,
-    plan: resolvedPlanPath,
-  });
-  if (liveAtStart !== undefined && !takeover) {
-    throw new ReviewCustodyHeld(liveAtStart);
-  }
-  const previousSession = await readCurrentReviewSession({ store });
-  // The token protects API requests that write the durable image store or use
-  // the live mailbox. Keep it stable when a later runtime takes custody of the
-  // same plan; the session id, not the token, identifies write authority.
-  const token = previousSession?.token ?? randomBytes(32).toString("base64url");
-  const initialSource = await readFile(resolvedPlanPath, "utf8");
-  renderDocument({
-    markdown: initialSource,
-    fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
-    identity: {},
-  });
-  const initialSnapshot = deriveSnapshotDigest(initialSource);
+}): Promise<Awaited<ReturnType<typeof readAgentExchange>>> => {
   await writeSnapshot({
     store,
     snapshot: initialSnapshot,
@@ -656,7 +615,141 @@ export const startReviewRuntime = async ({
     }
   }
 
-  const initialExchange = await readAgentExchange({ store, sessionId, planId });
+  return readAgentExchange({ store, sessionId, planId });
+};
+
+/**
+ * Starts the review runtime for one plan and resolves once it is listening.
+ * The caller owns the plan path; nothing about a request ever contributes one.
+ */
+export const startReviewRuntime = async ({
+  planPath,
+  diffPreviewSource,
+  idleTimeoutMs = DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
+  writeStallMs = MUTATION_STALL_MS,
+  queuedWorkIdleTimeoutMs = AGENT_CLAIM_LEASE_MS,
+  takeover = false,
+}: {
+  readonly planPath: string;
+  readonly diffPreviewSource?: string;
+  readonly idleTimeoutMs?: number;
+  /** How long one mutation may run before this runtime gives up on it. */
+  readonly writeStallMs?: number;
+  readonly queuedWorkIdleTimeoutMs?: number;
+  /** Replaces a live runtime that still holds this plan, instead of yielding. */
+  readonly takeover?: boolean;
+}): Promise<ReviewRuntime> => {
+  const queuedWorkIdleLimitMs = Number.isFinite(queuedWorkIdleTimeoutMs)
+    ? Math.max(0, Math.min(AGENT_CLAIM_LEASE_MS, queuedWorkIdleTimeoutMs))
+    : AGENT_CLAIM_LEASE_MS;
+  const resolvedPlanPath = resolve(planPath);
+  const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
+  const agentCommand = agentConnectCommand({
+    executablePath,
+    planPath: resolvedPlanPath,
+  });
+  const restartCommand = reviewRestartCommand({
+    executablePath,
+    planPath: resolvedPlanPath,
+  });
+  const recoveryPrompt = agentRecoveryPrompt({
+    executablePath,
+    planPath: resolvedPlanPath,
+  });
+  const planId = deriveReviewPlanId({ planPath: resolvedPlanPath });
+  const sessionId = randomId(8);
+  const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
+  await prepareStore(store);
+  // Yield before binding a port or rendering anything. This is the fast answer
+  // for the common case; it cannot settle a tie, which is what the locked
+  // activation below is for.
+  const liveAtStart = await liveReviewCustody({
+    store,
+    planId,
+    plan: resolvedPlanPath,
+  });
+  if (liveAtStart !== undefined && !takeover) {
+    throw new ReviewCustodyHeld(liveAtStart);
+  }
+  const previousSession = await readCurrentReviewSession({ store });
+  // The token protects API requests that write the durable image store or use
+  // the live mailbox. Keep it stable when a later runtime takes custody of the
+  // same plan; the session id, not the token, identifies write authority.
+  const token = previousSession?.token ?? randomBytes(32).toString("base64url");
+  const initialSource = await readFile(resolvedPlanPath, "utf8");
+  renderDocument({
+    markdown: initialSource,
+    fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+    identity: {},
+  });
+  const initialSnapshot = deriveSnapshotDigest(initialSource);
+
+  // Custody is taken before this runtime writes anything the plan's owner can
+  // see. The descriptor carries the address, so the socket has to be bound
+  // first; it is bound without a request listener and starts serving only once
+  // initialization below has finished.
+  const server: Server = createServer();
+  await new Promise<void>((settle, fail) => {
+    server.once("error", fail);
+    server.listen({ host: "127.0.0.1", port: 0 }, settle);
+  });
+  const address = server.address();
+  const port =
+    typeof address === "object" && address !== null ? address.port : 0;
+  const url = `http://127.0.0.1:${port}/`;
+  const closeListener = async (): Promise<void> => {
+    await new Promise<void>((settle) => {
+      server.close(() => {
+        settle();
+      });
+    });
+  };
+
+  // The early check cannot settle a tie: two runtimes may both have passed it
+  // before either wrote a descriptor. This one runs inside the custody lock, so
+  // exactly one of them wins and the other gives its port back having written
+  // nothing.
+  const activation = await activateReviewSession({
+    store,
+    takeover,
+    descriptor: {
+      version: 1,
+      sessionId,
+      planId,
+      plan: resolvedPlanPath,
+      url,
+      port,
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+      // The token is here so the reviewer's own tools can reach the runtime;
+      // the file is owner-only, which is what keeps that safe.
+      token,
+    },
+  }).catch(async (error: unknown): Promise<never> => {
+    // The socket is already bound. Leaving without closing it strands the port
+    // for the life of the process, whether custody failed or was refused.
+    await closeListener();
+    throw error;
+  });
+  if (!activation.activated) {
+    await closeListener();
+    throw new ReviewCustodyHeld(activation.live);
+  }
+
+  // Everything below mutates state this session now owns. A failure gives the
+  // port back rather than leaving a bound socket behind.
+  const initialExchange = await initializeOwnedReviewState({
+    store,
+    planId,
+    sessionId,
+    resolvedPlanPath,
+    initialSource,
+    initialSnapshot,
+    ...(diffPreviewSource === undefined ? {} : { diffPreviewSource }),
+  }).catch(async (error: unknown) => {
+    await closeListener();
+    throw error;
+  });
   const mutations = createMutationRegistry();
 
   // Every piece of state the routes share is built once, here, and named after
@@ -930,56 +1023,13 @@ export const startReviewRuntime = async ({
     }
   };
 
-  const server: Server = createServer((request, response) => {
+  // The socket was bound before custody was taken, so it has been accepting
+  // connections with no request listener attached. Serving starts here, once
+  // this session owns the plan and its state is initialized.
+  server.on("request", (request, response) => {
     void handle({ request, response });
   });
 
-  await new Promise<void>((settle, fail) => {
-    server.once("error", fail);
-    server.listen({ host: "127.0.0.1", port: 0 }, settle);
-  });
-
-  const address = server.address();
-  const port =
-    typeof address === "object" && address !== null ? address.port : 0;
-  const url = `http://127.0.0.1:${port}/`;
-
-  // The socket is already listening at this point. Leaving without closing it
-  // leaves an orphan bound port behind for the life of the process, whether
-  // custody failed or was refused.
-  const closeBoundPort = async (): Promise<void> => {
-    await new Promise<void>((settle) => {
-      server.close(() => settle());
-    });
-  };
-
-  // The check above cannot settle a tie: two runtimes may both have passed it
-  // before either wrote a descriptor. This one runs inside the custody lock, so
-  // exactly one of them wins and the other gives its port back.
-  const activation = await activateReviewSession({
-    store,
-    takeover,
-    descriptor: {
-      version: 1,
-      sessionId,
-      planId,
-      plan: resolvedPlanPath,
-      url,
-      port,
-      pid: process.pid,
-      startedAt: new Date().toISOString(),
-      // The token is here so the reviewer's own tools can reach the runtime;
-      // the file is owner-only, which is what keeps that safe.
-      token,
-    },
-  }).catch(async (error: unknown): Promise<never> => {
-    await closeBoundPort();
-    throw error;
-  });
-  if (!activation.activated) {
-    await closeBoundPort();
-    throw new ReviewCustodyHeld(activation.live);
-  }
   let heartbeatWrite = Promise.resolve();
   let heartbeatFailureReported = false;
   const queueHeartbeat = (

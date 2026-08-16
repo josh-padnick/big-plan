@@ -3,16 +3,18 @@
 // A silent seizure makes the other reviewer's open page and its connected
 // agent read-only with nothing said to either of them.
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { readAgentExchange } from "./agent-exchange.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import {
   ReviewCustodyHeld,
   reviewSessionOwnsMailbox,
 } from "./session-authority.js";
+import type { ReviewStore } from "./store.js";
 
 const PLAN = `# Custody plan
 
@@ -22,6 +24,54 @@ The runtime serves this document and nothing else.
 
 Today's reality is that a second start silently takes the review away.
 `;
+
+// The diff-preview seed is the loudest shared write a start performs: it stores
+// sent comments, drafts, agent requests, claims, and terminal responses.
+const PREVIEW_PLAN = `# Custody plan
+
+The runtime serves this document and nothing else.
+
+## Status quo
+
+Today's reality is that the preview seed lands in someone else's review.
+`;
+
+/** Every stored file under one review store, by path and exact content. */
+const storeContents = async (
+  store: ReviewStore,
+): Promise<ReadonlyArray<readonly [string, string]>> => {
+  const entries = await readdir(store.root, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  const files = entries.filter((entry) => entry.isFile());
+  return Promise.all(
+    files
+      .map((entry) => join(entry.parentPath, entry.name))
+      .sort()
+      .map(
+        async (path) =>
+          [path, await readFile(path, "utf8")] as readonly [string, string],
+      ),
+  );
+};
+
+const sentCommentCount = async (store: ReviewStore): Promise<number> => {
+  const parsed: unknown = JSON.parse(await readFile(store.sentPath, "utf8"));
+  return Array.isArray(parsed) ? parsed.length : -1;
+};
+
+/** The sessions that own the stored agent requests, in the order stored. */
+const requestSessionIds = async (
+  runtime: ReviewRuntime,
+): Promise<ReadonlyArray<string>> => {
+  const exchange = await readAgentExchange({
+    store: runtime.store,
+    sessionId: runtime.sessionId,
+    planId: runtime.planId,
+  });
+  return exchange.requests.map((request) => request.sessionId);
+};
 
 const running: Array<ReviewRuntime> = [];
 const directories: Array<string> = [];
@@ -117,6 +167,49 @@ describe("review runtime custody", () => {
         sessionId: next.sessionId,
       }),
     ).resolves.toBe(true);
+  });
+
+  it("should write nothing into a store another live runtime owns", async () => {
+    const planPath = await planFile();
+    const live = await start({ planPath });
+    const before = await storeContents(live.store);
+
+    const held = await start({
+      planPath,
+      diffPreviewSource: PREVIEW_PLAN,
+    }).catch((error: unknown) => error as unknown);
+
+    expect(held).toBeInstanceOf(ReviewCustodyHeld);
+    // A refused start must be inert: no snapshot, no seeded comments, no agent
+    // requests in a review it does not own.
+    await expect(storeContents(live.store)).resolves.toEqual(before);
+  });
+
+  it("should let only the winner of a tie write shared review state", async () => {
+    const planPath = await planFile();
+
+    const outcomes = await Promise.all([
+      start({ planPath, diffPreviewSource: PREVIEW_PLAN }).catch(
+        (error: unknown) => error as unknown,
+      ),
+      start({ planPath, diffPreviewSource: PREVIEW_PLAN }).catch(
+        (error: unknown) => error as unknown,
+      ),
+    ]);
+
+    const winners = outcomes.filter(
+      (one): one is ReviewRuntime => !(one instanceof Error),
+    );
+    expect(winners).toHaveLength(1);
+    const [winner] = winners;
+    if (winner === undefined) throw new Error("no runtime won the plan");
+    // The loser writes nothing, so every seeded request belongs to the session
+    // that actually holds the plan. A start that seeded before losing custody
+    // leaves requests owned by a session that never existed.
+    await expect(sentCommentCount(winner.store)).resolves.toBe(1);
+    const owners = await requestSessionIds(winner);
+    expect(owners.length).toBeGreaterThan(0);
+    expect([...new Set(owners)]).toEqual([winner.sessionId]);
   });
 
   it("should let exactly one of two simultaneous starts win the plan", async () => {

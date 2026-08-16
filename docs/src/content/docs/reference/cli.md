@@ -160,12 +160,13 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 
 It writes no output.
 
-`review` returns the loopback address, resolved plan path, session id, and
-feedback directory, then keeps running until `Ctrl+C` or the configured idle
-timeout. It owns the local session token, heartbeat, durable review state, and
-source snapshots.
+When `review` takes custody of the plan, it returns the loopback address,
+resolved plan path, session id, and feedback directory, then keeps running until
+`Ctrl+C` or the configured idle timeout. It owns the local session token,
+heartbeat, durable review state, and source snapshots.
 
-It also reports `custody`, because only one runtime may hold a plan at a time:
+It always reports `custody`, because only one runtime may hold a plan at a time,
+and that value says whether this command took it:
 
 - `activated`: this runtime took a free plan and is now serving it.
 - `held`: a live runtime already serves this plan, so no second runtime started. The returned address, plan, and session id are that live runtime's, and no `feedback` directory is reported. The command exits instead of listening.
