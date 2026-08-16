@@ -3,17 +3,26 @@
 // A silent seizure makes the other reviewer's open page and its connected
 // agent read-only with nothing said to either of them.
 
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { readAgentExchange } from "./agent-exchange.js";
+import { deriveSnapshotDigest, readAgentExchange } from "./agent-exchange.js";
 import { startReviewRuntime } from "./server.js";
 import type { ReviewRuntime } from "./server.js";
 import {
   ReviewCustodyHeld,
+  readCurrentReviewSession,
   reviewSessionOwnsMailbox,
 } from "./session-authority.js";
+import { deriveReviewPlanId, prepareStore, reviewStoreFor } from "./store.js";
 import type { ReviewStore } from "./store.js";
 
 const PLAN = `# Custody plan
@@ -210,6 +219,45 @@ describe("review runtime custody", () => {
     const owners = await requestSessionIds(winner);
     expect(owners.length).toBeGreaterThan(0);
     expect([...new Set(owners)]).toEqual([winner.sessionId]);
+  });
+
+  it("should release custody immediately when start-up initialization fails", async () => {
+    const planPath = await planFile();
+    const planId = deriveReviewPlanId({ planPath });
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    // A directory squatting on the snapshot's own path makes the first
+    // owned-state write fail after custody has already been taken.
+    const poisonedSnapshotPath = join(
+      store.snapshotDirectory,
+      `${deriveSnapshotDigest(PLAN)}.mdx`,
+    );
+    await mkdir(poisonedSnapshotPath);
+
+    const failure = await start({ planPath }).catch(
+      (error: unknown) => error as unknown,
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(ReviewCustodyHeld);
+    // The failed start leaves its descriptor behind, so its address is known;
+    // the listener it bound must be gone.
+    const abandoned = await readCurrentReviewSession({ store });
+    if (abandoned === undefined) {
+      throw new Error("the failed start left no session descriptor");
+    }
+    await expect(fetch(abandoned.url)).rejects.toThrow();
+    await rm(poisonedSnapshotPath, { recursive: true, force: true });
+    // Custody must be free right now, not after the start-up grace expires:
+    // this next start runs well inside that window.
+    const next = await start({ planPath });
+    expect(next.replacedSession).toBe(undefined);
+    await expect(
+      reviewSessionOwnsMailbox({
+        store: next.store,
+        sessionId: next.sessionId,
+      }),
+    ).resolves.toBe(true);
   });
 
   it("should let exactly one of two simultaneous starts win the plan", async () => {

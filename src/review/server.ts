@@ -619,6 +619,27 @@ const initializeOwnedReviewState = async ({
 };
 
 /**
+ * Closes a bound server without waiting on its connections: idle ones are
+ * dropped at once and the rest are forced shut after the shutdown grace, so a
+ * request arriving at the wrong moment cannot keep close() from settling.
+ */
+const drainAndCloseServer = async (server: Server): Promise<void> => {
+  const closedServer = new Promise<void>((settle) => {
+    server.close(() => settle());
+  });
+  server.closeIdleConnections();
+  const forceClose = setTimeout(() => {
+    server.closeAllConnections();
+  }, SHUTDOWN_GRACE_MS);
+  forceClose.unref();
+  try {
+    await closedServer;
+  } finally {
+    clearTimeout(forceClose);
+  }
+};
+
+/**
  * Starts the review runtime for one plan and resolves once it is listening.
  * The caller owns the plan path; nothing about a request ever contributes one.
  */
@@ -697,23 +718,6 @@ export const startReviewRuntime = async ({
   const port =
     typeof address === "object" && address !== null ? address.port : 0;
   const url = `http://127.0.0.1:${port}/`;
-  const closeListener = async (): Promise<void> => {
-    const closedServer = new Promise<void>((settle) => {
-      server.close(() => {
-        settle();
-      });
-    });
-    server.closeIdleConnections();
-    const forceClose = setTimeout(() => {
-      server.closeAllConnections();
-    }, SHUTDOWN_GRACE_MS);
-    forceClose.unref();
-    try {
-      await closedServer;
-    } finally {
-      clearTimeout(forceClose);
-    }
-  };
 
   // The early check cannot settle a tie: two runtimes may both have passed it
   // before either wrote a descriptor. This one runs inside the custody lock, so
@@ -738,11 +742,11 @@ export const startReviewRuntime = async ({
   }).catch(async (error: unknown): Promise<never> => {
     // The socket is already bound. Leaving without closing it strands the port
     // for the life of the process, whether custody failed or was refused.
-    await closeListener();
+    await drainAndCloseServer(server);
     throw error;
   });
   if (!activation.activated) {
-    await closeListener();
+    await drainAndCloseServer(server);
     throw new ReviewCustodyHeld(activation.live);
   }
 
@@ -771,10 +775,15 @@ export const startReviewRuntime = async ({
       });
     return heartbeatWrite;
   };
-  // The first heartbeat lands before any owned-state work so liveness rests on
-  // the heartbeat itself, not on the descriptor's start-up grace, however long
-  // initialization takes.
+  // The heartbeat starts, and keeps renewing, before any owned-state work so
+  // liveness rests on the heartbeat itself rather than on the descriptor's
+  // start-up grace, however long initialization takes. Heartbeats touch only
+  // this session's own liveness record, never the plan's shared review state.
   await queueHeartbeat(true);
+  const heartbeatTimer = setInterval(() => {
+    void queueHeartbeat(true);
+  }, REVIEW_HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref();
 
   // Everything below mutates state this session now owns. A failure gives the
   // port back rather than leaving a bound socket behind, and records a stopped
@@ -789,11 +798,12 @@ export const startReviewRuntime = async ({
     initialSnapshot,
     ...(diffPreviewSource === undefined ? {} : { diffPreviewSource }),
   }).catch(async (error: unknown) => {
+    clearInterval(heartbeatTimer);
     await queueHeartbeat(
       false,
       "The review runtime failed while starting and never served this plan.",
     );
-    await closeListener();
+    await drainAndCloseServer(server);
     throw error;
   });
   const mutations = createMutationRegistry();
@@ -1076,11 +1086,6 @@ export const startReviewRuntime = async ({
     void handle({ request, response });
   });
 
-  const heartbeatTimer = setInterval(() => {
-    void queueHeartbeat(true);
-  }, REVIEW_HEARTBEAT_INTERVAL_MS);
-  heartbeatTimer.unref();
-
   let connectionWrite = Promise.resolve();
   let connectionFailureReported = false;
   const queueConnectionCheck = (): Promise<void> => {
@@ -1197,19 +1202,7 @@ export const startReviewRuntime = async ({
     if (idleTimer !== undefined) clearInterval(idleTimer);
     await heartbeatWrite.catch(() => undefined);
     await connectionWrite.catch(() => undefined);
-    const closedServer = new Promise<void>((settle) => {
-      server.close(() => settle());
-    });
-    server.closeIdleConnections();
-    const forceClose = setTimeout(() => {
-      server.closeAllConnections();
-    }, SHUTDOWN_GRACE_MS);
-    forceClose.unref();
-    try {
-      await closedServer;
-    } finally {
-      clearTimeout(forceClose);
-    }
+    await drainAndCloseServer(server);
   };
   if (idleTimeoutMs > 0) {
     idleTimer = setInterval(
