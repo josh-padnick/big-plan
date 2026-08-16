@@ -62,6 +62,51 @@ const deferred = (): {
   return { promise, resolve };
 };
 
+/**
+ * Scripts one review session's heartbeat around the agent loop's wait: live
+ * until the agent is provably waiting, then absent for `missedReads` reads.
+ *
+ * A `mockResolvedValueOnce` queue cannot express this. The review runtime
+ * renews its own heartbeat every `REVIEW_HEARTBEAT_INTERVAL_MS` in this same
+ * process and renews it through this same store function, so one renewal
+ * arriving first drained the single live answer and left the loop's preflight
+ * reading an absent heartbeat - failing the wrong phase, and only on the runs
+ * where the timer happened to interleave. Phases turn on the agent's own
+ * waiting heartbeat instead of on call order, so a background renewal is
+ * harmless however it lands, and the dead phase always starts on the first
+ * read the waiting loop makes.
+ */
+const heartbeatAroundAgentWait = ({
+  review,
+  missedReads,
+}: {
+  readonly review: ReviewRuntime;
+  readonly missedReads: number;
+}) => {
+  let waiting = false;
+  let missed = 0;
+  const live = () => ({
+    sessionId: review.sessionId,
+    running: true,
+    updatedAtMs: Date.now(),
+  });
+  return vi
+    .spyOn(reviewStore, "readSessionHeartbeatValue")
+    .mockImplementation(async () => {
+      if (!waiting) {
+        const presence = await reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        });
+        if (!presence.connected) return live();
+        waiting = true;
+      }
+      if (missed >= missedReads) return live();
+      missed += 1;
+      return undefined;
+    });
+};
+
 const holdAgentRequestLock = async ({
   store,
   requestId,
@@ -2115,24 +2160,9 @@ describe("agent work loop lifecycle", () => {
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, "# Plan\n");
     const review = await startReviewRuntime({ planPath });
-    const heartbeat = vi
-      .spyOn(reviewStore, "readSessionHeartbeatValue")
-      .mockResolvedValueOnce({
-        sessionId: review.sessionId,
-        running: true,
-        updatedAtMs: Date.now(),
-      })
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({
-        sessionId: review.sessionId,
-        running: true,
-        updatedAtMs: Date.now(),
-      });
+    // Enough missed reads to fail one whole liveness check and start a second,
+    // which the next live read then recovers.
+    const heartbeat = heartbeatAroundAgentWait({ review, missedReads: 7 });
     const request = messageAgentRequest({
       kind: "chat",
       requestId: "cccccccccccccccc",
@@ -2175,14 +2205,10 @@ describe("agent work loop lifecycle", () => {
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, "# Plan\n");
     const review = await startReviewRuntime({ planPath });
-    const heartbeat = vi
-      .spyOn(reviewStore, "readSessionHeartbeatValue")
-      .mockResolvedValueOnce({
-        sessionId: review.sessionId,
-        running: true,
-        updatedAtMs: Date.now(),
-      })
-      .mockResolvedValue(undefined);
+    const heartbeat = heartbeatAroundAgentWait({
+      review,
+      missedReads: Number.POSITIVE_INFINITY,
+    });
     try {
       await expect(
         runAgentWorkLoopAction({

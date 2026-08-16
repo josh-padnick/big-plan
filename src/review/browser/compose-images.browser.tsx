@@ -17,6 +17,10 @@ import {
   type ReviewImageDescriptor,
 } from "../shared/review-image.js";
 import { ReviewImage } from "./review-image.browser.js";
+import {
+  reviewWriteRefusal,
+  type ReviewWriteAvailability,
+} from "./review-write-availability.js";
 import { Textarea } from "./ui.browser.js";
 
 // Uploading is the one image action that still needs the live session: it
@@ -28,6 +32,7 @@ export const ComposeImages = ({
   body,
   onBodyChange,
   identity,
+  writeAvailability,
   label,
   placeholder,
   maxLength,
@@ -39,6 +44,18 @@ export const ComposeImages = ({
   readonly body: string;
   readonly onBodyChange: (body: string) => void;
   readonly identity: ReviewImageIdentity | null;
+  /**
+   * Whether a write sent now could still be accepted. An upload is a write, so
+   * it asks the same shared question every other mutation path asks rather than
+   * discovering the refusal after the reviewer has watched it upload.
+   *
+   * Required, and deliberately without a default: defaulting to "available"
+   * would let a composer added later bypass the gate by saying nothing, which
+   * is the failure this shared question exists to remove. A missing answer is
+   * a compile error instead of a silent upload through a runtime that has
+   * already refused.
+   */
+  readonly writeAvailability: ReviewWriteAvailability;
   readonly label: string;
   readonly placeholder: string;
   readonly maxLength: number;
@@ -55,10 +72,17 @@ export const ComposeImages = ({
   }, [autoFocus]);
   const references = extractReviewImageReferences(body);
   const upload = async (file: File, caret: number, altOverride?: string) => {
-    if (identity === null) {
-      setError("Start big-plan review to attach images.");
+    // Nothing typed is touched: only the digest reference this would have
+    // inserted is withheld, so the composer keeps exactly what it had.
+    const refusal = reviewWriteRefusal({
+      path: "attach-image",
+      availability: writeAvailability,
+    });
+    if (refusal !== undefined) {
+      setError(refusal);
       return;
     }
+    if (identity === null) return;
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
       setError("Use PNG, JPEG, or WebP images.");
       return;
