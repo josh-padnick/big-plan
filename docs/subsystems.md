@@ -61,6 +61,10 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   The CLI requires a nonzero `--idle-timeout` to be at least 1 minute, while `--idle-timeout 0` disables expiry entirely; the agent work loop exits when the session heartbeat it follows dies.
   Symptoms that look unrelated (an agent disconnecting, a preview expiring) can share this one cause.
 - A thread-resolution action that conflicts with a queued or in-flight message for that thread is a request-lifecycle invariant, enforced where request claims and terminal states land (`request-mailbox.ts`), not a thread-semantics concern.
+- Custody of a plan is decided in one place and refused by default: `activateReviewSession` in `src/review/session-authority.ts` will not displace a runtime that is still live, and `big-plan review` reports that runtime's address instead of starting a second one.
+  Liveness there is the session heartbeat the agent already follows, never a second liveness definition, and the check runs inside the custody lock so simultaneous starts cannot both win.
+  Only an explicit `--takeover` displaces a live session, because doing so makes that session's open page and connected agent read-only.
+  Any surface tempted to suggest restarting a review inherits this rule rather than reasoning about liveness itself: only the command can know whether a runtime is live.
 
 ### C. Commenting Surface
 
