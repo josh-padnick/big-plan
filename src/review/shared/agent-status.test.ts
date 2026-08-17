@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  AGENT_RECOVERY_HORIZON_MS,
   AGENT_STALL_MS,
   agentHoldsClaimedWork,
+  heldWorkQuiet,
   agentPresenceIsFresh,
   deriveAgentStatus,
   deriveAgentHealthLabel,
@@ -466,7 +468,10 @@ describe("current agent activity", () => {
 });
 
 describe("held work", () => {
-  const held = { requests: [{ ...request(), ...liveClaim(NOW) }] };
+  const held = {
+    requests: [{ ...request(), ...liveClaim(NOW) }],
+    now: NOW,
+  };
 
   // BIG-147. The lease has by definition already lapsed during the quiet turn
   // this answers for, so a lease test here would answer "no" exactly when the
@@ -476,6 +481,7 @@ describe("held work", () => {
       agentHoldsClaimedWork({
         requests: [{ ...request(), ...liveClaim(NOW - AGENT_STALL_MS * 10) }],
         cancelPendingRequestIds: new Set(),
+        now: NOW,
       }),
     ).toBe(true);
   });
@@ -488,6 +494,7 @@ describe("held work", () => {
       agentHoldsClaimedWork({
         requests: [{ ...request(), ...liveClaim(), ...terminal }],
         cancelPendingRequestIds: new Set(),
+        now: NOW,
       }),
     ).toBe(false);
   });
@@ -506,8 +513,114 @@ describe("held work", () => {
       agentHoldsClaimedWork({
         requests: [request()],
         cancelPendingRequestIds: new Set(),
+        now: NOW,
       }),
     ).toBe(false);
+  });
+
+  // BIG-147. Nothing reaps a claim, so an explanation with no upper bound would
+  // account for silence forever on a plan no agent is attached to.
+  it("should stop explaining the quiet once the claim passes the recovery horizon", () => {
+    const quietFor = (ms: number) => ({
+      requests: [{ ...request(), ...liveClaim(NOW - ms) }],
+      cancelPendingRequestIds: new Set<string>(),
+      now: NOW,
+    });
+    expect(heldWorkQuiet(quietFor(AGENT_RECOVERY_HORIZON_MS))).toBe(
+      "explained",
+    );
+    expect(heldWorkQuiet(quietFor(AGENT_RECOVERY_HORIZON_MS + 1))).toBe(
+      "stale",
+    );
+    expect(agentHoldsClaimedWork(quietFor(AGENT_RECOVERY_HORIZON_MS))).toBe(
+      true,
+    );
+    expect(agentHoldsClaimedWork(quietFor(AGENT_RECOVERY_HORIZON_MS + 1))).toBe(
+      false,
+    );
+  });
+
+  it("should keep explaining the quiet while any one claim is inside the horizon", () => {
+    expect(
+      heldWorkQuiet({
+        requests: [
+          { ...request(), ...liveClaim(NOW - AGENT_RECOVERY_HORIZON_MS - 1) },
+          {
+            ...request(),
+            requestId: "2222222222222222",
+            ...liveClaim(NOW - AGENT_STALL_MS * 2),
+          },
+        ],
+        cancelPendingRequestIds: new Set(),
+        now: NOW,
+      }),
+    ).toBe("explained");
+  });
+
+  it("should report no held work when nobody has picked anything up", () => {
+    expect(
+      heldWorkQuiet({
+        requests: [request()],
+        cancelPendingRequestIds: new Set(),
+        now: NOW,
+      }),
+    ).toBe("none");
+  });
+});
+
+describe("claimed work attribution", () => {
+  const claimedAt = (requestId: string, quietForMs: number) => ({
+    ...request(),
+    requestId,
+    ...liveClaim(NOW - quietForMs),
+  });
+
+  // BIG-147. Requests arrive oldest-first, so list order described an abandoned
+  // claim's age and linked its thread while a later turn was the one in flight.
+  it("should describe the most recent pickup rather than the oldest claim", () => {
+    const abandoned = claimedAt("1111111111111111", AGENT_STALL_MS * 12);
+    const working = claimedAt("2222222222222222", AGENT_STALL_MS * 2);
+    const activity = deriveCurrentAgentActivity({
+      requests: [abandoned, working],
+      cancelPendingRequestIds: new Set(),
+      progressEvents: [],
+      agentConnected: false,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: 0,
+    });
+    expect(activity).toMatchObject({
+      state: "stalled",
+      requestId: "2222222222222222",
+      updatedAtMs: NOW - AGENT_STALL_MS * 2,
+    });
+    expect(activity).toHaveProperty(
+      "supporting",
+      expect.stringContaining("2m 30s"),
+    );
+  });
+
+  it("should stop claiming a stall once every claim passes the horizon", () => {
+    const activity = deriveCurrentAgentActivity({
+      requests: [claimedAt("1111111111111111", AGENT_RECOVERY_HORIZON_MS + 1)],
+      cancelPendingRequestIds: new Set(),
+      progressEvents: [],
+      agentConnected: false,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: 0,
+    });
+    expect(activity).toMatchObject({
+      state: "disconnected",
+      headline: "The agent is disconnected",
+    });
+    expect(
+      deriveAgentHealthLabel({
+        activity,
+        hasAgentRuntime: true,
+        isReadOnly: false,
+      }),
+    ).toBe("Agent disconnected");
   });
 });
 

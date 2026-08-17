@@ -17,7 +17,10 @@ import {
   agentModelVendor,
   type AgentModelVendor,
 } from "../shared/agent-model-icon.js";
-import type { CurrentAgentActivity } from "../shared/agent-status.js";
+import type {
+  CurrentAgentActivity,
+  HeldWorkQuiet,
+} from "../shared/agent-status.js";
 import type { BrowserConnectionEvent } from "../shared/review-wire.js";
 import {
   compactDurationLabel,
@@ -560,7 +563,7 @@ export const AgentConnectionPanel = ({
   activity,
   presenceState,
   connected,
-  workIsHeld,
+  heldWork,
   heartbeatAt,
   modelName,
   connectionLog,
@@ -575,11 +578,12 @@ export const AgentConnectionPanel = ({
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
   /**
-   * Whether an agent is holding work here. It withholds advice premised on
-   * nobody being there; it never decides what the cards below report, which
-   * stays presence alone (BIG-147).
+   * What held work says about the quiet. While it explains the quiet it
+   * withholds advice premised on nobody being there; once it has gone stale the
+   * advice returns, naming the takeover it now costs. It never decides what the
+   * cards below report, which stays presence alone (BIG-147).
    */
-  readonly workIsHeld: boolean;
+  readonly heldWork: HeldWorkQuiet;
   readonly heartbeatAt: number;
   readonly modelName?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -644,26 +648,46 @@ export const AgentConnectionPanel = ({
       )}
       <AnotherViewTip />
       {/*
-       * Held work explains the quiet, and under adr/0002 a reconnect invites a
-       * second agent to take the plan from the one still editing it. Offering
-       * this beside a stalled card would be advice that loses the working
-       * agent's answer, so it waits until nothing is held (BIG-147).
+       * While held work explains the quiet this is withheld: under adr/0002 a
+       * reconnect invites a second agent to take the plan from the one still
+       * editing it, so offering it beside a stalled card would be advice that
+       * loses the working agent's answer. Once the claim has gone stale the
+       * reviewer needs this route back more than the claim is worth, and the
+       * wording names the takeover so the choice is theirs (BIG-147).
        */}
       {isReadOnly ||
       isConnected ||
-      workIsHeld ||
+      heldWork === "explained" ||
       !agentStatusIsAvailable ? null : (
-        <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
+        <details
+          className="group mt-3 rounded-md border border-edge text-xs text-muted"
+          data-review-agent-recovery={
+            heldWork === "stale" ? "takeover" : "open"
+          }
+        >
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
               <Icon icon={CHEVRON_RIGHT_ICON} />
             </span>
-            Re-connect your session
+            {heldWork === "stale"
+              ? "Connect an agent and take over this work"
+              : "Re-connect your session"}
           </summary>
           <div className="grid gap-2 border-t border-edge px-3 py-3">
+            {heldWork === "stale" ? (
+              <p className="m-0">
+                An agent picked this work up and has reported nothing since. It
+                may still be running and finish on its own, and Big Plan cannot
+                tell that apart from an agent that stopped. Connecting a session
+                below takes the work over, so whatever the first agent was doing
+                is discarded and its answer will no longer be accepted. Your
+                comments are safe either way.
+              </p>
+            ) : null}
             <p className="m-0">
-              To reconnect this running review, paste this exact prompt into
-              your coding agent:
+              {heldWork === "stale"
+                ? "To take over, paste this exact prompt into your coding agent:"
+                : "To reconnect this running review, paste this exact prompt into your coding agent:"}
             </p>
             <CopyBlock
               value={

@@ -13,7 +13,11 @@ import {
   requestIsTerminal,
   type TerminalAgentRequest,
 } from "./agent-request-state.js";
-import { AGENT_STALL_MS, AGENT_STALL_WINDOW_LABEL } from "./agent-timing.js";
+import {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+  AGENT_STALL_WINDOW_LABEL,
+} from "./agent-timing.js";
 import type { BrowserConnectionEvent } from "./review-wire.js";
 import { compactDurationLabel } from "./time-label.js";
 
@@ -22,7 +26,12 @@ import { compactDurationLabel } from "./time-label.js";
 // The window bounds how long silence stays presented as progress; it does not
 // decide whether an agent is attached, because no signal renews while a turn
 // runs (BIG-147).
-export { AGENT_STALL_MS, AGENT_STALL_WINDOW_LABEL } from "./agent-timing.js";
+export {
+  AGENT_RECOVERY_HORIZON_LABEL,
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+  AGENT_STALL_WINDOW_LABEL,
+} from "./agent-timing.js";
 
 export type AgentActivityRequest = ClaimedRequest &
   TerminalAgentRequest & {
@@ -277,30 +286,87 @@ export const requestWasClaimed = (request: ClaimedRequest): boolean =>
   request.claimedBy !== undefined && claimSignalAtMs(request) !== undefined;
 
 /**
- * True while some agent is holding work on this plan. Deliberately blind to the
- * lease, because the quiet turn this answers for has by definition let its
- * lease lapse; a lease test here would answer "no" exactly when the question
- * matters.
- *
- * This explains a silence, so it may inform the activity reading and it may
- * withhold advice premised on nobody being there. It is never evidence that an
- * agent is attached, and it must not reach any connection surface (BIG-147).
+ * How long a claim has gone without a signal, measured from the claim's own
+ * last narration. Never from the lease: a quiet turn's lease is lapsed by
+ * definition, so a lease test would answer "no" exactly when the question
+ * matters (BIG-147).
  */
-export const agentHoldsClaimedWork = ({
+const claimQuietForMs = ({
+  request,
+  nowMs,
+}: {
+  readonly request: ClaimedRequest;
+  readonly nowMs: number;
+}): number | undefined => {
+  const signalAtMs = claimSignalAtMs(request);
+  return signalAtMs === undefined ? undefined : Math.max(0, nowMs - signalAtMs);
+};
+
+/**
+ * True while this claim still accounts for an agent's silence. Pickup explains
+ * quiet only within the recovery horizon; past it the claim has stopped saying
+ * anything about why nothing is being reported.
+ */
+const claimExplainsQuiet = ({
+  request,
+  nowMs,
+}: {
+  readonly request: ClaimedRequest;
+  readonly nowMs: number;
+}): boolean => {
+  if (!requestWasClaimed(request)) return false;
+  const quietFor = claimQuietForMs({ request, nowMs });
+  return quietFor !== undefined && quietFor <= AGENT_RECOVERY_HORIZON_MS;
+};
+
+/** What the plan's open claims say about why nothing is being reported. */
+export type HeldWorkQuiet =
+  /** Nobody has picked anything up, so held work explains nothing. */
+  | "none"
+  /** Someone picked work up recently enough that the quiet is accounted for. */
+  | "explained"
+  /** A claim is open but so old it no longer accounts for anything. */
+  | "stale";
+
+type OpenClaimedRequest = ClaimedRequest &
+  TerminalAgentRequest & { readonly requestId: string };
+
+/**
+ * The one definition of what held work says about a silence. Deliberately blind
+ * to the lease, and bounded by the recovery horizon so a claim nothing ever
+ * reaps cannot explain silence forever.
+ *
+ * An explanation may inform the activity reading and withhold advice premised
+ * on nobody being there. It is never evidence that an agent is attached, and it
+ * must not reach any connection surface (BIG-147).
+ */
+export const heldWorkQuiet = ({
   requests,
   cancelPendingRequestIds,
+  now,
 }: {
-  readonly requests: ReadonlyArray<
-    ClaimedRequest & TerminalAgentRequest & { readonly requestId: string }
-  >;
+  readonly requests: ReadonlyArray<OpenClaimedRequest>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
-}): boolean =>
-  requests.some(
+  readonly now: number;
+}): HeldWorkQuiet => {
+  const open = requests.filter(
     (request) =>
       !requestIsTerminal(request) &&
       !cancelPendingRequestIds.has(request.requestId) &&
       requestWasClaimed(request),
   );
+  if (open.length === 0) return "none";
+  return open.some((request) => claimExplainsQuiet({ request, nowMs: now }))
+    ? "explained"
+    : "stale";
+};
+
+/** True while held work still accounts for the plan being quiet. */
+export const agentHoldsClaimedWork = (input: {
+  readonly requests: ReadonlyArray<OpenClaimedRequest>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly now: number;
+}): boolean => heldWorkQuiet(input) === "explained";
 
 /** Selects the first live, nonterminal claim. */
 export const selectActiveAgentRequest = <Request extends AgentActivityRequest>({
@@ -319,20 +385,17 @@ export const selectActiveAgentRequest = <Request extends AgentActivityRequest>({
       claimIsLive({ request, nowMs: now }),
   );
 
-/** Selects live work before falling back to the oldest open request `accepts`. */
-const selectOpenAgentRequest = <Request extends AgentActivityRequest>({
+/** The open requests a selector may still choose between. */
+const openAgentRequests = <Request extends AgentActivityRequest>({
   requests,
   cancelPendingRequestIds,
-  now,
   accepts,
 }: {
   readonly requests: ReadonlyArray<Request>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
-  readonly now: number;
   readonly accepts: (request: Request) => boolean;
-}): Request | undefined =>
-  selectActiveAgentRequest({ requests, cancelPendingRequestIds, now }) ??
-  requests.find(
+}): ReadonlyArray<Request> =>
+  requests.filter(
     (request) =>
       !requestIsTerminal(request) &&
       !cancelPendingRequestIds.has(request.requestId) &&
@@ -342,26 +405,58 @@ const selectOpenAgentRequest = <Request extends AgentActivityRequest>({
 /**
  * Selects the work an agent is holding, preferring a renewed lease over one
  * that has lapsed. A lapsed lease says nothing about the holder, so a quiet
- * turn keeps its request here rather than falling back to the queue.
+ * turn keeps its request here rather than falling back to the queue - but only
+ * while the claim is still inside the recovery horizon, because past it the
+ * pickup no longer accounts for anything.
+ *
+ * Among lapsed claims it takes the most recent pickup rather than the first in
+ * list order. Requests arrive oldest-first, so list order would describe an
+ * abandoned claim's age and link its thread while a later turn is the one
+ * actually in flight (BIG-147).
  */
 export const selectClaimedAgentRequest = <
   Request extends AgentActivityRequest,
->(input: {
+>({
+  requests,
+  cancelPendingRequestIds,
+  now,
+}: {
   readonly requests: ReadonlyArray<Request>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly now: number;
 }): Request | undefined =>
-  selectOpenAgentRequest({ ...input, accepts: requestWasClaimed });
+  selectActiveAgentRequest({ requests, cancelPendingRequestIds, now }) ??
+  openAgentRequests({
+    requests,
+    cancelPendingRequestIds,
+    accepts: (request) => claimExplainsQuiet({ request, nowMs: now }),
+  }).reduce<Request | undefined>(
+    (newest, request) =>
+      newest === undefined ||
+      (claimSignalAtMs(request) ?? 0) > (claimSignalAtMs(newest) ?? 0)
+        ? request
+        : newest,
+    undefined,
+  );
 
 /** Selects live work before falling back to the oldest queued request. */
 export const selectPendingAgentRequest = <
   Request extends AgentActivityRequest,
->(input: {
+>({
+  requests,
+  cancelPendingRequestIds,
+  now,
+}: {
   readonly requests: ReadonlyArray<Request>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly now: number;
 }): Request | undefined =>
-  selectOpenAgentRequest({ ...input, accepts: () => true });
+  selectActiveAgentRequest({ requests, cancelPendingRequestIds, now }) ??
+  openAgentRequests({
+    requests,
+    cancelPendingRequestIds,
+    accepts: () => true,
+  })[0];
 
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({

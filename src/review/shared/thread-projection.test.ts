@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./comment.js";
 import { AGENT_CLAIM_LEASE_MS } from "./agent-claim.js";
+import { AGENT_RECOVERY_HORIZON_MS } from "./agent-timing.js";
 import {
   projectCommentThread,
   projectConversationHistory,
@@ -454,6 +455,48 @@ describe("thread projection", () => {
       stage: "blocked",
       headline: "Blocked - no agent connected",
     });
+  });
+
+  // BIG-147. Nothing reaps a claim, so once the holding request has been quiet
+  // past the recovery horizon it stops accounting for the plan's silence and
+  // the reviewer is owed the honest reading again.
+  it("should report a message as blocked once the holding claim goes stale", () => {
+    const abandoned = request({
+      requestId: "1111111111111111",
+      ...liveClaim(NOW - AGENT_RECOVERY_HORIZON_MS - 1),
+    });
+    const sentAfterwards = request({
+      requestId: "cccccccccccccccc",
+      kind: "reply",
+      commentId: comment.id,
+      commentIds: undefined,
+      createdAt: "2026-08-10T19:58:00Z",
+    });
+    const quietPresence = { ...presence, connected: false };
+    const statusWith = (holder: ThreadRequest) =>
+      projectRequestStatus({
+        request: sentAfterwards,
+        requests: [holder, sentAfterwards],
+        progressEvents: [],
+        presence: quietPresence,
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+        queuedAhead: 1,
+      });
+    expect(statusWith(abandoned)).toMatchObject({
+      stage: "blocked",
+      headline: "Blocked - no agent connected",
+    });
+    expect(
+      statusWith(
+        request({
+          requestId: "1111111111111111",
+          ...liveClaim(NOW - AGENT_RECOVERY_HORIZON_MS),
+        }),
+      ),
+    ).toMatchObject({ stage: "waiting", label: "Queued, 1 ahead" });
   });
 
   it("should keep a renewed claim working rather than stalled", () => {

@@ -6,6 +6,11 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAgentExchange } from "../src/review/agent-exchange.js";
+import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
+import {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+} from "../src/review/shared/agent-timing.js";
 import { startReviewRuntime } from "../src/review/server.js";
 import {
   agentResponseDraftPath,
@@ -370,6 +375,10 @@ test("should not invite a reconnect while an agent is holding work", async ({
   const reconnectDisclosure = page.getByText("Re-connect your session", {
     exact: true,
   });
+  const takeoverDisclosure = page.getByText(
+    "Connect an agent and take over this work",
+    { exact: true },
+  );
   const openAgentTab = async () => {
     await page.reload();
     await page.getByRole("button", { name: /Feedback/u }).click();
@@ -378,7 +387,12 @@ test("should not invite a reconnect while an agent is holding work", async ({
       .getByRole("tab", { name: "Agent" })
       .click();
   };
-  const goQuiet = async (requestId: string) => {
+  // Ages the claim's own last signal by `quietForMs`, which is what the wall
+  // clock does to an agent that has not narrated since pickup.
+  const goQuiet = async (
+    requestId: string,
+    quietForMs = AGENT_STALL_MS + 1,
+  ) => {
     const { requests } = await readAgentExchange({
       store: runtime.store,
       sessionId: runtime.sessionId,
@@ -393,7 +407,10 @@ test("should not invite a reconnect while an agent is holding work", async ({
     await writeAgentRequestValue({
       store: runtime.store,
       requestId,
-      value: { ...current, claimExpiresAtMs: Date.now() - 1_000 },
+      value: {
+        ...current,
+        claimExpiresAtMs: Date.now() - quietForMs + AGENT_CLAIM_LEASE_MS,
+      },
     });
     await rm(runtime.store.agentHeartbeatPath, { force: true });
   };
@@ -437,6 +454,40 @@ test("should not invite a reconnect while an agent is holding work", async ({
     await expect(
       rail.locator("[data-review-current-activity]"),
     ).toHaveAttribute("data-review-current-activity", "stalled");
+    await expect(reconnectDisclosure).toHaveCount(0);
+    await expect(takeoverDisclosure).toHaveCount(0);
+
+    // Matrix case 4. Nothing reaps a claim, so past the recovery horizon the
+    // pickup stops explaining the quiet and the reviewer gets their only route
+    // back - named for the takeover it now costs rather than as a bare
+    // invitation to reconnect.
+    await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS - 60_000);
+    await openAgentTab();
+    await expect(takeoverDisclosure).toHaveCount(0);
+
+    await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS + 60_000);
+    await openAgentTab();
+    await expect(reconnectDisclosure).toHaveCount(0);
+    await expect(takeoverDisclosure).toBeVisible();
+    const takeoverPanel = rail.locator("[data-review-agent-recovery]");
+    await expect(takeoverPanel).toHaveAttribute(
+      "data-review-agent-recovery",
+      "takeover",
+    );
+    await takeoverDisclosure.click();
+    await expect(takeoverPanel).toContainText("may still be running");
+    await expect(takeoverPanel).toContainText(
+      "its answer will no longer be accepted",
+    );
+    await expect(
+      rail.locator("[data-review-current-activity]"),
+    ).not.toHaveAttribute("data-review-current-activity", "stalled");
+
+    // Back inside the horizon the pickup explains the quiet again, so every
+    // piece of that advice goes away.
+    await goQuiet(requestId);
+    await openAgentTab();
+    await expect(takeoverDisclosure).toHaveCount(0);
     await expect(reconnectDisclosure).toHaveCount(0);
 
     // What following that prompt does. A second agent takes the lapsed claim,

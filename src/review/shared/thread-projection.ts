@@ -341,7 +341,11 @@ export const projectRequestStatus = ({
     // reporting it as queued described started work as waiting in line. The
     // lease is left to choose between working and stalled below (BIG-147).
     pickedUp: requestWasClaimed(request),
-    workIsHeld: agentHoldsClaimedWork({ requests, cancelPendingRequestIds }),
+    workIsHeld: agentHoldsClaimedWork({
+      requests,
+      cancelPendingRequestIds,
+      now: nowMs,
+    }),
     ...(queuedAhead === undefined ? {} : { queuedAhead }),
     surface,
     ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),

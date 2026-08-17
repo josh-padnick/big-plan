@@ -43,9 +43,9 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
   AGENT_STALL_MS,
-  agentHoldsClaimedWork,
   deriveAgentHealthLabel,
   deriveCurrentAgentActivity,
+  heldWorkQuiet,
   projectAgentConnectionState,
   selectActiveAgentRequest,
   type AgentStatus,
@@ -5780,9 +5780,10 @@ export const ReviewController = () => {
   // Activity and queue input only. It explains a silence; it is never evidence
   // that an agent is attached, so it must not reach agentConnected or anything
   // the connection card reads (BIG-147).
-  const agentWorkIsHeld = agentHoldsClaimedWork({
+  const agentHeldWork = heldWorkQuiet({
     requests: agent.requests,
     cancelPendingRequestIds,
+    now: agentProjectionNowMs,
   });
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
@@ -6589,7 +6590,7 @@ export const ReviewController = () => {
                 activity: currentAgentActivity,
                 presenceState: agentProjection.state,
                 connected: agentConnected,
-                workIsHeld: agentWorkIsHeld,
+                heldWork: agentHeldWork,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
                 modelName: activeRequest?.claimedModel?.name,
                 connectionLog: agentConnection.events,
