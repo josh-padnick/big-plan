@@ -5,7 +5,7 @@
 
 import { createHash } from "node:crypto";
 import type { CommentTarget, ReviewComment } from "./shared/comment.js";
-import { QUOTE_LIMIT } from "./shared/comment.js";
+import { QUOTE_LIMIT, SLIDE_TEXT_LIMIT } from "./shared/comment.js";
 import { claimIsHeldByAnother, claimIsLive } from "./shared/agent-claim.js";
 import {
   requestIsTerminal,
@@ -233,6 +233,19 @@ const target = (value: unknown): CommentTarget => {
             field: "target.section",
             limit: 300,
           }),
+        }
+      : {}),
+    // A slide comment addresses the slide, so the slide's content travels with
+    // it. Dropping it here would hand the agent the heading and nothing else on
+    // every request read back from the exchange.
+    ...(typeof value.slideText === "string" && value.slideText !== ""
+      ? {
+          slideText: text({
+            value: value.slideText,
+            field: "target.slideText",
+            limit: SLIDE_TEXT_LIMIT,
+          }),
+          isSlideTextExcerpt: value.isSlideTextExcerpt === true,
         }
       : {}),
   };

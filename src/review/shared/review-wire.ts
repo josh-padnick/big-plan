@@ -223,10 +223,35 @@ export const isReviewCommentValue = (
   );
 };
 
+// A slide-anchored target carries a copy of its slide for the agent's brief.
+// The browser is reading that slide already, so sending the copy back to it
+// would grow the bootstrap by one slide per comment for no reader-visible gain.
+// The server keeps the copy: it re-mints it from the block map for a new
+// target and preserves it for one it already accepted, so a comment that
+// returns from the browser without it loses nothing.
+const withoutSlideCopy = (comment: ReviewComment): ReviewComment => {
+  if (
+    comment.target.type === "document" ||
+    comment.target.slideText === undefined
+  ) {
+    return comment;
+  }
+  const {
+    slideText: _slideText,
+    isSlideTextExcerpt: _excerpt,
+    ...target
+  } = comment.target;
+  return { ...comment, target };
+};
+
 /** Encodes the server-owned comment snapshot for transport. */
 export const encodeReviewSnapshot = (
   value: ReviewSnapshotSource,
-): ReviewSnapshotSource => value;
+): ReviewSnapshotSource => ({
+  ...value,
+  drafts: value.drafts.map(withoutSlideCopy),
+  sent: value.sent.map(withoutSlideCopy),
+});
 
 /**
  * Decodes comments while dropping malformed local or transport values. Fields

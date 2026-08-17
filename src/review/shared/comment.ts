@@ -8,41 +8,47 @@
 // pattern-matched. A target can therefore never become a filesystem path, a
 // URL, or anything else with reach.
 
+/**
+ * What every target records about the block it names.
+ *
+ * `slideText` is present exactly when that block is a slide's own heading. A
+ * slide has no block of its own, so its heading is the only address a reviewer
+ * pointing at the slide can produce; carrying the slide's content here is what
+ * keeps "rewrite this slide" from reaching the agent as the title alone. It
+ * widens what the agent is told, never what the comment is anchored to.
+ */
+type TargetBlockIdentity = {
+  readonly blockId: string;
+  readonly kind: string;
+  readonly label: string;
+  readonly section?: string;
+  readonly slideText?: string;
+  readonly isSlideTextExcerpt?: boolean;
+};
+
 /** Where one comment points. */
 export type CommentTarget =
   | { readonly type: "document" }
-  | {
+  | ({
       readonly type: "block";
-      readonly blockId: string;
-      readonly kind: string;
-      readonly label: string;
-      readonly section?: string;
-    }
-  | {
+    } & TargetBlockIdentity)
+  | ({
       readonly type: "selection";
-      readonly blockId: string;
       readonly endBlockId?: string;
       /** Authored image blocks included in this text/image highlight. */
       readonly imageBlockIds?: ReadonlyArray<string>;
-      readonly kind: string;
-      readonly label: string;
-      readonly section?: string;
       readonly start: number;
       readonly end: number;
       readonly quote: string;
       readonly isQuoteExcerpt: boolean;
-    }
-  | {
+    } & TargetBlockIdentity)
+  | ({
       readonly type: "lines";
-      readonly blockId: string;
-      readonly kind: string;
-      readonly label: string;
-      readonly section?: string;
       readonly start: number;
       readonly end: number;
       readonly quote: string;
       readonly isQuoteExcerpt: boolean;
-    };
+    } & TargetBlockIdentity);
 
 /** One reviewer note, after validation. */
 export type ReviewComment = {
@@ -54,11 +60,16 @@ export type ReviewComment = {
 };
 
 /** What the renderer knows about the blocks a comment may point at. */
+// Mirrored by hand across the reviewShared tier boundary; reviewShared may
+// import nothing - keep this in sync with the descriptor minted by
+// src/render/markdown/block-identity.ts.
 export type BlockMapEntry = {
   readonly id: string;
   readonly kind: string;
   readonly label: string;
   readonly section?: string;
+  /** This slide's own content, on the heading that names the slide scope. */
+  readonly slideText?: string;
 };
 
 export class CommentRejected extends Error {
@@ -78,6 +89,12 @@ export class CommentRejected extends Error {
 // matches BODY_LIMIT because a quote and a comment body cost a brief the same.
 const BODY_LIMIT = 4000;
 export const QUOTE_LIMIT = BODY_LIMIT;
+// A slide's content is the unit of work a slide comment asks about, so it gets
+// its own, larger bound: a highlight is a fragment the agent can look up in the
+// source, while a truncated slide is the very under-application this carries
+// the content to prevent. It is still a bound, and a slide beyond it says so
+// through isSlideTextExcerpt rather than trailing off silently.
+export const SLIDE_TEXT_LIMIT = 8000;
 const ID_LIMIT = 64;
 const COMMENT_LIMIT = 200;
 const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
@@ -97,6 +114,37 @@ export const boundQuote = (selected: string): QuoteExcerpt =>
   selected.length > QUOTE_LIMIT
     ? { quote: selected.slice(0, QUOTE_LIMIT), isQuoteExcerpt: true }
     : { quote: selected, isQuoteExcerpt: false };
+
+/**
+ * Bounds a slide's content into the copy carried with a slide-anchored target,
+ * marking the result when the slide did not fit so the brief can say so.
+ */
+const boundSlideText = (
+  slideText: string,
+): {
+  readonly slideText: string;
+  readonly isSlideTextExcerpt: boolean;
+} =>
+  slideText.length > SLIDE_TEXT_LIMIT
+    ? {
+        slideText: slideText.slice(0, SLIDE_TEXT_LIMIT),
+        isSlideTextExcerpt: true,
+      }
+    : { slideText, isSlideTextExcerpt: false };
+
+// The slide scope a block carries, if it is a slide's own heading. The renderer
+// decides this - never the request - so a caller cannot claim slide reach for a
+// block that has none.
+const slideScopeOf = (
+  block: BlockMapEntry,
+): Pick<TargetBlockIdentity, "kind" | "slideText" | "isSlideTextExcerpt"> => {
+  if (block.slideText === undefined || block.slideText === "") {
+    return { kind: block.kind };
+  }
+  // The heading names the whole slide, so the target's kind is what the block
+  // addresses rather than the tag it happens to be rendered as.
+  return { kind: "slide", ...boundSlideText(block.slideText) };
+};
 
 const asRecord = ({
   value,
@@ -221,13 +269,14 @@ const validateTarget = ({
     return { type: "document" };
   }
   const block = resolveBlock({ value: target.blockId, blocks });
-  // Kind and label come back from the block map rather than from the request,
-  // so the label a tray showed can never become the label an agent reads.
+  // Kind, label, and slide scope come back from the block map rather than from
+  // the request, so the label a tray showed can never become the label an agent
+  // reads, and no request can claim to address a slide it does not name.
   const identity = {
     blockId: block.id,
-    kind: block.kind,
     label: block.label,
     ...(block.section === undefined ? {} : { section: block.section }),
+    ...slideScopeOf(block),
   };
   if (type === "block") {
     return { type: "block", ...identity };
@@ -320,6 +369,19 @@ const validateStoredTarget = (value: unknown): CommentTarget => {
             field: "section",
             limit: 300,
           }),
+        }),
+    // A stored slide comment keeps the slide it was accepted against, so a
+    // revision that moved or renamed the slide cannot quietly narrow an
+    // already-anchored note back down to its heading.
+    ...(target.slideText === undefined
+      ? {}
+      : {
+          slideText: asText({
+            value: target.slideText,
+            field: "slideText",
+            limit: SLIDE_TEXT_LIMIT,
+          }),
+          isSlideTextExcerpt: target.isSlideTextExcerpt === true,
         }),
   };
   if (target.type === "block") return { type: "block", ...identity };
