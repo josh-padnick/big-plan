@@ -38,7 +38,6 @@ import {
   cancelAgentRequest,
   ensureAgentRequest,
   removeCommentFromQueuedFeedbackRequest,
-  ResolvedThreadWorkRejected,
   withResolvedCommentLock,
 } from "./request-mailbox.js";
 import {
@@ -544,7 +543,7 @@ export const submitFeedback = async (
       }),
     });
   } catch (error: unknown) {
-    if (!(error instanceof ResolvedThreadWorkRejected)) throw error;
+    if (!(error instanceof AgentExchangeRejected)) throw error;
     return refusal({ status: 409, reason: error.message });
   }
   await writeComments({
@@ -783,14 +782,28 @@ export const deleteSentComment = async (
     path: store.sentPath,
     comments: sent.filter((comment) => comment.id !== commentId),
   });
-  const resolvedCommentIds = await readResolvedCommentIds({
-    store,
-    validate: validateResolvedCommentIds,
-  });
-  await writeResolvedCommentIds({
-    store,
-    ids: resolvedCommentIds.filter((id) => id !== commentId),
-  });
+  // The resolved-id read-modify-write shares `.resolved.lock` with request
+  // creation and the drafts write, so a concurrent resolve cannot be dropped by
+  // this deletion. The request locks above are already released, keeping the
+  // request-then-resolved order `ensureAgentRequest` establishes.
+  try {
+    await withResolvedCommentLock({
+      store,
+      change: async (lockedStore) => {
+        const resolvedCommentIds = await readResolvedCommentIds({
+          store: lockedStore,
+          validate: validateResolvedCommentIds,
+        });
+        await writeResolvedCommentIds({
+          store: lockedStore,
+          ids: resolvedCommentIds.filter((id) => id !== commentId),
+        });
+      },
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
   await appendProgressEvent({
     store,
     event: {

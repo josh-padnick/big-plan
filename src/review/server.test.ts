@@ -33,6 +33,7 @@ import {
   appendProgressEvent,
   claimAgentRequest,
   commitRequestTerminal,
+  withResolvedCommentLock,
 } from "./request-mailbox.js";
 import { materializeReviewImages } from "./plan-assets.js";
 import {
@@ -2136,15 +2137,15 @@ The dashboard shows the retry backlog.
         })
       ).status,
     ).toBe(200);
-    expect(
-      (
-        await call({
-          path: "/api/feedback",
-          method: "POST",
-          body: { comments: [comment] },
-        })
-      ).status,
-    ).toBe(500);
+    const resubmission = await call({
+      path: "/api/feedback",
+      method: "POST",
+      body: { comments: [comment] },
+    });
+    expect(resubmission.status).toBe(409);
+    await expect(resubmission.json()).resolves.toMatchObject({
+      error: "The feedback submission was canceled by the reviewer",
+    });
     const afterResubmission: unknown = await (
       await call({ path: "/api/drafts" })
     ).json();
@@ -2494,6 +2495,32 @@ describe("review runtime resolve invariant", () => {
       },
     });
 
+  /** Holds `.resolved.lock` the way a concurrent request creation would. */
+  const holdResolvedCommentLock = async (
+    isolated: ReviewRuntime,
+  ): Promise<() => Promise<void>> => {
+    let acquire = (): void => undefined;
+    const acquired = new Promise<void>((settle) => {
+      acquire = settle;
+    });
+    let release = (): void => undefined;
+    const released = new Promise<void>((settle) => {
+      release = settle;
+    });
+    const held = withResolvedCommentLock({
+      store: isolated.store,
+      change: async () => {
+        acquire();
+        await released;
+      },
+    });
+    await acquired;
+    return async () => {
+      release();
+      await held;
+    };
+  };
+
   it("should refuse a drafts write that resolves a comment with a queued message", async () => {
     const { isolated, isolatedCall, close } = await isolatedRuntime(
       "big-plan-resolve-refuse-",
@@ -2704,6 +2731,121 @@ describe("review runtime resolve invariant", () => {
       await expect(refusal.json()).resolves.toMatchObject({
         error: "Unresolve this thread before sending new work.",
       });
+    } finally {
+      await close();
+    }
+  });
+
+  it("should refuse a drafts write that waited for a concurrent create", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-resolve-interleave-",
+    );
+    try {
+      const version = await isolatedReviewStateVersion(isolatedCall);
+      const release = await holdResolvedCommentLock(isolated);
+      const resolved = isolatedCall({
+        path: "/api/drafts",
+        method: "PUT",
+        body: { drafts: [], resolvedCommentIds: [commentId], version },
+      });
+      let settled = false;
+      void resolved.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await new Promise((wait) => setTimeout(wait, 100));
+      expect(settled).toBe(false);
+
+      await writeAgentRequest({
+        store: isolated.store,
+        request: messageAgentRequest({
+          kind: "reply",
+          requestId: "5a5a5a5a5a5a5a5a",
+          sessionId: isolated.sessionId,
+          planId: isolated.planId,
+          premiseSnapshot: PLAN_SNAPSHOT,
+          createdAt: "2026-08-17T12:00:00.000Z",
+          body: "Please look at this again.",
+          commentId,
+        }),
+      });
+      await release();
+
+      const refusal = await resolved;
+      expect(refusal.status).toBe(409);
+      await expect(refusal.json()).resolves.toMatchObject({
+        error: expect.stringContaining("waiting for the coding agent"),
+      });
+      await expect(
+        readResolvedCommentIds({
+          store: isolated.store,
+          validate: validateResolvedCommentIds,
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("should delete a resolved comment under the shared lock", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-resolved-lock-",
+    );
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/agent-cancel",
+            method: "POST",
+            body: { requestId: await queuedRequestId(isolated) },
+          })
+        ).status,
+      ).toBe(200);
+      expect((await resolveWrite(isolatedCall)).status).toBe(200);
+
+      const version = await isolatedReviewStateVersion(isolatedCall);
+      const release = await holdResolvedCommentLock(isolated);
+      const deleted = isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: { commentId, version },
+      });
+      let settled = false;
+      void deleted.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await new Promise((wait) => setTimeout(wait, 100));
+      expect(settled).toBe(false);
+      await release();
+
+      expect((await deleted).status).toBe(200);
+      await expect(
+        readResolvedCommentIds({
+          store: isolated.store,
+          validate: validateResolvedCommentIds,
+        }),
+      ).resolves.toEqual([]);
     } finally {
       await close();
     }

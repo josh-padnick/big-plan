@@ -3715,7 +3715,10 @@ const SentThread = ({
             <div className="mt-2 flex items-center justify-end gap-2">
               {replyBlock === undefined &&
               shownResolvedWorkError === null ? null : (
-                <span className="text-2xs font-semibold text-danger">
+                <span
+                  className="text-2xs font-semibold text-danger"
+                  role={shownResolvedWorkError === null ? undefined : "alert"}
+                >
                   {shownResolvedWorkError ?? replyBlock?.label}
                 </span>
               )}
