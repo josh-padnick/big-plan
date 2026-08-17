@@ -1,12 +1,19 @@
-// Browser tests of the rendered export's appearance preferences: the document
-// follows the OS by default, supports a live explicit mode, and persists one
-// global record. Render-health failures are enforced by the fixtures module.
+// Browser tests of the rendered export's appearance and colour-theme
+// preferences: the document follows the OS and warm-paper defaults, supports
+// live explicit choices, and persists one global record. Render-health failures
+// are enforced by the fixtures module.
 
 import {
   PREFERENCES_STORAGE_KEY,
   serializePreferencesRecord,
 } from "../src/render/preferences.js";
-import { expect, test } from "./fixtures";
+import { expect, test, type Page } from "./fixtures";
+
+// The settings sheet is a sidebar plus one page, so a control is reachable only
+// once its section is selected. Every step below opens its own section rather
+// than assuming which page happens to be showing.
+const openSection = (page: Page, name: "Appearance" | "Color theme") =>
+  page.getByRole("tab", { name, exact: true }).click();
 
 const backdropOpacity = (color: string): number | null => {
   const match = /(?:\/|,)\s*([\d.]+)\s*\)?$/u.exec(color);
@@ -76,7 +83,7 @@ test("should choose and persist appearance from the settings dialog", async ({
           PREFERENCES_STORAGE_KEY,
         ),
       )
-      .toBe(serializePreferencesRecord("dark"));
+      .toBe(serializePreferencesRecord({ mode: "dark", palette: "default" }));
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -93,7 +100,7 @@ test("should choose and persist appearance from the settings dialog", async ({
           PREFERENCES_STORAGE_KEY,
         ),
       )
-      .toBe(serializePreferencesRecord("system"));
+      .toBe(serializePreferencesRecord({ mode: "system", palette: "default" }));
     const lightBackground = await page
       .locator("body")
       .evaluate((body) => getComputedStyle(body).backgroundColor);
@@ -139,9 +146,14 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
     await settings.click();
     const geometry = await dialog.evaluate((element) => {
       const rect = element.getBoundingClientRect();
-      const options = Array.from(element.querySelectorAll("label")).map(
-        (option) => option.getBoundingClientRect().height,
-      );
+      const options = Array.from(
+        element.querySelectorAll("[data-preference-mode]"),
+      ).map((option) => option.closest("label").getBoundingClientRect().height);
+      // The sidebar stacks above the page it opens rather than beside it, so
+      // its items share one row and the sheet stays one column.
+      const sections = Array.from(
+        element.querySelectorAll("[data-preferences-section]"),
+      ).map((tab) => tab.getBoundingClientRect());
       return {
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
@@ -149,6 +161,9 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
         right: rect.right,
         verticalCenter: (rect.top + rect.bottom) / 2,
         optionHeights: options,
+        sectionTops: new Set(sections.map((tab) => Math.round(tab.top))).size,
+        sectionHeights: sections.map((tab) => Math.round(tab.height)),
+        sectionRight: Math.max(...sections.map((tab) => tab.right)),
         documentScrollWidth: document.documentElement.scrollWidth,
       };
     });
@@ -158,22 +173,65 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
     expect(geometry.right).toBe(width - 12);
     expect(geometry.verticalCenter).toBeCloseTo(geometry.viewportHeight / 2);
     expect(geometry.optionHeights).toEqual([68, 68, 68]);
+    expect(geometry.sectionTops).toBe(1);
+    expect(geometry.sectionHeights).toEqual([44, 44]);
+    expect(geometry.sectionRight).toBeLessThanOrEqual(geometry.right);
     expect(geometry.documentScrollWidth).toBe(geometry.viewportWidth);
     await page.keyboard.press("Escape");
   }
 
-  await test.step("desktop keeps the three appearance cards", async () => {
+  await test.step("desktop puts the sidebar beside a dominant content pane", async () => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await settings.click();
-    const cards = await dialog.locator("label").evaluateAll((options) =>
-      options.map((option) => {
-        const rect = option.getBoundingClientRect();
-        return { height: rect.height, left: rect.left, top: rect.top };
-      }),
-    );
+    const cards = await dialog
+      .locator("label:has([data-preference-mode])")
+      .evaluateAll((options) =>
+        options.map((option) => {
+          const rect = option.getBoundingClientRect();
+          return { height: rect.height, left: rect.left, top: rect.top };
+        }),
+      );
     expect(cards.map(({ height }) => height)).toEqual([112, 112, 112]);
     expect(new Set(cards.map(({ left }) => left)).size).toBe(3);
     expect(new Set(cards.map(({ top }) => top)).size).toBe(1);
+    // A narrow rail beside the page it opens, never two equal columns: the
+    // content pane takes the clear majority of the sheet.
+    const layout = await dialog.evaluate((element) => {
+      const railRect = element
+        .querySelector("[data-preferences-sections]")
+        .getBoundingClientRect();
+      const tabs = Array.from(
+        element.querySelectorAll("[data-preferences-section]"),
+      ).map((tab) => tab.getBoundingClientRect());
+      const pane = element
+        .querySelector(
+          "[data-preferences-panel]:not([data-preferences-page-hidden])",
+        )
+        .getBoundingClientRect();
+      return {
+        railWidth: Math.round(railRect.width),
+        paneWidth: Math.round(pane.width),
+        railLeftOfPane: railRect.right <= pane.left,
+        tabColumns: new Set(tabs.map((tab) => Math.round(tab.left))).size,
+        tabRows: new Set(tabs.map((tab) => Math.round(tab.top))).size,
+      };
+    });
+    expect(layout.railLeftOfPane).toBe(true);
+    expect(layout.tabColumns).toBe(1);
+    expect(layout.tabRows).toBe(2);
+    expect(layout.paneWidth).toBeGreaterThan(layout.railWidth * 2);
+    await openSection(page, "Color theme");
+    const themes = await dialog
+      .locator("label:has([data-preference-palette])")
+      .evaluateAll((options) =>
+        options.map((option) => {
+          const rect = option.getBoundingClientRect();
+          return { left: Math.round(rect.left), top: Math.round(rect.top) };
+        }),
+      );
+    expect(themes).toHaveLength(5);
+    expect(new Set(themes.map(({ left }) => left)).size).toBe(1);
+    expect(new Set(themes.map(({ top }) => top)).size).toBe(5);
     await page.keyboard.press("Escape");
   });
 
@@ -186,9 +244,11 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
       const rect = element.getBoundingClientRect();
       return (rect.top + rect.bottom) / 2;
     })(),
-    footerBottom:
+    pageBottom:
       element
-        .querySelector("[data-preferences-status]")
+        .querySelector(
+          "[data-preferences-panel]:not([data-preferences-page-hidden])",
+        )
         ?.getBoundingClientRect().bottom ?? 0,
     viewportBottom: window.innerHeight,
   }));
@@ -196,15 +256,24 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
     shortViewport.clientHeight,
   );
   expect(shortViewport.verticalCenter).toBeCloseTo(110);
+  expect(shortViewport.pageBottom).toBeGreaterThan(
+    shortViewport.viewportBottom,
+  );
   await dialog.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
+  // The last of the sheet has to be reachable by scrolling, so the bottom of
+  // the settings page it is showing must come inside the viewport. The saving
+  // caption used to be the bottom-most thing here; it now sits under the title,
+  // where scrolling down takes it off the top and it can prove nothing.
   await expect
     .poll(() =>
-      dialog.locator("[data-preferences-status]").evaluate((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.bottom <= window.innerHeight;
-      }),
+      dialog
+        .locator("[data-preferences-panel]:not([data-preferences-page-hidden])")
+        .evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.bottom <= window.innerHeight;
+        }),
     )
     .toBe(true);
 
@@ -380,4 +449,412 @@ test("should apply every appearance row under light and dark OS schemes", async 
   expect(palettes.get("light-dark")).toBe(palettes.get("dark-dark"));
   expect(palettes.get("light-system")).toBe(palettes.get("light-light"));
   expect(palettes.get("dark-system")).toBe(palettes.get("dark-dark"));
+});
+
+test("should repaint the whole document from the colour-theme row", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+  await page.evaluate(
+    (key) => localStorage.removeItem(key),
+    PREFERENCES_STORAGE_KEY,
+  );
+  await page.reload();
+  const settings = page.getByRole("button", { name: "Open settings" });
+
+  // One sample of each thing a theme has to reach: the page itself, prose, a
+  // heading, a link, a code token, a callout, and a table band.
+  const surfaces = () =>
+    page.evaluate(() => {
+      const colorOf = (selector, property) => {
+        const element = document.querySelector(selector);
+        return element === null
+          ? null
+          : getComputedStyle(element)[property as "color"];
+      };
+      return {
+        page: colorOf("body", "backgroundColor"),
+        prose: colorOf("article p", "color"),
+        heading: colorOf("article h2", "color"),
+        link: colorOf("article a[href]", "color"),
+        code: colorOf("article .hljs-keyword", "color"),
+        callout: colorOf("[data-callout]", "backgroundColor"),
+        tableHead: colorOf("article table th", "backgroundColor"),
+        sidebar: colorOf("[data-section-link]", "color"),
+      };
+    });
+
+  await test.step("Default is the first-run theme and carries no attribute", async () => {
+    await expect(page.locator("html")).not.toHaveAttribute("data-palette");
+    await settings.click();
+    await openSection(page, "Color theme");
+    await expect(page.getByRole("radio", { name: "Default" })).toBeChecked();
+  });
+
+  const seen = new Map<string, string>();
+  for (const mode of ["Light", "Dark"] as const) {
+    await openSection(page, "Appearance");
+    await page.getByRole("radio", { name: mode }).check();
+    await openSection(page, "Color theme");
+    for (const theme of [
+      { title: "Default", id: null },
+      { title: "Rosé Pine", id: "rose-pine" },
+      { title: "Nord", id: "nord" },
+      { title: "Catppuccin", id: "catppuccin" },
+      { title: "Brutalist", id: "brutalist" },
+    ]) {
+      await page.getByRole("radio", { name: theme.title }).check();
+      if (theme.id === null) {
+        await expect(page.locator("html")).not.toHaveAttribute("data-palette");
+      } else {
+        await expect(page.locator("html")).toHaveAttribute(
+          "data-palette",
+          theme.id,
+        );
+      }
+      const painted = await surfaces();
+      for (const [surface, color] of Object.entries(painted)) {
+        expect(
+          color,
+          `${theme.title}/${mode} paints ${surface}`,
+        ).not.toBeNull();
+      }
+      seen.set(`${mode}/${theme.title}`, JSON.stringify(painted));
+    }
+  }
+
+  await test.step("every theme and mode paints a distinct document", async () => {
+    expect(new Set(seen.values()).size).toBe(seen.size);
+  });
+
+  await test.step("the choice survives a reload without a wrong-theme frame", async () => {
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => localStorage.getItem(key),
+          PREFERENCES_STORAGE_KEY,
+        ),
+      )
+      .toBe(serializePreferencesRecord({ mode: "dark", palette: "brutalist" }));
+    await page.reload();
+    // The head script runs before the first paint, so the attributes are
+    // already right when the document body is first parsed.
+    const atFirstBody = await page.evaluate(() => ({
+      theme: document.documentElement.getAttribute("data-theme"),
+      palette: document.documentElement.getAttribute("data-palette"),
+    }));
+    expect(atFirstBody).toEqual({ theme: "dark", palette: "brutalist" });
+    await settings.click();
+    await openSection(page, "Color theme");
+    await expect(page.getByRole("radio", { name: "Brutalist" })).toBeChecked();
+    await openSection(page, "Appearance");
+    await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
+  });
+
+  await test.step("returning to Default clears the field and the attribute", async () => {
+    await openSection(page, "Color theme");
+    await page.getByRole("radio", { name: "Default" }).check();
+    await expect(page.locator("html")).not.toHaveAttribute("data-palette");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) => localStorage.getItem(key),
+          PREFERENCES_STORAGE_KEY,
+        ),
+      )
+      .toBe(serializePreferencesRecord({ mode: "dark", palette: "default" }));
+  });
+
+  // Cole and Everforest were offered before the captain replaced them, so a
+  // browser that still holds one takes the same route a corrupt record takes.
+  await test.step("an unknown or withdrawn stored theme falls back to the product palette", async () => {
+    for (const palette of ["solarized", "cole", "everforest"]) {
+      await page.evaluate(
+        ([key, value]) =>
+          localStorage.setItem(
+            key,
+            `{"version":1,"mode":"dark","palette":"${value}"}`,
+          ),
+        [PREFERENCES_STORAGE_KEY, palette] as const,
+      );
+      await page.reload();
+      await expect(page.locator("html")).not.toHaveAttribute("data-theme");
+      await expect(page.locator("html")).not.toHaveAttribute("data-palette");
+      await settings.click();
+      await expect(page.getByRole("radio", { name: "System" })).toBeChecked();
+      await openSection(page, "Color theme");
+      await expect(page.getByRole("radio", { name: "Default" })).toBeChecked();
+      await page.keyboard.press("Escape");
+    }
+  });
+});
+
+test("should make Brutalist a change of shape, not only of hue", async ({
+  page,
+  allComponentsViewerUrl,
+}) => {
+  await page.goto(allComponentsViewerUrl);
+  await page.evaluate(
+    (key) => localStorage.removeItem(key),
+    PREFERENCES_STORAGE_KEY,
+  );
+  await page.reload();
+
+  const shape = () =>
+    page.evaluate(() => {
+      const of = (selector: string, property: string) => {
+        const element = document.querySelector(selector);
+        return element === null
+          ? null
+          : getComputedStyle(element)[property as "borderRadius"];
+      };
+      return {
+        slideRadius: of("[data-slide]", "borderRadius"),
+        slideShadow: of("[data-slide]", "boxShadow"),
+        codeRadius: of("article pre", "borderRadius"),
+        calloutRadius: of("[data-callout]", "borderRadius"),
+        decisionInputRadius: of(".decision-proposal-input", "borderRadius"),
+        decisionButtonRadius: of(".decision-confirm", "borderRadius"),
+        headingWeight: of("article h2", "fontWeight"),
+      };
+    });
+
+  const settings = page.getByRole("button", { name: "Open settings" });
+  await settings.click();
+  await page.getByRole("radio", { name: "Light" }).check();
+  const soft = await shape();
+  await openSection(page, "Color theme");
+  await page.getByRole("radio", { name: "Brutalist" }).check();
+  const stark = await shape();
+
+  expect(soft.slideRadius).not.toBe("0px");
+  expect(stark.slideRadius).toBe("0px");
+  expect(stark.codeRadius).toBe("0px");
+  expect(stark.calloutRadius).toBe("0px");
+  expect(soft.decisionInputRadius).not.toBe("0px");
+  expect(stark.decisionInputRadius).toBe("0px");
+  expect(soft.decisionButtonRadius).not.toBe("0px");
+  expect(stark.decisionButtonRadius).toBe("0px");
+  // A hard offset slab rather than a soft multi-layer shadow: every remaining
+  // shadow step is zero-blur.
+  expect(soft.slideShadow).not.toBe(stark.slideShadow);
+  expect(stark.slideShadow).toMatch(/2px 2px 0px 0px/u);
+  expect(Number(stark.headingWeight)).toBeGreaterThan(
+    Number(soft.headingWeight),
+  );
+
+  await test.step("the shape follows the theme into dark and back out again", async () => {
+    await openSection(page, "Appearance");
+    await page.getByRole("radio", { name: "Dark" }).check();
+    expect((await shape()).slideRadius).toBe("0px");
+    await openSection(page, "Color theme");
+    await page.getByRole("radio", { name: "Nord" }).check();
+    const nord = await shape();
+    expect(nord.slideRadius).toBe(soft.slideRadius);
+    expect(nord.headingWeight).toBe(soft.headingWeight);
+  });
+});
+
+test("should preview each theme in its own colours inside the sheet", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto(sampleViewerUrl);
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await openSection(page, "Color theme");
+  const defaultInk = await page
+    .locator("body")
+    .evaluate((body) => getComputedStyle(body).color);
+  await page.getByRole("radio", { name: "Rosé Pine" }).check();
+  const documentInk = await page
+    .locator("body")
+    .evaluate((body) => getComputedStyle(body).color);
+
+  const strips = await page
+    .locator("[data-palette-swatch]")
+    .evaluateAll((swatches) =>
+      swatches.map((swatch) => ({
+        palette: swatch.getAttribute("data-palette"),
+        chips: Array.from(swatch.children).map(
+          (chip) => getComputedStyle(chip).backgroundColor,
+        ),
+      })),
+    );
+
+  expect(strips.map(({ palette }) => palette)).toEqual([
+    "default",
+    "rose-pine",
+    "nord",
+    "catppuccin",
+    "brutalist",
+  ]);
+  for (const strip of strips) {
+    expect(strip.chips, `${strip.palette} shows four shades`).toHaveLength(4);
+  }
+  const inkChips = strips.map(({ chips }) => chips[3]);
+  expect(new Set(inkChips).size).toBe(5);
+  expect(inkChips[0]).toBe(defaultInk);
+  expect(inkChips[1]).toBe(documentInk);
+  expect(inkChips[0]).not.toBe(documentInk);
+  // A swatch reads its own theme's ramps, so no two strips agree even though
+  // the document behind the sheet is painted in one of them.
+  expect(new Set(strips.map(({ chips }) => chips.join("|"))).size).toBe(5);
+});
+
+test("should navigate settings through a sidebar of separate pages", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+  await page.evaluate(
+    (key) => localStorage.removeItem(key),
+    PREFERENCES_STORAGE_KEY,
+  );
+  await page.reload();
+  const settings = page.getByRole("button", { name: "Open settings" });
+  const appearanceTab = page.getByRole("tab", { name: "Appearance" });
+  const paletteTab = page.getByRole("tab", { name: "Color theme" });
+  const appearancePanel = page.locator('[data-preferences-panel="appearance"]');
+  const palettePanel = page.locator('[data-preferences-panel="palette"]');
+
+  await test.step("the sheet opens on the first page with the sidebar focused", async () => {
+    await settings.click();
+    await expect(page.getByRole("tablist")).toBeVisible();
+    await expect(appearanceTab).toBeFocused();
+    await expect(appearanceTab).toHaveAttribute("aria-selected", "true");
+    await expect(appearancePanel).toBeVisible();
+    await expect(palettePanel).toBeHidden();
+  });
+
+  await test.step("each page shows only its own controls", async () => {
+    await expect(page.getByRole("radio", { name: "System" })).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Default" })).toBeHidden();
+    await paletteTab.click();
+    await expect(palettePanel).toBeVisible();
+    await expect(appearancePanel).toBeHidden();
+    await expect(page.getByRole("radio", { name: "Default" })).toBeVisible();
+    await expect(page.getByRole("radio", { name: "System" })).toBeHidden();
+    await expect(paletteTab).toHaveAttribute("aria-selected", "true");
+    await expect(appearanceTab).toHaveAttribute("aria-selected", "false");
+  });
+
+  await test.step("the sidebar is one tab stop and the arrow keys walk it", async () => {
+    // A roving tab stop is what lets the sidebar grow without lengthening the
+    // trap: however many pages it holds, Tab counts it once.
+    await expect(paletteTab).toHaveAttribute("tabindex", "0");
+    await expect(appearanceTab).toHaveAttribute("tabindex", "-1");
+    await paletteTab.focus();
+    await page.keyboard.press("ArrowUp");
+    await expect(appearanceTab).toBeFocused();
+    await expect(appearancePanel).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    await expect(paletteTab).toBeFocused();
+    await expect(palettePanel).toBeVisible();
+    await page.keyboard.press("Home");
+    await expect(appearanceTab).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(paletteTab).toBeFocused();
+  });
+
+  await test.step("Tab still wraps inside the dialog with both pages present", async () => {
+    const stops: Array<string | null> = [];
+    for (let step = 0; step < 4; step += 1) {
+      await page.keyboard.press("Tab");
+      stops.push(
+        await page.evaluate(() => {
+          const active = document.activeElement;
+          return active === null
+            ? null
+            : (active.getAttribute("aria-label") ??
+                active.textContent?.trim() ??
+                null);
+        }),
+      );
+      expect(
+        await page.evaluate(
+          () =>
+            document.activeElement?.closest("[data-preferences-dialog]") !==
+            null,
+        ),
+      ).toBe(true);
+    }
+    // Three stops in the trap - the sidebar, the page's radio group, and Close
+    // - so the fourth Tab is back where the first one landed.
+    expect(stops[3]).toBe(stops[0]);
+  });
+});
+
+test("should hold one settings size while the reviewer changes page", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+  await page.evaluate(
+    (key) => localStorage.removeItem(key),
+    PREFERENCES_STORAGE_KEY,
+  );
+  await page.reload();
+  const settings = page.getByRole("button", { name: "Open settings" });
+  const dialog = page.locator("[data-preferences-dialog]");
+
+  const box = () =>
+    dialog.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { width: Math.round(rect.width), height: Math.round(rect.height) };
+    });
+
+  // Wide and narrow lay the sheet out differently, so each has to hold its own
+  // size; a phone reads the sidebar as a row above the page it opens.
+  for (const viewport of [
+    { width: 1024, height: 768 },
+    { width: 375, height: 812 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const mode of ["Light", "Dark"] as const) {
+      await settings.click();
+      await openSection(page, "Appearance");
+      await page.getByRole("radio", { name: mode }).check();
+      const onAppearance = await box();
+      await openSection(page, "Color theme");
+      const onPalette = await box();
+      await openSection(page, "Appearance");
+      const backOnAppearance = await box();
+
+      expect(onPalette, `${viewport.width}px/${mode} keeps its size`).toEqual(
+        onAppearance,
+      );
+      expect(
+        backOnAppearance,
+        `${viewport.width}px/${mode} returns to the same size`,
+      ).toEqual(onAppearance);
+      await page.keyboard.press("Escape");
+    }
+  }
+
+  await test.step("the pane reserves the room its tallest page needs", async () => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await settings.click();
+    const pages = await dialog.evaluate((element) => {
+      const rects = Array.from(
+        element.querySelectorAll("[data-preferences-panel]"),
+      ).map((panel) => panel.getBoundingClientRect());
+      return {
+        tops: new Set(rects.map((rect) => Math.round(rect.top))).size,
+        lefts: new Set(rects.map((rect) => Math.round(rect.left))).size,
+        tallest: Math.max(...rects.map((rect) => rect.height)),
+        paneHeight:
+          element
+            .querySelector("[data-preferences-panel]")
+            ?.parentElement?.getBoundingClientRect().height ?? 0,
+      };
+    });
+    // Both pages sit in one cell, so neither can push the other down and the
+    // cell is as tall as the taller of them.
+    expect(pages.tops).toBe(1);
+    expect(pages.lefts).toBe(1);
+    expect(Math.round(pages.paneHeight)).toBe(Math.round(pages.tallest));
+    await page.keyboard.press("Escape");
+  });
 });

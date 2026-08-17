@@ -119,7 +119,7 @@ attribute-based target rings cannot be expressed by utility classes. FlowDiagram
     margin: 0;
     color: var(--ink-c);
     font-size: 0.75rem;
-    font-weight: 700;
+    font-weight: var(--font-weight-bold);
   }
 
   .mermaid-diagram .flow-diagram-comment-thread-close {
@@ -128,7 +128,7 @@ attribute-based target rings cannot be expressed by utility classes. FlowDiagram
     width: 1.5rem;
     height: 1.5rem;
     place-items: center;
-    border-radius: 0.25rem;
+    border-radius: var(--radius-sm);
     color: var(--muted-c);
     cursor: pointer;
   }
@@ -288,7 +288,7 @@ attribute-based target rings cannot be expressed by utility classes. FlowDiagram
   .mermaid-diagram [data-flow-diagram-footer][data-flow-selected] {
     outline: 2px solid var(--accent-c);
     outline-offset: 4px;
-    border-radius: 0.25rem;
+    border-radius: var(--radius-sm);
   }
 
   .mermaid-diagram
@@ -461,7 +461,7 @@ attribute-based target rings cannot be expressed by utility classes. FlowDiagram
   .mermaid-diagram-revert-alert-title {
     color: var(--ink-c);
     font-size: 0.875rem;
-    font-weight: 700;
+    font-weight: var(--font-weight-bold);
   }
 
   /* Override invariant: dialog explanation beats resting paragraph spacing. */
@@ -492,7 +492,7 @@ attribute-based target rings cannot be expressed by utility classes. FlowDiagram
     background: var(--surface-c);
     color: var(--ink-c);
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     cursor: pointer;
   }
 

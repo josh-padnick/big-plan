@@ -7,10 +7,12 @@ Everything on this page is shipped and works today.
 
 ## Reading experience
 
-- One reading column with warm, paper-like light and dark palettes.
-- A `Settings` dialog behind the branding bar's gear, offering `Light`, `Dark`, and `System` appearance; phones get compact full-width choices in a centered, internally scrollable sheet, while wider screens keep the three-card layout. The choice applies immediately, is saved for every review document in this browser, and is applied before the first paint so the other palette never flashes.
+- One reading column with coordinated light and dark variants for every colour theme.
+- A `Settings` dialog behind the branding bar's gear, built as a sidebar of settings pages beside the page you pick. `Appearance` and `Color theme` are separate pages there, so neither crowds the other and a later setting joins the sidebar instead of lengthening a page. On wide screens the sidebar is a narrow rail beside a dominant content pane; on phones it becomes a compact row of pages above a single column.
+- The `Appearance` page offers `Light`, `Dark`, and `System`. The choice applies immediately, is saved for every review document in this browser, and is applied before the first paint so the other appearance never flashes.
+- The `Color theme` page offers `Default`, `Rosé Pine`, `Nord`, `Catppuccin`, and `Brutalist`. A theme is a palette rather than a mode: each one works in both light and dark, appearance still decides which, and every swatch previews that theme's own shades. The choice also applies immediately, is saved across review documents, and is restored before the first paint. `Default` is Big Plan's warm paper look and is what a document with no saved choice renders. `Brutalist` also squares cards and controls, replaces the soft shadows with hard offset slabs, and sets one weight heavier, so it changes the shape of the reading surface and not only its colours; pill-shaped badges stay round.
 - `System` follows your OS preference, and is the value you get on a first run or when the browser refuses storage.
-- A sticky branding bar whose logo follows the active theme.
+- A sticky branding bar whose logo follows the effective light or dark appearance, independently of the colour theme.
 - In-document `Maximize` controls for fenced code, code snippets and diffs, tree diffs, data tables, database schemas, [flow diagrams](/components/flow-diagram/), and [wireframes](/components/wireframe/), with Escape restoring the reading view after any pending-feedback prompt is resolved.
 
 ## Navigation

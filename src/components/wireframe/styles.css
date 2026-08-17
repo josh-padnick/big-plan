@@ -187,7 +187,7 @@ marks and a plan diff never jitters.
   .wireframe-switch {
     padding: 0.2rem 0.6rem;
     border: 2px solid var(--edge-c);
-    border-radius: 0.375rem;
+    border-radius: var(--radius-md);
     box-shadow: 2px 3px 0 -1px var(--edge-c);
     font-size: 0.8125rem;
     color: var(--color-muted);
@@ -199,7 +199,7 @@ marks and a plan diff never jitters.
   .wireframe-switch[aria-current="true"] {
     border-color: var(--wf-stroke);
     color: var(--color-ink);
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
   }
   /* The switcher is big-plan review chrome, not wireframe product chrome, so
      keyboard focus reads as an ordinary quiet halo instead of the browser's
@@ -208,7 +208,7 @@ marks and a plan diff never jitters.
      item shows no extra ring at all; only a focused inactive item gets the
      halo, since aria-current cannot speak for it. */
   .wireframe-switch:focus-visible {
-    border-radius: 0.25rem;
+    border-radius: var(--radius-sm);
     outline: none;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-c) 20%, transparent);
   }
