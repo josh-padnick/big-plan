@@ -284,8 +284,10 @@ its light counterpart so the three-deep ladder keeps the same separation.
   --callout-danger-ink: light-dark(var(--danger-900), var(--danger-100));
   --diff-add-c: light-dark(var(--success-700), var(--success-300));
   --diff-add-bg: light-dark(var(--success-100), var(--success-800));
-  /* The working indicator's ring is chrome around a live agent rather than a
-     reading-surface colour, so it stays a fixed neutral in every theme. */
+  /* Captain-approved local colour: the working indicator's ring is chrome
+     around a live agent rather than a reading surface, so the product palette
+     keeps a plain neutral here. A guest palette restates it from its own greys
+     with the comment surface. */
   --agent-active-ring-c: light-dark(#e6e6e6, #454545);
   --diff-remove-c: light-dark(var(--danger-700), var(--danger-300));
   --diff-remove-bg: light-dark(var(--danger-50), var(--danger-900));
@@ -356,9 +358,9 @@ THE PALETTES
 decides which half of every `light-dark()` above is used; the palette decides
 what the shades in both halves are. A palette is therefore a set of ramps behind
 one shared role mapping, so a role added above is themed everywhere at once and
-a palette costs one block rather than two. Two role categories are excepted:
---ink-c here, and the --syntax-* roles in src/render/markdown/syntax-highlighting.css.
-Both are explained below.
+a palette costs one block rather than two. Three role categories are excepted:
+--ink-c here, the comment-surface roles here, and the --syntax-* roles in
+src/render/markdown/syntax-highlighting.css. All three are explained below.
 
 The absent attribute, and the `default` id, both mean the warm paper ramps at
 the top of this file, so a document with no stored preference renders exactly
@@ -379,12 +381,19 @@ ink happens to be a dark surface shade, while a themed palette's light text is
 its own mid-dark colour and would be far too light to serve as the dark hunk
 band that shares `--grey-925`.
 
-The --syntax-* roles are the second exception, and a palette restates them in
+The comment-surface roles are the second exception. The product palette buys the
+thread band and the working ring as approved local colours rather than ramp
+steps, so a guest palette has to restate them or the commenting chrome stays
+warm paper inside a slate document. --comment-header-c takes --grey-925, the step
+that sits between the page and the comment toolbar in every palette;
+--comment-body-c and --comment-toolbar-c read the header and follow on their own.
+
+The --syntax-* roles are the third exception, and a palette restates them in
 src/render/markdown/syntax-highlighting.css rather than here. A token hue is a
 distinction between kinds of code, not a shade of the reading surface, so it
 comes from the palette's own accents instead of a ramp position these ramps
-hold. So a palette block may declare ramp steps, syntax tokens, the closed
-radius, weight, tracking and elevation scales, and --ink-c.
+hold. So a palette block may declare ramp steps, syntax tokens, comment-surface
+tokens, the closed radius, weight, tracking and elevation scales, and --ink-c.
 scripts/design-system/palettes.mjs is what closes that list.
 */
 
@@ -455,6 +464,9 @@ scripts/design-system/palettes.mjs is what closes that list.
   --neutral-800: #2b2740;
 
   --ink-c: light-dark(#403a5e, var(--grey-150));
+
+  --comment-header-c: light-dark(var(--grey-125), var(--grey-925));
+  --agent-active-ring-c: light-dark(var(--grey-200), var(--grey-800));
 }
 
 /* Nord: Snow Storm for light, Polar Night for dark, with Frost on the accent
@@ -523,6 +535,9 @@ scripts/design-system/palettes.mjs is what closes that list.
   --neutral-800: #39404f;
 
   --ink-c: light-dark(#2e3440, var(--grey-150));
+
+  --comment-header-c: light-dark(var(--grey-125), var(--grey-925));
+  --agent-active-ring-c: light-dark(var(--grey-200), var(--grey-800));
 }
 
 /* Catppuccin: Latte for light, Mocha for dark
@@ -591,6 +606,9 @@ scripts/design-system/palettes.mjs is what closes that list.
   --neutral-800: #2b2c3f;
 
   --ink-c: light-dark(#4c4f69, var(--grey-150));
+
+  --comment-header-c: light-dark(var(--grey-125), var(--grey-925));
+  --agent-active-ring-c: light-dark(var(--grey-200), var(--grey-800));
 }
 
 /* Brutalist: newsprint and black ink, or near-black and bone, with one loud
@@ -661,11 +679,14 @@ scripts/design-system/palettes.mjs is what closes that list.
 
   --ink-c: light-dark(#0b0b09, var(--grey-150));
 
+  --comment-header-c: light-dark(var(--grey-125), var(--grey-925));
+  --agent-active-ring-c: light-dark(var(--grey-200), var(--grey-800));
+
   /*
     Brutalist is the sanctioned exception to "a theme is only its ramps": a
     stark reading surface is a shape as much as a colour, so it also restates
     the closed radius, weight, tracking, and elevation scales. Beyond the
-    documented --ink-c exception, it restates no role, so nothing here can
+    documented exceptions above, it restates no role, so nothing here can
     drift from the role vocabulary.
   */
 

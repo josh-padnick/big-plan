@@ -17,8 +17,9 @@ import {
 
 // Reads only the two validated presentation fields before styles are parsed, so
 // a stored choice never flashes the other appearance or the other colour theme
-// on the first frame. It runs once and watches nothing: the visual-history
-// capture sets data-theme itself after load, and a second apply would fight it.
+// on the first frame. It runs once and watches nothing, because it exists only
+// to paint that first frame: once the document is interactive the shell's
+// preferences script owns both attributes and every later change to them.
 const PREFERENCES_HEAD_SCRIPT = `(() => {
   try {
     const raw = localStorage.getItem(${JSON.stringify(PREFERENCES_STORAGE_KEY)});
@@ -27,10 +28,10 @@ const PREFERENCES_HEAD_SCRIPT = `(() => {
     if (record?.version !== ${PREFERENCES_RECORD_VERSION} ||
         (record.mode !== undefined && ${JSON.stringify(STORED_APPEARANCE_MODES)}.indexOf(record.mode) === -1) ||
         (record.palette !== undefined && ${JSON.stringify(STORED_PALETTES)}.indexOf(record.palette) === -1)) return;
-    if (${JSON.stringify(STORED_APPEARANCE_MODES)}.indexOf(record.mode) !== -1) {
+    if (record.mode !== undefined) {
       document.documentElement.setAttribute("data-theme", record.mode);
     }
-    if (${JSON.stringify(STORED_PALETTES)}.indexOf(record.palette) !== -1) {
+    if (record.palette !== undefined) {
       document.documentElement.setAttribute("data-palette", record.palette);
     }
   } catch (_) {}

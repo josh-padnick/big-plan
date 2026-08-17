@@ -54,7 +54,7 @@ export const STYLESHEET_BUDGETS = {
   "src/components/flow-diagram/styles.css": { declarations: 467 },
   "src/components/mermaid-diagram/styles.css": { declarations: 208 },
   "src/components/wireframe/styles.css": { declarations: 1012 },
-  "src/render/global.css": { declarations: 500 },
+  "src/render/global.css": { declarations: 508 },
   "src/render/markdown/deck.css": { declarations: 48 },
   "src/render/markdown/prose.css": { declarations: 122 },
   "src/render/markdown/syntax-highlighting.css": { declarations: 71 },

@@ -57,6 +57,13 @@ const PALETTE_ROLE_EXCEPTIONS = new Set(["ink-c"]);
 
 const SYNTAX_TOKEN_PATTERN = /^syntax-[a-z]+-(?:c|bg)$/;
 
+// The commenting chrome. Its bands are approved local colours in the product
+// palette rather than ramp steps, so a guest palette has to restate them or the
+// comment card keeps the product's warm greys inside a themed document.
+// src/render/global.css states which step each one takes.
+const COMMENT_SURFACE_TOKEN_PATTERN =
+  /^(?:comment-[a-z]+-c|agent-active-ring-c)$/;
+
 // WCAG AA for body text. Every pairing below is text on a ground, so the large
 // text allowance never applies: a plan is read at reading size.
 const CONTRAST_FLOOR = 4.5;
@@ -304,12 +311,13 @@ export const checkPalettes = async ({
           !RAMP_STEP_PATTERN.test(name) &&
           !PALETTE_SCALE_PATTERN.test(name) &&
           !SYNTAX_TOKEN_PATTERN.test(name) &&
+          !COMMENT_SURFACE_TOKEN_PATTERN.test(name) &&
           !PALETTE_ROLE_EXCEPTIONS.has(name),
       )
       .sort();
     if (stray.length > 0) {
       failures.push(
-        `global.css: palette "${id}" declares ${stray.map((name) => `--${name}`).join(", ")}; a palette may declare ramp steps, syntax tokens, the closed radius, weight, tracking, and elevation scales, and ${[...PALETTE_ROLE_EXCEPTIONS].map((name) => `--${name}`).join(", ")}`,
+        `global.css: palette "${id}" declares ${stray.map((name) => `--${name}`).join(", ")}; a palette may declare ramp steps, syntax tokens, comment-surface tokens, the closed radius, weight, tracking, and elevation scales, and ${[...PALETTE_ROLE_EXCEPTIONS].map((name) => `--${name}`).join(", ")}`,
       );
     }
   }

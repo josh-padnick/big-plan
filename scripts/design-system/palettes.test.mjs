@@ -159,6 +159,21 @@ test("rejects a palette that restates a role instead of a shade", async () => {
 `,
   });
   assert.deepEqual(result.failures.slice(0, 1), [
-    'global.css: palette "sample" declares --bg; a palette may declare ramp steps, syntax tokens, the closed radius, weight, tracking, and elevation scales, and --ink-c',
+    'global.css: palette "sample" declares --bg; a palette may declare ramp steps, syntax tokens, comment-surface tokens, the closed radius, weight, tracking, and elevation scales, and --ink-c',
   ]);
+});
+
+test("accepts a palette that restates the comment surface", async () => {
+  const result = await runAgainst({
+    paletteCss: `[data-palette="sample"] {
+  --grey-50: #fdfdfd;
+  --grey-925: #202020;
+  --grey-150: #eeeeee;
+  --grey-950: #121212;
+  --comment-header-c: light-dark(var(--grey-150), var(--grey-925));
+  --agent-active-ring-c: light-dark(var(--grey-150), var(--grey-925));
+}
+`,
+  });
+  assert.deepEqual(result.failures, []);
 });
