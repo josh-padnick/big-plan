@@ -10,6 +10,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { validateCommand } from "../validate/command.js";
 import { guidanceCommand } from "./command.js";
 
+// Every command whose call site invokes requireGuidanceAcknowledgment.
+const GATED_COMMANDS = ["validate", "render", "review"] as const;
+
+// The command appends its acknowledgment note after the principles, so the
+// last non-empty line is the note and nothing else.
+const closingNote = (output: string): string =>
+  output.trimEnd().split("\n").at(-1) ?? "";
+
 let tempDirectory = "";
 let stateDirectory = "";
 
@@ -86,6 +94,18 @@ describe("guidanceCommand", () => {
     });
   });
 
+  it("should name every gated command in the acknowledgment note", async () => {
+    // The note is the only place a reader learns what reading guidance bought
+    // them, so it has to name the same commands the gate actually guards.
+    // Assert against the note alone; the principles above it mention commands
+    // too, and matching those would let the note drift unnoticed.
+    for (const command of GATED_COMMANDS) {
+      expect(closingNote(await guidanceCommand([]))).toContain(
+        `\`big-plan ${command}\``,
+      );
+    }
+  });
+
   it("should keep validate locked until guidance has been read", async () => {
     const inputPath = join(tempDirectory, "plan.mdx");
     await writeFile(inputPath, "# Plan\n\nLede.\n\n## Scope\n\nOne.\n", "utf8");
@@ -110,8 +130,13 @@ describe("guidanceCommand", () => {
     const inputPath = join(tempDirectory, "plan.mdx");
     await writeFile(inputPath, "# Plan\n\nLede.\n\n## Scope\n\nOne.\n", "utf8");
 
-    const output = await guidanceCommand([]);
-    expect(output).toContain("could not be saved");
+    const note = closingNote(await guidanceCommand([]));
+    expect(note).toContain("could not be saved");
+    // The degraded note has to describe the same command set as the unlocked
+    // one, or a reader learns the gate covers less than it does.
+    for (const command of GATED_COMMANDS) {
+      expect(note).toContain(command);
+    }
 
     await expect(validateCommand([inputPath])).resolves.toMatchObject({
       title: "Plan",

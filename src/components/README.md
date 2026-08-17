@@ -15,13 +15,13 @@ Code that coordinates an entire document belongs in the [renderer](../render/REA
 Give each component a plainly named folder, such as `callout/` or `file-tree/`.
 Keep the parts of that concept together:
 
-| Responsibility                       | Typical home                                | What it owns                                                                                                        |
-| ------------------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Interpret authored MDX               | `compile.ts`                                | Validates attributes and children, reports authoring errors, and produces plain validated data without using React. |
-| Present the validated data           | `view.tsx`                                  | Turns the validated data into the React view used for HTML delivery. It does not re-parse authored MDX.             |
-| Connect compilation and presentation | `definition.ts`                             | Pairs the compilation function with its view and declares any allowed nested components.                            |
-| Style the view                       | `styles.css`                                | Owns styles specific to this component.                                                                             |
-| Prove behavior                       | Colocated `*.test.ts` or `*.test.tsx` files | Tests the authoring rule or view beside the code that owns it.                                                      |
+| Responsibility                       | Typical home                                | What it owns                                                                                                                                                                                                                              |
+| ------------------------------------ | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interpret authored MDX               | `compile.ts`                                | Validates attributes and children, reports authoring errors, and produces plain validated data without using React.                                                                                                                       |
+| Present the validated data           | `view.tsx`                                  | Turns the validated data into the React view used for HTML delivery. It does not re-parse authored MDX.                                                                                                                                   |
+| Connect compilation and presentation | `definition.ts`                             | Pairs the compilation function with its view and declares any allowed nested components.                                                                                                                                                  |
+| Style the view                       | `view.tsx`, rarely `styles.css`             | Tailwind utilities on the markup the view renders. A `styles.css` file is the bounded escape hatch [_internal/ENGINEERING_PRACTICES.md](../../_internal/ENGINEERING_PRACTICES.md) defines, not the default home for a component's styles. |
+| Prove behavior                       | Colocated `*.test.ts` or `*.test.tsx` files | Tests the authoring rule or view beside the code that owns it.                                                                                                                                                                            |
 
 The exact set of files can vary with the component.
 The important boundary is that authoring rules do not depend on React, presentation consumes the resulting validated data, and component-specific behavior remains in the component's folder.

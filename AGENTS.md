@@ -59,7 +59,7 @@ Plan-authored code never executes: imports, exports, expressions, and inline JSX
 Big Plan calls the validation-and-translation step **compilation**.
 The output commands compile the authoritative plan source independently, then produce either machine-readable JSON for agents and tools or a self-contained HTML review document for humans.
 The no-write validation command renders the plan in memory while collecting the machine-readable summary, then applies linting rules to the authored plan.
-Human delivery enforces the same linting rules before packaging, and a guidance command prints versioned plan-writing principles whose recent acknowledgment gates validation and human delivery.
+Human delivery enforces the same linting rules before packaging, and a guidance command prints versioned plan-writing principles whose recent acknowledgment gates validation, human delivery, and local review.
 
 ## Architecture at a glance
 
