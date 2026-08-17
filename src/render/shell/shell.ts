@@ -9,7 +9,6 @@
 
 import { CHEVRONS_DOWN_UP_ICON } from "../../icons/lucide/chevrons-down-up.js";
 import { CHEVRONS_UP_DOWN_ICON } from "../../icons/lucide/chevrons-up-down.js";
-import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { MONITOR_ICON } from "../../icons/lucide/monitor.js";
 import { MOON_ICON } from "../../icons/lucide/moon.js";
@@ -309,7 +308,7 @@ const renderPreferencesDialog = (): string =>
 <div class="flex items-start justify-between gap-4">
 <div class="min-w-0">
 <h2 class="m-0 text-2xl font-semibold tracking-tight" id="big-plan-preferences-title">Settings</h2>
-<p class="mt-1 flex items-center gap-2 text-xs leading-normal text-muted" data-preferences-status>${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes are saved in browser local storage and apply to every review document in this browser.</span></p>
+<p class="mt-1 text-xs leading-normal text-muted" data-preferences-status>Changes are saved in browser local storage and apply to every review document in this browser.</p>
 </div>
 <button class="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-close aria-label="Close settings">${lucideIconToHtml({ icon: X_ICON, className: "size-4" })}</button>
 </div>
