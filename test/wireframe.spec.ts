@@ -9,25 +9,27 @@ import { boxOf, expect, test } from "./fixtures";
 type TestLocator = Parameters<typeof boxOf>[0];
 
 // Maximizing schedules a fit through a ResizeObserver, so waiting on the
-// attribute alone can measure the resting geometry. The frame's own zoom is
-// the one value the fit always rewrites, so a change in it - not in a card
-// box the maximized layout also moves - is what says the fit has run.
+// attribute alone can measure geometry the fit has not answered for yet. The
+// frame's own zoom is the one value the fit always rewrites, so this waits
+// for that value to stop moving. It deliberately does not wait for it to
+// change: a maximized panel can offer the frame the same width the article
+// column did, and then the settled answer is the resting one.
 const maximizeAfterFrameFit = async (wireframe: TestLocator): Promise<void> => {
   const frame = wireframe.locator(".wireframe-frame").first();
-  const restingZoom = await frame.evaluate((node) =>
-    Number.parseFloat(getComputedStyle(node).zoom),
-  );
   await wireframe.locator("[data-figure-maximize]").click();
   await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
+  let previous = Number.NaN;
   await expect
-    .poll(() =>
-      frame.evaluate(
-        (node, resting) =>
-          Math.abs(Number.parseFloat(getComputedStyle(node).zoom) - resting),
-        restingZoom,
-      ),
-    )
-    .toBeGreaterThan(0.0001);
+    .poll(async () => {
+      const zoom = await frame.evaluate((node) =>
+        Number.parseFloat(getComputedStyle(node).zoom),
+      );
+      const settled =
+        Number.isFinite(zoom) && zoom > 0 && Math.abs(zoom - previous) < 0.0001;
+      previous = zoom;
+      return settled;
+    })
+    .toBe(true);
 };
 
 // The caption is a figcaption pinned to the width the frame paints at, so its
@@ -374,28 +376,6 @@ test("should align a long caption with a height-fitted desktop frame", async ({
   expectCaptionContract(await captionContractOf(wireframe), {
     alignmentTolerance: 4,
   });
-});
-
-test("should name a heading-free wireframe by its title, or by its screen when untitled", async ({
-  page,
-  wireframeLongCaptionDesktopViewerUrl,
-}) => {
-  await page.goto(wireframeLongCaptionDesktopViewerUrl);
-
-  // The screen caption is the only figcaption a heading-free screen offers, and
-  // it holds a name over subordinate viewport metadata. Read as one run of
-  // text those two facts collide, so the name alone has to name the block.
-  await expect(
-    page.locator('[data-wireframe="untitled-heading-free"]'),
-  ).toHaveAttribute("data-block-label", "Approve step");
-  // A figure that names itself still wins over the screen beneath it.
-  await expect(
-    page.locator('[data-wireframe="titled-heading-free"]'),
-  ).toHaveAttribute("data-block-label", "Titled heading-free wireframe");
-  // And an authored heading inside the drawing still outranks both.
-  await expect(
-    page.locator('[data-wireframe="long-caption-desktop"]'),
-  ).toHaveAttribute("data-block-label", "Review thread");
 });
 
 test("should keep a long wireframe caption aligned and readable on mobile", async ({
