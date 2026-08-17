@@ -778,11 +778,63 @@ describe("request mailbox", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("should reject an answer after its lease expires", async () => {
+  // BIG-147. A turn longer than the lease is the normal path, not an anomaly:
+  // `agent next` hands the work over and its process exits, so nothing renews
+  // the claim between progress notes. Refusing the finished answer lost the
+  // reviewer's message, which is what adr/0002 exists to prevent.
+  it("should accept the holder's answer after its lease expires", async () => {
     const { store } = await preparedReview();
     const comment = reviewComment({
       id: "4444444444444444",
-      body: "Reject a stale worker.",
+      body: "Answer after a long quiet turn.",
+    });
+    const request = requestWith([comment]);
+    await writeAgentRequest({ store, request });
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:00:00.000Z",
+      clock: clockAt("2026-08-10T12:00:00.000Z"),
+    });
+    const response = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        outcomes: [
+          {
+            commentId: comment.id,
+            state: "declined",
+            message: "No plan revision is needed.",
+          },
+        ],
+      },
+      request: claimed,
+      commentsById: new Map([[comment.id, comment]]),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: "2026-08-10T12:20:00.000Z",
+    });
+
+    await expect(
+      commitRequestTerminal({
+        store,
+        response,
+        claimedBy: agentA,
+        now: "2026-08-10T12:20:00.000Z",
+      }),
+    ).resolves.toMatchObject({ answeredAt: "2026-08-10T12:20:00.000Z" });
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ responses: [expect.anything()] });
+  });
+
+  it("should reject an answer once a lapsed claim has been taken over", async () => {
+    const { store } = await preparedReview();
+    const comment = reviewComment({
+      id: "4444444444444444",
+      body: "Only the current holder may answer.",
     });
     const request = requestWith([comment]);
     await writeAgentRequest({ store, request });
@@ -812,26 +864,34 @@ describe("request mailbox", () => {
       currentSnapshot: snapshot,
       now: "2026-08-10T12:01:16.000Z",
     });
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentB,
+      baselineSnapshot: snapshot,
+      now: "2026-08-10T12:01:16.000Z",
+      clock: clockAt("2026-08-10T12:01:16.000Z"),
+    });
 
     await expect(
       commitRequestTerminal({
         store,
         response,
         claimedBy: agentA,
-        now: "2026-08-10T12:01:16.000Z",
-        clock: clockAt("2026-08-10T12:01:16.000Z"),
+        now: "2026-08-10T12:01:17.000Z",
       }),
-    ).rejects.toThrow(/claim/);
+    ).rejects.toThrow(/Another agent now holds the claim/);
     await expect(
       readAgentExchange({ store, sessionId, planId }),
     ).resolves.toMatchObject({ responses: [] });
   });
 
-  it("should reject an answer whose lease expires while waiting for the lock", async () => {
+  it("should reject an answer taken over while it waited for the lock", async () => {
     const { store } = await preparedReview();
     const comment = reviewComment({
       id: "4444444444444444",
-      body: "Reject an answer that waited past expiry.",
+      body: "Reject an answer overtaken behind the lock.",
     });
     const request = requestWith([comment]);
     await writeAgentRequest({ store, request });
@@ -862,9 +922,19 @@ describe("request mailbox", () => {
       currentSnapshot: snapshot,
       now: new Date(startedAt + 74_000).toISOString(),
     });
+    // The takeover is written while the answer is already queued behind the
+    // request lock, so the ownership test has to be read inside the lock and
+    // not captured before it.
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentB,
+      baselineSnapshot: snapshot,
+      now: new Date(startedAt + 76_000).toISOString(),
+      clock: () => startedAt + 76_000,
+    });
     let releaseLock: (() => Promise<void>) | undefined;
-    let lockReleased = false;
-    let clockReads = 0;
     try {
       releaseLock = await holdAgentRequestLock({
         store,
@@ -874,22 +944,13 @@ describe("request mailbox", () => {
         store,
         response,
         claimedBy: agentA,
-        now: new Date(startedAt + 74_000).toISOString(),
-        clock: () => {
-          clockReads += 1;
-          return startedAt + (lockReleased ? 76_000 : 74_000);
-        },
+        now: new Date(startedAt + 77_000).toISOString(),
       });
       await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(clockReads).toBe(0);
-      // With the clock read moved before request-lock acquisition, it captures
-      // the live value and this commit resolves; that counterfactual was verified.
-      lockReleased = true;
       await releaseLock();
       releaseLock = undefined;
 
-      await expect(commit).rejects.toThrow(/live claim/);
-      expect(clockReads).toBe(1);
+      await expect(commit).rejects.toThrow(/Another agent now holds the claim/);
       await expect(
         readAgentExchange({ store, sessionId, planId }),
       ).resolves.toMatchObject({ responses: [] });
