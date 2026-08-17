@@ -25,7 +25,13 @@ const evaluateEmbeddedSource = (): ((screen: unknown) => void) =>
     screen: unknown,
   ) => void;
 
-const buildScreen = ({ maximized }: { readonly maximized: boolean }) => {
+const buildScreen = ({
+  maximized,
+  screenHeight = SCREEN_HEIGHT,
+}: {
+  readonly maximized: boolean;
+  readonly screenHeight?: number;
+}) => {
   const styles = new Map<object, Styles>();
   const zeroInset: Styles = {
     paddingLeft: "0px",
@@ -62,7 +68,7 @@ const buildScreen = ({ maximized }: { readonly maximized: boolean }) => {
   };
   const screen = {
     clientWidth: SCREEN_WIDTH,
-    clientHeight: SCREEN_HEIGHT,
+    clientHeight: screenHeight,
     querySelector: (selector: string) =>
       selector.includes("frame-card") ? card : caption,
     closest: () => (maximized ? {} : null),
@@ -120,6 +126,24 @@ describe("fitWireframeScreen", () => {
     const paintedWidth = `${String(FRAME_WIDTH * scale + CARD_INSET)}px`;
     expect(card.style.width).toBe(paintedWidth);
     expect(caption.style.width).toBe(paintedWidth);
+  });
+
+  it("should still paint valid CSS when the caption alone exhausts the height", () => {
+    const { card, caption, frame, screen, styles } = buildScreen({
+      maximized: true,
+      // Shorter than the caption plus the card's inset, so the height budget
+      // left for the frame is negative.
+      screenHeight: 40,
+    });
+
+    withComputedStyle(styles, () => {
+      fitWireframeScreen(screen as unknown as HTMLElement);
+    });
+
+    const scale = Number.parseFloat(frame.style.zoom);
+    expect(scale).toBeGreaterThan(0);
+    expect(Number.parseFloat(card.style.width)).toBeGreaterThan(0);
+    expect(Number.parseFloat(caption.style.width)).toBeGreaterThan(0);
   });
 
   it("should fit width only at rest, leaving the drawing at its true height", () => {

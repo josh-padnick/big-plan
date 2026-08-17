@@ -744,25 +744,11 @@ const Screen = ({
   const preset = WIREFRAME_DEVICE_PRESETS[screen.device];
   const desktop = screen.device === "desktop";
   const phone = screen.device === "phone";
-  // A desktop screen holds the fixed application silhouette whenever it hosts
-  // a workspace, whether the author reached for an `AppShell` or placed the
-  // workspace `Row` directly in the screen after a `TopBar`. The caption below
-  // prints which policy applies and the artboard has to keep it, so the answer
-  // is decided once here and published on the artboard as
-  // `data-wireframe-workspace`; the stylesheet reads that attribute rather
-  // than re-deriving the same two hosts from a selector that could drift out
-  // of step with what the caption says.
   const workspaceViewport =
-    desktop &&
-    screen.children.some(
-      (child) =>
-        child.element === "AppShell" ||
-        (child.element === "Row" && isWorkspaceRow(child.children)),
-    );
+    desktop && screen.children.some((child) => child.element === "AppShell");
   return (
     <figure
       className="wireframe-screen mx-auto w-full overflow-x-auto [container-type:inline-size]"
-      aria-label={`${screen.name}, ${preset.label}`}
       data-wireframe-screen={screen.id}
       data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
@@ -790,7 +776,6 @@ const Screen = ({
             className="wireframe-artboard"
             data-wireframe-device={screen.device}
             data-wireframe-height-policy={preset.heightPolicy}
-            {...(workspaceViewport ? { "data-wireframe-workspace": "" } : {})}
             {...(screen.pattern === undefined
               ? {}
               : { "data-wireframe-pattern": screen.pattern })}

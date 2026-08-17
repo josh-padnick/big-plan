@@ -32,29 +32,34 @@ const maximizeAfterFrameFit = async (wireframe: TestLocator): Promise<void> => {
 
 // The caption is a figcaption pinned to the width the frame paints at, so its
 // edges land on the card's edges however far the drawing has been scaled.
+// The fit runs from a ResizeObserver, so the alignment is polled rather than
+// sampled once: a layout change that has not yet been fitted is a pending
+// answer, not a failing one.
 const expectCaptionAlignedToFrame = async (
   screen: TestLocator,
   tolerance = 4,
 ): Promise<void> => {
-  const geometry = await screen.evaluate((node) => {
-    const caption = node.querySelector<HTMLElement>(
-      ":scope > .wireframe-screen-caption",
-    );
-    const card = node.querySelector<HTMLElement>(
-      ":scope > .wireframe-frame-card",
-    );
-    if (caption === null || card === null) {
-      throw new Error("screen caption and frame card are incomplete");
-    }
-    const captionBox = caption.getBoundingClientRect();
-    const cardBox = card.getBoundingClientRect();
-    return {
-      leftDelta: Math.abs(captionBox.left - cardBox.left),
-      rightDelta: Math.abs(captionBox.right - cardBox.right),
-    };
-  });
-  expect(geometry.leftDelta).toBeLessThan(tolerance);
-  expect(geometry.rightDelta).toBeLessThan(tolerance);
+  await expect
+    .poll(() =>
+      screen.evaluate((node) => {
+        const caption = node.querySelector<HTMLElement>(
+          ":scope > .wireframe-screen-caption",
+        );
+        const card = node.querySelector<HTMLElement>(
+          ":scope > .wireframe-frame-card",
+        );
+        if (caption === null || card === null) {
+          throw new Error("screen caption and frame card are incomplete");
+        }
+        const captionBox = caption.getBoundingClientRect();
+        const cardBox = card.getBoundingClientRect();
+        return Math.max(
+          Math.abs(captionBox.left - cardBox.left),
+          Math.abs(captionBox.right - cardBox.right),
+        );
+      }),
+    )
+    .toBeLessThan(tolerance);
 };
 
 // Everything the caption contract asserts about one rendered figcaption,
@@ -146,8 +151,11 @@ const expectCaptionContract = (
   );
   expect(contract.stackTopInset).toBeGreaterThanOrEqual(-1);
   expect(contract.stackBottomInset).toBeGreaterThanOrEqual(-1);
-  expect(contract.horizontalOverflow).toBe(0);
-  expect(contract.verticalOverflow).toBe(0);
+  // The fit lands the stack on the panel's height exactly, and scrollHeight
+  // and clientHeight round independently, so a sub-pixel residue can show as
+  // one pixel - the same tolerance the stack height above already allows.
+  expect(contract.horizontalOverflow).toBeLessThanOrEqual(1);
+  expect(contract.verticalOverflow).toBeLessThanOrEqual(1);
 };
 
 test("should walk the wireframe prototype between screens", async ({
@@ -282,6 +290,12 @@ test("should maximize into a left screen rail, sequence it with arrow keys, and 
     await expect(
       rail.getByRole("button", { name: "My wallet" }),
     ).toHaveAttribute("aria-current", "true");
+    // The rail takes width from the screen box, so the frame refits into a
+    // narrower slot; the caption beneath it has to follow rather than keep
+    // the width it was drawn at and overhang the drawing it names.
+    await expectCaptionAlignedToFrame(
+      page.locator('[data-wireframe-screen="child-home"]'),
+    );
   });
 
   await test.step("clicking a rail item switches the active screen", async () => {
@@ -341,116 +355,6 @@ test("should maximize into a left screen rail, sequence it with arrow keys, and 
   });
 });
 
-test("should preserve panel spacing outside a direct desktop workspace", async ({
-  page,
-  wireframeDirectPanelViewerUrl,
-}) => {
-  await page.goto(wireframeDirectPanelViewerUrl);
-
-  const screen = page.locator('[data-wireframe-screen="standalone"]');
-  await expect(
-    screen.locator(".wireframe-row[data-wireframe-workspace]"),
-  ).toHaveCount(0);
-  // A plain desktop panel keeps the ordinary body rhythm: the workspace rules
-  // that now reach a canvas-hosted row must not have reached this one.
-  await expect(screen.locator(".wireframe-panel-body")).toHaveCSS(
-    "gap",
-    "12px",
-  );
-});
-
-test("should fill a maximized single-screen desktop workspace", async ({
-  page,
-  wireframeSingleDesktopViewerUrl,
-}) => {
-  await page.setViewportSize({ width: 1440, height: 800 });
-  await page.goto(wireframeSingleDesktopViewerUrl);
-
-  const figure = page.locator('[data-wireframe="single-desktop"]');
-  const screen = figure.locator("[data-wireframe-screen]");
-  const rail = figure.locator(".wireframe-rail");
-  // A workspace Row hosted directly by the screen is a workspace, so the
-  // caption says so - and the artboard below has to keep that promise.
-  await expect(figure.locator(".wireframe-screen-viewport")).toHaveText(
-    "Desktop · 1200 × 820px workspace viewport",
-  );
-  await expect(figure.locator(".wireframe-screen-name")).toHaveText(
-    "Historical change",
-  );
-
-  const assertFixedWorkspaceViewport = async (): Promise<void> => {
-    const viewport = await figure
-      .locator(".wireframe-artboard")
-      .evaluate((node) => ({
-        height: node.offsetHeight,
-        overflow: node.scrollHeight - node.clientHeight,
-      }));
-    expect(viewport.height).toBe(820);
-    expect(viewport.overflow).toBe(0);
-    // The silhouette holds because the rail absorbs its own overflow, not
-    // because the drawing happened to be short enough.
-    expect(
-      await rail.evaluate((node) => node.scrollHeight - node.clientHeight),
-    ).toBeGreaterThan(0);
-  };
-
-  await expectCaptionAlignedToFrame(screen);
-  await assertFixedWorkspaceViewport();
-  await maximizeAfterFrameFit(figure);
-  await expect(figure.getByRole("heading", { name: "Feedback" })).toBeVisible();
-  await expectCaptionAlignedToFrame(screen);
-  await assertFixedWorkspaceViewport();
-
-  const geometry = await screen.evaluate((node) => {
-    const artboard = node.querySelector<HTMLElement>(".wireframe-artboard");
-    const workspace = node.querySelector<HTMLElement>(
-      ".wireframe-row[data-wireframe-workspace]",
-    );
-    const primary = workspace?.querySelector<HTMLElement>(".wireframe-panel");
-    const rail = workspace?.querySelector<HTMLElement>(".wireframe-rail");
-    if (
-      artboard === null ||
-      workspace === undefined ||
-      workspace === null ||
-      primary === null ||
-      primary === undefined ||
-      rail === null ||
-      rail === undefined
-    ) {
-      throw new Error("single-screen desktop workspace is incomplete");
-    }
-    const artboardBox = artboard.getBoundingClientRect();
-    const workspaceBox = workspace.getBoundingClientRect();
-    return {
-      artboardHeight: artboardBox.height,
-      deadBand: artboardBox.bottom - workspaceBox.bottom,
-      workspaceHeight: workspaceBox.height,
-      primaryHeight: primary.getBoundingClientRect().height,
-      railHeight: rail.getBoundingClientRect().height,
-      screenOverflow: node.scrollHeight - node.clientHeight,
-    };
-  });
-
-  // The workspace fills the silhouette rather than sitting in the top of it,
-  // and both panes run its full height.
-  expect(geometry.deadBand).toBeLessThan(32);
-  expect(geometry.workspaceHeight).toBeGreaterThan(
-    geometry.artboardHeight * 0.85,
-  );
-  expect(geometry.primaryHeight).toBeCloseTo(geometry.workspaceHeight, 0);
-  expect(geometry.railHeight).toBeCloseTo(geometry.workspaceHeight, 0);
-  expect(geometry.screenOverflow).toBe(0);
-
-  const scrollRange = await rail.evaluate(
-    (node) => node.scrollHeight - node.clientHeight,
-  );
-  await rail.hover();
-  await page.mouse.wheel(0, scrollRange);
-  await expect
-    .poll(() => rail.evaluate((node) => node.scrollTop))
-    .toBeGreaterThan(0);
-});
-
 test("should align a long caption with a height-fitted desktop frame", async ({
   page,
   wireframeLongCaptionDesktopViewerUrl,
@@ -481,66 +385,6 @@ test("should keep a long wireframe caption aligned and readable on mobile", asyn
   expectCaptionContract(await captionContractOf(wireframe), {
     alignmentTolerance: 2,
   });
-});
-
-test("should fill a multi-screen desktop workspace at rest and when maximized", async ({
-  page,
-  wireframeMultiDesktopViewerUrl,
-}) => {
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(wireframeMultiDesktopViewerUrl);
-
-  const figure = page.locator('[data-wireframe="multi-desktop"]');
-  const screen = figure.locator('[data-wireframe-screen="first-thread"]');
-
-  const assertWorkspaceFillsArtboard = async (): Promise<void> => {
-    const geometry = await screen.evaluate((node) => {
-      const artboard = node.querySelector<HTMLElement>(".wireframe-artboard");
-      const workspace = node.querySelector<HTMLElement>(
-        ".wireframe-row[data-wireframe-workspace]",
-      );
-      const primary = workspace?.querySelector<HTMLElement>(".wireframe-panel");
-      const rail = workspace?.querySelector<HTMLElement>(".wireframe-rail");
-      if (
-        artboard === null ||
-        workspace === null ||
-        primary === null ||
-        primary === undefined ||
-        rail === null ||
-        rail === undefined
-      ) {
-        throw new Error("multi-screen desktop workspace is incomplete");
-      }
-      const artboardBox = artboard.getBoundingClientRect();
-      const workspaceBox = workspace.getBoundingClientRect();
-      return {
-        artboardHeight: artboardBox.height,
-        deadBand: artboardBox.bottom - workspaceBox.bottom,
-        workspaceHeight: workspaceBox.height,
-        primaryHeight: primary.getBoundingClientRect().height,
-        railHeight: rail.getBoundingClientRect().height,
-      };
-    });
-
-    expect(geometry.deadBand).toBeLessThan(geometry.artboardHeight * 0.05);
-    expect(geometry.workspaceHeight).toBeGreaterThan(
-      geometry.artboardHeight * 0.85,
-    );
-    expect(geometry.primaryHeight).toBeCloseTo(geometry.workspaceHeight, 0);
-    expect(geometry.railHeight).toBeCloseTo(geometry.workspaceHeight, 0);
-  };
-
-  await expect(
-    figure.getByRole("navigation", { name: "Prototype screens" }),
-  ).toBeVisible();
-  await expectCaptionAlignedToFrame(screen);
-  await assertWorkspaceFillsArtboard();
-
-  // Maximizing swaps the switcher into a left rail, so the screen box narrows
-  // sharply; the caption has to follow the frame into that narrower slot.
-  await maximizeAfterFrameFit(figure);
-  await expectCaptionAlignedToFrame(screen);
-  await assertWorkspaceFillsArtboard();
 });
 
 test("should keep the wireframe maximize control dormant and the storyboard readable without JavaScript", async ({

@@ -28,6 +28,15 @@ export const fitWireframeScreen = (screen: HTMLElement): void => {
   // Half a thousandth of a scale factor is well below one painted pixel on
   // any device this draws, so a pass that moves less has settled.
   const fitSettled = 0.0001;
+  // A screen box smaller than the caption plus the card's own inset leaves a
+  // negative height budget, and `zoom: -0.31` or `width: -372px` is not an
+  // invalid-but-visible value - the CSSOM drops it, the frame silently keeps
+  // the previous pass's zoom, and the fit never settles. Every scale is
+  // therefore held to a positive floor: a drawing scaled to a twentieth is
+  // unreadable, but it is a real answer the loop can converge on.
+  const minimumFitScale = 0.05;
+  const clampScale = (value: number): number =>
+    Math.min(1, Math.max(minimumFitScale, value));
   const card = screen.querySelector<HTMLElement>(
     ":scope > .wireframe-frame-card",
   );
@@ -94,7 +103,7 @@ export const fitWireframeScreen = (screen: HTMLElement): void => {
   // reader opened the figure to see all of it at once, and instead gets a
   // scrollbar and a cut-off frame. Both axes have to fit, and the caption is
   // part of what has to stay visible.
-  let scale = Math.min(1, widthScale);
+  let scale = clampScale(widthScale);
   if (screen.closest("[data-figure-maximized]") === null) {
     paint(scale);
     return;
@@ -123,7 +132,7 @@ export const fitWireframeScreen = (screen: HTMLElement): void => {
         captionHeight -
         verticalInset) /
       frameHeight;
-    const next = Math.min(1, widthScale, heightScale);
+    const next = clampScale(Math.min(widthScale, heightScale));
     const settled = Math.abs(next - scale) < fitSettled;
     scale = next;
     if (settled) break;
