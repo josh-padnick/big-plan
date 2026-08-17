@@ -2858,6 +2858,59 @@ describe("review runtime resolve invariant", () => {
     }
   });
 
+  it("should delete an unresolved comment while another process holds the shared lock", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-unresolved-lock-",
+    );
+    const keptComment = {
+      id: "c5c5c5c5",
+      body: "Keep this queued comment.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" as const },
+    };
+    let release: (() => Promise<void>) | undefined;
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment, keptComment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+
+      const version = await isolatedReviewStateVersion(isolatedCall);
+      release = await holdResolvedCommentLock(isolated);
+      const deleted = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: { commentId, version },
+      });
+      expect(deleted.status).toBe(200);
+      await expect(
+        readAgentExchange({
+          store: isolated.store,
+          sessionId: isolated.sessionId,
+          planId: isolated.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [{ kind: "feedback", comments: [{ id: keptComment.id }] }],
+      });
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({
+        sent: [expect.objectContaining({ id: keptComment.id })],
+      });
+    } finally {
+      await release?.();
+      await close();
+    }
+  });
+
   it("should leave a delete retryable when the shared lock times out", async () => {
     const { isolated, isolatedCall, close } = await isolatedRuntime(
       "big-plan-delete-lock-timeout-",

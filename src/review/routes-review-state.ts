@@ -761,6 +761,12 @@ export const deleteSentComment = async (
     });
   }
   const now = new Date().toISOString();
+  const wasResolved = (
+    await readResolvedCommentIds({
+      store,
+      validate: validateResolvedCommentIds,
+    })
+  ).includes(commentId);
   for (const pending of answeredRequestIds.size === 0 ? pendingRequests : []) {
     if (pending.canceledAt !== undefined) continue;
     if (pending.kind === "feedback") {
@@ -781,24 +787,28 @@ export const deleteSentComment = async (
   // The resolved-id read-modify-write shares `.resolved.lock` with request
   // creation and the drafts write, so a concurrent resolve cannot be dropped by
   // this deletion. The request locks above are already released, keeping the
-  // request-then-resolved order `ensureAgentRequest` establishes.
-  try {
-    await withResolvedCommentLock({
-      store,
-      change: async (lockedStore) => {
-        const resolvedCommentIds = await readResolvedCommentIds({
-          store: lockedStore,
-          validate: validateResolvedCommentIds,
-        });
-        await writeResolvedCommentIds({
-          store: lockedStore,
-          ids: resolvedCommentIds.filter((id) => id !== commentId),
-        });
-      },
-    });
-  } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
+  // request-then-resolved order `ensureAgentRequest` establishes. A comment
+  // that was not resolved has no id to remove, and a comment holding queued
+  // work is never resolved, so this waits on the lock only when it writes.
+  if (wasResolved) {
+    try {
+      await withResolvedCommentLock({
+        store,
+        change: async (lockedStore) => {
+          const resolvedCommentIds = await readResolvedCommentIds({
+            store: lockedStore,
+            validate: validateResolvedCommentIds,
+          });
+          await writeResolvedCommentIds({
+            store: lockedStore,
+            ids: resolvedCommentIds.filter((id) => id !== commentId),
+          });
+        },
+      });
+    } catch (error: unknown) {
+      if (!(error instanceof AgentExchangeRejected)) throw error;
+      return refusal({ status: 409, reason: error.message });
+    }
   }
   await writeComments({
     path: store.sentPath,

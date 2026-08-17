@@ -684,7 +684,11 @@ export const deleteQueuedRequest = async ({
     },
   });
 
-/** Removes one comment before an agent claims its feedback request. */
+/**
+ * Removes one comment before an agent claims its feedback request. A request
+ * that no longer carries the comment has already had it removed, so the
+ * removal answers with the stored request rather than refusing a repeat.
+ */
 export const removeCommentFromQueuedFeedbackRequest = async ({
   store,
   requestId,
@@ -718,11 +722,7 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
       const comments = request.comments.filter(
         (comment) => comment.id !== commentId,
       );
-      if (comments.length === request.comments.length) {
-        throw new AgentExchangeRejected(
-          "The queued feedback request does not contain this comment",
-        );
-      }
+      if (comments.length === request.comments.length) return request;
       const updated = validateAgentRequest(
         comments.length === 0
           ? { ...request, canceledAt: now }

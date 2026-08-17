@@ -1239,6 +1239,38 @@ describe("request mailbox", () => {
     ).resolves.toMatchObject({ canceledAt: "2026-08-10T12:00:02.000Z" });
   });
 
+  it("should treat removing a comment the request no longer carries as done", async () => {
+    const { store } = await preparedReview();
+    const removedId = "4444444444444444";
+    const keptId = "5555555555555555";
+    const request = requestWith([
+      reviewComment({ id: removedId, body: "Remove this." }),
+      reviewComment({ id: keptId, body: "Keep this." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    await removeCommentFromQueuedFeedbackRequest({
+      store,
+      requestId: request.requestId,
+      commentId: removedId,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    const repeated = await removeCommentFromQueuedFeedbackRequest({
+      store,
+      requestId: request.requestId,
+      commentId: removedId,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+
+    expect(repeated.comments.map((comment) => comment.id)).toEqual([keptId]);
+    expect(repeated.canceledAt).toBeUndefined();
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({
+      requests: [{ kind: "feedback", comments: [{ id: keptId }] }],
+    });
+  });
+
   it("should keep a valid request when removal races with pickup", async () => {
     const { store } = await preparedReview();
     const removedId = "4444444444444444";
