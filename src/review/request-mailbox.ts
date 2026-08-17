@@ -1,6 +1,7 @@
 // Owns locked changes to stored agent requests and the plan-wide claim gate.
-// Request creation refuses work that names a still-resolved thread, so
-// resolution and outstanding work stay mutually exclusive from both directions.
+// Request creation and resolution share `.resolved.lock`, so a resolve and a
+// new reply or feedback cannot interleave into a resolved thread that holds
+// outstanding work.
 
 import { join } from "node:path";
 import {
@@ -155,6 +156,32 @@ const withRequestLock = async <TResult>({
   });
 };
 
+const resolvedCommentLockPath = (store: ReviewStore): string =>
+  join(store.reviewDirectory, ".resolved.lock");
+
+/**
+ * Serializes resolution writes against create-time unresolved checks. The
+ * request lock still owns one request file; this lock owns the pairing of
+ * resolved.json with outstanding work.
+ */
+export const withResolvedCommentLock = async <TResult>({
+  store,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly change: (store: ReviewStore) => Promise<TResult>;
+}): Promise<TResult> =>
+  withReviewStoreLock({
+    lockPath: resolvedCommentLockPath(store),
+    change: () => change(store),
+    timeoutError: () =>
+      new AgentExchangeRejected(
+        "Another process is changing resolved threads. Try again.",
+      ),
+    invalidLockError: () =>
+      new AgentExchangeRejected("The request mailbox is unavailable"),
+  });
+
 const withPlanClaimLock = async <TResult>({
   store,
   change,
@@ -251,16 +278,21 @@ export const ensureAgentRequest = async ({
         requestId: intended.requestId,
       });
       if (value === undefined) {
-        await assertCommentsAreUnresolved({
+        return withResolvedCommentLock({
           store: lockedStore,
-          commentIds: namedCommentIds(intended),
+          change: async () => {
+            await assertCommentsAreUnresolved({
+              store: lockedStore,
+              commentIds: namedCommentIds(intended),
+            });
+            await writeAgentRequestValue({
+              store: lockedStore,
+              requestId: intended.requestId,
+              value: intended,
+            });
+            return intended;
+          },
         });
-        await writeAgentRequestValue({
-          store: lockedStore,
-          requestId: intended.requestId,
-          value: intended,
-        });
-        return intended;
       }
       const existing = validateAgentRequest(value);
       if (

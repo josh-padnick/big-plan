@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./shared/comment.js";
+import { validateResolvedCommentIds } from "./shared/comment.js";
 import {
   deriveSnapshotDigest,
   feedbackAgentRequest,
@@ -41,12 +42,14 @@ import {
   removeCommentFromQueuedFeedbackRequest,
   ResolvedThreadWorkRejected,
   reviseQueuedRequest,
+  withResolvedCommentLock,
 } from "./request-mailbox.js";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
   prepareStore,
   readAgentConnectionEvents,
   readProgress,
+  readResolvedCommentIds,
   reviewStoreFor,
   withReviewStoreLock,
   writeAgentResponseValue,
@@ -99,6 +102,30 @@ const holdAgentRequestLock = async ({
       await released.promise;
     },
     timeoutError: () => new Error("Timed out holding the agent request lock"),
+  });
+  await acquired.promise;
+  let settled = false;
+  return async () => {
+    if (settled) return;
+    settled = true;
+    released.resolve();
+    await lock;
+  };
+};
+
+const holdResolvedCommentLock = async ({
+  store,
+}: {
+  readonly store: ReturnType<typeof reviewStoreFor>;
+}): Promise<() => Promise<void>> => {
+  const acquired = deferred();
+  const released = deferred();
+  const lock = withResolvedCommentLock({
+    store,
+    change: async () => {
+      acquired.resolve();
+      await released.promise;
+    },
   });
   await acquired.promise;
   let settled = false;
@@ -1719,6 +1746,77 @@ describe("request mailbox", () => {
     await expect(
       readAgentExchange({ store, sessionId, planId }),
     ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should not queue a reply while a concurrent resolve holds the shared lock", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const release = await holdResolvedCommentLock({ store });
+    const created = ensureAgentRequest({
+      store,
+      request: replyRequest({ commentId }),
+    });
+    let settled = false;
+    void created.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(settled).toBe(false);
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+    await release();
+    await expect(created).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should not resolve a thread while a concurrent create holds the shared lock", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const release = await holdResolvedCommentLock({ store });
+    const resolved = withResolvedCommentLock({
+      store,
+      change: async (lockedStore) => {
+        await assertResolvableComment({
+          store: lockedStore,
+          sessionId,
+          planId,
+          commentId,
+        });
+        await writeResolvedCommentIds({
+          store: lockedStore,
+          ids: [commentId],
+        });
+      },
+    });
+    let settled = false;
+    void resolved.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(settled).toBe(false);
+    await writeAgentRequest({
+      store,
+      request: replyRequest({ commentId }),
+    });
+    await release();
+    await expect(resolved).rejects.toThrow(/waiting for the coding agent/u);
+    await expect(
+      readResolvedCommentIds({
+        store,
+        validate: validateResolvedCommentIds,
+      }),
+    ).resolves.toEqual([]);
   });
 
   it("should still accept a plan question while another thread is resolved", async () => {

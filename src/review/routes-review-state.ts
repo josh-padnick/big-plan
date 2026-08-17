@@ -39,6 +39,7 @@ import {
   ensureAgentRequest,
   removeCommentFromQueuedFeedbackRequest,
   ResolvedThreadWorkRejected,
+  withResolvedCommentLock,
 } from "./request-mailbox.js";
 import {
   anchorReviewStore,
@@ -332,31 +333,48 @@ export const updateReviewState = async (
     payload.resolvedCommentIds,
   );
   // A newly resolved thread must not contradict outstanding agent work. The
-  // check runs before any write, so a refusal leaves the whole review state
-  // untouched rather than half applied.
-  const alreadyResolved = new Set(
-    await readResolvedCommentIds({
+  // check and the resolved-id write share `.resolved.lock` with request
+  // creation, so a refusal leaves the whole review state untouched and a
+  // concurrent create cannot sneak onto the thread.
+  try {
+    await withResolvedCommentLock({
       store,
-      validate: validateResolvedCommentIds,
-    }),
-  );
-  for (const commentId of resolvedCommentIds) {
-    if (alreadyResolved.has(commentId)) continue;
-    try {
-      await assertResolvableComment({ store, sessionId, planId, commentId });
-    } catch (error: unknown) {
-      if (!(error instanceof AgentExchangeRejected)) throw error;
-      return refusal({ status: 409, reason: error.message });
-    }
+      change: async (lockedStore) => {
+        const alreadyResolved = new Set(
+          await readResolvedCommentIds({
+            store: lockedStore,
+            validate: validateResolvedCommentIds,
+          }),
+        );
+        for (const commentId of resolvedCommentIds) {
+          if (alreadyResolved.has(commentId)) continue;
+          await assertResolvableComment({
+            store: lockedStore,
+            sessionId,
+            planId,
+            commentId,
+          });
+        }
+        const sentIds = new Set(
+          (await planRenderer.readStoredComments(lockedStore.sentPath)).map(
+            (comment) => comment.id,
+          ),
+        );
+        const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
+        await writeComments({
+          path: lockedStore.draftsPath,
+          comments: unsentDrafts,
+        });
+        await writeResolvedCommentIds({
+          store: lockedStore,
+          ids: resolvedCommentIds,
+        });
+      },
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
   }
-  const sentIds = new Set(
-    (await planRenderer.readStoredComments(store.sentPath)).map(
-      (comment) => comment.id,
-    ),
-  );
-  const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
-  await writeComments({ path: store.draftsPath, comments: unsentDrafts });
-  await writeResolvedCommentIds({ store, ids: resolvedCommentIds });
   return jsonResponse({
     status: 200,
     value: await storedReviewSnapshot({ context }),
