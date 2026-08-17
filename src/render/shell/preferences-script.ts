@@ -84,6 +84,20 @@ export const PREFERENCES_SCRIPT = `<script>
     }
   };
 
+  // The sidebar is a column beside the page on a wide screen and a row above it
+  // on a narrow one, so the orientation it reports has to follow the layout
+  // rather than be asserted once in the markup. The width is the layout
+  // breakpoint src/render/global.css lays the sheet out on.
+  const layoutColumn = window.matchMedia("(min-width: 56rem)");
+  const applyOrientation = () => {
+    sectionList.setAttribute(
+      "aria-orientation",
+      layoutColumn.matches ? "vertical" : "horizontal",
+    );
+  };
+  applyOrientation();
+  layoutColumn.addEventListener("change", applyOrientation);
+
   const selectedSection = () => {
     const selected = sections.find(
       (tab) => tab.getAttribute("aria-selected") === "true",

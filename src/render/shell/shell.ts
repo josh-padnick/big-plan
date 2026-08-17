@@ -313,7 +313,7 @@ const renderPreferencesDialog = (): string =>
 <button class="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-close aria-label="Close settings">${lucideIconToHtml({ icon: X_ICON, className: "size-4" })}</button>
 </div>
 <div class="mt-4 border-t border-edge pt-4 wide:mt-6 wide:grid wide:grid-cols-[12rem_1fr] wide:gap-6 wide:pt-6">
-<div class="flex min-w-0 gap-1 overflow-x-auto border-b border-edge pb-3 wide:flex-col wide:overflow-x-visible wide:border-r wide:border-b-0 wide:pr-4 wide:pb-0" role="tablist" aria-orientation="vertical" aria-label="Settings sections" data-preferences-sections>
+<div class="flex min-w-0 gap-1 overflow-x-auto border-b border-edge pb-3 wide:flex-col wide:overflow-x-visible wide:border-r wide:border-b-0 wide:pr-4 wide:pb-0" role="tablist" aria-label="Settings sections" data-preferences-sections>
 ${renderPreferencesSection({ section: "appearance", title: "Appearance", icon: SUN_MOON_ICON, selected: true })}
 ${renderPreferencesSection({ section: "palette", title: "Color theme", icon: PALETTE_ICON, selected: false })}
 </div>

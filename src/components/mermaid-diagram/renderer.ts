@@ -93,7 +93,7 @@ export const MERMAID_ROLE_TOKENS = {
 type MermaidThemeVariant = keyof typeof MERMAID_THEME_TOKENS;
 
 /** Maps one variant's baked colours to the roles they were taken from. */
-const roleSubstitutions = (
+export const roleSubstitutions = (
   variant: MermaidThemeVariant,
 ): ReadonlyMap<string, string> => {
   const substitutions = new Map<string, string>();
@@ -115,7 +115,7 @@ const roleSubstitutions = (
 
 const COLOUR_BEARING_ATTRIBUTES = ["fill", "stroke", "style"];
 
-const substituteColours = ({
+export const substituteColours = ({
   value,
   substitutions,
 }: {

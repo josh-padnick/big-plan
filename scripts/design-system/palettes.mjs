@@ -6,7 +6,9 @@
 // This check owns the exact required pairings and the exact contrast floor;
 // DESIGN_PRINCIPLES.md owns why colour is expressed as roles over ramps. The
 // palette id list is authored in src/render/preference-options.js and
-// re-exported by src/render/preferences.ts for application consumers.
+// re-exported by src/render/preferences.ts for application consumers. A palette
+// block is matched by its bare [data-palette="<id>"] selector, so a message
+// that names one has to spell it that way.
 
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -265,26 +267,26 @@ export const checkPalettes = async ({
 
   if (paletteIds[0] !== "default") {
     failures.push(
-      "preferences.ts: PALETTES must offer the product's own palette first",
+      "preference-options.js: PALETTES must offer the product's own palette first",
     );
   }
   if (storedPaletteIds.join(",") !== themed.join(",")) {
     failures.push(
-      "preferences.ts: STORED_PALETTES must be PALETTES without the default, in the same order",
+      "preference-options.js: STORED_PALETTES must be PALETTES without the default, in the same order",
     );
   }
 
   for (const id of themed) {
     if (!palettes.has(id)) {
       failures.push(
-        `global.css: palette "${id}" is offered in preferences.ts but declares no :root[data-palette="${id}"] block`,
+        `global.css: palette "${id}" is offered in preference-options.js but declares no [data-palette="${id}"] block`,
       );
     }
   }
   for (const id of palettes.keys()) {
     if (!themed.includes(id)) {
       failures.push(
-        `global.css: palette "${id}" is declared but is not in STORED_PALETTES in preferences.ts`,
+        `global.css: palette "${id}" is declared but is not in STORED_PALETTES in preference-options.js`,
       );
     }
   }

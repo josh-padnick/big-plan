@@ -698,6 +698,10 @@ band that shares `--grey-925`.
      restated to preview it. */
   [data-palette-swatch] > [data-swatch] {
     display: block;
+    /* approved-metric: one stripe of the four-shade swatch. The chip is sized
+       to sit inside the settings row rather than on the spacing scale, so its
+       height is the row's inner height and its width is a quarter of the chip
+       that height earns. */
     width: 0.6875rem;
     height: 1.375rem;
   }

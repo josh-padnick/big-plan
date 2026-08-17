@@ -204,7 +204,9 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
         element.querySelectorAll("[data-preferences-section]"),
       ).map((tab) => tab.getBoundingClientRect());
       const pane = element
-        .querySelector("[data-preferences-panel]:not([hidden])")
+        .querySelector(
+          "[data-preferences-panel]:not([data-preferences-page-hidden])",
+        )
         .getBoundingClientRect();
       return {
         railWidth: Math.round(railRect.width),
