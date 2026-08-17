@@ -2515,7 +2515,10 @@ describe("review runtime resolve invariant", () => {
       },
     });
     await acquired;
+    let done = false;
     return async () => {
+      if (done) return;
+      done = true;
       release();
       await held;
     };
@@ -2740,9 +2743,10 @@ describe("review runtime resolve invariant", () => {
     const { isolated, isolatedCall, close } = await isolatedRuntime(
       "big-plan-resolve-interleave-",
     );
+    let release: (() => Promise<void>) | undefined;
     try {
       const version = await isolatedReviewStateVersion(isolatedCall);
-      const release = await holdResolvedCommentLock(isolated);
+      release = await holdResolvedCommentLock(isolated);
       const resolved = isolatedCall({
         path: "/api/drafts",
         method: "PUT",
@@ -2787,6 +2791,7 @@ describe("review runtime resolve invariant", () => {
         }),
       ).resolves.toEqual([]);
     } finally {
+      await release?.();
       await close();
     }
   });
@@ -2795,6 +2800,7 @@ describe("review runtime resolve invariant", () => {
     const { isolated, isolatedCall, close } = await isolatedRuntime(
       "big-plan-delete-resolved-lock-",
     );
+    let release: (() => Promise<void>) | undefined;
     try {
       expect(
         (
@@ -2820,7 +2826,7 @@ describe("review runtime resolve invariant", () => {
       expect((await resolveWrite(isolatedCall)).status).toBe(200);
 
       const version = await isolatedReviewStateVersion(isolatedCall);
-      const release = await holdResolvedCommentLock(isolated);
+      release = await holdResolvedCommentLock(isolated);
       const deleted = isolatedCall({
         path: "/api/comments-delete",
         method: "POST",
@@ -2847,9 +2853,73 @@ describe("review runtime resolve invariant", () => {
         }),
       ).resolves.toEqual([]);
     } finally {
+      await release?.();
       await close();
     }
   });
+
+  it("should leave a delete retryable when the shared lock times out", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-lock-timeout-",
+    );
+    let release: (() => Promise<void>) | undefined;
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/agent-cancel",
+            method: "POST",
+            body: { requestId: await queuedRequestId(isolated) },
+          })
+        ).status,
+      ).toBe(200);
+      expect((await resolveWrite(isolatedCall)).status).toBe(200);
+
+      const version = await isolatedReviewStateVersion(isolatedCall);
+      release = await holdResolvedCommentLock(isolated);
+      const refused = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: { commentId, version },
+      });
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toMatchObject({
+        error: expect.stringContaining("changing resolved threads"),
+      });
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({
+        sent: [expect.objectContaining({ id: commentId })],
+        resolvedCommentIds: [commentId],
+      });
+
+      await release();
+      const retried = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: { commentId, version },
+      });
+      expect(retried.status).toBe(200);
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({ sent: [], resolvedCommentIds: [] });
+    } finally {
+      await release?.();
+      await close();
+    }
+  }, 15_000);
 });
 
 describe("review runtime shutdown", () => {
