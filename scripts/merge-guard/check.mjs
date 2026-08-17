@@ -51,13 +51,13 @@
 //     the merge base and the fork point equal main and no blob-anchored rule
 //     can see the loss. The stale blobs never existed on main either, so a
 //     rule that flags restoring a superseded published blob finds nothing.
-//     The one detector that does catch it, line-level contribution survival
-//     (for each recent main commit, do the distinctive lines it added survive
-//     in the result?), was measured over 77 pull requests: it fires on 61 of
-//     77 at a 1-line threshold, 18 of 77 at 5 lines, 14 of 77 at 10 lines,
-//     and 11 of 77 at 20 lines. An 18 percent false-alarm rate on ordinary
-//     refactors makes it unusable as a blocking gate. Do not re-attempt it
-//     without new evidence.
+//     The one detector that does catch it is line-level contribution survival
+//     (how many lines that main has does the landing throw away, and which
+//     main commits wrote them?). Its false-alarm rate on ordinary refactors
+//     makes it unusable as a blocking gate, so it does not belong in this
+//     file. It ships beside this one as a warning that never fails the build,
+//     in warn-stale-copy.mjs, and a human adjudicates each firing. Do not
+//     promote it to a blocking rule without new evidence.
 //   - Partial loss inside a file that the branch edits and keeps changed. The
 //     branch owns that file, so the check cannot tell a supersession from a
 //     mistake.
@@ -73,137 +73,21 @@
 //
 // CONTRIBUTING.md owns the contributor-facing description of the exception.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-
-const run = promisify(execFile);
-
-// Any commit message on the branch may carry this trailer. The value is a list
-// of exact repository-relative paths. Exact paths only: a glob would let one
-// careless declaration cover work nobody looked at.
-const EXCEPTION_TRAILER = "Overwrites-main";
-
-const DEFAULT_MAIN_REFS = ["origin/main", "main"];
-
-/** Runs one git command and returns its stdout, or null when git rejects it. */
-const git = async (repoRoot, args) => {
-  try {
-    const { stdout } = await run("git", ["-C", repoRoot, ...args], {
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    return stdout;
-  } catch {
-    return null;
-  }
-};
-
-/** Raised by a git call whose silent failure could hide a loss. */
-class GitFailure extends Error {
-  constructor(operation) {
-    super(`the git operation "${operation}" failed`);
-    this.operation = operation;
-  }
-}
-
-/** Runs one git command and throws a GitFailure when git rejects it. */
-const gitOrThrow = async (repoRoot, args, operation) => {
-  const stdout = await git(repoRoot, args);
-  if (stdout === null) {
-    throw new GitFailure(operation);
-  }
-  return stdout;
-};
-
-/** Splits NUL-separated git output into non-empty entries. */
-const splitNul = (stdout) =>
-  stdout === null ? [] : stdout.split("\0").filter((entry) => entry !== "");
-
-/** Reads the exit code from a failed child process, or null when it never exited. */
-const exitCodeOf = (error) =>
-  typeof error?.code === "number" ? error.code : null;
-
-/**
- * Reports whether ancestor is reachable from descendant. git answers no with
- * exit code 1; any other failure throws GitFailure so the check fails closed.
- */
-const isAncestor = async (repoRoot, ancestor, descendant) => {
-  try {
-    await run("git", [
-      "-C",
-      repoRoot,
-      "merge-base",
-      "--is-ancestor",
-      ancestor,
-      descendant,
-    ]);
-    return true;
-  } catch (error) {
-    const exitCode = exitCodeOf(error);
-    if (exitCode === 1) {
-      return false;
-    }
-    throw new GitFailure(
-      exitCode === null
-        ? `run "git merge-base --is-ancestor"`
-        : `run "git merge-base --is-ancestor" (exit code ${exitCode})`,
-    );
-  }
-};
-
-/** Resolves the first main ref that exists, or null when none does. */
-const resolveMainRef = async (repoRoot, requestedRef) => {
-  const candidates = requestedRef ? [requestedRef] : DEFAULT_MAIN_REFS;
-  for (const candidate of candidates) {
-    const commit = await git(repoRoot, [
-      "rev-parse",
-      "--verify",
-      `${candidate}^{commit}`,
-    ]);
-    if (commit !== null) {
-      return { ref: candidate, commit: commit.trim() };
-    }
-  }
-  return null;
-};
-
-// Produces the tree that would land on main. When main is already an ancestor
-// of the head, the head tree is the landing tree, which is exactly the shape of
-// the merge-main-into-the-branch mistake. Otherwise git computes the merge the
-// same way the forge would.
-const resolveResultTree = async (repoRoot, mainCommit, headCommit) => {
-  if (await isAncestor(repoRoot, mainCommit, headCommit)) {
-    const tree = await gitOrThrow(
-      repoRoot,
-      ["rev-parse", `${headCommit}^{tree}`],
-      "read the head tree",
-    );
-    return { tree: tree.trim(), reason: null };
-  }
-  try {
-    const { stdout } = await run(
-      "git",
-      ["-C", repoRoot, "merge-tree", "--write-tree", mainCommit, headCommit],
-      { maxBuffer: 64 * 1024 * 1024 },
-    );
-    return { tree: stdout.split("\n")[0].trim(), reason: null };
-  } catch (error) {
-    const exitCode = exitCodeOf(error);
-    if (exitCode === 1) {
-      return {
-        tree: null,
-        reason:
-          "the merge with main has conflicts, so no result tree exists yet",
-      };
-    }
-    throw new GitFailure(
-      exitCode === null
-        ? `run "git merge-tree --write-tree"`
-        : `run "git merge-tree --write-tree" (exit code ${exitCode})`,
-    );
-  }
-};
+import {
+  EXCEPTION_TRAILER,
+  DEFAULT_MAIN_REFS,
+  git,
+  GitFailure,
+  gitOrThrow,
+  splitNul,
+  resolveMainRef,
+  resolveResultTree,
+  collectDeclaredPaths,
+  resolveForkPoint,
+  resolveHead,
+} from "./repo.mjs";
 
 /** Collects every path that a non-merge commit on the branch adds, edits, or deletes. */
 const collectTouchedPaths = async (repoRoot, mainCommit, headCommit) => {
@@ -222,67 +106,6 @@ const collectTouchedPaths = async (repoRoot, mainCommit, headCommit) => {
     "list the paths that the branch's commits edit",
   );
   return new Set(splitNul(stdout));
-};
-
-/** Reads every path declared with the exception trailer anywhere on the branch. */
-const collectDeclaredPaths = async (repoRoot, mainCommit, headCommit) => {
-  const stdout = await gitOrThrow(
-    repoRoot,
-    ["log", "--format=%B%x00", `${mainCommit}..${headCommit}`],
-    "read the branch's commit messages",
-  );
-  const declared = new Set();
-  const trailer = new RegExp(`^\\s*${EXCEPTION_TRAILER}\\s*:\\s*(.+)$`, "i");
-  for (const message of splitNul(stdout)) {
-    for (const line of message.split("\n")) {
-      const match = trailer.exec(line);
-      if (match === null) {
-        continue;
-      }
-      for (const path of match[1].split(/[\s,]+/)) {
-        if (path !== "") {
-          declared.add(path);
-        }
-      }
-    }
-  }
-  return declared;
-};
-
-// Finds the branch's earliest fork point from main: the commit on main that
-// the branch's own work builds on, ignoring any later catch-up merge of main.
-// Every parent of a branch commit that is not itself a branch commit is a
-// point on main the branch builds on; the fork point is their common ancestor.
-// Returns null when the branch has no such parent at all.
-const resolveForkPoint = async (repoRoot, mainCommit, headCommit) => {
-  const stdout = await gitOrThrow(
-    repoRoot,
-    ["rev-list", "--parents", `${mainCommit}..${headCommit}`],
-    "list the branch commits and their parents",
-  );
-  const lines = stdout.split("\n").filter((line) => line !== "");
-  const own = new Set(lines.map((line) => line.split(" ")[0]));
-  const candidates = new Set();
-  for (const line of lines) {
-    for (const parent of line.split(" ").slice(1)) {
-      if (!own.has(parent)) {
-        candidates.add(parent);
-      }
-    }
-  }
-  if (candidates.size === 0) {
-    return null;
-  }
-  const list = [...candidates];
-  if (list.length === 1) {
-    return list[0];
-  }
-  const base = await gitOrThrow(
-    repoRoot,
-    ["merge-base", "--octopus", ...list],
-    "compute the fork point from main",
-  );
-  return base.trim();
 };
 
 // Rule 2: every path that main changed after the fork point but that the merge
@@ -445,31 +268,15 @@ export const checkMergeGuard = async ({
       reason: `cannot resolve the main branch (tried ${(mainRef ? [mainRef] : DEFAULT_MAIN_REFS).join(", ")}). Fetch it, or set MERGE_GUARD_MAIN_REF.`,
     };
   }
-  const headOutput = await git(root, [
-    "rev-parse",
-    "--verify",
-    `${headRef}^{commit}`,
-  ]);
-  if (headOutput === null) {
-    return {
-      status: "unresolved",
-      reason: `cannot resolve the head ref "${headRef}".`,
-    };
-  }
-  const headCommit = headOutput.trim();
-
-  if (headCommit === main.commit) {
-    return { status: "skipped", reason: `the head is ${main.ref} itself` };
-  }
-
   try {
-    if (await isAncestor(root, headCommit, main.commit)) {
-      return {
-        status: "skipped",
-        reason: `the head is already merged into ${main.ref}`,
-      };
+    const head = await resolveHead(root, main, headRef);
+    if (head.unresolved !== undefined) {
+      return { status: "unresolved", reason: head.unresolved };
     }
-    return await compareResultAgainstMain(root, main, headCommit);
+    if (head.skip !== undefined) {
+      return { status: "skipped", reason: head.skip };
+    }
+    return await compareResultAgainstMain(root, main, head.headCommit);
   } catch (error) {
     if (error instanceof GitFailure) {
       return {
