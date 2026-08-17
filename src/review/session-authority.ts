@@ -64,6 +64,23 @@ export class SessionAuthorityRejected extends Error {
   }
 }
 
+/**
+ * Raised when a live runtime already holds custody of the same plan.
+ *
+ * It carries the live descriptor rather than only a message, because the one
+ * useful answer to this condition is the address that runtime is already
+ * serving.
+ */
+export class ReviewCustodyHeld extends Error {
+  readonly live: ReviewSessionDescriptor;
+
+  constructor(live: ReviewSessionDescriptor) {
+    super(`A live review runtime already serves this plan at ${live.url}`);
+    this.name = "ReviewCustodyHeld";
+    this.live = live;
+  }
+}
+
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -163,22 +180,112 @@ export const readCurrentReviewSession = async ({
 }): Promise<ReviewSessionDescriptor | undefined> =>
   validateReviewSessionDescriptor(await readSessionDescriptorValue(store));
 
-/** Replaces the current session with one complete checked descriptor. */
+/**
+ * Reports the live runtime that currently holds custody of one exact plan.
+ *
+ * Liveness reuses the signal the agent path already trusts: the current
+ * descriptor plus a fresh heartbeat for that same session. A descriptor written
+ * moments ago has not yet had time to write its first heartbeat, so a
+ * descriptor younger than one freshness window still counts as live. Without
+ * that start-up grace two runtimes started at the same instant would each read
+ * the other's heartbeat-less descriptor as dead, and both would claim custody.
+ */
+export const liveReviewCustody = async ({
+  store,
+  planId,
+  plan,
+  now,
+  maximumAgeMs = SESSION_MAXIMUM_AGE_MS,
+}: {
+  readonly store: ReviewStore;
+  readonly planId: string;
+  readonly plan: string;
+  readonly now?: number;
+  readonly maximumAgeMs?: number;
+}): Promise<ReviewSessionDescriptor | undefined> => {
+  const current = await readCurrentReviewSession({ store });
+  if (
+    current === undefined ||
+    current.planId !== planId ||
+    current.plan !== plan
+  ) {
+    return undefined;
+  }
+  const observedAtMs = now ?? Date.now();
+  const heartbeat = validateReviewSessionHeartbeat(
+    await readSessionHeartbeatValue(store),
+  );
+  if (
+    heartbeatIsFresh({
+      heartbeat,
+      sessionId: current.sessionId,
+      observedAtMs,
+      maximumAgeMs,
+    })
+  ) {
+    return current;
+  }
+  // An explicit stop is that session's own durable answer, so no grace applies:
+  // it said it was leaving.
+  if (heartbeat?.sessionId === current.sessionId && !heartbeat.running) {
+    return undefined;
+  }
+  const startedAtMs = Date.parse(current.startedAt);
+  return Number.isFinite(startedAtMs) &&
+    observedAtMs - startedAtMs >= 0 &&
+    observedAtMs - startedAtMs <= maximumAgeMs
+    ? current
+    : undefined;
+};
+
+export type ReviewSessionActivation =
+  | { readonly activated: true; readonly displaced?: ReviewSessionDescriptor }
+  | { readonly activated: false; readonly live: ReviewSessionDescriptor };
+
+/**
+ * Takes custody of one plan for a complete checked descriptor.
+ *
+ * Custody is refused while another live runtime holds it, because taking it
+ * makes that reviewer's open page and its connected agent read-only with
+ * nothing said to either of them. `takeover` is the deliberate case, and the
+ * activation reports the live session it actually displaced. The check runs
+ * inside the custody lock so two simultaneous starts cannot both conclude the
+ * other is absent, and so the displaced session is the one the write replaced
+ * rather than a pre-lock guess.
+ */
 export const activateReviewSession = async ({
   store,
   descriptor,
+  takeover = false,
+  now,
 }: {
   readonly store: ReviewStore;
   readonly descriptor: ReviewSessionDescriptor;
-}): Promise<void> => {
+  readonly takeover?: boolean;
+  readonly now?: number;
+}): Promise<ReviewSessionActivation> => {
   const checked = validateReviewSessionDescriptor(descriptor);
   if (checked === undefined) {
     throw new SessionAuthorityRejected("invalid");
   }
-  await withReviewStoreLock({
+  return withReviewStoreLock({
     lockPath: store.sessionLockPath,
-    change: async () => {
+    change: async (): Promise<ReviewSessionActivation> => {
+      const live = await liveReviewCustody({
+        store,
+        planId: checked.planId,
+        plan: checked.plan,
+        ...(now === undefined ? {} : { now }),
+      });
+      if (live !== undefined && live.sessionId !== checked.sessionId) {
+        if (!takeover) {
+          return { activated: false, live };
+        }
+        await writeSessionDescriptorValue({ store, value: checked });
+        return { activated: true, displaced: live };
+      }
       await writeSessionDescriptorValue({ store, value: checked });
+      return { activated: true };
     },
     timeoutError: () => new Error("Another process is changing review custody"),
   });

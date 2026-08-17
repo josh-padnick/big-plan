@@ -15,7 +15,7 @@ big-plan skill [write <path>]
 big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
-big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
+big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
 big-plan agent <input.mdx>
 big-plan agent next <input.mdx> [--wait] [--agent <token>]
 big-plan agent note <input.mdx> "<progress>" --agent <token>
@@ -39,7 +39,7 @@ npx big-plan skill write <path/to/SKILL.md>
 npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
-npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
+npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
 npx big-plan agent <input.mdx>
 npx big-plan agent next <input.mdx> --wait [--agent <token>]
 npx big-plan agent note <input.mdx> "<progress>" --agent <token>
@@ -160,10 +160,26 @@ On success, each command returns a structured result for `axi-sdk-js` to seriali
 
 It writes no output.
 
-`review` returns the loopback address, resolved plan path, session id, and
-feedback directory, then keeps running until `Ctrl+C` or the configured idle
-timeout. It owns the local session token, heartbeat, durable review state, and
-source snapshots.
+When `review` takes custody of the plan, it returns the loopback address,
+resolved plan path, session id, and feedback directory, then keeps running until
+`Ctrl+C` or the configured idle timeout. It owns the local session token,
+heartbeat, durable review state, and source snapshots.
+
+It always reports `custody`, because only one runtime may hold a plan at a time,
+and that value says whether this command took it:
+
+- `activated`: this runtime took a free plan and is now serving it.
+- `held`: a live runtime already serves this plan, so no second runtime started. The returned address, plan, and session id are that live runtime's, and no `feedback` directory is reported. The command exits instead of listening.
+- `seized`: `--takeover` replaced a live runtime, which is named in `help`.
+
+Liveness is the session heartbeat the coding agent already relies on, plus one
+freshness window of grace for a runtime that has not yet written its first
+heartbeat, so two simultaneous starts cannot both take the same plan.
+A stopped, expired, or crashed session leaves the plan free, and the next
+`review` takes custody normally.
+`--takeover` leaves the replaced runtime listening without write custody, which
+makes its open page and its connected agent read-only until each moves to the
+new address.
 
 `agent <input.mdx>` reads the matching live session and returns the owner-only
 prompt plus pasteable Codex and Claude launch commands. Big Plan does not call
@@ -225,10 +241,10 @@ If the input argument is missing, `validate`, `render`, `compile`, or `review` r
 Usage: big-plan validate <input.mdx>
 Usage: big-plan render <input.mdx> [output.html]
 Usage: big-plan compile <input.mdx> [output.json]
-Usage: big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>]
+Usage: big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
 ```
 
-`validate`, `render`, `compile`, and `skill` reject any dash-prefixed command argument as an unknown option. `review` additionally accepts `--diff-preview` and `--idle-timeout <minutes>`; it defaults to 30 minutes, zero disables the idle timeout, and a nonzero timeout must be at least 1 minute.
+`validate`, `render`, `compile`, and `skill` reject any dash-prefixed command argument as an unknown option. `review` additionally accepts `--diff-preview`, `--idle-timeout <minutes>`, and `--takeover`; it defaults to 30 minutes, zero disables the idle timeout, and a nonzero timeout must be at least 1 minute.
 `validate` and `review` reject a second positional argument; `render` and `compile` reject a third.
 Both cases raise a structured `VALIDATION_ERROR`, include the command's usage line, and write no output.
 An empty, non-numeric, negative, nonzero sub-minute, or overflowing `review --idle-timeout` value raises a structured `INVALID_INPUT` error.

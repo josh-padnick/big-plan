@@ -23,9 +23,30 @@ If the deadline the page last knew has also passed, it reports that observation 
 When the page has no unsaved browser-only input, Refresh is offered in either case so you can check whether the review is still running.
 If it does have unsaved input, Refresh stays disabled and the page asks you to keep the tab open instead.
 It does not say why contact was lost, because a page that has lost contact cannot tell an idle expiry from a runtime someone stopped, or from one that is still serving another tab.
-For the same reason it never tells you to start a new review runtime: doing so takes custody of the plan and would make a still-running review and its connected agent read-only.
+For the same reason it never tells you to start a new review runtime; the command is the only place that decides whether starting or taking over a runtime is allowed, and it answers that question for you.
 When a newer review session for that plan was recorded before contact was lost, the page also links to it as **Open latest review**.
 Opening an old address after its runtime has already ended still reaches the browser's connection-error page; giving shared links an explicit lifetime remains a separate product decision.
+
+## Starting a review that is already running
+
+Only one review runtime holds custody of a plan at a time.
+The one holding it is the only session that can save comments, and the only one a coding agent can answer through.
+
+Running `big-plan review` on a plan a live runtime is already serving therefore takes nothing away.
+It starts no second runtime, reports `custody: held`, and prints that runtime's address so you can open it.
+The live session, its open page, and its connected agent keep working.
+A runtime counts as live while its session heartbeat is current, which is the same liveness the coding agent relies on; a session that has stopped, expired, or crashed leaves the plan free and the next `big-plan review` takes custody normally.
+Two `big-plan review` commands started at the same instant resolve the same way: exactly one takes custody, and the other prints that one's address.
+
+Pass `--takeover` to replace a live session deliberately, for example when its terminal is gone but the process is still running:
+
+```sh
+npx big-plan review plans/checkout-retry.mdx --takeover
+```
+
+The replaced runtime keeps listening but loses write custody.
+Its open page and its connected agent become read-only until each moves to the new address, so prefer opening the printed address over taking custody.
+The command reports `custody: seized` together with the session it displaced.
 
 ## When a session stops accepting changes
 

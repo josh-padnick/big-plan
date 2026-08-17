@@ -2849,7 +2849,7 @@ describe("review runtime shutdown", () => {
     }
   });
 
-  it("should keep a replacement runtime authoritative for the same plan", async () => {
+  it("should keep a takeover runtime authoritative for the same plan", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-server-restart-"));
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
@@ -2860,7 +2860,9 @@ describe("review runtime shutdown", () => {
       sessionToken: firstToken,
     });
     await new Promise((settle) => setTimeout(settle, 20));
-    const replacement = await startReviewRuntime({ planPath });
+    // Custody is refused while the first runtime is live, so a replacement is
+    // the deliberate takeover case.
+    const replacement = await startReviewRuntime({ planPath, takeover: true });
     try {
       stalled.request.end('"drafts":[],"resolvedCommentIds":[]}');
       await expect(stalled.status).resolves.toBe(409);

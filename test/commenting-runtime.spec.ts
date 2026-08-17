@@ -6369,7 +6369,12 @@ test("should mark a superseded review as read-only and link to its replacement",
   ) {
     throw new Error("The review runtime did not identify its plan");
   }
-  const replacement = await startReviewRuntime({ planPath: session.plan });
+  // Superseding a session that is still live is exactly what --takeover is
+  // for; without it the runtime yields to the session this page is reading.
+  const replacement = await startReviewRuntime({
+    planPath: session.plan,
+    takeover: true,
+  });
   try {
     const readOnly = page.getByRole("button", {
       name: /Using read-only session/,

@@ -99,12 +99,15 @@ import {
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import {
   activateReviewSession,
+  liveReviewCustody,
+  ReviewCustodyHeld,
   REVIEW_HEARTBEAT_INTERVAL_MS,
   readCurrentReviewSession,
   refreshReviewSessionHeartbeat,
   stopReviewSessionIfInactive,
   withReviewSessionAuthority,
 } from "./session-authority.js";
+import type { ReviewSessionDescriptor } from "./session-authority.js";
 import {
   createActivityClock,
   createPlanRenderer,
@@ -229,6 +232,8 @@ export type ReviewRuntime = {
   readonly planId: string;
   readonly planPath: string;
   readonly store: ReviewStore;
+  /** The live session this runtime replaced, when `takeover` displaced one. */
+  readonly replacedSession?: ReviewSessionDescriptor;
   readonly close: (reason?: string) => Promise<void>;
   /** Reports what this runtime is doing right now, including any stalled write. */
   readonly diagnostics: () => ReviewRuntimeDiagnostics;
@@ -357,56 +362,30 @@ const refuse = ({
 export const DEFAULT_REVIEW_IDLE_TIMEOUT_MS = 30 * 60 * 1_000;
 
 /**
- * Starts the review runtime for one plan and resolves once it is listening.
- * The caller owns the plan path; nothing about a request ever contributes one.
+ * Initializes the durable review state this session has just taken custody of.
+ *
+ * Every write here lands in the plan's shared store, so it runs only after the
+ * locked activation: a runtime that lost a start-up tie, or one that was
+ * refused because another runtime is live, must leave that store exactly as it
+ * found it.
  */
-export const startReviewRuntime = async ({
-  planPath,
+const initializeOwnedReviewState = async ({
+  store,
+  planId,
+  sessionId,
+  resolvedPlanPath,
+  initialSource,
+  initialSnapshot,
   diffPreviewSource,
-  idleTimeoutMs = DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
-  writeStallMs = MUTATION_STALL_MS,
-  queuedWorkIdleTimeoutMs = AGENT_CLAIM_LEASE_MS,
 }: {
-  readonly planPath: string;
+  readonly store: ReviewStore;
+  readonly planId: string;
+  readonly sessionId: string;
+  readonly resolvedPlanPath: string;
+  readonly initialSource: string;
+  readonly initialSnapshot: string;
   readonly diffPreviewSource?: string;
-  readonly idleTimeoutMs?: number;
-  /** How long one mutation may run before this runtime gives up on it. */
-  readonly writeStallMs?: number;
-  readonly queuedWorkIdleTimeoutMs?: number;
-}): Promise<ReviewRuntime> => {
-  const queuedWorkIdleLimitMs = Number.isFinite(queuedWorkIdleTimeoutMs)
-    ? Math.max(0, Math.min(AGENT_CLAIM_LEASE_MS, queuedWorkIdleTimeoutMs))
-    : AGENT_CLAIM_LEASE_MS;
-  const resolvedPlanPath = resolve(planPath);
-  const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
-  const agentCommand = agentConnectCommand({
-    executablePath,
-    planPath: resolvedPlanPath,
-  });
-  const restartCommand = reviewRestartCommand({
-    executablePath,
-    planPath: resolvedPlanPath,
-  });
-  const recoveryPrompt = agentRecoveryPrompt({
-    executablePath,
-    planPath: resolvedPlanPath,
-  });
-  const planId = deriveReviewPlanId({ planPath: resolvedPlanPath });
-  const sessionId = randomId(8);
-  const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
-  await prepareStore(store);
-  const previousSession = await readCurrentReviewSession({ store });
-  // The token protects API requests that write the durable image store or use
-  // the live mailbox. Keep it stable when a later runtime takes custody of the
-  // same plan; the session id, not the token, identifies write authority.
-  const token = previousSession?.token ?? randomBytes(32).toString("base64url");
-  const initialSource = await readFile(resolvedPlanPath, "utf8");
-  renderDocument({
-    markdown: initialSource,
-    fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
-    identity: {},
-  });
-  const initialSnapshot = deriveSnapshotDigest(initialSource);
+}): Promise<Awaited<ReturnType<typeof readAgentExchange>>> => {
   await writeSnapshot({
     store,
     snapshot: initialSnapshot,
@@ -636,7 +615,197 @@ export const startReviewRuntime = async ({
     }
   }
 
-  const initialExchange = await readAgentExchange({ store, sessionId, planId });
+  return readAgentExchange({ store, sessionId, planId });
+};
+
+/**
+ * Closes a bound server without waiting on its connections: idle ones are
+ * dropped at once and the rest are forced shut after the shutdown grace, so a
+ * request arriving at the wrong moment cannot keep close() from settling.
+ */
+const drainAndCloseServer = async (server: Server): Promise<void> => {
+  const closedServer = new Promise<void>((settle) => {
+    server.close(() => settle());
+  });
+  server.closeIdleConnections();
+  const forceClose = setTimeout(() => {
+    server.closeAllConnections();
+  }, SHUTDOWN_GRACE_MS);
+  forceClose.unref();
+  try {
+    await closedServer;
+  } finally {
+    clearTimeout(forceClose);
+  }
+};
+
+/**
+ * Starts the review runtime for one plan and resolves once it is listening.
+ * The caller owns the plan path; nothing about a request ever contributes one.
+ */
+export const startReviewRuntime = async ({
+  planPath,
+  diffPreviewSource,
+  idleTimeoutMs = DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
+  writeStallMs = MUTATION_STALL_MS,
+  queuedWorkIdleTimeoutMs = AGENT_CLAIM_LEASE_MS,
+  takeover = false,
+}: {
+  readonly planPath: string;
+  readonly diffPreviewSource?: string;
+  readonly idleTimeoutMs?: number;
+  /** How long one mutation may run before this runtime gives up on it. */
+  readonly writeStallMs?: number;
+  readonly queuedWorkIdleTimeoutMs?: number;
+  /** Replaces a live runtime that still holds this plan, instead of yielding. */
+  readonly takeover?: boolean;
+}): Promise<ReviewRuntime> => {
+  const queuedWorkIdleLimitMs = Number.isFinite(queuedWorkIdleTimeoutMs)
+    ? Math.max(0, Math.min(AGENT_CLAIM_LEASE_MS, queuedWorkIdleTimeoutMs))
+    : AGENT_CLAIM_LEASE_MS;
+  const resolvedPlanPath = resolve(planPath);
+  const executablePath = resolve(process.argv[1] ?? "bin/big-plan.mjs");
+  const agentCommand = agentConnectCommand({
+    executablePath,
+    planPath: resolvedPlanPath,
+  });
+  const restartCommand = reviewRestartCommand({
+    executablePath,
+    planPath: resolvedPlanPath,
+  });
+  const recoveryPrompt = agentRecoveryPrompt({
+    executablePath,
+    planPath: resolvedPlanPath,
+  });
+  const planId = deriveReviewPlanId({ planPath: resolvedPlanPath });
+  const sessionId = randomId(8);
+  const store = reviewStoreFor({ planPath: resolvedPlanPath, planId });
+  await prepareStore(store);
+  // Yield before binding a port or rendering anything. This is the fast answer
+  // for the common case; it cannot settle a tie, which is what the locked
+  // activation below is for.
+  const liveAtStart = await liveReviewCustody({
+    store,
+    planId,
+    plan: resolvedPlanPath,
+  });
+  if (liveAtStart !== undefined && !takeover) {
+    throw new ReviewCustodyHeld(liveAtStart);
+  }
+  const previousSession = await readCurrentReviewSession({ store });
+  // The token protects API requests that write the durable image store or use
+  // the live mailbox. Keep it stable when a later runtime takes custody of the
+  // same plan; the session id, not the token, identifies write authority.
+  const token = previousSession?.token ?? randomBytes(32).toString("base64url");
+  const initialSource = await readFile(resolvedPlanPath, "utf8");
+  renderDocument({
+    markdown: initialSource,
+    fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
+    identity: {},
+  });
+  const initialSnapshot = deriveSnapshotDigest(initialSource);
+
+  // Custody is taken before this runtime writes anything the plan's owner can
+  // see. The descriptor carries the address, so the socket has to be bound
+  // first; it is bound without a request listener and starts serving only once
+  // initialization below has finished.
+  const server: Server = createServer();
+  await new Promise<void>((settle, fail) => {
+    server.once("error", fail);
+    server.listen({ host: "127.0.0.1", port: 0 }, settle);
+  });
+  const address = server.address();
+  const port =
+    typeof address === "object" && address !== null ? address.port : 0;
+  const url = `http://127.0.0.1:${port}/`;
+
+  // The early check cannot settle a tie: two runtimes may both have passed it
+  // before either wrote a descriptor. This one runs inside the custody lock, so
+  // exactly one of them wins and the other gives its port back having written
+  // nothing.
+  const activation = await activateReviewSession({
+    store,
+    takeover,
+    descriptor: {
+      version: 1,
+      sessionId,
+      planId,
+      plan: resolvedPlanPath,
+      url,
+      port,
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+      // The token is here so the reviewer's own tools can reach the runtime;
+      // the file is owner-only, which is what keeps that safe.
+      token,
+    },
+  }).catch(async (error: unknown): Promise<never> => {
+    // The socket is already bound. Leaving without closing it strands the port
+    // for the life of the process, whether custody failed or was refused.
+    await drainAndCloseServer(server);
+    throw error;
+  });
+  if (!activation.activated) {
+    await drainAndCloseServer(server);
+    throw new ReviewCustodyHeld(activation.live);
+  }
+
+  let heartbeatWrite = Promise.resolve();
+  let heartbeatFailureReported = false;
+  const queueHeartbeat = (
+    running: boolean,
+    stopReason?: string,
+  ): Promise<void> => {
+    heartbeatWrite = heartbeatWrite
+      .catch(() => undefined)
+      .then(async () => {
+        await refreshReviewSessionHeartbeat({
+          store,
+          sessionId,
+          running,
+          ...(stopReason === undefined ? {} : { stopReason }),
+        });
+      })
+      .catch((error: unknown) => {
+        if (heartbeatFailureReported) return;
+        heartbeatFailureReported = true;
+        process.stderr.write(
+          `Review heartbeat failed for session ${sessionId} (${resolvedPlanPath}): ${String(error)}\n`,
+        );
+      });
+    return heartbeatWrite;
+  };
+  // The heartbeat starts, and keeps renewing, before any owned-state work so
+  // liveness rests on the heartbeat itself rather than on the descriptor's
+  // start-up grace, however long initialization takes. Heartbeats touch only
+  // this session's own liveness record, never the plan's shared review state.
+  await queueHeartbeat(true);
+  const heartbeatTimer = setInterval(() => {
+    void queueHeartbeat(true);
+  }, REVIEW_HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref();
+
+  // Everything below mutates state this session now owns. A failure gives the
+  // port back rather than leaving a bound socket behind, and records a stopped
+  // heartbeat so custody is released immediately instead of after the grace
+  // window.
+  const initialExchange = await initializeOwnedReviewState({
+    store,
+    planId,
+    sessionId,
+    resolvedPlanPath,
+    initialSource,
+    initialSnapshot,
+    ...(diffPreviewSource === undefined ? {} : { diffPreviewSource }),
+  }).catch(async (error: unknown) => {
+    clearInterval(heartbeatTimer);
+    await queueHeartbeat(
+      false,
+      "The review runtime failed while starting and never served this plan.",
+    );
+    await drainAndCloseServer(server);
+    throw error;
+  });
   const mutations = createMutationRegistry();
 
   // Every piece of state the routes share is built once, here, and named after
@@ -910,75 +1079,12 @@ export const startReviewRuntime = async ({
     }
   };
 
-  const server: Server = createServer((request, response) => {
+  // The socket was bound before custody was taken, so it has been accepting
+  // connections with no request listener attached. Serving starts here, once
+  // this session owns the plan and its state is initialized.
+  server.on("request", (request, response) => {
     void handle({ request, response });
   });
-
-  await new Promise<void>((settle, fail) => {
-    server.once("error", fail);
-    server.listen({ host: "127.0.0.1", port: 0 }, settle);
-  });
-
-  const address = server.address();
-  const port =
-    typeof address === "object" && address !== null ? address.port : 0;
-  const url = `http://127.0.0.1:${port}/`;
-
-  try {
-    await activateReviewSession({
-      store,
-      descriptor: {
-        version: 1,
-        sessionId,
-        planId,
-        plan: resolvedPlanPath,
-        url,
-        port,
-        pid: process.pid,
-        startedAt: new Date().toISOString(),
-        // The token is here so the reviewer's own tools can reach the runtime;
-        // the file is owner-only, which is what keeps that safe.
-        token,
-      },
-    });
-  } catch (error: unknown) {
-    // The socket is already listening at this point. Throwing without closing
-    // it leaves an orphan bound port behind for the life of the process.
-    await new Promise<void>((settle) => {
-      server.close(() => settle());
-    });
-    throw error;
-  }
-  let heartbeatWrite = Promise.resolve();
-  let heartbeatFailureReported = false;
-  const queueHeartbeat = (
-    running: boolean,
-    stopReason?: string,
-  ): Promise<void> => {
-    heartbeatWrite = heartbeatWrite
-      .catch(() => undefined)
-      .then(async () => {
-        await refreshReviewSessionHeartbeat({
-          store,
-          sessionId,
-          running,
-          ...(stopReason === undefined ? {} : { stopReason }),
-        });
-      })
-      .catch((error: unknown) => {
-        if (heartbeatFailureReported) return;
-        heartbeatFailureReported = true;
-        process.stderr.write(
-          `Review heartbeat failed for session ${sessionId} (${resolvedPlanPath}): ${String(error)}\n`,
-        );
-      });
-    return heartbeatWrite;
-  };
-  await queueHeartbeat(true);
-  const heartbeatTimer = setInterval(() => {
-    void queueHeartbeat(true);
-  }, REVIEW_HEARTBEAT_INTERVAL_MS);
-  heartbeatTimer.unref();
 
   let connectionWrite = Promise.resolve();
   let connectionFailureReported = false;
@@ -1096,19 +1202,7 @@ export const startReviewRuntime = async ({
     if (idleTimer !== undefined) clearInterval(idleTimer);
     await heartbeatWrite.catch(() => undefined);
     await connectionWrite.catch(() => undefined);
-    const closedServer = new Promise<void>((settle) => {
-      server.close(() => settle());
-    });
-    server.closeIdleConnections();
-    const forceClose = setTimeout(() => {
-      server.closeAllConnections();
-    }, SHUTDOWN_GRACE_MS);
-    forceClose.unref();
-    try {
-      await closedServer;
-    } finally {
-      clearTimeout(forceClose);
-    }
+    await drainAndCloseServer(server);
   };
   if (idleTimeoutMs > 0) {
     idleTimer = setInterval(
@@ -1180,6 +1274,9 @@ export const startReviewRuntime = async ({
     planId,
     planPath: resolvedPlanPath,
     store,
+    ...(activation.displaced === undefined
+      ? {}
+      : { replacedSession: activation.displaced }),
     close: closeRuntime,
     diagnostics,
     diagnosticGrowth,
