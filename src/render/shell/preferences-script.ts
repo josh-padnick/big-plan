@@ -63,9 +63,10 @@ export const PREFERENCES_SCRIPT = `<script>
     else document.documentElement.setAttribute("data-theme", mode);
   };
 
-  // The sidebar is the whole navigation: one item is selected, one panel is
-  // shown, and the rest are hidden rather than stacked below. Selection is a
-  // roving tab stop, so the trap counts the list once however long it grows.
+  // The sidebar is the whole navigation: one item is selected, one page is
+  // shown, and the rest give up their paint rather than stacking below.
+  // Selection is a roving tab stop, so the trap counts the list once however
+  // long it grows.
   const showSection = (next) => {
     for (const tab of sections) {
       const selected = tab.getAttribute("data-preferences-section") === next;
@@ -73,7 +74,13 @@ export const PREFERENCES_SCRIPT = `<script>
       tab.tabIndex = selected ? 0 : -1;
     }
     for (const panel of panels) {
-      panel.hidden = panel.getAttribute("data-preferences-panel") !== next;
+      // The page yields its paint, never its room: every page shares one grid
+      // cell, so the sheet keeps the height of its tallest page whichever one
+      // is showing. src/render/global.css owns what the attribute does.
+      panel.toggleAttribute(
+        "data-preferences-page-hidden",
+        panel.getAttribute("data-preferences-panel") !== next,
+      );
     }
   };
 
@@ -98,11 +105,16 @@ export const PREFERENCES_SCRIPT = `<script>
     }
   };
 
+  // A settings page that is not showing keeps its room, so it is not [hidden]
+  // and has to be excluded by name. The browser already skips it in the real
+  // tab order; the trap has to agree, or its wrap-around counts stops that
+  // Tab will never reach.
   const isTabbable = (element) =>
     element instanceof HTMLElement &&
     element.tabIndex >= 0 &&
     !element.matches(":disabled") &&
-    element.closest("[hidden], [inert]") === null;
+    element.closest("[hidden], [inert], [data-preferences-page-hidden]") ===
+      null;
 
   // A radio group is one tab stop, not one per option: the browser moves
   // between its members with the arrow keys and skips the rest. Counting every

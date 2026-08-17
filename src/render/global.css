@@ -840,6 +840,17 @@ are declared, so a role or a scale step is the only thing a utility can name.
     box-shadow: none;
   }
 
+  /* Every settings page shares one grid cell, so the pane already reserves the
+     room its tallest page needs. The page that is not showing therefore gives
+     up its paint and keeps its room, which is what stops the sheet resizing
+     under the pointer when the reviewer changes page. `visibility` rather than
+     `display` is also what keeps the page out of the tab order and out of the
+     accessibility tree while it holds that room.
+     Override invariant: a page that is not showing must not paint. */
+  [data-preferences-page-hidden] {
+    visibility: hidden;
+  }
+
   /* Override invariant: the settings sheet must clear the device safe area
      after the resting twelve-pixel mobile viewport margin. */
   @media (width < 56rem) {

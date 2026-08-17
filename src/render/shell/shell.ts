@@ -264,6 +264,12 @@ const renderPreferencesSection = ({
 // what it is once the reviewer's eye has left the rail. Stacked under the
 // sidebar it would only repeat the chip one line above it, so there it stays
 // in the accessibility tree and out of the reading order.
+//
+// Every page occupies the same grid cell, so the pane reserves the room its
+// tallest page needs and the sheet cannot resize when the reviewer changes
+// page. The page that is not showing yields its paint rather than its room,
+// which is why it is marked hidden with an attribute of its own rather than
+// with `hidden`.
 const renderPreferencesPanel = ({
   section,
   title,
@@ -277,7 +283,7 @@ const renderPreferencesPanel = ({
   readonly controls: string;
   readonly selected: boolean;
 }): string =>
-  `<section class="min-w-0" id="big-plan-settings-panel-${section}" role="tabpanel" tabindex="-1" aria-labelledby="big-plan-settings-tab-${section}" data-preferences-panel="${section}"${selected ? "" : " hidden"}>
+  `<section class="col-start-1 row-start-1 min-w-0" id="big-plan-settings-panel-${section}" role="tabpanel" tabindex="-1" aria-labelledby="big-plan-settings-tab-${section}" data-preferences-panel="${section}"${selected ? "" : " data-preferences-page-hidden"}>
 <h3 class="sr-only m-0 text-lg font-semibold leading-tight wide:not-sr-only" id="big-plan-${section}-label">${escapeHtml(title)}</h3>
 <p class="mt-1 text-sm leading-normal text-muted">${escapeHtml(description)}</p>
 ${controls}
@@ -299,7 +305,7 @@ const renderPreferencesDialog = (): string =>
 ${renderPreferencesSection({ section: "appearance", title: "Appearance", icon: SUN_MOON_ICON, selected: true })}
 ${renderPreferencesSection({ section: "palette", title: "Color theme", icon: PALETTE_ICON, selected: false })}
 </div>
-<div class="mt-4 min-w-0 wide:mt-0">
+<div class="mt-4 grid min-w-0 wide:mt-0">
 ${renderPreferencesPanel({
   section: "appearance",
   title: "Appearance",

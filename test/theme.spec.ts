@@ -230,17 +230,6 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
     expect(themes).toHaveLength(5);
     expect(new Set(themes.map(({ left }) => left)).size).toBe(1);
     expect(new Set(themes.map(({ top }) => top)).size).toBe(5);
-    // Choosing a page never resizes the sheet, so the sidebar never moves
-    // under the pointer that is walking it.
-    const paletteWidth = await dialog.evaluate((element) =>
-      Math.round(element.getBoundingClientRect().width),
-    );
-    await openSection(page, "Appearance");
-    expect(
-      await dialog.evaluate((element) =>
-        Math.round(element.getBoundingClientRect().width),
-      ),
-    ).toBe(paletteWidth);
     await page.keyboard.press("Escape");
   });
 
@@ -781,5 +770,78 @@ test("should navigate settings through a sidebar of separate pages", async ({
     // Three stops in the trap - the sidebar, the page's radio group, and Close
     // - so the fourth Tab is back where the first one landed.
     expect(stops[3]).toBe(stops[0]);
+  });
+});
+
+test("should hold one settings size while the reviewer changes page", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+  await page.evaluate(
+    (key) => localStorage.removeItem(key),
+    PREFERENCES_STORAGE_KEY,
+  );
+  await page.reload();
+  const settings = page.getByRole("button", { name: "Open settings" });
+  const dialog = page.locator("[data-preferences-dialog]");
+
+  const box = () =>
+    dialog.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { width: Math.round(rect.width), height: Math.round(rect.height) };
+    });
+
+  // Wide and narrow lay the sheet out differently, so each has to hold its own
+  // size; a phone reads the sidebar as a row above the page it opens.
+  for (const viewport of [
+    { width: 1024, height: 768 },
+    { width: 375, height: 812 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const mode of ["Light", "Dark"] as const) {
+      await settings.click();
+      await openSection(page, "Appearance");
+      await page.getByRole("radio", { name: mode }).check();
+      const onAppearance = await box();
+      await openSection(page, "Color theme");
+      const onPalette = await box();
+      await openSection(page, "Appearance");
+      const backOnAppearance = await box();
+
+      expect(onPalette, `${viewport.width}px/${mode} keeps its size`).toEqual(
+        onAppearance,
+      );
+      expect(
+        backOnAppearance,
+        `${viewport.width}px/${mode} returns to the same size`,
+      ).toEqual(onAppearance);
+      await page.keyboard.press("Escape");
+    }
+  }
+
+  await test.step("the pane reserves the room its tallest page needs", async () => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await settings.click();
+    const pages = await dialog.evaluate((element) => {
+      const rects = Array.from(
+        element.querySelectorAll("[data-preferences-panel]"),
+      ).map((panel) => panel.getBoundingClientRect());
+      return {
+        tops: new Set(rects.map((rect) => Math.round(rect.top))).size,
+        lefts: new Set(rects.map((rect) => Math.round(rect.left))).size,
+        tallest: Math.max(...rects.map((rect) => rect.height)),
+        paneHeight:
+          element
+            .querySelector("[data-preferences-panel]")
+            ?.parentElement?.getBoundingClientRect().height ?? 0,
+      };
+    });
+    // Both pages sit in one cell, so neither can push the other down and the
+    // cell is as tall as the taller of them.
+    expect(pages.tops).toBe(1);
+    expect(pages.lefts).toBe(1);
+    expect(Math.round(pages.paneHeight)).toBe(Math.round(pages.tallest));
+    await page.keyboard.press("Escape");
   });
 });
