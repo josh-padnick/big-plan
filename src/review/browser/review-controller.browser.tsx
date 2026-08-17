@@ -3147,6 +3147,7 @@ const SentThread = ({
   useEffect(() => {
     if (!resolved) setResolvedWorkError(null);
   }, [resolved]);
+  const shownResolvedWorkError = resolved ? resolvedWorkError : null;
   const sendReply = (bodyOverride?: string) => {
     const body = (bodyOverride ?? reply).trim();
     if (identity === null || body === "") return;
@@ -3712,9 +3713,10 @@ const SentThread = ({
               }}
             />
             <div className="mt-2 flex items-center justify-end gap-2">
-              {replyBlock === undefined && resolvedWorkError === null ? null : (
+              {replyBlock === undefined &&
+              shownResolvedWorkError === null ? null : (
                 <span className="text-2xs font-semibold text-danger">
-                  {resolvedWorkError ?? replyBlock?.label}
+                  {shownResolvedWorkError ?? replyBlock?.label}
                 </span>
               )}
               <Tooltip
