@@ -39,6 +39,17 @@ loses nothing when the hint never renders.
     transition: none;
   }
 
+  /* A hint that explains a choice carries a sentence, not a control's name.
+     One line would run off the card, so this variant wraps at a reading
+     measure and opens from its own left edge, where these hints sit beside a
+     label rather than at a figure's right end. */
+  article [data-tooltip][data-tooltip-wrap]::after {
+    right: auto;
+    left: 0;
+    width: 18rem;
+    white-space: normal;
+  }
+
   article [data-tooltip]:hover::after,
   article [data-tooltip]:focus-visible::after {
     opacity: 1;

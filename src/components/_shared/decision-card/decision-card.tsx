@@ -19,6 +19,7 @@ import {
   type DecisionCardTone,
 } from "../../_model/decision-card.js";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
+import { INFO_ICON } from "../../../icons/lucide/info.js";
 import { PLUS_ICON } from "../../../icons/lucide/plus.js";
 import { TRIANGLE_ALERT_ICON } from "../../../icons/lucide/triangle-alert.js";
 import { type MatrixToneParity } from "../comparison-matrix/comparison-matrix.js";
@@ -86,12 +87,19 @@ const RationalePanel = ({
   </div>
 );
 
+// The hint answers the one question the toggle raises: what happens to these
+// words. It is the tooltip and the accessible name, so a pointer and a screen
+// reader are told the same thing.
+const MODE_HINT =
+  "By setting this to 'Make this my decision', we will save this as your official decision rather than requesting feedback from the agent to update this.";
+
 // The escape hatch, demoted to a quiet link so it never competes with the
 // real options. Its radio still belongs to the group, so proposing clears
 // whichever column was picked.
 const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
   const inputId = `${model.id}-proposal-choice`;
   const textId = `${model.id}-proposal-text`;
+  const modeId = `${model.id}-proposal-mode`;
   return (
     <div className="decision-propose" data-option-proposal="">
       <label className="decision-propose-link" htmlFor={inputId}>
@@ -125,8 +133,37 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
           data-decision-proposal-text=""
         />
         <p className="mt-1.5 mb-0 text-xs text-muted">
-          {"The agent revises the plan to answer a proposal."}
+          {
+            "Use this text box to either request changes or directly submit a decision."
+          }
         </p>
+        {/* The composer has exactly two outcomes, and reading them off three
+            buttons made the reader infer the difference. The toggle states it
+            instead: off, these words go to the agent as feedback; on, they are
+            the answer of record. It is authored markup rather than script-made
+            chrome so the two modes exist in the reachable document, and the
+            shell only has to show the buttons the chosen mode owns. */}
+        <div className="decision-mode mt-2.5" data-decision-mode="">
+          <label className="decision-mode-label" htmlFor={modeId}>
+            <input
+              className="decision-mode-check"
+              type="checkbox"
+              id={modeId}
+              data-decision-mode-toggle=""
+            />
+            <span>{"Make this my decision"}</span>
+          </label>
+          <span
+            className="decision-mode-hint"
+            data-tooltip={MODE_HINT}
+            data-tooltip-wrap=""
+            tabIndex={0}
+            role="note"
+            aria-label={MODE_HINT}
+          >
+            {lucideIconToReact({ icon: INFO_ICON, hidden: false })}
+          </span>
+        </div>
         <button
           className="decision-proposal-cancel data-[shown]:inline-flex mt-2"
           type="button"

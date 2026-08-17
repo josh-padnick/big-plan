@@ -544,11 +544,14 @@
     ) {
     color: var(--color-muted);
   }
+  /* The field takes the option cards' raised surface rather than the card
+     body's own background. Against the body it read as a bordered hole, and a
+     reader could not see where to type. */
   article .decision-proposal-input {
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--edge-strong-c);
     border-radius: var(--radius-md);
-    background: var(--bg);
+    background: var(--raised-c);
     color: var(--ink-c);
     font: inherit;
     font-size: 0.875rem;
@@ -560,6 +563,64 @@
     border-color: var(--color-accent);
     box-shadow: var(--elevation-focus);
   }
+  /* The mode switch sits between the reader's words and the actions those
+     words feed, because that is where the question "what happens to this"
+     arises. The hint rides beside the label rather than under it: the row is
+     one statement, and a second line would read as a third mode. */
+  article .decision-mode {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  article .decision-mode-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    cursor: pointer;
+    color: var(--ink-c);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  article .decision-mode-check {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: var(--color-accent);
+    cursor: pointer;
+  }
+  article .decision-mode-label:has(:focus-visible) {
+    outline: none;
+    border-radius: 0.125rem;
+    box-shadow: var(--elevation-focus);
+  }
+  article .decision-mode-hint {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    color: var(--color-muted);
+  }
+  article .decision-mode-hint svg {
+    width: 100%;
+    height: 100%;
+  }
+  article .decision-mode-hint:hover,
+  article .decision-mode-hint:focus-visible {
+    color: var(--ink-c);
+  }
+  article .decision-mode-hint:focus-visible {
+    outline: none;
+    border-radius: 0.125rem;
+    box-shadow: var(--elevation-focus);
+  }
+  article .decision-mode-check:disabled,
+  article .decision-mode-label:has(:disabled) {
+    cursor: default;
+    color: var(--color-subtle);
+  }
+
   article .decision-proposal-cancel {
     padding: 0.25rem 0.75rem;
     border: 1px solid var(--edge-c);

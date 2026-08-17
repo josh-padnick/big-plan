@@ -2500,6 +2500,7 @@ const wireDecisions = () => {
     const rationale = own("[data-decision-rationale]");
     const question = own("[data-decision-question]");
     const proposalText = own("[data-decision-proposal-text]");
+    const modeToggle = own("[data-decision-mode-toggle]");
     const proposalCancel = own("[data-decision-proposal-cancel]");
     const propose = own("[data-option-proposal]");
     const choices = ownAll("[data-decision-choice]");
@@ -2521,7 +2522,7 @@ const wireDecisions = () => {
     const proposalBatch = document.createElement("button");
     proposalBatch.type = "button";
     proposalBatch.className = "decision-proposal-action";
-    proposalBatch.textContent = "Add to feedback";
+    proposalBatch.textContent = "Add to Queue";
     proposalBatch.hidden = true;
     const proposalNow = document.createElement("button");
     proposalNow.type = "button";
@@ -2784,17 +2785,23 @@ const wireDecisions = () => {
       const index = choice === null ? null : choice.getAttribute("data-option-index");
       showPanel(index === null ? defaultIndex : index);
       paintColumn(index, false);
-      confirm.textContent = proposing
-        ? "Include with acceptance"
-        : "Confirm choice";
+      // A composed proposal has two outcomes, not three. The toggle picks
+      // which one the reader is in, and each mode shows only the buttons it
+      // owns: feedback hands the words to the agent, a decision records them
+      // as the answer. Outside the composer there is nothing to hand off, so
+      // confirming is the only action and the toggle is out of the way.
+      const decisionMode = proposing && modeToggle !== null && modeToggle.checked;
+      confirm.textContent = "Confirm choice";
+      confirm.hidden = proposing && !decisionMode;
       confirm.disabled =
         locked || choice === null || (proposing && proposalValue() === "");
       change.disabled = locked;
       for (const candidate of choices) candidate.disabled = locked;
       if (proposalText !== null) proposalText.disabled = locked;
       for (const note of lockedNotes) note.hidden = !locked;
-      proposalBatch.hidden = !proposing;
-      proposalNow.hidden = !proposing;
+      proposalBatch.hidden = !proposing || decisionMode;
+      proposalNow.hidden = !proposing || decisionMode;
+      if (modeToggle !== null) modeToggle.disabled = locked;
       proposalBatch.disabled = locked || proposalValue() === "";
       proposalNow.disabled = locked || proposalValue() === "";
       if (clear !== null) {
@@ -2819,7 +2826,15 @@ const wireDecisions = () => {
     };
     decision.addEventListener("change", (event) => {
       if (!mine(event.target)) return;
-      if (!proposes(event.target) && event.target.checked) {
+      // The mode toggle also fires change inside this card, and it is not a
+      // column, so remembering it here would restore a checkbox as the
+      // reader's previous option when they cancel.
+      if (
+        event.target instanceof Element &&
+        event.target.hasAttribute("data-decision-choice") &&
+        !proposes(event.target) &&
+        event.target.checked
+      ) {
         previousOptionChoice = event.target;
       }
       sync();
@@ -2849,6 +2864,9 @@ const wireDecisions = () => {
       if (proposalChoice !== null) proposalChoice.checked = false;
       if (previousOptionChoice !== null) previousOptionChoice.checked = true;
       if (proposalText !== null) proposalText.value = "";
+      // The composer is empty again, so it reopens in the default mode rather
+      // than carrying the last reader's intent into the next proposal.
+      if (modeToggle !== null) modeToggle.checked = false;
       sync();
     };
     proposalBatch.addEventListener("click", () => handOffProposal("batch"));
@@ -2869,6 +2887,7 @@ const wireDecisions = () => {
         if (proposalChoice !== null) proposalChoice.checked = false;
         if (previousOptionChoice !== null) previousOptionChoice.checked = true;
         if (proposalText !== null) proposalText.value = "";
+        if (modeToggle !== null) modeToggle.checked = false;
         sync();
         if (proposalChoice !== null) {
           proposalChoice.focus({ focusVisible: false });

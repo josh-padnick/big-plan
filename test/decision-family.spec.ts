@@ -160,14 +160,30 @@ test("should compare, answer, and revise a Decision", async ({
   await card
     .locator("[data-decision-proposal-text]")
     .fill("Publish a signed standalone archive.");
-  await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
+  // The composer has two outcomes, not three, and the toggle is what picks
+  // between them: off, the words are feedback for the agent; on, they are the
+  // answer of record. Each mode owns its own buttons, so seeing the other
+  // mode's button at the same time is the regression this guards.
+  const modeToggle = card.locator("[data-decision-mode-toggle]");
+  await expect(modeToggle).not.toBeChecked();
   await expect(
-    card.getByRole("button", { name: "Add to feedback" }),
+    card.getByRole("button", { name: "Add to Queue" }),
   ).toBeVisible();
   await expect(card.getByRole("button", { name: "Send now" })).toBeVisible();
-  await expect(
-    card.getByRole("button", { name: "Include with acceptance" }),
-  ).toBeVisible();
+  await expect(card.locator("[data-decision-confirm]")).toBeHidden();
+
+  await modeToggle.check();
+  await expect(card.locator("[data-decision-confirm]")).toBeVisible();
+  await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
+  await expect(card.locator("[data-decision-confirm]")).toHaveText(
+    "Confirm choice",
+  );
+  await expect(card.getByRole("button", { name: "Add to Queue" })).toBeHidden();
+  await expect(card.getByRole("button", { name: "Send now" })).toBeHidden();
+
+  await modeToggle.uncheck();
+  await expect(card.locator("[data-decision-confirm]")).toBeHidden();
+
   await card.locator("[data-decision-proposal-cancel]").click();
   await expect(card.locator("[data-decision-proposal]")).toBeHidden();
 
@@ -187,7 +203,8 @@ test("should compare, answer, and revise a Decision", async ({
   await card
     .locator("[data-decision-proposal-text]")
     .fill("Publish through the repository release.");
-  await card.getByRole("button", { name: "Include with acceptance" }).click();
+  await card.locator("[data-decision-mode-toggle]").check();
+  await card.getByRole("button", { name: "Confirm choice" }).click();
   await expect(card.locator("[data-decision-answer]")).toContainText(
     "Publish through the repository release.",
   );
