@@ -11,6 +11,40 @@ The workflow is intentionally light:
 - **Checks.** Run `bun run lint`, `bun run build`, `bun run test`, and `bun run test:e2e` before opening a pull request; CI enforces the same checks on branches pushed to this repository.
 - **License.** Big Plan is [MIT](LICENSE) licensed; contributions are accepted under the same license.
 
+## Do not overwrite merged work
+
+A pull request must not remove work that is already on `main`.
+CI runs a merge guard on every push (`scripts/merge-guard/check.mjs`, also available as `bun run check:merge-guard`).
+The guard enforces two rules.
+
+1. The merge result may differ from `main` only in files that the branch's own non-merge commits touch.
+2. A file that `main` changed after the branch's fork point must not sit at its fork-point content in the merge result.
+
+Rule 1 finds a file that changes with no commit on the branch to explain the change.
+Rule 2 finds a file that the branch edited and then put back, so the change from `main` is thrown away.
+Both losses happen most often when a contributor merges `main` into a long-lived branch and resolves the conflicts by hand.
+A bad resolution keeps the branch's older version, so a landed feature disappears and Git records no deletion.
+When a comparison the guard needs cannot run, the guard reports `unresolved` and fails instead of passing.
+
+When the guard fails, it names each file, the rule that found it, the commit on `main` that owns it, and the number of lines at risk.
+Repair the branch in one of two ways.
+
+1. **Restore the work.** Run the `git checkout main -- <paths>` command that the failure prints, then commit the result.
+2. **Declare the removal.** Remove the work on purpose and record the decision in a commit trailer on the branch.
+   The same trailer clears a finding from either rule:
+
+   ```text
+   Overwrites-main: <path> [<path> ...]
+   ```
+
+   Put the reason in the commit body, and name the pull request or commit whose work you remove.
+   Any commit on the branch may carry the trailer, and a branch may carry several.
+   Paths must be exact and repository-relative; the guard accepts no wildcards, so each removal stays visible to a reviewer.
+   The failure message prints a ready `git commit --allow-empty` command with the correct trailer lines.
+
+The guard is deliberately narrow to keep false alarms near zero.
+The file header in `scripts/merge-guard/check.mjs` states what the guard does not catch, and it records the measured evidence behind both rules and behind the rejected detectors.
+
 ## Styling changes
 
 There is no pixel-history CI gate and no visual contract in commit subjects.
