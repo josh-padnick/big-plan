@@ -26,6 +26,15 @@ jobs:
       # second. A branch that would delete merged main work should fail fast.
       - name: Merged main work must not disappear
         run: node scripts/merge-guard/check.mjs
+      # The companion warner. It sees the one loss shape the blocking guard
+      # cannot: stale file bytes that arrive as ordinary fresh commits. It
+      # cannot tell that apart from an honest large refactor, so it never
+      # gates. The script exits 0 on every outcome, including its own failure;
+      # continue-on-error is the second belt, so even a crash in node itself
+      # cannot turn this job red. A human adjudicates each warning.
+      - name: Stale-copy warning (never fails the build)
+        continue-on-error: true
+        run: node scripts/merge-guard/warn-stale-copy.mjs
       - uses: oven-sh/setup-bun@v2
         with:
           # Reads the packageManager field so CI and local bun stay in lockstep.

@@ -135,6 +135,6 @@ The brake must not become the bottleneck that stops safe, frequent change.
 ## CI
 
 The CI workflow runs on every push.
-It installs the pinned Bun version, runs `bun run lint`, runs `bun run build`, checks generated-file drift, runs `bun run test`, installs Chromium, and runs `bun run test:e2e`.
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) owns the exact steps and their order, and it runs the same lint, build, unit-test, and browser-test commands you run locally.
 Keep the full pipeline fast enough to run on every change.
 The value of the brakes is that they are available before a change reaches a user.

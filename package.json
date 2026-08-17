@@ -35,6 +35,7 @@
     "test": "bun run gen && vitest run && bun run test:contracts",
     "test:contracts": "node --test scripts/style-contract/*.test.mjs scripts/design-system/*.test.mjs scripts/git-hooks/*.test.mjs scripts/merge-guard/*.test.mjs",
     "check:merge-guard": "node scripts/merge-guard/check.mjs",
+    "warn:stale-copy": "node scripts/merge-guard/warn-stale-copy.mjs",
     "test:e2e": "playwright test",
     "lint": "eslint . && node scripts/style-contract/check.mjs && node scripts/design-system/check.mjs && prettier --check .",
     "format": "prettier --write .",
