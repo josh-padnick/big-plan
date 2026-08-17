@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AGENT_STALL_MS,
+  agentHoldsClaimedWork,
   agentPresenceIsFresh,
   deriveAgentStatus,
   deriveAgentHealthLabel,
@@ -264,7 +265,7 @@ describe("current agent activity", () => {
     });
   });
 
-  it("should return work to waiting after its claim lapses", () => {
+  it("should report picked-up work as stalled rather than queued after its claim lapses", () => {
     expect(
       deriveCurrentAgentActivity({
         requests: [
@@ -280,7 +281,107 @@ describe("current agent activity", () => {
         now: NOW,
         heartbeatAt: NOW,
       }),
-    ).toMatchObject({ state: "waiting", headline: "Waiting for agent" });
+    ).toMatchObject({
+      state: "stalled",
+      tone: "warning",
+      headline: "Agent may be stalled",
+    });
+  });
+
+  // BIG-147. `agent next` hands the work over and its process exits, so a turn
+  // longer than the lease renews nothing. Reading that silence as a lost agent
+  // told the reviewer the session had ended while the agent was working, and
+  // invited them to reconnect - which under adr/0002 lets a second agent take
+  // the plan from the one still editing it.
+  it("should not call a working agent disconnected while it holds quiet work", () => {
+    const activity = deriveCurrentAgentActivity({
+      requests: [
+        {
+          ...request(),
+          ...liveClaim(NOW - AGENT_STALL_MS - 60_000),
+        },
+      ],
+      cancelPendingRequestIds: new Set(),
+      progressEvents: [],
+      agentConnected: false,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: NOW - AGENT_STALL_MS - 60_000,
+    });
+    expect(activity).toMatchObject({
+      state: "stalled",
+      tone: "warning",
+      headline: "Agent may be stalled",
+      requestId: "1111111111111111",
+    });
+    expect(activity).toHaveProperty(
+      "supporting",
+      expect.stringContaining("reported nothing for 2m 15s"),
+    );
+    expect(activity).not.toHaveProperty(
+      "supporting",
+      expect.stringContaining("Reconnect"),
+    );
+    expect(
+      deriveAgentHealthLabel({
+        activity,
+        hasAgentRuntime: true,
+        isReadOnly: false,
+      }),
+    ).toBe("Agent not responding");
+  });
+
+  it("should still report disconnection once no agent holds any work", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [
+          {
+            ...request(),
+            ...liveClaim(NOW - AGENT_STALL_MS - 1),
+            answeredAt: "2026-08-08T19:59:30.000Z",
+          },
+        ],
+        cancelPendingRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: false,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW - AGENT_STALL_MS - 1,
+      }),
+    ).toMatchObject({
+      state: "disconnected",
+      headline: "The agent is disconnected",
+    });
+  });
+
+  it("should keep a failed step ahead of the silence that follows it", () => {
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [
+          {
+            ...request(),
+            ...liveClaim(NOW - AGENT_STALL_MS - 1),
+          },
+        ],
+        cancelPendingRequestIds: new Set(),
+        progressEvents: [
+          {
+            requestId: "1111111111111111",
+            stepCode: "agent-note",
+            step: "Reading the plan",
+            state: "failed",
+            detail: "Out of usage",
+          },
+        ],
+        agentConnected: false,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: 0,
+      }),
+    ).toMatchObject({
+      state: "errored",
+      headline: "The agent reported a problem",
+    });
   });
 
   it("should prefer live claimed work over an older lapsed request", () => {
@@ -364,6 +465,29 @@ describe("current agent activity", () => {
   });
 });
 
+describe("claimed work", () => {
+  it("should hold open work whose lease has long lapsed", () => {
+    expect(
+      agentHoldsClaimedWork([
+        { ...request(), ...liveClaim(NOW - AGENT_STALL_MS * 10) },
+      ]),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["answered", { answeredAt: "2026-08-08T19:59:30.000Z" }],
+    ["canceled", { canceledAt: "2026-08-08T19:59:30.000Z" }],
+  ])("should release the plan once the request is %s", (_name, terminal) => {
+    expect(
+      agentHoldsClaimedWork([{ ...request(), ...liveClaim(), ...terminal }]),
+    ).toBe(false);
+  });
+
+  it("should not treat a queued request nobody picked up as held work", () => {
+    expect(agentHoldsClaimedWork([request()])).toBe(false);
+  });
+});
+
 describe("agent connection events", () => {
   const connectedEvent = {
     eventId: "event-1",
@@ -402,6 +526,21 @@ describe("agent connection events", () => {
         },
       ],
     });
+  });
+
+  // BIG-147. The reviewer's connection log filled with disconnect and reconnect
+  // pairs, each reasoned "heartbeat timed out", while one agent worked through
+  // all of them: nothing renews the plan-wide heartbeat between progress notes.
+  it("should not project a disconnection while an agent holds work", () => {
+    expect(
+      projectAgentConnectionState({
+        presenceConnected: true,
+        heartbeatAt: NOW - 200_000,
+        now: NOW,
+        events: [connectedEvent],
+        holdsOpenRequest: true,
+      }),
+    ).toEqual({ connected: true, events: [connectedEvent] });
   });
 
   it("should keep disconnection current when a reconnect event races after stale presence", () => {
@@ -548,7 +687,10 @@ describe("agent request status", () => {
     });
     expect(stalled.stage).toBe("stalled");
     expect(stalled.headline).toBe("No progress for 1m");
-    expect(stalled.detail).toContain("agent session is still connected");
+    // The silence that reaches this branch is the only evidence there is, so
+    // the detail must not assert anything about the session (BIG-147).
+    expect(stalled.detail).not.toContain("still connected");
+    expect(stalled.detail).toContain("Check the agent terminal");
     expect(
       deriveAgentStatus({
         ...input,
