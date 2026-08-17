@@ -747,9 +747,11 @@ const Screen = ({
   // A desktop screen holds the fixed application silhouette whenever it hosts
   // a workspace, whether the author reached for an `AppShell` or placed the
   // workspace `Row` directly in the screen after a `TopBar`. The caption below
-  // prints which policy applies, so this test and the fixed-height rules in
-  // styles.css have to name the same two hosts or the caption states a
-  // silhouette the artboard does not keep.
+  // prints which policy applies and the artboard has to keep it, so the answer
+  // is decided once here and published on the artboard as
+  // `data-wireframe-workspace`; the stylesheet reads that attribute rather
+  // than re-deriving the same two hosts from a selector that could drift out
+  // of step with what the caption says.
   const workspaceViewport =
     desktop &&
     screen.children.some(
@@ -765,7 +767,7 @@ const Screen = ({
       data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
-      <div className="wireframe-frame-card mx-auto w-fit">
+      <div className="wireframe-frame-card mx-auto block w-fit">
         <div
           className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
           data-wireframe-device={screen.device}
@@ -788,6 +790,7 @@ const Screen = ({
             className="wireframe-artboard"
             data-wireframe-device={screen.device}
             data-wireframe-height-policy={preset.heightPolicy}
+            {...(workspaceViewport ? { "data-wireframe-workspace": "" } : {})}
             {...(screen.pattern === undefined
               ? {}
               : { "data-wireframe-pattern": screen.pattern })}
@@ -811,11 +814,11 @@ const Screen = ({
           The fit module pins this element's width to the frame's painted
           width, so both lines wrap inside the frame instead of running past
           its edge. */}
-      <figcaption className="wireframe-screen-caption mx-auto mt-3 w-full min-w-0 text-sm tracking-normal text-ink">
-        <span className="wireframe-screen-name block min-w-0 break-words">
+      <figcaption className="wireframe-screen-caption mx-auto mt-3 w-full text-sm">
+        <span className="wireframe-screen-name block break-words">
           {screen.name}
         </span>
-        <span className="wireframe-screen-viewport mt-1 block min-w-0 break-words text-xs text-muted">
+        <span className="wireframe-screen-viewport mt-1 block break-words text-xs text-muted">
           {preset.label} · {preset.width} × {preset.height}px{" "}
           {workspaceViewport
             ? "workspace viewport"

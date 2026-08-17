@@ -98,14 +98,10 @@ marks and a plan diff never jitters.
      title so the control still has a stable home; MaximizeButton itself
      ships hidden until the viewer script reveals it. */
   .wireframe-header {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
   }
-  /* Maximized, every pixel above the drawing is height the frame and its
-     caption no longer have. The row keeps its own height and gives up the
-     gap; `.wireframe-content` below already separates the two. */
   .wireframe[data-figure-maximized] > .wireframe-header {
     flex: none;
-    margin-bottom: 0;
   }
 
   /* The screens live beside the switcher rather than under it, so the same
@@ -353,12 +349,10 @@ marks and a plan diff never jitters.
      The viewer script reads this padding and border back out of computed
      style to keep the frame's uniform fit math correct, so the two stay in
      sync without a duplicated constant, and pins this card to the width the
-     frame paints at so the caption beneath it can share that width. The card
-     is a block rather than an inline-block because that pin is a width, and
-     a shrink-to-fit box that is also given a width only invites the two
-     rules to disagree. */
+     frame paints at so the caption beneath it can share that width. The
+     card's own box - block, shrink-to-fit, centred - is stated in utilities
+     on the markup that renders it; only the drawn chrome lives here. */
   .wireframe-frame-card {
-    display: block;
     max-width: 100%;
     padding: 0.5rem;
     border: 1px solid var(--edge-c);
@@ -496,15 +490,11 @@ marks and a plan diff never jitters.
   /* A desktop application is a viewport, not an endlessly growing page.
      Its workspace host owns the device height; persistent chrome stays
      anchored while workspace panes take responsibility for their own
-     overflow. A workspace has two hosts - an `AppShell`, and a workspace
-     `Row` placed directly in the screen after a `TopBar` - and both must be
-     named here, because the screen caption prints "workspace viewport" for
-     either one and a caption that names a silhouette the artboard does not
-     keep is worse than no caption at all. */
-  .wireframe-artboard[data-wireframe-device="desktop"]:has(
-      .wireframe-app-shell,
-      > .wireframe-canvas > .wireframe-row[data-wireframe-workspace]
-    ) {
+     overflow. Which screens count is the view's answer, not a second one
+     derived here: the same test that makes the caption print "workspace
+     viewport" marks the artboard, so the caption can never name a silhouette
+     the artboard does not keep. */
+  .wireframe-artboard[data-wireframe-workspace] {
     height: var(--wf-min-height);
     min-height: 0;
     overflow: hidden;
@@ -513,11 +503,7 @@ marks and a plan diff never jitters.
     flex: 1;
     min-width: 0;
   }
-  .wireframe-artboard[data-wireframe-device="desktop"]:has(
-      .wireframe-app-shell,
-      > .wireframe-canvas > .wireframe-row[data-wireframe-workspace]
-    )
-    > .wireframe-canvas {
+  .wireframe-artboard[data-wireframe-workspace] > .wireframe-canvas {
     height: 100%;
     min-height: 0;
   }
