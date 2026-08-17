@@ -293,11 +293,16 @@ ${controls}
 // settings on the left, the chosen one on the right. Appearance and Color theme
 // are peers there, so neither competes with the other for the reviewer's
 // attention and a later setting costs one more sidebar item.
+//
+// The sheet is titled rather than labelled: Settings names the whole surface
+// and sits one type step above the page title it contains, so the ladder reads
+// sheet, then page, then body. An all-caps tracked kicker was the other way of
+// keeping the two apart and read as a label left behind rather than a title.
 const renderPreferencesDialog = (): string =>
   `<div class="fixed inset-0 z-50 flex items-center justify-center bg-backdrop/70 p-3 wide:p-4" data-preferences-backdrop hidden>
 <section class="max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-edge bg-paper p-4 text-ink shadow-floating wide:max-h-[calc(100dvh-2rem)] wide:max-w-3xl wide:p-8" data-preferences-dialog role="dialog" aria-modal="true" aria-labelledby="big-plan-preferences-title">
 <div class="flex items-center justify-between gap-4">
-<h2 class="m-0 text-xs font-semibold tracking-caps uppercase text-subtle" id="big-plan-preferences-title">Settings</h2>
+<h2 class="m-0 text-2xl font-semibold tracking-tight" id="big-plan-preferences-title">Settings</h2>
 <button class="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-close aria-label="Close settings">${lucideIconToHtml({ icon: X_ICON, className: "size-4" })}</button>
 </div>
 <div class="mt-4 border-t border-edge pt-4 wide:mt-6 wide:grid wide:grid-cols-[12rem_1fr] wide:gap-6 wide:pt-6">
