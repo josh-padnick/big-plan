@@ -298,11 +298,19 @@ ${controls}
 // and sits one type step above the page title it contains, so the ladder reads
 // sheet, then page, then body. An all-caps tracked kicker was the other way of
 // keeping the two apart and read as a label left behind rather than a title.
+//
+// The saving caption belongs to the title rather than to the sheet's last
+// edge. It says how every page here behaves, so it reads as the title's
+// subtitle; parked at the bottom it sat below whichever page was showing and
+// read as a footnote to that one page.
 const renderPreferencesDialog = (): string =>
   `<div class="fixed inset-0 z-50 flex items-center justify-center bg-backdrop/70 p-3 wide:p-4" data-preferences-backdrop hidden>
 <section class="max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-edge bg-paper p-4 text-ink shadow-floating wide:max-h-[calc(100dvh-2rem)] wide:max-w-3xl wide:p-8" data-preferences-dialog role="dialog" aria-modal="true" aria-labelledby="big-plan-preferences-title">
-<div class="flex items-center justify-between gap-4">
+<div class="flex items-start justify-between gap-4">
+<div class="min-w-0">
 <h2 class="m-0 text-2xl font-semibold tracking-tight" id="big-plan-preferences-title">Settings</h2>
+<p class="mt-1 flex items-center gap-2 text-xs leading-normal text-muted" data-preferences-status>${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes apply immediately and are saved for every review document in this browser.</span></p>
+</div>
 <button class="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-close aria-label="Close settings">${lucideIconToHtml({ icon: X_ICON, className: "size-4" })}</button>
 </div>
 <div class="mt-4 border-t border-edge pt-4 wide:mt-6 wide:grid wide:grid-cols-[12rem_1fr] wide:gap-6 wide:pt-6">
@@ -336,7 +344,6 @@ ${PALETTE_OPTIONS.map(renderPaletteOption).join("\n")}
 })}
 </div>
 </div>
-<p class="mt-4 flex items-center gap-2 text-xs leading-normal text-muted wide:mt-6" data-preferences-status>${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes apply immediately and are saved for every review document in this browser.</span></p>
 </section>
 </div>`;
 

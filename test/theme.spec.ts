@@ -242,9 +242,11 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
       const rect = element.getBoundingClientRect();
       return (rect.top + rect.bottom) / 2;
     })(),
-    footerBottom:
+    pageBottom:
       element
-        .querySelector("[data-preferences-status]")
+        .querySelector(
+          "[data-preferences-panel]:not([data-preferences-page-hidden])",
+        )
         ?.getBoundingClientRect().bottom ?? 0,
     viewportBottom: window.innerHeight,
   }));
@@ -252,15 +254,24 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
     shortViewport.clientHeight,
   );
   expect(shortViewport.verticalCenter).toBeCloseTo(110);
+  expect(shortViewport.pageBottom).toBeGreaterThan(
+    shortViewport.viewportBottom,
+  );
   await dialog.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
+  // The last of the sheet has to be reachable by scrolling, so the bottom of
+  // the settings page it is showing must come inside the viewport. The saving
+  // caption used to be the bottom-most thing here; it now sits under the title,
+  // where scrolling down takes it off the top and it can prove nothing.
   await expect
     .poll(() =>
-      dialog.locator("[data-preferences-status]").evaluate((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.bottom <= window.innerHeight;
-      }),
+      dialog
+        .locator("[data-preferences-panel]:not([data-preferences-page-hidden])")
+        .evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.bottom <= window.innerHeight;
+        }),
     )
     .toBe(true);
 
