@@ -12,6 +12,7 @@ import {
   SLIDE_TEXT_LIMIT,
 } from "./shared/comment.js";
 import { claimIsHeldByAnother, claimIsLive } from "./shared/agent-claim.js";
+import { agentHoldsClaimedWork } from "./shared/agent-status.js";
 import {
   requestIsTerminal,
   type TerminalAgentRequest,
@@ -1119,6 +1120,27 @@ export const requestBlocksPlanPickup = ({
   readonly nowMs: number;
 }): boolean =>
   request.answeredAt === undefined && claimIsLive({ request, nowMs });
+
+/**
+ * True while some agent is holding work on this plan that it has neither
+ * answered nor had canceled. Its lease may well have lapsed: `agent next` hands
+ * the work over and its process exits, so nothing renews the plan-wide
+ * heartbeat for the length of a turn. Callers use this to keep that ordinary
+ * silence from being reported as a disconnection the runtime never observed
+ * (BIG-147).
+ */
+export const agentHoldsOpenRequest = async ({
+  store,
+  sessionId,
+  planId,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly planId: string;
+}): Promise<boolean> =>
+  agentHoldsClaimedWork(
+    await readValidatedAgentRequests({ store, sessionId, planId }),
+  );
 
 /**
  * Reads the whole plan exchange through the contract. A review-server restart
