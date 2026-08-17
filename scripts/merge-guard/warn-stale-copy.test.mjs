@@ -125,6 +125,80 @@ const buildOrdinaryRefactor = async () => {
   return root;
 };
 
+/**
+ * Builds a branch that renames one file and also edits it. git filters by
+ * pathspec before it pairs a rename, so a per-file diff that names the old path
+ * alone reads the file as a wholesale delete and blames every line of it.
+ */
+const buildRenameWithEdits = async () => {
+  const root = await mkdtemp(join(tmpdir(), "big-plan-stale-copy-"));
+  await git(root, "init", "--initial-branch=main", "--quiet");
+  await git(root, "config", "commit.gpgsign", "false");
+  await put(root, "src/feature/big.ts", moduleSource(0, "current", 60));
+  await put(root, "src/feature/moved.ts", moduleSource(1, "current", 60));
+  await commit(root, "chore: start the repository\n\nThe current generation.");
+
+  await git(root, "checkout", "--quiet", "-b", "feature");
+  await put(root, "src/feature/big.ts", moduleSource(0, "stale", 6));
+  await git(root, "mv", "src/feature/moved.ts", "src/feature/renamed.ts");
+  await put(root, "src/feature/renamed.ts", moduleSource(1, "current", 54));
+  await commit(
+    root,
+    "refactor: rework the surface\n\nMoves one module and edits it.",
+  );
+  return root;
+};
+
+/**
+ * Reads the removed-line count git itself reports for one renamed path. git
+ * writes a rename as "old => new" inside the shared directory prefix, so the
+ * lookup asks for that arrow form.
+ */
+const numstatRemovedFor = async (root, oldPath, newPath) => {
+  const { stdout } = await git(
+    root,
+    "diff",
+    "--numstat",
+    "--find-renames",
+    "main",
+    "feature",
+  );
+  const [prefix] = oldPath.split(/([^/]+)$/);
+  const combined = `${prefix}{${oldPath.slice(prefix.length)} => ${newPath.slice(prefix.length)}}`;
+  for (const line of stdout.split("\n")) {
+    const fields = line.split("\t");
+    if (fields[2] === combined) {
+      return Number(fields[1]);
+    }
+  }
+  throw new Error(`git reported no rename record for ${oldPath}`);
+};
+
+/** Builds a stale copy wide enough that the check cannot blame every file. */
+const buildWideStaleCopy = async (fileCount) => {
+  const root = await mkdtemp(join(tmpdir(), "big-plan-stale-copy-"));
+  await git(root, "init", "--initial-branch=main", "--quiet");
+  await git(root, "config", "commit.gpgsign", "false");
+  const wide = Array.from(
+    { length: fileCount },
+    (_, index) => `src/wide/module-${index}.ts`,
+  );
+  for (const [index, path] of wide.entries()) {
+    await put(root, path, moduleSource(index, "current", 12));
+  }
+  await commit(root, "chore: start the repository\n\nThe current generation.");
+
+  await git(root, "checkout", "--quiet", "-b", "feature");
+  for (const [index, path] of wide.entries()) {
+    await put(root, path, moduleSource(index, "stale", 1));
+  }
+  await commit(
+    root,
+    "feat: land the feature work\n\nCopied from an older worktree by mistake.",
+  );
+  return root;
+};
+
 /** Replays one real merge from this repository, or skips when it is absent. */
 const replay = async (t, base, head, options = {}) => {
   const known = await run("git", [
@@ -257,6 +331,85 @@ test("should exit zero on every outcome, including a warning and its own failure
   } finally {
     await rm(root, { recursive: true, force: true });
     await rm(ordinary, { recursive: true, force: true });
+  }
+});
+
+test("should blame only the edited lines of a file the branch renames", async () => {
+  const root = await buildRenameWithEdits();
+  try {
+    const result = await checkStaleCopyWarning({
+      repoRoot: root,
+      minFiles: 2,
+      minTotalLines: 10,
+    });
+    assert.equal(result.status, "warned");
+    const removed = await numstatRemovedFor(
+      root,
+      "src/feature/moved.ts",
+      "src/feature/renamed.ts",
+    );
+    const renamed = result.findings.find(
+      (finding) => finding.path === "src/feature/moved.ts",
+    );
+    assert.ok(renamed !== undefined, "the renamed file must be reported");
+    assert.equal(renamed.droppedLines, removed);
+    // The origins must add up to the lines git says went away, not to the
+    // whole length of the old file.
+    const blamed = renamed.origins.reduce(
+      (sum, origin) => sum + origin.lines,
+      0,
+    );
+    assert.equal(renamed.moreOrigins, 0);
+    assert.equal(blamed, removed);
+    // The roll-up a human adjudicates must never exceed the header total.
+    const rolledUp = result.commitsAtRisk.reduce(
+      (sum, origin) => sum + origin.lines,
+      0,
+    );
+    assert.ok(
+      rolledUp <= result.totalDroppedLines,
+      `roll-up ${rolledUp} exceeds the total ${result.totalDroppedLines}`,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("should say the commit roll-up is partial when it cannot blame every file", async () => {
+  const root = await buildWideStaleCopy(61);
+  try {
+    const result = await checkStaleCopyWarning({ repoRoot: root });
+    assert.equal(result.status, "warned");
+    assert.ok(
+      result.blamedFiles < result.totalFiles,
+      "the fixture must be wider than the blame bound",
+    );
+    assert.match(
+      formatStaleCopyWarning(result),
+      /This list comes from the 60 largest file\(s\) of 61\. It is not complete\./,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("should keep the measured thresholds when an override is set but empty", async () => {
+  const root = await buildOrdinaryRefactor();
+  try {
+    const { stdout } = await run("node", [CLI], {
+      cwd: root,
+      env: {
+        ...process.env,
+        MERGE_GUARD_WARN_THRESHOLD: "",
+        MERGE_GUARD_WARN_MIN_FILES: "",
+        MERGE_GUARD_WARN_MIN_LINES: "",
+      },
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    assert.match(stdout, /stale-copy warning: silent\./);
+    assert.match(stdout, /under the 10 file and 500 line thresholds/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 

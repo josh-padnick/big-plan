@@ -92,12 +92,20 @@ export const DEFAULT_MIN_TOTAL_LINES = 500;
 
 // A warning a human cannot scan in a few seconds does not get adjudicated, so
 // the report is bounded. It blames at most MAX_BLAMED_FILES files, which bounds
-// the runtime, then names the worst MAX_REPORTED_COMMITS main commits across
-// the whole branch and the worst MAX_REPORTED_FILES files.
+// the runtime, then names the worst MAX_REPORTED_COMMITS main commits from
+// those blamed files and the worst MAX_REPORTED_FILES files. The commit roll-up
+// therefore covers the blamed files only, not always every file at risk, and
+// the report says so when the two counts differ. A bounded report must never
+// read as a complete one.
 const MAX_BLAMED_FILES = 60;
 const MAX_REPORTED_FILES = 12;
 const MAX_REPORTED_COMMITS = 8;
 const MAX_COMMITS_PER_FILE = 2;
+
+// One "git blame" call takes every dropped range of one file. A file with
+// thousands of small hunks would build a command line that the operating system
+// rejects, so the ranges go out in chunks under this many characters.
+const MAX_BLAME_ARG_CHARS = 60_000;
 
 /** Parses `git diff --numstat -z`, which writes a rename as two extra records. */
 const parseNumstat = (stdout) => {
@@ -112,26 +120,48 @@ const parseNumstat = (stdout) => {
     const [, added, removed, inlinePath] = match;
     // An empty third field means the next two records are the rename's old and
     // new path. Blame must read the old path, because that is where main's
-    // lines live.
+    // lines live, but both paths must stay on the record: git filters by
+    // pathspec before it pairs a rename, so a diff of the old path alone loses
+    // the destination and reads the file as a wholesale delete.
     const isRename = inlinePath === "";
     const path = isRename ? entries[index + 1] : inlinePath;
+    const newPath = isRename ? entries[index + 2] : inlinePath;
     if (isRename) {
       index += 2;
     }
-    if (added === "-" || removed === "-" || path === undefined) {
+    if (
+      added === "-" ||
+      removed === "-" ||
+      path === undefined ||
+      newPath === undefined
+    ) {
       continue; // A binary file has no lines to count.
     }
-    records.push({ path, removedLines: Number(removed) });
+    records.push({ path, newPath, removedLines: Number(removed) });
   }
   return records;
 };
 
-/** Reads the main-side line ranges that the landing tree drops for one path. */
-const readDroppedRanges = async (repoRoot, mainCommit, resultTree, path) => {
+/** Names both sides of a rename, so rename detection can pair them again. */
+const pathspecOf = (record) =>
+  record.newPath === record.path
+    ? [record.path]
+    : [record.path, record.newPath];
+
+/** Reads the main-side line ranges that the landing tree drops for one record. */
+const readDroppedRanges = async (repoRoot, mainCommit, resultTree, record) => {
   const stdout = await gitOrThrow(
     repoRoot,
-    ["diff", "-U0", "--find-renames", mainCommit, resultTree, "--", path],
-    `diff "${path}" between main and the landing tree`,
+    [
+      "diff",
+      "-U0",
+      "--find-renames",
+      mainCommit,
+      resultTree,
+      "--",
+      ...pathspecOf(record),
+    ],
+    `diff "${record.path}" between main and the landing tree`,
   );
   const ranges = [];
   for (const line of stdout.split("\n")) {
@@ -147,18 +177,42 @@ const readDroppedRanges = async (repoRoot, mainCommit, resultTree, path) => {
   return ranges;
 };
 
-/** Tallies, per main commit, how many of the dropped lines that commit wrote. */
+/** Groups the ranges into command lines that stay under the length limit. */
+const chunkRanges = (ranges) => {
+  const chunks = [];
+  let current = [];
+  let chars = 0;
+  for (const range of ranges) {
+    const spec = `${range.start},+${range.count}`;
+    const cost = spec.length + 4; // The "-L" flag, the value, and two spaces.
+    if (current.length > 0 && chars + cost > MAX_BLAME_ARG_CHARS) {
+      chunks.push(current);
+      current = [];
+      chars = 0;
+    }
+    current.push(spec);
+    chars += cost;
+  }
+  if (current.length > 0) {
+    chunks.push(current);
+  }
+  return chunks;
+};
+
+// Tallies, per main commit, how many of the dropped lines that commit wrote.
+// git blame accepts one -L option for each range, so one file costs one process
+// instead of one process for each hunk. A wide reformat can make thousands of
+// hunks, and a process for each one of them made the step take minutes.
 const blameDroppedLines = async (repoRoot, mainCommit, path, ranges) => {
   const perCommit = new Map();
-  for (const range of ranges) {
+  for (const chunk of chunkRanges(ranges)) {
     const stdout = await gitOrThrow(
       repoRoot,
       [
         "blame",
         "--line-porcelain",
         "--no-progress",
-        "-L",
-        `${range.start},+${range.count}`,
+        ...chunk.flatMap((spec) => ["-L", spec]),
         mainCommit,
         "--",
         path,
@@ -215,7 +269,7 @@ const collectFindings = async (repoRoot, mainCommit, resultTree, records) => {
       repoRoot,
       mainCommit,
       resultTree,
-      record.path,
+      record,
     );
     const perCommit = await blameDroppedLines(
       repoRoot,
@@ -290,7 +344,9 @@ export const checkStaleCopyWarning = async ({
 
     const overThreshold = parseNumstat(numstat)
       .filter((record) => record.removedLines >= thresholdLines)
-      .filter((record) => !declared.has(record.path))
+      .filter(
+        (record) => !pathspecOf(record).some((path) => declared.has(path)),
+      )
       .sort(
         (left, right) =>
           right.removedLines - left.removedLines ||
@@ -346,6 +402,7 @@ export const checkStaleCopyWarning = async ({
       ),
       findings: reported,
       moreFiles: overThreshold.length - reported.length,
+      blamedFiles: findings.length,
       totalFiles: overThreshold.length,
       totalDroppedLines,
     };
@@ -381,6 +438,11 @@ export const formatStaleCopyWarning = (result) => {
   if (result.moreCommitsAtRisk > 0) {
     lines.push(
       `  and ${result.moreCommitsAtRisk} more ${result.mainRef} commit(s)`,
+    );
+  }
+  if (result.blamedFiles < result.totalFiles) {
+    lines.push(
+      `  This list comes from the ${result.blamedFiles} largest file(s) of ${result.totalFiles}. It is not complete.`,
     );
   }
   lines.push("");
@@ -448,10 +510,18 @@ const isMain =
   process.argv[1] !== undefined &&
   fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 
-/** Reads one numeric override, falling back to the measured default. */
+// Reads one numeric override, and falls back to the measured default for every
+// value that is not a positive number. An empty value must fall back too: a
+// workflow that interpolates an unset repository variable sets the name to the
+// empty string, Number("") is 0, and a threshold of 0 makes the check fire on
+// every push. That is the exact failure the three thresholds exist to prevent.
 const numberFromEnv = (name, fallback) => {
-  const parsed = Number(process.env[name]);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
 // This repository's CI runs on "push", so no pull request exists at check time
