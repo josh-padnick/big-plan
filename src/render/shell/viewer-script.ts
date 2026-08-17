@@ -33,7 +33,10 @@
 // and embedded here as text (the same .toString() trick used for
 // compareDataTableValues below), because the review diff lens imports that
 // module directly while this string template cannot. Both callers therefore
-// fit a maximized wireframe screen identically.
+// fit a maximized wireframe screen identically. Any function embedded this way
+// must be self-contained: .toString() carries the body alone, so a module-level
+// constant, helper, or import it names is undefined here and fails silently.
+// wireframe-fit.ts owns that invariant and the test that enforces it.
 //
 // RE-WIRING. The review island replaces the whole article in place when the
 // agent publishes a revision and announces it with a document-level

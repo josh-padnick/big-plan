@@ -68,6 +68,7 @@ type WorkerFixtures = {
   readonly tableSchemaViewerUrl: string;
   readonly weightedAuditDecisionAnalysisViewerUrl: string;
   readonly wireframeFormFactorsViewerUrl: string;
+  readonly wireframeLongCaptionDesktopViewerUrl: string;
   readonly wireframeQualityViewerUrl: string;
   readonly wireframeSparseAppShellViewerUrl: string;
   readonly wireframeShortContentViewerUrl: string;
@@ -284,6 +285,24 @@ const WIREFRAME_SHORT_CONTENT_MDX = `# Short wireframe
   <Screen id="ready" name="Ready" device="phone">
     <Panel title="Ready">
       <Text text="The short state is complete." />
+    </Panel>
+  </Screen>
+</Wireframe>
+`;
+
+// A name far longer than any frame can hold on one line. It is the caption
+// contract's worst case: the two lines have to wrap inside the frame's width
+// at every review width and still leave the maximized frame room to fit.
+const WIREFRAME_LONG_CAPTION_DESKTOP_MDX = `# Long-caption desktop workspace
+
+<Wireframe id="long-caption-desktop" title="Long caption alignment">
+  <Screen
+    id="historical"
+    name="Historical change across a deliberately long reviewer-visible desktop screen caption that must wrap without outgrowing its frame while preserving readable typography, subordinate viewport metadata, frame alignment, and the complete maximized desktop silhouette at every supported review width"
+    device="desktop"
+  >
+    <Panel title="Review thread">
+      <Text text="The complete caption remains aligned with this desktop frame." />
     </Panel>
   </Screen>
 </Wireframe>
@@ -822,6 +841,20 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       const inputPath = join(outputDir, "wireframe-short-content.mdx");
       const outputPath = join(outputDir, "wireframe-short-content.html");
       await writeFile(inputPath, WIREFRAME_SHORT_CONTENT_MDX, "utf8");
+      await renderThroughCli({ inputPath, outputPath, outputDir });
+      await use(pathToFileURL(outputPath).href);
+      await rm(outputDir, { recursive: true, force: true });
+    },
+    { scope: "worker" },
+  ],
+  wireframeLongCaptionDesktopViewerUrl: [
+    async ({}, use) => {
+      const outputDir = await mkdtemp(
+        join(tmpdir(), "big-plan-wireframe-long-caption-desktop-"),
+      );
+      const inputPath = join(outputDir, "wireframe-long-caption-desktop.mdx");
+      const outputPath = join(outputDir, "wireframe-long-caption-desktop.html");
+      await writeFile(inputPath, WIREFRAME_LONG_CAPTION_DESKTOP_MDX, "utf8");
       await renderThroughCli({ inputPath, outputPath, outputDir });
       await use(pathToFileURL(outputPath).href);
       await rm(outputDir, { recursive: true, force: true });

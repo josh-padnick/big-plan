@@ -1,9 +1,170 @@
 // Browser tests of the wireframe reading journey: the drawing a reviewer
 // meets, walking a prototype from one screen to another and back, the
-// keyboard route through the same path, and true-size drawings scaling into
-// the review surface. Render-health failures are enforced by the fixtures.
+// keyboard route through the same path, the caption that names each screen
+// beneath it, and true-size drawings scaling into the review surface.
+// Render-health failures are enforced by the fixtures.
 
 import { boxOf, expect, test } from "./fixtures";
+
+type TestLocator = Parameters<typeof boxOf>[0];
+
+// Maximizing schedules a fit through a ResizeObserver, so waiting on the
+// attribute alone can measure geometry the fit has not answered for yet. The
+// frame's own zoom is the one value the fit always rewrites, so this waits
+// for that value to stop moving. It deliberately does not wait for it to
+// change: a maximized panel can offer the frame the same width the article
+// column did, and then the settled answer is the resting one.
+const maximizeAfterFrameFit = async (wireframe: TestLocator): Promise<void> => {
+  const frame = wireframe.locator(".wireframe-frame").first();
+  await wireframe.locator("[data-figure-maximize]").click();
+  await expect(wireframe).toHaveAttribute("data-figure-maximized", "");
+  let previous = Number.NaN;
+  await expect
+    .poll(async () => {
+      const zoom = await frame.evaluate((node) =>
+        Number.parseFloat(getComputedStyle(node).zoom),
+      );
+      const settled =
+        Number.isFinite(zoom) && zoom > 0 && Math.abs(zoom - previous) < 0.0001;
+      previous = zoom;
+      return settled;
+    })
+    .toBe(true);
+};
+
+// The caption is a figcaption pinned to the width the frame paints at, so its
+// edges land on the card's edges however far the drawing has been scaled.
+// The fit runs from a ResizeObserver, so the alignment is polled rather than
+// sampled once: a layout change that has not yet been fitted is a pending
+// answer, not a failing one.
+const expectCaptionAlignedToFrame = async (
+  screen: TestLocator,
+  tolerance = 4,
+): Promise<void> => {
+  await expect(screen).toBeVisible();
+  await expect
+    .poll(() =>
+      screen.evaluate((node) => {
+        const caption = node.querySelector<HTMLElement>(
+          ":scope > .wireframe-screen-caption",
+        );
+        const card = node.querySelector<HTMLElement>(
+          ":scope > .wireframe-frame-card",
+        );
+        if (caption === null || card === null) {
+          throw new Error("screen caption and frame card are incomplete");
+        }
+        const captionBox = caption.getBoundingClientRect();
+        const cardBox = card.getBoundingClientRect();
+        // A screen that is not displayed measures as an all-zero rect, which
+        // would make every edge agree and pass this vacuously.
+        if (cardBox.width === 0 || captionBox.width === 0) {
+          return Number.POSITIVE_INFINITY;
+        }
+        return Math.max(
+          Math.abs(captionBox.left - cardBox.left),
+          Math.abs(captionBox.right - cardBox.right),
+        );
+      }),
+    )
+    .toBeLessThan(tolerance);
+};
+
+// Everything the caption contract asserts about one rendered figcaption,
+// measured in one round trip so the desktop and mobile cases below state the
+// same bar rather than two drifting copies of it.
+const captionContractOf = async (wireframe: TestLocator) =>
+  wireframe.evaluate((node) => {
+    const body = node.querySelector<HTMLElement>(":scope > [data-figure-body]");
+    const screen = node.querySelector<HTMLElement>(".wireframe-screen");
+    const caption = node.querySelector<HTMLElement>(
+      ".wireframe-screen figcaption",
+    );
+    const card = node.querySelector<HTMLElement>(".wireframe-frame-card");
+    if (body === null || screen === null || caption === null || card === null) {
+      throw new Error("captioned screen is incomplete");
+    }
+    const name = caption.querySelector<HTMLElement>(".wireframe-screen-name");
+    const viewport = caption.querySelector<HTMLElement>(
+      ".wireframe-screen-viewport",
+    );
+    if (name === null || viewport === null) {
+      throw new Error("caption metadata is incomplete");
+    }
+    const bodyBox = body.getBoundingClientRect();
+    const captionBox = caption.getBoundingClientRect();
+    const cardBox = card.getBoundingClientRect();
+    const nameBox = name.getBoundingClientRect();
+    const viewportBox = viewport.getBoundingClientRect();
+    const captionStyle = getComputedStyle(caption);
+    const nameStyle = getComputedStyle(name);
+    const viewportStyle = getComputedStyle(viewport);
+    const nameLineHeight = Number.parseFloat(nameStyle.lineHeight);
+    return {
+      directChild: caption.parentElement === screen,
+      nameLineCount: nameBox.height / nameLineHeight,
+      captionTopGap: captionBox.top - cardBox.bottom,
+      leftDelta: Math.abs(captionBox.left - cardBox.left),
+      rightDelta: Math.abs(captionBox.right - cardBox.right),
+      metadataGap: viewportBox.top - nameBox.bottom,
+      nameDisplay: nameStyle.display,
+      nameFontSize: Number.parseFloat(nameStyle.fontSize),
+      nameLineHeight,
+      captionFont: captionStyle.fontFamily,
+      readingFont: getComputedStyle(document.body).fontFamily,
+      captionTracking: captionStyle.letterSpacing,
+      nameColor: nameStyle.color,
+      metadataColor: viewportStyle.color,
+      metadataDisplay: viewportStyle.display,
+      metadataFontSize: Number.parseFloat(viewportStyle.fontSize),
+      stackHeight: captionBox.bottom - cardBox.top,
+      availableHeight: bodyBox.height,
+      stackTopInset: cardBox.top - bodyBox.top,
+      stackBottomInset: bodyBox.bottom - captionBox.bottom,
+      horizontalOverflow: body.scrollWidth - body.clientWidth,
+      verticalOverflow: body.scrollHeight - body.clientHeight,
+    };
+  });
+
+const expectCaptionContract = (
+  contract: Awaited<ReturnType<typeof captionContractOf>>,
+  { alignmentTolerance }: { readonly alignmentTolerance: number },
+): void => {
+  // Semantics: the caption belongs to the screen's own figure, beneath it.
+  expect(contract.directChild).toBe(true);
+  expect(contract.captionTopGap).toBeGreaterThanOrEqual(10);
+  expect(contract.captionTopGap).toBeLessThanOrEqual(14);
+  // Typography: the reading sans at the caption step, not the sketch hand,
+  // and no tracking of its own.
+  expect(contract.captionFont).toBe(contract.readingFont);
+  expect(["normal", "0px"]).toContain(contract.captionTracking);
+  expect(contract.nameFontSize).toBe(14);
+  expect(contract.nameLineHeight / contract.nameFontSize).toBeGreaterThan(1.35);
+  expect(contract.nameLineHeight / contract.nameFontSize).toBeLessThan(1.55);
+  // Hierarchy: two stacked lines, the metadata subordinate in size and ink.
+  expect(contract.nameDisplay).toBe("block");
+  expect(contract.metadataDisplay).toBe("block");
+  expect(contract.metadataFontSize).toBe(12);
+  expect(contract.metadataFontSize).toBeLessThan(contract.nameFontSize);
+  expect(contract.metadataColor).not.toBe(contract.nameColor);
+  expect(contract.metadataGap).toBeGreaterThanOrEqual(4);
+  expect(contract.metadataGap).toBeLessThanOrEqual(6);
+  // Wrapping and fit: a long name takes more than one line, both lines stay
+  // on the frame, and the whole stack fits the panel with nothing to scroll.
+  expect(contract.nameLineCount).toBeGreaterThanOrEqual(2);
+  expect(contract.leftDelta).toBeLessThan(alignmentTolerance);
+  expect(contract.rightDelta).toBeLessThan(alignmentTolerance);
+  expect(contract.stackHeight).toBeLessThanOrEqual(
+    contract.availableHeight + 1,
+  );
+  expect(contract.stackTopInset).toBeGreaterThanOrEqual(-1);
+  expect(contract.stackBottomInset).toBeGreaterThanOrEqual(-1);
+  // The fit lands the stack on the panel's height exactly, and scrollHeight
+  // and clientHeight round independently, so a sub-pixel residue can show as
+  // one pixel - the same tolerance the stack height above already allows.
+  expect(contract.horizontalOverflow).toBeLessThanOrEqual(1);
+  expect(contract.verticalOverflow).toBeLessThanOrEqual(1);
+};
 
 test("should walk the wireframe prototype between screens", async ({
   page,
@@ -137,6 +298,12 @@ test("should maximize into a left screen rail, sequence it with arrow keys, and 
     await expect(
       rail.getByRole("button", { name: "My wallet" }),
     ).toHaveAttribute("aria-current", "true");
+    // The rail takes width from the screen box, so the frame refits into a
+    // narrower slot; the caption beneath it has to follow rather than keep
+    // the width it was drawn at and overhang the drawing it names.
+    await expectCaptionAlignedToFrame(
+      page.locator('[data-wireframe-screen="child-home"]'),
+    );
   });
 
   await test.step("clicking a rail item switches the active screen", async () => {
@@ -193,6 +360,38 @@ test("should maximize into a left screen rail, sequence it with arrow keys, and 
     await expect(
       page.locator('[data-wireframe-screen="child-home"]'),
     ).toBeVisible();
+  });
+});
+
+test("should align a long caption with a height-fitted desktop frame", async ({
+  page,
+  wireframeLongCaptionDesktopViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await page.goto(wireframeLongCaptionDesktopViewerUrl);
+
+  const wireframe = page.locator('[data-wireframe="long-caption-desktop"]');
+  await maximizeAfterFrameFit(wireframe);
+
+  expectCaptionContract(await captionContractOf(wireframe), {
+    alignmentTolerance: 4,
+  });
+});
+
+test("should keep a long wireframe caption aligned and readable on mobile", async ({
+  page,
+  wireframeLongCaptionDesktopViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(wireframeLongCaptionDesktopViewerUrl);
+
+  const wireframe = page.locator('[data-wireframe="long-caption-desktop"]');
+  await maximizeAfterFrameFit(wireframe);
+
+  // At phone width there is no slack to hide a misalignment in, so the
+  // caption has to land on the frame edge rather than merely near it.
+  expectCaptionContract(await captionContractOf(wireframe), {
+    alignmentTolerance: 2,
   });
 });
 

@@ -737,14 +737,9 @@ const WireframeElements = ({
 const Screen = ({
   screen,
   current,
-  named,
 }: {
   readonly screen: WireframeScreen;
   readonly current: boolean;
-  // Whether the screen's name is worth drawing. With one screen there is no
-  // switcher for it to name and the prose above already said what this is, so
-  // printing it again only competes with that.
-  readonly named: boolean;
 }) => {
   const preset = WIREFRAME_DEVICE_PRESETS[screen.device];
   const desktop = screen.device === "desktop";
@@ -752,38 +747,13 @@ const Screen = ({
   const workspaceViewport =
     desktop && screen.children.some((child) => child.element === "AppShell");
   return (
-    <section
+    <figure
       className="wireframe-screen mx-auto w-full overflow-x-auto [container-type:inline-size]"
-      aria-label={`${screen.name}, ${preset.label}`}
       data-wireframe-screen={screen.id}
       data-wireframe-device={screen.device}
       {...(current ? { "data-wireframe-current": "" } : {})}
     >
-      {/* Named screens sit opposite their viewport note so the switcher's
-          label leads the row. With one screen there is no name, and an empty
-          spacer would strand the note on the right edge under a left-aligned
-          figure title; the note then simply starts at the same left edge
-          (Alignment). */}
-      <div
-        className={`wireframe-screen-caption mb-1.5 flex flex-wrap gap-2 text-xs text-muted${
-          named ? " justify-between" : ""
-        }`}
-      >
-        {named ? (
-          <span className="wireframe-screen-name font-semibold tracking-caps">
-            {screen.name}
-          </span>
-        ) : null}
-        <span className="wireframe-screen-viewport">
-          {preset.label} · {preset.width} × {preset.height}px{" "}
-          {workspaceViewport
-            ? "workspace viewport"
-            : preset.heightPolicy === "fixed"
-              ? "fixed frame"
-              : "minimum · grows with content"}
-        </span>
-      </div>
-      <div className="wireframe-frame-card">
+      <div className="wireframe-frame-card mx-auto block w-fit">
         <div
           className="wireframe-frame box-border w-[var(--wf-outer)] overflow-hidden [zoom:1]"
           data-wireframe-device={screen.device}
@@ -816,7 +786,33 @@ const Screen = ({
           </div>
         </div>
       </div>
-    </section>
+      {/* The caption reads after the drawing it names, as a figure's caption
+          does: the reader looks at the screen, then learns what it is. It is a
+          direct child of the screen's own `<figure>` so the caption/figure
+          relationship is the one HTML already defines, rather than a styled
+          div a screen reader has to infer. The name leads on its own line and
+          the viewport note follows as a subordinate second line, because two
+          facts of unequal weight on one row read as one run-on label. Every
+          screen carries it, including a lone screen: a drawing with no name
+          under it is a drawing the reader has to name from context.
+
+          The fit module pins this element's width to the frame's painted
+          width, so both lines wrap inside the frame instead of running past
+          its edge. */}
+      <figcaption className="wireframe-screen-caption mx-auto mt-3 w-full text-sm">
+        <span className="wireframe-screen-name wireframe-screen-title block break-words">
+          {screen.name}
+        </span>
+        <span className="wireframe-screen-viewport mt-1 block break-words text-xs text-muted">
+          {preset.label} · {preset.width} × {preset.height}px{" "}
+          {workspaceViewport
+            ? "workspace viewport"
+            : preset.heightPolicy === "fixed"
+              ? "fixed frame"
+              : "minimum · grows with content"}
+        </span>
+      </figcaption>
+    </figure>
   );
 };
 
@@ -831,7 +827,7 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
   >
     <div className="wireframe-header flex w-full flex-wrap items-center gap-3">
       {model.title === undefined ? null : (
-        <figcaption className="wireframe-caption text-sm font-semibold text-ink">
+        <figcaption className="wireframe-caption wireframe-figure-title text-sm font-semibold text-ink">
           {model.title}
         </figcaption>
       )}
@@ -864,7 +860,6 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
             key={screen.id}
             screen={screen}
             current={screen.id === model.initialScreenId}
-            named={model.screens.length > 1}
           />
         ))}
       </div>

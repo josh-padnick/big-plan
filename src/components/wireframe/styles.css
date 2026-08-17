@@ -347,10 +347,12 @@ marks and a plan diff never jitters.
      background). It wraps outside the hand-drawn device bezel `.wireframe-frame`
      already draws for desktop/tablet/phone, so nothing doubles up inside it.
      The viewer script reads this padding and border back out of computed
-     style to keep the frame's fit-to-width math correct, so the two stay in
-     sync without a duplicated constant. */
+     style to keep the frame's uniform fit math correct, so the two stay in
+     sync without a duplicated constant, and pins this card to the width the
+     frame paints at so the caption beneath it can share that width. The
+     card's own box - block, shrink-to-fit, centred - is stated in utilities
+     on the markup that renders it; only the drawn chrome lives here. */
   .wireframe-frame-card {
-    display: inline-block;
     max-width: 100%;
     padding: 0.5rem;
     border: 1px solid var(--edge-c);

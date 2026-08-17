@@ -289,6 +289,31 @@ describe("block identity boundaries", () => {
     );
   });
 
+  it("should name a Wireframe by its own title, an authored heading, or the screen it draws", () => {
+    const wireframeLabel = (source: string): string | undefined =>
+      compile(source).blocks.find((block) => block.kind === "wireframe")?.label;
+    // A screen's caption names it over subordinate viewport metadata. Read as
+    // one run of text those two facts collide, so a screen must never name a
+    // whole wireframe through that caption.
+    expect(
+      wireframeLabel(
+        '## Flow\n\n<Wireframe id="plain">\n  <Screen id="approve" name="Approve step" device="desktop">\n    <Text text="No heading anywhere." />\n    <Button label="Approve" />\n  </Screen>\n</Wireframe>\n',
+      ),
+    ).toBe("Approve step");
+    // A figure that names itself outranks the screen beneath it.
+    expect(
+      wireframeLabel(
+        '## Flow\n\n<Wireframe id="named" title="Named wireframe">\n  <Screen id="review" name="Review step" device="desktop">\n    <Text text="No heading anywhere." />\n    <Button label="Approve" />\n  </Screen>\n</Wireframe>\n',
+      ),
+    ).toBe("Named wireframe");
+    // An authored heading inside the drawing outranks both.
+    expect(
+      wireframeLabel(
+        '## Flow\n\n<Wireframe id="panelled">\n  <Screen id="thread" name="Thread step" device="desktop">\n    <Panel title="Review thread">\n      <Text text="Body copy." />\n    </Panel>\n  </Screen>\n</Wireframe>\n',
+      ),
+    ).toBe("Review thread");
+  });
+
   it("should expose DataTable rows, cells, and columns as semantic sub-targets", () => {
     const { blocks } = compile(
       '## Gates\n\n<DataTable title="Rollout gates">\n\n```table\n| Gate | Owner |\n| --- | --- |\n| Durability | Service |\n```\n\n</DataTable>\n',
