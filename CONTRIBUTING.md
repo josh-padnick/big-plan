@@ -45,6 +45,28 @@ Repair the branch in one of two ways.
 The guard is deliberately narrow to keep false alarms near zero.
 The file header in `scripts/merge-guard/check.mjs` states what the guard does not catch, and it records the measured evidence behind both rules and behind the rejected detectors.
 
+### The stale-copy warning
+
+One loss shape gets past the guard: a branch that writes stale file bytes as ordinary fresh commits, which is how PR #117 overwrote five days of `main`.
+CI therefore also runs `scripts/merge-guard/warn-stale-copy.mjs` (also available as `bun run warn:stale-copy`).
+It counts the lines that the branch's landing tree drops from `main`, then names the `main` commits that wrote them.
+
+**This check never fails the build.** It exits 0 on every outcome, including its own internal failure, which it reports on a visible line.
+It is a warning because the measure cannot tell a stale copy from an honest large refactor: both delete `main` lines in bulk, and neither leaves any other trace.
+
+The warning speaks when at least 10 files each drop 5 or more `main` lines and the branch drops 500 or more such lines in total.
+Replayed over 109 real merges in this repository, that fires 13 times and catches both known loss events.
+The file header records the full measurements and the thresholds that were tried and rejected.
+
+When you see the warning:
+
+- If the branch rewrites that code on purpose, ignore it.
+- If the branch copied files from a stale branch or an old worktree, rebase and redo the change on top of the current `main`.
+- To silence one path on purpose, declare it with the same `Overwrites-main` trailer the blocking guard honours.
+
+**A human adjudicates every warning.** The captain decided on 2026-08-17 that firstmate reviews each one and determines whether an overwrite is really happening; no agent acts on it automatically.
+Silence is therefore not a promise that no work was lost. It only means the branch stayed under the thresholds.
+
 ## Styling changes
 
 There is no pixel-history CI gate and no visual contract in commit subjects.
