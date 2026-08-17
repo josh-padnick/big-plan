@@ -165,24 +165,48 @@ test("should compare, answer, and revise a Decision", async ({
   // answer of record. Each mode owns its own buttons, so seeing the other
   // mode's button at the same time is the regression this guards.
   const modeToggle = card.locator("[data-decision-mode-toggle]");
+  const proposalField = card.locator("[data-decision-proposal-text]");
+  const proposalNote = card.locator("[data-decision-proposal-note]");
   await expect(modeToggle).not.toBeChecked();
   await expect(
-    card.getByRole("button", { name: "Add to Queue" }),
+    card.getByRole("button", { name: "Add to Comments" }),
   ).toBeVisible();
   await expect(card.getByRole("button", { name: "Send now" })).toBeVisible();
   await expect(card.locator("[data-decision-confirm]")).toBeHidden();
+  // Each mode asks the question its own buttons answer, so the prompt and the
+  // note under it move with the toggle rather than covering both cases.
+  await expect(proposalField).toHaveAttribute(
+    "placeholder",
+    "Tell the agent how this decision should be changed.",
+  );
+  await expect(proposalNote).toHaveText(
+    "The agent will update the decision title, description, and/or available options.",
+  );
 
   await modeToggle.check();
+  await expect(proposalField).toHaveAttribute(
+    "placeholder",
+    "What did you decide?",
+  );
+  await expect(proposalNote).toHaveText(
+    "The agent will treat your response as your final decision here.",
+  );
   await expect(card.locator("[data-decision-confirm]")).toBeVisible();
   await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
   await expect(card.locator("[data-decision-confirm]")).toHaveText(
     "Confirm choice",
   );
-  await expect(card.getByRole("button", { name: "Add to Queue" })).toBeHidden();
+  await expect(
+    card.getByRole("button", { name: "Add to Comments" }),
+  ).toBeHidden();
   await expect(card.getByRole("button", { name: "Send now" })).toBeHidden();
 
   await modeToggle.uncheck();
   await expect(card.locator("[data-decision-confirm]")).toBeHidden();
+  await expect(proposalField).toHaveAttribute(
+    "placeholder",
+    "Tell the agent how this decision should be changed.",
+  );
 
   await card.locator("[data-decision-proposal-cancel]").click();
   await expect(card.locator("[data-decision-proposal]")).toBeHidden();

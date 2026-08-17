@@ -2501,6 +2501,15 @@ const wireDecisions = () => {
     const question = own("[data-decision-question]");
     const proposalText = own("[data-decision-proposal-text]");
     const modeToggle = own("[data-decision-mode-toggle]");
+    const proposalNote = own("[data-decision-proposal-note]");
+    // Both wordings are authored onto the elements that show them, so the
+    // shell picks between them rather than holding a second copy of the copy.
+    const wordFor = (node, mode, attribute) =>
+      node === null
+        ? null
+        : node.getAttribute(
+            "data-" + (mode ? "decision" : "feedback") + "-" + attribute,
+          );
     const proposalCancel = own("[data-decision-proposal-cancel]");
     const propose = own("[data-option-proposal]");
     const choices = ownAll("[data-decision-choice]");
@@ -2522,7 +2531,7 @@ const wireDecisions = () => {
     const proposalBatch = document.createElement("button");
     proposalBatch.type = "button";
     proposalBatch.className = "decision-proposal-action";
-    proposalBatch.textContent = "Add to Queue";
+    proposalBatch.textContent = "Add to Comments";
     proposalBatch.hidden = true;
     const proposalNow = document.createElement("button");
     proposalNow.type = "button";
@@ -2802,6 +2811,11 @@ const wireDecisions = () => {
       proposalBatch.hidden = !proposing || decisionMode;
       proposalNow.hidden = !proposing || decisionMode;
       if (modeToggle !== null) modeToggle.disabled = locked;
+      // The prompt and its note ask the question the live mode will answer.
+      const placeholder = wordFor(proposalText, decisionMode, "placeholder");
+      if (placeholder !== null) proposalText.placeholder = placeholder;
+      const note = wordFor(proposalNote, decisionMode, "note");
+      if (note !== null) proposalNote.textContent = note;
       proposalBatch.disabled = locked || proposalValue() === "";
       proposalNow.disabled = locked || proposalValue() === "";
       if (clear !== null) {

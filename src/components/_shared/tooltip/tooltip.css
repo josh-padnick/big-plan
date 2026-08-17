@@ -56,6 +56,16 @@ loses nothing when the hint never renders.
     transition: opacity 60ms ease-out 1s;
   }
 
+  /* The linger exists so hints do not flash at a reader sweeping across a row
+     of controls. A lone hint marked immediate is not in such a row: it is the
+     only way to learn what its control does, and waiting a second to answer
+     that reads as the page ignoring the reader. Every other tooltip keeps the
+     one-second wait. */
+  article [data-tooltip][data-tooltip-immediate]:hover::after,
+  article [data-tooltip][data-tooltip-immediate]:focus-visible::after {
+    transition: opacity 60ms ease-out;
+  }
+
   /* A control whose menu is open has already answered the question the hint
      would have answered, and the open menu occupies the same space. */
   article [data-tooltip][aria-expanded="true"]::after {
@@ -72,6 +82,13 @@ loses nothing when the hint never renders.
     article [data-tooltip]:hover::after,
     article [data-tooltip]:focus-visible::after {
       transition: opacity 0s linear 1s;
+    }
+
+    /* Override invariant: an immediate hint stays immediate here too. Reduced
+       motion removes the fade, not the decision about when the hint answers. */
+    article [data-tooltip][data-tooltip-immediate]:hover::after,
+    article [data-tooltip][data-tooltip-immediate]:focus-visible::after {
+      transition: none;
     }
   }
 }

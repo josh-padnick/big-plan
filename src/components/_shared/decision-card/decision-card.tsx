@@ -91,7 +91,17 @@ const RationalePanel = ({
 // words. It is the tooltip and the accessible name, so a pointer and a screen
 // reader are told the same thing.
 const MODE_HINT =
-  "By setting this to 'Make this my decision', we will save this as your official decision rather than requesting feedback from the agent to update this.";
+  'By setting this to "make this my decision," we will save this as your official decision. Alternatively, you can submit feedback to the agent to update this decision box and make a decision then.';
+
+// Each mode asks its own question. Feedback is the authored state, so a
+// script-free reader gets the wording that matches the buttons they can reach.
+const FEEDBACK_PLACEHOLDER =
+  "Tell the agent how this decision should be changed.";
+const FEEDBACK_NOTE =
+  "The agent will update the decision title, description, and/or available options.";
+const DECISION_PLACEHOLDER = "What did you decide?";
+const DECISION_NOTE =
+  "The agent will treat your response as your final decision here.";
 
 // The escape hatch, demoted to a quiet link so it never competes with the
 // real options. Its radio still belongs to the group, so proposing clears
@@ -125,17 +135,28 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
         <label className="sr-only" htmlFor={textId}>
           {"Proposed approach"}
         </label>
+        {/* The prompt and the note under it name whichever mode is live, so
+            the reader is asked the question their words will actually answer
+            rather than one phrasing covering both. Both wordings ship as data
+            on the elements that show them: the authored state is the feedback
+            mode, which is what a script-free reader gets, and the shell swaps
+            in the decision wording without owning a second copy of the text. */}
         <textarea
           className="decision-proposal-input block w-full"
           id={textId}
           rows={3}
-          placeholder="Describe the behavior you want, and the constraint that rules the options out."
+          placeholder={FEEDBACK_PLACEHOLDER}
           data-decision-proposal-text=""
+          data-feedback-placeholder={FEEDBACK_PLACEHOLDER}
+          data-decision-placeholder={DECISION_PLACEHOLDER}
         />
-        <p className="mt-1.5 mb-0 text-xs text-muted">
-          {
-            "Use this text box to either request changes or directly submit a decision."
-          }
+        <p
+          className="mt-1.5 mb-0 text-xs text-muted"
+          data-decision-proposal-note=""
+          data-feedback-note={FEEDBACK_NOTE}
+          data-decision-note={DECISION_NOTE}
+        >
+          {FEEDBACK_NOTE}
         </p>
         {/* The composer has exactly two outcomes, and reading them off three
             buttons made the reader infer the difference. The toggle states it
@@ -157,6 +178,7 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
             className="decision-mode-hint"
             data-tooltip={MODE_HINT}
             data-tooltip-wrap=""
+            data-tooltip-immediate=""
             tabIndex={0}
             role="note"
             aria-label={MODE_HINT}
