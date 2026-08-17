@@ -25,7 +25,7 @@ export const fitWireframeScreen = (screen: HTMLElement): void => {
   // strictly toward that point and it settles within two or three; the cap
   // only bounds a caption whose wrapping oscillates by a fraction of a pixel.
   const maximumFitPasses = 8;
-  // Half a thousandth of a scale factor is well below one painted pixel on
+  // A ten-thousandth of a scale factor is well below one painted pixel on
   // any device this draws, so a pass that moves less has settled.
   const fitSettled = 0.0001;
   // A screen box smaller than the caption plus the card's own inset leaves a

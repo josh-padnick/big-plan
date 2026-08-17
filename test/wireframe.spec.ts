@@ -39,6 +39,7 @@ const expectCaptionAlignedToFrame = async (
   screen: TestLocator,
   tolerance = 4,
 ): Promise<void> => {
+  await expect(screen).toBeVisible();
   await expect
     .poll(() =>
       screen.evaluate((node) => {
@@ -53,6 +54,11 @@ const expectCaptionAlignedToFrame = async (
         }
         const captionBox = caption.getBoundingClientRect();
         const cardBox = card.getBoundingClientRect();
+        // A screen that is not displayed measures as an all-zero rect, which
+        // would make every edge agree and pass this vacuously.
+        if (cardBox.width === 0 || captionBox.width === 0) {
+          return Number.POSITIVE_INFINITY;
+        }
         return Math.max(
           Math.abs(captionBox.left - cardBox.left),
           Math.abs(captionBox.right - cardBox.right),
