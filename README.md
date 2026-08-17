@@ -41,7 +41,7 @@ Rendered output defaults to `<file>.html`; compiled output defaults to `<file>.m
 Rendered and compiled output sit next to the input by default, while the MDX file remains the canonical source and JSON is always derived output.
 See the [two-artifact delivery contract](adr/0001-two-artifact-plan-delivery.md).
 MermaidDiagram rendering additionally uses the pinned headless Chromium renderer at compile time; on a clean install, provision it once with `bunx playwright@1.61.1 install chromium`.
-A responsive table of contents links to the document's level-two headings and highlights the section being read, and a `Settings` dialog lets a reviewer choose a saved `Light`, `Dark`, or `System` appearance separately from one of five colour themes.
+A responsive table of contents links to the document's level-two headings and highlights the section being read, and a `Settings` dialog holds a sidebar of settings pages where a reviewer chooses a saved `Light`, `Dark`, or `System` appearance on one page and one of five colour themes on another.
 
 Plans are prose plus validated components, like this callout:
 

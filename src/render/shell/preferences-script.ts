@@ -1,6 +1,6 @@
-// Owns the deferred browser behavior for the settings dialog: live appearance
-// and colour-theme changes, guarded persistence, focus isolation, and keyboard
-// escape routes.
+// Owns the deferred browser behavior for the settings dialog: sidebar section
+// switching, live appearance and colour-theme changes, guarded persistence,
+// focus isolation, and keyboard escape routes.
 
 import {
   PREFERENCES_RECORD_VERSION,
@@ -18,14 +18,24 @@ export const PREFERENCES_SCRIPT = `<script>
   const palettes = Array.from(
     document.querySelectorAll("[data-preference-palette]"),
   );
+  const sectionList = document.querySelector("[data-preferences-sections]");
+  const sections = Array.from(
+    document.querySelectorAll("[data-preferences-section]"),
+  );
+  const panels = Array.from(
+    document.querySelectorAll("[data-preferences-panel]"),
+  );
   if (
     !(control instanceof HTMLElement) ||
     !(dialog instanceof HTMLElement) ||
     !(backdrop instanceof HTMLElement) ||
     !(openButton instanceof HTMLButtonElement) ||
     !(closeButton instanceof HTMLButtonElement) ||
+    !(sectionList instanceof HTMLElement) ||
     modes.length === 0 ||
-    palettes.length === 0
+    palettes.length === 0 ||
+    sections.length === 0 ||
+    panels.length !== sections.length
   )
     return;
 
@@ -51,6 +61,27 @@ export const PREFERENCES_SCRIPT = `<script>
   const applyMode = (mode) => {
     if (mode === "system") document.documentElement.removeAttribute("data-theme");
     else document.documentElement.setAttribute("data-theme", mode);
+  };
+
+  // The sidebar is the whole navigation: one item is selected, one panel is
+  // shown, and the rest are hidden rather than stacked below. Selection is a
+  // roving tab stop, so the trap counts the list once however long it grows.
+  const showSection = (next) => {
+    for (const tab of sections) {
+      const selected = tab.getAttribute("data-preferences-section") === next;
+      tab.setAttribute("aria-selected", selected ? "true" : "false");
+      tab.tabIndex = selected ? 0 : -1;
+    }
+    for (const panel of panels) {
+      panel.hidden = panel.getAttribute("data-preferences-panel") !== next;
+    }
+  };
+
+  const selectedSection = () => {
+    const selected = sections.find(
+      (tab) => tab.getAttribute("aria-selected") === "true",
+    );
+    return selected ?? sections[0];
   };
 
   const applyPalette = (palette) => {
@@ -134,11 +165,10 @@ export const PREFERENCES_SCRIPT = `<script>
     openButton.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
       isolate();
-      const selected = modes.find(
-        (candidate) =>
-          candidate instanceof HTMLInputElement && candidate.checked,
-      );
-      (selected || closeButton).focus();
+      // The sidebar is where reading the sheet starts, so the open dialog hands
+      // the keyboard to the selected item rather than to a control inside a
+      // panel the reviewer may not be looking at.
+      selectedSection().focus();
     } else {
       restoreIsolation();
       if (returnFocus) {
@@ -164,6 +194,7 @@ export const PREFERENCES_SCRIPT = `<script>
       : "default";
   };
 
+  showSection(selectedSection().getAttribute("data-preferences-section"));
   syncGroup(modes, "data-preference-mode", currentMode());
   syncGroup(palettes, "data-preference-palette", currentPalette());
   control.hidden = false;
@@ -188,6 +219,36 @@ export const PREFERENCES_SCRIPT = `<script>
       save();
     });
   }
+  for (const tab of sections) {
+    tab.addEventListener("click", (event) => {
+      event.preventDefault();
+      showSection(tab.getAttribute("data-preferences-section"));
+    });
+  }
+  // Arrow keys walk the sidebar on either axis, because the same list is a
+  // column on a wide screen and a row on a narrow one.
+  sectionList.addEventListener("keydown", (event) => {
+    const target =
+      event.target instanceof Element
+        ? event.target.closest("[data-preferences-section]")
+        : null;
+    const index = target === null ? -1 : sections.indexOf(target);
+    if (index === -1) return;
+    const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[
+      event.key
+    ];
+    if (step === undefined && event.key !== "Home" && event.key !== "End")
+      return;
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? sections.length - 1
+          : (index + step + sections.length) % sections.length;
+    showSection(sections[next].getAttribute("data-preferences-section"));
+    sections[next].focus();
+  });
   for (const paletteControl of palettes) {
     paletteControl.addEventListener("change", () => {
       const palette = paletteControl.getAttribute("data-preference-palette");

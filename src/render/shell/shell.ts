@@ -13,8 +13,10 @@ import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { MONITOR_ICON } from "../../icons/lucide/monitor.js";
 import { MOON_ICON } from "../../icons/lucide/moon.js";
+import { PALETTE_ICON } from "../../icons/lucide/palette.js";
 import { SETTINGS_ICON } from "../../icons/lucide/settings.js";
 import { SUN_ICON } from "../../icons/lucide/sun.js";
+import { SUN_MOON_ICON } from "../../icons/lucide/sun-moon.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import { LOGO_DARK_SRC, LOGO_LIGHT_SRC } from "../branding.generated.js";
@@ -241,39 +243,89 @@ const renderPaletteOption = ({
 <span class="min-w-0 grow truncate text-sm font-semibold leading-tight">${escapeHtml(title)}</span>
 </label>`;
 
-// The dialog is intentionally a focused presentation chooser: how light the
-// page is, and whose colours fill it. Future settings join only when
-// actionable, so an unavailable roadmap item never competes with the
-// reviewer's current decisions.
+// One sidebar item, and the settings page it opens. The sidebar exists so a
+// later setting joins the list instead of lengthening one page: a new entry
+// here is a new item and a new panel, and nothing else moves.
+const renderPreferencesSection = ({
+  section,
+  title,
+  icon,
+  selected,
+}: {
+  readonly section: string;
+  readonly title: string;
+  readonly icon: typeof SUN_ICON;
+  readonly selected: boolean;
+}): string =>
+  `<button class="flex min-h-11 min-w-0 shrink-0 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-3 text-left text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-selected:bg-surface aria-selected:font-semibold aria-selected:text-ink wide:min-h-9 wide:w-full wide:px-2" type="button" role="tab" id="big-plan-settings-tab-${section}" aria-controls="big-plan-settings-panel-${section}" aria-selected="${selected ? "true" : "false"}" tabindex="${selected ? "0" : "-1"}" data-preferences-section="${section}">${lucideIconToHtml({ icon, className: "size-4 shrink-0" })}<span class="truncate">${escapeHtml(title)}</span></button>`;
+
+// A settings page: its own heading, its own explanation, and one control
+// group. Beside the sidebar the heading is the page title, so the pane says
+// what it is once the reviewer's eye has left the rail. Stacked under the
+// sidebar it would only repeat the chip one line above it, so there it stays
+// in the accessibility tree and out of the reading order.
+const renderPreferencesPanel = ({
+  section,
+  title,
+  description,
+  controls,
+  selected,
+}: {
+  readonly section: string;
+  readonly title: string;
+  readonly description: string;
+  readonly controls: string;
+  readonly selected: boolean;
+}): string =>
+  `<section class="min-w-0" id="big-plan-settings-panel-${section}" role="tabpanel" tabindex="-1" aria-labelledby="big-plan-settings-tab-${section}" data-preferences-panel="${section}"${selected ? "" : " hidden"}>
+<h3 class="sr-only m-0 text-lg font-semibold leading-tight wide:not-sr-only" id="big-plan-${section}-label">${escapeHtml(title)}</h3>
+<p class="mt-1 text-sm leading-normal text-muted">${escapeHtml(description)}</p>
+${controls}
+</section>`;
+
+// The dialog is a settings surface rather than one long page: a sidebar of
+// settings on the left, the chosen one on the right. Appearance and Color theme
+// are peers there, so neither competes with the other for the reviewer's
+// attention and a later setting costs one more sidebar item.
 const renderPreferencesDialog = (): string =>
-  `<div class="fixed inset-0 z-50 flex items-center justify-center bg-backdrop/70 p-3 wide:grid wide:place-items-center wide:p-4" data-preferences-backdrop hidden>
-<section class="max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-edge bg-paper p-4 text-ink shadow-floating wide:max-h-[calc(100dvh-2rem)] wide:p-8" data-preferences-dialog role="dialog" aria-modal="true" aria-labelledby="big-plan-preferences-title">
-<div class="flex items-start justify-between gap-4">
-<div>
-<h2 class="m-0 text-lg font-semibold leading-tight" id="big-plan-preferences-title">Settings</h2>
-<p class="mt-2 max-w-sm text-sm leading-normal text-muted">Preferences are saved for every review document in this browser.</p>
-</div>
+  `<div class="fixed inset-0 z-50 flex items-center justify-center bg-backdrop/70 p-3 wide:p-4" data-preferences-backdrop hidden>
+<section class="max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-edge bg-paper p-4 text-ink shadow-floating wide:max-h-[calc(100dvh-2rem)] wide:max-w-3xl wide:p-8" data-preferences-dialog role="dialog" aria-modal="true" aria-labelledby="big-plan-preferences-title">
+<div class="flex items-center justify-between gap-4">
+<h2 class="m-0 text-xs font-semibold tracking-caps uppercase text-subtle" id="big-plan-preferences-title">Settings</h2>
 <button class="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" type="button" data-preferences-close aria-label="Close settings">${lucideIconToHtml({ icon: X_ICON, className: "size-4" })}</button>
 </div>
-<div class="mt-4 border-t border-edge pt-4 wide:mt-6 wide:pt-6">
-<h3 class="m-0 text-sm font-semibold" id="big-plan-appearance-label">Appearance</h3>
-<p class="mt-1 text-sm leading-normal text-muted">Choose how Big Plan looks.</p>
-<fieldset class="mt-3 grid min-w-0 grid-cols-1 gap-2 border-0 p-0 wide:mt-4 wide:grid-cols-3 wide:gap-3" aria-labelledby="big-plan-appearance-label" role="radiogroup">
+<div class="mt-4 border-t border-edge pt-4 wide:mt-6 wide:grid wide:grid-cols-[12rem_1fr] wide:gap-6 wide:pt-6">
+<div class="flex min-w-0 gap-1 overflow-x-auto border-b border-edge pb-3 wide:flex-col wide:overflow-x-visible wide:border-r wide:border-b-0 wide:pr-4 wide:pb-0" role="tablist" aria-orientation="vertical" aria-label="Settings sections" data-preferences-sections>
+${renderPreferencesSection({ section: "appearance", title: "Appearance", icon: SUN_MOON_ICON, selected: true })}
+${renderPreferencesSection({ section: "palette", title: "Color theme", icon: PALETTE_ICON, selected: false })}
+</div>
+<div class="mt-4 min-w-0 wide:mt-0">
+${renderPreferencesPanel({
+  section: "appearance",
+  title: "Appearance",
+  description: "Choose how light or dark Big Plan looks.",
+  selected: true,
+  controls: `<fieldset class="mt-3 grid min-w-0 grid-cols-1 gap-2 border-0 p-0 wide:mt-4 wide:grid-cols-3 wide:gap-3" aria-labelledby="big-plan-appearance-label" role="radiogroup">
 <legend class="sr-only">Appearance</legend>
 ${renderPreferenceOption({ mode: "light", title: "Light", description: "Always light", icon: SUN_ICON })}
 ${renderPreferenceOption({ mode: "dark", title: "Dark", description: "Always dark", icon: MOON_ICON })}
 ${renderPreferenceOption({ mode: "system", title: "System", description: "Match device", icon: MONITOR_ICON })}
-</fieldset>
-</div>
-<div class="mt-4 border-t border-edge pt-4 wide:mt-6 wide:pt-6">
-<h3 class="m-0 text-sm font-semibold" id="big-plan-palette-label">Color theme</h3>
-<p class="mt-1 text-sm leading-normal text-muted">Choose which colors Big Plan uses. Each theme works in both light and dark.</p>
-<fieldset class="mt-3 grid min-w-0 grid-cols-1 gap-2 border-0 p-0 wide:mt-4" aria-labelledby="big-plan-palette-label" role="radiogroup">
+</fieldset>`,
+})}
+${renderPreferencesPanel({
+  section: "palette",
+  title: "Color theme",
+  description:
+    "Choose which colors Big Plan uses. Each theme works in both light and dark.",
+  selected: false,
+  controls: `<fieldset class="mt-3 grid min-w-0 grid-cols-1 gap-2 border-0 p-0 wide:mt-4" aria-labelledby="big-plan-palette-label" role="radiogroup">
 <legend class="sr-only">Color theme</legend>
 ${PALETTE_OPTIONS.map(renderPaletteOption).join("\n")}
-</fieldset>
-<p class="mt-3 flex items-center gap-2 text-xs leading-normal text-muted wide:mt-4" data-preferences-status>${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes apply immediately and are saved automatically.</span></p>
+</fieldset>`,
+})}
 </div>
+</div>
+<p class="mt-4 flex items-center gap-2 text-xs leading-normal text-muted wide:mt-6" data-preferences-status>${lucideIconToHtml({ icon: CHECK_ICON, className: "size-3.5 shrink-0 text-accent" })}<span>Changes apply immediately and are saved for every review document in this browser.</span></p>
 </section>
 </div>`;
 
