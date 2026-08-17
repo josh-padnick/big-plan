@@ -154,8 +154,8 @@ edits only the authoritative MDX when appropriate, validates the new render,
 and publishes one outcome for every comment.
 
 Messages sent while the agent is handling another request are received immediately and wait in delivery order.
-A sent thread is **Queued** and says **Waiting for an agent** until its request holds a live claim.
-A waiting turn shows **Queued, _N_ ahead** when earlier unanswered work exists, then reaches the agent when that earlier work finishes.
+A sent thread reports that wait in two places until its request holds a live claim: the comment rail groups it under the **Queued** heading and numbers its card by position within that group, while the status block inside the thread reads **Waiting for an agent**.
+That in-thread block adds the line **Queued, _N_ ahead** above the headline when earlier unanswered work exists, then reaches the agent when that earlier work finishes.
 While that claim remains live, the thread says **Working**.
 If the lease lapses before a response commits, the thread returns to the queued and waiting state until an agent picks it up again.
 A real response records an `answered`, `changed`, `warning`, `needs-input`, or `declined` outcome and shows the agent's message.
