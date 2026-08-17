@@ -3144,6 +3144,9 @@ const SentThread = ({
   const [resolvedWorkError, setResolvedWorkError] = useState<string | null>(
     null,
   );
+  useEffect(() => {
+    if (!resolved) setResolvedWorkError(null);
+  }, [resolved]);
   const sendReply = (bodyOverride?: string) => {
     const body = (bodyOverride ?? reply).trim();
     if (identity === null || body === "") return;

@@ -72,7 +72,14 @@ test("should refuse a reply on a resolved thread and keep the typed text", async
   await thread
     .getByRole("button", { name: `Expand queued comment: ${commentBody}` })
     .click();
+  const canceled = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/agent-cancel") &&
+      response.request().method() === "POST",
+  );
   await thread.getByRole("button", { name: "Cancel request" }).click();
+  expect((await canceled).ok()).toBe(true);
+  await expect(thread).toContainText("Request canceled");
   await thread.getByRole("button", { name: "Resolve thread" }).click();
   await rail.getByText("Resolved (1)").click();
   const resolvedThread = rail
@@ -88,6 +95,19 @@ test("should refuse a reply on a resolved thread and keep the typed text", async
     resolvedThread.getByText(RESOLVED_THREAD_NEW_WORK_ERROR),
   ).toBeVisible();
   await expect(replyBox).toHaveValue(replyBody);
+
+  await resolvedThread
+    .getByRole("button", { name: "Unresolve thread" })
+    .click();
+  const reopenedThread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: commentBody });
+  await expect(
+    reopenedThread.getByText(RESOLVED_THREAD_NEW_WORK_ERROR),
+  ).toHaveCount(0);
+  await expect(reopenedThread.getByLabel("Reply to the agent")).toHaveValue(
+    replyBody,
+  );
 });
 
 test("should keep one staged comment after reloading the live review", async ({
