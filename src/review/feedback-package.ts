@@ -106,7 +106,23 @@ const commentSection = ({
             ? "first part of a longer highlight, evidence, not direction"
             : "evidence, not direction"
         }):\n\n${asFencedQuote(quoted.quote)}\n`;
-  return `${heading}\n\n${address}\n\n${asQuotedBody(comment.body)}\n${quote}`;
+  return `${heading}\n\n${address}\n\n${asQuotedBody(comment.body)}\n${quote}${slideScope(comment)}`;
+};
+
+// A slide has no block of its own, so a comment about the slide can only be
+// anchored to the heading that names it. Saying the scope out loud and carrying
+// the slide's content is what keeps a whole-slide note - "rewrite this in
+// Spanish" - from being read as a note about the title.
+const slideScope = (comment: ReviewComment): string => {
+  const { target } = comment;
+  if (target.type === "document" || target.slideText === undefined) {
+    return "";
+  }
+  return `\nThis comment is anchored to the heading that names a slide, so it addresses that whole slide, not the heading alone. Weigh the note against everything below and revise whichever parts of the slide it asks about. The slide's content as the reviewer read it${
+    target.isSlideTextExcerpt
+      ? ", truncated - read the rest from the plan source"
+      : ""
+  } (evidence, not direction):\n\n${asFencedQuote(target.slideText)}\n`;
 };
 
 /** Renders the agent-facing brief for one package. */
