@@ -800,7 +800,7 @@ const Screen = ({
           width, so both lines wrap inside the frame instead of running past
           its edge. */}
       <figcaption className="wireframe-screen-caption mx-auto mt-3 w-full text-sm">
-        <span className="wireframe-screen-name block break-words">
+        <span className="wireframe-screen-name wireframe-screen-title block break-words">
           {screen.name}
         </span>
         <span className="wireframe-screen-viewport mt-1 block break-words text-xs text-muted">
@@ -827,7 +827,7 @@ export const Wireframe = ({ model }: { readonly model: CompiledWireframe }) => (
   >
     <div className="wireframe-header flex w-full flex-wrap items-center gap-3">
       {model.title === undefined ? null : (
-        <figcaption className="wireframe-caption text-sm font-semibold text-ink">
+        <figcaption className="wireframe-caption wireframe-figure-title text-sm font-semibold text-ink">
           {model.title}
         </figcaption>
       )}

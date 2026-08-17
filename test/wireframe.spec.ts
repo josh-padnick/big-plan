@@ -376,6 +376,28 @@ test("should align a long caption with a height-fitted desktop frame", async ({
   });
 });
 
+test("should name a heading-free wireframe by its title, or by its screen when untitled", async ({
+  page,
+  wireframeLongCaptionDesktopViewerUrl,
+}) => {
+  await page.goto(wireframeLongCaptionDesktopViewerUrl);
+
+  // The screen caption is the only figcaption a heading-free screen offers, and
+  // it holds a name over subordinate viewport metadata. Read as one run of
+  // text those two facts collide, so the name alone has to name the block.
+  await expect(
+    page.locator('[data-wireframe="untitled-heading-free"]'),
+  ).toHaveAttribute("data-block-label", "Approve step");
+  // A figure that names itself still wins over the screen beneath it.
+  await expect(
+    page.locator('[data-wireframe="titled-heading-free"]'),
+  ).toHaveAttribute("data-block-label", "Titled heading-free wireframe");
+  // And an authored heading inside the drawing still outranks both.
+  await expect(
+    page.locator('[data-wireframe="long-caption-desktop"]'),
+  ).toHaveAttribute("data-block-label", "Review thread");
+});
+
 test("should keep a long wireframe caption aligned and readable on mobile", async ({
   page,
   wireframeLongCaptionDesktopViewerUrl,

@@ -306,6 +306,20 @@ const WIREFRAME_LONG_CAPTION_DESKTOP_MDX = `# Long-caption desktop workspace
     </Panel>
   </Screen>
 </Wireframe>
+
+<Wireframe id="untitled-heading-free">
+  <Screen id="approve" name="Approve step" device="desktop">
+    <Text text="No heading anywhere, so the screen name is the only title." />
+    <Button label="Approve" />
+  </Screen>
+</Wireframe>
+
+<Wireframe id="titled-heading-free" title="Titled heading-free wireframe">
+  <Screen id="review" name="Review step" device="desktop">
+    <Text text="No heading anywhere, so the figure's own title still names it." />
+    <Button label="Approve" />
+  </Screen>
+</Wireframe>
 `;
 
 const WIREFRAME_SPARSE_APP_SHELL_MDX = `# Sparse application shells
