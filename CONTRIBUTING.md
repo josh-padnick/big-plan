@@ -76,7 +76,7 @@ When you change anything a reader sees:
 
 - Pick values from the scales in [_internal/DESIGN_PRINCIPLES.md](_internal/DESIGN_PRINCIPLES.md) rather than inventing new ones.
 - Render an affected example, such as `node bin/big-plan.mjs render examples/all-components.mdx`, and read the result in both light and dark appearances at desktop and phone widths before opening the pull request. For colour-theme work, exercise every affected theme.
-- Keep `bun run lint` green: the stylesheet-contract and design-system checks enforce the CSS escape-hatch rules and the declaration ratchet.
+- Keep `bun run lint` green: the stylesheet-contract and design-system checks enforce the CSS escape-hatch rules and the declaration ratchet, and the palette check enforces every colour theme's ramp completeness and contrast floor.
 - Describe the intended visual change in the pull request so a reviewer knows what to look at.
 
 See [AGENTS.md](AGENTS.md) for architecture, [_internal/DESIGN_PRINCIPLES.md](_internal/DESIGN_PRINCIPLES.md) for the design scales a visual change picks from, [_internal/ENGINEERING_PRACTICES.md](_internal/ENGINEERING_PRACTICES.md) for engineering practices, and [README.md](README.md) for development commands.
