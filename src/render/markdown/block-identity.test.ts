@@ -99,6 +99,56 @@ describe("block identity scopes", () => {
   });
 });
 
+describe("block identity slide scope", () => {
+  const slideTextOf = ({
+    blocks,
+    id,
+  }: {
+    readonly blocks: ReadonlyArray<BlockDescriptor>;
+    readonly id: string;
+  }): string | undefined => blocks.find((block) => block.id === id)?.slideText;
+
+  it("should carry a slide's whole content on the heading that names it", () => {
+    const { blocks } = compile(
+      "## Sequencing\n\nAgree the order.\n\n- Schema\n",
+    );
+    expect(slideTextOf({ blocks, id: "section/sequencing/heading-1" })).toBe(
+      "Sequencing\n\nAgree the order.\n\nSchema",
+    );
+  });
+
+  it("should leave a slide's body blocks without a scope of their own", () => {
+    const { blocks } = compile("## Sequencing\n\nAgree the order.\n");
+    expect(
+      slideTextOf({ blocks, id: "section/sequencing/paragraph-1" }),
+    ).toBeUndefined();
+  });
+
+  it("should keep nested sub-slides out of their parent's content", () => {
+    const { blocks } = compile("## Design\n\nIntro.\n\n### Pipeline\n\nHow.\n");
+    expect(slideTextOf({ blocks, id: "section/design/heading-1" })).toBe(
+      "Design\n\nIntro.",
+    );
+    expect(slideTextOf({ blocks, id: "section/pipeline/heading-1" })).toBe(
+      "Pipeline\n\nHow.",
+    );
+  });
+
+  it("should say a slide's content once when a block declares sub-targets", () => {
+    const { blocks } = compile(
+      "## Costs\n\n| Tier | Price |\n| --- | --- |\n| Free | 0 |\n",
+    );
+    expect(slideTextOf({ blocks, id: "section/costs/heading-1" })).toBe(
+      "Costs\n\nTier\n\nPrice\n\nFree\n\n0",
+    );
+  });
+
+  it("should leave the document scope above the first slide without one", () => {
+    const { blocks } = compile("# Plan\n\nThe lede.\n\n## One\n\nA.\n");
+    expect(slideTextOf({ blocks, id: "document/heading-1" })).toBeUndefined();
+  });
+});
+
 describe("block identity kinds and labels", () => {
   it("should name a component by its own heading when it has one", () => {
     const { blocks } = compile(DECISION_FIXTURE);
