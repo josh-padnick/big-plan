@@ -160,7 +160,8 @@ Rules:
 A reviewer can swap the ramps without swapping the roles.
 `data-theme` picks light or dark; `data-palette` picks whose shades fill both halves.
 A colour theme is therefore a set of ramps behind a shared role mapping, so a role added here is themed everywhere at once.
-The sole role exception is `--ink-c`, whose light half cannot share a ramp position with the dark hunk band; Brutalist also restates the shape scales under rule 5 below.
+Two role categories are excepted: `--ink-c`, whose light half cannot share a ramp position with the dark hunk band, and the `--syntax-*` token hues, which come from a palette's accents rather than a ramp position.
+Brutalist also restates the shape scales under rule 5 below.
 
 Rules:
 
@@ -168,7 +169,8 @@ Rules:
    Every role is `light-dark(light, dark)` in `src/render/global.css`.
    A palette that needs to restate a role has found a missing ramp step; add the step instead.
    `--edge-strong-c` has its own two steps for exactly that reason: a strong edge and a secondary text colour want the same lightness in the warm greys and nothing like it anywhere else.
-   `--ink-c` is the one exception: a guest palette's light primary text is its own mid-dark colour, which cannot also serve as the dark hunk band on `--grey-925`.
+   `--ink-c` is the first exception: a guest palette's light primary text is its own mid-dark colour, which cannot also serve as the dark hunk band on `--grey-925`.
+   The `--syntax-*` token hues are the second, restated in `src/render/markdown/syntax-highlighting.css`: a token hue is a distinction between kinds of code, so it takes the palette's own accents rather than a ramp position these ramps hold.
 2. **A theme is an adaptation, not a port.**
    A terminal palette names a foreground, a background, and eight accents.
    Take its anchors, interpolate the steps between them, and derive a family it does not ship rather than reusing one it does.
@@ -180,7 +182,8 @@ Rules:
 5. **A theme may restate a closed scale.**
    Some characters are a shape as much as a colour: Brutalist squares cards and controls, drops the soft light source for a hard offset slab, and sets one step heavier; pill-shaped badges stay round.
    A theme may therefore also restate the closed radius, weight, tracking, and elevation scales, because those are scales this document already owns and a check can already close.
-   It may not restate another role beyond the `--ink-c` exception in rule 1, because that is how a theme stops sharing the vocabulary every other theme is read in.
+   A palette block may therefore declare ramp steps, syntax tokens, the closed radius, weight, tracking, and elevation scales, and `--ink-c`, and nothing else.
+   It may not restate another role beyond the two exceptions in rule 1, because that is how a theme stops sharing the vocabulary every other theme is read in.
 
 ## Elevation
 

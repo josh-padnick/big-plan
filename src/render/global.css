@@ -356,8 +356,9 @@ THE PALETTES
 decides which half of every `light-dark()` above is used; the palette decides
 what the shades in both halves are. A palette is therefore a set of ramps behind
 one shared role mapping, so a role added above is themed everywhere at once and
-a palette costs one block rather than two. The sole role exception is --ink-c,
-explained below.
+a palette costs one block rather than two. Two role categories are excepted:
+--ink-c here, and the --syntax-* roles in src/render/markdown/syntax-highlighting.css.
+Both are explained below.
 
 The absent attribute, and the `default` id, both mean the warm paper ramps at
 the top of this file, so a document with no stored preference renders exactly
@@ -377,6 +378,14 @@ only role whose two halves cannot share a ramp position: the default palette's
 ink happens to be a dark surface shade, while a themed palette's light text is
 its own mid-dark colour and would be far too light to serve as the dark hunk
 band that shares `--grey-925`.
+
+The --syntax-* roles are the second exception, and a palette restates them in
+src/render/markdown/syntax-highlighting.css rather than here. A token hue is a
+distinction between kinds of code, not a shade of the reading surface, so it
+comes from the palette's own accents instead of a ramp position these ramps
+hold. So a palette block may declare ramp steps, syntax tokens, the closed
+radius, weight, tracking and elevation scales, and --ink-c.
+scripts/design-system/palettes.mjs is what closes that list.
 */
 
 /* Rosé Pine: Dawn for light, Main for dark (https://rosepinetheme.com).

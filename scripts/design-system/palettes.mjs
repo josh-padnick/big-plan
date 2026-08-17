@@ -191,8 +191,15 @@ const readCall = (text, name) => {
   return null;
 };
 
-/** Resolves one declared value into a literal colour for one appearance mode. */
-const resolveValue = ({ value, mode, lookup, seen = new Set() }) => {
+/**
+ * Resolves one declared value into a literal colour for one appearance mode.
+ * The pass cap is the bound on the substitution: a role that names itself, or a
+ * chain longer than the design system ever builds, runs out of passes and comes
+ * back unresolved rather than looping. A visited set cannot take its place,
+ * because one value legitimately names the same property twice - --elevation-focus
+ * names --accent-c in both light-dark() halves before the mode collapses them.
+ */
+const resolveValue = ({ value, mode, lookup }) => {
   let text = value.trim();
   for (let pass = 0; pass < 24; pass += 1) {
     const lightDark = readCall(text, "light-dark");
@@ -205,7 +212,6 @@ const resolveValue = ({ value, mode, lookup, seen = new Set() }) => {
     const variable = readCall(text, "var");
     if (variable !== null) {
       const name = splitArguments(variable.body)[0].replace(/^--/, "");
-      if (seen.has(name)) return null;
       const declared = lookup(name);
       if (declared === undefined) return null;
       text = `${text.slice(0, variable.start)}${declared}${text.slice(variable.end)}`;

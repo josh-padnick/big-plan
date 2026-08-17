@@ -92,16 +92,37 @@ export const MERMAID_ROLE_TOKENS = {
 
 type MermaidThemeVariant = keyof typeof MERMAID_THEME_TOKENS;
 
-/** Maps one variant's baked colours to the roles they were taken from. */
-export const roleSubstitutions = (
-  variant: MermaidThemeVariant,
-): ReadonlyMap<string, string> => {
+type MermaidThemeTable = Readonly<
+  Record<string, Readonly<Record<string, string>>>
+>;
+type MermaidRoleTable = Readonly<Record<string, string>>;
+
+/**
+ * Maps one variant's baked colours to the roles they were taken from. Both
+ * tables are injectable so a test can drive the collision and missing-literal
+ * guards against a throwaway pair, which the delivered mapping never contains.
+ */
+export const roleSubstitutions = ({
+  variant,
+  themeTokens = MERMAID_THEME_TOKENS,
+  roleTokens = MERMAID_ROLE_TOKENS,
+}: {
+  readonly variant: MermaidThemeVariant;
+  readonly themeTokens?: MermaidThemeTable;
+  readonly roleTokens?: MermaidRoleTable;
+}): ReadonlyMap<string, string> => {
   const substitutions = new Map<string, string>();
-  for (const [token, role] of Object.entries(MERMAID_ROLE_TOKENS)) {
-    const literal =
-      MERMAID_THEME_TOKENS[variant][
-        token as keyof (typeof MERMAID_THEME_TOKENS)[typeof variant]
-      ];
+  const variantTokens = themeTokens[variant];
+  if (variantTokens === undefined) {
+    throw new Error(`Mermaid theme has no "${variant}" variant`);
+  }
+  for (const [token, role] of Object.entries(roleTokens)) {
+    const literal = variantTokens[token];
+    if (literal === undefined) {
+      throw new Error(
+        `Mermaid role token "${token}" has no ${variant} literal to replace`,
+      );
+    }
     const existing = substitutions.get(literal.toLowerCase());
     if (existing !== undefined && existing !== `var(${role})`) {
       throw new Error(
@@ -468,7 +489,7 @@ const sanitizeSvg = ({
   sanitizeNode(element);
   applyRoleColours({
     node: element,
-    substitutions: roleSubstitutions(variant),
+    substitutions: roleSubstitutions({ variant }),
   });
   if (element.properties["viewBox"] === undefined) {
     throw new Error("Mermaid returned an SVG without a viewBox");

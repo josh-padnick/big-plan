@@ -14,7 +14,7 @@ import {
 describe("mermaid role colours", () => {
   it("should map every role-bearing token's literal to its role", () => {
     for (const variant of ["light", "dark"] as const) {
-      const substitutions = roleSubstitutions(variant);
+      const substitutions = roleSubstitutions({ variant });
       for (const [token, role] of Object.entries(MERMAID_ROLE_TOKENS)) {
         const literal =
           MERMAID_THEME_TOKENS[variant][
@@ -31,7 +31,7 @@ describe("mermaid role colours", () => {
   it("should leave a tint that owns no role alone", () => {
     // The secondary and tertiary tints are deliberately literal: giving them
     // the nearest role would move pixels in the default palette.
-    const substitutions = roleSubstitutions("light");
+    const substitutions = roleSubstitutions({ variant: "light" });
     for (const token of [
       "secondaryColor",
       "secondaryBorderColor",
@@ -69,9 +69,35 @@ describe("mermaid role colours", () => {
     // Two roles resolving to the same shade would make the rewrite ambiguous,
     // so the renderer fails at compile time rather than picking one.
     expect(() =>
-      roleSubstitutions(
-        "collision" as unknown as Parameters<typeof roleSubstitutions>[0],
-      ),
-    ).toThrow();
+      roleSubstitutions({
+        variant: "light",
+        themeTokens: { light: { mainBkg: "#101010", nodeBorder: "#101010" } },
+        roleTokens: { mainBkg: "--surface-c", nodeBorder: "--edge-strong-c" },
+      }),
+    ).toThrow(/shares #101010 with a different role/u);
+  });
+
+  it("should accept two tokens that claim one literal for one role", () => {
+    // --bg reaches two tokens on purpose, so sharing a shade is only a failure
+    // when the roles differ.
+    expect(
+      roleSubstitutions({
+        variant: "light",
+        themeTokens: {
+          light: { background: "#101010", edgeLabelBackground: "#101010" },
+        },
+        roleTokens: { background: "--bg", edgeLabelBackground: "--bg" },
+      }).get("#101010"),
+    ).toBe("var(--bg)");
+  });
+
+  it("should refuse a role token the variant bakes no literal for", () => {
+    expect(() =>
+      roleSubstitutions({
+        variant: "light",
+        themeTokens: { light: { mainBkg: "#101010" } },
+        roleTokens: { nodeBorder: "--edge-strong-c" },
+      }),
+    ).toThrow(/"nodeBorder" has no light literal/u);
   });
 });
