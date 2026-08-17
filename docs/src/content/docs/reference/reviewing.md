@@ -93,6 +93,10 @@ It prints the session, plan path, in-flight and stalled writes, and current grow
 4. Edit or delete an individual staged comment, or choose **Send all comments
    to agent** to write one feedback package.
 
+A comment reaches the agent with the scope it was left at.
+Selecting text inside a paragraph, list, or table cell anchors the note to that block alone.
+A slide's comment icon, or a selection of the slide's own title, addresses the whole slide, so an instruction such as "rewrite this in Spanish" carries the slide's entire content rather than its heading.
+
 A plan may also point at picture files of its own, such as
 `![The cabinet](./assets/cabinet.jpg)`.
 `big-plan review` serves any PNG, JPEG, WebP, GIF, AVIF, or SVG file up to 10 MiB that sits inside the plan's own directory, at any depth, so a photograph an author or an agent saves beside the plan appears in the review document.
