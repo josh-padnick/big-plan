@@ -7,7 +7,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAgentExchange } from "../src/review/agent-exchange.js";
 import { startReviewRuntime } from "../src/review/server.js";
-import { agentResponseDraftPath, readProgress } from "../src/review/store.js";
+import {
+  agentResponseDraftPath,
+  readProgress,
+  writeAgentRequestValue,
+} from "../src/review/store.js";
 import { expect, runAgentCli, test } from "./fixtures";
 
 const PASTED_PNG = Buffer.from(
@@ -235,6 +239,112 @@ test("should send a slide's whole content when its title is highlighted", async 
             );
       })
       .toContain("We agree the landing order before the schema ships.");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// BIG-147. The captain watched a review report "The agent is disconnected"
+// while the coding agent kept working and eventually answered. `agent next`
+// hands the work over and its process exits, so a turn longer than the claim
+// lease renews nothing, and the runtime read that ordinary silence as a lost
+// agent. This drives the whole path through the real CLI: claim, go quiet past
+// the lease, then answer.
+test("should report a quiet working agent as stalled rather than disconnected", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-quiet-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(
+    planPath,
+    "# Quiet turn\n\nThe agent takes longer than its claim lease to answer.\n",
+    "utf8",
+  );
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    const composer = rail.getByPlaceholder("Ask about the plan as a whole…");
+    await composer.fill("Why does the plan start here?");
+    await rail.getByRole("button", { name: "Send", exact: true }).click();
+
+    const claim = await runAgentCli(["next", planPath, "--wait"]);
+    const agentToken = /agent_token: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
+    if (agentToken === undefined) {
+      throw new Error("The real agent CLI did not return a claim token");
+    }
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const request = exchange.requests.find(
+      (candidate) => candidate.kind === "chat",
+    );
+    if (request === undefined) {
+      throw new Error("The real agent CLI did not claim the chat request");
+    }
+
+    // The turn runs long. Aging the lease and clearing the heartbeat is exactly
+    // what the wall clock does to an agent that has not narrated since pickup.
+    await writeAgentRequestValue({
+      store: runtime.store,
+      requestId: request.requestId,
+      value: { ...request, claimExpiresAtMs: Date.now() - 1_000 },
+    });
+    await rm(runtime.store.agentHeartbeatPath, { force: true });
+
+    await page.reload();
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    await expect(
+      page.getByRole("button", { name: /Agent not responding/u }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Agent disconnected/u }),
+    ).toHaveCount(0);
+    await rail.getByRole("tab", { name: "Agent" }).click();
+    const currentActivity = rail.locator("[data-review-current-activity]");
+    await expect(currentActivity).toHaveAttribute(
+      "data-review-current-activity",
+      "stalled",
+    );
+    await expect(currentActivity).toContainText("Agent may be stalled");
+    // Telling the reviewer to reconnect here would invite a second agent to
+    // take the plan from the one still editing it (adr/0002).
+    await expect(currentActivity).not.toContainText("Reconnect");
+
+    // The agent finishes. Its answer must still land: refusing it would lose
+    // the reviewer's message on the ordinary path.
+    const responsePath = agentResponseDraftPath({
+      store: runtime.store,
+      requestId: request.requestId,
+    });
+    await writeFile(
+      responsePath,
+      JSON.stringify({
+        requestId: request.requestId,
+        message: "It starts there because the reader needs the status quo.",
+      }),
+      "utf8",
+    );
+    const response = await runAgentCli([
+      "respond",
+      planPath,
+      responsePath,
+      "--agent",
+      agentToken,
+    ]);
+    expect(response.stdout).toContain(`responded: ${request.requestId}`);
+
+    await page.reload();
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    await expect(
+      rail.locator("li").filter({ hasText: "Why does the plan start here?" }),
+    ).toContainText("It starts there because the reader needs the status quo.");
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

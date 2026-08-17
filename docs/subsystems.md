@@ -60,6 +60,11 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   Any authenticated request from an open page counts as activity, so a page being read keeps its own session alive rather than only writes counting.
   The CLI requires a nonzero `--idle-timeout` to be at least 1 minute, while `--idle-timeout 0` disables expiry entirely; the agent work loop exits when the session heartbeat it follows dies.
   Symptoms that look unrelated (an agent disconnecting, a preview expiring) can share this one cause.
+- Whether an agent is attached and whether it has narrated lately are two questions, and one signal cannot answer both.
+  `big-plan agent next` hands the work over and its process exits, so between two progress notes nothing is running on that agent's behalf and no heartbeat or claim lease renews.
+  Silence inside a turn is therefore evidence of silence alone: work that has been picked up is judged by its own narration and reported as stalled, never as a lost connection, and the plan-wide presence signal decides attachment only when nobody holds work.
+  `agentHoldsClaimedWork` in `src/review/shared/agent-status.ts` is the single definition of "someone is holding work here"; the runtime asks it through `agentHoldsOpenRequest` before writing a connection edge, and the page asks it directly, so the two cannot disagree.
+  For the same reason, answering is gated on still being the recorded holder rather than on an unexpired lease: a takeover rewrites `claimedBy`, while a slow turn does not, and refusing the slow turn's answer would lose the reviewer's message.
 - A thread-resolution action that conflicts with a queued or in-flight message for that thread is a request-lifecycle invariant, enforced where request claims and terminal states land (`request-mailbox.ts`), not a thread-semantics concern.
   The invariant holds both ways: new work naming a still-resolved thread is refused at the same request-creation boundary.
   Both directions take `.resolved.lock` around their check and their write, so a resolve and a create cannot interleave into a resolved thread that holds outstanding work; session custody and the HTTP write gate order requests but do not replace that lock.
