@@ -3,6 +3,7 @@
 // joining requests, responses, outcomes, progress, and comments themselves.
 
 import {
+  agentHoldsClaimedWork,
   deriveAgentStatus,
   requestWasClaimed,
   selectPendingAgentRequest,
@@ -275,6 +276,7 @@ export const projectLatestAgentStatus = ({
   }
   return projectRequestStatus({
     request,
+    requests,
     progressEvents,
     presence: { ...presence, connected: agentConnected },
     runtime,
@@ -292,6 +294,7 @@ export const projectLatestAgentStatus = ({
 
 export const projectRequestStatus = ({
   request,
+  requests,
   progressEvents,
   presence,
   runtime,
@@ -301,6 +304,8 @@ export const projectRequestStatus = ({
   queuedAhead,
 }: {
   readonly request: ThreadRequest;
+  /** Every request on the plan, so this one can tell a queue from an absence. */
+  readonly requests: ReadonlyArray<ThreadRequest>;
   readonly progressEvents: ReadonlyArray<ThreadProgress>;
   readonly presence: ThreadPresence;
   readonly runtime: ThreadRuntime;
@@ -336,6 +341,7 @@ export const projectRequestStatus = ({
     // reporting it as queued described started work as waiting in line. The
     // lease is left to choose between working and stalled below (BIG-147).
     pickedUp: requestWasClaimed(request),
+    workIsHeld: agentHoldsClaimedWork({ requests, cancelPendingRequestIds }),
     ...(queuedAhead === undefined ? {} : { queuedAhead }),
     surface,
     ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
@@ -386,6 +392,7 @@ export const projectCommentThread = <
         activity: projectRequestActivity({ request, progressEvents }),
         status: projectRequestStatus({
           request,
+          requests,
           progressEvents,
           presence,
           runtime,

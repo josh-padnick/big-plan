@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AGENT_STALL_MS,
+  agentHoldsClaimedWork,
   agentPresenceIsFresh,
   deriveAgentStatus,
   deriveAgentHealthLabel,
@@ -461,6 +462,52 @@ describe("current agent activity", () => {
         now: NOW,
       }),
     ).toMatchObject({ requestId: "3333333333333333" });
+  });
+});
+
+describe("held work", () => {
+  const held = { requests: [{ ...request(), ...liveClaim(NOW) }] };
+
+  // BIG-147. The lease has by definition already lapsed during the quiet turn
+  // this answers for, so a lease test here would answer "no" exactly when the
+  // question matters.
+  it("should still hold work whose lease lapsed long ago", () => {
+    expect(
+      agentHoldsClaimedWork({
+        requests: [{ ...request(), ...liveClaim(NOW - AGENT_STALL_MS * 10) }],
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["answered", { answeredAt: "2026-08-08T19:59:30.000Z" }],
+    ["canceled", { canceledAt: "2026-08-08T19:59:30.000Z" }],
+  ])("should release the plan once the request is %s", (_name, terminal) => {
+    expect(
+      agentHoldsClaimedWork({
+        requests: [{ ...request(), ...liveClaim(), ...terminal }],
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toBe(false);
+  });
+
+  it("should release the plan while a cancel is in flight", () => {
+    expect(
+      agentHoldsClaimedWork({
+        ...held,
+        cancelPendingRequestIds: new Set(["1111111111111111"]),
+      }),
+    ).toBe(false);
+  });
+
+  it("should not treat a request nobody picked up as held work", () => {
+    expect(
+      agentHoldsClaimedWork({
+        requests: [request()],
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toBe(false);
   });
 });
 

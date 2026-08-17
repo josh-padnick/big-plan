@@ -276,6 +276,32 @@ const disconnectedSupporting = ({
 export const requestWasClaimed = (request: ClaimedRequest): boolean =>
   request.claimedBy !== undefined && claimSignalAtMs(request) !== undefined;
 
+/**
+ * True while some agent is holding work on this plan. Deliberately blind to the
+ * lease, because the quiet turn this answers for has by definition let its
+ * lease lapse; a lease test here would answer "no" exactly when the question
+ * matters.
+ *
+ * This explains a silence, so it may inform the activity reading and it may
+ * withhold advice premised on nobody being there. It is never evidence that an
+ * agent is attached, and it must not reach any connection surface (BIG-147).
+ */
+export const agentHoldsClaimedWork = ({
+  requests,
+  cancelPendingRequestIds,
+}: {
+  readonly requests: ReadonlyArray<
+    ClaimedRequest & TerminalAgentRequest & { readonly requestId: string }
+  >;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+}): boolean =>
+  requests.some(
+    (request) =>
+      !requestIsTerminal(request) &&
+      !cancelPendingRequestIds.has(request.requestId) &&
+      requestWasClaimed(request),
+  );
+
 /** Selects the first live, nonterminal claim. */
 export const selectActiveAgentRequest = <Request extends AgentActivityRequest>({
   requests,
@@ -472,6 +498,13 @@ export type AgentStatusInput = {
   readonly request: "none" | "pending" | "answered";
   readonly agentConnected: boolean;
   readonly pickedUp: boolean;
+  /**
+   * Whether some other request on this plan is being held by an agent. It
+   * separates "nobody has picked this up and nobody is here" from "nobody has
+   * picked this up because someone is busy" - a queue question, not a
+   * connection verdict - and never travels to a connection surface.
+   */
+  readonly workIsHeld?: boolean;
   /** How many unanswered messages the agent delivers before this one. */
   readonly queuedAhead?: number;
   readonly surface?: "thread" | "chat";
@@ -533,7 +566,10 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     };
   }
   if (!input.pickedUp) {
-    if (!input.agentConnected) {
+    // Held work explains the silence, so this message is queued behind a turn
+    // rather than undeliverable. Calling it blocked would be a connection
+    // verdict drawn from the same quiet the agent's own turn produces.
+    if (!input.agentConnected && input.workIsHeld !== true) {
       return {
         stage: "blocked",
         label: "Blocked",

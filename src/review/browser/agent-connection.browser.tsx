@@ -381,17 +381,21 @@ const ConnectionLog = ({
     .filter((event) => Number.isFinite(event.atMs))
     .sort((left, right) => left.atMs - right.atMs);
   const latest = ordered.at(-1);
-  let disconnects = 0;
-  let reconnects = 0;
+  // A gap in the signal is a quiet period, not an observed disconnection. The
+  // runtime records an edge whenever the heartbeat ages out, and nothing renews
+  // it while a turn runs, so counting these as disconnects and reconnects put
+  // events in the reviewer's log that never happened (BIG-147).
+  let quietPeriods = 0;
+  let resumed = 0;
   let hasConnected = false;
   ordered.forEach((event, index) => {
-    if (!event.connected && ordered[index - 1]?.connected) disconnects += 1;
+    if (!event.connected && ordered[index - 1]?.connected) quietPeriods += 1;
     if (
       event.connected &&
       hasConnected &&
       ordered[index - 1]?.connected === false
     )
-      reconnects += 1;
+      resumed += 1;
     if (event.connected) hasConnected = true;
   });
   const groups = new Map<string, Array<(typeof ordered)[number]>>();
@@ -468,7 +472,8 @@ const ConnectionLog = ({
                 Events
               </dt>
               <dd className="m-0 text-xs text-ink [overflow-wrap:anywhere]">
-                {disconnects} disconnects · {reconnects} reconnects
+                {quietPeriods} quiet {quietPeriods === 1 ? "period" : "periods"}{" "}
+                · {resumed} resumed
               </dd>
             </div>
           </dl>
@@ -488,11 +493,11 @@ const ConnectionLog = ({
                     ? "Connected for "
                     : next?.connected
                       ? knownSession
-                        ? "Reconnected after "
-                        : "Connected after "
-                      : "Offline for ";
+                        ? "Signal returned after "
+                        : "First signal after "
+                      : "Quiet for ";
                   const suffix =
-                    !event.connected && next?.connected ? " offline" : "";
+                    !event.connected && next?.connected ? " quiet" : "";
                   const duration = compactDurationLabel({
                     start: event.atMs,
                     end: next?.atMs ?? nowMs,
@@ -502,7 +507,7 @@ const ConnectionLog = ({
                       key={event.eventId ?? event.at}
                       className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-0.5 py-2 leading-none first:pt-1 last:pb-0"
                       data-review-connection-event={
-                        event.connected ? "connected" : "disconnected"
+                        event.connected ? "connected" : "quiet"
                       }
                       data-review-connection-current={
                         event === latest ? "" : undefined
@@ -519,7 +524,7 @@ const ConnectionLog = ({
                       <strong
                         className={`min-w-0 text-xs ${event.connected ? "text-[var(--diff-add-c)]" : "text-ink"}`}
                       >
-                        {event.connected ? "Connected" : "Disconnected"}
+                        {event.connected ? "Connected" : "No signal"}
                       </strong>
                       {event === latest ? (
                         <span className="rounded-full border border-edge px-1.5 py-px text-2xs font-bold leading-[1.2] uppercase tracking-caps">
@@ -555,6 +560,7 @@ export const AgentConnectionPanel = ({
   activity,
   presenceState,
   connected,
+  workIsHeld,
   heartbeatAt,
   modelName,
   connectionLog,
@@ -568,6 +574,12 @@ export const AgentConnectionPanel = ({
   readonly activity: CurrentAgentActivity;
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
+  /**
+   * Whether an agent is holding work here. It withholds advice premised on
+   * nobody being there; it never decides what the cards below report, which
+   * stays presence alone (BIG-147).
+   */
+  readonly workIsHeld: boolean;
   readonly heartbeatAt: number;
   readonly modelName?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -631,7 +643,16 @@ export const AgentConnectionPanel = ({
         <AgentPresenceUnavailableCard />
       )}
       <AnotherViewTip />
-      {isReadOnly || isConnected || !agentStatusIsAvailable ? null : (
+      {/*
+       * Held work explains the quiet, and under adr/0002 a reconnect invites a
+       * second agent to take the plan from the one still editing it. Offering
+       * this beside a stalled card would be advice that loses the working
+       * agent's answer, so it waits until nothing is held (BIG-147).
+       */}
+      {isReadOnly ||
+      isConnected ||
+      workIsHeld ||
+      !agentStatusIsAvailable ? null : (
         <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">

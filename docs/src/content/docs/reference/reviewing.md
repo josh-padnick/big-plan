@@ -159,10 +159,13 @@ edits only the authoritative MDX when appropriate, validates the new render,
 and publishes one outcome for every comment.
 
 Messages sent while the agent is handling another request are received immediately and wait in delivery order.
-A sent thread reports that wait in two places until its request holds a live claim: the comment rail groups it under the **Queued** heading and numbers its card by position within that group, while the status block inside the thread reads **Waiting for an agent**.
+A sent thread reports that wait in two places until an agent picks its request up: the comment rail groups it under the **Queued** heading and numbers its card by position within that group, while the status block inside the thread reads **Waiting for an agent**.
 That in-thread block adds the line **Queued, _N_ ahead** above the headline when earlier unanswered work exists, then reaches the agent when that earlier work finishes.
-While that claim remains live, the thread says **Working**.
-If the lease lapses before a response commits, the thread returns to the queued and waiting state until an agent picks it up again.
+Once an agent picks the request up the thread says **Working**, and it stays picked up from then on.
+A turn can run longer than the agent reports progress for, because `big-plan agent next` hands the work over and its own process exits, so nothing is running on that agent's behalf between two progress notes.
+After 75 seconds of that quiet the thread reads **No progress for \_N_m** and the **Agent** tab reads **Agent may be stalled**, naming how long the agent has been silent and suggesting you check its terminal.
+That is a report about the silence and not about the connection: the work is still picked up, the answer is still accepted when it arrives, and a message you send meanwhile is queued behind that turn rather than reported as blocked.
+Big Plan cannot tell a slow agent from a stopped one, because neither produces a signal, so the stalled reading covers both and resolves itself as soon as the agent speaks again.
 A real response records an `answered`, `changed`, `warning`, `needs-input`, or `declined` outcome and shows the agent's message.
 A warning leaves the plan unchanged, shows its short one-line summary directly under the **Warning** badge, explains the standard or template the request would cross, and lets the reviewer explicitly choose **Do it anyway**.
 A changed result updates the plan in place without discarding staged comments, open threads, or scroll position.

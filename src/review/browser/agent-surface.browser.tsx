@@ -13,6 +13,8 @@ export type AgentSurfaceModel = {
   readonly activity: CurrentAgentActivity;
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
+  /** Whether an agent is holding work here. Never an attachment claim. */
+  readonly workIsHeld: boolean;
   readonly heartbeatAt: number;
   readonly modelName?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -39,6 +41,7 @@ export const AgentSurface = ({
       activity={model.activity}
       presenceState={model.presenceState}
       connected={model.connected}
+      workIsHeld={model.workIsHeld}
       heartbeatAt={model.heartbeatAt}
       modelName={model.modelName}
       connectionLog={model.connectionLog}
