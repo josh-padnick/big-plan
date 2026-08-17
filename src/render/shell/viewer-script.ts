@@ -2542,6 +2542,36 @@ const wireDecisions = () => {
       footer.insertBefore(proposalBatch, confirm);
       footer.insertBefore(proposalNow, confirm);
     }
+    // Decision mode routes the reader's words through a comment on this
+    // decision before they can become the answer, so its actions belong to the
+    // field that holds those words rather than to the card's footer. The
+    // footer keeps the one action that settles the decision itself.
+    const composerActions = document.createElement("div");
+    composerActions.className = "decision-composer-actions";
+    // Cancel joins this row rather than sitting under it: leaving the
+    // composer and acting on it are the same kind of choice, and a lone
+    // control below a right-aligned pair reads as a leftover.
+    const composerSubmits = document.createElement("div");
+    composerSubmits.className = "decision-composer-submits";
+    composerSubmits.hidden = true;
+    const composerAdd = document.createElement("button");
+    composerAdd.type = "button";
+    composerAdd.className = "decision-proposal-action";
+    composerAdd.textContent = "Add comment";
+    const composerNow = document.createElement("button");
+    composerNow.type = "button";
+    composerNow.className = "decision-proposal-action decision-proposal-now";
+    composerNow.textContent = "Submit now";
+    composerSubmits.append(composerAdd, composerNow);
+    if (proposalCancel !== null && proposalCancel.parentNode !== null) {
+      proposalCancel.parentNode.insertBefore(composerActions, proposalCancel);
+      composerActions.append(proposalCancel, composerSubmits);
+    }
+    // The words the reader already captured as a comment. Decision mode empties
+    // the field on capture, so this is what the confirm step then records.
+    let capturedProposal = "";
+    const answerText = () =>
+      capturedProposal === "" ? proposalValue() : capturedProposal;
     let previousOptionChoice =
       choices.find((choice) => choice.checked && !proposes(choice)) || null;
     // True while the reader is changing an answer they already gave. Only then
@@ -2799,18 +2829,31 @@ const wireDecisions = () => {
       // owns: feedback hands the words to the agent, a decision records them
       // as the answer. Outside the composer there is nothing to hand off, so
       // confirming is the only action and the toggle is out of the way.
-      const decisionMode = proposing && modeToggle !== null && modeToggle.checked;
+      const decisionMode =
+        proposing && modeToggle !== null && modeToggle.checked;
+      const answered = decision.hasAttribute("data-decision-answered");
       confirm.textContent = "Confirm choice";
+      // Decision mode keeps the confirm action in view while it is still out of
+      // reach, so the reader can see where their words are heading before they
+      // have committed them. It waits on the capture rather than on the field,
+      // because in that mode the comment is what gets confirmed.
       confirm.hidden = proposing && !decisionMode;
       confirm.disabled =
-        locked || choice === null || (proposing && proposalValue() === "");
+        locked ||
+        choice === null ||
+        (proposing && (decisionMode ? capturedProposal : proposalValue()) === "");
       change.disabled = locked;
       for (const candidate of choices) candidate.disabled = locked;
       if (proposalText !== null) proposalText.disabled = locked;
       for (const note of lockedNotes) note.hidden = !locked;
       proposalBatch.hidden = !proposing || decisionMode;
       proposalNow.hidden = !proposing || decisionMode;
-      if (modeToggle !== null) modeToggle.disabled = locked;
+      composerSubmits.hidden = !decisionMode;
+      composerAdd.disabled = locked || proposalValue() === "";
+      composerNow.disabled = locked || proposalValue() === "";
+      // A recorded answer is not something the reader can re-aim by flipping
+      // the mode underneath it. Changing the answer is what reopens the choice.
+      if (modeToggle !== null) modeToggle.disabled = locked || answered;
       // The prompt and its note ask the question the live mode will answer.
       const placeholder = wordFor(proposalText, decisionMode, "placeholder");
       if (placeholder !== null) proposalText.placeholder = placeholder;
@@ -2827,7 +2870,7 @@ const wireDecisions = () => {
           choice === null
             ? "Select an option to continue."
             : proposing
-              ? "Your own approach selected."
+              ? "You selected your own approach."
               : choice.value + " selected.";
         // Write into the copy element rather than over the paragraph: the
         // paragraph also holds the selection mark the picked state reveals,
@@ -2855,7 +2898,14 @@ const wireDecisions = () => {
       if (proposes(event.target) && proposalText !== null) proposalText.focus();
     });
     if (proposalText !== null) proposalText.addEventListener("input", sync);
-    const handOffProposal = (submit) => {
+    // The capture flag marks the decision-mode route, where the words become a comment
+    // on this decision and the field is emptied because that comment is now the
+    // visible record of them. The feedback route leaves the field alone: its
+    // words go to the review batch, nothing lands on the card, and clearing
+    // them would look like the submission was dropped.
+    const handOffProposal = (submit, capture) => {
+      const words = proposalValue();
+      if (words === "") return;
       const target = window.bigPlan?.feedback;
       if (typeof target?.add !== "function") {
         const line = "Open this document in a live review to submit feedback.";
@@ -2867,24 +2917,18 @@ const wireDecisions = () => {
         source: "decision",
         anchor: decision.id,
         submit,
-        items: [
-          {
-            kind: "comment",
-            body: "Suggest another option: " + proposalValue(),
-          },
-        ],
+        items: [{ kind: "comment", body: "Suggest another option: " + words }],
       });
-      const proposalChoice = choices.find(proposes) || null;
-      if (proposalChoice !== null) proposalChoice.checked = false;
-      if (previousOptionChoice !== null) previousOptionChoice.checked = true;
-      if (proposalText !== null) proposalText.value = "";
-      // The composer is empty again, so it reopens in the default mode rather
-      // than carrying the last reader's intent into the next proposal.
-      if (modeToggle !== null) modeToggle.checked = false;
+      if (capture) {
+        capturedProposal = words;
+        if (proposalText !== null) proposalText.value = "";
+      }
       sync();
     };
-    proposalBatch.addEventListener("click", () => handOffProposal("batch"));
-    proposalNow.addEventListener("click", () => handOffProposal("now"));
+    proposalBatch.addEventListener("click", () => handOffProposal("batch", false));
+    proposalNow.addEventListener("click", () => handOffProposal("now", false));
+    composerAdd.addEventListener("click", () => handOffProposal("batch", true));
+    composerNow.addEventListener("click", () => handOffProposal("now", true));
     decision.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || event.bigPlanEscapeHandled === true) return;
       const choice = picked();
@@ -2901,6 +2945,9 @@ const wireDecisions = () => {
         if (proposalChoice !== null) proposalChoice.checked = false;
         if (previousOptionChoice !== null) previousOptionChoice.checked = true;
         if (proposalText !== null) proposalText.value = "";
+        // Cancelling abandons the whole composed proposal, including anything
+        // already captured, so the next one starts from nothing.
+        capturedProposal = "";
         if (modeToggle !== null) modeToggle.checked = false;
         sync();
         if (proposalChoice !== null) {
@@ -3004,11 +3051,16 @@ const wireDecisions = () => {
       }
       if (answerTitle !== null) {
         answerTitle.textContent =
-          ": " + (proposing ? proposalValue() : choice.value);
+          ": " + (proposing ? answerText() : choice.value);
       }
       if (proposalText !== null) proposalText.readOnly = proposing;
       decision.setAttribute("data-decision-answered", "");
       compress(true);
+      // Recording changes what the composer may still offer - notably the mode
+      // toggle, which must not re-aim an answer that already stands - so the
+      // controls are resynced against the answered state rather than left as
+      // they were the instant before it.
+      sync();
       if (replay) showPersistenceSaved();
       else if (proposing) showReadingSession();
       else showPersistencePending();
@@ -3019,7 +3071,7 @@ const wireDecisions = () => {
         question: question === null ? "" : question.textContent,
         optionId: choice.id,
         option: choice.value,
-        proposal: proposing ? proposalValue() : "",
+        proposal: proposing ? answerText() : "",
       };
       window.bigPlanDecisionAnswers = window.bigPlanDecisionAnswers || [];
       window.bigPlanDecisionAnswers.push(record);

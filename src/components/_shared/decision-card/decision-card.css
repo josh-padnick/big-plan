@@ -563,6 +563,21 @@
     border-color: var(--color-accent);
     box-shadow: var(--elevation-focus);
   }
+  /* The mark's own box is centred in the bar, but the Lucide SVG keeps its
+     24px intrinsic height inside a 16px box, so the glyph hung below its slot
+     and the whole line read as sitting low. Sizing the SVG to its box is what
+     the other icon slots already do. */
+  article .decision-selection-mark svg {
+    width: 100%;
+    height: 100%;
+  }
+  /* The check's ink sits high in its own viewBox, so a box-centred mark still
+     reads above the line it confirms. */
+  article .decision-selection-mark {
+    position: relative;
+    top: 1px;
+  }
+
   /* The mode switch sits between the reader's words and the actions those
      words feed, because that is where the question "what happens to this"
      arises. The hint rides beside the label rather than under it: the row is
@@ -627,6 +642,24 @@
   article .decision-mode-label:has(:disabled) {
     cursor: default;
     color: var(--color-subtle);
+  }
+
+  /* Decision mode's actions belong to the field whose words they carry, so
+     they sit at its trailing edge the way a composer's own actions do. */
+  article .decision-composer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  article .decision-composer-submits {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+  article .decision-composer-submits[hidden] {
+    display: none;
   }
 
   article .decision-proposal-cancel {

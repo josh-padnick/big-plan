@@ -191,15 +191,26 @@ test("should compare, answer, and revise a Decision", async ({
   await expect(proposalNote).toHaveText(
     "The agent will treat your response as your final decision here.",
   );
+  // Decision mode keeps the confirm action in view but out of reach until the
+  // words have been captured as a comment on this decision, and moves the two
+  // actions that capture them onto the field that holds them.
   await expect(card.locator("[data-decision-confirm]")).toBeVisible();
-  await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
+  await expect(card.locator("[data-decision-confirm]")).toBeDisabled();
   await expect(card.locator("[data-decision-confirm]")).toHaveText(
     "Confirm choice",
   );
+  await expect(card.getByRole("button", { name: "Add comment" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Submit now" })).toBeVisible();
   await expect(
     card.getByRole("button", { name: "Add to Comments" }),
   ).toBeHidden();
   await expect(card.getByRole("button", { name: "Send now" })).toBeHidden();
+
+  await card.getByRole("button", { name: "Add comment" }).click();
+  // Captured, so the field is empty and the confirm step now has something to
+  // record. The words themselves live on in the comment.
+  await expect(proposalField).toHaveValue("");
+  await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
 
   await modeToggle.uncheck();
   await expect(card.locator("[data-decision-confirm]")).toBeHidden();
@@ -228,10 +239,43 @@ test("should compare, answer, and revise a Decision", async ({
     .locator("[data-decision-proposal-text]")
     .fill("Publish through the repository release.");
   await card.locator("[data-decision-mode-toggle]").check();
+  await card.getByRole("button", { name: "Add comment" }).click();
   await card.getByRole("button", { name: "Confirm choice" }).click();
+  // The field was emptied by the capture, so this proves the answer records
+  // the captured words rather than whatever the field happens to hold.
   await expect(card.locator("[data-decision-answer]")).toContainText(
     "Publish through the repository release.",
   );
+  // An answer that stands cannot be re-aimed by flipping the mode underneath
+  // it; changing the answer is what reopens that choice.
+  await expect(card.locator("[data-decision-mode-toggle]")).toBeDisabled();
+  await card.locator("[data-decision-change]").click();
+  await expect(card.locator("[data-decision-mode-toggle]")).toBeEnabled();
+});
+
+test("should keep a feedback proposal in the field after handing it off", async ({
+  page,
+  decisionViewerUrl,
+}) => {
+  // Feedback lands in the review batch, not on the card, so emptying the field
+  // would read as the submission having been dropped. Decision mode is the
+  // opposite case and is covered above: there the words become a visible
+  // comment, which is what makes clearing them correct.
+  await page.goto(decisionViewerUrl);
+  const card = page.locator("[data-decision-selector]").first();
+  await card.locator(".decision-propose-link").click();
+  await card
+    .locator("[data-decision-proposal-text]")
+    .fill("Publish a signed standalone archive.");
+  await expect(card.locator("[data-decision-selection-summary]")).toHaveText(
+    "You selected your own approach.",
+  );
+
+  await card.getByRole("button", { name: "Add to Comments" }).click();
+  await expect(card.locator("[data-decision-proposal-text]")).toHaveValue(
+    "Publish a signed standalone archive.",
+  );
+  await expect(card.locator("[data-decision-proposal-choice]")).toBeChecked();
 });
 
 test("should keep decision content readable and script-only controls dormant without JavaScript", async ({
