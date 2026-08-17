@@ -39,6 +39,7 @@ import {
   ensureAgentRequest,
   recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
+  ResolvedThreadWorkRejected,
   reviseQueuedRequest,
 } from "./request-mailbox.js";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
@@ -1691,12 +1692,12 @@ describe("request mailbox", () => {
     const commentId = "4444444444444444";
     await writeResolvedCommentIds({ store, ids: [commentId] });
 
-    await expect(
-      ensureAgentRequest({
-        store,
-        request: replyRequest({ commentId }),
-      }),
-    ).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
+    const refused = ensureAgentRequest({
+      store,
+      request: replyRequest({ commentId }),
+    });
+    await expect(refused).rejects.toThrow(ResolvedThreadWorkRejected);
+    await expect(refused).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
     await expect(
       readAgentExchange({ store, sessionId, planId }),
     ).resolves.toMatchObject({ requests: [] });
@@ -1707,14 +1708,14 @@ describe("request mailbox", () => {
     const commentId = "4444444444444444";
     await writeResolvedCommentIds({ store, ids: [commentId] });
 
-    await expect(
-      ensureAgentRequest({
-        store,
-        request: requestWith([
-          reviewComment({ id: commentId, body: "Look at this again." }),
-        ]),
-      }),
-    ).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
+    const refused = ensureAgentRequest({
+      store,
+      request: requestWith([
+        reviewComment({ id: commentId, body: "Look at this again." }),
+      ]),
+    });
+    await expect(refused).rejects.toThrow(ResolvedThreadWorkRejected);
+    await expect(refused).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
     await expect(
       readAgentExchange({ store, sessionId, planId }),
     ).resolves.toMatchObject({ requests: [] });

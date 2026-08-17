@@ -61,6 +61,13 @@ const namedCommentIds = (request: AgentRequest): ReadonlyArray<string> =>
       ? [request.commentId]
       : [];
 
+export class ResolvedThreadWorkRejected extends AgentExchangeRejected {
+  constructor() {
+    super(RESOLVED_THREAD_NEW_WORK_ERROR);
+    this.name = "ResolvedThreadWorkRejected";
+  }
+}
+
 /** Refuses create when any named thread is still resolved. */
 export const assertCommentsAreUnresolved = async ({
   store,
@@ -77,7 +84,7 @@ export const assertCommentsAreUnresolved = async ({
     }),
   );
   if (commentIds.some((commentId) => resolved.has(commentId))) {
-    throw new AgentExchangeRejected(RESOLVED_THREAD_NEW_WORK_ERROR);
+    throw new ResolvedThreadWorkRejected();
   }
 };
 

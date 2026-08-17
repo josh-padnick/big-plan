@@ -38,8 +38,8 @@ import {
   cancelAgentRequest,
   ensureAgentRequest,
   removeCommentFromQueuedFeedbackRequest,
+  ResolvedThreadWorkRejected,
 } from "./request-mailbox.js";
-import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
   anchorReviewStore,
   freezeRequestAttachments,
@@ -526,12 +526,7 @@ export const submitFeedback = async (
       }),
     });
   } catch (error: unknown) {
-    if (
-      !(error instanceof AgentExchangeRejected) ||
-      error.message !== RESOLVED_THREAD_NEW_WORK_ERROR
-    ) {
-      throw error;
-    }
+    if (!(error instanceof ResolvedThreadWorkRejected)) throw error;
     return refusal({ status: 409, reason: error.message });
   }
   await writeComments({

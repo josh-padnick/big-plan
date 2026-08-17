@@ -102,12 +102,16 @@ test("should refuse a reply on a resolved thread and keep the typed text", async
   const reopenedThread = rail
     .locator("[data-review-sent-thread]")
     .filter({ hasText: commentBody });
+  await expect(reopenedThread).toBeVisible();
+  const reopenedReplyBox = reopenedThread.getByLabel("Reply to the agent");
+  await expect(reopenedReplyBox).toBeVisible();
+  await expect(reopenedReplyBox).toHaveValue(replyBody);
+  await expect(
+    reopenedThread.getByRole("button", { name: "Resolve thread" }),
+  ).toBeVisible();
   await expect(
     reopenedThread.getByText(RESOLVED_THREAD_NEW_WORK_ERROR),
   ).toHaveCount(0);
-  await expect(reopenedThread.getByLabel("Reply to the agent")).toHaveValue(
-    replyBody,
-  );
 });
 
 test("should keep one staged comment after reloading the live review", async ({
