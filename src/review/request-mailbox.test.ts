@@ -41,6 +41,7 @@ import {
   removeCommentFromQueuedFeedbackRequest,
   reviseQueuedRequest,
 } from "./request-mailbox.js";
+import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
   prepareStore,
   readAgentConnectionEvents,
@@ -48,6 +49,7 @@ import {
   reviewStoreFor,
   withReviewStoreLock,
   writeAgentResponseValue,
+  writeResolvedCommentIds,
 } from "./store.js";
 import {
   buildReviewImageReference,
@@ -161,6 +163,24 @@ const chatRequest = (
     createdAt: "2026-08-10T12:00:00.000Z",
     body,
     attachments,
+  });
+
+const replyRequest = ({
+  commentId,
+  requestId = "6666666666666666",
+}: {
+  readonly commentId: string;
+  readonly requestId?: string;
+}) =>
+  messageAgentRequest({
+    kind: "reply",
+    requestId,
+    sessionId,
+    planId,
+    premiseSnapshot: snapshot,
+    createdAt: "2026-08-10T12:00:00.000Z",
+    body: "Please look at this again.",
+    commentId,
   });
 
 const preparedReview = async () => {
@@ -1664,5 +1684,51 @@ describe("request mailbox", () => {
       { connected: true },
       { connected: false, reason: "Heartbeat timed out" },
     ]);
+  });
+
+  it("should refuse a reply that names a resolved thread", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    await expect(
+      ensureAgentRequest({
+        store,
+        request: replyRequest({ commentId }),
+      }),
+    ).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should refuse feedback that names a resolved thread", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    await expect(
+      ensureAgentRequest({
+        store,
+        request: requestWith([
+          reviewComment({ id: commentId, body: "Look at this again." }),
+        ]),
+      }),
+    ).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should still accept a plan question while another thread is resolved", async () => {
+    const { store } = await preparedReview();
+    await writeResolvedCommentIds({ store, ids: ["4444444444444444"] });
+
+    await expect(
+      ensureAgentRequest({
+        store,
+        request: chatRequest("What is the retry boundary?"),
+      }),
+    ).resolves.toMatchObject({ kind: "chat" });
   });
 });

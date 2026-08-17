@@ -33,11 +33,13 @@ import {
 } from "./agent-exchange.js";
 import {
   appendProgressEvent,
+  assertCommentsAreUnresolved,
   assertResolvableComment,
   cancelAgentRequest,
   ensureAgentRequest,
   removeCommentFromQueuedFeedbackRequest,
 } from "./request-mailbox.js";
+import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
   anchorReviewStore,
   freezeRequestAttachments,
@@ -385,6 +387,15 @@ export const submitFeedback = async (
   if (comments.length === 0) {
     return refusal({ status: 400, reason: "Nothing to send" });
   }
+  try {
+    await assertCommentsAreUnresolved({
+      store,
+      commentIds: comments.map((comment) => comment.id),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
   const alreadySent = await planRenderer.readStoredComments(store.sentPath);
   const sentById = new Map(alreadySent.map((comment) => [comment.id, comment]));
   if (
@@ -505,13 +516,24 @@ export const submitFeedback = async (
     brief: renderBrief(feedback),
   });
   await writeSnapshot({ store, snapshot: premiseSnapshot, source });
-  const agentRequest = await ensureAgentRequest({
-    store,
-    request: feedbackAgentRequest({
-      feedback,
-      premiseSnapshot,
-    }),
-  });
+  let agentRequest;
+  try {
+    agentRequest = await ensureAgentRequest({
+      store,
+      request: feedbackAgentRequest({
+        feedback,
+        premiseSnapshot,
+      }),
+    });
+  } catch (error: unknown) {
+    if (
+      !(error instanceof AgentExchangeRejected) ||
+      error.message !== RESOLVED_THREAD_NEW_WORK_ERROR
+    ) {
+      throw error;
+    }
+    return refusal({ status: 409, reason: error.message });
+  }
   await writeComments({
     path: store.sentPath,
     comments: [...alreadySent, ...feedback.comments],

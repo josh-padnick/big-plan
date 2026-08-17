@@ -14,12 +14,12 @@ import {
   deriveSnapshotDigest,
   messageAgentRequest,
   readAgentExchange,
-  writeAgentRequest,
 } from "./agent-exchange.js";
 import {
   appendProgressEvent,
   cancelAgentRequest,
   deleteQueuedRequest,
+  ensureAgentRequest,
   reviseQueuedRequest,
   type ProgressEventDraft,
 } from "./request-mailbox.js";
@@ -233,27 +233,36 @@ export const sendAgentRequest = async (
       });
     }
   }
-  await writeAgentRequest({ store, request: agentRequest });
+  let storedRequest;
+  try {
+    storedRequest = await ensureAgentRequest({
+      store,
+      request: agentRequest,
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
   await appendProgressBestEffort({
     context,
     event: {
       sessionId,
       atMs: Date.now(),
-      stepCode: agentRequest.kind === "reply" ? "reply-sent" : "chat-sent",
+      stepCode: storedRequest.kind === "reply" ? "reply-sent" : "chat-sent",
       step:
-        agentRequest.kind === "reply"
+        storedRequest.kind === "reply"
           ? "Reply sent to agent"
           : "Plan question sent to agent",
       state: "waiting",
     },
-    failureMessage: `Review progress update failed after queuing request ${agentRequest.requestId}`,
+    failureMessage: `Review progress update failed after queuing request ${storedRequest.requestId}`,
   });
   return jsonResponse({
     status: 200,
     value: {
-      requestId: agentRequest.requestId,
-      kind: agentRequest.kind,
-      request: agentRequest,
+      requestId: storedRequest.requestId,
+      kind: storedRequest.kind,
+      request: storedRequest,
     },
   });
 };

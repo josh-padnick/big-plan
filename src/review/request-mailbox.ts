@@ -1,4 +1,6 @@
 // Owns locked changes to stored agent requests and the plan-wide claim gate.
+// Request creation refuses work that names a still-resolved thread, so
+// resolution and outstanding work stay mutually exclusive from both directions.
 
 import { join } from "node:path";
 import {
@@ -21,6 +23,8 @@ import {
   extractReviewImageReferences,
 } from "./shared/review-image.js";
 import { agentOwnsRequest } from "./shared/request-ownership.js";
+import { validateResolvedCommentIds } from "./shared/comment.js";
+import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
   anchorReviewStore,
   appendAgentConnectionEvent,
@@ -30,6 +34,7 @@ import {
   nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
+  readResolvedCommentIds,
   ReviewStorePathRejected,
   withReviewStoreLock,
   writeAgentRequestValue,
@@ -48,6 +53,33 @@ import type {
 } from "./store.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
+
+const namedCommentIds = (request: AgentRequest): ReadonlyArray<string> =>
+  request.kind === "feedback"
+    ? request.comments.map((comment) => comment.id)
+    : request.kind === "reply"
+      ? [request.commentId]
+      : [];
+
+/** Refuses create when any named thread is still resolved. */
+export const assertCommentsAreUnresolved = async ({
+  store,
+  commentIds,
+}: {
+  readonly store: ReviewStore;
+  readonly commentIds: ReadonlyArray<string>;
+}): Promise<void> => {
+  if (commentIds.length === 0) return;
+  const resolved = new Set(
+    await readResolvedCommentIds({
+      store,
+      validate: validateResolvedCommentIds,
+    }),
+  );
+  if (commentIds.some((commentId) => resolved.has(commentId))) {
+    throw new AgentExchangeRejected(RESOLVED_THREAD_NEW_WORK_ERROR);
+  }
+};
 
 export class RetryableAgentClaimRejected extends AgentExchangeRejected {}
 
@@ -212,6 +244,10 @@ export const ensureAgentRequest = async ({
         requestId: intended.requestId,
       });
       if (value === undefined) {
+        await assertCommentsAreUnresolved({
+          store: lockedStore,
+          commentIds: namedCommentIds(intended),
+        });
         await writeAgentRequestValue({
           store: lockedStore,
           requestId: intended.requestId,

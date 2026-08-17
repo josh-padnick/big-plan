@@ -2569,15 +2569,105 @@ describe("review runtime resolve invariant", () => {
     }
   });
 
-  it("should keep an already resolved comment resolvable while work is queued", async () => {
+  it("should keep an already resolved comment resolvable while unrelated work is queued", async () => {
     const { isolated, isolatedCall, close } = await isolatedRuntime(
-      "big-plan-resolve-idempotent-",
+      "big-plan-resolve-unrelated-",
     );
+    const otherComment = {
+      id: "c8c8c8c8",
+      body: "Rewrite the intended change section.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" as const },
+    };
     try {
       await writeResolvedCommentIds({
         store: isolated.store,
         ids: [commentId],
       });
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [otherComment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+
+      const draft = {
+        id: "d9d9d9d9",
+        body: "Keep this draft while the other thread stays resolved.",
+        premiseSnapshot: PLAN_SNAPSHOT,
+        target: { type: "document" as const },
+      };
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/drafts",
+            method: "PUT",
+            body: {
+              drafts: [draft],
+              resolvedCommentIds: [commentId],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      await expect(
+        readResolvedCommentIds({
+          store: isolated.store,
+          validate: validateResolvedCommentIds,
+        }),
+      ).resolves.toEqual([commentId]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("should refuse feedback that names a resolved thread", async () => {
+    const { isolatedCall, close } = await isolatedRuntime(
+      "big-plan-feedback-resolved-refuse-",
+    );
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/drafts",
+            method: "PUT",
+            body: {
+              drafts: [comment],
+              resolvedCommentIds: [commentId],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+
+      const refusal = await isolatedCall({
+        path: "/api/feedback",
+        method: "POST",
+        body: {
+          comments: [comment],
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+      expect(refusal.status).toBe(409);
+      await expect(refusal.json()).resolves.toMatchObject({
+        error: "Unresolve this thread before sending new work.",
+      });
+    } finally {
+      await close();
+    }
+  });
+
+  it("should refuse a reply that names a resolved thread", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-reply-resolved-refuse-",
+    );
+    try {
       expect(
         (
           await isolatedCall({
@@ -2590,8 +2680,30 @@ describe("review runtime resolve invariant", () => {
           })
         ).status,
       ).toBe(200);
-
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/agent-cancel",
+            method: "POST",
+            body: { requestId: await queuedRequestId(isolated) },
+          })
+        ).status,
+      ).toBe(200);
       expect((await resolveWrite(isolatedCall)).status).toBe(200);
+
+      const refusal = await isolatedCall({
+        path: "/api/agent-requests",
+        method: "POST",
+        body: {
+          kind: "reply",
+          commentId,
+          body: "Please look at this again.",
+        },
+      });
+      expect(refusal.status).toBe(409);
+      await expect(refusal.json()).resolves.toMatchObject({
+        error: "Unresolve this thread before sending new work.",
+      });
     } finally {
       await close();
     }

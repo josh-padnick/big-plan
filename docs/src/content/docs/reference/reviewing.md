@@ -198,6 +198,7 @@ Choose **Accept change** to mark the current place accepted and advance to the n
 Acceptance is a browser-local review checklist: it does not edit the plan or resolve the comment thread.
 After accepting the set, choose **Keep chatting**; a comment thread also offers **Resolve thread**.
 Resolving never cancels a message the thread is still waiting on: while the agent owes that thread an answer, the review runtime refuses the resolve and says so, so cancel the waiting message or wait for its answer first.
+A resolved thread will not accept a reply or new feedback until you unresolve it.
 **Revert response** restores only that response's claim-time baseline, leaves earlier changes in place, and becomes unavailable after the plan changes again.
 
 Comments retain their premise snapshot. If the plan changes before a comment
