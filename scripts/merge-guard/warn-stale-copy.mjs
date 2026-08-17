@@ -282,6 +282,7 @@ const collectFindings = async (repoRoot, mainCommit, resultTree, records) => {
     }
     findings.push({
       path: record.path,
+      newPath: record.newPath,
       droppedLines: record.removedLines,
       ranked: rankByLines(perCommit),
     });
@@ -378,6 +379,7 @@ export const checkStaleCopyWarning = async ({
     const reported = await Promise.all(
       findings.slice(0, MAX_REPORTED_FILES).map(async (finding) => ({
         path: finding.path,
+        newPath: finding.newPath,
         droppedLines: finding.droppedLines,
         origins: await describeRanked(
           root,
@@ -419,6 +421,15 @@ export const checkStaleCopyWarning = async ({
   }
 };
 
+// Names one file for a human. Blame reads the old path, because that is where
+// main's lines live, but the reader must also see where the file is now, so a
+// moved file gets git's own "old => new" rename notation. A file that stayed
+// where it was reads as one plain path.
+const nameOf = (finding) =>
+  finding.newPath === undefined || finding.newPath === finding.path
+    ? finding.path
+    : `${finding.path} => ${finding.newPath}`;
+
 /** Formats the warning so a human can adjudicate it in a few seconds. */
 export const formatStaleCopyWarning = (result) => {
   const lines = [
@@ -454,7 +465,7 @@ export const formatStaleCopyWarning = (result) => {
       )
       .join(", ");
     lines.push(
-      `  ${String(finding.droppedLines).padStart(6)} line(s)  ${finding.path}  (${origins}${finding.moreOrigins > 0 ? `, +${finding.moreOrigins} more` : ""})`,
+      `  ${String(finding.droppedLines).padStart(6)} line(s)  ${nameOf(finding)}  (${origins}${finding.moreOrigins > 0 ? `, +${finding.moreOrigins} more` : ""})`,
     );
   }
   if (result.moreFiles > 0) {
@@ -494,14 +505,21 @@ export const formatStaleCopyWarning = (result) => {
   return lines.join("\n");
 };
 
-/** Writes the one-line GitHub annotations that surface in the CI run summary. */
+// Writes the one-line GitHub annotations that surface in the CI run summary.
+// The anchor is the path in the branch, because GitHub cannot show an
+// annotation on a path that the head tree does not have. The message names the
+// old path when the file moved.
 const annotate = (result) => {
   for (const finding of result.findings) {
     const origins = finding.origins
       .map((origin) => `${origin.description} (${origin.lines} line(s))`)
       .join("; ");
+    const moved =
+      finding.newPath === finding.path
+        ? ""
+        : ` This file moved from ${finding.path}.`;
     console.log(
-      `::warning file=${finding.path}::Drops ${finding.droppedLines} line(s) that ${result.mainRef} has. Main commits at risk: ${origins || "unattributed"}. Warning only, adjudicated by a human.`,
+      `::warning file=${finding.newPath}::Drops ${finding.droppedLines} line(s) that ${result.mainRef} has.${moved} Main commits at risk: ${origins || "unattributed"}. Warning only, adjudicated by a human.`,
     );
   }
 };

@@ -375,6 +375,37 @@ test("should blame only the edited lines of a file the branch renames", async ()
   }
 });
 
+test("should name a moved file in both directions and anchor its annotation in the branch", async () => {
+  const root = await buildRenameWithEdits();
+  try {
+    const { stdout } = await run("node", [CLI], {
+      cwd: root,
+      env: {
+        ...process.env,
+        MERGE_GUARD_WARN_MIN_FILES: "2",
+        MERGE_GUARD_WARN_MIN_LINES: "10",
+      },
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    // The report shows where main's lines lived and where the file is now.
+    assert.match(
+      stdout,
+      /src\/feature\/moved\.ts => src\/feature\/renamed\.ts/,
+    );
+    // GitHub can only anchor a path that the branch has.
+    assert.match(stdout, /::warning file=src\/feature\/renamed\.ts::/);
+    assert.match(stdout, /This file moved from src\/feature\/moved\.ts\./);
+    // A file that stayed where it was reads exactly as it did before.
+    assert.match(
+      stdout,
+      /::warning file=src\/feature\/big\.ts::Drops \d+ line/,
+    );
+    assert.doesNotMatch(stdout, /src\/feature\/big\.ts =>/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("should say the commit roll-up is partial when it cannot blame every file", async () => {
   const root = await buildWideStaleCopy(61);
   try {
