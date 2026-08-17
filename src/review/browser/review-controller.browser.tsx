@@ -43,7 +43,6 @@ import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { attributeDiffPlaces } from "../shared/change-attribution.js";
 import {
   AGENT_STALL_MS,
-  agentHoldsClaimedWork,
   deriveAgentHealthLabel,
   deriveCurrentAgentActivity,
   projectAgentConnectionState,
@@ -3974,7 +3973,6 @@ export const ReviewController = () => {
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
     now: agentProjectionNowMs,
     events: agent.connectionLog,
-    holdsOpenRequest: agentHoldsClaimedWork(agent.requests),
   });
   const agentConnected = agentConnection.connected;
   // Reachability and acceptance are different questions once a runtime can
@@ -5806,10 +5804,7 @@ export const ReviewController = () => {
         key={request.requestId}
         request={request}
         response={response}
-        delivery={projectRequestDelivery({
-          request,
-          nowMs: agentProjectionNowMs,
-        })}
+        delivery={projectRequestDelivery({ request })}
         identity={identity}
         status={statusForRequest(request, "chat")}
         activity={activityForRequest(request)}

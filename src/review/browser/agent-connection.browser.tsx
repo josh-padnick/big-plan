@@ -282,6 +282,10 @@ const CurrentActivityCard = ({
   );
 };
 
+// A quiet heartbeat is an absence of signal, not an observed disconnection, so
+// this card reports the signal and leaves the verdict alone. Nothing renews the
+// plan-wide heartbeat while a turn runs, and the activity card - which does
+// know whether work was picked up - is what names a stall (BIG-147).
 const ConnectionHealthCard = ({
   connected,
   heartbeatAt,
@@ -292,8 +296,8 @@ const ConnectionHealthCard = ({
   readonly nowMs: number;
 }) => (
   <article
-    className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${connected ? "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]" : "border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]"}`}
-    data-review-connection-health={connected ? "connected" : "disconnected"}
+    className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${connected ? "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]" : "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"}`}
+    data-review-connection-health={connected ? "connected" : "quiet"}
   >
     <div className="flex min-w-0 items-center gap-2">
       <span
@@ -301,10 +305,10 @@ const ConnectionHealthCard = ({
         aria-hidden="true"
       />
       <strong className="min-w-0 flex-1 text-sm text-ink">
-        {connected ? "Agent connected" : "Agent disconnected"}
+        {connected ? "Agent connected" : "No recent agent signal"}
       </strong>
       <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
-        {connected ? "online" : "offline"}
+        {connected ? "online" : "quiet"}
       </span>
     </div>
     <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 border-t border-current/20 pt-2">
@@ -312,9 +316,7 @@ const ConnectionHealthCard = ({
         <dt className="text-2xs font-bold uppercase tracking-caps opacity-80">
           Connection
         </dt>
-        <dd className="m-0 text-ink">
-          {connected ? "Healthy" : "Unavailable"}
-        </dd>
+        <dd className="m-0 text-ink">{connected ? "Healthy" : "No signal"}</dd>
       </div>
       <div className="min-w-0">
         <dt className="text-2xs font-bold uppercase tracking-caps opacity-80">
@@ -442,7 +444,7 @@ const ConnectionLog = ({
                     : "m-0 text-xs font-[750] text-warning [overflow-wrap:anywhere]"
                 }
               >
-                {connected ? "CONNECTED" : "DISCONNECTED"}
+                {connected ? "CONNECTED" : "NO SIGNAL"}
               </dd>
             </div>
             <div className="min-w-0">

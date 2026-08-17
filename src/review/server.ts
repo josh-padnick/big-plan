@@ -50,7 +50,6 @@ import {
 } from "./shared/comment.js";
 import { buildFeedbackPackage } from "./feedback-package.js";
 import {
-  agentHoldsOpenRequest,
   deriveSnapshotDigest,
   feedbackAgentRequest,
   messageAgentRequest,
@@ -1089,32 +1088,20 @@ export const startReviewRuntime = async ({
 
   let connectionWrite = Promise.resolve();
   let connectionFailureReported = false;
-  // Set once a disconnect has been recorded, so the extra exchange read below
-  // is paid only while the answer can still change: from the moment presence
-  // goes quiet until the disconnect is either explained away by an open claim
-  // or written to the log.
-  let disconnectRecorded = false;
   const queueConnectionCheck = (): Promise<void> => {
     connectionWrite = connectionWrite
       .catch(() => undefined)
       .then(async () => {
+        // Presence alone. Work an agent is holding is evidence about that turn,
+        // not about whether anyone is still attached, so it never reaches this
+        // edge (BIG-147).
         const presence = await readAgentPresence({ store, sessionId });
-        // A quiet heartbeat is not a disconnection while an agent is holding
-        // work: its process exits at pickup and there is nothing left to renew
-        // until it narrates. Recording the edge here is what filled the
-        // reviewer's connection log with disconnect and reconnect pairs that
-        // never happened (BIG-147).
-        const connected =
-          presence.connected ||
-          (!disconnectRecorded &&
-            (await agentHoldsOpenRequest({ store, sessionId, planId })));
-        disconnectRecorded = !connected;
         await recordAgentConnectionState({
           store,
           sessionId,
-          connected,
+          connected: presence.connected,
           at: new Date().toISOString(),
-          disconnectReason: "No progress reported and no agent attached",
+          disconnectReason: "Heartbeat timed out",
         });
       })
       .catch((error: unknown) => {

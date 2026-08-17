@@ -10,7 +10,6 @@ import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import type { ReviewComment } from "./shared/comment.js";
 import { projectCommentThread } from "./shared/thread-projection.js";
 import {
-  agentHoldsOpenRequest,
   AgentExchangeRejected,
   commentsFromExchange,
   deriveSnapshotDigest,
@@ -420,61 +419,6 @@ describe("agent exchange response contract", () => {
 });
 
 describe("agent exchange filesystem", () => {
-  // BIG-147. The runtime asks this before it writes a disconnect edge. A quiet
-  // heartbeat is not a lost agent while one is holding work, because `agent
-  // next` hands the work over and its process exits.
-  it("should hold the plan through a lapsed lease and release it on the answer", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-held-"));
-    const planPath = join(directory, "plan.mdx");
-    await writeFile(planPath, before);
-    const store = reviewStoreFor({ planPath, planId });
-    await prepareStore(store);
-    await expect(
-      agentHoldsOpenRequest({ store, sessionId, planId }),
-    ).resolves.toBe(false);
-    await writeAgentRequest({ store, request });
-    await expect(
-      agentHoldsOpenRequest({ store, sessionId, planId }),
-    ).resolves.toBe(false);
-    const claimed = await claimAgentRequest({
-      store,
-      activeSessionId: sessionId,
-      requestId: request.requestId,
-      claimedBy: agentSessionId,
-      baselineSnapshot: request.premiseSnapshot,
-      now: "2026-08-02T12:00:30.000Z",
-      clock: () => Date.now() - AGENT_CLAIM_LEASE_MS * 10,
-    });
-    await expect(
-      agentHoldsOpenRequest({ store, sessionId, planId }),
-    ).resolves.toBe(true);
-    await commitRequestTerminal({
-      store,
-      response: validateAgentResponseDraft({
-        value: {
-          requestId: request.requestId,
-          outcomes: [
-            {
-              commentId,
-              state: "declined",
-              message: "No plan revision is needed.",
-            },
-          ],
-        },
-        request: claimed,
-        commentsById: new Map([[commentId, comment]]),
-        changedBlocks: new Set(),
-        currentSnapshot: request.premiseSnapshot,
-        now: "2026-08-02T12:30:00.000Z",
-      }),
-      claimedBy: agentSessionId,
-      now: "2026-08-02T12:30:00.000Z",
-    });
-    await expect(
-      agentHoldsOpenRequest({ store, sessionId, planId }),
-    ).resolves.toBe(false);
-  });
-
   it("freezes the first claim revision when work is picked up again", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-claim-"));
     const planPath = join(directory, "plan.mdx");

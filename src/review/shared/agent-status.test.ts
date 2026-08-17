@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   AGENT_STALL_MS,
-  agentHoldsClaimedWork,
   agentPresenceIsFresh,
   deriveAgentStatus,
   deriveAgentHealthLabel,
@@ -465,29 +464,6 @@ describe("current agent activity", () => {
   });
 });
 
-describe("claimed work", () => {
-  it("should hold open work whose lease has long lapsed", () => {
-    expect(
-      agentHoldsClaimedWork([
-        { ...request(), ...liveClaim(NOW - AGENT_STALL_MS * 10) },
-      ]),
-    ).toBe(true);
-  });
-
-  it.each([
-    ["answered", { answeredAt: "2026-08-08T19:59:30.000Z" }],
-    ["canceled", { canceledAt: "2026-08-08T19:59:30.000Z" }],
-  ])("should release the plan once the request is %s", (_name, terminal) => {
-    expect(
-      agentHoldsClaimedWork([{ ...request(), ...liveClaim(), ...terminal }]),
-    ).toBe(false);
-  });
-
-  it("should not treat a queued request nobody picked up as held work", () => {
-    expect(agentHoldsClaimedWork([request()])).toBe(false);
-  });
-});
-
 describe("agent connection events", () => {
   const connectedEvent = {
     eventId: "event-1",
@@ -528,19 +504,35 @@ describe("agent connection events", () => {
     });
   });
 
-  // BIG-147. The reviewer's connection log filled with disconnect and reconnect
-  // pairs, each reasoned "heartbeat timed out", while one agent worked through
-  // all of them: nothing renews the plan-wide heartbeat between progress notes.
-  it("should not project a disconnection while an agent holds work", () => {
+  // BIG-147. A killed agent leaves its claim behind, and that claim outlives
+  // the review session that saw it: restart `big-plan review` and the abandoned
+  // request is still open on a runtime no agent has ever attached to. Held work
+  // may name a stall on the activity card, but it must never let a connection
+  // surface assert a connection nobody observed.
+  it("should report no connection on a fresh session holding an abandoned claim", () => {
+    const abandoned = {
+      ...request(),
+      ...liveClaim(NOW - AGENT_STALL_MS * 10),
+    };
     expect(
       projectAgentConnectionState({
-        presenceConnected: true,
-        heartbeatAt: NOW - 200_000,
+        presenceConnected: false,
+        heartbeatAt: 0,
         now: NOW,
-        events: [connectedEvent],
-        holdsOpenRequest: true,
+        events: [],
       }),
-    ).toEqual({ connected: true, events: [connectedEvent] });
+    ).toEqual({ connected: false, events: [] });
+    expect(
+      deriveCurrentAgentActivity({
+        requests: [abandoned],
+        cancelPendingRequestIds: new Set(),
+        progressEvents: [],
+        agentConnected: false,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: 0,
+      }),
+    ).toMatchObject({ state: "stalled", headline: "Agent may be stalled" });
   });
 
   it("should keep disconnection current when a reconnect event races after stale presence", () => {

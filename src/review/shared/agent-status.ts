@@ -160,49 +160,32 @@ export const agentPresenceIsFresh = ({
   Math.max(0, now - heartbeatAt) <= AGENT_STALL_MS;
 
 /**
- * True while some agent is holding work here that it has neither answered nor
- * had canceled, whether or not its lease still holds. This is the one place
- * that fact is defined; the runtime and the page both ask it so they cannot
- * disagree about whether silence means anyone is home.
- */
-export const agentHoldsClaimedWork = (
-  requests: ReadonlyArray<ClaimedRequest & TerminalAgentRequest>,
-): boolean =>
-  requests.some(
-    (request) => !requestIsTerminal(request) && request.claimedBy !== undefined,
-  );
-
-/**
  * Reconciles persisted connection events with the current presence lease.
  *
- * `holdsOpenRequest` is the same fact the runtime consults before it writes a
- * disconnect edge. An agent that is holding work has no process left to renew
- * the plan-wide heartbeat, so without it the page would draw a disconnection
- * the runtime deliberately declined to record (BIG-147).
+ * Presence is the only evidence admitted here. Work an agent is holding says
+ * nothing about whether anyone is still attached - a claim outlives the process
+ * that took it - so it may inform the activity reading but never this one
+ * (BIG-147).
  */
 export const projectAgentConnectionState = ({
   presenceConnected,
   heartbeatAt,
   now,
   events,
-  holdsOpenRequest = false,
 }: {
   readonly presenceConnected: boolean;
   readonly heartbeatAt: number;
   readonly now: number;
   readonly events: ReadonlyArray<BrowserConnectionEvent>;
-  readonly holdsOpenRequest?: boolean;
 }): {
   readonly connected: boolean;
   readonly events: ReadonlyArray<BrowserConnectionEvent>;
 } => {
-  const connected =
-    holdsOpenRequest ||
-    agentPresenceIsFresh({
-      connected: presenceConnected,
-      heartbeatAt,
-      now,
-    });
+  const connected = agentPresenceIsFresh({
+    connected: presenceConnected,
+    heartbeatAt,
+    now,
+  });
   let latest: { readonly connected: boolean; readonly atMs: number } | null =
     null;
   for (const event of events) {
@@ -284,8 +267,13 @@ const disconnectedSupporting = ({
     : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
 };
 
-/** True once an agent has picked a request up, lease still live or not. */
-const requestWasClaimed = (request: AgentActivityRequest): boolean =>
+/**
+ * True once an agent has picked a request up, lease still live or not. Pickup
+ * is what the reviewer is told about, and a lapsed lease does not undo it:
+ * `agent next` hands the work over and its process exits, so between two
+ * progress notes nothing is left to renew the claim (BIG-147).
+ */
+export const requestWasClaimed = (request: ClaimedRequest): boolean =>
   request.claimedBy !== undefined && claimSignalAtMs(request) !== undefined;
 
 /** Selects the first live, nonterminal claim. */
@@ -305,50 +293,49 @@ export const selectActiveAgentRequest = <Request extends AgentActivityRequest>({
       claimIsLive({ request, nowMs: now }),
   );
 
-/**
- * Selects the work an agent is holding, preferring a renewed lease over one
- * that has lapsed. A lapsed lease says nothing about the holder: `agent next`
- * hands the work over and its process exits, so between two progress notes no
- * Big Plan process is running on that agent's behalf and there is no signal to
- * renew (BIG-147).
- */
-export const selectClaimedAgentRequest = <
-  Request extends AgentActivityRequest,
->({
+/** Selects live work before falling back to the oldest open request `accepts`. */
+const selectOpenAgentRequest = <Request extends AgentActivityRequest>({
   requests,
   cancelPendingRequestIds,
   now,
+  accepts,
 }: {
   readonly requests: ReadonlyArray<Request>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly now: number;
+  readonly accepts: (request: Request) => boolean;
 }): Request | undefined =>
   selectActiveAgentRequest({ requests, cancelPendingRequestIds, now }) ??
   requests.find(
     (request) =>
       !requestIsTerminal(request) &&
       !cancelPendingRequestIds.has(request.requestId) &&
-      requestWasClaimed(request),
+      accepts(request),
   );
 
-/** Selects live work before falling back to the oldest queued request. */
-export const selectPendingAgentRequest = <
+/**
+ * Selects the work an agent is holding, preferring a renewed lease over one
+ * that has lapsed. A lapsed lease says nothing about the holder, so a quiet
+ * turn keeps its request here rather than falling back to the queue.
+ */
+export const selectClaimedAgentRequest = <
   Request extends AgentActivityRequest,
->({
-  requests,
-  cancelPendingRequestIds,
-  now,
-}: {
+>(input: {
   readonly requests: ReadonlyArray<Request>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
   readonly now: number;
 }): Request | undefined =>
-  selectActiveAgentRequest({ requests, cancelPendingRequestIds, now }) ??
-  requests.find(
-    (request) =>
-      !requestIsTerminal(request) &&
-      !cancelPendingRequestIds.has(request.requestId),
-  );
+  selectOpenAgentRequest({ ...input, accepts: requestWasClaimed });
+
+/** Selects live work before falling back to the oldest queued request. */
+export const selectPendingAgentRequest = <
+  Request extends AgentActivityRequest,
+>(input: {
+  readonly requests: ReadonlyArray<Request>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly now: number;
+}): Request | undefined =>
+  selectOpenAgentRequest({ ...input, accepts: () => true });
 
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({

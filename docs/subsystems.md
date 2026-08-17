@@ -62,8 +62,9 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   Symptoms that look unrelated (an agent disconnecting, a preview expiring) can share this one cause.
 - Whether an agent is attached and whether it has narrated lately are two questions, and one signal cannot answer both.
   `big-plan agent next` hands the work over and its process exits, so between two progress notes nothing is running on that agent's behalf and no heartbeat or claim lease renews.
-  Silence inside a turn is therefore evidence of silence alone: work that has been picked up is judged by its own narration and reported as stalled, never as a lost connection, and the plan-wide presence signal decides attachment only when nobody holds work.
-  `agentHoldsClaimedWork` in `src/review/shared/agent-status.ts` is the single definition of "someone is holding work here"; the runtime asks it through `agentHoldsOpenRequest` before writing a connection edge, and the page asks it directly, so the two cannot disagree.
+  Silence inside a turn is therefore evidence of silence alone, and the two questions are answered on separate surfaces.
+  A connection surface reports only what presence observed, and never consults held work: a claim outlives the process that took it, so letting it speak for attachment would assert a connection nobody saw, and stale presence is reported as an absent signal rather than as an observed disconnection.
+  Work that has been picked up is judged by its own narration instead: a renewed lease reads as working and a quiet one as stalled, and only an unclaimed plan lets presence decide idle against disconnected.
   For the same reason, answering is gated on still being the recorded holder rather than on an unexpired lease: a takeover rewrites `claimedBy`, while a slow turn does not, and refusing the slow turn's answer would lose the reviewer's message.
 - A thread-resolution action that conflicts with a queued or in-flight message for that thread is a request-lifecycle invariant, enforced where request claims and terminal states land (`request-mailbox.ts`), not a thread-semantics concern.
   The invariant holds both ways: new work naming a still-resolved thread is refused at the same request-creation boundary.

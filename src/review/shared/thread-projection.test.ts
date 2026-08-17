@@ -346,25 +346,66 @@ describe("thread projection", () => {
       cancelPendingRequestIds: new Set(),
     });
     expect(projection).toMatchObject({
-      group: "queued",
+      group: "working",
       canDeleteQueued: false,
     });
-    expect(projection.latestExchange).toMatchObject({ delivery: "Queued" });
-    expect(
-      projectRequestDelivery({
-        request: request(liveClaim()),
-        nowMs: NOW,
-      }),
-    ).toBe("Sent");
+    // Delivery happened, and the lease lapsing since does not unsend it.
+    expect(projection.latestExchange).toMatchObject({ delivery: "Sent" });
+    expect(projectRequestDelivery({ request: request(liveClaim()) })).toBe(
+      "Sent",
+    );
     expect(
       projectRequestDelivery({
         request: request({
           ...expiredClaim,
           answeredAt: "2026-08-10T20:00:01Z",
         }),
-        nowMs: NOW,
       }),
     ).toBe("Sent");
+    expect(projectRequestDelivery({ request: request() })).toBe("Queued");
+  });
+
+  // BIG-147. A turn longer than the claim lease is the ordinary path, not an
+  // anomaly: `agent next` hands the work over and its process exits, so nothing
+  // renews the claim between progress notes. Reporting that as "Queued, N
+  // ahead" described started work as still waiting in line, and left the amber
+  // stalled state with no producer on this surface.
+  it("should report a quiet claimed request as stalled rather than queued", () => {
+    const quiet = request(liveClaim(NOW - AGENT_CLAIM_LEASE_MS - 60_000));
+    const status = projectRequestStatus({
+      request: quiet,
+      progressEvents: [],
+      presence,
+      runtime: "online",
+      surface: "thread",
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set(),
+      queuedAhead: 1,
+    });
+    expect(status).toMatchObject({
+      stage: "stalled",
+      label: "Working",
+      headline: "No progress for 2m",
+      tone: "warning",
+    });
+    // The same silence is the only evidence there is, so the detail must not
+    // assert that the agent session is still connected.
+    expect(status.detail).not.toContain("still connected");
+    expect(status.detail).toContain("Check the agent terminal");
+  });
+
+  it("should keep a renewed claim working rather than stalled", () => {
+    expect(
+      projectRequestStatus({
+        request: request(liveClaim(NOW - 1_000)),
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({ stage: "working", label: "Agent working" });
   });
 
   it("should exclude terminal feedback from the active batch", () => {
@@ -507,7 +548,10 @@ describe("thread projection", () => {
     ).toBe("waiting");
   });
 
-  it("should stop reporting a request as picked up once its lease lapses", () => {
+  // Replaces an assertion that a lapsed lease returned the request to waiting.
+  // Pickup is a past event; the clock running past the lease reports it as
+  // quiet, never as never-started (BIG-147).
+  it("should keep reporting a request as picked up once its lease lapses", () => {
     expect(
       projectRequestStatus({
         request: request(liveClaim()),
@@ -518,7 +562,7 @@ describe("thread projection", () => {
         nowMs: NOW + AGENT_CLAIM_LEASE_MS + 1,
         cancelPendingRequestIds: new Set(),
       }).stage,
-    ).toBe("waiting");
+    ).toBe("stalled");
   });
 
   it("should ignore an invalid claimed timestamp when its lease is live", () => {

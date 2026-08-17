@@ -29,6 +29,7 @@ import {
   writeAgentRequest,
 } from "./agent-exchange.js";
 import { buildFeedbackPackage } from "./feedback-package.js";
+import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
 import {
   appendProgressEvent,
   assertResolvableComment,
@@ -50,6 +51,7 @@ import {
   readProgress,
   reviewStoreFor,
   withReviewStoreLock,
+  writeAgentRequestValue,
   writeAgentResponseValue,
   writeResolvedCommentIds,
 } from "./store.js";
@@ -922,18 +924,6 @@ describe("request mailbox", () => {
       currentSnapshot: snapshot,
       now: new Date(startedAt + 74_000).toISOString(),
     });
-    // The takeover is written while the answer is already queued behind the
-    // request lock, so the ownership test has to be read inside the lock and
-    // not captured before it.
-    await claimAgentRequest({
-      store,
-      activeSessionId: sessionId,
-      requestId: request.requestId,
-      claimedBy: agentB,
-      baselineSnapshot: snapshot,
-      now: new Date(startedAt + 76_000).toISOString(),
-      clock: () => startedAt + 76_000,
-    });
     let releaseLock: (() => Promise<void>) | undefined;
     try {
       releaseLock = await holdAgentRequestLock({
@@ -946,7 +936,28 @@ describe("request mailbox", () => {
         claimedBy: agentA,
         now: new Date(startedAt + 77_000).toISOString(),
       });
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      // Long enough for the commit to reach the lock and to have finished any
+      // read it made before taking it.
+      for (let turn = 0; turn < 8; turn += 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+
+      // The takeover lands while the answer is already queued behind the lock,
+      // so agentA is still the recorded holder at the moment the commit starts
+      // waiting. An ownership test hoisted out of `withRequestLock` would read
+      // that earlier state and let this answer overwrite agentB's work; only a
+      // test read inside the lock sees the takeover. Written through the store
+      // rather than `claimAgentRequest`, which would wait for the same lock.
+      await writeAgentRequestValue({
+        store,
+        requestId: request.requestId,
+        value: {
+          ...claimed,
+          claimedBy: agentB,
+          claimedAt: new Date(startedAt + 76_000).toISOString(),
+          claimExpiresAtMs: startedAt + 76_000 + AGENT_CLAIM_LEASE_MS,
+        },
+      });
       await releaseLock();
       releaseLock = undefined;
 
