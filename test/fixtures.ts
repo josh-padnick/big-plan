@@ -903,15 +903,14 @@ export const stageComment = async (page: Page, body: string): Promise<void> => {
   await addComment.click();
 };
 
-/**
- * Runs one real `big-plan agent` command against a plan, so a journey can
- * cross the same process boundary a coding agent crosses. The whole output is
- * returned, and a non-zero exit or a hang becomes a readable failure rather
- * than a silent one.
- */
-export const runAgentCli = (
-  args: ReadonlyArray<string>,
-): Promise<{ readonly stdout: string; readonly stderr: string }> =>
+type AgentCliRun = {
+  readonly code: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+/** Runs one real `big-plan agent` command and reports how it ended. */
+const spawnAgentCli = (args: ReadonlyArray<string>): Promise<AgentCliRun> =>
   new Promise((settle, fail) => {
     const child = spawn(process.execPath, [binPath, "agent", ...args], {
       cwd: repoRoot,
@@ -944,19 +943,45 @@ export const runAgentCli = (
         ),
       );
     });
-    child.once("close", (code, signal) => {
+    child.once("close", (code) => {
       clearTimeout(timer);
-      if (code !== 0) {
-        fail(
-          new Error(
-            `Agent CLI stopped with code ${String(code)} and signal ${String(signal)}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
-          ),
-        );
-        return;
-      }
-      settle({ stdout, stderr });
+      settle({ code, stdout, stderr });
     });
   });
+
+/**
+ * Runs one real `big-plan agent` command against a plan, so a journey can
+ * cross the same process boundary a coding agent crosses. The whole output is
+ * returned, and a non-zero exit or a hang becomes a readable failure rather
+ * than a silent one.
+ */
+export const runAgentCli = async (
+  args: ReadonlyArray<string>,
+): Promise<{ readonly stdout: string; readonly stderr: string }> => {
+  const { code, stdout, stderr } = await spawnAgentCli(args);
+  if (code !== 0) {
+    throw new Error(
+      `Agent CLI stopped with code ${String(code)}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+    );
+  }
+  return { stdout, stderr };
+};
+
+/**
+ * Runs one real `big-plan agent` command that the runtime is expected to
+ * refuse, so a journey can read the refusal instead of catching a throw.
+ */
+export const runRefusedAgentCli = async (
+  args: ReadonlyArray<string>,
+): Promise<{ readonly stdout: string; readonly stderr: string }> => {
+  const { code, stdout, stderr } = await spawnAgentCli(args);
+  if (code === 0) {
+    throw new Error(
+      `Agent CLI was expected to refuse this command.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+    );
+  }
+  return { stdout, stderr };
+};
 
 /**
  * Returns the locator's bounding box, failing the test when the element has
