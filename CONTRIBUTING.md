@@ -146,7 +146,8 @@ Add a trailing `head <sha>` to scope it to one commit instead, and a later push 
 A gate re-runs by itself whenever the pull request changes: a push, a review, an inline comment, or a conversation comment, including an edited or deleted one.
 Writing the missing comment is therefore enough to turn a gate green; no push is needed.
 
-Comment triggers always run the workflow file on `main`, so a pull request whose branch predates a change to the gate is judged by main's copy of it.
+A conversation comment runs the workflow file from `main`, not from the pull request's branch, so a change to the gate itself only governs conversation comments once it merges.
+Pushes, reviews, and inline review comments run the branch's own copy.
 To judge a pull request by hand, run the workflow from the Actions tab with the pull request number, or run it locally:
 
 ```sh

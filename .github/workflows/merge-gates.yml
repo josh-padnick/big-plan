@@ -17,6 +17,12 @@
 # run it creates against the pull request's head sha does. Every trigger below
 # therefore runs the same evaluation and republishes the same two named checks.
 #
+# Measured on 2026-08-18 while building this: pull_request and
+# pull_request_review_comment run the branch's copy of this file, and
+# issue_comment runs main's copy and nothing else. So a change to the gate
+# governs conversation comments only once it merges, which is why
+# workflow_dispatch exists.
+#
 # It shares CI's self-hosted runner because this account has no GitHub-hosted
 # minutes. The job only reads the API, so it is seconds long and needs nothing
 # from the local machine, but it does queue behind whatever that runner is
