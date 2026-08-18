@@ -216,6 +216,14 @@ test("should compare, answer, and revise a Decision", async ({
     submitBox?.y ?? 0,
   );
   expect(cancelBox?.x ?? 0).toBeLessThan(submitBox?.x ?? 0);
+  // Submitting here makes a comment, so the button wears the comment boxes'
+  // accent-outline submit rather than a neutral one.
+  const accent = await card
+    .locator(".decision-propose-link")
+    .evaluate((node) => getComputedStyle(node).color);
+  await expect(submitNow).toHaveCSS("border-color", accent);
+  await expect(submitNow).toHaveCSS("color", accent);
+  await expect(cancel).not.toHaveCSS("border-color", accent);
   // All of it hangs off the field's right edge.
   const textBox = await proposalField.boundingBox();
   expect(
