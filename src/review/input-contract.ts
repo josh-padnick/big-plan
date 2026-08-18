@@ -22,14 +22,28 @@ import { isCurrentAnswer, type StagedInputs } from "./plan-inputs-store.js";
 import type { DecisionInventory } from "./decision-inventory.js";
 import type { ReviewInput } from "./shared/input-contract.js";
 
+/**
+ * What one revision changed, or the fact that nobody can say any more.
+ *
+ * A diff that came out empty and a diff that could not be computed are
+ * different facts about a change set, and collapsing them into an empty list
+ * makes the contract report the wrong one: a revision that edited nothing asks
+ * the reviewer for nothing, while a revision whose snapshots are gone asks for
+ * something the review can no longer show.
+ */
+export type ChangeSetPlaces =
+  | { readonly kind: "known"; readonly placeIds: ReadonlyArray<string> }
+  | { readonly kind: "unreadable" };
+
 /** One change set as the contract needs to see it. */
 export type ChangeSetInput = {
   readonly changeSetId: string;
   readonly label: string;
   readonly from: string;
   readonly to: string;
-  /** The places this revision changed, or none where its snapshots are gone. */
-  readonly placeIds: ReadonlyArray<string>;
+  readonly places: ChangeSetPlaces;
+  /** The results this change set held before its current one. */
+  readonly priorResultSnapshots: ReadonlyArray<string>;
 };
 
 const decisionDetail = ({
@@ -90,6 +104,16 @@ export const decisionInputs = ({
  * current one. That is what makes a change set that moved under recorded
  * acceptances stale rather than merely unanswered: the reviewer closed this
  * change set once, and a later revision reopened it.
+ *
+ * Supersession is asked of the addresses this change set has itself occupied,
+ * never of its base alone. One revision can answer several comments at once,
+ * and every change set it carries is then based on the same snapshot; reading
+ * that shared base as identity would report a sibling nobody revised as stale.
+ *
+ * A revision that changed nothing is not an input. It expects nothing of the
+ * reviewer, so listing it would leave a row no gesture could ever satisfy.
+ * A change set whose snapshots are gone is the opposite case and stays: the
+ * reviewer was shown it, and is owed its absence rather than its disappearance.
  */
 export const changeSetInputs = ({
   changeSets,
@@ -99,35 +123,45 @@ export const changeSetInputs = ({
   readonly dispositions: ChangeDispositionState;
 }): ReadonlyArray<ReviewInput> => {
   const accepted = acceptedChangeKeys(dispositions);
-  return changeSets.map((changeSet) => {
+  const inputs: Array<ReviewInput> = [];
+  for (const changeSet of changeSets) {
+    const isReadable = changeSet.places.kind === "known";
+    const placeIds =
+      changeSet.places.kind === "known" ? changeSet.places.placeIds : [];
+    if (isReadable && placeIds.length === 0) continue;
     const standing = changeSetStanding({
       from: changeSet.from,
       to: changeSet.to,
-      placeIds: changeSet.placeIds,
+      placeIds,
       accepted,
     });
+    const priorResults = new Set(
+      changeSet.priorResultSnapshots.filter(
+        (snapshot) => snapshot !== changeSet.to,
+      ),
+    );
     const supersededAcceptance = dispositions.accepted.some(
-      (entry) => entry.from === changeSet.from && entry.to !== changeSet.to,
+      (entry) => entry.from === changeSet.from && priorResults.has(entry.to),
     );
     const state: ReviewInput["state"] = standing.isAccepted
       ? "answered"
       : supersededAcceptance
         ? "stale"
         : "unanswered";
-    return {
+    inputs.push({
       inputId: changeSet.changeSetId,
       kind: "change-set",
       label: changeSet.label,
       isCritical: false,
       state,
-      detail:
-        standing.total === 0
-          ? "These changes are no longer available to review"
-          : state === "stale"
-            ? `Revised after review; ${standing.accepted} of ${standing.total} changes accepted`
-            : `${standing.accepted} of ${standing.total} changes accepted`,
-    };
-  });
+      detail: !isReadable
+        ? "These changes are no longer available to review"
+        : state === "stale"
+          ? `Revised after review; ${standing.accepted} of ${standing.total} changes accepted`
+          : `${standing.accepted} of ${standing.total} changes accepted`,
+    });
+  }
+  return inputs;
 };
 
 /**

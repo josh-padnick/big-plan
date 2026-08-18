@@ -37,7 +37,7 @@ import type { StagedInputs } from "./plan-inputs-store.js";
 import { validateChangeDispositions } from "./change-dispositions-store.js";
 import type { StoredChangeDispositions } from "./change-dispositions-store.js";
 import { readCommittedChangeSets } from "./change-set-commit.js";
-import type { ChangeSetInput } from "./input-contract.js";
+import type { ChangeSetInput, ChangeSetPlaces } from "./input-contract.js";
 import { buildSnapshotDiff } from "./snapshot-diff.js";
 import { reviewerMessageLabel } from "./shared/reviewer-markdown.js";
 import {
@@ -551,8 +551,12 @@ export const createActivityClock = (idleTimeoutMs: number): ActivityClock => {
  * because that address is content-pinned: one pair of snapshot digests always
  * describes the same set of changes, and a later revision arrives as its own
  * address rather than mutating this one. Recomputing it would mean rendering
- * two whole documents on every read of the contract, which the reviewer's
- * browser asks for on every poll.
+ * two whole documents every time the reviewer's browser applied a newer answers
+ * or disposition record and asked what the review is still waiting for.
+ *
+ * Only a computed answer is memoized. A read that failed said nothing about
+ * this address, and remembering it would hold a change set unreviewable for the
+ * life of the runtime over one transient failure.
  */
 export const createPlanChangeSets = ({
   store,
@@ -564,16 +568,16 @@ export const createPlanChangeSets = ({
   readonly planRenderer: PlanRenderer;
 }): PlanChangeSets => {
   const places = new Map<string, ReadonlyArray<string>>();
-  const placeIdsFor = async ({
+  const placesFor = async ({
     from,
     to,
   }: {
     readonly from: string;
     readonly to: string;
-  }): Promise<ReadonlyArray<string>> => {
+  }): Promise<ChangeSetPlaces> => {
     const address = `${from}:${to}`;
     const memoized = places.get(address);
-    if (memoized !== undefined) return memoized;
+    if (memoized !== undefined) return { kind: "known", placeIds: memoized };
     const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
     let placeIds: ReadonlyArray<string>;
     try {
@@ -596,40 +600,49 @@ export const createPlanChangeSets = ({
         }).blocks,
       }).places.map((place) => place.placeId);
     } catch {
-      // A snapshot this review no longer holds leaves a change set with
-      // nothing to review. It stays in the contract, because a reviewer who
-      // was shown it is owed its absence rather than its disappearance.
-      placeIds = [];
+      // A snapshot this review can no longer read is an unknown diff, not an
+      // empty one, and the contract has to be told which of the two it has.
+      return { kind: "unreadable" };
     }
     places.set(address, placeIds);
-    return placeIds;
+    return { kind: "known", placeIds };
   };
   // A thread's change set is addressed by the comment that started it, so the
   // comment is where its name comes from. A plan-wide question owns no thread
   // and is named for what it is.
-  const labelFor = async (changeSetId: string): Promise<string> => {
+  const threadLabels = async (): Promise<ReadonlyMap<string, string>> => {
     const comments = [
       ...(await planRenderer.readStoredComments(store.sentPath)),
       ...(await planRenderer.readStoredComments(store.draftsPath)),
     ];
-    const comment = comments.find((entry) => entry.id === changeSetId);
-    return comment === undefined
-      ? "Plan-wide question"
-      : reviewerMessageLabel(comment.body);
+    return new Map(
+      comments.map((comment) => [
+        comment.id,
+        reviewerMessageLabel(comment.body),
+      ]),
+    );
   };
   return {
     list: async () => {
       const changeSets = await readCommittedChangeSets({ store });
+      // The comment files are read once for the whole contract, not once per
+      // change set: every label comes out of the same two files.
+      const labels = changeSets.some(
+        (changeSet) => changeSet.provenance !== "chat",
+      )
+        ? await threadLabels()
+        : new Map<string, string>();
       return Promise.all(
         changeSets.map(async (changeSet) => ({
           changeSetId: changeSet.changeSetId,
           label:
-            changeSet.provenance === "chat"
-              ? "Plan-wide question"
-              : await labelFor(changeSet.changeSetId),
+            (changeSet.provenance === "chat"
+              ? undefined
+              : labels.get(changeSet.changeSetId)) ?? "Plan-wide question",
           from: changeSet.baseSnapshot,
           to: changeSet.resultSnapshot,
-          placeIds: await placeIdsFor({
+          priorResultSnapshots: changeSet.priorResultSnapshots,
+          places: await placesFor({
             from: changeSet.baseSnapshot,
             to: changeSet.resultSnapshot,
           }),

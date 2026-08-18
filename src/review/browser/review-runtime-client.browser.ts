@@ -100,9 +100,45 @@ export const requestJson = async ({
  * long as the clocks were apart. Deriving it from what this page has already
  * applied is what keeps every surface on one revision of the truth.
  */
-export const REVIEW_RECORD_APPLIED_EVENT = "bigplan:review-record-applied";
+const REVIEW_RECORD_APPLIED_EVENT = "bigplan:review-record-applied";
 
-/** Announces one applied record, for surfaces derived from more than one. */
-export const announceAppliedReviewRecord = (): void => {
+/** The last record revision one surface applied. A React ref satisfies it. */
+export type AppliedRecordRevision = { current: number };
+
+/**
+ * Applies one record response, and announces the ones it applied.
+ *
+ * Every response from these records carries the whole current record and the
+ * revision that produced it, so applying one is the only way this page learns
+ * what is stored, and a strictly older revision lost a race with a write
+ * already applied and is dropped without comment.
+ *
+ * Announcing lives here rather than at each record's own reader because a
+ * reader that applied a record without saying so leaves every surface derived
+ * from more than one record showing an older review than the surfaces beside
+ * it - and nothing throws, so the disagreement is only ever found by looking.
+ */
+export const applyReviewRecord = ({
+  revision,
+  applied,
+  apply,
+}: {
+  readonly revision: number;
+  readonly applied: AppliedRecordRevision;
+  readonly apply: () => void;
+}): boolean => {
+  if (revision < applied.current) return false;
+  applied.current = revision;
+  apply();
   document.dispatchEvent(new CustomEvent(REVIEW_RECORD_APPLIED_EVENT));
+  return true;
+};
+
+/**
+ * Subscribes a surface derived from more than one record to the moments this
+ * page applied a newer copy of one, and returns how to stop.
+ */
+export const onAppliedReviewRecord = (react: () => void): (() => void) => {
+  document.addEventListener(REVIEW_RECORD_APPLIED_EVENT, react);
+  return () => document.removeEventListener(REVIEW_RECORD_APPLIED_EVENT, react);
 };

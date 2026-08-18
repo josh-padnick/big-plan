@@ -191,7 +191,7 @@ import {
 } from "./review-recovery-storage.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
-  announceAppliedReviewRecord,
+  applyReviewRecord,
   requestJson,
   runtimeIdentity,
   type RuntimeIdentity,
@@ -4535,17 +4535,16 @@ export const ReviewController = () => {
     },
     [],
   );
-  // Every response from the answers store carries the whole current record and
-  // the revision that produced it, so applying one is the only way this page
-  // learns what is stored. A strictly older revision lost a race with a write
-  // that has already been applied and is dropped without comment.
   const applyAnswersResponse = useCallback((value: unknown): void => {
     const state = parseReviewState(value);
-    if (state.revision < appliedAnswerRevision.current) return;
-    appliedAnswerRevision.current = state.revision;
-    setStoredAnswers(state.answers);
-    setSupersededDecisionIds(state.supersededDecisionIds);
-    announceAppliedReviewRecord();
+    applyReviewRecord({
+      revision: state.revision,
+      applied: appliedAnswerRevision,
+      apply: () => {
+        setStoredAnswers(state.answers);
+        setSupersededDecisionIds(state.supersededDecisionIds);
+      },
+    });
   }, []);
   const flushPendingDecisionInputs = useCallback(async (): Promise<void> => {
     if (

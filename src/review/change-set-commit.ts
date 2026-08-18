@@ -43,6 +43,12 @@ export type CommittedChangeSet = {
   readonly provenance: ChangeSetProvenance;
   readonly baseSnapshot: string;
   readonly resultSnapshot: string;
+  /**
+   * The results this change set held before its current one, in commit order.
+   * One revision can carry several change sets, so a snapshot pair does not
+   * identify a change set; the addresses it has actually occupied do.
+   */
+  readonly priorResultSnapshots: ReadonlyArray<string>;
   readonly committedAt: string;
 };
 
@@ -252,6 +258,10 @@ export const readCommittedRevisionsToObserve = async ({
  * from the change set's first committed revision and stay put, so a thread's
  * Was keeps naming where the thread started rather than where its latest
  * reply started.
+ *
+ * Every result the change set has moved off is kept, because that history is
+ * the only thing that tells this change set's own past apart from a sibling
+ * answered in the same revision.
  */
 export const changeSetsFrom = (
   revisions: ReadonlyArray<CommittedPlanRevision>,
@@ -265,6 +275,10 @@ export const changeSetsFrom = (
         provenance: existing?.provenance ?? revision.provenance,
         baseSnapshot: existing?.baseSnapshot ?? revision.baseSnapshot,
         resultSnapshot: revision.resultSnapshot,
+        priorResultSnapshots:
+          existing === undefined
+            ? []
+            : [...existing.priorResultSnapshots, existing.resultSnapshot],
         committedAt: revision.committedAt,
       });
     }

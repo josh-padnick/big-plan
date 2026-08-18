@@ -44,9 +44,31 @@ describe("committed change sets", () => {
         provenance: "feedback",
         baseSnapshot: BASE,
         resultSnapshot: SECOND,
+        // The result it moved off is kept: a sibling answered in the same
+        // revision shares this change set's base, so only the addresses this
+        // one has occupied tell the two apart.
+        priorResultSnapshots: [FIRST],
         committedAt: "2026-08-17T12:05:00.000Z",
       },
     ]);
+  });
+
+  it("should leave a sibling answered in the same revision at its own address", () => {
+    const [thread, sibling] = changeSetsFrom([
+      revision({ changeSetIds: [THREAD, OTHER_THREAD] }),
+      revision({
+        requestId: "bbbbbbbbbbbbbbbb",
+        changeSetIds: [THREAD],
+        baseSnapshot: FIRST,
+        resultSnapshot: SECOND,
+        provenance: "reply",
+        committedAt: "2026-08-17T12:05:00.000Z",
+      }),
+    ]);
+
+    expect(thread?.priorResultSnapshots).toEqual([FIRST]);
+    expect(sibling?.resultSnapshot).toBe(FIRST);
+    expect(sibling?.priorResultSnapshots).toEqual([]);
   });
 
   it("should give one commit a change set for every thread it answers", () => {

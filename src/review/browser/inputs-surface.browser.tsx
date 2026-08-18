@@ -29,9 +29,9 @@ import { decodeReviewInputContract } from "../shared/review-wire.js";
 import { Icon } from "./icon.browser.js";
 import { displayedStandIn, liveDecisionFigure } from "./live-target.browser.js";
 import {
+  onAppliedReviewRecord,
   requestJson,
   runtimeIdentity,
-  REVIEW_RECORD_APPLIED_EVENT,
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
 import { Badge } from "./ui.browser.js";
@@ -106,10 +106,10 @@ const useReviewInputContract = (): {
         .catch(() => undefined);
     };
     read();
-    document.addEventListener(REVIEW_RECORD_APPLIED_EVENT, read);
+    const stopListening = onAppliedReviewRecord(read);
     return () => {
       cancelled = true;
-      document.removeEventListener(REVIEW_RECORD_APPLIED_EVENT, read);
+      stopListening();
     };
   }, [apply, articleVersion, identity]);
 
