@@ -48,7 +48,7 @@ export type AgentOutcomeState =
   "answered" | "changed" | "warning" | "needs-input" | "declined";
 
 type AgentRequestBase = TerminalAgentRequest & {
-  readonly version: 2;
+  readonly version: 3;
   readonly requestId: string;
   readonly sessionId: string;
   readonly planId: string;
@@ -59,6 +59,12 @@ type AgentRequestBase = TerminalAgentRequest & {
   readonly claimedBy?: string;
   readonly claimedModel?: AgentModelIdentity;
   readonly claimExpiresAtMs?: number;
+  /**
+   * Rises by one on every new claim and takeover, and stays put on renewal.
+   * It is what a commit proves it still owns: a superseded generation may keep
+   * changing its own claim stage but can never publish it.
+   */
+  readonly claimGeneration?: number;
   readonly attachmentManifest: ReadonlyArray<ReviewImageAttachment>;
   readonly attachments: ReadonlyArray<ReviewImageAttachment>;
 };
@@ -93,10 +99,17 @@ export type AgentOutcome = {
 };
 
 type AgentResponseBase = {
-  readonly version: 2;
+  readonly version: 3;
   readonly requestId: string;
   readonly sessionId: string;
   readonly planId: string;
+  /**
+   * The claim generation this answer was drafted for. It is stamped from the
+   * request, never from the agent, and the terminal commit re-checks it, so a
+   * takeover between drafting and commit refuses the answer instead of letting
+   * it publish over the new holder's work.
+   */
+  readonly claimGeneration: number;
   readonly resultSnapshot: string;
   readonly createdAt: string;
 };
@@ -183,6 +196,15 @@ const epochMilliseconds = (value: unknown, field: string): number => {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
     throw new AgentExchangeRejected(
       `"${field}" must be a positive epoch millisecond count`,
+    );
+  }
+  return value;
+};
+
+const claimGenerationNumber = (value: unknown): number => {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    throw new AgentExchangeRejected(
+      '"claimGeneration" must be a positive whole number',
     );
   }
   return value;
@@ -445,7 +467,7 @@ const validateRequestAttachments = ({
 const requestBase = (
   value: Readonly<Record<string, unknown>>,
 ): AgentRequestBase => {
-  if (value.version !== 2) {
+  if (value.version !== 3) {
     throw new AgentExchangeRejected("Unsupported agent request version");
   }
   const rawBaselineSnapshot =
@@ -473,6 +495,10 @@ const requestBase = (
     value.claimExpiresAtMs === undefined
       ? undefined
       : epochMilliseconds(value.claimExpiresAtMs, "claimExpiresAtMs");
+  const claimGeneration =
+    value.claimGeneration === undefined
+      ? undefined
+      : claimGenerationNumber(value.claimGeneration);
   const answeredAt =
     value.answeredAt === undefined ? undefined : timestamp(value.answeredAt);
   const canceledAt =
@@ -487,13 +513,14 @@ const requestBase = (
     claimedAt,
     claimedBy,
     claimExpiresAtMs,
+    claimGeneration,
   ];
   if (
     claimFields.some((field) => field !== undefined) !==
     claimFields.every((field) => field !== undefined)
   ) {
     throw new AgentExchangeRejected(
-      '"baselineSnapshot", "claimedAt", "claimedBy", and "claimExpiresAtMs" must appear together',
+      '"baselineSnapshot", "claimedAt", "claimedBy", "claimExpiresAtMs", and "claimGeneration" must appear together',
     );
   }
   if (answeredAt !== undefined && baselineSnapshot === undefined) {
@@ -509,7 +536,7 @@ const requestBase = (
     attachments: value.attachments,
   });
   return {
-    version: 2,
+    version: 3,
     requestId: id(value.requestId, "requestId"),
     sessionId: id(value.sessionId, "sessionId"),
     planId: id(value.planId, "planId"),
@@ -526,6 +553,7 @@ const requestBase = (
           claimedAt,
           claimedBy,
           claimExpiresAtMs,
+          claimGeneration,
           ...(claimedModel === undefined ? {} : { claimedModel }),
         }),
     ...(answeredAt === undefined ? {} : { answeredAt }),
@@ -587,10 +615,11 @@ const responseBase = ({
   readonly currentSnapshot: string;
   readonly now: string;
 }): AgentResponseBase => ({
-  version: 2,
+  version: 3,
   requestId: request.requestId,
   sessionId: request.sessionId,
   planId: request.planId,
+  claimGeneration: requestClaimGeneration(request),
   resultSnapshot: currentSnapshot,
   createdAt: now,
 });
@@ -710,6 +739,16 @@ const outcome = ({
 export const requestBaselineSnapshot = (request: AgentRequest): string =>
   request.baselineSnapshot ?? request.premiseSnapshot;
 
+/** Reads the generation of a claimed request, refusing an unclaimed one. */
+export const requestClaimGeneration = (request: AgentRequest): number => {
+  if (request.claimGeneration === undefined) {
+    throw new AgentExchangeRejected(
+      "The request must be claimed before its generation can be read",
+    );
+  }
+  return request.claimGeneration;
+};
+
 /** Validates an agent-authored draft and fills trusted session metadata. */
 export const validateAgentResponseDraft = ({
   value,
@@ -770,43 +809,22 @@ export const validateAgentResponseDraft = ({
   return { ...base, kind: request.kind, outcomes };
 };
 
-const validateStoredResponse = ({
-  value,
-  request,
-  commentsById,
-}: {
-  readonly value: unknown;
-  readonly request: AgentRequest;
-  readonly commentsById: ReadonlyMap<string, ReviewComment>;
-}): AgentResponse => {
-  if (request.answeredAt === undefined) {
-    throw new AgentExchangeRejected(
-      "A stored agent response has not reached its terminal commit",
-    );
-  }
-  if (!agentOwnsRequest(request) || request.baselineSnapshot === undefined) {
-    throw new AgentExchangeRejected(
-      "A stored agent response cannot answer an unclaimed request",
-    );
-  }
-  if (!isRecord(value) || value.version !== 2) {
+/**
+ * Re-checks one stored response on its own terms, without the request it
+ * answers. The prepared-transaction journal carries a response the runtime
+ * later publishes with no agent present, so it is validated on the way out of
+ * the file as strictly as it was on the way in.
+ */
+export const validateAgentResponse = (value: unknown): AgentResponse => {
+  if (!isRecord(value) || value.version !== 3) {
     throw new AgentExchangeRejected("A stored agent response is invalid");
   }
-  if (
-    value.requestId !== request.requestId ||
-    value.sessionId !== request.sessionId ||
-    value.planId !== request.planId ||
-    value.kind !== request.kind
-  ) {
-    throw new AgentExchangeRejected(
-      "A stored agent response does not match its request",
-    );
-  }
   const base: AgentResponseBase = {
-    version: 2,
-    requestId: request.requestId,
-    sessionId: request.sessionId,
-    planId: request.planId,
+    version: 3,
+    requestId: id(value.requestId, "requestId"),
+    sessionId: id(value.sessionId, "sessionId"),
+    planId: id(value.planId, "planId"),
+    claimGeneration: claimGenerationNumber(value.claimGeneration),
     resultSnapshot: migratedSnapshot({
       value,
       currentField: "resultSnapshot",
@@ -814,17 +832,19 @@ const validateStoredResponse = ({
     }),
     createdAt: timestamp(value.createdAt),
   };
-  if (request.kind === "chat") {
+  if (value.kind === "chat") {
     return {
       ...base,
       kind: "chat",
       message: text({ value: value.message, field: "message" }),
     };
   }
+  if (value.kind !== "feedback" && value.kind !== "reply") {
+    throw new AgentExchangeRejected("A stored agent response is invalid");
+  }
   if (!Array.isArray(value.outcomes)) {
     throw new AgentExchangeRejected("A stored outcome list is invalid");
   }
-  const expected = expectedCommentIds({ request, commentsById });
   const outcomes: ReadonlyArray<AgentOutcome> = value.outcomes.map((entry) => {
     if (!isRecord(entry)) {
       throw new AgentExchangeRejected("A stored outcome is invalid");
@@ -862,14 +882,53 @@ const validateStoredResponse = ({
     return { ...result, changeTargets: entry.changeTargets };
   });
   const actual = outcomes.map((entry) => entry.commentId);
+  if (new Set(actual).size !== actual.length) {
+    throw new AgentExchangeRejected("A stored outcome set is incomplete");
+  }
+  return { ...base, kind: value.kind, outcomes };
+};
+
+const validateStoredResponse = ({
+  value,
+  request,
+  commentsById,
+}: {
+  readonly value: unknown;
+  readonly request: AgentRequest;
+  readonly commentsById: ReadonlyMap<string, ReviewComment>;
+}): AgentResponse => {
+  if (request.answeredAt === undefined) {
+    throw new AgentExchangeRejected(
+      "A stored agent response has not reached its terminal commit",
+    );
+  }
+  if (!agentOwnsRequest(request) || request.baselineSnapshot === undefined) {
+    throw new AgentExchangeRejected(
+      "A stored agent response cannot answer an unclaimed request",
+    );
+  }
+  const response = validateAgentResponse(value);
   if (
-    new Set(actual).size !== actual.length ||
+    response.requestId !== request.requestId ||
+    response.sessionId !== request.sessionId ||
+    response.planId !== request.planId ||
+    response.kind !== request.kind ||
+    response.claimGeneration !== request.claimGeneration
+  ) {
+    throw new AgentExchangeRejected(
+      "A stored agent response does not match its request",
+    );
+  }
+  if (response.kind === "chat" || request.kind === "chat") return response;
+  const expected = expectedCommentIds({ request, commentsById });
+  const actual = response.outcomes.map((entry) => entry.commentId);
+  if (
     expected.length !== actual.length ||
     expected.some((commentId) => !actual.includes(commentId))
   ) {
     throw new AgentExchangeRejected("A stored outcome set is incomplete");
   }
-  return { ...base, kind: request.kind, outcomes };
+  return response;
 };
 
 const commentsFromRequests = (
@@ -1031,7 +1090,7 @@ export const feedbackAgentRequest = ({
   readonly feedback: FeedbackPackage;
   readonly premiseSnapshot: string;
 }): AgentFeedbackRequest => ({
-  version: 2,
+  version: 3,
   requestId: feedback.packageId,
   sessionId: feedback.sessionId,
   planId: feedback.planId,
@@ -1068,7 +1127,7 @@ export const messageAgentRequest = ({
 }): AgentReplyRequest | AgentChatRequest => {
   const checkedAttachments = validateAttachments(attachments ?? []);
   const base: AgentRequestBase = {
-    version: 2,
+    version: 3,
     requestId: id(requestId, "requestId"),
     sessionId: id(sessionId, "sessionId"),
     planId: id(planId, "planId"),

@@ -7,8 +7,8 @@
 // prepared against; one prepared against content the store has since moved
 // past is refused rather than applied.
 
-import { createHash, randomBytes } from "node:crypto";
-import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { renderDocument } from "../render/render-document.js";
 import { jsonResponse, payloadOf, refusal } from "./review-route-context.js";
@@ -40,6 +40,10 @@ import {
   removeCommentFromQueuedFeedbackRequest,
   withResolvedCommentLock,
 } from "./request-mailbox.js";
+import {
+  REVERT_SOURCE_MOVED_REASON,
+  revertPlanSource,
+} from "./staged-plan-mutation.js";
 import {
   anchorReviewStore,
   freezeRequestAttachments,
@@ -124,27 +128,6 @@ const conditionalReviewStateRefusal = async ({
         reason: "The review state changed since this mutation was prepared",
         code: STALE_REVIEW_STATE_CODE,
       });
-};
-
-/**
- * Replaces the plan through a same-directory temporary file so a reader never
- * observes a partially written plan, and the original mode survives.
- */
-const replacePlanSource = async ({
-  path,
-  source,
-}: {
-  readonly path: string;
-  readonly source: string;
-}): Promise<void> => {
-  const temporaryPath = `${path}.big-plan-revert-${randomBytes(8).toString("hex")}`;
-  const mode = (await stat(path)).mode;
-  try {
-    await writeFile(temporaryPath, source, { flag: "wx", mode });
-    await rename(temporaryPath, path);
-  } finally {
-    await unlink(temporaryPath).catch(() => undefined);
-  }
 };
 
 type FeedbackSubmission = {
@@ -632,11 +615,7 @@ export const revertAgentChanges = async (
   }
   const currentSource = await readFile(resolvedPlanPath, "utf8");
   if (deriveSnapshotDigest(currentSource) !== agentResponse.resultSnapshot) {
-    return refusal({
-      status: 409,
-      reason:
-        "The plan changed after this response, so reverting it would overwrite newer work",
-    });
+    return refusal({ status: 409, reason: REVERT_SOURCE_MOVED_REASON });
   }
   let baselineSource: string;
   try {
@@ -655,10 +634,21 @@ export const revertAgentChanges = async (
     fallbackTitle: basename(resolvedPlanPath, extname(resolvedPlanPath)),
     identity: {},
   });
-  await replacePlanSource({
-    path: resolvedPlanPath,
-    source: baselineSource,
-  });
+  // Everything above was decided outside the plan-mutation lock, so the same
+  // digest is proved again under it. An agent commit that published from this
+  // response's result in the meantime wins, and the reviewer is told rather
+  // than losing that revision to a rename it never saw.
+  try {
+    await revertPlanSource({
+      store,
+      planPath: resolvedPlanPath,
+      expectedSnapshot: agentResponse.resultSnapshot,
+      source: baselineSource,
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
   readerProgress.accept(request.baselineSnapshot);
   return jsonResponse({
     status: 200,

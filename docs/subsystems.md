@@ -35,7 +35,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 **Problem set.** The core entity of review is the change set: a baseline snapshot, a current snapshot, acceptance state, provenance, and an optionally attached conversation, diffed from its start, rendered in place of what it changes, and closed by explicit acceptance.
 
-**Code anchors.** `src/review/snapshot-diff.ts`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/review/browser/wireframe-screen-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, snapshots in `src/review/store.ts`.
+**Code anchors.** `src/review/snapshot-diff.ts`, `src/review/change-set-commit.ts`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/review/browser/wireframe-screen-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, snapshots in `src/review/store.ts`.
 
 **Boundary rules.**
 
@@ -44,18 +44,25 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   An inbound push is a new message kind through `src/review/agent-exchange.ts` and rides the same claim-and-atomic-terminal delivery protocol as any other exchange; it does not invent its own delivery path.
 - Diff mode is a component contract, not an engine-owned rendering choice: see [Captain amendments](#captain-amendments).
 - The engine keeps sole ownership of detection, alignment, baseline policy, and attribution; components own only honest presentation of the pair.
+- A change set describes committed revisions only.
+  `src/review/change-set-commit.ts` is the seam: a revision is recorded inside the terminal commit and nowhere else, the reader's current snapshot advances from that log rather than from response files, and folding the log keeps a thread's baseline and provenance stable across every later reply.
+  When the full aggregate lands it implements that contract without adopting claim stages as domain state.
 - Delivery (getting a message to the runtime) belongs to Session Reliability, and furniture (composer, tooltips, layout) belongs to Commenting Surface; only Change Engine code changes when acceptance semantics change.
 
 ### B. Session Reliability
 
 **Problem set.** The browser, the loopback server, and the agent stay connected and honest about liveness, and no message is ever lost, double-processed, or run inside a resolved thread.
 
-**Code anchors.** `src/review/server.ts`, `src/review/review-route-context.ts`, `src/review/routes-*.ts`, `src/review/runtime-watchdog.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, `src/review/agent-work-loop.ts`, `src/review/agent-exchange.ts`, `src/review/review-state-version.ts`, `src/review/browser/review-poll-health.ts`, `src/review/browser/review-write-availability.ts`, `src/review/browser/review-runtime-request.ts`, `src/review/browser/review-recovery-merge.ts`, `src/review/browser/review-recovery-storage.browser.ts`, `src/review/shared/agent-status.ts`, `src/cli/review/command.ts`, `src/cli/agent/`.
+**Code anchors.** `src/review/server.ts`, `src/review/review-route-context.ts`, `src/review/routes-*.ts`, `src/review/runtime-watchdog.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, `src/review/staged-plan-mutation.ts`, `src/review/agent-work-loop.ts`, `src/review/agent-exchange.ts`, `src/review/review-state-version.ts`, `src/review/browser/review-poll-health.ts`, `src/review/browser/review-write-availability.ts`, `src/review/browser/review-runtime-request.ts`, `src/review/browser/review-recovery-merge.ts`, `src/review/browser/review-recovery-storage.browser.ts`, `src/review/shared/agent-status.ts`, `src/cli/review/command.ts`, `src/cli/agent/`.
 
 **Boundary rules.**
 
 - This subsystem owns lifecycle and atomicity: session liveness, replacement, recovery, and locked mutation of stored agent requests.
   It does not own what a thread means or what a diff shows.
+- It also owns the plan source's one writer.
+  Agent edits live in a claim-scoped stage, and `src/review/staged-plan-mutation.ts` publishes a stage under the plan-mutation lock only when the holder, the claim generation, and the source's base digest all still hold; the swap is one atomic rename, and a journal written before it settles a crash on either side.
+  The reviewer's revert publishes through the same module and the same lock, re-proving the digest it was computed against, so it can never land over a revision an agent committed while the revert was being prepared.
+  A claim attempt is transport state here, never Change Engine domain state: the commit hands the Change Engine a committed revision through `src/review/change-set-commit.ts`, and nothing else records one.
 - Idle expiry is one centralized runtime policy, not a pair of aligned boundary defaults: `DEFAULT_REVIEW_IDLE_TIMEOUT_MS` in `src/review/server.ts` owns the default, and `src/cli/review/command.ts` imports it rather than duplicating it.
   Any authenticated request from an open page counts as activity, so a page being read keeps its own session alive rather than only writes counting.
   The CLI requires a nonzero `--idle-timeout` to be at least 1 minute, while `--idle-timeout 0` disables expiry entirely; the agent work loop exits when the session heartbeat it follows dies.

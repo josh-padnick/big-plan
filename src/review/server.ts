@@ -65,6 +65,8 @@ import {
   commitRequestTerminal,
   recordAgentConnectionState,
 } from "./request-mailbox.js";
+import { recoverStagedPlanMutations } from "./staged-plan-mutation.js";
+import { readCommittedRevisions } from "./change-set-commit.js";
 import {
   deriveReviewPlanId,
   prepareStore,
@@ -790,7 +792,32 @@ export const startReviewRuntime = async ({
   // port back rather than leaving a bound socket behind, and records a stopped
   // heartbeat so custody is released immediately instead of after the grace
   // window.
-  const initialExchange = await initializeOwnedReviewState({
+  // An interrupted commit is settled before this runtime answers anything.
+  // Until it is, the plan file, the request, and the response can disagree
+  // about whether an answer landed, and every reader would inherit the guess.
+  await recoverStagedPlanMutations({
+    store,
+    planPath: resolvedPlanPath,
+  })
+    .then((recoveries) => {
+      for (const recovery of recoveries) {
+        if (recovery.outcome === "conflict") {
+          process.stderr.write(
+            `Big Plan stopped agent edits for ${resolvedPlanPath}: its source is ${recovery.currentSnapshot}, which matches neither side of the interrupted commit for request ${recovery.requestId}.\n`,
+          );
+        }
+      }
+    })
+    .catch(async (error: unknown) => {
+      clearInterval(heartbeatTimer);
+      await queueHeartbeat(
+        false,
+        "The review runtime could not settle an interrupted plan commit.",
+      );
+      await drainAndCloseServer(server);
+      throw error;
+    });
+  await initializeOwnedReviewState({
     store,
     planId,
     sessionId,
@@ -830,8 +857,8 @@ export const startReviewRuntime = async ({
     }),
     readerProgress: createReaderProgress({
       initialSnapshot,
-      observedResponseIds: initialExchange.responses.map(
-        (response) => response.requestId,
+      observedResponseIds: (await readCommittedRevisions({ store })).map(
+        (revision) => revision.requestId,
       ),
     }),
     writeGate: createWriteGate({ mutations, stallMs: writeStallMs }),

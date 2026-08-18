@@ -29,7 +29,14 @@ import {
 } from "../src/review/store.js";
 import { renderDocument } from "../src/render/render-document.js";
 import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
-import { boxOf, expect, stageComment, test, type Page } from "./fixtures";
+import {
+  boxOf,
+  expect,
+  stageComment,
+  test,
+  type Page,
+  closeReviewRuntime,
+} from "./fixtures";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "../src/review/shared/resolved-thread-work.js";
 
 const PASTED_PNG_BASE64 =
@@ -2796,6 +2803,7 @@ test("should keep answered requests terminal when their response is unavailable"
     claimedAt: new Date(now - 500).toISOString(),
     claimedBy: "eeeeeeeeeeeeeeee",
     claimExpiresAtMs: now + AGENT_CLAIM_LEASE_MS,
+    claimGeneration: 1,
     answeredAt: new Date(now).toISOString(),
   };
   await writeAgentRequest({ store, request });
@@ -4888,7 +4896,7 @@ test("should preview stale, historical, and multi-place causal diffs through the
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
     await expect(rail.getByText("Resolved (1)")).toBeVisible();
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -4953,7 +4961,7 @@ test("should keep component replacements inside their slide and preserve Callout
       path: testInfo.outputPath("callout-diff-in-slide.png"),
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -5105,7 +5113,7 @@ The runbook stays inline for the first rollout.
       path: testInfo.outputPath("per-side-presentation.png"),
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -5198,7 +5206,7 @@ test("should colour a component snapshot switch as a diff", async ({
     expect(removedThumbBackground).not.toBe(addedThumbBackground);
     expect(removedBorder).not.toBe(addedBorder);
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -5267,7 +5275,7 @@ test("should show each initial screen when another wireframe screen changes", as
     await expect(queueScreen).toBeVisible();
     await expect(detailScreen).toBeHidden();
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -5328,7 +5336,7 @@ ${survivingWireframe}
     ).toContainText("This snapshot belongs only in Was.");
     await expect(survivor).toBeVisible();
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -5437,7 +5445,7 @@ ${multiScreen("Revised triage copy")}
       expect(style.boxShadow).not.toBe("none");
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -5814,7 +5822,7 @@ ${reorderedWorkspace}
       await expect.poll(isLiveWireframeVisible).toBe(true);
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -5877,7 +5885,7 @@ test("should diff an HTTP endpoint at field level inside one rendering", async (
       path: testInfo.outputPath("http-endpoint-field-diff.png"),
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -5935,7 +5943,7 @@ test("should diff a database schema at column level inside one rendering", async
       path: testInfo.outputPath("database-table-schema-field-diff.png"),
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -5991,7 +5999,7 @@ test("should diff a quick summary at facet level with word runs", async ({
       path: testInfo.outputPath("quick-summary-facet-diff.png"),
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -6237,7 +6245,7 @@ test("should keep shell interactions wired after an agent revision refreshes the
       await expect(batchNote).toHaveCount(0);
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -6286,7 +6294,7 @@ test("should highlight only changed words inside a revised list", async ({
     await expect(list.locator("li").nth(2).locator("del, ins")).toHaveCount(0);
     await expect(list.locator("li").nth(3).locator("del, ins")).toHaveCount(0);
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -6335,7 +6343,7 @@ The dashboard shows the retry backlog.
     await expect(lens).toHaveCount(0);
     await expect(pictureHost).toBeVisible();
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -6700,7 +6708,7 @@ Reviewers confirm the output by hand.
       });
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -6916,7 +6924,7 @@ The current plan contains no slides.
       .getByRole("button", { name: "Restore wireframe diff size" })
       .click();
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -7129,7 +7137,7 @@ The rollout waits for a green build.
   } finally {
     releaseRefresh();
     await page.unroute("**/*");
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -7317,7 +7325,7 @@ test("should open a digest entry in the slide its section header names", async (
     expect(arrivedKicker).toBe(headerLabel);
     await expect(entry).toHaveAttribute("aria-current", "step");
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -7509,7 +7517,7 @@ ${lowerContent}
       )
       .toBe(true);
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -7753,7 +7761,7 @@ const verification = "first";
     await expect(lens).toContainText('const verification = "revised";');
     await expect(lens).not.toContainText('const delivery = "revised";');
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -8036,7 +8044,7 @@ test("should re-anchor an open lens, its highlights, and hover association when 
       );
     });
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -8095,7 +8103,7 @@ test.describe("recovery section visibility", () => {
       await openAgentTab();
       await expect(recoveryPanel).toBeVisible();
     } finally {
-      await runtime.close();
+      await closeReviewRuntime({ page, runtime });
       await rm(directory, { recursive: true, force: true });
     }
   });

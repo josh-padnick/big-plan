@@ -7,6 +7,7 @@ concurrent plan editing.
 
 - Status: Accepted
 - Date: 2026-08-15
+- Amended: 2026-08-17, when BIG-122 delivered the staged-write boundary
 
 ## Context
 
@@ -43,12 +44,24 @@ An answered request releases immediately because the agent finished editing and 
 A canceled request with a live lease keeps blocking until the lease expires because cancellation is a reviewer action that the editing agent may not learn about until its next note or response.
 Treating cancellation as an immediate release would allow a new agent to edit while the canceled agent may still be writing.
 
-## Accepted residual risk
+## Staged-write invariant
 
-A lease can lapse while an agent is genuinely mid-edit.
-The taking-over agent's baseline may therefore include partial edits from the previous agent, and the reviewer's **Was**/**Now** comparison can attribute those edits to the new agent.
-Progress-note renewal reduces this risk, and the takeover narration discloses the possible interleaving to the reviewer.
-The protocol does not fence those plan writes because staged or fenced source mutation is deferred to BIG-122.
+This section replaces the residual risk this decision originally accepted.
+BIG-122 delivered the staged-write boundary that risk was waiting on, so a lapsed lease no longer reaches the plan.
+
+Every supported agent edit is made in a claim-scoped private stage, and one Big Plan component is the plan file's only writer.
+A claim carries a monotonic generation that a takeover raises and a renewal keeps.
+Publication happens under one plan-mutation lock, taken before the request lock, and requires three things at once: the recorded holder, the generation the answer was drafted for, and a plan source whose digest still equals the candidate's base.
+The publication itself is one atomic rename, preceded by a prepared transaction journal carrying the validated response and the digests on both sides of that rename.
+
+The consequences for this decision are:
+
+- A displaced agent may keep editing its own candidate, and none of it can reach the plan.
+- A takeover's baseline is the last published revision, so **Was**/**Now** cannot attribute the previous agent's work to the new one.
+- An interrupted commit has one answer, settled before the runtime or any agent command is served: the response completes if the rename won, the request stays open at its base revision if it did not, and a source matching neither digest stops agent writes with a typed external-source conflict rather than being overwritten.
+
+This protocol covers writes made through the supported agent workflow.
+A process running with the same local user rights can still alter any user-owned file outside Big Plan, and that remains out of scope.
 
 ## Rejected alternatives
 
@@ -64,14 +77,14 @@ It would weaken the guarantee that no reviewer message is lost on the normal pat
 
 ### Stage or fence source mutations
 
-This alternative is deferred as BIG-122 rather than rejected in principle.
-A sound staged or fenced write boundary is the condition under which concurrent claims may return.
-Until that boundary exists, documentation alone or partial answer-time detection is insufficient.
+This alternative was deferred as BIG-122 rather than rejected in principle, and BIG-122 has since delivered it.
+It is recorded above as the staged-write invariant.
 
 ## Consequences
 
 - Only one agent works on a plan at a time, although other agents may wait for queued work.
 - Per-pickup tokens, lease renewal, resumption, terminal ownership checks, and lapsed-claim takeover remain necessary within the serialized design.
 - Answered requests release the plan immediately, while canceled requests with live leases continue to block pickup until expiry.
-- BIG-122 must provide a shared source-mutation boundary before this decision can be amended to restore concurrent plan editing.
-- The lapsed-lease takeover interleave remains an accepted and reviewer-visible risk until that boundary exists.
+- The shared source-mutation boundary BIG-122 was required to provide now exists, so the precondition for restoring concurrent plan editing is met.
+- Serialization itself is not lifted here. Concurrent claims need their own decision about merge policy, conflict presentation, and reviewer experience; the write boundary makes that decision possible, not automatic.
+- The lapsed-lease takeover interleave is closed rather than accepted.

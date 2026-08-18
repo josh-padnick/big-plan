@@ -38,6 +38,8 @@ import {
   MAX_IMAGES_PER_MESSAGE,
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
+import { readCommittedRevisionsToObserve } from "./change-set-commit.js";
+import { recoverStagedPlanMutations } from "./staged-plan-mutation.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
 
 const appendProgressBestEffort = async ({
@@ -57,16 +59,39 @@ const appendProgressBestEffort = async ({
 };
 
 /**
- * Reading the exchange is also how the runtime learns that a response arrived,
+ * Reading the exchange is also how the runtime learns that a revision landed,
  * so it advances reader progress before answering.
+ *
+ * The committed revision log is what moves the reader, not the response file.
+ * A revision is recorded only inside the terminal commit, after the source
+ * swap, so the snapshot the reader is sent is always one the plan file really
+ * reached.
+ *
+ * The browser polls this route for the life of the review, so only the
+ * revisions the reader can be moved onto right now are read; the rest of the
+ * log costs a directory listing and nothing more.
  */
 export const readAgentSnapshot = async (
   context: ReviewRouteContext,
 ): Promise<ReviewRouteResponse> => {
   const { store, sessionId, planId, readerProgress } = context;
   const exchange = await readAgentExchange({ store, sessionId, planId });
-  for (const agentResponse of exchange.responses) {
-    readerProgress.observe(agentResponse);
+  // One payload describes one instant, so the reader is moved only onto a
+  // revision whose request this very exchange already reports as answered. A
+  // commit that landed mid-read leaves its revision for the next poll, which
+  // is 1.5 seconds away, rather than sending a snapshot whose response the
+  // same payload still calls pending.
+  const answered = new Set(
+    exchange.requests.flatMap((request) =>
+      request.answeredAt === undefined ? [] : [request.requestId],
+    ),
+  );
+  for (const revision of await readCommittedRevisionsToObserve({
+    store,
+    shouldObserve: (requestId) =>
+      answered.has(requestId) && !readerProgress.hasObserved(requestId),
+  })) {
+    readerProgress.observe(revision);
   }
   const presence = await readAgentPresence({ store, sessionId });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
@@ -321,11 +346,22 @@ export const cancelPendingAgentRequest = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
-  const { store, planId, sessionId } = context;
+  const { store, planId, sessionId, resolvedPlanPath } = context;
   const payload = payloadOf(body);
   const requestId = payload.requestId;
   if (typeof requestId !== "string") {
     return refusal({ status: 400, reason: "A request id is required" });
+  }
+  // An interrupted commit is settled before the mailbox is touched, and under
+  // the plan-mutation lock this releases before any request lock is taken. A
+  // journal an abandoned commit left behind is rolled back here, so the cancel
+  // refuses only an answer that really is published or one rename away from
+  // it, rather than one that never left the agent's stage.
+  try {
+    await recoverStagedPlanMutations({ store, planPath: resolvedPlanPath });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
   }
   const exchange = await readAgentExchange({ store, sessionId, planId });
   const agentRequest = exchange.requests.find(

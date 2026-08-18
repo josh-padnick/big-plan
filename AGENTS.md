@@ -36,7 +36,7 @@ This guide owns the durable implementation model contributors must preserve.
 ### Concepts
 
 - **Agent plan** is the agent's proposed approach for achieving the user's intent before implementation begins.
-- **Plan source** is the authoritative plan document on disk. The agent edits this source in response to feedback.
+- **Plan source** is the authoritative plan document on disk. During a review the agent edits a claim-scoped candidate copy of it, and Big Plan publishes that copy into this source.
 - **Component** is a built-in, opinionated way to present a specific kind of plan information, such as a decision, code diff, schema, or file tree.
 - **Review document** is Big Plan's human-friendly presentation of the plan source.
 - **Plan review** is the conversation in which the human works to understand the proposed approach, gives feedback, and resolves concerns with the agent.
@@ -102,26 +102,33 @@ lens, and answers with an element or a reason it is missing; a lint rule keeps i
 the only such place, because a raw selector silently returns a plausible wrong
 node instead of failing.
 
+One server-side invariant is worth the same treatment, for the same reason.
+The authoritative plan source has exactly one writer, `src/review/staged-plan-mutation.ts`.
+Agent edits go into a claim-scoped stage, and a stage publishes only under the plan-mutation lock, only when the recorded holder, the claim generation, and the source's base digest all still hold, and only through one atomic rename that a journal written beforehand can settle after a crash.
+The reviewer's revert crosses the same boundary: it too takes that lock, and it too re-proves the digest it was computed against before renaming, so a revision an agent published in the meantime refuses the revert instead of disappearing under it.
+Anything that writes the plan outside that boundary reintroduces the failure the boundary exists to remove, and it does so silently: the bytes land, and nothing refuses them until a reviewer notices work they never approved.
+Its record for the Change Engine goes through `src/review/change-set-commit.ts` and nowhere else, which is what keeps a change set describing published revisions only.
+
 Dependencies follow ownership inward: the CLI owns public command I/O, the review layer owns the local human-agent exchange, the renderer owns document-wide compilation and delivery, and component slices own component behavior.
 The exact dependency allow-list and completeness guard live in `eslint.config.mjs`.
 
 ## Source ownership and placement
 
-| Owner                    | Responsibility and placement rule                                                                                                                                                                                                                                       |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/cli/`               | Public command dispatch, shared input and safe derived-output workflows, errors, and result serialization. Give each public command a non-underscored folder; keep reusable command mechanics in `_shared/` and business semantics below the CLI.                       |
-| `src/components/`        | Built-in components as vertical slices. Put a new component in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                                                                         |
-| `src/lint/`              | Framework-free, validate-only linting rules for statically analyzable aspects of an authored plan. Keep rules independent and register them in a deterministic order.                                                                                                   |
-| `src/plan-vocabulary/`   | Framework-free, guidance-bearing plan vocabulary shared by component compilation, lint, and rendering. Give each slide type its own file under `slide-types/definitions/`, and keep catalog-wide validation, assembly, and shared contracts at the `slide-types/` root. |
-| `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep component-specific behavior in its component slice.                             |
-| `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                                                 |
-| `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                                                   |
-| `src/review/`            | Local review persistence, loopback transport, agent exchange, causal snapshot diffs, and the browser interaction island. Keep browser-only React under `browser/`, browser-safe contracts under `shared/`, and Node-owned runtime behavior at the root.                 |
-| `src/icons/`             | Framework-neutral Lucide icon data. Add one catalog-named file per glyph; adapt it to HAST or React only at the relevant rendering edge.                                                                                                                                |
-| `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                                                       |
-| `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                                                        |
-| `test/`                  | Critical browser journeys over complete rendered documents. Keep pure behavior in colocated unit tests.                                                                                                                                                                 |
-| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. The subsystem definitions and boundary rules live in `docs/subsystems.md`; otherwise, docs do not own internal source-placement rules.                   |
+| Owner                    | Responsibility and placement rule                                                                                                                                                                                                                                             |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/cli/`               | Public command dispatch, shared input and safe derived-output workflows, errors, and result serialization. Give each public command a non-underscored folder; keep reusable command mechanics in `_shared/` and business semantics below the CLI.                             |
+| `src/components/`        | Built-in components as vertical slices. Put a new component in its own folder and follow the infrastructure boundaries in the [components local map](src/components/README.md).                                                                                               |
+| `src/lint/`              | Framework-free, validate-only linting rules for statically analyzable aspects of an authored plan. Keep rules independent and register them in a deterministic order.                                                                                                         |
+| `src/plan-vocabulary/`   | Framework-free, guidance-bearing plan vocabulary shared by component compilation, lint, and rendering. Give each slide type its own file under `slide-types/definitions/`, and keep catalog-wide validation, assembly, and shared contracts at the `slide-types/` root.       |
+| `src/render/`            | Pure document compilation and delivery orchestration. Put cross-document pipeline behavior here and follow the stage boundaries in the [renderer local map](src/render/README.md); keep component-specific behavior in its component slice.                                   |
+| `src/render/shell/`      | Viewer chrome, reading layout, branding, and responsive navigation. Do not put document packaging here.                                                                                                                                                                       |
+| `src/render/page.ts`     | Doctype, head, embedded delivery assets, favicons, and the final inert HTML envelope.                                                                                                                                                                                         |
+| `src/review/`            | Local review persistence, loopback transport, agent exchange, staged plan mutation, causal snapshot diffs, and the browser interaction island. Keep browser-only React under `browser/`, browser-safe contracts under `shared/`, and Node-owned runtime behavior at the root. |
+| `src/icons/`             | Framework-neutral Lucide icon data. Add one catalog-named file per glyph; adapt it to HAST or React only at the relevant rendering edge.                                                                                                                                      |
+| `scripts/` and `assets/` | Authored build-time inputs and the generators that embed CSS and branding. Generated modules are derived outputs.                                                                                                                                                             |
+| `examples/`              | Valid, realistic plan sources shared by authors, tests, and documentation. Add the smallest example that demonstrates an author-facing contract.                                                                                                                              |
+| `test/`                  | Critical browser journeys over complete rendered documents. Keep pure behavior in colocated unit tests.                                                                                                                                                                       |
+| `docs/`                  | Current product orientation and capability discovery for humans, plus usage and authoring guidance for agents. The subsystem definitions and boundary rules live in `docs/subsystems.md`; otherwise, docs do not own internal source-placement rules.                         |
 
 Use these placement tests:
 
@@ -131,6 +138,7 @@ Use these placement tests:
 - Document-wide parsing, transformation, or delivery behavior belongs in `src/render/`; component-specific validation and presentation stay with the component.
 - Reading and navigation chrome belongs in the shell; doctype, head, and embedded packaging belong in the page envelope.
 - Local comments, agent exchange, snapshot comparison, and review-only browser behavior belong in `src/review/`; shared browser-server contracts stay framework-free.
+- Anything that writes the authoritative plan source belongs behind `src/review/staged-plan-mutation.ts`; no other module may write that file.
 - A pure rule gets a colocated unit test; only a critical integrated reading journey gets a Playwright spec in `test/`.
 - A public authoring change updates its validated example and the appropriate human or agent-facing product documentation.
 

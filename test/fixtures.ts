@@ -885,6 +885,25 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 export { expect };
 export type { Page };
 
+/**
+ * Ends a journey's own review runtime.
+ *
+ * The open document polls its runtime until it is navigated away, so closing
+ * the runtime under a live page makes the browser log a connection failure
+ * that the render-health contract then counts against the test. The shared
+ * `reviewRuntimeUrl` fixture unmounts for the same reason.
+ */
+export const closeReviewRuntime = async ({
+  page,
+  runtime,
+}: {
+  readonly page: Page;
+  readonly runtime: { readonly close: () => Promise<void> };
+}): Promise<void> => {
+  if (!page.isClosed()) await page.goto("about:blank");
+  await runtime.close();
+};
+
 /** Stages an offline-first slide comment without depending on saved switch state. */
 export const stageComment = async (page: Page, body: string): Promise<void> => {
   const slide = page.locator("[data-slide]").first();
@@ -903,15 +922,14 @@ export const stageComment = async (page: Page, body: string): Promise<void> => {
   await addComment.click();
 };
 
-/**
- * Runs one real `big-plan agent` command against a plan, so a journey can
- * cross the same process boundary a coding agent crosses. The whole output is
- * returned, and a non-zero exit or a hang becomes a readable failure rather
- * than a silent one.
- */
-export const runAgentCli = (
-  args: ReadonlyArray<string>,
-): Promise<{ readonly stdout: string; readonly stderr: string }> =>
+type AgentCliRun = {
+  readonly code: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+/** Runs one real `big-plan agent` command and reports how it ended. */
+const spawnAgentCli = (args: ReadonlyArray<string>): Promise<AgentCliRun> =>
   new Promise((settle, fail) => {
     const child = spawn(process.execPath, [binPath, "agent", ...args], {
       cwd: repoRoot,
@@ -928,6 +946,10 @@ export const runAgentCli = (
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
+    // Generous, because this bound exists to turn a hang into a readable
+    // failure, not to police latency. A parallel suite run starves a spawned
+    // Node process for far longer than the command itself needs, and a tight
+    // bound turns that starvation into a flake.
     const timer = setTimeout(() => {
       child.kill("SIGTERM");
       fail(
@@ -935,7 +957,7 @@ export const runAgentCli = (
           `Agent CLI timed out.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
         ),
       );
-    }, 10_000);
+    }, 30_000);
     child.once("error", (error) => {
       clearTimeout(timer);
       fail(
@@ -944,19 +966,45 @@ export const runAgentCli = (
         ),
       );
     });
-    child.once("close", (code, signal) => {
+    child.once("close", (code) => {
       clearTimeout(timer);
-      if (code !== 0) {
-        fail(
-          new Error(
-            `Agent CLI stopped with code ${String(code)} and signal ${String(signal)}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
-          ),
-        );
-        return;
-      }
-      settle({ stdout, stderr });
+      settle({ code, stdout, stderr });
     });
   });
+
+/**
+ * Runs one real `big-plan agent` command against a plan, so a journey can
+ * cross the same process boundary a coding agent crosses. The whole output is
+ * returned, and a non-zero exit or a hang becomes a readable failure rather
+ * than a silent one.
+ */
+export const runAgentCli = async (
+  args: ReadonlyArray<string>,
+): Promise<{ readonly stdout: string; readonly stderr: string }> => {
+  const { code, stdout, stderr } = await spawnAgentCli(args);
+  if (code !== 0) {
+    throw new Error(
+      `Agent CLI stopped with code ${String(code)}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+    );
+  }
+  return { stdout, stderr };
+};
+
+/**
+ * Runs one real `big-plan agent` command that the runtime is expected to
+ * refuse, so a journey can read the refusal instead of catching a throw.
+ */
+export const runRefusedAgentCli = async (
+  args: ReadonlyArray<string>,
+): Promise<{ readonly stdout: string; readonly stderr: string }> => {
+  const { code, stdout, stderr } = await spawnAgentCli(args);
+  if (code === 0) {
+    throw new Error(
+      `Agent CLI was expected to refuse this command.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+    );
+  }
+  return { stdout, stderr };
+};
 
 /**
  * Returns the locator's bounding box, failing the test when the element has

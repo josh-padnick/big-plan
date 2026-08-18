@@ -132,6 +132,7 @@ export type PlanRenderer = {
 /** The snapshot the browser may reload onto, and the responses behind it. */
 export type ReaderProgress = {
   readonly currentSnapshot: () => string;
+  readonly hasObserved: (requestId: string) => boolean;
   readonly observe: (response: {
     readonly requestId: string;
     readonly resultSnapshot: string;
@@ -293,6 +294,9 @@ export const createReaderProgress = ({
   let acceptedSnapshot = initialSnapshot;
   return {
     currentSnapshot: () => acceptedSnapshot,
+    // The polled exchange route asks this before it reads a revision body, so
+    // a log that only ever grows costs one directory listing per poll.
+    hasObserved: (requestId) => observed.has(requestId),
     observe: (response) => {
       if (!observed.has(response.requestId)) {
         acceptedSnapshot = response.resultSnapshot;

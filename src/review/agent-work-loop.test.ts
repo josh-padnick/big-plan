@@ -13,7 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -26,7 +26,10 @@ import {
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
-import { runAgentWorkLoopAction } from "./agent-work-loop.js";
+import {
+  AgentWorkLoopRejected,
+  runAgentWorkLoopAction,
+} from "./agent-work-loop.js";
 import {
   cancelAgentRequest,
   claimAgentRequest,
@@ -1428,6 +1431,7 @@ describe("agent work loop lifecycle", () => {
                   claimedAt: now,
                   claimedBy: "eeeeeeeeeeeeeeee",
                   claimExpiresAtMs: Date.now() + AGENT_CLAIM_LEASE_MS,
+                  claimGeneration: 1,
                   answeredAt: now,
                 },
         });
@@ -2072,9 +2076,7 @@ describe("agent work loop lifecycle", () => {
           expect.objectContaining({
             requestId: request.requestId,
             stepCode: "request-reclaimed",
-            detail: expect.stringContaining(
-              "partial plan edits may interleave with this takeover",
-            ),
+            detail: expect.stringContaining("stay in its own claim stage"),
           }),
         ]),
       );
@@ -2109,34 +2111,45 @@ describe("agent work loop lifecycle", () => {
       body: "Please include the capture in the plan.",
     });
     await writeAgentRequest({ store: review.store, request });
-    await claimAgentRequest({
-      store: review.store,
-      activeSessionId: review.sessionId,
-      requestId: request.requestId,
-      claimedBy: review.sessionId,
-      baselineSnapshot: deriveSnapshotDigest(source),
-      now: new Date().toISOString(),
-    });
-    await writeFile(
-      planPath,
-      `${source}\n![Capture](review-image:${descriptor.id})\n`,
-    );
-    const responsePath = join(directory, "response.json");
-    await writeFile(
-      responsePath,
-      JSON.stringify({
-        requestId: request.requestId,
-        message: "The capture is now part of the plan.",
-      }),
-    );
     try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.candidate_plan !== "string" ||
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return a candidate to edit");
+      }
+      // The reference goes into the agent's own candidate; the assets and the
+      // plan both change only when the response publishes.
+      await writeFile(
+        pickup.candidate_plan,
+        `${source}\n![Capture](review-image:${descriptor.id})\n`,
+      );
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({
+          requestId: request.requestId,
+          message: "The capture is now part of the plan.",
+        }),
+      );
+      await expect(
+        readFile(
+          join(directory, "assets", `review-image-${descriptor.id}.png`),
+        ),
+      ).rejects.toThrow();
       await expect(
         runAgentWorkLoopAction({
           kind: "respond",
           planPath,
-          responsePath,
+          responsePath: pickup.response_file,
           executablePath,
-          agentToken: review.sessionId,
+          agentToken: pickup.agent_token,
         }),
       ).resolves.toMatchObject({ responded: request.requestId });
       await expect(readFile(planPath, "utf8")).resolves.toContain(
@@ -2147,6 +2160,133 @@ describe("agent work loop lifecycle", () => {
           join(directory, "assets", `review-image-${descriptor.id}.png`),
         ),
       ).resolves.toEqual(expect.any(Buffer));
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse readably when publishing a plan asset fails", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-asset-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nThe reviewer supplied a capture.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const descriptor = await reviewStore.publishReviewImage({
+      store: review.store,
+      bytes: Uint8Array.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48,
+        0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 3,
+      ]),
+      alt: "Capture",
+    });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "cccccccccccccccc",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Please include the capture in the plan.",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.candidate_plan !== "string" ||
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return a candidate to edit");
+      }
+      await writeFile(
+        pickup.candidate_plan,
+        `${source}\n![Capture](review-image:${descriptor.id})\n`,
+      );
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({
+          requestId: request.requestId,
+          message: "The capture is now part of the plan.",
+        }),
+      );
+      // The asset path is already taken by different bytes, so the write the
+      // commit makes fails. Preparation never touches the filesystem, so this
+      // reaches the agent only from inside the commit.
+      await mkdir(join(directory, "assets"), { recursive: true });
+      await writeFile(
+        join(directory, "assets", `review-image-${descriptor.id}.png`),
+        "not the capture",
+      );
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "respond",
+          planPath,
+          responsePath: pickup.response_file,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toThrow(AgentWorkLoopRejected);
+      // The swap comes after the assets, so nothing reached the plan.
+      await expect(readFile(planPath, "utf8")).resolves.toBe(source);
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse readably when the claim stage cannot be opened", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-stage-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nOne question waits.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddd",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "Is the plan ready?",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.agent_token !== "string" ||
+        typeof pickup.candidate_plan !== "string"
+      ) {
+        throw new Error("Pickup did not open a claim stage");
+      }
+      // The stage's own record of what it holds is no longer usable, so the
+      // resume that reopens it is refused rather than served a candidate the
+      // commit could not match.
+      await writeFile(
+        join(dirname(pickup.candidate_plan), "manifest.json"),
+        JSON.stringify({ version: 1 }),
+      );
+
+      await expect(
+        runAgentWorkLoopAction({
+          kind: "next",
+          planPath,
+          shouldWait: false,
+          executablePath,
+          agentToken: pickup.agent_token,
+        }),
+      ).rejects.toThrow(AgentWorkLoopRejected);
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

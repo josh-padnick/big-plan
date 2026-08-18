@@ -1,6 +1,12 @@
 // Materializes reviewer-owned image references into source-controlled plan
 // assets before an agent response is rendered. Review-image URIs are runtime
 // references and are intentionally not part of the plan authoring grammar.
+//
+// Preparation and publication are separate because the commit protocol needs
+// them apart: the expensive read and rewrite happen before the plan-mutation
+// lock, and the bytes reach the repository inside it, before the source swap.
+// An unreferenced asset is harmless; a published plan pointing at a missing
+// one is not.
 
 import {
   mkdir,
@@ -44,6 +50,18 @@ const assetPathFor = ({
     assetName(id, extension),
   );
 
+/** One asset's bytes and the repository path they belong at. */
+export type PreparedPlanAsset = {
+  readonly path: string;
+  readonly bytes: Uint8Array;
+};
+
+/** A candidate rewritten to reference plan assets, and the assets it needs. */
+export type PreparedPlanAssets = {
+  readonly source: string;
+  readonly assets: ReadonlyArray<PreparedPlanAsset>;
+};
+
 const writeAsset = async ({
   path,
   bytes,
@@ -79,8 +97,12 @@ const writeAsset = async ({
   }
 };
 
-/** Replaces runtime image references and writes their bytes beside the plan. */
-export const materializeReviewImages = async ({
+/**
+ * Rewrites runtime image references to repository asset paths and collects the
+ * bytes those paths will need. Nothing is written: the caller publishes the
+ * prepared assets inside the commit, before the source swap.
+ */
+export const prepareReviewImageAssets = async ({
   markdown,
   planPath,
   store,
@@ -88,10 +110,11 @@ export const materializeReviewImages = async ({
   readonly markdown: string;
   readonly planPath: string;
   readonly store: ReviewStore;
-}): Promise<string> => {
+}): Promise<PreparedPlanAssets> => {
   const references = extractReviewImageReferences(markdown);
-  if (references.length === 0) return markdown;
+  if (references.length === 0) return { source: markdown, assets: [] };
   const replacements = new Map<string, string>();
+  const assets: Array<PreparedPlanAsset> = [];
   for (const reference of references) {
     const stored = await readReviewImage({ store, id: reference.id });
     if (stored === undefined) {
@@ -110,19 +133,31 @@ export const materializeReviewImages = async ({
       id: reference.id,
       extension: format.extension,
     });
-    await writeAsset({ path, bytes: stored.bytes });
+    assets.push({ path, bytes: stored.bytes });
     replacements.set(
       reference.id,
       `./${PLAN_ASSET_DIRECTORY}/${assetName(reference.id, format.extension)}`,
     );
   }
-  return markdown.replace(
-    REVIEW_IMAGE_REFERENCE,
-    (whole, alt: string, id: string) => {
-      const path = replacements.get(id);
-      return path === undefined ? whole : `![${alt}](${path})`;
-    },
-  );
+  return {
+    source: markdown.replace(
+      REVIEW_IMAGE_REFERENCE,
+      (whole, alt: string, id: string) => {
+        const path = replacements.get(id);
+        return path === undefined ? whole : `![${alt}](${path})`;
+      },
+    ),
+    assets,
+  };
+};
+
+/** Writes prepared asset bytes into the plan's repository. */
+export const publishPreparedPlanAssets = async (
+  assets: ReadonlyArray<PreparedPlanAsset>,
+): Promise<void> => {
+  for (const asset of assets) {
+    await writeAsset({ path: asset.path, bytes: asset.bytes });
+  }
 };
 
 /** Writes a materialized source atomically while preserving its file mode. */

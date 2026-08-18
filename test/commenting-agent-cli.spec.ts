@@ -12,12 +12,17 @@ import {
   AGENT_STALL_MS,
 } from "../src/review/shared/agent-timing.js";
 import { startReviewRuntime } from "../src/review/server.js";
-import {
-  agentResponseDraftPath,
-  readProgress,
-  writeAgentRequestValue,
-} from "../src/review/store.js";
-import { expect, runAgentCli, test } from "./fixtures";
+import { readProgress, writeAgentRequestValue } from "../src/review/store.js";
+import { expect, runAgentCli, test, closeReviewRuntime } from "./fixtures";
+
+/** The claim's own response draft path, as pickup hands it to the agent. */
+const responseDraftOf = (stdout: string): string => {
+  const draft = /response_file: (\S+)/u.exec(stdout)?.[1];
+  if (draft === undefined) {
+    throw new Error(`The agent CLI returned no response file:\n${stdout}`);
+  }
+  return draft;
+};
 
 const PASTED_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -130,10 +135,7 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
     await rail.getByRole("tab", { name: "Chat" }).click();
     await expect(chat).toContainText("Agent is working on your feedback");
 
-    const responsePath = agentResponseDraftPath({
-      store: runtime.store,
-      requestId: request.requestId,
-    });
+    const responsePath = responseDraftOf(claim.stdout);
     await writeFile(
       responsePath,
       JSON.stringify({
@@ -175,7 +177,7 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
       "It lets a reviewer understand and discuss the plan.",
     );
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -245,7 +247,7 @@ test("should send a slide's whole content when its title is highlighted", async 
       })
       .toContain("We agree the landing order before the schema ships.");
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -323,10 +325,7 @@ test("should report a quiet working agent as stalled rather than disconnected", 
 
     // The agent finishes. Its answer must still land: refusing it would lose
     // the reviewer's message on the ordinary path.
-    const responsePath = agentResponseDraftPath({
-      store: runtime.store,
-      requestId: request.requestId,
-    });
+    const responsePath = responseDraftOf(claim.stdout);
     await writeFile(
       responsePath,
       JSON.stringify({
@@ -351,7 +350,7 @@ test("should report a quiet working agent as stalled rather than disconnected", 
       rail.locator("li").filter({ hasText: "Why does the plan start here?" }),
     ).toContainText("It starts there because the reader needs the status quo.");
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -504,10 +503,11 @@ test("should warn about a takeover before inviting one while work is held", asyn
     expect(/agent_token: ([a-f0-9]{16})/u.exec(takeover.stdout)?.[1]).not.toBe(
       workingAgent,
     );
-    const displacedDraft = agentResponseDraftPath({
-      store: runtime.store,
-      requestId,
-    });
+    // Each claim drafts into its own stage, so the displaced agent's answer
+    // cannot even overwrite the file the takeover will answer from.
+    const displacedDraft = responseDraftOf(firstClaim.stdout);
+    const takeoverDraft = responseDraftOf(takeover.stdout);
+    expect(takeoverDraft).not.toBe(displacedDraft);
     await writeFile(
       displacedDraft,
       JSON.stringify({
@@ -524,7 +524,7 @@ test("should warn about a takeover before inviting one while work is held", asyn
         "--agent",
         workingAgent,
       ]),
-    ).rejects.toThrow(/does not answer the current pending request/u);
+    ).rejects.toThrow(/this claim generation can no longer publish/u);
     await expect(
       readAgentExchange({
         store: runtime.store,
@@ -541,10 +541,18 @@ test("should warn about a takeover before inviting one while work is held", asyn
     if (takeoverAgent === undefined) {
       throw new Error("The takeover did not report its claim");
     }
+    await writeFile(
+      takeoverDraft,
+      JSON.stringify({
+        requestId,
+        message: "The retry budget drives it, so it has to come first.",
+      }),
+      "utf8",
+    );
     await runAgentCli([
       "respond",
       planPath,
-      displacedDraft,
+      takeoverDraft,
       "--agent",
       takeoverAgent,
     ]);
@@ -554,7 +562,7 @@ test("should warn about a takeover before inviting one while work is held", asyn
     await expect(plainRecovery).toBeVisible();
     await expect(takeoverRecovery).toHaveCount(0);
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
