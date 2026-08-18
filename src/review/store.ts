@@ -36,6 +36,7 @@ import { readBoundedRegularFile } from "./bounded-regular-file.js";
 import type { ReviewComment } from "./shared/comment.js";
 import type { FeedbackPackage } from "./feedback-package.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
+import type { StoredChangeDispositions } from "./change-dispositions-store.js";
 import {
   isReviewImageId,
   isReviewImageWithinLimits,
@@ -105,6 +106,7 @@ export type ReviewStore = {
   readonly snapshotDirectory: string;
   readonly draftsPath: string;
   readonly inputsPath: string;
+  readonly changeDispositionsPath: string;
   readonly sentPath: string;
   readonly progressPath: string;
   readonly agentConnectionDirectory: string;
@@ -482,6 +484,10 @@ export const reviewStoreFor = ({
     }),
     draftsPath: inside({ base: reviewDirectory, leaf: "drafts.json" }),
     inputsPath: inside({ base: reviewDirectory, leaf: "inputs.json" }),
+    changeDispositionsPath: inside({
+      base: reviewDirectory,
+      leaf: "dispositions.json",
+    }),
     sentPath: inside({ base: reviewDirectory, leaf: "sent.json" }),
     progressPath: inside({ base: reviewDirectory, leaf: "progress.jsonl" }),
     agentConnectionDirectory: inside({
@@ -1254,6 +1260,41 @@ export const writeStagedInputs = async ({
   readonly inputs: StagedInputs;
 }): Promise<void> => {
   await writeStoreJson({ path: store.inputsPath, value: inputs });
+};
+
+/**
+ * Reads recorded change dispositions back through their owned validator. A
+ * record this build cannot read is answered as empty rather than thrown,
+ * because an unreadable disposition record reopens change sets the reviewer
+ * has to look at again - a visible, recoverable loss, unlike a lost answer.
+ */
+export const readChangeDispositions = async ({
+  store,
+  validate,
+}: {
+  readonly store: ReviewStore;
+  readonly validate: (value: unknown) => StoredChangeDispositions;
+}): Promise<StoredChangeDispositions> => {
+  const stored = await readStoreJson(store.changeDispositionsPath);
+  try {
+    return validate(stored);
+  } catch {
+    return validate(undefined);
+  }
+};
+
+/** Atomically replaces the recorded change dispositions. */
+export const writeChangeDispositions = async ({
+  store,
+  dispositions,
+}: {
+  readonly store: ReviewStore;
+  readonly dispositions: StoredChangeDispositions;
+}): Promise<void> => {
+  await writeStoreJson({
+    path: store.changeDispositionsPath,
+    value: dispositions,
+  });
 };
 
 const snapshotPath = ({

@@ -19,7 +19,10 @@ import { messageTimeLabel } from "../shared/time-label.js";
 import type { AgentStatus } from "../shared/agent-status.js";
 import type { ProgressStepCode } from "../shared/progress-code.js";
 import type { DiffPlace, SnapshotDiff } from "../shared/review-wire.js";
-import { useDiffTour } from "./diff-tour.browser.js";
+import {
+  UNRECORDABLE_ACCEPTANCE_LABEL,
+  useDiffTour,
+} from "./diff-tour.browser.js";
 import { Icon } from "./icon.browser.js";
 import { ReviewImage } from "./review-image.browser.js";
 import { foundElement, liveBlock } from "./live-target.browser.js";
@@ -552,8 +555,10 @@ export const AgentChangeDigest = ({
   const {
     activeDiff,
     activePlaceId,
+    canRecordAcceptance,
     isPlaceAccepted,
     setPlacesAccepted,
+    standingOf,
     closeTour,
     openTour,
   } = useDiffTour();
@@ -578,10 +583,13 @@ export const AgentChangeDigest = ({
     );
   }
   if (available.length === 0) return null;
-  const acceptedCount = available.filter((place) =>
-    isPlaceAccepted(diff, place.placeId),
-  ).length;
-  const allAccepted = acceptedCount === available.length;
+  // The digest and the stepper reviewing this same set both ask the selector,
+  // so the two can never disagree about how much is still open.
+  const standing = standingOf(
+    diff,
+    available.map((place) => place.placeId),
+  );
+  const allAccepted = standing.isAccepted;
   const ownsActiveTour =
     activeDiff?.from === diff.from && activeDiff?.to === diff.to;
   const isActive =
@@ -619,16 +627,16 @@ export const AgentChangeDigest = ({
         <Icon icon={CHEVRON_RIGHT_ICON} />
         {available.length} change{available.length === 1 ? "" : "s"} across{" "}
         {sections.size} slide{sections.size === 1 ? "" : "s"}
-        {acceptedCount === 0 ? null : allAccepted ? (
+        {standing.accepted === 0 ? null : allAccepted ? (
           <Badge className="ml-auto" size="status" tone="statusAccent">
             Accepted
           </Badge>
         ) : (
           <span
             className="ml-auto shrink-0 font-medium text-accent"
-            aria-label={`${acceptedCount} of ${available.length} changes accepted`}
+            aria-label={`${standing.accepted} of ${standing.total} changes accepted`}
           >
-            {acceptedCount}/{available.length}
+            {standing.accepted}/{standing.total}
           </span>
         )}
       </button>
@@ -727,7 +735,7 @@ export const AgentChangeDigest = ({
           {isActive
             ? "Exit review"
             : (actionLabel ??
-              (acceptedCount > 0 && !allAccepted
+              (standing.accepted > 0 && !allAccepted
                 ? "Continue review"
                 : available.length === 1
                   ? "Review change"
@@ -737,6 +745,12 @@ export const AgentChangeDigest = ({
           <Button
             variant="accentOutline"
             size="micro"
+            disabled={!canRecordAcceptance}
+            aria-label={
+              canRecordAcceptance
+                ? "Accept all changes"
+                : UNRECORDABLE_ACCEPTANCE_LABEL
+            }
             onClick={() =>
               setPlacesAccepted(
                 diff,

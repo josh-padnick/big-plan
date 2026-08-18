@@ -16,8 +16,7 @@ import type {
 import { buildSnapshotDiff, usesRenderedSnapshot } from "./snapshot-diff.js";
 import { readSnapshot } from "./store.js";
 import { encodeSnapshotDiff } from "./shared/review-wire.js";
-
-const SNAPSHOT_DIGEST = /^[a-f0-9]{16,64}$/;
+import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
 
 const isHastElement = (node: RootContent | ElementContent): node is Element =>
   node.type === "element";

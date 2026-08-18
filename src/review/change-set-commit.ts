@@ -16,12 +16,12 @@ import { join } from "node:path";
 import type { AgentResponse } from "./agent-exchange.js";
 import { readStoreJson, writeStoreJson } from "./store.js";
 import type { ReviewStore } from "./store.js";
+import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
 // A change set is addressed by the thread it belongs to, and a comment id is a
 // short hexadecimal identifier rather than a request-shaped one.
 const CHANGE_SET_ID = /^[a-f0-9]{4,64}$/;
-const SNAPSHOT_DIGEST = /^[a-f0-9]{16,64}$/;
 const COMMITTED_REVISION_VERSION = 1;
 
 /** What caused the change set the committed revision belongs to. */

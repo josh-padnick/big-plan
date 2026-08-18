@@ -19,9 +19,11 @@ import {
 } from "./shared/comment.js";
 import { deriveSnapshotDigest, readAgentExchange } from "./agent-exchange.js";
 import {
+  readChangeDispositions,
   readComments,
   readResolvedCommentIds,
   readStagedInputs,
+  writeChangeDispositions,
   writeStagedInputs,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
@@ -31,6 +33,8 @@ import {
 } from "./decision-inventory.js";
 import { validateStagedInputs } from "./plan-inputs-store.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
+import { validateChangeDispositions } from "./change-dispositions-store.js";
+import type { StoredChangeDispositions } from "./change-dispositions-store.js";
 import {
   MUTATION_STALL_MS,
   ReviewWriteStalled,
@@ -179,6 +183,16 @@ export type DecisionAnswers = {
   readonly write: (inputs: StagedInputs) => Promise<void>;
 };
 
+/**
+ * The change dispositions this review has recorded. Unlike the answer record
+ * there is no inventory to join against: a disposition names the two snapshot
+ * digests it closed, so it already refers to exactly one revision's content.
+ */
+export type ChangeDispositions = {
+  readonly read: () => Promise<StoredChangeDispositions>;
+  readonly write: (dispositions: StoredChangeDispositions) => Promise<void>;
+};
+
 /** The review's one lifetime policy and its current activity. */
 export type ActivityClock = {
   readonly idleTimeoutMs: number;
@@ -197,6 +211,7 @@ export type ReviewRouteContext = {
   readonly recoveryPrompt: string;
   readonly planRenderer: PlanRenderer;
   readonly decisionAnswers: DecisionAnswers;
+  readonly changeDispositions: ChangeDispositions;
   readonly readerProgress: ReaderProgress;
   readonly writeGate: WriteGate;
   readonly activityClock: ActivityClock;
@@ -366,6 +381,40 @@ export const createDecisionAnswers = ({
     write: async (inputs) => {
       await writeStagedInputs({ store, inputs });
       revisionFloor = Math.max(revisionFloor, inputs.revision);
+    },
+  };
+};
+
+/**
+ * Owns every read and write of the change-disposition record.
+ *
+ * The revision a browser has applied is its guard against stale responses, so
+ * within one runtime the revision this object answers with never decreases:
+ * a record that resets underneath the session - unreadable and answered as
+ * empty, or replaced out of band - is served at the highest revision already
+ * handed out, and the next accepted write advances from there.
+ */
+export const createChangeDispositions = ({
+  store,
+}: {
+  readonly store: ReviewStore;
+}): ChangeDispositions => {
+  let revisionFloor = 0;
+  return {
+    read: async () => {
+      const dispositions = await readChangeDispositions({
+        store,
+        validate: validateChangeDispositions,
+      });
+      if (dispositions.revision < revisionFloor) {
+        return { ...dispositions, revision: revisionFloor };
+      }
+      revisionFloor = dispositions.revision;
+      return dispositions;
+    },
+    write: async (dispositions) => {
+      await writeChangeDispositions({ store, dispositions });
+      revisionFloor = Math.max(revisionFloor, dispositions.revision);
     },
   };
 };
