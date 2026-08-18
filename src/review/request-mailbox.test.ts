@@ -39,8 +39,11 @@ import {
   ensureAgentRequest,
   recordAgentConnectionState,
   removeCommentFromQueuedFeedbackRequest,
+  ResolvedThreadWorkRejected,
   reviseQueuedRequest,
+  withResolvedCommentLock,
 } from "./request-mailbox.js";
+import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
   prepareStore,
   readAgentConnectionEvents,
@@ -48,6 +51,7 @@ import {
   reviewStoreFor,
   withReviewStoreLock,
   writeAgentResponseValue,
+  writeResolvedCommentIds,
 } from "./store.js";
 import {
   buildReviewImageReference,
@@ -96,6 +100,30 @@ const holdAgentRequestLock = async ({
       await released.promise;
     },
     timeoutError: () => new Error("Timed out holding the agent request lock"),
+  });
+  await acquired.promise;
+  let settled = false;
+  return async () => {
+    if (settled) return;
+    settled = true;
+    released.resolve();
+    await lock;
+  };
+};
+
+const holdResolvedCommentLock = async ({
+  store,
+}: {
+  readonly store: ReturnType<typeof reviewStoreFor>;
+}): Promise<() => Promise<void>> => {
+  const acquired = deferred();
+  const released = deferred();
+  const lock = withResolvedCommentLock({
+    store,
+    change: async () => {
+      acquired.resolve();
+      await released.promise;
+    },
   });
   await acquired.promise;
   let settled = false;
@@ -161,6 +189,24 @@ const chatRequest = (
     createdAt: "2026-08-10T12:00:00.000Z",
     body,
     attachments,
+  });
+
+const replyRequest = ({
+  commentId,
+  requestId = "6666666666666666",
+}: {
+  readonly commentId: string;
+  readonly requestId?: string;
+}) =>
+  messageAgentRequest({
+    kind: "reply",
+    requestId,
+    sessionId,
+    planId,
+    premiseSnapshot: snapshot,
+    createdAt: "2026-08-10T12:00:00.000Z",
+    body: "Please look at this again.",
+    commentId,
   });
 
 const preparedReview = async () => {
@@ -1193,6 +1239,38 @@ describe("request mailbox", () => {
     ).resolves.toMatchObject({ canceledAt: "2026-08-10T12:00:02.000Z" });
   });
 
+  it("should treat removing a comment the request no longer carries as done", async () => {
+    const { store } = await preparedReview();
+    const removedId = "4444444444444444";
+    const keptId = "5555555555555555";
+    const request = requestWith([
+      reviewComment({ id: removedId, body: "Remove this." }),
+      reviewComment({ id: keptId, body: "Keep this." }),
+    ]);
+    await writeAgentRequest({ store, request });
+    await removeCommentFromQueuedFeedbackRequest({
+      store,
+      requestId: request.requestId,
+      commentId: removedId,
+      now: "2026-08-10T12:00:01.000Z",
+    });
+
+    const repeated = await removeCommentFromQueuedFeedbackRequest({
+      store,
+      requestId: request.requestId,
+      commentId: removedId,
+      now: "2026-08-10T12:00:02.000Z",
+    });
+
+    expect(repeated.comments.map((comment) => comment.id)).toEqual([keptId]);
+    expect(repeated.canceledAt).toBeUndefined();
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({
+      requests: [{ kind: "feedback", comments: [{ id: keptId }] }],
+    });
+  });
+
   it("should keep a valid request when removal races with pickup", async () => {
     const { store } = await preparedReview();
     const removedId = "4444444444444444";
@@ -1664,5 +1742,78 @@ describe("request mailbox", () => {
       { connected: true },
       { connected: false, reason: "Heartbeat timed out" },
     ]);
+  });
+
+  it("should refuse a reply that names a resolved thread", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    const refused = ensureAgentRequest({
+      store,
+      request: replyRequest({ commentId }),
+    });
+    await expect(refused).rejects.toThrow(ResolvedThreadWorkRejected);
+    await expect(refused).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should refuse feedback that names a resolved thread", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+
+    const refused = ensureAgentRequest({
+      store,
+      request: requestWith([
+        reviewComment({ id: commentId, body: "Look at this again." }),
+      ]),
+    });
+    await expect(refused).rejects.toThrow(ResolvedThreadWorkRejected);
+    await expect(refused).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should not queue a reply while a concurrent resolve holds the shared lock", async () => {
+    const { store } = await preparedReview();
+    const commentId = "4444444444444444";
+    const release = await holdResolvedCommentLock({ store });
+    const created = ensureAgentRequest({
+      store,
+      request: replyRequest({ commentId }),
+    });
+    let settled = false;
+    void created.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(settled).toBe(false);
+    await writeResolvedCommentIds({ store, ids: [commentId] });
+    await release();
+    await expect(created).rejects.toThrow(RESOLVED_THREAD_NEW_WORK_ERROR);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should still accept a plan question while another thread is resolved", async () => {
+    const { store } = await preparedReview();
+    await writeResolvedCommentIds({ store, ids: ["4444444444444444"] });
+
+    await expect(
+      ensureAgentRequest({
+        store,
+        request: chatRequest("What is the retry boundary?"),
+      }),
+    ).resolves.toMatchObject({ kind: "chat" });
   });
 });

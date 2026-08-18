@@ -30,6 +30,7 @@ import {
 import { renderDocument } from "../src/render/render-document.js";
 import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
 import { boxOf, expect, stageComment, test, type Page } from "./fixtures";
+import { RESOLVED_THREAD_NEW_WORK_ERROR } from "../src/review/shared/resolved-thread-work.js";
 
 const PASTED_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -45,6 +46,73 @@ const WIDE_PNG_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAEElEQVR4nGMQqTgBRwzIHACEmgqhmuCM0QAAAABJRU5ErkJggg==";
 const TALL_PNG_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAAECAIAAAArjXluAAAAEElEQVR4nGO4E6UBRAzYKACe3Arxvs3ORQAAAABJRU5ErkJggg==";
+
+test("should refuse a reply on a resolved thread and keep the typed text", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const commentBody = "Need a second look at the retry boundary.";
+  const replyBody = "Please walk through the failure case again.";
+  await stageComment(page, commentBody);
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const sent = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/feedback") &&
+      response.request().method() === "POST",
+  );
+  await rail
+    .getByRole("button", { name: "Send all comments to agent" })
+    .click();
+  expect((await sent).ok()).toBe(true);
+  const thread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: commentBody });
+  await thread
+    .getByRole("button", { name: `Expand queued comment: ${commentBody}` })
+    .click();
+  const canceled = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/agent-cancel") &&
+      response.request().method() === "POST",
+  );
+  await thread.getByRole("button", { name: "Cancel request" }).click();
+  expect((await canceled).ok()).toBe(true);
+  await expect(thread).toContainText("Request canceled");
+  await thread.getByRole("button", { name: "Resolve thread" }).click();
+  await rail.getByText("Resolved (1)").click();
+  const resolvedThread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: commentBody });
+  await resolvedThread
+    .getByRole("button", { name: `Expand thread: ${commentBody}` })
+    .click();
+  const replyBox = resolvedThread.getByLabel("Reply to the agent");
+  await replyBox.fill(replyBody);
+  await resolvedThread.getByRole("button", { name: "Reply" }).click();
+  await expect(
+    resolvedThread.getByText(RESOLVED_THREAD_NEW_WORK_ERROR),
+  ).toBeVisible();
+  await expect(replyBox).toHaveValue(replyBody);
+
+  await resolvedThread
+    .getByRole("button", { name: "Unresolve thread" })
+    .click();
+  const reopenedThread = rail
+    .locator("[data-review-sent-thread]")
+    .filter({ hasText: commentBody });
+  await expect(reopenedThread).toBeVisible();
+  const reopenedReplyBox = reopenedThread.getByLabel("Reply to the agent");
+  await expect(reopenedReplyBox).toBeVisible();
+  await expect(reopenedReplyBox).toHaveValue(replyBody);
+  await expect(
+    reopenedThread.getByRole("button", { name: "Resolve thread" }),
+  ).toBeVisible();
+  await expect(
+    reopenedThread.getByText(RESOLVED_THREAD_NEW_WORK_ERROR),
+  ).toHaveCount(0);
+});
 
 test("should keep one staged comment after reloading the live review", async ({
   page,

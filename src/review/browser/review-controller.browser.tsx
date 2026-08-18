@@ -145,6 +145,7 @@ import {
   reviewWriteRefusal,
   type ReviewWriteAvailability,
 } from "./review-write-availability.js";
+import { RESOLVED_THREAD_NEW_WORK_ERROR } from "../shared/resolved-thread-work.js";
 import {
   isReviewRuntimeRefusal,
   isReviewRuntimeUnavailable,
@@ -3140,9 +3141,21 @@ const SentThread = ({
   // and canceling - is held back by the same answer, so a reviewer is told the
   // session cannot take a change before acting rather than after.
   const replyBlock = reviewWriteBlock(writeAvailability);
+  const [resolvedWorkError, setResolvedWorkError] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!resolved) setResolvedWorkError(null);
+  }, [resolved]);
+  const shownResolvedWorkError = resolved ? resolvedWorkError : null;
   const sendReply = (bodyOverride?: string) => {
     const body = (bodyOverride ?? reply).trim();
     if (identity === null || body === "") return;
+    if (resolved) {
+      setResolvedWorkError(RESOLVED_THREAD_NEW_WORK_ERROR);
+      return;
+    }
+    setResolvedWorkError(null);
     onReply(body);
   };
 
@@ -3700,9 +3713,13 @@ const SentThread = ({
               }}
             />
             <div className="mt-2 flex items-center justify-end gap-2">
-              {replyBlock === undefined ? null : (
-                <span className="text-2xs font-semibold text-danger">
-                  {replyBlock.label}
+              {replyBlock === undefined &&
+              shownResolvedWorkError === null ? null : (
+                <span
+                  className="text-2xs font-semibold text-danger"
+                  role={shownResolvedWorkError === null ? undefined : "alert"}
+                >
+                  {shownResolvedWorkError ?? replyBlock?.label}
                 </span>
               )}
               <Tooltip
@@ -4298,6 +4315,12 @@ export const ReviewController = () => {
         return;
       }
       if (identity === null) return;
+      if (
+        latestReviewStateRef.current.state.resolvedCommentIds.has(commentId)
+      ) {
+        setStatus(RESOLVED_THREAD_NEW_WORK_ERROR);
+        return;
+      }
       const pending = new Set(replyPendingCommentIdsRef.current).add(commentId);
       replyPendingCommentIdsRef.current = pending;
       setReplyPendingCommentIds(pending);
@@ -5238,6 +5261,15 @@ export const ReviewController = () => {
           });
           if (preparedComments.length !== comments.length) {
             return { submitted: false, conflicted: false, comments: [] };
+          }
+          if (
+            preparedComments.some((comment) =>
+              latestReviewStateRef.current.state.resolvedCommentIds.has(
+                comment.id,
+              ),
+            )
+          ) {
+            throw new Error(RESOLVED_THREAD_NEW_WORK_ERROR);
           }
           const submittedBodies = new Map(
             preparedComments.map((comment) => [comment.id, comment.body]),
@@ -6624,12 +6656,16 @@ export const ReviewController = () => {
               )}
               {identity !== null &&
               (status === STALE_SUBMISSION_STATUS ||
+                status === RESOLVED_THREAD_NEW_WORK_ERROR ||
                 !isLiveRecoveryAvailable) ? (
                 <p
                   className="m-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)]"
                   role="status"
                 >
-                  {status === STALE_SUBMISSION_STATUS ? `${status} ` : ""}
+                  {status === STALE_SUBMISSION_STATUS ||
+                  status === RESOLVED_THREAD_NEW_WORK_ERROR
+                    ? `${status} `
+                    : ""}
                   {!isLiveRecoveryAvailable
                     ? LIVE_RECOVERY_UNAVAILABLE_STATUS
                     : ""}

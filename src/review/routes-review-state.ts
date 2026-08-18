@@ -33,10 +33,12 @@ import {
 } from "./agent-exchange.js";
 import {
   appendProgressEvent,
+  assertCommentsAreUnresolved,
   assertResolvableComment,
   cancelAgentRequest,
   ensureAgentRequest,
   removeCommentFromQueuedFeedbackRequest,
+  withResolvedCommentLock,
 } from "./request-mailbox.js";
 import {
   anchorReviewStore,
@@ -330,31 +332,48 @@ export const updateReviewState = async (
     payload.resolvedCommentIds,
   );
   // A newly resolved thread must not contradict outstanding agent work. The
-  // check runs before any write, so a refusal leaves the whole review state
-  // untouched rather than half applied.
-  const alreadyResolved = new Set(
-    await readResolvedCommentIds({
+  // check and the resolved-id write share `.resolved.lock` with request
+  // creation, so a refusal leaves the whole review state untouched and a
+  // concurrent create cannot sneak onto the thread.
+  try {
+    await withResolvedCommentLock({
       store,
-      validate: validateResolvedCommentIds,
-    }),
-  );
-  for (const commentId of resolvedCommentIds) {
-    if (alreadyResolved.has(commentId)) continue;
-    try {
-      await assertResolvableComment({ store, sessionId, planId, commentId });
-    } catch (error: unknown) {
-      if (!(error instanceof AgentExchangeRejected)) throw error;
-      return refusal({ status: 409, reason: error.message });
-    }
+      change: async (lockedStore) => {
+        const alreadyResolved = new Set(
+          await readResolvedCommentIds({
+            store: lockedStore,
+            validate: validateResolvedCommentIds,
+          }),
+        );
+        for (const commentId of resolvedCommentIds) {
+          if (alreadyResolved.has(commentId)) continue;
+          await assertResolvableComment({
+            store: lockedStore,
+            sessionId,
+            planId,
+            commentId,
+          });
+        }
+        const sentIds = new Set(
+          (await planRenderer.readStoredComments(lockedStore.sentPath)).map(
+            (comment) => comment.id,
+          ),
+        );
+        const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
+        await writeComments({
+          path: lockedStore.draftsPath,
+          comments: unsentDrafts,
+        });
+        await writeResolvedCommentIds({
+          store: lockedStore,
+          ids: resolvedCommentIds,
+        });
+      },
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
   }
-  const sentIds = new Set(
-    (await planRenderer.readStoredComments(store.sentPath)).map(
-      (comment) => comment.id,
-    ),
-  );
-  const unsentDrafts = drafts.filter((draft) => !sentIds.has(draft.id));
-  await writeComments({ path: store.draftsPath, comments: unsentDrafts });
-  await writeResolvedCommentIds({ store, ids: resolvedCommentIds });
   return jsonResponse({
     status: 200,
     value: await storedReviewSnapshot({ context }),
@@ -384,6 +403,15 @@ export const submitFeedback = async (
   const comments = await planRenderer.validateUpdates(payload.comments);
   if (comments.length === 0) {
     return refusal({ status: 400, reason: "Nothing to send" });
+  }
+  try {
+    await assertCommentsAreUnresolved({
+      store,
+      commentIds: comments.map((comment) => comment.id),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
   }
   const alreadySent = await planRenderer.readStoredComments(store.sentPath);
   const sentById = new Map(alreadySent.map((comment) => [comment.id, comment]));
@@ -505,13 +533,19 @@ export const submitFeedback = async (
     brief: renderBrief(feedback),
   });
   await writeSnapshot({ store, snapshot: premiseSnapshot, source });
-  const agentRequest = await ensureAgentRequest({
-    store,
-    request: feedbackAgentRequest({
-      feedback,
-      premiseSnapshot,
-    }),
-  });
+  let agentRequest;
+  try {
+    agentRequest = await ensureAgentRequest({
+      store,
+      request: feedbackAgentRequest({
+        feedback,
+        premiseSnapshot,
+      }),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
   await writeComments({
     path: store.sentPath,
     comments: [...alreadySent, ...feedback.comments],
@@ -727,6 +761,12 @@ export const deleteSentComment = async (
     });
   }
   const now = new Date().toISOString();
+  const wasResolved = (
+    await readResolvedCommentIds({
+      store,
+      validate: validateResolvedCommentIds,
+    })
+  ).includes(commentId);
   for (const pending of answeredRequestIds.size === 0 ? pendingRequests : []) {
     if (pending.canceledAt !== undefined) continue;
     if (pending.kind === "feedback") {
@@ -744,17 +784,35 @@ export const deleteSentComment = async (
       });
     }
   }
+  // The resolved-id read-modify-write shares `.resolved.lock` with request
+  // creation and the drafts write, so a concurrent resolve cannot be dropped by
+  // this deletion. The request locks above are already released, keeping the
+  // request-then-resolved order `ensureAgentRequest` establishes. A comment
+  // that was not resolved has no id to remove, and a comment holding queued
+  // work is never resolved, so this waits on the lock only when it writes.
+  if (wasResolved) {
+    try {
+      await withResolvedCommentLock({
+        store,
+        change: async (lockedStore) => {
+          const resolvedCommentIds = await readResolvedCommentIds({
+            store: lockedStore,
+            validate: validateResolvedCommentIds,
+          });
+          await writeResolvedCommentIds({
+            store: lockedStore,
+            ids: resolvedCommentIds.filter((id) => id !== commentId),
+          });
+        },
+      });
+    } catch (error: unknown) {
+      if (!(error instanceof AgentExchangeRejected)) throw error;
+      return refusal({ status: 409, reason: error.message });
+    }
+  }
   await writeComments({
     path: store.sentPath,
     comments: sent.filter((comment) => comment.id !== commentId),
-  });
-  const resolvedCommentIds = await readResolvedCommentIds({
-    store,
-    validate: validateResolvedCommentIds,
-  });
-  await writeResolvedCommentIds({
-    store,
-    ids: resolvedCommentIds.filter((id) => id !== commentId),
   });
   await appendProgressEvent({
     store,

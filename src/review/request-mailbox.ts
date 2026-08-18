@@ -1,4 +1,7 @@
 // Owns locked changes to stored agent requests and the plan-wide claim gate.
+// Request creation and resolution share `.resolved.lock`, so a resolve and a
+// new reply or feedback cannot interleave into a resolved thread that holds
+// outstanding work.
 
 import { join } from "node:path";
 import {
@@ -21,6 +24,8 @@ import {
   extractReviewImageReferences,
 } from "./shared/review-image.js";
 import { agentOwnsRequest } from "./shared/request-ownership.js";
+import { validateResolvedCommentIds } from "./shared/comment.js";
+import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
   anchorReviewStore,
   appendAgentConnectionEvent,
@@ -30,6 +35,7 @@ import {
   nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
+  readResolvedCommentIds,
   ReviewStorePathRejected,
   withReviewStoreLock,
   writeAgentRequestValue,
@@ -48,6 +54,40 @@ import type {
 } from "./store.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
+
+const namedCommentIds = (request: AgentRequest): ReadonlyArray<string> =>
+  request.kind === "feedback"
+    ? request.comments.map((comment) => comment.id)
+    : request.kind === "reply"
+      ? [request.commentId]
+      : [];
+
+export class ResolvedThreadWorkRejected extends AgentExchangeRejected {
+  constructor() {
+    super(RESOLVED_THREAD_NEW_WORK_ERROR);
+    this.name = "ResolvedThreadWorkRejected";
+  }
+}
+
+/** Refuses create when any named thread is still resolved. */
+export const assertCommentsAreUnresolved = async ({
+  store,
+  commentIds,
+}: {
+  readonly store: ReviewStore;
+  readonly commentIds: ReadonlyArray<string>;
+}): Promise<void> => {
+  if (commentIds.length === 0) return;
+  const resolved = new Set(
+    await readResolvedCommentIds({
+      store,
+      validate: validateResolvedCommentIds,
+    }),
+  );
+  if (commentIds.some((commentId) => resolved.has(commentId))) {
+    throw new ResolvedThreadWorkRejected();
+  }
+};
 
 export class RetryableAgentClaimRejected extends AgentExchangeRejected {}
 
@@ -115,6 +155,32 @@ const withRequestLock = async <TResult>({
       new AgentExchangeRejected("The request mailbox is unavailable"),
   });
 };
+
+const resolvedCommentLockPath = (store: ReviewStore): string =>
+  join(store.reviewDirectory, ".resolved.lock");
+
+/**
+ * Serializes resolution writes against create-time unresolved checks. The
+ * request lock still owns one request file; this lock owns the pairing of
+ * resolved.json with outstanding work.
+ */
+export const withResolvedCommentLock = async <TResult>({
+  store,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly change: (store: ReviewStore) => Promise<TResult>;
+}): Promise<TResult> =>
+  withReviewStoreLock({
+    lockPath: resolvedCommentLockPath(store),
+    change: () => change(store),
+    timeoutError: () =>
+      new AgentExchangeRejected(
+        "Another process is changing resolved threads. Try again.",
+      ),
+    invalidLockError: () =>
+      new AgentExchangeRejected("The request mailbox is unavailable"),
+  });
 
 const withPlanClaimLock = async <TResult>({
   store,
@@ -212,12 +278,21 @@ export const ensureAgentRequest = async ({
         requestId: intended.requestId,
       });
       if (value === undefined) {
-        await writeAgentRequestValue({
+        return withResolvedCommentLock({
           store: lockedStore,
-          requestId: intended.requestId,
-          value: intended,
+          change: async () => {
+            await assertCommentsAreUnresolved({
+              store: lockedStore,
+              commentIds: namedCommentIds(intended),
+            });
+            await writeAgentRequestValue({
+              store: lockedStore,
+              requestId: intended.requestId,
+              value: intended,
+            });
+            return intended;
+          },
         });
-        return intended;
       }
       const existing = validateAgentRequest(value);
       if (
@@ -609,7 +684,11 @@ export const deleteQueuedRequest = async ({
     },
   });
 
-/** Removes one comment before an agent claims its feedback request. */
+/**
+ * Removes one comment before an agent claims its feedback request. A request
+ * that no longer carries the comment has already had it removed, so the
+ * removal answers with the stored request rather than refusing a repeat.
+ */
 export const removeCommentFromQueuedFeedbackRequest = async ({
   store,
   requestId,
@@ -643,11 +722,7 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
       const comments = request.comments.filter(
         (comment) => comment.id !== commentId,
       );
-      if (comments.length === request.comments.length) {
-        throw new AgentExchangeRejected(
-          "The queued feedback request does not contain this comment",
-        );
-      }
+      if (comments.length === request.comments.length) return request;
       const updated = validateAgentRequest(
         comments.length === 0
           ? { ...request, canceledAt: now }
