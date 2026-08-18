@@ -8,7 +8,8 @@
 // gate that cannot be evaluated must never look satisfied.
 //
 // Run it locally against any pull request:
-//   GH_TOKEN=$(gh auth token) node scripts/merge-gates/check.mjs 168 --dry-run
+//   GH_TOKEN=$(gh auth token) node scripts/merge-gates/check.mjs 168 \
+//     --repo=josh-padnick/big-plan --dry-run
 
 import { fetchSnapshot, publishCheckRun, GitHubFailure } from "./github.mjs";
 import { CHECK_NAMES, evaluateMergeGates, formatVerdict } from "./gates.mjs";

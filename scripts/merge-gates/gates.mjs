@@ -164,10 +164,26 @@ const withoutHiddenSpans = (line, wasHidden) => {
  * stronger form of not asserting than an indent is. It is also reached without
  * malice, because reviewer bots wrap their bookkeeping - including quoted
  * context from earlier comments - in exactly those spans.
+ *
+ * Which text each rule reads is the contract here, and getting it backwards
+ * fails open rather than loudly.
+ *
+ * Blockquote and indent are properties of the RAW line, because Markdown reads
+ * a line's block context from the prefix it actually starts with. A span that
+ * closes at the start of a line would otherwise eat that line's `>` or its
+ * indentation and promote quoted text to an assertion, so both rules consult
+ * the raw line first; they also consult what survives the span, which can only
+ * suppress more, never assert more.
+ *
+ * A fence is a property of what SURVIVES, because a ``` sitting inside a
+ * comment span is not a fence at all, and reading the raw line there would
+ * suppress everything after a fence that only appears to open.
  */
 export const assertedLines = (body) => {
   const lines = (body ?? "").split(/\r?\n/);
   const fence = /^\s*(```|~~~)/;
+  const quotedOrIndented = (text) =>
+    /^\s*>/.test(text) || /^(\s{4,}|\t)/.test(text);
   const asserted = [];
   let fenced = false;
   let hidden = false;
@@ -180,11 +196,11 @@ export const assertedLines = (body) => {
     }
     const span = withoutHiddenSpans(line, hidden);
     hidden = span.hidden;
-    if (fence.test(span.visible)) {
-      fenced = true;
+    if (quotedOrIndented(line) || quotedOrIndented(span.visible)) {
       continue;
     }
-    if (/^\s*>/.test(span.visible) || /^(\s{4,}|\t)/.test(span.visible)) {
+    if (fence.test(span.visible)) {
+      fenced = true;
       continue;
     }
     asserted.push(span.visible);
@@ -404,7 +420,7 @@ export const triageThreads = (snapshot, reviewerLogins) => {
   return { threads: own, resolved, unresolved, foreign };
 };
 
-/** Where an inline thread sits, for a reader who has to go answer it. */
+/** Where an inline thread sits, for a reader who has to go resolve it. */
 const locate = (thread) => {
   const line = thread.line ?? thread.originalLine;
   return line === null || line === undefined
@@ -432,8 +448,8 @@ const verdict = (name, conclusion, title, details) => ({
 });
 
 /**
- * Gate 1. Requires exactly one accepted review, a written response to each of
- * its inline findings, and a sign-off naming the current head.
+ * Gate 1. Requires exactly one accepted review, a written reply resolving each
+ * of its inline findings, and a sign-off naming the current head.
  */
 export const evaluateReviewTriage = (snapshot) => {
   const head = short(snapshot.headSha);
@@ -578,7 +594,7 @@ export const evaluateReviewTriage = (snapshot) => {
     "",
     `Sign-off: missing for head ${head}.`,
     "",
-    "Next action: once every finding has a response, post this as a plain line in a",
+    "Next action: once every finding is resolved, post this as a plain line in a",
     "new comment on the pull request (not inside a code fence, not quoted):",
     "",
     `    ${withHead(MARKERS.signOff, snapshot.headSha)}`,

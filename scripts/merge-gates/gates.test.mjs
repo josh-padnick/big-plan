@@ -107,7 +107,7 @@ test("an unresolved finding fails the gate and names where it is", () => {
   assert.match(report(verdict), /Next action: reply in each thread/);
 });
 
-test("the reviewer answering itself is not a response", () => {
+test("the reviewer replying to itself does not resolve a finding", () => {
   const verdict = evaluateReviewTriage(
     snapshot({
       issueComments: [signOff],
@@ -119,7 +119,7 @@ test("the reviewer answering itself is not a response", () => {
   assert.match(report(verdict), /unresolved: 1/);
 });
 
-test("resolving a thread without replying is not a response", () => {
+test("ticking GitHub's resolve checkbox does not resolve a finding", () => {
   const verdict = evaluateReviewTriage(
     snapshot({
       issueComments: [signOff],
@@ -493,6 +493,44 @@ test("a marker hidden in an HTML comment satisfies nothing", () => {
   assert.equal(
     evaluateValidationAttestation(snapshot(visible)).conclusion,
     "success",
+  );
+});
+
+test("an HTML comment cannot un-quote or un-indent the line it closes on", () => {
+  // A span that closes at the start of a line must not eat that line's
+  // blockquote marker or its indentation: the line is still quoted or still
+  // indented, so the marker on it is still not an assertion.
+  const triaged = {
+    reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+    reviewThreads: [thread([finding(), reply()])],
+  };
+  const quoted = evaluateReviewTriage(
+    snapshot({
+      ...triaged,
+      issueComments: [
+        comment(
+          `> <!--\n> quoted metadata\n> --> review-triage: complete ${HEAD}`,
+        ),
+      ],
+    }),
+  );
+  assert.equal(quoted.conclusion, "failure");
+  assert.match(quoted.title, /Sign-off missing/);
+
+  const indented = evaluateReviewTriage(
+    snapshot({
+      ...triaged,
+      issueComments: [
+        comment(`<!-- note\n    --> review-triage: complete ${HEAD}`),
+      ],
+    }),
+  );
+  assert.equal(indented.conclusion, "failure");
+  assert.match(indented.title, /Sign-off missing/);
+
+  assert.deepEqual(
+    assertedLines(`> <!--\n> hidden\n> --> review-triage: complete ${HEAD}`),
+    [],
   );
 });
 
