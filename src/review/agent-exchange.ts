@@ -1165,10 +1165,14 @@ export const writeAgentRequest = async ({
 };
 
 /**
- * A plan-wide pickup block releases only when its writer is provably gone.
- * An answer proves the agent finished, but cancellation is a reviewer action
- * the agent may not see until its next note or response, so a canceled live
- * claim keeps blocking new work until its lease lapses.
+ * A plan-wide pickup block releases only when its writer can no longer reach
+ * the plan source. Either terminal outcome proves that: an answer because the
+ * agent finished, and a cancellation because the commit boundary refuses a
+ * canceled request outright and its claim stages are dropped as it is
+ * withdrawn. A canceled holder that has not noticed yet is therefore fenced
+ * out more completely than a displaced one, so keeping its lapsed-lease block
+ * bought no safety and cost the reviewer a stalled queue: the next message sat
+ * queued for the rest of the lease instead of starting (BIG-159).
  */
 export const requestBlocksPlanPickup = ({
   request,
@@ -1176,8 +1180,7 @@ export const requestBlocksPlanPickup = ({
 }: {
   readonly request: AgentRequest;
   readonly nowMs: number;
-}): boolean =>
-  request.answeredAt === undefined && claimIsLive({ request, nowMs });
+}): boolean => !requestIsTerminal(request) && claimIsLive({ request, nowMs });
 
 /**
  * Reads the whole plan exchange through the contract. A review-server restart

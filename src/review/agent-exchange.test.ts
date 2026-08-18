@@ -296,8 +296,9 @@ describe("agent exchange response contract", () => {
         nowMs,
       }),
     ).toBeUndefined();
-    // Without the writer-release rule, cancellation releases the plan while
-    // its writer still holds a live lease. That counterfactual was verified.
+    // Cancellation is terminal: the commit boundary refuses a canceled
+    // request, so its holder cannot reach the plan and the queue advances at
+    // once rather than waiting out the lease (BIG-159).
     expect(
       nextPendingAgentRequest(
         {
@@ -308,21 +309,6 @@ describe("agent exchange response contract", () => {
           responses: [],
         },
         { claimedBy: "cccc0000cccc0000", nowMs },
-      ),
-    ).toBeUndefined();
-    expect(
-      nextPendingAgentRequest(
-        {
-          requests: [
-            { ...active, canceledAt: "2026-08-02T12:00:31.000Z" },
-            request,
-          ],
-          responses: [],
-        },
-        {
-          claimedBy: "cccc0000cccc0000",
-          nowMs: (active.claimExpiresAtMs ?? nowMs) + 1,
-        },
       ),
     ).toBe(request);
     expect(
@@ -722,7 +708,6 @@ describe("agent exchange filesystem", () => {
       claimedBy: agentSessionId,
       claimExpiresAtMs: nowMs + AGENT_CLAIM_LEASE_MS,
       claimGeneration: 1,
-      canceledAt: new Date(nowMs - 500).toISOString(),
     });
     const queued = messageAgentRequest({
       kind: "chat",
@@ -731,7 +716,7 @@ describe("agent exchange filesystem", () => {
       planId,
       premiseSnapshot: deriveSnapshotDigest(before),
       createdAt: new Date(startedAt + 404).toISOString(),
-      body: "Wait for the canceled writer to leave.",
+      body: "Wait for the working writer to leave.",
     });
     await writeAgentRequest({ store, request: blocker });
     await writeAgentRequest({ store, request: queued });
@@ -761,6 +746,6 @@ describe("agent exchange filesystem", () => {
         claimedBy: "cccc0000cccc0000",
         nowMs: (blocker.claimExpiresAtMs ?? nowMs) + 1,
       }),
-    ).toEqual(queued);
+    ).toEqual(blocker);
   });
 });
