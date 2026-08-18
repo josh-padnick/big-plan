@@ -1,7 +1,10 @@
 // Owns the Agent tab's browser presentation. Runtime polling and navigation
 // stay in the review controller.
 
-import type { CurrentAgentActivity } from "../shared/agent-status.js";
+import type {
+  CurrentAgentActivity,
+  HeldWorkQuiet,
+} from "../shared/agent-status.js";
 import type {
   BrowserConnectionEvent,
   RuntimeSession,
@@ -13,6 +16,8 @@ export type AgentSurfaceModel = {
   readonly activity: CurrentAgentActivity;
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
+  /** What held work says about the quiet. Never an attachment claim. */
+  readonly heldWork: HeldWorkQuiet;
   readonly heartbeatAt: number;
   readonly modelName?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -39,6 +44,7 @@ export const AgentSurface = ({
       activity={model.activity}
       presenceState={model.presenceState}
       connected={model.connected}
+      heldWork={model.heldWork}
       heartbeatAt={model.heartbeatAt}
       modelName={model.modelName}
       connectionLog={model.connectionLog}

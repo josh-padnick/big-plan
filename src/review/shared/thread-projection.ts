@@ -3,15 +3,13 @@
 // joining requests, responses, outcomes, progress, and comments themselves.
 
 import {
+  agentHoldsClaimedWork,
   deriveAgentStatus,
+  requestWasClaimed,
   selectPendingAgentRequest,
   type AgentStatus,
 } from "./agent-status.js";
-import {
-  claimIsLive,
-  claimSignalAtMs,
-  type ClaimedRequest,
-} from "./agent-claim.js";
+import { claimSignalAtMs, type ClaimedRequest } from "./agent-claim.js";
 import {
   requestIsTerminal,
   type TerminalAgentRequest,
@@ -125,17 +123,18 @@ export const requestCommentIds = (
     : [];
 };
 
-/** Projects delivery from durable terminality or a currently live claim. */
+/**
+ * Projects delivery from durable terminality or a pickup that has happened.
+ * Delivery is a past event, so a lapsed lease cannot undo it: the same silence
+ * that leaves a claim unrenewed would otherwise relabel work the agent is
+ * holding as still waiting in line (BIG-147).
+ */
 export const projectRequestDelivery = ({
   request,
-  nowMs,
 }: {
   readonly request: ThreadRequest;
-  readonly nowMs: number;
 }): RequestDelivery =>
-  requestIsTerminal(request) || claimIsLive({ request, nowMs })
-    ? "Sent"
-    : "Queued";
+  requestIsTerminal(request) || requestWasClaimed(request) ? "Sent" : "Queued";
 
 /** Selects the newest open multi-comment feedback batch. */
 export const selectActiveFeedbackBatch = <Request extends ThreadRequest>({
@@ -277,6 +276,7 @@ export const projectLatestAgentStatus = ({
   }
   return projectRequestStatus({
     request,
+    requests,
     progressEvents,
     presence: { ...presence, connected: agentConnected },
     runtime,
@@ -294,6 +294,7 @@ export const projectLatestAgentStatus = ({
 
 export const projectRequestStatus = ({
   request,
+  requests,
   progressEvents,
   presence,
   runtime,
@@ -303,6 +304,8 @@ export const projectRequestStatus = ({
   queuedAhead,
 }: {
   readonly request: ThreadRequest;
+  /** Every request on the plan, so this one can tell a queue from an absence. */
+  readonly requests: ReadonlyArray<ThreadRequest>;
   readonly progressEvents: ReadonlyArray<ThreadProgress>;
   readonly presence: ThreadPresence;
   readonly runtime: ThreadRuntime;
@@ -334,7 +337,15 @@ export const projectRequestStatus = ({
     runtime,
     request: requestIsTerminal(request) ? "answered" : "pending",
     agentConnected: presence.connected,
-    pickedUp: claimIsLive({ request, nowMs }),
+    // Pickup, not lease freshness: a quiet turn has still been picked up, and
+    // reporting it as queued described started work as waiting in line. The
+    // lease is left to choose between working and stalled below (BIG-147).
+    pickedUp: requestWasClaimed(request),
+    workIsHeld: agentHoldsClaimedWork({
+      requests,
+      cancelPendingRequestIds,
+      now: nowMs,
+    }),
     ...(queuedAhead === undefined ? {} : { queuedAhead }),
     surface,
     ...(lastSignalAtMs > 0 ? { lastAgentSignalAtMs: lastSignalAtMs } : {}),
@@ -385,6 +396,7 @@ export const projectCommentThread = <
         activity: projectRequestActivity({ request, progressEvents }),
         status: projectRequestStatus({
           request,
+          requests,
           progressEvents,
           presence,
           runtime,
@@ -398,7 +410,7 @@ export const projectCommentThread = <
             cancelPendingRequestIds,
           }),
         }),
-        delivery: projectRequestDelivery({ request, nowMs }),
+        delivery: projectRequestDelivery({ request }),
         canceled,
         baselineSnapshot: request.baselineSnapshot ?? request.premiseSnapshot,
         canReviseMessage: canReviseQueuedMessage({
@@ -431,7 +443,8 @@ export const projectCommentThread = <
             requestIsTerminal(latestExchange.request)
           ? "ready"
           : latestStatus?.stage === "working" ||
-              latestStatus?.stage === "stalled"
+              (latestStatus?.stage === "stalled" &&
+                latestStatus.tone === "warning")
             ? "working"
             : "queued";
   return {

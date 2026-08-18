@@ -6,8 +6,17 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAgentExchange } from "../src/review/agent-exchange.js";
+import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
+import {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+} from "../src/review/shared/agent-timing.js";
 import { startReviewRuntime } from "../src/review/server.js";
-import { agentResponseDraftPath, readProgress } from "../src/review/store.js";
+import {
+  agentResponseDraftPath,
+  readProgress,
+  writeAgentRequestValue,
+} from "../src/review/store.js";
 import { expect, runAgentCli, test } from "./fixtures";
 
 const PASTED_PNG = Buffer.from(
@@ -235,6 +244,315 @@ test("should send a slide's whole content when its title is highlighted", async 
             );
       })
       .toContain("We agree the landing order before the schema ships.");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// BIG-147. The captain watched a review report "The agent is disconnected"
+// while the coding agent kept working and eventually answered. `agent next`
+// hands the work over and its process exits, so a turn longer than the claim
+// lease renews nothing, and the runtime read that ordinary silence as a lost
+// agent. This drives the whole path through the real CLI: claim, go quiet past
+// the lease, then answer.
+test("should report a quiet working agent as stalled rather than disconnected", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-quiet-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(
+    planPath,
+    "# Quiet turn\n\nThe agent takes longer than its claim lease to answer.\n",
+    "utf8",
+  );
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    const composer = rail.getByPlaceholder("Ask about the plan as a whole…");
+    await composer.fill("Why does the plan start here?");
+    await rail.getByRole("button", { name: "Send", exact: true }).click();
+
+    const claim = await runAgentCli(["next", planPath, "--wait"]);
+    const agentToken = /agent_token: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
+    if (agentToken === undefined) {
+      throw new Error("The real agent CLI did not return a claim token");
+    }
+    const exchange = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const request = exchange.requests.find(
+      (candidate) => candidate.kind === "chat",
+    );
+    if (request === undefined) {
+      throw new Error("The real agent CLI did not claim the chat request");
+    }
+
+    // The turn runs long. Aging the lease and clearing the heartbeat is exactly
+    // what the wall clock does to an agent that has not narrated since pickup.
+    await writeAgentRequestValue({
+      store: runtime.store,
+      requestId: request.requestId,
+      value: { ...request, claimExpiresAtMs: Date.now() - 1_000 },
+    });
+    await rm(runtime.store.agentHeartbeatPath, { force: true });
+
+    await page.reload();
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    await expect(
+      page.getByRole("button", { name: /Agent not responding/u }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Agent disconnected/u }),
+    ).toHaveCount(0);
+    await rail.getByRole("tab", { name: "Agent" }).click();
+    const currentActivity = rail.locator("[data-review-current-activity]");
+    await expect(currentActivity).toHaveAttribute(
+      "data-review-current-activity",
+      "stalled",
+    );
+    await expect(currentActivity).toContainText("Agent may be stalled");
+    // Telling the reviewer to reconnect here would invite a second agent to
+    // take the plan from the one still editing it (adr/0002).
+    await expect(currentActivity).not.toContainText("Reconnect");
+
+    // The agent finishes. Its answer must still land: refusing it would lose
+    // the reviewer's message on the ordinary path.
+    const responsePath = agentResponseDraftPath({
+      store: runtime.store,
+      requestId: request.requestId,
+    });
+    await writeFile(
+      responsePath,
+      JSON.stringify({
+        requestId: request.requestId,
+        message: "It starts there because the reader needs the status quo.",
+      }),
+      "utf8",
+    );
+    const response = await runAgentCli([
+      "respond",
+      planPath,
+      responsePath,
+      "--agent",
+      agentToken,
+    ]);
+    expect(response.stdout).toContain(`responded: ${request.requestId}`);
+
+    await page.reload();
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    await expect(
+      rail.locator("li").filter({ hasText: "Why does the plan start here?" }),
+    ).toContainText("It starts there because the reader needs the status quo.");
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// BIG-147. The Agent tab's recovery section is always on screen, so its copy is
+// the only thing between a reviewer and an adr/0002 takeover of an agent that is
+// still working. This drives the harm itself through the real CLI: the takeover
+// displaces the working agent, whose finished answer is then refused.
+test("should warn about a takeover before inviting one while work is held", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-held-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(
+    planPath,
+    "# Held work\n\nThe agent goes quiet while it still holds the request.\n",
+    "utf8",
+  );
+  const runtime = await startReviewRuntime({ planPath });
+  // The recovery section is never hidden - it holds the only recovery prompt
+  // and connector command in the review - so these assert which copy it is
+  // wearing, not whether it exists.
+  const recoveryPanel = page.locator("[data-review-agent-recovery]");
+  const plainRecovery = page.getByText("Reconnect your agent", {
+    exact: true,
+  });
+  const takeoverRecovery = page.getByText(
+    "Connect an agent and take over this work",
+    { exact: true },
+  );
+  const openAgentTab = async () => {
+    await page.reload();
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    await page
+      .getByRole("complementary", { name: "Feedback" })
+      .getByRole("tab", { name: "Agent" })
+      .click();
+  };
+  // Ages the claim's own last signal by `quietForMs`, which is what the wall
+  // clock does to an agent that has not narrated since pickup.
+  const goQuiet = async (
+    requestId: string,
+    quietForMs = AGENT_STALL_MS + 1,
+  ) => {
+    const { requests } = await readAgentExchange({
+      store: runtime.store,
+      sessionId: runtime.sessionId,
+      planId: runtime.planId,
+    });
+    const current = requests.find(
+      (candidate) => candidate.requestId === requestId,
+    );
+    if (current === undefined) {
+      throw new Error(`The exchange lost request ${requestId}`);
+    }
+    await writeAgentRequestValue({
+      store: runtime.store,
+      requestId,
+      value: {
+        ...current,
+        claimExpiresAtMs: Date.now() - quietForMs + AGENT_CLAIM_LEASE_MS,
+      },
+    });
+    await rm(runtime.store.agentHeartbeatPath, { force: true });
+  };
+
+  try {
+    await page.goto(runtime.url);
+    await page.getByRole("button", { name: /Feedback/u }).click();
+    const rail = page.getByRole("complementary", { name: "Feedback" });
+    await rail.getByRole("tab", { name: "Chat" }).click();
+    await rail
+      .getByPlaceholder("Ask about the plan as a whole…")
+      .fill("Which constraint drives this?");
+    await rail.getByRole("button", { name: "Send", exact: true }).click();
+    // The claim below reads the mailbox directly, so wait for the send to have
+    // landed rather than racing the request that writes it.
+    await expect(
+      rail.locator("li").filter({ hasText: "Which constraint drives this?" }),
+    ).toBeVisible();
+
+    const firstClaim = await runAgentCli(["next", planPath, "--wait"]);
+    const workingAgent = /agent_token: ([a-f0-9]{16})/u.exec(
+      firstClaim.stdout,
+    )?.[1];
+    if (workingAgent === undefined) {
+      throw new Error("The real agent CLI did not report its claim");
+    }
+    const claimed = (
+      await readAgentExchange({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+      })
+    ).requests.find((candidate) => candidate.kind === "chat");
+    if (claimed === undefined) {
+      throw new Error("The real agent CLI did not claim the chat request");
+    }
+    const requestId = claimed.requestId;
+    await goQuiet(requestId);
+
+    await openAgentTab();
+    await expect(
+      rail.locator("[data-review-current-activity]"),
+    ).toHaveAttribute("data-review-current-activity", "stalled");
+    // The claim explains the quiet, so the section is present but warns before
+    // the reviewer copies anything.
+    await expect(takeoverRecovery).toBeVisible();
+    await expect(plainRecovery).toHaveCount(0);
+    await expect(recoveryPanel).toHaveAttribute(
+      "data-review-agent-recovery",
+      "takeover",
+    );
+    await takeoverRecovery.click();
+    await expect(recoveryPanel).toContainText("may still be working on it");
+    await expect(recoveryPanel).toContainText(
+      "its answer will no longer be accepted",
+    );
+
+    await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS - 60_000);
+    await openAgentTab();
+    await expect(takeoverRecovery).toBeVisible();
+
+    // Matrix case 4. Nothing reaps a claim, so past the recovery horizon the
+    // pickup stops explaining the quiet: the card falls out of stalled and the
+    // section drops the takeover warning for the plain recovery instruction.
+    await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS + 60_000);
+    await openAgentTab();
+    await expect(takeoverRecovery).toHaveCount(0);
+    await expect(plainRecovery).toBeVisible();
+    await expect(recoveryPanel).toHaveAttribute(
+      "data-review-agent-recovery",
+      "plain",
+    );
+    await expect(
+      rail.locator("[data-review-current-activity]"),
+    ).not.toHaveAttribute("data-review-current-activity", "stalled");
+
+    // Back inside the horizon the pickup explains the quiet again, so the
+    // warning returns.
+    await goQuiet(requestId);
+    await openAgentTab();
+    await expect(takeoverRecovery).toBeVisible();
+    await expect(plainRecovery).toHaveCount(0);
+
+    // What following that prompt does. A second agent takes the lapsed claim,
+    // and the first agent's finished answer is refused - the reviewer's message
+    // is the thing that would be lost.
+    const takeover = await runAgentCli(["next", planPath, "--wait"]);
+    expect(/agent_token: ([a-f0-9]{16})/u.exec(takeover.stdout)?.[1]).not.toBe(
+      workingAgent,
+    );
+    const displacedDraft = agentResponseDraftPath({
+      store: runtime.store,
+      requestId,
+    });
+    await writeFile(
+      displacedDraft,
+      JSON.stringify({
+        requestId,
+        message: "The retry budget drives it, so it has to come first.",
+      }),
+      "utf8",
+    );
+    await expect(
+      runAgentCli([
+        "respond",
+        planPath,
+        displacedDraft,
+        "--agent",
+        workingAgent,
+      ]),
+    ).rejects.toThrow(/does not answer the current pending request/u);
+    await expect(
+      readAgentExchange({
+        store: runtime.store,
+        sessionId: runtime.sessionId,
+        planId: runtime.planId,
+      }),
+    ).resolves.toMatchObject({ responses: [] });
+
+    // The advice returns as soon as nobody is holding work, because then the
+    // quiet really is all the evidence there is.
+    const takeoverAgent = /agent_token: ([a-f0-9]{16})/u.exec(
+      takeover.stdout,
+    )?.[1];
+    if (takeoverAgent === undefined) {
+      throw new Error("The takeover did not report its claim");
+    }
+    await runAgentCli([
+      "respond",
+      planPath,
+      displacedDraft,
+      "--agent",
+      takeoverAgent,
+    ]);
+    await rm(runtime.store.agentHeartbeatPath, { force: true });
+
+    await openAgentTab();
+    await expect(plainRecovery).toBeVisible();
+    await expect(takeoverRecovery).toHaveCount(0);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

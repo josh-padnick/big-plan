@@ -299,6 +299,16 @@ const STATUS_TONES = {
 } as const;
 
 /** Places request lifecycle and narrated activity directly under its user turn. */
+/**
+ * The past-horizon reading, which the vocabulary marks by tone rather than by a
+ * stage of its own: a claim quiet past the recovery horizon has stopped
+ * explaining anything, so its copy sends the reviewer to the Agent tab and the
+ * surfaces here have to carry that route and read differently from an ordinary
+ * quiet turn (BIG-147).
+ */
+const abandonedReading = (status: AgentStatus): boolean =>
+  status.stage === "stalled" && status.tone === "danger";
+
 export const RequestStatusStrip = ({
   status,
   activity,
@@ -369,7 +379,7 @@ export const RequestStatusStrip = ({
       {status.detail === "" ? null : (
         <p className="m-0 text-ink [overflow-wrap:anywhere]">{status.detail}</p>
       )}
-      {status.stage === "blocked" ? (
+      {status.stage === "blocked" || abandonedReading(status) ? (
         <button
           type="button"
           className="mt-1.5 w-fit cursor-pointer border-0 bg-transparent p-0 font-semibold text-current underline underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -484,14 +494,19 @@ export const AgentStatePill = ({
             ? ({ tone: "failed", label: "Agent disconnected" } as const)
             : status.stage === "blocked"
               ? ({ tone: "failed", label: "No agent connected" } as const)
-              : status.stage === "stalled"
+              : abandonedReading(status)
                 ? ({
-                    tone: "idle",
-                    label: "Agent silent — check terminal",
+                    tone: "failed",
+                    label: "No longer reporting — connect an agent",
                   } as const)
-                : status.stage === "waiting"
-                  ? ({ tone: "idle", label: "Waiting for agent" } as const)
-                  : ({ tone: "idle", label: "Waiting for you" } as const);
+                : status.stage === "stalled"
+                  ? ({
+                      tone: "idle",
+                      label: "Agent silent — check terminal",
+                    } as const)
+                  : status.stage === "waiting"
+                    ? ({ tone: "idle", label: "Waiting for agent" } as const)
+                    : ({ tone: "idle", label: "Waiting for you" } as const);
   return (
     <span
       className={`ml-auto rounded-full px-2 py-0.5 text-2xs font-semibold whitespace-nowrap ${PILL_STYLES[state.tone]}`}

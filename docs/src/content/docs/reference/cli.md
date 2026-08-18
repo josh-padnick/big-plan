@@ -214,7 +214,7 @@ next` or `agent note` to report which model is connected, for example `Grok
 4.6`.
 Use a non-empty model name of at most 80 characters.
 `agent next` stores the reported name with the durable per-pickup claim, and `agent note` preserves or refreshes that claim identity.
-The reviewer's browser reads the model from the live claim, so a waiting agent's heartbeat cannot relabel another agent's active request.
+The reviewer's browser reads the model from the pickup it is describing, for as long as that pickup still explains the plan's quiet, so a waiting agent's heartbeat cannot relabel another agent's request.
 
 A `changed` outcome is accepted only when the result snapshot differs and every
 named target belongs to the computed snapshot diff. Other outcomes are

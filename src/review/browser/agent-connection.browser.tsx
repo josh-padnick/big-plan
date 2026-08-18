@@ -17,7 +17,10 @@ import {
   agentModelVendor,
   type AgentModelVendor,
 } from "../shared/agent-model-icon.js";
-import type { CurrentAgentActivity } from "../shared/agent-status.js";
+import type {
+  CurrentAgentActivity,
+  HeldWorkQuiet,
+} from "../shared/agent-status.js";
 import type { BrowserConnectionEvent } from "../shared/review-wire.js";
 import {
   compactDurationLabel,
@@ -282,6 +285,10 @@ const CurrentActivityCard = ({
   );
 };
 
+// A quiet heartbeat is an absence of signal, not an observed disconnection, so
+// this card reports the signal and leaves the verdict alone. Nothing renews the
+// plan-wide heartbeat while a turn runs, and the activity card - which does
+// know whether work was picked up - is what names a stall (BIG-147).
 const ConnectionHealthCard = ({
   connected,
   heartbeatAt,
@@ -292,8 +299,8 @@ const ConnectionHealthCard = ({
   readonly nowMs: number;
 }) => (
   <article
-    className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${connected ? "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]" : "border-[var(--callout-danger-c)] bg-[var(--callout-danger-bg)] text-[var(--callout-danger-c)]"}`}
-    data-review-connection-health={connected ? "connected" : "disconnected"}
+    className={`grid min-w-0 gap-2 rounded-lg border p-3 text-xs leading-[1.45] ${connected ? "border-[var(--diff-add-c)] bg-[var(--diff-add-bg)] text-[var(--diff-add-c)]" : "border-[var(--callout-warning-c)] bg-[var(--callout-warning-bg)] text-[var(--callout-warning-c)]"}`}
+    data-review-connection-health={connected ? "connected" : "quiet"}
   >
     <div className="flex min-w-0 items-center gap-2">
       <span
@@ -301,10 +308,10 @@ const ConnectionHealthCard = ({
         aria-hidden="true"
       />
       <strong className="min-w-0 flex-1 text-sm text-ink">
-        {connected ? "Agent connected" : "Agent disconnected"}
+        {connected ? "Agent connected" : "No recent agent signal"}
       </strong>
       <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
-        {connected ? "online" : "offline"}
+        {connected ? "online" : "quiet"}
       </span>
     </div>
     <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 border-t border-current/20 pt-2">
@@ -312,9 +319,7 @@ const ConnectionHealthCard = ({
         <dt className="text-2xs font-bold uppercase tracking-caps opacity-80">
           Connection
         </dt>
-        <dd className="m-0 text-ink">
-          {connected ? "Healthy" : "Unavailable"}
-        </dd>
+        <dd className="m-0 text-ink">{connected ? "Healthy" : "No signal"}</dd>
       </div>
       <div className="min-w-0">
         <dt className="text-2xs font-bold uppercase tracking-caps opacity-80">
@@ -379,17 +384,21 @@ const ConnectionLog = ({
     .filter((event) => Number.isFinite(event.atMs))
     .sort((left, right) => left.atMs - right.atMs);
   const latest = ordered.at(-1);
-  let disconnects = 0;
-  let reconnects = 0;
+  // A gap in the signal is a quiet period, not an observed disconnection. The
+  // runtime records an edge whenever the heartbeat ages out, and nothing renews
+  // it while a turn runs, so counting these as disconnects and reconnects put
+  // events in the reviewer's log that never happened (BIG-147).
+  let quietPeriods = 0;
+  let resumed = 0;
   let hasConnected = false;
   ordered.forEach((event, index) => {
-    if (!event.connected && ordered[index - 1]?.connected) disconnects += 1;
+    if (!event.connected && ordered[index - 1]?.connected) quietPeriods += 1;
     if (
       event.connected &&
       hasConnected &&
       ordered[index - 1]?.connected === false
     )
-      reconnects += 1;
+      resumed += 1;
     if (event.connected) hasConnected = true;
   });
   const groups = new Map<string, Array<(typeof ordered)[number]>>();
@@ -442,7 +451,7 @@ const ConnectionLog = ({
                     : "m-0 text-xs font-[750] text-warning [overflow-wrap:anywhere]"
                 }
               >
-                {connected ? "CONNECTED" : "DISCONNECTED"}
+                {connected ? "CONNECTED" : "NO SIGNAL"}
               </dd>
             </div>
             <div className="min-w-0">
@@ -466,7 +475,8 @@ const ConnectionLog = ({
                 Events
               </dt>
               <dd className="m-0 text-xs text-ink [overflow-wrap:anywhere]">
-                {disconnects} disconnects · {reconnects} reconnects
+                {quietPeriods} quiet {quietPeriods === 1 ? "period" : "periods"}{" "}
+                · {resumed} resumed
               </dd>
             </div>
           </dl>
@@ -486,11 +496,11 @@ const ConnectionLog = ({
                     ? "Connected for "
                     : next?.connected
                       ? knownSession
-                        ? "Reconnected after "
-                        : "Connected after "
-                      : "Offline for ";
+                        ? "Signal returned after "
+                        : "First signal after "
+                      : "Quiet for ";
                   const suffix =
-                    !event.connected && next?.connected ? " offline" : "";
+                    !event.connected && next?.connected ? " quiet" : "";
                   const duration = compactDurationLabel({
                     start: event.atMs,
                     end: next?.atMs ?? nowMs,
@@ -500,7 +510,7 @@ const ConnectionLog = ({
                       key={event.eventId ?? event.at}
                       className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-0.5 py-2 leading-none first:pt-1 last:pb-0"
                       data-review-connection-event={
-                        event.connected ? "connected" : "disconnected"
+                        event.connected ? "connected" : "quiet"
                       }
                       data-review-connection-current={
                         event === latest ? "" : undefined
@@ -517,7 +527,7 @@ const ConnectionLog = ({
                       <strong
                         className={`min-w-0 text-xs ${event.connected ? "text-[var(--diff-add-c)]" : "text-ink"}`}
                       >
-                        {event.connected ? "Connected" : "Disconnected"}
+                        {event.connected ? "Connected" : "No signal"}
                       </strong>
                       {event === latest ? (
                         <span className="rounded-full border border-edge px-1.5 py-px text-2xs font-bold leading-[1.2] uppercase tracking-caps">
@@ -553,6 +563,7 @@ export const AgentConnectionPanel = ({
   activity,
   presenceState,
   connected,
+  heldWork,
   heartbeatAt,
   modelName,
   connectionLog,
@@ -566,6 +577,15 @@ export const AgentConnectionPanel = ({
   readonly activity: CurrentAgentActivity;
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
+  /**
+   * What held work says about the quiet. It chooses this section's copy and
+   * nothing else: while it explains the quiet the section names the takeover
+   * that connecting a session would cost, and once it has gone stale the copy
+   * becomes the plain recovery instruction. It never decides whether the
+   * section renders, and never decides what the cards above report, which stays
+   * presence alone (BIG-147).
+   */
+  readonly heldWork: HeldWorkQuiet;
   readonly heartbeatAt: number;
   readonly modelName?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -629,18 +649,55 @@ export const AgentConnectionPanel = ({
         <AgentPresenceUnavailableCard />
       )}
       <AnotherViewTip />
-      {isReadOnly || isConnected || !agentStatusIsAvailable ? null : (
-        <details className="group mt-3 rounded-md border border-edge text-xs text-muted">
+      {/*
+       * The gate is exactly this, and it must not be simplified further:
+       * read-only, or a runtime that cannot be reached, hides the recovery
+       * section. Agent presence never hides it.
+       *
+       * This is the only place the recovery prompt and the connector command
+       * are rendered, and every "connect an agent" link in the review routes
+       * here, so an agent falling quiet must not make the reviewer's route back
+       * vanish - held work and the recovery horizon change only the copy. A
+       * runtime that is itself offline is a different question: the connector
+       * command would be advice about a dead endpoint, printed under a card
+       * that already says the review session is offline, while every other
+       * surface for that state tells the reviewer to restart `big-plan review`.
+       *
+       * All of the safety therefore lives in the copy. While a claim still
+       * explains the quiet, an agent may genuinely be mid-turn, and under
+       * adr/0002 connecting a session takes that claim over and discards what
+       * the first agent was doing - so the reviewer is told that before they
+       * copy anything, rather than nudged into it (BIG-147).
+       */}
+      {isReadOnly || !agentStatusIsAvailable ? null : (
+        <details
+          className="group mt-3 rounded-md border border-edge text-xs text-muted"
+          data-review-agent-recovery={
+            heldWork === "explained" ? "takeover" : "plain"
+          }
+        >
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
               <Icon icon={CHEVRON_RIGHT_ICON} />
             </span>
-            Re-connect your session
+            {heldWork === "explained"
+              ? "Connect an agent and take over this work"
+              : "Reconnect your agent"}
           </summary>
           <div className="grid gap-2 border-t border-edge px-3 py-3">
+            {heldWork === "explained" ? (
+              <p className="m-0">
+                An agent picked this work up and may still be working on it, and
+                it may finish on its own. Connecting a session below takes the
+                work over, so whatever that agent was doing is discarded and its
+                answer will no longer be accepted. Your comments are safe either
+                way.
+              </p>
+            ) : null}
             <p className="m-0">
-              To reconnect this running review, paste this exact prompt into
-              your coding agent:
+              {heldWork === "explained"
+                ? "To take over anyway, paste this exact prompt into your coding agent:"
+                : "To reconnect this running review, paste this exact prompt into your coding agent:"}
             </p>
             <CopyBlock
               value={

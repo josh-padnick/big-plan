@@ -97,6 +97,7 @@ import {
   reviewRestartCommand,
 } from "./shared/agent-command.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
+import { AGENT_STALL_WINDOW_LABEL } from "./shared/agent-timing.js";
 import {
   activateReviewSession,
   liveReviewCustody,
@@ -1092,13 +1093,18 @@ export const startReviewRuntime = async ({
     connectionWrite = connectionWrite
       .catch(() => undefined)
       .then(async () => {
+        // Presence alone. Work an agent is holding is evidence about that turn,
+        // not about whether anyone is still attached, so it never reaches this
+        // edge. The reason states the signal that stopped rather than a verdict
+        // about the agent, because nothing renews the heartbeat while a turn
+        // runs and this edge fires on every long turn (BIG-147).
         const presence = await readAgentPresence({ store, sessionId });
         await recordAgentConnectionState({
           store,
           sessionId,
           connected: presence.connected,
           at: new Date().toISOString(),
-          disconnectReason: "Heartbeat timed out",
+          disconnectReason: `No agent signal within ${AGENT_STALL_WINDOW_LABEL}`,
         });
       })
       .catch((error: unknown) => {

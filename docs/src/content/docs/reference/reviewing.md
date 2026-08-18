@@ -159,10 +159,21 @@ edits only the authoritative MDX when appropriate, validates the new render,
 and publishes one outcome for every comment.
 
 Messages sent while the agent is handling another request are received immediately and wait in delivery order.
-A sent thread reports that wait in two places until its request holds a live claim: the comment rail groups it under the **Queued** heading and numbers its card by position within that group, while the status block inside the thread reads **Waiting for an agent**.
+A sent thread reports that wait in two places until an agent picks its request up: the comment rail groups it under the **Queued** heading and numbers its card by position within that group, while the status block inside the thread reads **Waiting for an agent**.
 That in-thread block adds the line **Queued, _N_ ahead** above the headline when earlier unanswered work exists, then reaches the agent when that earlier work finishes.
-While that claim remains live, the thread says **Working**.
-If the lease lapses before a response commits, the thread returns to the queued and waiting state until an agent picks it up again.
+Once an agent picks the request up the thread says **Working**, and it stays picked up from then on.
+A turn can run longer than the agent reports progress for, because `big-plan agent next` hands the work over and its own process exits, so nothing is running on that agent's behalf between two progress notes.
+After 75 seconds of that quiet the thread reads **No progress for *N*m** and the **Agent** tab reads **Agent may be stalled**, naming how long the agent has been silent and suggesting you check its terminal.
+That is a report about the silence and not about the connection: the work is still picked up, the answer is still accepted when it arrives, and a message you send meanwhile is queued behind that turn rather than reported as blocked.
+Big Plan cannot tell a slow agent from a stopped one, because neither produces a signal, so the stalled reading covers both and resolves itself as soon as the agent speaks again.
+
+The **Agent** tab offers **Reconnect your agent**, holding the prompt and the connector command that start a coding-agent session.
+An agent going quiet never hides that section, because it is the only place those two live and losing your route back is the last thing a silence should cost you; only a read-only session or a review runtime you cannot reach hides it.
+While a request is picked up that section instead reads **Connect an agent and take over this work** and says plainly that the agent may still be working and may finish on its own, and that connecting a session takes the work over so its answer will no longer be accepted - because [the agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) serializes pickup and only the current holder may answer.
+Your comments are safe whichever you choose.
+
+The stalled reading is bounded, because a pickup cannot account for silence indefinitely.
+After 30 minutes without a single report Big Plan stops treating the pickup as an explanation: the **Agent** tab gives way to the ordinary connection reading, the thread reads **No longer reporting**, drops its promise to resolve itself, leaves the **Working** group and offers **Show setup instructions →**, a message you send now reads **Blocked - no agent connected**, and the recovery section returns to its plain wording.
 A real response records an `answered`, `changed`, `warning`, `needs-input`, or `declined` outcome and shows the agent's message.
 A warning leaves the plan unchanged, shows its short one-line summary directly under the **Warning** badge, explains the standard or template the request would cross, and lets the reviewer explicitly choose **Do it anyway**.
 A changed result updates the plan in place without discarding staged comments, open threads, or scroll position.
@@ -171,10 +182,11 @@ The [agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/m
 Set `BIG_PLAN_AGENT_MODEL` before starting the coding-agent session to report
 the model identity for each pickup, for example `Grok 4.6` or
 `GPT-5.6-Luna`.
-While a request has a live claim, the **Agent** tab shows that request's model
-name and icon.
-An idle connected agent still shows connection status, but no model badge,
-because no request claim is live.
+The **Agent** tab shows the model name and icon of the request it is describing,
+for as long as that pickup still explains the quiet - through the working
+reading and the whole stalled window, not only while the claim is live.
+With nothing picked up, or once a pickup has gone quiet past 30 minutes, the tab
+shows connection status and no model badge.
 A name containing `openai`, a `gpt-4` or `gpt-5` family name, `claude`, or
 `grok` uses that vendor's own logo; any other reported name uses a generic
 model icon instead of guessing a vendor. This keeps a different GPT-named

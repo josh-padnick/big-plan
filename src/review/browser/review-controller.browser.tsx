@@ -45,8 +45,9 @@ import {
   AGENT_STALL_MS,
   deriveAgentHealthLabel,
   deriveCurrentAgentActivity,
+  heldWorkQuiet,
   projectAgentConnectionState,
-  selectActiveAgentRequest,
+  selectClaimedAgentRequest,
   type AgentStatus,
 } from "../shared/agent-status.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
@@ -102,7 +103,10 @@ import {
 import { AgentHealthAlert } from "./agent-connection.browser.js";
 import { AgentSurface } from "./agent-surface.browser.js";
 import { ChatSurface } from "./chat-surface.browser.js";
-import { CommentsSurface } from "./comments-surface.browser.js";
+import {
+  batchSectionTone,
+  CommentsSurface,
+} from "./comments-surface.browser.js";
 import {
   AgentChangeDigest,
   MessageTurn,
@@ -5727,7 +5731,11 @@ export const ReviewController = () => {
   };
 
   const effectivePresence = { ...agent.presence, connected: agentConnected };
-  const activeRequest = selectActiveAgentRequest({
+  // The same request the activity card describes, so the card's header and its
+  // model badge cannot disagree. A live-lease selection would drop the badge at
+  // exactly the moment the card turns stalled and the reviewer starts asking
+  // which agent is holding the work (BIG-147).
+  const claimedRequest = selectClaimedAgentRequest({
     requests: agent.requests,
     cancelPendingRequestIds,
     now: agentProjectionNowMs,
@@ -5762,6 +5770,7 @@ export const ReviewController = () => {
   ): AgentStatus =>
     projectRequestStatus({
       request,
+      requests: agent.requests,
       progressEvents: progress,
       presence: effectivePresence,
       runtime: threadRuntime,
@@ -5775,6 +5784,14 @@ export const ReviewController = () => {
         cancelPendingRequestIds,
       }),
     });
+  // Activity and queue input only. It explains a silence; it is never evidence
+  // that an agent is attached, so it must not reach agentConnected or anything
+  // the connection card reads (BIG-147).
+  const agentHeldWork = heldWorkQuiet({
+    requests: agent.requests,
+    cancelPendingRequestIds,
+    now: agentProjectionNowMs,
+  });
   const currentAgentActivity = deriveCurrentAgentActivity({
     requests: agent.requests,
     cancelPendingRequestIds,
@@ -5804,10 +5821,7 @@ export const ReviewController = () => {
         key={request.requestId}
         request={request}
         response={response}
-        delivery={projectRequestDelivery({
-          request,
-          nowMs: agentProjectionNowMs,
-        })}
+        delivery={projectRequestDelivery({ request })}
         identity={identity}
         status={statusForRequest(request, "chat")}
         activity={activityForRequest(request)}
@@ -6213,8 +6227,16 @@ export const ReviewController = () => {
               ) : (
                 <AgentHealthAlert
                   label={agentHealthLabel}
+                  // The activity's own tone decides this, so a quiet turn does
+                  // not raise a danger-red alarm about an agent that is
+                  // working. Warning and danger must stay distinguishable by
+                  // their labels - "Agent not responding" against "Agent
+                  // disconnected" - and never by colour alone, so a later
+                  // change must not give the warning variant the danger glyph
+                  // to make the two look consistent.
                   tone={
-                    runtimeSession?.authoritative === false
+                    runtimeSession?.authoritative === false ||
+                    currentAgentActivity.tone === "warning"
                       ? "warning"
                       : "danger"
                   }
@@ -6332,11 +6354,14 @@ export const ReviewController = () => {
                         count: activeBatchCommentIds.length,
                         label: statusForRequest(activeBatchRequest, "thread")
                           .label,
-                        tone:
-                          statusForRequest(activeBatchRequest, "thread")
-                            .stage === "waiting"
-                            ? ("queued" as const)
-                            : ("working" as const),
+                        tone: batchSectionTone({
+                          status: statusForRequest(
+                            activeBatchRequest,
+                            "thread",
+                          ),
+                          workingCount: (sentByGroup.get("working") ?? [])
+                            .length,
+                        }),
                         content: (
                           <Card
                             className="m-0 w-full max-w-none border border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-ink)] shadow-none"
@@ -6583,8 +6608,9 @@ export const ReviewController = () => {
                 activity: currentAgentActivity,
                 presenceState: agentProjection.state,
                 connected: agentConnected,
+                heldWork: agentHeldWork,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
-                modelName: activeRequest?.claimedModel?.name,
+                modelName: claimedRequest?.claimedModel?.name,
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 agentCommand: agent.agentCommand,

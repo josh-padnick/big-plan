@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewComment } from "./comment.js";
 import { AGENT_CLAIM_LEASE_MS } from "./agent-claim.js";
+import { AGENT_RECOVERY_HORIZON_MS } from "./agent-timing.js";
 import {
   projectCommentThread,
   projectConversationHistory,
@@ -13,6 +14,7 @@ import {
   type ThreadRequest,
   type ThreadResponse,
 } from "./thread-projection.js";
+import type { AgentStatus } from "./agent-status.js";
 
 const NOW = Date.parse("2026-08-10T20:00:00Z");
 const comment: ReviewComment = {
@@ -48,6 +50,13 @@ const answeredRequest = (
     answeredAt: new Date(NOW).toISOString(),
     ...overrides,
   });
+// Each of these exercises one request in isolation, so the plan's request list
+// is that request alone; the list exists to answer whether some other request
+// is being held.
+const statusForOneRequest = (
+  input: Omit<Parameters<typeof projectRequestStatus>[0], "requests">,
+): AgentStatus => projectRequestStatus({ ...input, requests: [input.request] });
+
 const response = (
   state: "answered" | "changed" | "warning" | "needs-input" | "declined",
 ): ThreadResponse => ({
@@ -346,25 +355,203 @@ describe("thread projection", () => {
       cancelPendingRequestIds: new Set(),
     });
     expect(projection).toMatchObject({
-      group: "queued",
+      group: "working",
       canDeleteQueued: false,
     });
-    expect(projection.latestExchange).toMatchObject({ delivery: "Queued" });
-    expect(
-      projectRequestDelivery({
-        request: request(liveClaim()),
-        nowMs: NOW,
-      }),
-    ).toBe("Sent");
+    // Delivery happened, and the lease lapsing since does not unsend it.
+    expect(projection.latestExchange).toMatchObject({ delivery: "Sent" });
+    expect(projectRequestDelivery({ request: request(liveClaim()) })).toBe(
+      "Sent",
+    );
     expect(
       projectRequestDelivery({
         request: request({
           ...expiredClaim,
           answeredAt: "2026-08-10T20:00:01Z",
         }),
-        nowMs: NOW,
       }),
     ).toBe("Sent");
+    expect(projectRequestDelivery({ request: request() })).toBe("Queued");
+  });
+
+  // BIG-147. A turn longer than the claim lease is the ordinary path, not an
+  // anomaly: `agent next` hands the work over and its process exits, so nothing
+  // renews the claim between progress notes. Reporting that as "Queued, N
+  // ahead" described started work as still waiting in line, and left the amber
+  // stalled state with no producer on this surface.
+  it("should report a quiet claimed request as stalled rather than queued", () => {
+    const quiet = request(liveClaim(NOW - AGENT_CLAIM_LEASE_MS - 60_000));
+    const status = statusForOneRequest({
+      request: quiet,
+      progressEvents: [],
+      presence,
+      runtime: "online",
+      surface: "thread",
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set(),
+      queuedAhead: 1,
+    });
+    expect(status).toMatchObject({
+      stage: "stalled",
+      label: "Working",
+      headline: "No progress for 2m",
+      tone: "warning",
+    });
+    // The same silence is the only evidence there is, so the detail must not
+    // assert that the agent session is still connected.
+    expect(status.detail).not.toContain("still connected");
+    expect(status.detail).toContain("Check the agent terminal");
+  });
+
+  // BIG-147. An abandoned claim used to sit under a "Working" heading promising
+  // to resolve itself forever, beside a message that correctly said no agent
+  // was connected. Past the horizon the pickup stops explaining anything, so
+  // this surface has to stop promising a resumption nothing will deliver.
+  it("should drop the resume promise once its own claim goes stale", () => {
+    const statusAfter = (quietForMs: number) =>
+      statusForOneRequest({
+        request: request(liveClaim(NOW - quietForMs)),
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      });
+    const held = statusAfter(AGENT_RECOVERY_HORIZON_MS);
+    expect(held).toMatchObject({ stage: "stalled", tone: "warning" });
+    expect(held.detail).toContain("updates by itself once the agent resumes");
+
+    const stale = statusAfter(AGENT_RECOVERY_HORIZON_MS + 60_000);
+    expect(stale).toMatchObject({ stage: "stalled", tone: "danger" });
+    expect(stale.detail).not.toContain("updates by itself");
+    expect(stale.detail).toContain("takes the work over");
+  });
+
+  it("should stop grouping an abandoned request as working", () => {
+    const grouped = (quietForMs: number) =>
+      projectCommentThread({
+        comment,
+        requests: [request(liveClaim(NOW - quietForMs))],
+        responses: [],
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }).group;
+    expect(grouped(AGENT_RECOVERY_HORIZON_MS)).toBe("working");
+    expect(grouped(AGENT_RECOVERY_HORIZON_MS + 60_000)).toBe("queued");
+  });
+
+  // BIG-147. Nothing renews the plan-wide heartbeat while a turn runs, so a
+  // second message sent during one used to read "Blocked - no agent connected"
+  // while the Agent tab correctly said an agent was holding work. That told the
+  // reviewer their message was undeliverable when it was merely behind a turn.
+  it("should queue a message sent during a quiet turn rather than call it blocked", () => {
+    const held = request({
+      requestId: "1111111111111111",
+      ...liveClaim(NOW - AGENT_CLAIM_LEASE_MS - 60_000),
+    });
+    const sentDuringTheTurn = request({
+      requestId: "cccccccccccccccc",
+      kind: "reply",
+      commentId: comment.id,
+      commentIds: undefined,
+      createdAt: "2026-08-10T19:58:00Z",
+    });
+    const quietPresence = { ...presence, connected: false };
+    expect(
+      projectRequestStatus({
+        request: sentDuringTheTurn,
+        requests: [held, sentDuringTheTurn],
+        progressEvents: [],
+        presence: quietPresence,
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+        queuedAhead: 1,
+      }),
+    ).toMatchObject({
+      stage: "waiting",
+      label: "Queued, 1 ahead",
+      tone: "neutral",
+    });
+    // With nothing held, the same silence is all the evidence there is, and the
+    // blocked reading is the honest one.
+    expect(
+      projectRequestStatus({
+        request: sentDuringTheTurn,
+        requests: [sentDuringTheTurn],
+        progressEvents: [],
+        presence: quietPresence,
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+        queuedAhead: 1,
+      }),
+    ).toMatchObject({
+      stage: "blocked",
+      headline: "Blocked - no agent connected",
+    });
+  });
+
+  // BIG-147. Nothing reaps a claim, so once the holding request has been quiet
+  // past the recovery horizon it stops accounting for the plan's silence and
+  // the reviewer is owed the honest reading again.
+  it("should report a message as blocked once the holding claim goes stale", () => {
+    const abandoned = request({
+      requestId: "1111111111111111",
+      ...liveClaim(NOW - AGENT_RECOVERY_HORIZON_MS - 1),
+    });
+    const sentAfterwards = request({
+      requestId: "cccccccccccccccc",
+      kind: "reply",
+      commentId: comment.id,
+      commentIds: undefined,
+      createdAt: "2026-08-10T19:58:00Z",
+    });
+    const quietPresence = { ...presence, connected: false };
+    const statusWith = (holder: ThreadRequest) =>
+      projectRequestStatus({
+        request: sentAfterwards,
+        requests: [holder, sentAfterwards],
+        progressEvents: [],
+        presence: quietPresence,
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+        queuedAhead: 1,
+      });
+    expect(statusWith(abandoned)).toMatchObject({
+      stage: "blocked",
+      headline: "Blocked - no agent connected",
+    });
+    expect(
+      statusWith(
+        request({
+          requestId: "1111111111111111",
+          ...liveClaim(NOW - AGENT_RECOVERY_HORIZON_MS),
+        }),
+      ),
+    ).toMatchObject({ stage: "waiting", label: "Queued, 1 ahead" });
+  });
+
+  it("should keep a renewed claim working rather than stalled", () => {
+    expect(
+      statusForOneRequest({
+        request: request(liveClaim(NOW - 1_000)),
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toMatchObject({ stage: "working", label: "Agent working" });
   });
 
   it("should exclude terminal feedback from the active batch", () => {
@@ -398,7 +585,7 @@ describe("thread projection", () => {
         answeredAt: "2026-08-10T20:00:01Z",
       });
       expect(
-        projectRequestStatus({
+        statusForOneRequest({
           request: answered,
           progressEvents: [],
           presence,
@@ -440,7 +627,7 @@ describe("thread projection", () => {
 
   it("should derive one request status from its live claim", () => {
     expect(
-      projectRequestStatus({
+      statusForOneRequest({
         request: request(liveClaim()),
         progressEvents: [
           {
@@ -463,7 +650,7 @@ describe("thread projection", () => {
 
   it("should keep a reviewer queue edit waiting before agent pickup", () => {
     expect(
-      projectRequestStatus({
+      statusForOneRequest({
         request: request({ kind: "chat", commentIds: undefined }),
         response: undefined,
         progressEvents: [
@@ -487,7 +674,7 @@ describe("thread projection", () => {
 
   it("should not report a request as picked up from progress events alone", () => {
     expect(
-      projectRequestStatus({
+      statusForOneRequest({
         request: request(),
         progressEvents: [
           {
@@ -507,9 +694,12 @@ describe("thread projection", () => {
     ).toBe("waiting");
   });
 
-  it("should stop reporting a request as picked up once its lease lapses", () => {
+  // Replaces an assertion that a lapsed lease returned the request to waiting.
+  // Pickup is a past event; the clock running past the lease reports it as
+  // quiet, never as never-started (BIG-147).
+  it("should keep reporting a request as picked up once its lease lapses", () => {
     expect(
-      projectRequestStatus({
+      statusForOneRequest({
         request: request(liveClaim()),
         progressEvents: [],
         presence: { ...presence, state: "working" },
@@ -518,12 +708,12 @@ describe("thread projection", () => {
         nowMs: NOW + AGENT_CLAIM_LEASE_MS + 1,
         cancelPendingRequestIds: new Set(),
       }).stage,
-    ).toBe("waiting");
+    ).toBe("stalled");
   });
 
   it("should ignore an invalid claimed timestamp when its lease is live", () => {
     expect(
-      projectRequestStatus({
+      statusForOneRequest({
         request: request({ ...liveClaim(), claimedAt: "not-a-timestamp" }),
         progressEvents: [
           {
@@ -546,7 +736,7 @@ describe("thread projection", () => {
 
   it("should derive work recency from the renewed claim", () => {
     expect(
-      projectRequestStatus({
+      statusForOneRequest({
         request: request({
           claimedAt: new Date(NOW - AGENT_CLAIM_LEASE_MS * 2).toISOString(),
           claimedBy: "aaaa0000aaaa0000",
@@ -569,7 +759,7 @@ describe("thread projection", () => {
 
   it("should not treat terminal heartbeat work as session busy", () => {
     expect(
-      projectRequestStatus({
+      statusForOneRequest({
         request: request(),
         progressEvents: [],
         presence: {

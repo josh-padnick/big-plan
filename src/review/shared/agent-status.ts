@@ -13,14 +13,24 @@ import {
   requestIsTerminal,
   type TerminalAgentRequest,
 } from "./agent-request-state.js";
-import { AGENT_STALL_MS, AGENT_STALL_WINDOW_LABEL } from "./agent-timing.js";
+import {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+  AGENT_STALL_WINDOW_LABEL,
+} from "./agent-timing.js";
 import type { BrowserConnectionEvent } from "./review-wire.js";
 import { compactDurationLabel } from "./time-label.js";
 
-// Agents are expected to send a progress note at least once per minute while
-// working. The extra 15 seconds absorbs scheduling and filesystem jitter, but
-// still marks a killed agent disconnected well before a two-minute wait.
-export { AGENT_STALL_MS, AGENT_STALL_WINDOW_LABEL } from "./agent-timing.js";
+// Agents are asked to send a progress note at least once per minute while
+// working, and the extra 15 seconds absorbs scheduling and filesystem jitter.
+// The window bounds how long silence stays presented as progress; it does not
+// decide whether an agent is attached, because no signal renews while a turn
+// runs (BIG-147).
+export {
+  AGENT_RECOVERY_HORIZON_MS,
+  AGENT_STALL_MS,
+  AGENT_STALL_WINDOW_LABEL,
+} from "./agent-timing.js";
 
 export type AgentActivityRequest = ClaimedRequest &
   TerminalAgentRequest & {
@@ -141,6 +151,12 @@ const meaningfulWork = (
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This updates by itself once the agent resumes.";
 
+// The stalled hint promises a self-resolving wait, which nothing will keep once
+// a claim is this old. Past the recovery horizon the reviewer needs the route
+// forward and the cost of taking it, not another reassurance (BIG-147).
+const abandonedHint =
+  "The agent has reported nothing for far longer than a turn takes. Connect a coding agent from the Agent tab to pick this up; doing so takes the work over, so the original agent's answer will no longer be accepted.";
+
 /** Expires a browser-held presence snapshot at the same lease as the store. */
 export const agentPresenceIsFresh = ({
   connected,
@@ -157,7 +173,14 @@ export const agentPresenceIsFresh = ({
   heartbeatAt > 0 &&
   Math.max(0, now - heartbeatAt) <= AGENT_STALL_MS;
 
-/** Reconciles persisted connection events with the current presence lease. */
+/**
+ * Reconciles persisted connection events with the current presence lease.
+ *
+ * Presence is the only evidence admitted here. Work an agent is holding says
+ * nothing about whether anyone is still attached - a claim outlives the process
+ * that took it - so it may inform the activity reading but never this one
+ * (BIG-147).
+ */
 export const projectAgentConnectionState = ({
   presenceConnected,
   heartbeatAt,
@@ -219,22 +242,150 @@ export const projectAgentConnectionState = ({
   };
 };
 
-/** Explains a lost lease without claiming why the external agent stopped. */
+/**
+ * Reports the silence itself rather than a verdict about the agent. Nothing
+ * renews a claim while the turn runs, so a quiet lease is evidence of quiet and
+ * of nothing else - and telling the reviewer to reconnect here would invite a
+ * second agent to take the plan from the one still working (adr/0002).
+ */
+const stalledSupporting = ({
+  signalAtMs,
+  now,
+}: {
+  readonly signalAtMs: number;
+  readonly now: number;
+}): string => {
+  const quietFor = compactDurationLabel({
+    start: signalAtMs,
+    end: Math.max(now, signalAtMs),
+  });
+  return quietFor === null
+    ? `The agent picked this up and has not reported progress since. ${stalledHint}`
+    : `The agent picked this up and has reported nothing for ${quietFor}. ${stalledHint}`;
+};
+
+/**
+ * Explains a lost lease without claiming why the external agent stopped.
+ *
+ * When a claim is still open this reading is only reached past the recovery
+ * horizon, so the reviewer is one click from a recovery prompt that would take
+ * that claim over. The card has to tell the same story as the prompt below it
+ * rather than end on a bare invitation to reconnect (BIG-147).
+ */
 const disconnectedSupporting = ({
   heartbeatAt,
   now,
+  claimStillOpen,
 }: {
   readonly heartbeatAt: number;
   readonly now: number;
+  readonly claimStillOpen: boolean;
 }): string => {
   const quietFor = compactDurationLabel({
     start: heartbeatAt,
     end: Math.max(now, heartbeatAt),
   });
+  const takeover = claimStillOpen
+    ? " An agent still holds work here, so connecting a session takes that work over and its answer will no longer be accepted."
+    : "";
   return quietFor === null
-    ? "Reconnect the coding agent to continue. All comments are safe."
-    : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
+    ? `Reconnect the coding agent to continue.${takeover} All comments are safe.`
+    : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue.${takeover} All comments are safe.`;
 };
+
+/**
+ * True once an agent has picked a request up, lease still live or not. Pickup
+ * is what the reviewer is told about, and a lapsed lease does not undo it:
+ * `agent next` hands the work over and its process exits, so between two
+ * progress notes nothing is left to renew the claim (BIG-147).
+ */
+export const requestWasClaimed = (request: ClaimedRequest): boolean =>
+  request.claimedBy !== undefined && claimSignalAtMs(request) !== undefined;
+
+/**
+ * How long a claim has gone without a signal, measured from the claim's own
+ * last narration. Never from the lease: a quiet turn's lease is lapsed by
+ * definition, so a lease test would answer "no" exactly when the question
+ * matters (BIG-147).
+ */
+const claimQuietForMs = ({
+  request,
+  nowMs,
+}: {
+  readonly request: ClaimedRequest;
+  readonly nowMs: number;
+}): number | undefined => {
+  const signalAtMs = claimSignalAtMs(request);
+  return signalAtMs === undefined ? undefined : Math.max(0, nowMs - signalAtMs);
+};
+
+/**
+ * True while this claim still accounts for an agent's silence. Pickup explains
+ * quiet only within the recovery horizon; past it the claim has stopped saying
+ * anything about why nothing is being reported.
+ */
+const claimExplainsQuiet = ({
+  request,
+  nowMs,
+}: {
+  readonly request: ClaimedRequest;
+  readonly nowMs: number;
+}): boolean => {
+  if (!requestWasClaimed(request)) return false;
+  const quietFor = claimQuietForMs({ request, nowMs });
+  return quietFor !== undefined && quietFor <= AGENT_RECOVERY_HORIZON_MS;
+};
+
+/** What the plan's open claims say about why nothing is being reported. */
+export type HeldWorkQuiet =
+  /** Nobody has picked anything up, so held work explains nothing. */
+  | "none"
+  /** Someone picked work up recently enough that the quiet is accounted for. */
+  | "explained"
+  /** A claim is open but so old it no longer accounts for anything. */
+  | "stale";
+
+type OpenClaimedRequest = ClaimedRequest &
+  TerminalAgentRequest & { readonly requestId: string };
+
+/**
+ * The one definition of what held work says about a silence. Deliberately blind
+ * to the lease, and bounded by the recovery horizon so a claim nothing ever
+ * reaps cannot explain silence forever.
+ *
+ * An explanation may inform the activity reading, hold a later message in the
+ * queue rather than calling it blocked, and put the takeover warning on advice
+ * that would otherwise read as a bare invitation to reconnect. It is never
+ * evidence that an agent is attached, and it must not reach any connection
+ * surface (BIG-147).
+ */
+export const heldWorkQuiet = ({
+  requests,
+  cancelPendingRequestIds,
+  now,
+}: {
+  readonly requests: ReadonlyArray<OpenClaimedRequest>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly now: number;
+}): HeldWorkQuiet => {
+  const open = requests.filter(
+    (request) =>
+      !requestIsTerminal(request) &&
+      !cancelPendingRequestIds.has(request.requestId) &&
+      requestWasClaimed(request),
+  );
+  if (open.length === 0) return "none";
+  return open.some((request) => claimExplainsQuiet({ request, nowMs: now }))
+    ? "explained"
+    : "stale";
+};
+
+/** True while held work still accounts for the plan being quiet. */
+export const agentHoldsClaimedWork = (input: {
+  readonly requests: ReadonlyArray<OpenClaimedRequest>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly now: number;
+}): boolean => heldWorkQuiet(input) === "explained";
 
 /** Selects the first live, nonterminal claim. */
 export const selectActiveAgentRequest = <Request extends AgentActivityRequest>({
@@ -253,6 +404,60 @@ export const selectActiveAgentRequest = <Request extends AgentActivityRequest>({
       claimIsLive({ request, nowMs: now }),
   );
 
+/** The open requests a selector may still choose between. */
+const openAgentRequests = <Request extends AgentActivityRequest>({
+  requests,
+  cancelPendingRequestIds,
+  accepts,
+}: {
+  readonly requests: ReadonlyArray<Request>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly accepts: (request: Request) => boolean;
+}): ReadonlyArray<Request> =>
+  requests.filter(
+    (request) =>
+      !requestIsTerminal(request) &&
+      !cancelPendingRequestIds.has(request.requestId) &&
+      accepts(request),
+  );
+
+/**
+ * Selects the work an agent is holding, preferring a renewed lease over one
+ * that has lapsed. A lapsed lease says nothing about the holder, so a quiet
+ * turn keeps its request here rather than falling back to the queue - but only
+ * while the claim is still inside the recovery horizon, because past it the
+ * pickup no longer accounts for anything.
+ *
+ * Among lapsed claims it takes the most recent pickup rather than the first in
+ * list order. Requests arrive oldest-first, so list order would describe an
+ * abandoned claim's age and link its thread while a later turn is the one
+ * actually in flight (BIG-147).
+ */
+export const selectClaimedAgentRequest = <
+  Request extends AgentActivityRequest,
+>({
+  requests,
+  cancelPendingRequestIds,
+  now,
+}: {
+  readonly requests: ReadonlyArray<Request>;
+  readonly cancelPendingRequestIds: ReadonlySet<string>;
+  readonly now: number;
+}): Request | undefined =>
+  selectActiveAgentRequest({ requests, cancelPendingRequestIds, now }) ??
+  openAgentRequests({
+    requests,
+    cancelPendingRequestIds,
+    accepts: (request) => claimExplainsQuiet({ request, nowMs: now }),
+  }).reduce<Request | undefined>(
+    (newest, request) =>
+      newest === undefined ||
+      (claimSignalAtMs(request) ?? 0) > (claimSignalAtMs(newest) ?? 0)
+        ? request
+        : newest,
+    undefined,
+  );
+
 /** Selects live work before falling back to the oldest queued request. */
 export const selectPendingAgentRequest = <
   Request extends AgentActivityRequest,
@@ -266,11 +471,11 @@ export const selectPendingAgentRequest = <
   readonly now: number;
 }): Request | undefined =>
   selectActiveAgentRequest({ requests, cancelPendingRequestIds, now }) ??
-  requests.find(
-    (request) =>
-      !requestIsTerminal(request) &&
-      !cancelPendingRequestIds.has(request.requestId),
-  );
+  openAgentRequests({
+    requests,
+    cancelPendingRequestIds,
+    accepts: () => true,
+  })[0];
 
 /** Derives the single current-work card from immutable runtime facts. */
 export const deriveCurrentAgentActivity = ({
@@ -299,17 +504,22 @@ export const deriveCurrentAgentActivity = ({
         "Restart `big-plan review`, then open the new URL it prints. All comments are safe.",
     };
   }
-  const request = selectPendingAgentRequest({
+  // Work that has been picked up is judged by its own narration, and never
+  // falls through to the presence question below. The two ask different things
+  // - "is anyone attached" against "has this turn reported lately" - and the
+  // plan-wide heartbeat can only answer the first, because the agent's own
+  // process is gone for the length of the turn (BIG-147).
+  const claimed = selectClaimedAgentRequest({
     requests,
     cancelPendingRequestIds,
     now,
   });
-  if (request !== undefined && claimIsLive({ request, nowMs: now })) {
-    const facts = requestFacts(request);
+  if (claimed !== undefined) {
+    const facts = requestFacts(claimed);
     const failed = progressEvents
       .filter(
         (event) =>
-          event.requestId === request.requestId && event.state === "failed",
+          event.requestId === claimed.requestId && event.state === "failed",
       )
       .at(-1);
     if (failed !== undefined) {
@@ -323,26 +533,47 @@ export const deriveCurrentAgentActivity = ({
           (failed.detail === undefined ? "" : ` - ${failed.detail}`),
       };
     }
+    const signalAtMs = claimSignalAtMs(claimed) ?? 0;
+    if (!claimIsLive({ request: claimed, nowMs: now })) {
+      return {
+        ...facts,
+        state: "stalled",
+        tone: "warning",
+        headline: "Agent may be stalled",
+        supporting: stalledSupporting({ signalAtMs, now }),
+        updatedAtMs: signalAtMs,
+      };
+    }
     const meaningful = progressEvents.filter((event) =>
-      meaningfulWork(event, request.requestId),
+      meaningfulWork(event, claimed.requestId),
     );
     const latest = meaningful.at(-1);
     return {
       ...facts,
       state: "working",
       tone: "working",
-      headline: requestHeadline(request),
+      headline: requestHeadline(claimed),
       latestStep: latest?.step ?? "Picked up by the agent",
-      updatedAtMs: claimSignalAtMs(request) ?? 0,
+      updatedAtMs: signalAtMs,
     };
   }
 
+  const request = selectPendingAgentRequest({
+    requests,
+    cancelPendingRequestIds,
+    now,
+  });
   if (!agentPresenceIsFresh({ connected: agentConnected, heartbeatAt, now })) {
     return {
       state: "disconnected",
       tone: "danger",
       headline: "The agent is disconnected",
-      supporting: disconnectedSupporting({ heartbeatAt, now }),
+      supporting: disconnectedSupporting({
+        heartbeatAt,
+        now,
+        claimStillOpen:
+          heldWorkQuiet({ requests, cancelPendingRequestIds, now }) === "stale",
+      }),
     };
   }
   if (request === undefined) {
@@ -386,6 +617,13 @@ export type AgentStatusInput = {
   readonly request: "none" | "pending" | "answered";
   readonly agentConnected: boolean;
   readonly pickedUp: boolean;
+  /**
+   * Whether some other request on this plan is being held by an agent. It
+   * separates "nobody has picked this up and nobody is here" from "nobody has
+   * picked this up because someone is busy" - a queue question, not a
+   * connection verdict - and never travels to a connection surface.
+   */
+  readonly workIsHeld?: boolean;
   /** How many unanswered messages the agent delivers before this one. */
   readonly queuedAhead?: number;
   readonly surface?: "thread" | "chat";
@@ -447,7 +685,10 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
     };
   }
   if (!input.pickedUp) {
-    if (!input.agentConnected) {
+    // Held work explains the silence, so this message is queued behind a turn
+    // rather than undeliverable. Calling it blocked would be a connection
+    // verdict drawn from the same quiet the agent's own turn produces.
+    if (!input.agentConnected && input.workIsHeld !== true) {
       return {
         stage: "blocked",
         label: "Blocked",
@@ -473,17 +714,22 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
       ? null
       : Math.max(0, input.nowMs - input.lastAgentSignalAtMs);
   if (quietFor === null || quietFor > AGENT_STALL_MS) {
+    // Past the recovery horizon the pickup has stopped explaining the quiet
+    // everywhere else, so this surface drops the promise that it resolves
+    // itself. Measured from the claim's own last signal, never from the lease,
+    // which a quiet turn has by definition already let lapse (BIG-147).
+    const abandoned = quietFor !== null && quietFor > AGENT_RECOVERY_HORIZON_MS;
     return {
       stage: "stalled",
-      label: "Working",
+      label: abandoned ? "No longer reporting" : "Working",
       headline:
         quietFor === null
           ? "No progress reported yet"
           : `No progress for ${Math.max(1, Math.round(quietFor / 60_000))}m`,
-      detail:
-        (input.agentConnected ? "The agent session is still connected. " : "") +
-        stalledHint,
-      tone: "warning",
+      // No claim about the session itself: the same silence that reaches this
+      // branch is the only evidence there is either way (BIG-147).
+      detail: abandoned ? abandonedHint : stalledHint,
+      tone: abandoned ? "danger" : "warning",
     };
   }
   return {

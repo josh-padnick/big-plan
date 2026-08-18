@@ -43,7 +43,6 @@ import {
 } from "./store.js";
 import {
   claimIsHeldByAnother,
-  claimIsLive,
   claimLeaseExpiryMs,
 } from "./shared/agent-claim.js";
 import type { AgentModelIdentity } from "./shared/agent-model.js";
@@ -496,13 +495,11 @@ export const commitRequestTerminal = async ({
   response,
   claimedBy,
   now,
-  clock = Date.now,
 }: {
   readonly store: ReviewStore;
   readonly response: AgentResponse;
   readonly claimedBy: string;
   readonly now: string;
-  readonly clock?: Clock;
 }): Promise<AgentRequest> =>
   withRequestLock({
     store,
@@ -532,13 +529,20 @@ export const commitRequestTerminal = async ({
           "The agent has already answered this request",
         );
       }
-      // Only the holder may answer. Without this the lease would guard pickup
-      // but not delivery, and a session that lost its claim could still
+      // Only the recorded holder may answer. Without this the lease would guard
+      // pickup but not delivery, and a session that lost its claim could still
       // overwrite the holder's work at the last step.
-      const nowMs = readClock(clock);
-      if (request.claimedBy !== claimedBy || !claimIsLive({ request, nowMs })) {
+      //
+      // Ownership, not lease freshness, is the test. A lease lapses on the
+      // normal path: `agent next` hands the work over and exits, so nothing
+      // renews the claim between progress notes, and a turn longer than the
+      // window would otherwise have its finished answer refused - losing the
+      // reviewer's message, which is the one failure adr/0002 exists to prevent
+      // (BIG-147). A displaced holder is still refused, because a takeover
+      // rewrites `claimedBy`, and a settled request is refused above.
+      if (request.claimedBy !== claimedBy) {
         throw new AgentExchangeRejected(
-          "This agent session does not hold a live claim on this request",
+          "Another agent now holds the claim on this request",
         );
       }
       if (!responseMatchesRequest({ value: response, request })) {
