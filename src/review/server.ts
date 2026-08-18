@@ -1252,6 +1252,7 @@ export const startReviewRuntime = async ({
     reviewStoreGrowth({ store }).catch(() => undefined);
 
   let closed = false;
+  let shutdown: Promise<void> | undefined;
   let idleTimer: ReturnType<typeof setInterval> | undefined;
   let queuedWorkIdleState:
     | {
@@ -1259,11 +1260,10 @@ export const startReviewRuntime = async ({
         readonly expiresAtMs: number;
       }
     | undefined;
-  const closeRuntime = async (
-    reason = "The review session was stopped.",
-    sessionAlreadyStopped = false,
+  const teardown = async (
+    reason: string,
+    sessionAlreadyStopped: boolean,
   ): Promise<void> => {
-    if (closed) return;
     if (!sessionAlreadyStopped) {
       await stopReviewSessionIfInactive({
         store,
@@ -1272,7 +1272,6 @@ export const startReviewRuntime = async ({
         inactive: async () => true,
       });
     }
-    if (closed) return;
     closed = true;
     clearInterval(heartbeatTimer);
     clearInterval(connectionTimer);
@@ -1282,6 +1281,17 @@ export const startReviewRuntime = async ({
     await heartbeatWrite.catch(() => undefined);
     await connectionWrite.catch(() => undefined);
     await drainAndCloseServer(server);
+  };
+  // One shutdown, shared by every caller. The idle timer and an external
+  // close() can both arrive while the session stop is still awaiting, and a
+  // second caller that merely returned would resolve its own close() before
+  // the port was given back - so it waits on the first one's promise instead.
+  const closeRuntime = async (
+    reason = "The review session was stopped.",
+    sessionAlreadyStopped = false,
+  ): Promise<void> => {
+    shutdown ??= teardown(reason, sessionAlreadyStopped);
+    return shutdown;
   };
   if (idleTimeoutMs > 0) {
     idleTimer = setInterval(

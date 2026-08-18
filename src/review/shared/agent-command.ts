@@ -51,7 +51,7 @@ export const agentNoteCommand = ({
   readonly planPath: string;
   readonly agentToken: string;
 }): string =>
-  `node ${quoteShellArgument(executablePath)} agent note ${quoteShellArgument(planPath)} ${quoteShellArgument(AGENT_NOTE_INITIAL_PROGRESS)} --agent ${agentToken}`;
+  `node ${quoteShellArgument(executablePath)} agent note ${quoteShellArgument(planPath)} ${quoteShellArgument(AGENT_NOTE_INITIAL_PROGRESS)} --agent ${quoteShellArgument(agentToken)}`;
 
 /** Publishes the drafted response under the claim taken at pickup. */
 export const agentRespondCommand = ({
@@ -65,7 +65,7 @@ export const agentRespondCommand = ({
   readonly responsePath: string;
   readonly agentToken: string;
 }): string =>
-  `node ${quoteShellArgument(executablePath)} agent respond ${quoteShellArgument(planPath)} ${quoteShellArgument(responsePath)} --agent ${agentToken}`;
+  `node ${quoteShellArgument(executablePath)} agent respond ${quoteShellArgument(planPath)} ${quoteShellArgument(responsePath)} --agent ${quoteShellArgument(agentToken)}`;
 
 export const agentRecoveryPrompt = ({
   executablePath,

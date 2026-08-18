@@ -2254,10 +2254,14 @@ export const compactProgressLog = async ({
     progressCompactionChecks.get(store.progressPath) ??
     PROGRESS_COMPACTION_CHECK + 1;
   if (values.length < nextCheck) return false;
+  // A retained record is written back exactly as it was read. The parsed form
+  // is normalized for readers - truncated text, invalid optional fields
+  // dropped, unknown fields removed - and compaction only decides which
+  // records survive, so rewriting from it would quietly edit the ones it kept.
   const compacted = [...readableProgressHistories(values).values()]
     .flatMap((history) => history.entries.slice(-PROGRESS_EVENT_LIMIT))
     .sort((left, right) => left.index - right.index)
-    .map((entry) => entry.event);
+    .map((entry) => values[entry.index] ?? entry.event);
   const reclaimable = values.length - compacted.length;
   if (reclaimable < PROGRESS_COMPACTION_RECLAIM) {
     progressCompactionChecks.set(

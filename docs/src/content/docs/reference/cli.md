@@ -44,7 +44,7 @@ npx big-plan compile <input.mdx> [output.json]
 npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
 npx big-plan service status
 npx big-plan agent <input.mdx>
-npx big-plan agent next <input.mdx> --wait [--agent <token>]
+npx big-plan agent next <input.mdx> [--wait] [--agent <token>]
 npx big-plan agent note <input.mdx> "<progress>" --agent <token>
 npx big-plan agent respond <input.mdx> <response.json> --agent <token>
 npx big-plan update --check
