@@ -64,6 +64,26 @@ export type BlockDescriptor = {
   // carries none, and absence downstream renders neutrally rather than as a
   // guessed default.
   readonly presentation?: BlockPresentation;
+  // Set only on the heading that names a slide's scope, and carrying that
+  // slide's own top-level content in reading order.
+  //
+  // A slide is a scope, not a block: it mints ids like
+  // `section/sequencing/paragraph-2` but has no block of its own. Without this,
+  // the only address a reviewer pointing at a slide can produce is its heading,
+  // so "rewrite this slide" reaches an agent as the title and nothing else.
+  // Recording the content here is what lets a heading-anchored comment carry
+  // the slide it names, while the anchor itself stays exactly as precise as it
+  // was. Nested sub-slides are excluded: each is a slide in its own right.
+  readonly slideText?: string;
+  // Set beside slideText on a grouped slide, naming the sub-slides it owns
+  // directly, in reading order.
+  //
+  // Their bodies stay out of slideText because each sub-slide is a slide in its
+  // own right and repeating it here would say the same content twice. Naming
+  // them is what keeps a whole-slide note honest about how far it reaches: the
+  // reviewer pointed at a card that visually contains them, so the agent has to
+  // know they are part of the slide and where to read them.
+  readonly slideSubHeadings?: ReadonlyArray<string>;
 };
 
 const isElement = (node: RootContent | ElementContent): node is Element =>
@@ -761,6 +781,105 @@ const stampScope = ({
   }
 };
 
+// A slide's content as the reviewer reads it: the plain text of the blocks the
+// slide owns directly, in reading order. Sub-targets a block declares - table
+// rows and cells, a component's internals, an inline picture - are already
+// inside their owner's text, so including them would repeat the slide back
+// several times over. The heading sheds its generated numbering for the same
+// reason its label does: the reviewer is pointing at the words the author
+// wrote, not at "3.1 /".
+const slideTextOf = ({
+  slideBlocks,
+  headingId,
+}: {
+  readonly slideBlocks: ReadonlyArray<BlockDescriptor>;
+  readonly headingId: string;
+}): string | undefined => {
+  const parts = slideBlocks
+    .filter((block) => block.ownerId === undefined)
+    .map((block) =>
+      (block.id === headingId
+        ? block.text.replace(KICKER_PREFIX, "")
+        : block.text
+      )
+        // Nested block boundaries can leave runs of blank lines behind; one
+        // blank line already separates units, and more only pads the brief.
+        .replace(/\n{3,}/g, "\n\n")
+        .trim(),
+    )
+    .filter((text) => text !== "");
+  return parts.length === 0 ? undefined : parts.join("\n\n");
+};
+
+// The words an author wrote in a heading, with the deck's generated numbering
+// shed for the same reason a label sheds it.
+const headingTextOf = (heading: Element): string =>
+  summarize(textOf(heading)).replace(KICKER_PREFIX, "");
+
+// The sub-slides a slide owns directly. The walk descends through the frame's
+// presentation wrappers and stops at the first nested slide on each branch, so
+// a grandchild never speaks for the group above its own parent. It reads the
+// element tree rather than stamped ids because a slide records its content
+// before its sub-slides have been walked.
+const directSubSlidesOf = (container: Element): ReadonlyArray<Element> =>
+  container.children.flatMap((child) =>
+    !isElement(child)
+      ? []
+      : child.properties["data-slide"] !== undefined
+        ? [child]
+        : directSubSlidesOf(child),
+  );
+
+// A sub-slide's own title, whether the deck put it in a generated kicker or
+// left the authored h3 standing as one.
+const subSlideHeadingsOf = (slide: Element): ReadonlyArray<string> =>
+  directSubSlidesOf(slide)
+    .map((subSlide) => {
+      const heading = findDescendant({
+        node: subSlide,
+        match: (candidate) => candidate.tagName === "h3",
+      });
+      return heading === undefined ? "" : headingTextOf(heading);
+    })
+    .filter((text) => text !== "");
+
+// Attaches a slide's content, and the names of any sub-slides it continues
+// into, to the descriptor of the heading that names it. The heading is found by
+// the id the walk just stamped on it rather than by position, so a slide that
+// opens with something else keeps an empty scope instead of promoting an
+// unrelated block to speak for the whole slide.
+const recordSlideContent = ({
+  slide,
+  heading,
+  slideBlocks,
+  blocks,
+}: {
+  readonly slide: Element;
+  readonly heading: Element | undefined;
+  readonly slideBlocks: ReadonlyArray<BlockDescriptor>;
+  readonly blocks: Array<BlockDescriptor>;
+}): void => {
+  const headingId = heading?.properties["data-block-id"];
+  if (typeof headingId !== "string") {
+    return;
+  }
+  const slideText = slideTextOf({ slideBlocks, headingId });
+  if (slideText === undefined) {
+    return;
+  }
+  const index = blocks.findIndex((block) => block.id === headingId);
+  const descriptor = blocks[index];
+  if (descriptor === undefined) {
+    return;
+  }
+  const slideSubHeadings = subSlideHeadingsOf(slide);
+  blocks[index] = {
+    ...descriptor,
+    slideText,
+    ...(slideSubHeadings.length === 0 ? {} : { slideSubHeadings }),
+  };
+};
+
 // The scope a slide contributes: its heading's anchor, so a block id reads as
 // a path a human can follow ("section/status-quo/paragraph-2").
 const scopeNameFor = ({
@@ -841,8 +960,17 @@ export const rehypeBlockIdentity =
         const section =
           sectionHeading === undefined
             ? `Section ${slideIndex}`
-            : summarize(textOf(sectionHeading)).replace(KICKER_PREFIX, "");
+            : headingTextOf(sectionHeading);
+        const before = collected.length;
         stampScope({ container: child, scope, section, blocks: collected });
+        // Everything stamped between here and the nested walk below is this
+        // slide's own content, so the heading can carry the slide it names.
+        recordSlideContent({
+          slide: child,
+          heading: sectionHeading,
+          slideBlocks: collected.slice(before),
+          blocks: collected,
+        });
         // A grouped slide owns nested sub-slide scopes inside its body. Stamp
         // them independently after the parent so their blocks keep the h3
         // address instead of disappearing behind the outer frame.

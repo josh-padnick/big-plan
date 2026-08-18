@@ -4285,11 +4285,13 @@ test("should restore and submit staged comments through the local review runtime
     "data-review-associated",
     "true",
   );
-  await expect(page.locator("html")).toHaveAttribute(
+  // The note was left with "Comment on slide", so it addresses the slide. The
+  // slide is what lights up; there is no passage inside it to highlight.
+  await expect(page.locator("html")).not.toHaveAttribute(
     "data-review-selection-active",
     "",
   );
-  await expect(page.locator("[data-slide]").first()).not.toHaveAttribute(
+  await expect(page.locator("[data-slide]").first()).toHaveAttribute(
     "data-review-comment-associated",
     "",
   );
@@ -4317,11 +4319,13 @@ test("should restore and submit staged comments through the local review runtime
   await contextualThread
     .getByRole("button", { name: "1 · Details", exact: true })
     .evaluate((button) => button.click());
-  await expect(page.locator("html")).toHaveAttribute(
+  // The note was left with "Comment on slide", so it addresses the slide. The
+  // slide is what lights up; there is no passage inside it to highlight.
+  await expect(page.locator("html")).not.toHaveAttribute(
     "data-review-selection-active",
     "",
   );
-  await expect(page.locator("[data-slide]").first()).not.toHaveAttribute(
+  await expect(page.locator("[data-slide]").first()).toHaveAttribute(
     "data-review-comment-associated",
     "",
   );

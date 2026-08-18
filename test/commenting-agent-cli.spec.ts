@@ -2,7 +2,7 @@
 // crosses the same mailbox that the browser chat surface reads.
 
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAgentExchange } from "../src/review/agent-exchange.js";
@@ -165,6 +165,76 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
     await expect(chat).toContainText(
       "It lets a reviewer understand and discuss the plan.",
     );
+  } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// A slide is a scope rather than a block, so highlighting a slide's title can
+// only anchor to its heading. The reviewer meant the slide; before this, the
+// package handed the agent the title and nothing else, and a whole-slide
+// instruction quietly applied to the title alone. Only a real browser produces
+// the selection, so only this journey proves what the highlight becomes.
+test("should send a slide's whole content when its title is highlighted", async ({
+  page,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), "big-plan-slide-scope-"));
+  const planPath = join(directory, "plan.mdx");
+  await writeFile(
+    planPath,
+    "# Slide scope\n\nOne slide carries more than its title.\n\n## Sequencing\n\nWe agree the landing order before the schema ships.\n",
+    "utf8",
+  );
+  const runtime = await startReviewRuntime({ planPath });
+  try {
+    await page.goto(runtime.url);
+    const heading = page.getByRole("heading", { name: "Sequencing" });
+    await heading.scrollIntoViewIfNeeded();
+    const highlighted = await heading.evaluate((element) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      let last: Text | null = null;
+      for (
+        let node = walker.nextNode();
+        node !== null;
+        node = walker.nextNode()
+      ) {
+        if (node instanceof Text && node.data.trim() !== "") last = node;
+      }
+      if (last === null) return "";
+      const range = document.createRange();
+      range.setStart(last, 0);
+      range.setEnd(last, last.data.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+      return selection?.toString() ?? "";
+    });
+    expect(highlighted).toBe("Sequencing");
+
+    await page
+      .getByRole("button", { name: "Comment on selected text" })
+      .click();
+    await page
+      .getByRole("textbox", { name: "Add a comment" })
+      .fill("rewrite this in Spanish");
+    await page.getByRole("button", { name: "Submit Now" }).click();
+
+    // The package on disk is what the agent reads, so it is what the journey
+    // asserts. The body has to be in it, or the rewrite reaches only the title.
+    await expect
+      .poll(async () => {
+        const names = await readdir(runtime.store.feedbackDirectory);
+        const brief = names.find((name) => name.endsWith(".md"));
+        return brief === undefined
+          ? ""
+          : await readFile(
+              join(runtime.store.feedbackDirectory, brief),
+              "utf8",
+            );
+      })
+      .toContain("We agree the landing order before the schema ships.");
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

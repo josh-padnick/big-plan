@@ -5,7 +5,12 @@
 
 import { createHash } from "node:crypto";
 import type { CommentTarget, ReviewComment } from "./shared/comment.js";
-import { QUOTE_LIMIT } from "./shared/comment.js";
+import {
+  QUOTE_LIMIT,
+  SLIDE_SUB_HEADING_LIMIT,
+  SLIDE_SUB_HEADING_TEXT_LIMIT,
+  SLIDE_TEXT_LIMIT,
+} from "./shared/comment.js";
 import { claimIsHeldByAnother, claimIsLive } from "./shared/agent-claim.js";
 import {
   requestIsTerminal,
@@ -233,6 +238,36 @@ const target = (value: unknown): CommentTarget => {
             field: "target.section",
             limit: 300,
           }),
+        }
+      : {}),
+    // A slide comment addresses the slide, so the slide's content travels with
+    // it. Dropping it here would hand the agent the heading and nothing else on
+    // every request read back from the exchange.
+    ...(typeof value.slideText === "string" && value.slideText !== ""
+      ? {
+          slideText: text({
+            value: value.slideText,
+            field: "target.slideText",
+            limit: SLIDE_TEXT_LIMIT,
+          }),
+          isSlideTextExcerpt: value.isSlideTextExcerpt === true,
+        }
+      : {}),
+    // A grouped slide's own text stops at its first sub-slide, so the names of
+    // the sub-slides it continues into travel with it too. Without them the
+    // agent reads the group's opening as the whole of what the note reaches.
+    ...(Array.isArray(value.slideSubHeadings) &&
+    value.slideSubHeadings.length > 0
+      ? {
+          slideSubHeadings: value.slideSubHeadings
+            .slice(0, SLIDE_SUB_HEADING_LIMIT)
+            .map((heading, index) =>
+              text({
+                value: heading,
+                field: `target.slideSubHeadings[${index}]`,
+                limit: SLIDE_SUB_HEADING_TEXT_LIMIT,
+              }),
+            ),
         }
       : {}),
   };

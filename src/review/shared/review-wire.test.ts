@@ -254,6 +254,54 @@ describe("review wire contract", () => {
     expect(decodeAgentSnapshot(encoded).requests).toEqual([]);
   });
 
+  // A pending request holds the comments that produced it, so the slide copy
+  // carried for the agent's brief would otherwise reach the browser on every
+  // poll. The browser projection keeps only comment ids, so none of it is read.
+  it("should leave a request's slide copy out of what the browser polls", () => {
+    const encoded = encodeAgentSnapshot({
+      currentSnapshot: "a".repeat(16),
+      presence: { connected: true, state: "working" },
+      requests: [
+        {
+          requestId: "1".repeat(16),
+          premiseSnapshot: "a".repeat(16),
+          createdAt: "2026-08-10T12:00:00.000Z",
+          kind: "feedback",
+          comments: [
+            {
+              id: "aabbccdd",
+              body: "rewrite this in Spanish",
+              createdAt: "2026-08-10T12:00:00.000Z",
+              premiseSnapshot: "a".repeat(16),
+              target: {
+                type: "block",
+                blockId: "section/http-endpoints/heading-1",
+                kind: "slide",
+                label: "HTTP endpoints",
+                section: "HTTP endpoints",
+                slideText: "HTTP endpoints\n\nEvery job arrives here.",
+                isSlideTextExcerpt: false,
+                slideSubHeadings: ["The queueing endpoint"],
+              },
+            },
+          ],
+        },
+      ],
+      responses: [],
+      connectionLog: [],
+      plan: "/tmp/plan.mdx",
+      agentCommand: "big-plan agent /tmp/plan.mdx",
+      recoveryPrompt: "Reconnect this review",
+    });
+
+    expect(JSON.stringify(encoded)).not.toContain("Every job arrives here.");
+    expect(JSON.stringify(encoded)).not.toContain("The queueing endpoint");
+    // Stripping the copy must not cost the browser the request itself.
+    expect(decodeAgentSnapshot(encoded).requests).toMatchObject([
+      { commentIds: ["aabbccdd"], targetLabel: "HTTP endpoints" },
+    ]);
+  });
+
   it("should round-trip per-side presentation facts through a snapshot diff", () => {
     const diff: SnapshotDiff = {
       from: "a".repeat(16),

@@ -174,3 +174,111 @@ describe("agent brief containment", () => {
     expect(brief).toContain("rather than doing it");
   });
 });
+
+// A slide has no block of its own, so a comment about the slide can only anchor
+// to the heading that names it. Before this, the brief handed the agent that
+// heading and its title text alone, and a whole-slide instruction quietly
+// applied to the title.
+describe("agent brief slide scope", () => {
+  const SLIDE_CONTENT =
+    "Sequencing\n\nWe need to agree on the landing order.\n\nLand the schema migration first.";
+
+  const slideNote = (
+    slide: Partial<{
+      readonly slideText: string;
+      readonly isSlideTextExcerpt: boolean;
+      readonly slideSubHeadings: ReadonlyArray<string>;
+    }> = {},
+  ): ReviewComment => ({
+    ...NOTE,
+    body: "rewrite this in Spanish",
+    target: {
+      type: "selection",
+      blockId: "section/sequencing/heading-1",
+      kind: "slide",
+      label: "Sequencing",
+      section: "Sequencing",
+      start: 0,
+      end: 10,
+      quote: "Sequencing",
+      isQuoteExcerpt: false,
+      slideText: SLIDE_CONTENT,
+      isSlideTextExcerpt: false,
+      ...slide,
+    },
+  });
+
+  it("should carry the slide's body when a selection anchors to its heading", () => {
+    const brief = briefFor([slideNote()]);
+    expect(brief).toContain("We need to agree on the landing order.");
+    expect(brief).toContain("Land the schema migration first.");
+  });
+
+  it("should say the comment addresses the slide rather than its heading", () => {
+    const brief = briefFor([slideNote()]);
+    expect(brief).toContain(
+      "addresses that whole slide, not the heading alone",
+    );
+  });
+
+  it("should still carry the highlight so a narrower note keeps its evidence", () => {
+    const brief = briefFor([slideNote()]);
+    expect(brief).toContain("Highlighted plan text");
+    expect(brief.indexOf("Highlighted plan text")).toBeLessThan(
+      brief.indexOf("addresses that whole slide"),
+    );
+  });
+
+  it("should name the sub-slides a grouped slide continues into", () => {
+    const brief = briefFor([
+      slideNote({
+        slideText: "HTTP endpoints",
+        slideSubHeadings: ["The queueing endpoint", "The status endpoint"],
+      }),
+    ]);
+    expect(brief).toContain('"The queueing endpoint"');
+    expect(brief).toContain('"The status endpoint"');
+  });
+
+  // A group's own text stops at its first sub-slide, so calling the fence the
+  // slide's content would under-apply the note exactly as the bare heading did.
+  it("should send a grouped slide's agent to the plan source for the rest", () => {
+    const brief = briefFor([
+      slideNote({
+        slideText: "HTTP endpoints",
+        slideSubHeadings: ["The queueing endpoint"],
+      }),
+    ]);
+    expect(brief).toContain(
+      "whose content is in the plan source rather than below",
+    );
+    expect(brief).not.toContain("The slide's content as the reviewer read it");
+  });
+
+  it("should admit a truncated slide instead of trailing off silently", () => {
+    expect(briefFor([slideNote({ isSlideTextExcerpt: true })])).toContain(
+      "truncated - read the rest from the plan source",
+    );
+  });
+
+  it("should leave a comment anchored inside one block scoped to that block", () => {
+    const brief = briefFor([
+      {
+        ...NOTE,
+        target: {
+          type: "selection",
+          blockId: "section/sequencing/paragraph-1",
+          kind: "paragraph",
+          label: "We need to agree on the landing order.",
+          section: "Sequencing",
+          start: 0,
+          end: 19,
+          quote: "We need to agree on",
+          isQuoteExcerpt: false,
+        },
+      },
+    ]);
+    expect(brief).not.toContain("addresses that whole slide");
+    expect(brief).not.toContain("Land the schema migration first.");
+  });
+});

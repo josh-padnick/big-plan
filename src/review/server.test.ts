@@ -1205,6 +1205,153 @@ describe("review runtime feedback", () => {
     expect(response.status).toBe(400);
   });
 
+  // The feedback directory accumulates across this suite, so a brief is found
+  // by the package id the send returned rather than by being the only one there.
+  const briefNameFor = async (response: {
+    readonly json: () => Promise<unknown>;
+  }): Promise<string | undefined> => {
+    const body = (await response.json()) as { readonly packageId?: string };
+    return (await readdir(runtime.store.feedbackDirectory)).find((name) =>
+      name.endsWith(`-${body.packageId ?? ""}.md`),
+    );
+  };
+
+  // A slide is a scope, not a block, so a reviewer pointing at one can only
+  // anchor to the heading that names it. The brief has to carry the slide, or a
+  // whole-slide instruction reaches the agent as its title and nothing else.
+  it("should carry the whole slide when a highlight anchors to its heading", async () => {
+    await fetch(runtime.url);
+    const response = await call({
+      path: "/api/feedback",
+      method: "POST",
+      body: {
+        comments: [
+          {
+            id: "99aabbcc",
+            body: "rewrite this in Spanish",
+            premiseSnapshot: PLAN_SNAPSHOT,
+            target: {
+              type: "selection",
+              blockId: "section/status-quo/heading-1",
+              start: 0,
+              end: 10,
+              quote: "Status quo",
+            },
+          },
+        ],
+      },
+    });
+    expect(response.status).toBe(200);
+    const brief = await readFile(
+      join(
+        runtime.store.feedbackDirectory,
+        (await briefNameFor(response)) ?? "",
+      ),
+      "utf8",
+    );
+    expect(brief).toContain(
+      "Today's reality is that feedback does not reach the agent.",
+    );
+    expect(brief).toContain(
+      "addresses that whole slide, not the heading alone",
+    );
+  });
+
+  // A grouped slide's own text stops at its first sub-slide, so the runtime has
+  // to tell the agent what the slide continues into. Without that the brief
+  // claims a group's title is the whole slide and the note under-applies.
+  it("should name a grouped slide's sub-slides in the package it writes", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-grouped-slide-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(
+      planPath,
+      "# Grouped plan\n\n## HTTP endpoints\n\n### The queueing endpoint\n\nAccepts a job.\n\n### The status endpoint\n\nReports one.\n",
+    );
+    const isolated = await startReviewRuntime({ planPath });
+    try {
+      const isolatedToken = await readSessionToken(isolated);
+      await fetch(isolated.url);
+      const sent = await fetch(`${isolated.url}api/feedback`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-big-plan-review-token": isolatedToken,
+          "sec-fetch-site": "same-origin",
+          origin: isolated.url.replace(/\/$/, ""),
+        },
+        body: JSON.stringify({
+          version: await draftsVersionOf(isolated, isolatedToken),
+          comments: [
+            {
+              id: "aa11bb22",
+              body: "rewrite this in Spanish",
+              premiseSnapshot: deriveSnapshotDigest(
+                await readFile(planPath, "utf8"),
+              ),
+              target: {
+                type: "selection",
+                blockId: "section/http-endpoints/heading-1",
+                start: 0,
+                end: 14,
+                quote: "HTTP endpoints",
+              },
+            },
+          ],
+        }),
+      });
+      expect(sent.status).toBe(200);
+      const body = (await sent.json()) as { readonly packageId?: string };
+      const briefName = (await readdir(isolated.store.feedbackDirectory)).find(
+        (name) => name.endsWith(`-${body.packageId ?? ""}.md`),
+      );
+      const brief = await readFile(
+        join(isolated.store.feedbackDirectory, briefName ?? ""),
+        "utf8",
+      );
+      expect(brief).toContain('"The queueing endpoint"');
+      expect(brief).toContain('"The status endpoint"');
+      expect(brief).toContain(
+        "whose content is in the plan source rather than below",
+      );
+    } finally {
+      await isolated.close();
+    }
+  });
+
+  it("should keep a highlight inside one block anchored to that block", async () => {
+    await fetch(runtime.url);
+    const response = await call({
+      path: "/api/feedback",
+      method: "POST",
+      body: {
+        comments: [
+          {
+            id: "99aabbcd",
+            body: "rewrite this in Spanish",
+            premiseSnapshot: PLAN_SNAPSHOT,
+            target: {
+              type: "selection",
+              blockId: "section/status-quo/paragraph-1",
+              start: 0,
+              end: 6,
+              quote: "Today's",
+            },
+          },
+        ],
+      },
+    });
+    expect(response.status).toBe(200);
+    const brief = await readFile(
+      join(
+        runtime.store.feedbackDirectory,
+        (await briefNameFor(response)) ?? "",
+      ),
+      "utf8",
+    );
+    expect(brief).toContain("· paragraph · selected text");
+    expect(brief).not.toContain("addresses that whole slide");
+  });
+
   it("should write a package and brief under runtime-generated names on send", async () => {
     await fetch(runtime.url);
     const response = await call({
