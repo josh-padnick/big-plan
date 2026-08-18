@@ -313,6 +313,14 @@ test("should submit a suggestion through the review's own comment controls", asy
   await card.locator("[data-decision-mode] .decision-mode-switch").click();
 
   await card.getByRole("button", { name: "Submit Now" }).click();
+  // The comment names what it is feedback about, so the agent reading the rail
+  // knows the words belong to this decision's options.
+  await expect(page.locator("body")).toContainText(
+    "Decision options feedback:",
+  );
+  await expect(page.locator("body")).toContainText(
+    "Publish a signed standalone archive.",
+  );
   // The comment now holds those words, so the field lets them go.
   await expect(card.locator("[data-decision-proposal-text]")).toHaveValue("");
   // Its thread is nominated onto the composer, so the review draws it beside

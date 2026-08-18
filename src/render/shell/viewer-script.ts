@@ -2880,7 +2880,7 @@ const wireDecisions = () => {
         source: "decision",
         anchor: decision.id,
         submit: sendNow !== null && sendNow.checked ? "now" : "batch",
-        items: [{ kind: "comment", body: "Suggest another option: " + words }],
+        items: [{ kind: "comment", body: words }],
       });
       if (proposalText !== null) proposalText.value = "";
       // The comment's thread belongs beside the field the words came from

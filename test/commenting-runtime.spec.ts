@@ -6540,14 +6540,12 @@ test("should turn diagram notes and decision proposals into review comments", as
       source: "decision",
       anchor: null,
       submit: "now",
-      items: [
-        { kind: "comment", body: "Suggest another option: local journal." },
-      ],
+      items: [{ kind: "comment", body: "local journal." }],
     }),
   );
   expect((await sent).ok()).toBe(true);
-  await expect(rail).toContainText("Suggested decision option:");
-  await expect(rail).toContainText("Suggest another option: local journal.");
+  await expect(rail).toContainText("Decision options feedback:");
+  await expect(rail).toContainText("local journal.");
 });
 
 test("should mark a superseded review as read-only and link to its replacement", async ({

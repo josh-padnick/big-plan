@@ -5787,7 +5787,7 @@ export const ReviewController = () => {
         const subject =
           payload.source === "flow-diagram"
             ? "Diagram feedback"
-            : "Suggested decision option";
+            : "Decision options feedback";
         const lines = payload.items.map((item) => {
           if (item.kind === "edit-text") {
             return `- Change ${item.field ?? "text"}: “${item.before ?? ""}” → “${item.after ?? ""}”`;
