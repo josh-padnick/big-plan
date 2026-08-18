@@ -196,6 +196,10 @@ After 75 seconds of that quiet the thread reads **No progress for *N*m** and the
 That is a report about the silence and not about the connection: the work is still picked up, the answer is still accepted when it arrives, and a message you send meanwhile is queued behind that turn rather than reported as blocked.
 Big Plan cannot tell a slow agent from a stopped one, because neither produces a signal, so the stalled reading covers both and resolves itself as soon as the agent speaks again.
 
+When the coding agent that started the session exits, its waiting connection ends with it rather than outliving it: within a few seconds the **Agent** tab reads **Agent session ended**, the status card names when the session ended instead of guessing at a threshold, and the connection log records a **Session ended** row.
+A session that disappears without the connection noticing - a machine losing power, or something killing the whole process tree at once - still reads as disconnected after the same 75 seconds of silence as before.
+Either way a message you send once the agent is gone reads **Blocked - no agent connected** and sends itself when an agent reconnects, rather than being picked up by a session that can no longer answer.
+
 The **Agent** tab offers **Reconnect your agent**, holding the prompt and the connector command that start a coding-agent session.
 An agent going quiet never hides that section, because it is the only place those two live and losing your route back is the last thing a silence should cost you; only a read-only session or a review runtime you cannot reach hides it.
 While a request is picked up that section instead reads **Connect an agent and take over this work** and says plainly that the agent may still be working and may finish on its own, and that connecting a session takes the work over so its answer will no longer be accepted - because [the agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) serializes pickup and only the current holder may answer.
