@@ -198,7 +198,7 @@ test("should keep an accepted change accepted across a reload and a restart", as
         ).toBeVisible();
         await expect(
           rail(page).getByRole("button", {
-            name: "Accepting is unavailable because this review session is read-only",
+            name: "Accepting is unavailable because this page cannot record review state",
           }),
         ).toBeDisabled();
         expect(await recordedChanges(dispositionsPath)).toHaveLength(1);

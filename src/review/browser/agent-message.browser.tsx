@@ -628,6 +628,10 @@ export const AgentChangeDigest = ({
           </Badge>
         ) : (
           <span
+            // A generic span cannot carry an accessible name, so a reader would
+            // be told only "1/2". The image role is what lets the label stand
+            // in for the shorthand the sighted reader sees.
+            role="img"
             className="ml-auto shrink-0 font-medium text-accent"
             aria-label={`${standing.accepted} of ${standing.total} changes accepted`}
           >
