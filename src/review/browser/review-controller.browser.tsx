@@ -5068,7 +5068,11 @@ export const ReviewController = () => {
         },
       ];
     });
-    const refreshGeometry = () => {
+    // Measured while inspecting a pointer position rather than cached across
+    // them: the page also reflows without scrolling or resizing - reopening the
+    // feedback sidebar reflows it - and geometry held from before such a reflow
+    // silently stops matching the text the pointer is over.
+    const measureGeometry = () => {
       for (const entry of entries) {
         if (entry.target.type === "selection") {
           const range = selectionRange(entry.target);
@@ -5080,7 +5084,6 @@ export const ReviewController = () => {
         }
       }
     };
-    refreshGeometry();
     let frame = 0;
     let pending:
       | {
@@ -5117,6 +5120,7 @@ export const ReviewController = () => {
       ) {
         return;
       }
+      measureGeometry();
       const selected = entries.find(({ target, selectionRects }) => {
         if (target.type !== "selection") return false;
         return selectionRects.some(
@@ -5145,15 +5149,10 @@ export const ReviewController = () => {
       pending = { x: event.clientX, y: event.clientY, target: event.target };
       if (frame === 0) frame = requestAnimationFrame(inspect);
     };
-    const refresh = () => refreshGeometry();
     document.addEventListener("pointermove", move, { passive: true });
-    window.addEventListener("scroll", refresh, { passive: true });
-    window.addEventListener("resize", refresh, { passive: true });
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("pointermove", move);
-      window.removeEventListener("scroll", refresh);
-      window.removeEventListener("resize", refresh);
       for (const element of marked) delete element.dataset.reviewHasComment;
     };
   }, [articleVersion, reviewComments]);
