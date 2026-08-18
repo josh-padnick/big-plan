@@ -61,6 +61,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   It does not own what a thread means or what a diff shows.
 - It also owns the plan source's one writer.
   Agent edits live in a claim-scoped stage, and `src/review/staged-plan-mutation.ts` publishes a stage under the plan-mutation lock only when the holder, the claim generation, and the source's base digest all still hold; the swap is one atomic rename, and a journal written before it settles a crash on either side.
+  The reviewer's revert publishes through the same module and the same lock, re-proving the digest it was computed against, so it can never land over a revision an agent committed while the revert was being prepared.
   A claim attempt is transport state here, never Change Engine domain state: the commit hands the Change Engine a committed revision through `src/review/change-set-commit.ts`, and nothing else records one.
 - Idle expiry is one centralized runtime policy, not a pair of aligned boundary defaults: `DEFAULT_REVIEW_IDLE_TIMEOUT_MS` in `src/review/server.ts` owns the default, and `src/cli/review/command.ts` imports it rather than duplicating it.
   Any authenticated request from an open page counts as activity, so a page being read keeps its own session alive rather than only writes counting.

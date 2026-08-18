@@ -1532,6 +1532,29 @@ export type AgentRequestDeletionResult =
     };
 
 /**
+ * Removes every claim stage one request owns, with the private plan candidate
+ * each of them holds. A request that can no longer produce an answer - it
+ * committed, or the reviewer withdrew it - keeps none of them.
+ */
+export const removeAgentMutationStages = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<void> => {
+  if (!/^[a-f0-9]{16}$/.test(requestId)) {
+    throw new Error(
+      "An agent exchange request id must be 16 hexadecimal characters",
+    );
+  }
+  await rm(inside({ base: store.agentMutationDirectory, leaf: requestId }), {
+    recursive: true,
+    force: true,
+  });
+};
+
+/**
  * Removes one request the agent never started, together with the blobs frozen
  * for it. The request file goes first, so a failed blob cleanup leaves orphaned
  * bytes rather than a message the reviewer believes they deleted.

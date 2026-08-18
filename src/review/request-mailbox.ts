@@ -37,6 +37,7 @@ import {
   readAgentConnectionEvents,
   readAgentRequestValue,
   readResolvedCommentIds,
+  removeAgentMutationStages,
   ReviewStorePathRejected,
   withReviewStoreLock,
   writeAgentRequestValue,
@@ -501,6 +502,10 @@ export const cancelAgentRequest = async ({
         requestId,
         value: canceled,
       });
+      // A withdrawn request can never publish, so the claim stages it opened -
+      // one private plan copy per generation - go with it rather than sitting
+      // in the store for the life of the plan.
+      await removeAgentMutationStages({ store: lockedStore, requestId });
       return canceled;
     },
   });

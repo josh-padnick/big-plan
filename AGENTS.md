@@ -105,6 +105,7 @@ node instead of failing.
 One server-side invariant is worth the same treatment, for the same reason.
 The authoritative plan source has exactly one writer, `src/review/staged-plan-mutation.ts`.
 Agent edits go into a claim-scoped stage, and a stage publishes only under the plan-mutation lock, only when the recorded holder, the claim generation, and the source's base digest all still hold, and only through one atomic rename that a journal written beforehand can settle after a crash.
+The reviewer's revert crosses the same boundary: it too takes that lock, and it too re-proves the digest it was computed against before renaming, so a revision an agent published in the meantime refuses the revert instead of disappearing under it.
 Anything that writes the plan outside that boundary reintroduces the failure the boundary exists to remove, and it does so silently: the bytes land, and nothing refuses them until a reviewer notices work they never approved.
 Its record for the Change Engine goes through `src/review/change-set-commit.ts` and nowhere else, which is what keeps a change set describing published revisions only.
 

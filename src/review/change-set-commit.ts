@@ -169,11 +169,22 @@ export const recordCommittedRevision = async ({
   });
 };
 
-/** Reads the committed revision log in commit order. */
-export const readCommittedRevisions = async ({
+const REVISION_FILE = /^([a-f0-9]{16})\.json$/;
+
+/**
+ * Reads the revisions a caller asks for, in commit order.
+ *
+ * The log is never pruned, so a request the caller will discard is never read:
+ * the directory names carry the request id, and only the bodies that pass the
+ * filter are opened. That is the whole reason `wanted` is asked before the
+ * read rather than after it.
+ */
+const readRevisionsWhere = async ({
   store,
+  wanted,
 }: {
   readonly store: ReviewStore;
+  readonly wanted: (requestId: string) => boolean;
 }): Promise<ReadonlyArray<CommittedPlanRevision>> => {
   let names: ReadonlyArray<string>;
   try {
@@ -183,7 +194,10 @@ export const readCommittedRevisions = async ({
   }
   const revisions: Array<CommittedPlanRevision> = [];
   for (const name of names) {
-    if (!/^[a-f0-9]{16}\.json$/.test(name)) continue;
+    const named = REVISION_FILE.exec(name);
+    if (named === null) continue;
+    const [, requestId] = named;
+    if (requestId === undefined || !wanted(requestId)) continue;
     let value: unknown;
     try {
       value = JSON.parse(
@@ -206,6 +220,35 @@ export const readCommittedRevisions = async ({
       : left.committedAt.localeCompare(right.committedAt),
   );
 };
+
+/** Reads the committed revision log in commit order. */
+export const readCommittedRevisions = async ({
+  store,
+}: {
+  readonly store: ReviewStore;
+}): Promise<ReadonlyArray<CommittedPlanRevision>> =>
+  readRevisionsWhere({ store, wanted: () => true });
+
+/**
+ * Reads only the revisions a reader has not been moved onto yet.
+ *
+ * The browser polls the exchange every couple of seconds for the life of the
+ * review, and the log grows by one file per answered request and is never
+ * pruned. Folding all of it on every poll is the read-every-file pattern
+ * BIG-44 removed from these routes, so the poll path asks for the unobserved
+ * ids and reads nothing else.
+ */
+export const readUnobservedCommittedRevisions = async ({
+  store,
+  hasObserved,
+}: {
+  readonly store: ReviewStore;
+  readonly hasObserved: (requestId: string) => boolean;
+}): Promise<ReadonlyArray<CommittedPlanRevision>> =>
+  readRevisionsWhere({
+    store,
+    wanted: (requestId) => !hasObserved(requestId),
+  });
 
 /**
  * Folds the revision log into change sets. The baseline and provenance come

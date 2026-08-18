@@ -35,6 +35,7 @@ import {
 import {
   anchorReviewStore,
   readStoreJson,
+  removeAgentMutationStages,
   ReviewStorePathRejected,
   withReviewStoreLock,
   writeSnapshot,
@@ -357,47 +358,6 @@ export const readMutationStage = async ({
   );
 };
 
-/**
- * Removes stages this request no longer needs. A superseded generation goes as
- * soon as a later one opens, and the whole request goes once it has committed,
- * because nothing may read an attempt after its answer is public.
- */
-export const retireMutationStages = async ({
-  store,
-  requestId,
-  keepGeneration,
-}: {
-  readonly store: ReviewStore;
-  readonly requestId: string;
-  readonly keepGeneration?: number;
-}): Promise<void> => {
-  const requestDirectory = join(
-    store.agentMutationDirectory,
-    checkedRequestId(requestId),
-  );
-  if (keepGeneration === undefined) {
-    await rm(requestDirectory, { recursive: true, force: true });
-    return;
-  }
-  let names: ReadonlyArray<string>;
-  try {
-    names = await readdir(requestDirectory);
-  } catch {
-    return;
-  }
-  await Promise.all(
-    names
-      .filter(
-        (name) =>
-          GENERATION_DIRECTORY.test(name) &&
-          Number(name) !== checkedGeneration(keepGeneration),
-      )
-      .map((name) =>
-        rm(join(requestDirectory, name), { recursive: true, force: true }),
-      ),
-  );
-};
-
 type MutationJournal = {
   readonly version: typeof JOURNAL_VERSION;
   readonly requestId: string;
@@ -409,7 +369,13 @@ type MutationJournal = {
   readonly response: AgentResponse;
 };
 
-const validateJournal = (value: unknown): MutationJournal => {
+const unreadableJournal = (path: string): StagedPlanMutationRejected =>
+  new StagedPlanMutationRejected(
+    "unavailable",
+    `A prepared plan mutation journal is unreadable: ${path}. It was written by a build this one no longer understands, or it has been damaged, so the interrupted commit it describes cannot be settled. Delete that file to abandon the interrupted commit, then start \`big-plan review\` again.`,
+  );
+
+const validateJournal = (value: unknown, path: string): MutationJournal => {
   if (
     !isRecord(value) ||
     value.version !== JOURNAL_VERSION ||
@@ -426,10 +392,15 @@ const validateJournal = (value: unknown): MutationJournal => {
     typeof value.answeredAt !== "string" ||
     Number.isNaN(Date.parse(value.answeredAt))
   ) {
-    throw new StagedPlanMutationRejected(
-      "unavailable",
-      "A prepared plan mutation journal is unreadable",
-    );
+    throw unreadableJournal(path);
+  }
+  let response: AgentResponse;
+  try {
+    // Recovery publishes this response with no agent present, so it is
+    // re-checked on the way out of the file as strictly as on the way in.
+    response = validateAgentResponse(value.response);
+  } catch {
+    throw unreadableJournal(path);
   }
   return {
     version: JOURNAL_VERSION,
@@ -439,9 +410,7 @@ const validateJournal = (value: unknown): MutationJournal => {
     baseSnapshot: value.baseSnapshot,
     resultSnapshot: value.resultSnapshot,
     answeredAt: value.answeredAt,
-    // Recovery publishes this response with no agent present, so it is
-    // re-checked on the way out of the file as strictly as on the way in.
-    response: validateAgentResponse(value.response),
+    response,
   };
 };
 
@@ -468,11 +437,10 @@ const readJournals = async (
   }
   const journals: Array<MutationJournal> = [];
   for (const name of names.filter((entry) => JOURNAL_FILE.test(entry))) {
-    const value = await readStoreJson(
-      join(store.agentMutationJournalDirectory, name),
-    );
+    const path = join(store.agentMutationJournalDirectory, name);
+    const value = await readStoreJson(path);
     if (value === undefined) continue;
-    journals.push(validateJournal(value));
+    journals.push(validateJournal(value, path));
   }
   return journals;
 };
@@ -564,6 +532,44 @@ export const assertNoExternalSourceConflict = (
   if (conflict !== undefined) throw externalSourceConflict(conflict);
 };
 
+/**
+ * Puts the plan back to a revision the reviewer chose, under the same lock and
+ * the same compare-and-swap an agent commit takes.
+ *
+ * The reviewer's revert is decided outside the lock - the response is found,
+ * its baseline is resolved, and that baseline is rendered - so by the time the
+ * bytes are ready an agent commit may already have published a newer revision
+ * from the very digest this revert was computed against. Re-proving the digest
+ * under the lock is what turns that into a refusal the reviewer reads instead
+ * of a published revision that silently disappears.
+ */
+export const revertPlanSource = async ({
+  store,
+  planPath,
+  expectedSnapshot,
+  source,
+}: {
+  readonly store: ReviewStore;
+  readonly planPath: string;
+  readonly expectedSnapshot: string;
+  readonly source: string;
+}): Promise<void> =>
+  withPlanMutationLock({
+    store,
+    change: async () => {
+      const currentSnapshot = deriveSnapshotDigest(
+        await readFile(planPath, "utf8"),
+      );
+      if (currentSnapshot !== expectedSnapshot) {
+        throw new StagedPlanMutationRejected(
+          "source-moved",
+          "The plan changed after this response, so reverting it would overwrite newer work",
+        );
+      }
+      await replacePlanSource({ path: planPath, source });
+    },
+  });
+
 /** Retains the published revision and clears the attempt that produced it. */
 const finalizeCommittedMutation = async ({
   store,
@@ -582,7 +588,11 @@ const finalizeCommittedMutation = async ({
   await rm(journalPath({ store, requestId: journal.requestId }), {
     force: true,
   });
-  await retireMutationStages({ store, requestId: journal.requestId });
+  // A superseded generation survives every earlier step on purpose: a
+  // displaced agent still owns a real stage, which is what lets its answer be
+  // refused by generation rather than reported as a missing candidate. Once
+  // this request's answer is public, none of them may be read again.
+  await removeAgentMutationStages({ store, requestId: journal.requestId });
 };
 
 /**

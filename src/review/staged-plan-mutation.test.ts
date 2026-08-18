@@ -2,7 +2,7 @@
 // only under a live claim generation from an unmoved base, and an interrupted
 // commit has exactly one answer on each side of its rename.
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -15,14 +15,16 @@ import {
   writeAgentRequest,
 } from "./agent-exchange.js";
 import { readCommittedRevisions } from "./change-set-commit.js";
-import { claimAgentRequest } from "./request-mailbox.js";
+import { cancelAgentRequest, claimAgentRequest } from "./request-mailbox.js";
 import {
   assertNoExternalSourceConflict,
   commitStagedPlanMutation,
   openMutationStage,
   readMutationStage,
   recoverStagedPlanMutations,
+  revertPlanSource,
   StagedPlanMutationRejected,
+  withPlanMutationLock,
 } from "./staged-plan-mutation.js";
 import {
   deriveReviewPlanId,
@@ -287,6 +289,159 @@ describe("staged plan mutation", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("should take every stage with a request the reviewer withdrew", async () => {
+    const { directory, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const claimed = await claim({ store, claimedBy: AGENT_A });
+      const stage = await stageFor({
+        store,
+        claimedBy: AGENT_A,
+        generation: requestClaimGeneration(claimed),
+      });
+      await writeFile(stage.candidatePath, RESULT, "utf8");
+
+      await cancelAgentRequest({
+        store,
+        requestId: REQUEST,
+        now: new Date().toISOString(),
+      });
+
+      // A withdrawn request can never publish, so its private plan copies must
+      // not outlive it in the store.
+      await expect(
+        readMutationStage({ store, requestId: REQUEST, claimedBy: AGENT_A }),
+      ).rejects.toThrow(StagedPlanMutationRejected);
+      await expect(readdir(store.agentMutationDirectory)).resolves.toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * The reviewer's revert is the plan file's other writer. It decides what to
+ * write outside the plan-mutation lock - find the response, resolve its
+ * baseline, render it - so an agent commit can publish from the very digest
+ * the revert was computed against while that work is in flight.
+ */
+describe("reviewer revert of a published revision", () => {
+  const publishRevision = async ({
+    store,
+    planPath,
+    planId,
+  }: {
+    readonly store: ReviewStore;
+    readonly planPath: string;
+    readonly planId: string;
+  }): Promise<string> => {
+    await writeAgentRequest({ store, request: chatRequest(planId) });
+    const claimed = await claim({ store, claimedBy: AGENT_A });
+    const stage = await stageFor({
+      store,
+      claimedBy: AGENT_A,
+      generation: requestClaimGeneration(claimed),
+    });
+    await writeFile(stage.candidatePath, RESULT, "utf8");
+    const resultSnapshot = deriveSnapshotDigest(RESULT);
+    await commitStagedPlanMutation({
+      store,
+      planPath,
+      request: claimed,
+      generation: stage.generation,
+      claimedBy: AGENT_A,
+      baseSnapshot: stage.baseSnapshot,
+      resultSnapshot,
+      resultSource: RESULT,
+      assets: [],
+      response: answerFor({
+        request: claimed,
+        currentSnapshot: resultSnapshot,
+      }),
+      now: new Date().toISOString(),
+    });
+    return resultSnapshot;
+  };
+
+  it("should put the plan back when nothing moved underneath it", async () => {
+    const { directory, planPath, store, planId } = await preparedPlan();
+    try {
+      const resultSnapshot = await publishRevision({ store, planPath, planId });
+
+      await revertPlanSource({
+        store,
+        planPath,
+        expectedSnapshot: resultSnapshot,
+        source: BASE,
+      });
+
+      await expect(readFile(planPath, "utf8")).resolves.toBe(BASE);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a revert an agent commit published past", async () => {
+    const { directory, planPath, store, planId } = await preparedPlan();
+    try {
+      // The reviewer opened the revert against the plan as it stood, which is
+      // the baseline the agent is about to publish from.
+      const expectedSnapshot = deriveSnapshotDigest(BASE);
+      const resultSnapshot = await publishRevision({ store, planPath, planId });
+      expect(resultSnapshot).not.toBe(expectedSnapshot);
+
+      await expect(
+        revertPlanSource({
+          store,
+          planPath,
+          expectedSnapshot,
+          source: BASE,
+        }),
+      ).rejects.toThrow(/would overwrite newer work/u);
+      // The published revision is still the plan, and the log still describes
+      // it, so nothing the agent committed disappeared under the revert.
+      await expect(readFile(planPath, "utf8")).resolves.toBe(RESULT);
+      await expect(readCommittedRevisions({ store })).resolves.toMatchObject([
+        { requestId: REQUEST, resultSnapshot },
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should wait for the plan-mutation lock before it writes", async () => {
+    const { directory, planPath, store } = await preparedPlan();
+    let revert: Promise<unknown> = Promise.resolve();
+    try {
+      let settled = false;
+      await withPlanMutationLock({
+        store,
+        change: async () => {
+          revert = revertPlanSource({
+            store,
+            planPath,
+            expectedSnapshot: deriveSnapshotDigest(BASE),
+            source: RESULT,
+          }).finally(() => {
+            settled = true;
+          });
+          revert.catch(() => undefined);
+          // A revert that did not take this lock would already have renamed
+          // its bytes over whatever the holder is midway through publishing.
+          await new Promise((resume) => setTimeout(resume, 50));
+          expect(settled).toBe(false);
+          await expect(readFile(planPath, "utf8")).resolves.toBe(BASE);
+        },
+      });
+
+      await expect(revert).resolves.toBeUndefined();
+      await expect(readFile(planPath, "utf8")).resolves.toBe(RESULT);
+    } finally {
+      await revert.catch(() => undefined);
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });
 
 const prepareJournal = async ({
@@ -379,6 +534,50 @@ describe("interrupted plan commit recovery", () => {
         (await readAgentExchange({ store, sessionId: SESSION, planId }))
           .responses,
       ).toHaveLength(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should name the journal and its remedy when one is unreadable", async () => {
+    const { directory, planPath, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const claimed = await claim({ store, claimedBy: AGENT_A });
+      await prepareJournal({
+        store,
+        request: claimed,
+        resultSnapshot: deriveSnapshotDigest(RESULT),
+      });
+      // A journal left by an older build: valid JSON, but a response shape
+      // this one no longer accepts.
+      const path = join(store.agentMutationJournalDirectory, `${REQUEST}.json`);
+      await writeStoreJson({
+        path,
+        value: {
+          version: 1,
+          requestId: REQUEST,
+          generation: requestClaimGeneration(claimed),
+          claimedBy: AGENT_A,
+          baseSnapshot: deriveSnapshotDigest(BASE),
+          resultSnapshot: deriveSnapshotDigest(RESULT),
+          answeredAt: "2026-08-17T12:00:05.000Z",
+          response: { requestId: REQUEST, kind: "chat" },
+        },
+      });
+
+      // Refusing is right - the interrupted commit really cannot be settled -
+      // but the operator has to be told which file to remove to get moving.
+      const refusal = await recoverStagedPlanMutations({
+        store,
+        planPath,
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(refusal).toBeInstanceOf(StagedPlanMutationRejected);
+      expect((refusal as Error).message).toContain(path);
+      expect((refusal as Error).message).toMatch(/[Dd]elete that file/u);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

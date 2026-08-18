@@ -38,7 +38,7 @@ import {
   MAX_IMAGES_PER_MESSAGE,
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
-import { readCommittedRevisions } from "./change-set-commit.js";
+import { readUnobservedCommittedRevisions } from "./change-set-commit.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
 
 const appendProgressBestEffort = async ({
@@ -65,13 +65,20 @@ const appendProgressBestEffort = async ({
  * A revision is recorded only inside the terminal commit, after the source
  * swap, so the snapshot the reader is sent is always one the plan file really
  * reached.
+ *
+ * The browser polls this route for the life of the review, so only the
+ * revisions the reader has not been moved onto are read; the rest of the log
+ * costs a directory listing and nothing more.
  */
 export const readAgentSnapshot = async (
   context: ReviewRouteContext,
 ): Promise<ReviewRouteResponse> => {
   const { store, sessionId, planId, readerProgress } = context;
   const exchange = await readAgentExchange({ store, sessionId, planId });
-  for (const revision of await readCommittedRevisions({ store })) {
+  for (const revision of await readUnobservedCommittedRevisions({
+    store,
+    hasObserved: readerProgress.hasObserved,
+  })) {
     readerProgress.observe(revision);
   }
   const presence = await readAgentPresence({ store, sessionId });
