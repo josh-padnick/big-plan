@@ -157,8 +157,6 @@ import {
   isReviewRuntimeRefusal,
   isReviewRuntimeUnavailable,
   isTerminalReviewRuntimeRefusal,
-  normalizeReviewRuntimeRequestError,
-  reviewRuntimeRefusal,
   reviewRuntimeRefusalStatus,
 } from "./review-runtime-request.js";
 import { createRuntimeSessionOrder } from "./runtime-session-order.js";
@@ -191,6 +189,11 @@ import {
 } from "./review-recovery-storage.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
+  requestJson,
+  runtimeIdentity,
+  type RuntimeIdentity,
+} from "./review-runtime-client.browser.js";
+import {
   AlertDialog,
   Badge,
   Button,
@@ -201,10 +204,8 @@ import {
   toast,
 } from "./ui.browser.js";
 
-const TOKEN_HEADER = "x-big-plan-review-token";
 const BODY_LIMIT = 4000;
 const LONG_COMMENT = 180;
-const REQUEST_TIMEOUT_MS = 10_000;
 const PROSE_KINDS = new Set(["heading", "paragraph", "list", "blockquote"]);
 const TABLE_PRECISION_KINDS = new Set([
   "table-cell",
@@ -226,12 +227,6 @@ type PendingDelete =
 type PendingRevert = {
   readonly requestId: string;
   readonly commentId: string;
-};
-
-type RuntimeIdentity = {
-  readonly planId: string;
-  readonly sessionId: string;
-  readonly token: string;
 };
 
 // The server owns the answer time and the digest of the decision that was
@@ -497,15 +492,6 @@ const threadTime = (createdAt: string): string => {
   return `${Math.floor(elapsed / 31_536_000_000)}y ago`;
 };
 
-const runtimeIdentity = (): RuntimeIdentity | null => {
-  const planId = rootElement.getAttribute("data-plan-id") ?? "";
-  const sessionId = rootElement.getAttribute("data-review-session") ?? "";
-  const token = rootElement.getAttribute("data-review-token") ?? "";
-  return planId === "" || sessionId === "" || token === ""
-    ? null
-    : { planId, sessionId, token };
-};
-
 const bootstrapSnapshot = (): string => {
   try {
     const value: unknown = JSON.parse(
@@ -717,53 +703,6 @@ const RecoveryConflictDialog = ({
       </div>
     </AlertDialog>
   );
-};
-
-const requestJson = async ({
-  path,
-  identity,
-  method = "GET",
-  body,
-}: {
-  readonly path: string;
-  readonly identity: RuntimeIdentity;
-  readonly method?: "GET" | "PUT" | "POST";
-  readonly body?: unknown;
-}): Promise<unknown> => {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(
-    () => controller.abort(),
-    REQUEST_TIMEOUT_MS,
-  );
-  try {
-    const response = await fetch(path, {
-      method,
-      mode: "same-origin",
-      credentials: "omit",
-      cache: "no-store",
-      redirect: "error",
-      signal: controller.signal,
-      headers: {
-        [TOKEN_HEADER]: identity.token,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    if (!response.ok) {
-      throw await reviewRuntimeRefusal({
-        status: response.status,
-        readBody: () => response.json(),
-      });
-    }
-    return await response.json();
-  } catch (error) {
-    throw normalizeReviewRuntimeRequestError({
-      error,
-      timedOut: controller.signal.aborted,
-    });
-  } finally {
-    window.clearTimeout(timeout);
-  }
 };
 
 /**
