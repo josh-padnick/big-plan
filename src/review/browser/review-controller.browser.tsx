@@ -296,7 +296,15 @@ type ExternalFeedbackPayload = {
 
 type BigPlanFeedbackWindow = Window & {
   bigPlan?: {
-    feedback?: { readonly add: (payload: ExternalFeedbackPayload) => void };
+    feedback?: {
+      // The id comes back so a component can hold on to the one comment it
+      // raised, rather than raising a second one it cannot tell apart.
+      readonly add: (payload: ExternalFeedbackPayload) => string | null;
+      // Shows the reader a comment they already made, which is what a
+      // component should do instead of quietly making another.
+      readonly reveal: (commentId: string) => void;
+      readonly send: (commentId: string) => void;
+    };
   };
 };
 
@@ -1870,6 +1878,22 @@ const useInlineComposeHost = (
   return host;
 };
 
+// A block-targeted comment normally sits level with the top of its block, which
+// is right for a comment about the block. A component that raised the comment
+// from one control inside itself knows better: it nominates that control, and
+// the thread sits beside the thing the reader was actually looking at. The
+// comment's target is unchanged - this moves where the thread is drawn, not
+// what it points at.
+const threadAnchorElement = (comment: ReviewComment): HTMLElement | null => {
+  const nominated = document.querySelector<HTMLElement>(
+    `[data-review-thread-anchor="${CSS.escape(comment.id)}"]`,
+  );
+  if (nominated !== null && nominated.getClientRects().length > 0) {
+    return nominated;
+  }
+  return targetElement(comment.target);
+};
+
 const useThreadHosts = (
   comments: ReadonlyArray<ReviewComment>,
   isOpen: boolean,
@@ -1891,7 +1915,7 @@ const useThreadHosts = (
       { readonly left: number; readonly right: number; readonly top: number }
     >();
     for (const comment of comments) {
-      const anchor = targetElement(comment.target);
+      const anchor = threadAnchorElement(comment);
       if (anchor === null) continue;
       const container =
         anchor.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
@@ -1939,7 +1963,7 @@ const useThreadHosts = (
       const rightThreadOffsets = new Map<string, number>();
       for (const comment of comments) {
         const host = mounted.get(comment.id);
-        const target = targetElement(comment.target);
+        const target = threadAnchorElement(comment);
         if (host === undefined || target === null) continue;
         const anchor =
           target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
@@ -5749,7 +5773,7 @@ export const ReviewController = () => {
     const feedbackWindow = window as BigPlanFeedbackWindow;
     const previous = feedbackWindow.bigPlan?.feedback;
     const api = {
-      add: (payload: ExternalFeedbackPayload): void => {
+      add: (payload: ExternalFeedbackPayload): string => {
         const source =
           payload.source === "flow-diagram" && payload.anchor !== undefined
             ? // A diagram element that no longer resolves still deserves its
@@ -5793,6 +5817,34 @@ export const ReviewController = () => {
             : "Component feedback added to the review batch.",
         );
         if (payload.submit === "now") void sendComments([comment]);
+        return comment.id;
+      },
+      reveal: (commentId: string): void => {
+        setIsOpen(true);
+        setTab("comments");
+        // The thread beside the plan is where the connection to the element is
+        // visible, so that is what gets shown and pulsed. The rail copy is
+        // opened either way for a reader whose window is too narrow for it.
+        const host = document.querySelector<HTMLElement>(
+          `[data-review-thread-for="${CSS.escape(commentId)}"]`,
+        );
+        if (host === null) return;
+        host.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        host.setAttribute("data-review-thread-flash", "");
+        window.setTimeout(
+          () => host.removeAttribute("data-review-thread-flash"),
+          1200,
+        );
+      },
+      send: (commentId: string): void => {
+        const existing = reviewComments.find(
+          (candidate) => candidate.id === commentId,
+        );
+        if (existing === undefined) return;
+        setIsOpen(true);
+        setTab("comments");
+        setStatus("Submitting component feedback.");
+        void sendComments([existing]);
       },
     };
     feedbackWindow.bigPlan = {
@@ -5807,7 +5859,13 @@ export const ReviewController = () => {
       };
       if (previous === undefined) delete feedbackWindow.bigPlan.feedback;
     };
-  }, [displayedSnapshot, isHydrated, sendComments, stageReviewComment]);
+  }, [
+    displayedSnapshot,
+    isHydrated,
+    reviewComments,
+    sendComments,
+    stageReviewComment,
+  ]);
 
   const saveComment = (body: string, submitRightAway: boolean) => {
     if (compose === null) return;

@@ -2528,48 +2528,51 @@ const wireDecisions = () => {
       choice.hasAttribute("data-decision-proposal-choice");
     const proposalValue = () =>
       proposalText === null ? "" : proposalText.value.trim();
-    const proposalBatch = document.createElement("button");
-    proposalBatch.type = "button";
-    proposalBatch.className = "decision-proposal-action";
-    proposalBatch.textContent = "Add to Comments";
-    proposalBatch.hidden = true;
-    const proposalNow = document.createElement("button");
-    proposalNow.type = "button";
-    proposalNow.className = "decision-proposal-action decision-proposal-now";
-    proposalNow.textContent = "Send now";
-    proposalNow.hidden = true;
-    if (footer !== null && confirm !== null) {
-      footer.insertBefore(proposalBatch, confirm);
-      footer.insertBefore(proposalNow, confirm);
-    }
-    // Decision mode routes the reader's words through a comment on this
-    // decision before they can become the answer, so its actions belong to the
-    // field that holds those words rather than to the card's footer. The
-    // footer keeps the one action that settles the decision itself.
+    // Everything that acts on the reader's words sits in one row directly under
+    // the field holding them: the mode on the left, what to do with them on the
+    // right. Spreading these across the card left the reader hunting for the
+    // action that belonged to what they had just typed.
     const composerActions = document.createElement("div");
     composerActions.className = "decision-composer-actions";
-    // Cancel joins this row rather than sitting under it: leaving the
-    // composer and acting on it are the same kind of choice, and a lone
-    // control below a right-aligned pair reads as a leftover.
     const composerSubmits = document.createElement("div");
     composerSubmits.className = "decision-composer-submits";
-    composerSubmits.hidden = true;
     const composerAdd = document.createElement("button");
     composerAdd.type = "button";
-    composerAdd.className = "decision-proposal-action";
+    composerAdd.className = "decision-composer-action";
     composerAdd.textContent = "Add comment";
     const composerNow = document.createElement("button");
     composerNow.type = "button";
-    composerNow.className = "decision-proposal-action decision-proposal-now";
+    composerNow.className =
+      "decision-composer-action decision-composer-action-primary";
     composerNow.textContent = "Submit now";
-    composerSubmits.append(composerAdd, composerNow);
+    // One suggestion carries one comment. Once it exists, the actions that
+    // would make a second are replaced by the way back to the first.
+    const composerCaptured = document.createElement("button");
+    composerCaptured.type = "button";
+    composerCaptured.className = "decision-composer-captured";
+    composerCaptured.textContent = "Captured as a comment.";
+    composerCaptured.hidden = true;
+    composerSubmits.append(composerAdd, composerCaptured, composerNow);
+    // The left of the row is the mode and, directly under it, the note saying
+    // what that mode will do with the words. The note moved here from under the
+    // field so the sentence and the switch it describes read as one statement.
+    const composerMode = document.createElement("div");
+    composerMode.className = "decision-composer-mode";
     if (proposalCancel !== null && proposalCancel.parentNode !== null) {
       proposalCancel.parentNode.insertBefore(composerActions, proposalCancel);
-      composerActions.append(proposalCancel, composerSubmits);
+      composerSubmits.append(proposalCancel);
+      composerActions.append(composerMode, composerSubmits);
+      const modeRow =
+        modeToggle === null ? null : modeToggle.closest("[data-decision-mode]");
+      if (modeRow !== null) composerMode.append(modeRow);
+      if (proposalNote !== null) composerMode.append(proposalNote);
     }
-    // The words the reader already captured as a comment. Decision mode empties
-    // the field on capture, so this is what the confirm step then records.
+    // The words the reader already captured as a comment, and the comment that
+    // now holds them. Decision mode empties the field on capture, so this is
+    // what the confirm step then records.
     let capturedProposal = "";
+    let capturedCommentId = null;
+    let capturedSent = false;
     const answerText = () =>
       capturedProposal === "" ? proposalValue() : capturedProposal;
     let previousOptionChoice =
@@ -2846,11 +2849,18 @@ const wireDecisions = () => {
       for (const candidate of choices) candidate.disabled = locked;
       if (proposalText !== null) proposalText.disabled = locked;
       for (const note of lockedNotes) note.hidden = !locked;
-      proposalBatch.hidden = !proposing || decisionMode;
-      proposalNow.hidden = !proposing || decisionMode;
-      composerSubmits.hidden = !decisionMode;
+      // One suggestion carries one comment. Once it exists, the action that
+      // would raise a second gives way to the way back to the first, and
+      // sending stops meaning "make and send" - it sends the one that is
+      // already there. Once that has been sent there is nothing left to do
+      // with it, so the captured state stands alone.
+      const captured = capturedCommentId !== null;
+      composerAdd.hidden = captured;
+      composerNow.hidden = captured && capturedSent;
+      composerCaptured.hidden = !captured;
       composerAdd.disabled = locked || proposalValue() === "";
-      composerNow.disabled = locked || proposalValue() === "";
+      composerNow.disabled =
+        locked || (captured ? false : proposalValue() === "");
       // A recorded answer is not something the reader can re-aim by flipping
       // the mode underneath it. Changing the answer is what reopens the choice.
       if (modeToggle !== null) modeToggle.disabled = locked || answered;
@@ -2859,8 +2869,6 @@ const wireDecisions = () => {
       if (placeholder !== null) proposalText.placeholder = placeholder;
       const note = wordFor(proposalNote, decisionMode, "note");
       if (note !== null) proposalNote.textContent = note;
-      proposalBatch.disabled = locked || proposalValue() === "";
-      proposalNow.disabled = locked || proposalValue() === "";
       if (clear !== null) {
         clear.hidden = !changingAnswer;
         clear.disabled = locked;
@@ -2898,14 +2906,16 @@ const wireDecisions = () => {
       if (proposes(event.target) && proposalText !== null) proposalText.focus();
     });
     if (proposalText !== null) proposalText.addEventListener("input", sync);
-    // The capture flag marks the decision-mode route, where the words become a comment
-    // on this decision and the field is emptied because that comment is now the
-    // visible record of them. The feedback route leaves the field alone: its
-    // words go to the review batch, nothing lands on the card, and clearing
-    // them would look like the submission was dropped.
-    const handOffProposal = (submit, capture) => {
+    // Both modes hand the words to the same place: a comment on this decision,
+    // rendered beside the field they came from. The mode decides what the words
+    // then mean - a change request, or the answer of record - not where they go.
+    // The field empties on capture because that comment is now the visible
+    // record of them, standing right next to where they were typed.
+    const handOffProposal = (submit) => {
       const words = proposalValue();
-      if (words === "") return;
+      // The field is empty once a capture has taken it, so emptiness only
+      // blocks the route that would raise a new comment.
+      if (words === "" && capturedCommentId === null) return;
       const target = window.bigPlan?.feedback;
       if (typeof target?.add !== "function") {
         const line = "Open this document in a live review to submit feedback.";
@@ -2913,22 +2923,42 @@ const wireDecisions = () => {
         else if (summary !== null) summary.textContent = line;
         return;
       }
-      target.add({
+      // A suggestion that already has a comment never gets a second one. Asking
+      // again shows the reader the one they made, which answers the question
+      // they were really asking: where did my words go.
+      if (capturedCommentId !== null) {
+        if (submit === "now") {
+          capturedSent = true;
+          target.send?.(capturedCommentId);
+        } else {
+          target.reveal?.(capturedCommentId);
+        }
+        sync();
+        return;
+      }
+      const raised = target.add({
         source: "decision",
         anchor: decision.id,
         submit,
         items: [{ kind: "comment", body: "Suggest another option: " + words }],
       });
-      if (capture) {
-        capturedProposal = words;
-        if (proposalText !== null) proposalText.value = "";
+      capturedProposal = words;
+      capturedCommentId = typeof raised === "string" ? raised : null;
+      capturedSent = submit === "now";
+      if (proposalText !== null) proposalText.value = "";
+      // The thread for this comment belongs beside the field the words came
+      // from, not at the top of the card, so the composer nominates itself.
+      if (capturedCommentId !== null && propose !== null) {
+        propose.setAttribute("data-review-thread-anchor", capturedCommentId);
       }
       sync();
     };
-    proposalBatch.addEventListener("click", () => handOffProposal("batch", false));
-    proposalNow.addEventListener("click", () => handOffProposal("now", false));
-    composerAdd.addEventListener("click", () => handOffProposal("batch", true));
-    composerNow.addEventListener("click", () => handOffProposal("now", true));
+    composerAdd.addEventListener("click", () => handOffProposal("batch"));
+    composerNow.addEventListener("click", () => handOffProposal("now"));
+    composerCaptured.addEventListener("click", () => {
+      if (capturedCommentId === null) return;
+      window.bigPlan?.feedback?.reveal?.(capturedCommentId);
+    });
     decision.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || event.bigPlanEscapeHandled === true) return;
       const choice = picked();
@@ -2946,8 +2976,15 @@ const wireDecisions = () => {
         if (previousOptionChoice !== null) previousOptionChoice.checked = true;
         if (proposalText !== null) proposalText.value = "";
         // Cancelling abandons the whole composed proposal, including anything
-        // already captured, so the next one starts from nothing.
+        // already captured, so the next one starts from nothing. The comment
+        // itself stays: the reader made it deliberately, and the rail is where
+        // they delete it.
         capturedProposal = "";
+        if (capturedCommentId !== null && propose !== null) {
+          propose.removeAttribute("data-review-thread-anchor");
+        }
+        capturedCommentId = null;
+        capturedSent = false;
         if (modeToggle !== null) modeToggle.checked = false;
         sync();
         if (proposalChoice !== null) {

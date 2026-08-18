@@ -646,34 +646,110 @@
 
   /* Decision mode's actions belong to the field whose words they carry, so
      they sit at its trailing edge the way a composer's own actions do. */
+  /* One row, directly under the field: what mode you are in on the left, what
+     to do with what you typed on the right. Proximity is the whole point, so
+     nothing from this group is allowed to drift down the card. */
   article .decision-composer-actions {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 1rem;
     margin-top: 0.5rem;
+  }
+  article .decision-composer-mode {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
   }
   article .decision-composer-submits {
     display: flex;
-    gap: 0.5rem;
+    align-items: center;
+    gap: 0.75rem;
     margin-left: auto;
+    padding-top: 0.375rem;
   }
   article .decision-composer-submits[hidden] {
     display: none;
   }
-
-  article .decision-proposal-cancel {
-    padding: 0.25rem 0.75rem;
+  /* Sized as comment actions, not as the decision's own confirm: these move a
+     note around, they do not settle the question. */
+  article .decision-composer-action {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3125rem 0.75rem;
     border: 1px solid var(--edge-c);
     border-radius: var(--radius-md);
     cursor: pointer;
-    background: var(--bg);
+    background: var(--raised-c);
     color: var(--ink-c);
     font-size: 0.75rem;
     font-weight: var(--font-weight-semibold);
   }
-  article .decision-proposal-cancel:hover {
+  article .decision-composer-action[hidden] {
+    display: none;
+  }
+  article .decision-composer-action:hover {
     background: var(--surface-c);
+  }
+  article .decision-composer-action-primary {
+    border-color: transparent;
+    background: var(--color-accent);
+    color: var(--paper-c, var(--bg));
+  }
+  article .decision-composer-action-primary:hover {
+    background: color-mix(in srgb, var(--color-accent) 88%, var(--ink-c));
+  }
+  article .decision-composer-action:disabled {
+    cursor: default;
+    border-color: var(--edge-c);
+    background: var(--surface-c);
+    color: var(--color-subtle);
+  }
+  article .decision-composer-action:focus-visible {
+    outline: none;
+    box-shadow: var(--elevation-focus);
+  }
+
+  /* The suggestion already has its comment. This is not another action, it is
+     the way back to that comment, so it reads as a link. */
+  article .decision-composer-captured {
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+    background: none;
+    color: var(--color-accent);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+  article .decision-composer-captured[hidden] {
+    display: none;
+  }
+  article .decision-composer-captured:hover {
+    color: color-mix(in srgb, var(--color-accent) 80%, var(--ink-c));
+  }
+  article .decision-composer-captured:focus-visible {
+    outline: none;
+    border-radius: 0.125rem;
+    box-shadow: var(--elevation-focus);
+  }
+
+  /* Leaving the composer is a way out, not a third thing to weigh against the
+     two actions beside it, so it carries no button weight. */
+  article .decision-proposal-cancel {
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+    background: none;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  article .decision-proposal-cancel:hover {
+    color: var(--ink-c);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
   }
   article .decision-proposal-action {
     display: inline-flex;
