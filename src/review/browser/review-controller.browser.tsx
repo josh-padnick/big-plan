@@ -209,6 +209,7 @@ import {
   Toaster,
   Tooltip,
   toast,
+  WorkingMark,
 } from "./ui.browser.js";
 
 const BODY_LIMIT = 4000;
@@ -2387,10 +2388,7 @@ const ContextualCommentSummary = ({
       aria-label={statusIconLabel ?? status}
     >
       {statusSpinner ? (
-        <span
-          className="inline-block size-2.5 animate-spin rounded-full border-[1.5px] border-current border-r-transparent motion-reduce:animate-none"
-          aria-hidden="true"
-        />
+        <WorkingMark className="size-2.5" />
       ) : statusIcon === undefined ? null : (
         <Icon icon={statusIcon} />
       )}
@@ -7095,6 +7093,15 @@ export const ReviewController = () => {
                 modelEffort:
                   claimedRequest?.claimedModel?.effort ??
                   agent.presence.model?.effort,
+                modelClient:
+                  claimedRequest?.claimedModel?.client ??
+                  agent.presence.model?.client,
+                sessionUrl:
+                  claimedRequest?.claimedModel?.sessionUrl ??
+                  agent.presence.model?.sessionUrl,
+                sessionId:
+                  claimedRequest?.claimedModel?.sessionId ??
+                  agent.presence.model?.sessionId,
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 runtimeSession,

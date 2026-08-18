@@ -12,6 +12,7 @@ import type {
   AgentHealthIndicator,
 } from "../shared/agent-status.js";
 import { Icon } from "./icon.browser.js";
+import { WorkingMark } from "./ui.browser.js";
 
 /** The label is fixed so the control never changes width as the state changes. */
 export const AGENT_STATUS_LABEL = "Agent Status";
@@ -37,58 +38,9 @@ export const AGENT_STATUS_TRIGGER_ID = "review-agent-trigger";
 const FILLED_MARK = "[&>svg]:size-2 [&>svg]:fill-current";
 const OUTLINED_MARK = "[&>svg]:size-3.5";
 
-// The working mark is the connected dot with work happening inside it: the same
-// green, the same box, drawn as a three-by-three grid whose ring brightens one
-// position at a time. It says "busy" through motion rather than through a
-// second colour, which keeps the state readable for a reader who cannot
-// separate the greens, and it never grows past the dot it replaces.
-//
-// It is drawn as SVG rather than as nine elements, because at this size CSS
-// boxes are the wrong tool: a two-pixel round div lands on fractional device
-// pixels and antialiases into an oval, so the dots come out visibly different
-// shapes. An SVG circle is a circle at any scale, and the mark then matches the
-// other status glyphs, which are all SVG.
-//
-// Geometry is stated in the icon system's own 24-unit box so it sits beside
-// those glyphs unconverted: centres nine units apart, and a radius that leaves
-// the dots almost touching. The captain chose this weight against a lighter one
-// - heavier dots, a deeper drop between lit and unlit, and a quicker cycle read
-// as more insistent without moving differently.
-const SWEEP_CENTRES = [3, 12, 21] as const;
-const SWEEP_DELAYS = [
-  "[animation-delay:0ms]",
-  "[animation-delay:163ms]",
-  "[animation-delay:325ms]",
-  "[animation-delay:1138ms]",
-  null,
-  "[animation-delay:488ms]",
-  "[animation-delay:975ms]",
-  "[animation-delay:813ms]",
-  "[animation-delay:650ms]",
-] as const;
-
-const AgentWorkingMark = () => (
-  <svg
-    viewBox="0 0 24 24"
-    className="size-2 shrink-0 fill-current text-agent-live"
-    aria-hidden="true"
-  >
-    {SWEEP_DELAYS.map((delay, index) => (
-      <circle
-        key={index}
-        cx={SWEEP_CENTRES[index % 3]}
-        cy={SWEEP_CENTRES[Math.floor(index / 3)]}
-        r={3.7}
-        className={
-          delay === null
-            ? "opacity-75"
-            : `opacity-15 animate-agent-sweep motion-reduce:animate-none motion-reduce:opacity-75 ${delay}`
-        }
-      />
-    ))}
-  </svg>
-);
-
+// The working state draws the product's one working mark rather than an icon,
+// at the size of the dot it replaces so nothing in the toolbar moves when work
+// starts or stops.
 const INDICATOR_PRESENTATION: Record<
   AgentHealthIndicator,
   { readonly icon: LucideIcon; readonly className: string }
@@ -128,7 +80,7 @@ export const AgentStatusGlyph = ({
       aria-hidden="true"
     >
       {indicator === "working" ? (
-        <AgentWorkingMark />
+        <WorkingMark className="size-2" />
       ) : (
         <Icon icon={presentation.icon} />
       )}

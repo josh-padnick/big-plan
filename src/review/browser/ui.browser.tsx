@@ -228,6 +228,33 @@ const BADGE_WEIGHTS = {
   bold: "font-bold",
 } as const;
 
+/*
+The one mark that means "working", everywhere the product says it.
+
+A rotating circle with a gap, at the size its surface gives it. It had grown
+three nearly-identical spellings and one bespoke alternative; a reader who has
+learned what it means in one place should not have to learn it again in the
+next, so it is spelled once here and sized by the caller.
+
+The motion slows rather than stops for a reader who asks the OS for reduced
+motion. Stopping it entirely would leave a static ring that reads as a shape
+rather than as activity, and this mark is only ever on screen while something
+is genuinely in flight.
+*/
+export const WorkingMark = ({
+  className = "size-3",
+}: {
+  readonly className?: string;
+}) => (
+  <span
+    /* box-border so the ring's own stroke sits inside the size it is given:
+       a mark asked for eight pixels has to occupy eight, or it shifts the
+       toolbar it replaces a dot in. */
+    className={`box-border inline-block shrink-0 animate-spin rounded-full border-[1.5px] border-current border-r-transparent motion-reduce:[animation-duration:2.4s] ${className}`}
+    aria-hidden="true"
+  />
+);
+
 export const Badge = ({
   className,
   size = "default",

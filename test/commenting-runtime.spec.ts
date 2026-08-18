@@ -2700,7 +2700,12 @@ test("should show the active claim's model despite a competing heartbeat", async
     activeSessionId: session.sessionId,
     requestId: request.requestId,
     claimedBy: "abababababababab",
-    model: { name: "Grok 4.6", effort: "high" },
+    model: {
+      name: "grok-4.6",
+      effort: "high",
+      client: "grok-cli 0.2.99",
+      sessionUrl: "https://grok.example/chat/42",
+    },
     baselineSnapshot: request.premiseSnapshot,
     now: new Date().toISOString(),
   });
@@ -2722,12 +2727,17 @@ test("should show the active claim's model despite a competing heartbeat", async
       });
       return snapshot.requests[0]?.claimedModel?.name;
     })
-    .toBe("Grok 4.6");
+    .toBe("grok-4.6");
   await agentStatusTrigger(page).click();
   const rail = agentSidebar(page);
   const modelBadge = rail.locator("[data-review-agent-model]");
   await expect(modelBadge).toBeVisible();
+  // The declared id is canonical; the catalog owns how it is written.
   await expect(modelBadge).toContainText("Grok 4.6");
+  await expect(modelBadge).not.toContainText("grok-4.6");
+  // Client, model, and effort read as one line, in the order a reader asks.
+  await expect(modelBadge).toContainText("Grok CLI");
+  await expect(modelBadge).not.toContainText("0.2.99");
   await expect(modelBadge).not.toContainText("Wrong waiting agent");
   await expect(modelBadge.locator("svg")).toHaveAttribute(
     "viewBox",
@@ -2737,6 +2747,13 @@ test("should show the active claim's model despite a competing heartbeat", async
   // the name rather than standing beside it as a second fact.
   await expect(modelBadge).toContainText("high");
   await expect(modelBadge).toHaveAttribute("data-review-agent-effort", "high");
+  // A declared URL is the one segment that becomes an affordance.
+  const chatLink = rail.getByRole("link", { name: "Open the agent's chat" });
+  await expect(chatLink).toHaveAttribute(
+    "href",
+    "https://grok.example/chat/42",
+  );
+  await expect(chatLink).toHaveAttribute("rel", /noreferrer/u);
 
   await writeAgentHeartbeat({
     store,
@@ -4011,77 +4028,60 @@ test("should restore and submit staged comments through the local review runtime
     "working",
   );
   // Working separates itself from merely connected by motion, so this reads the
-  // shipped animation rather than a class name. The mark is a nine-dot grid
-  // whose ring brightens one position at a time, and the sweep is only a sweep
-  // if the dots run the same animation at different offsets. They are SVG
-  // circles rather than boxes because a round box this small antialiases into
-  // an oval, so this pins that they are circles at all, and identical ones.
-  const readFade = () =>
+  // shipped animation rather than a class name. It is the product's one working
+  // mark - a rotating circle with a gap - the same mark the batch headers and
+  // the thread chips show, so a reader learns it once.
+  const readMark = () =>
     workingMark.evaluate((mark) => {
-      const dots = [...mark.querySelectorAll("svg > circle")];
-      const ring = dots.map((dot) => getComputedStyle(dot));
-      const first = ring[0];
+      const spinner = mark.firstElementChild;
+      if (spinner === null) return null;
+      const style = getComputedStyle(spinner);
+
       return {
-        dots: dots.length,
-        animationName: first?.animationName,
-        animationDuration: first?.animationDuration,
-        animationIterationCount: first?.animationIterationCount,
-        animationTimingFunction: first?.animationTimingFunction,
-        distinctDelays: new Set(ring.map((style) => style.animationDelay)).size,
-        still: ring.filter((style) => style.animationName === "none").length,
+        animationName: style.animationName,
+        animationIterationCount: style.animationIterationCount,
+        animationTimingFunction: style.animationTimingFunction,
+        borderRadius: style.borderTopLeftRadius,
+        // The gap is one transparent side of an otherwise drawn ring.
+        transparentSides: [
+          style.borderTopColor,
+          style.borderRightColor,
+          style.borderBottomColor,
+          style.borderLeftColor,
+        ].filter((colour) => colour.endsWith(", 0)")).length,
+        // The laid-out box, not the bounding box: this mark is rotating, so
+        // its axis-aligned bounds breathe between the square and its diagonal.
+        size: [style.width, style.height],
       };
     });
-  expect(await readFade()).toMatchObject({
-    dots: 9,
-    animationName: "agent-sweep",
-    animationDuration: "1.3s",
+  expect(await readMark()).toMatchObject({
+    animationName: "spin",
     animationIterationCount: "infinite",
-    animationTimingFunction: "ease-in-out",
-    // Eight offsets around the ring; the centre shares the first one's zero
-    // because it never animates at all, which is what keeps the mark present
-    // at the dimmest point of the sweep.
-    distinctDelays: 8,
-    still: 1,
+    animationTimingFunction: "linear",
+    transparentSides: 1,
+    // It must never outgrow the plain connected dot it replaces, so nothing in
+    // the toolbar moves when work starts or stops.
+    size: ["8px", "8px"],
   });
-  expect(
-    await workingMark.evaluate((node) => {
-      const circles = [...node.querySelectorAll("svg > circle")];
-      return {
-        radii: [...new Set(circles.map((circle) => circle.getAttribute("r")))],
-        boxes: [
-          ...new Set(
-            circles.map((circle) => {
-              const box = circle.getBoundingClientRect();
-              return `${String(Math.round(box.width * 100))}x${String(Math.round(box.height * 100))}`;
-            }),
-          ),
-        ],
-      };
-    }),
-  ).toEqual({ radii: ["3.7"], boxes: ["247x247"] });
-  // It must never outgrow the plain connected dot it replaces.
-  expect(
-    await workingMark.evaluate((mark) => {
-      const box = mark.getBoundingClientRect();
-      return [Math.round(box.width), Math.round(box.height)];
-    }),
-  ).toEqual([8, 8]);
-  const readOpacity = () =>
-    workingMark.evaluate((mark) => {
-      const dot = mark.querySelector("svg > circle");
-      return dot === null ? null : getComputedStyle(dot).opacity;
-    });
-  const firstOpacity = await readOpacity();
-  await expect.poll(readOpacity, { timeout: 3_000 }).not.toBe(firstOpacity);
 
   await page.emulateMedia({ colorScheme: "dark" });
-  expect((await readFade()).animationName).toBe("agent-sweep");
+  expect((await readMark())?.animationName).toBe("spin");
   await workingAgent.screenshot({
     path: testInfo.outputPath("agent-working-fade-dark.png"),
   });
   // Readers who ask the OS for less motion get the mark without the fade.
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  expect((await readFade()).animationName).toBe("none");
+  // Reduced motion slows the mark rather than stopping it: a static ring reads
+  // as a shape, and this mark is only on screen while work is in flight.
+  expect((await readMark())?.animationName).toBe("spin");
+  expect(
+    await workingMark.evaluate((mark) => {
+      const spinner = mark.firstElementChild;
+      return spinner === null
+        ? null
+        : getComputedStyle(spinner).animationDuration;
+    }),
+  ).toBe("2.4s");
   await workingAgent.screenshot({
     path: testInfo.outputPath("agent-working-fade-reduced-motion.png"),
   });

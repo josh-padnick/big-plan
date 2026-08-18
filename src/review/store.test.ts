@@ -603,7 +603,7 @@ describe("review store agent presence", () => {
     });
   });
 
-  it("keeps connector identity but drops request-specific metadata", async () => {
+  it("keeps connector identity when the heartbeat ages out", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
@@ -637,7 +637,65 @@ describe("review store agent presence", () => {
     ).resolves.toEqual({
       connected: false,
       state: "waiting",
+      model: { name: "Grok 4.6" },
       updatedAtMs: 10_000,
+    });
+  });
+
+  it("keeps the connector's identity through a lapsed working turn", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    // The sequence the captain hit: an agent connects and declares itself, then
+    // works long enough that nothing renews the plan-wide heartbeat. Who it is
+    // must not expire with the proof that it is still there.
+    await writeFile(
+      store.agentHeartbeatPath,
+      JSON.stringify({
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "working",
+        requestId: "bbbbbbbbbbbbbbbb",
+        model: {
+          name: "grok-4.6",
+          effort: "high",
+          client: "grok-cli 0.2.99",
+          sessionUrl: "https://grok.example/chat/42",
+        },
+        updatedAtMs: 10_000,
+      }),
+    );
+    const declared = {
+      name: "grok-4.6",
+      effort: "high",
+      client: "grok-cli 0.2.99",
+      sessionUrl: "https://grok.example/chat/42",
+    };
+    await expect(
+      readAgentPresence({ store, sessionId: "aaaaaaaaaaaaaaaa", now: 12_000 }),
+    ).resolves.toMatchObject({ connected: true, model: declared });
+    // Ten minutes into one turn, with no heartbeat since pickup.
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 10_000 + 600_000,
+      }),
+    ).resolves.toMatchObject({ connected: false, model: declared });
+    // And a new agent replaces it, which is the only thing that should.
+    await writeFile(
+      store.agentHeartbeatPath,
+      JSON.stringify({
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "waiting",
+        model: { name: "claude-fable-5" },
+        updatedAtMs: 700_000,
+      }),
+    );
+    await expect(
+      readAgentPresence({ store, sessionId: "aaaaaaaaaaaaaaaa", now: 700_100 }),
+    ).resolves.toMatchObject({
+      connected: true,
+      model: { name: "claude-fable-5" },
     });
   });
 

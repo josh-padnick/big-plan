@@ -11,7 +11,7 @@ import type { AgentStatus, AgentStatusStage } from "../shared/agent-status.js";
 import type { ReviewComment } from "../shared/comment.js";
 import type { ThreadGroup } from "../shared/thread-projection.js";
 import { Icon } from "./icon.browser.js";
-import { Badge, Button } from "./ui.browser.js";
+import { Badge, Button, WorkingMark } from "./ui.browser.js";
 
 /** The stages that say an agent has this batch in hand. */
 const PICKED_UP_STAGES: ReadonlySet<AgentStatusStage> = new Set([
@@ -66,10 +66,7 @@ const LifecycleSection = ({
   >
     <h3 className="m-0 mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-caps">
       {tone === "working" ? (
-        <span
-          className="inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
-          aria-hidden="true"
-        />
+        <WorkingMark />
       ) : tone === "ready" ? (
         <Icon icon={CHECK_ICON} />
       ) : tone === "queued" ? (

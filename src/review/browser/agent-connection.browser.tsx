@@ -15,9 +15,11 @@ import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import {
+  agentClientDisplayName,
+  agentModelDisplayName,
   agentModelVendor,
   type AgentModelVendor,
-} from "../shared/agent-model-icon.js";
+} from "../shared/agent-identity-catalog.js";
 import {
   AGENT_SESSION_ENDED_REASON,
   agentHasEverConnected,
@@ -286,6 +288,9 @@ const CurrentActivityCard = ({
   status,
   modelName,
   modelEffort,
+  modelClient,
+  sessionUrl,
+  sessionId,
   connection,
   nowMs,
   onViewRequest,
@@ -294,6 +299,9 @@ const CurrentActivityCard = ({
   readonly status: AgentHealth;
   readonly modelName?: string;
   readonly modelEffort?: string;
+  readonly modelClient?: string;
+  readonly sessionUrl?: string;
+  readonly sessionId?: string;
   readonly connection: ReturnType<typeof summarizeAgentConnection>;
   readonly nowMs: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
@@ -334,10 +342,24 @@ const CurrentActivityCard = ({
       : activity.state === "offline"
         ? "Unreachable since"
         : "Connected since";
-  const identityIsKnowable =
-    activity.state !== "disconnected" &&
-    activity.state !== "never-connected" &&
-    activity.state !== "offline";
+  /*
+  What the connector said about itself, in the order a reader asks it: which
+  tool, which model, how hard it was told to think. Each segment is independent,
+  because each is declared independently, and the catalog decides how a declared
+  id is written - never this component, and never by re-casing what it was
+  handed.
+  */
+  const identitySegments = [
+    modelClient === undefined
+      ? undefined
+      : { key: "client", text: agentClientDisplayName(modelClient) },
+    modelName === undefined
+      ? undefined
+      : { key: "model", text: agentModelDisplayName(modelName) },
+    modelEffort === undefined
+      ? undefined
+      : { key: "effort", text: modelEffort },
+  ].filter((segment) => segment !== undefined);
   const requestId = "requestId" in activity ? activity.requestId : undefined;
   const requestKind = "requestId" in activity ? activity.requestKind : "";
   const footerLabel =
@@ -358,40 +380,54 @@ const CurrentActivityCard = ({
         <strong className="min-w-0 flex-1 text-sm text-ink">{title}</strong>
       </div>
       {/*
-      An attached agent always says something about its identity, because the
-      absence of a badge is indistinguishable from a badge that failed to
-      render, and a reader looking for "which model is this" should not have to
-      decide which of those they are seeing. When the connector reports nothing
-      the card says so in words: it is a fact about the connection, not a
-      placeholder standing in for a mark we do not have.
+      Identity is shown only where it exists, segment by segment. A session that
+      declared nothing renders nothing here: a line saying so would occupy the
+      space an answer occupies while carrying none, and the reader who wants to
+      know which agent this is learns more from the absence than from being told
+      about it.
       */}
-      {modelName === undefined ? (
-        identityIsKnowable ? (
-          <span
-            className="inline-flex w-fit max-w-full items-center rounded-full border border-current/20 px-2 py-0.5 text-2xs text-muted"
-            data-review-agent-model=""
-          >
-            Model not reported
-          </span>
-        ) : null
-      ) : (
+      {identitySegments.length === 0 ? null : (
         <span
           className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-current/20 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2 py-0.5 text-2xs font-semibold text-ink [&>svg]:size-3"
-          data-review-agent-model={modelName}
+          {...(modelName === undefined
+            ? {}
+            : { "data-review-agent-model": modelName })}
           {...(modelEffort === undefined
             ? {}
             : { "data-review-agent-effort": modelEffort })}
+          {...(modelClient === undefined
+            ? {}
+            : { "data-review-agent-client": modelClient })}
         >
-          <ModelIcon modelName={modelName} />
-          <span className="truncate">{modelName}</span>
-          {/* Effort is the connector's own word, so it is shown as a quieter
-              qualifier of the name rather than as a second fact beside it. */}
-          {modelEffort === undefined ? null : (
-            <span className="shrink-0 font-normal text-muted">
-              {modelEffort}
+          {modelName === undefined ? null : <ModelIcon modelName={modelName} />}
+          {identitySegments.map((segment, index) => (
+            <span
+              key={segment.key}
+              className={
+                segment.key === "effort"
+                  ? "shrink-0 font-normal text-muted"
+                  : "min-w-0 truncate"
+              }
+            >
+              {index === 0 ? "" : "· "}
+              {segment.text}
             </span>
-          )}
+          ))}
         </span>
+      )}
+      {sessionUrl === undefined ? null : (
+        /* The agent's own conversation is somewhere else entirely, so the link
+           says where it goes rather than naming a destination the reader is
+           already looking at. */
+        <a
+          className="inline-flex w-fit items-center gap-1 text-2xs font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          href={sessionUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          data-review-agent-session-url={sessionUrl}
+        >
+          Open the agent's chat
+        </a>
       )}
       {workHeadline === undefined || subjectLabel === undefined ? null : (
         <p className="m-0 text-ink [overflow-wrap:anywhere]">{workHeadline}</p>
@@ -440,6 +476,20 @@ const CurrentActivityCard = ({
               {")"}
             </dd>
           </div>
+          {sessionId === undefined || sessionUrl !== undefined ? null : (
+            /* An opaque handle is a detail, not a headline: it cannot be
+               followed, so it belongs with the other facts a reader consults
+               rather than beside the state they are reading. */
+            <div className="min-w-0">
+              <dt className="font-semibold">Agent session</dt>
+              <dd
+                className="m-0 truncate text-ink"
+                data-review-agent-session-id={sessionId}
+              >
+                {sessionId}
+              </dd>
+            </div>
+          )}
           <div className="min-w-0">
             <dt className="font-semibold">Events</dt>
             <dd className="m-0 grid text-ink [overflow-wrap:anywhere]">
@@ -826,6 +876,9 @@ export const AgentConnectionPanel = ({
   endedAtMs,
   modelName,
   modelEffort,
+  modelClient,
+  sessionUrl,
+  sessionId,
   connectionLog,
   recoveryPrompt,
   isReadOnly,
@@ -838,6 +891,9 @@ export const AgentConnectionPanel = ({
   readonly connected: boolean;
   readonly modelName?: string;
   readonly modelEffort?: string;
+  readonly modelClient?: string;
+  readonly sessionUrl?: string;
+  readonly sessionId?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   /**
    * What held work says about the quiet. It chooses this section's copy and
@@ -897,6 +953,9 @@ export const AgentConnectionPanel = ({
             status={status}
             modelName={modelName}
             modelEffort={modelEffort}
+            modelClient={modelClient}
+            sessionUrl={sessionUrl}
+            sessionId={sessionId}
             connection={connection}
             nowMs={currentNowMs}
             onViewRequest={onViewRequest}

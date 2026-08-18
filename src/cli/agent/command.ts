@@ -40,13 +40,32 @@ const connectorModelName = (): string | undefined => {
   return trimmed === undefined || trimmed === "" ? undefined : trimmed;
 };
 
-// The connector's own report of how hard it was told to think, e.g. "high".
-// Read the same way and on the same terms as the name: shown only when the
-// launching environment stated it.
-const connectorModelEffort = (): string | undefined => {
-  const trimmed = process.env["BIG_PLAN_AGENT_EFFORT"]?.trim();
+/*
+The rest of what a connector may declare about itself, read on the same terms
+as the model name: stated by the launching environment or absent, never
+inferred here.
+
+All four are ordinary environment variables read once per process and carried
+on the heartbeat and claim writes that already happen. Declaring them costs the
+connection nothing: no extra call, no extra byte on the wire beyond the strings
+themselves, and no work at all for a connector that declares none.
+*/
+const connectorValue = (variable: string): string | undefined => {
+  const trimmed = process.env[variable]?.trim();
   return trimmed === undefined || trimmed === "" ? undefined : trimmed;
 };
+
+const connectorModelEffort = (): string | undefined =>
+  connectorValue("BIG_PLAN_AGENT_EFFORT");
+
+const connectorClient = (): string | undefined =>
+  connectorValue("BIG_PLAN_AGENT_CLIENT");
+
+const connectorSessionUrl = (): string | undefined =>
+  connectorValue("BIG_PLAN_AGENT_SESSION_URL");
+
+const connectorSessionId = (): string | undefined =>
+  connectorValue("BIG_PLAN_AGENT_SESSION");
 
 /**
  * Lifts `--agent <token>` out of the positional arguments.
@@ -96,6 +115,9 @@ const parseAction = (
   ) {
     const modelName = connectorModelName();
     const modelEffort = connectorModelEffort();
+    const modelClient = connectorClient();
+    const sessionUrl = connectorSessionUrl();
+    const sessionId = connectorSessionId();
     return {
       kind: "next",
       planPath: args[1] ?? "",
@@ -104,6 +126,9 @@ const parseAction = (
       ...(agentToken === undefined ? {} : { agentToken }),
       ...(modelName === undefined ? {} : { modelName }),
       ...(modelEffort === undefined ? {} : { modelEffort }),
+      ...(modelClient === undefined ? {} : { modelClient }),
+      ...(sessionUrl === undefined ? {} : { sessionUrl }),
+      ...(sessionId === undefined ? {} : { sessionId }),
     };
   }
   if (args[0] === "respond" && args.length === 3 && agentToken !== undefined) {
@@ -118,6 +143,9 @@ const parseAction = (
   if (args[0] === "note" && args.length === 3 && agentToken !== undefined) {
     const modelName = connectorModelName();
     const modelEffort = connectorModelEffort();
+    const modelClient = connectorClient();
+    const sessionUrl = connectorSessionUrl();
+    const sessionId = connectorSessionId();
     return {
       kind: "note",
       planPath: args[1] ?? "",
@@ -125,6 +153,9 @@ const parseAction = (
       agentToken,
       ...(modelName === undefined ? {} : { modelName }),
       ...(modelEffort === undefined ? {} : { modelEffort }),
+      ...(modelClient === undefined ? {} : { modelClient }),
+      ...(sessionUrl === undefined ? {} : { sessionUrl }),
+      ...(sessionId === undefined ? {} : { sessionId }),
     };
   }
   return invalidArguments();

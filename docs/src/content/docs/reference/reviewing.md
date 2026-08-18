@@ -232,25 +232,40 @@ A warning leaves the plan unchanged, shows its short one-line summary directly u
 A changed result updates the plan in place without discarding staged comments, open threads, or scroll position.
 The [agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) owns why pickup is serialized and what must change before concurrent plan editing can return.
 
-Set `BIG_PLAN_AGENT_MODEL` before starting the coding-agent session to report
-the model identity, for example `Grok 4.6` or `GPT-5.6-Luna`, and
-`BIG_PLAN_AGENT_EFFORT` to report how hard it was told to think, for example
-`high`.
-**Agent Status** shows the model of the request it is describing, for as long as
-that pickup still explains the quiet - through the working reading and the whole
-stalled window, not only while the claim is live - and falls back to the model
-the attached connector reports when nothing is picked up.
-A name containing `openai`, a `gpt-4` or `gpt-5` family name, `claude`, `grok`,
-or one of Mistral's own families uses that vendor's own logo. Any other reported
-name shows as a name alone: a mark is used only where Big Plan holds one
-faithful to the vendor's published mark, so a different GPT-named model such as
-EleutherAI's GPT-J neither borrows the OpenAI logo nor stands behind a generic
-one.
-Leave both unset and the card reads `Model not reported` rather than showing
-nothing, so an empty identity is never mistaken for one that failed to load.
+A connected agent may declare four things about itself, each optional and each
+read from the environment the coding-agent session was launched in:
+
+| Variable                     | What it declares                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `BIG_PLAN_AGENT_MODEL`       | The provider's own canonical model id, for example `grok-4.6` or `claude-fable-5`.                          |
+| `BIG_PLAN_AGENT_EFFORT`      | How hard the model was told to think, for example `high`.                                                   |
+| `BIG_PLAN_AGENT_CLIENT`      | Which tool is connected, for example `grok-cli 0.2.99`.                                                     |
+| `BIG_PLAN_AGENT_SESSION_URL` | A link to the agent's own conversation. Use `BIG_PLAN_AGENT_SESSION` instead when it has an id but no link. |
+
+**Agent Status** shows what was declared, and only what was declared: client,
+model, and effort read as one line, each segment appearing only if the agent
+stated it, and a session with no declaration shows no identity at all rather
+than a note about its absence.
+A declared URL becomes an **Open the agent's chat** link; a bare session id
+appears among the connection details instead, since it cannot be followed.
+
+Model ids are looked up, never rewritten. A known id prints the name its vendor
+writes - `grok-4.6` shows as `Grok 4.6` - and uses that vendor's own logo. An id
+Big Plan does not hold prints exactly as declared, and shows a logo only where
+Big Plan holds a mark faithful to the vendor's published one, so a different
+GPT-named model such as EleutherAI's GPT-J neither borrows the OpenAI logo nor
+stands behind a generic one.
+
+Identity belongs to the session's agent rather than to its heartbeat. Once
+declared it stays on the card through working turns, quiet periods, stalls, and
+disconnection - a disconnected card still names the agent that left - and it
+changes only when another agent connects.
+
 The reconnect prompt the review hands the reviewer asks the agent to export
-both variables itself before connecting, because the agent is the only party
-that knows which model is running it; Big Plan never infers one.
+these itself before connecting, because the agent is the only party that knows
+any of them; Big Plan never infers one. They cost the connection nothing: they
+are read once per process and ride the heartbeat and claim writes that already
+happen.
 
 ## Diff and anchor truth
 

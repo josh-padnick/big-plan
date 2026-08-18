@@ -2511,6 +2511,20 @@ export const readAgentPresence = async ({
   ) {
     return { connected: false, state: "waiting" };
   }
+  /*
+  Identity outlives the signal that carried it.
+
+  Who the agent is and whether it answered recently are two different questions,
+  and this record answers both. Expiring the whole record on the freshness check
+  made the second answer erase the first: nothing renews the plan-wide heartbeat
+  during a long working turn (BIG-147), so an agent that was mid-answer stopped
+  being anyone at all, and the card that should have said which agent had gone
+  quiet said nothing instead. What it declared about itself stays until another
+  agent declares something else.
+  */
+  const model =
+    "model" in value ? decodeAgentModelIdentity(value.model) : undefined;
+  const identity = model === undefined ? {} : { model };
   // An end the loop observed needs no aging: the question aging answers has
   // already been answered, by the only process that could answer it.
   if (value.state === "ended") {
@@ -2518,6 +2532,7 @@ export const readAgentPresence = async ({
       connected: false,
       state: "waiting",
       updatedAtMs: value.updatedAtMs,
+      ...identity,
       endedAtMs:
         "endedAtMs" in value &&
         typeof value.endedAtMs === "number" &&
@@ -2531,6 +2546,7 @@ export const readAgentPresence = async ({
       connected: false,
       state: "waiting",
       updatedAtMs: value.updatedAtMs,
+      ...identity,
     };
   }
   const requestId =
@@ -2539,13 +2555,11 @@ export const readAgentPresence = async ({
     /^[a-f0-9]{16}$/.test(value.requestId)
       ? value.requestId
       : undefined;
-  const model =
-    "model" in value ? decodeAgentModelIdentity(value.model) : undefined;
   return {
     connected: true,
     state: value.state,
     ...(requestId === undefined ? {} : { requestId }),
-    ...(model === undefined ? {} : { model }),
+    ...identity,
     updatedAtMs: value.updatedAtMs,
   };
 };

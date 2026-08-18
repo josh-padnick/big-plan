@@ -77,11 +77,12 @@ export const agentRecoveryPrompt = ({
 }): string =>
   [
     `Reconnect to my existing Big Plan review for ${planPath}.`,
-    // The agent is the only party that knows which model is running it. Big
-    // Plan never guesses, and detecting it from the outside would be a guess,
-    // so the one honest source is asked directly - in the prompt the reviewer
-    // is already handing over.
-    "First export BIG_PLAN_AGENT_MODEL in that shell with your own model name, for example Grok 4.6, and BIG_PLAN_AGENT_EFFORT with your reasoning effort if you have one, so the review can name the agent it is talking to.",
+    // The agent is the only party that knows any of this. Big Plan never
+    // guesses, and detecting it from the outside would be a guess, so the one
+    // honest source is asked directly - in the prompt the reviewer is already
+    // handing over. The model is asked for as an id rather than a name because
+    // an id is the form an agent can state without composing it.
+    "First export what you know about yourself in that shell, skipping any you cannot answer: BIG_PLAN_AGENT_MODEL as the exact model id your API uses, for example grok-4.6; BIG_PLAN_AGENT_EFFORT as your reasoning effort; BIG_PLAN_AGENT_CLIENT as your tool and version, for example grok-cli 0.2.99; and BIG_PLAN_AGENT_SESSION_URL as a link to this conversation, or BIG_PLAN_AGENT_SESSION as its id if it has no link.",
     `Then run ${agentConnectCommand({ executablePath, planPath })}.`,
     "Read the prompt_file path it prints and follow that prompt in this agent session.",
     "Keep the connection loop running so the review remains live.",

@@ -38,17 +38,6 @@ palette in inert exports.
 @import "./fonts.generated.css";
 @import "../components/wireframe/styles.css";
 
-@keyframes agent-sweep {
-  0%,
-  55%,
-  100% {
-    opacity: 0.16;
-  }
-  20% {
-    opacity: 1;
-  }
-}
-
 @keyframes boost-pop {
   0% {
     transform: scale(0.6);
@@ -829,21 +818,6 @@ are declared, so a role or a scale step is the only thing a utility can name.
 }
 
 @theme {
-  /*
-    The one animation the product owns as a token: the agent's working mark.
-
-    It is a named animation rather than nine hand-written rules because the
-    mark is drawn by the review island, which styles what it renders with
-    utilities; only the keyframe itself has to live in the stylesheet. Each dot
-    runs the same animation and differs only by its delay, so the sweep is one
-    idea rather than nine.
-
-    The floor is not zero. A dot that reaches nothing leaves the mark a hole
-    for a fifth of every cycle, and the grid has to read as a whole thing being
-    scanned rather than as parts appearing and going.
-  */
-  --animate-agent-sweep: agent-sweep 1.3s ease-in-out infinite;
-
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* The layout switches from stacked to sidebar-plus-column at this width. */

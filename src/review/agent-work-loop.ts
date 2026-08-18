@@ -87,6 +87,9 @@ export type AgentWorkLoopAction =
       readonly shouldWait: boolean;
       readonly modelName?: string;
       readonly modelEffort?: string;
+      readonly modelClient?: string;
+      readonly sessionUrl?: string;
+      readonly sessionId?: string;
       readonly agentToken?: string;
     }
   | {
@@ -103,6 +106,9 @@ export type AgentWorkLoopAction =
       readonly agentToken: string;
       readonly modelName?: string;
       readonly modelEffort?: string;
+      readonly modelClient?: string;
+      readonly sessionUrl?: string;
+      readonly sessionId?: string;
     };
 
 export type AgentWorkLoopErrorCode = "invalid-input" | "validation-error";
@@ -378,7 +384,7 @@ Reviewer image references included in a changed candidate are materialized into 
       // Asked here as well as in the recovery prompt, because an agent reaching
       // this output has connected some other way and would otherwise never be
       // told that the reviewer cannot see which model it is.
-      "Export BIG_PLAN_AGENT_MODEL with your own model name, and BIG_PLAN_AGENT_EFFORT with your reasoning effort, so the reviewer sees which agent is connected",
+      "Export BIG_PLAN_AGENT_MODEL as your API's exact model id (e.g. grok-4.6), plus BIG_PLAN_AGENT_EFFORT, BIG_PLAN_AGENT_CLIENT, and BIG_PLAN_AGENT_SESSION_URL where you know them, so the reviewer sees which agent is connected",
     ],
   };
 };
@@ -389,6 +395,9 @@ const nextWork = async ({
   executablePath,
   modelName,
   modelEffort,
+  modelClient,
+  sessionUrl,
+  sessionId,
   agentToken,
 }: {
   readonly planPath: string;
@@ -396,6 +405,9 @@ const nextWork = async ({
   readonly executablePath: string;
   readonly modelName?: string;
   readonly modelEffort?: string;
+  readonly modelClient?: string;
+  readonly sessionUrl?: string;
+  readonly sessionId?: string;
   readonly agentToken?: string;
 }): Promise<Record<string, unknown>> => {
   const model = decodeAgentModelIdentity(
@@ -404,6 +416,9 @@ const nextWork = async ({
       : {
           name: modelName,
           ...(modelEffort === undefined ? {} : { effort: modelEffort }),
+          ...(modelClient === undefined ? {} : { client: modelClient }),
+          ...(sessionUrl === undefined ? {} : { sessionUrl }),
+          ...(sessionId === undefined ? {} : { sessionId }),
         },
   );
   let session: Awaited<ReturnType<typeof readPlanSession>>;
@@ -937,12 +952,18 @@ const note = async ({
   detail,
   modelName,
   modelEffort,
+  modelClient,
+  sessionUrl,
+  sessionId,
   agentToken,
 }: {
   readonly planPath: string;
   readonly detail: string;
   readonly modelName?: string;
   readonly modelEffort?: string;
+  readonly modelClient?: string;
+  readonly sessionUrl?: string;
+  readonly sessionId?: string;
   readonly agentToken: string;
 }): Promise<Record<string, unknown>> => {
   const model = decodeAgentModelIdentity(
@@ -951,6 +972,9 @@ const note = async ({
       : {
           name: modelName,
           ...(modelEffort === undefined ? {} : { effort: modelEffort }),
+          ...(modelClient === undefined ? {} : { client: modelClient }),
+          ...(sessionUrl === undefined ? {} : { sessionUrl }),
+          ...(sessionId === undefined ? {} : { sessionId }),
         },
   );
   const message = detail.trim();
@@ -1044,6 +1068,15 @@ export const runAgentWorkLoopAction = async (
       ...(action.modelEffort === undefined
         ? {}
         : { modelEffort: action.modelEffort }),
+      ...(action.modelClient === undefined
+        ? {}
+        : { modelClient: action.modelClient }),
+      ...(action.sessionUrl === undefined
+        ? {}
+        : { sessionUrl: action.sessionUrl }),
+      ...(action.sessionId === undefined
+        ? {}
+        : { sessionId: action.sessionId }),
     });
   }
   if (action.kind === "respond") {
@@ -1062,5 +1095,12 @@ export const runAgentWorkLoopAction = async (
     ...(action.modelEffort === undefined
       ? {}
       : { modelEffort: action.modelEffort }),
+    ...(action.modelClient === undefined
+      ? {}
+      : { modelClient: action.modelClient }),
+    ...(action.sessionUrl === undefined
+      ? {}
+      : { sessionUrl: action.sessionUrl }),
+    ...(action.sessionId === undefined ? {} : { sessionId: action.sessionId }),
   });
 };
