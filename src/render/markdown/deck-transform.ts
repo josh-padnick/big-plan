@@ -218,11 +218,17 @@ const collectSlideTypes = ({
 
   const consume = (parent: Root | Element): void => {
     let index = 0;
+    // Slide groups are built from h2 sections, so an h3 is only a sub-slide
+    // once an h2 has opened a group above it.
+    let hasOpenSlideGroup = false;
     while (index < parent.children.length) {
       const child = parent.children[index];
       if (child === undefined || !isElement(child)) {
         index += 1;
         continue;
+      }
+      if (parent.type === "root" && child.tagName === "h2") {
+        hasOpenSlideGroup = true;
       }
       const authoredType = child.properties[OUTLINE_SLIDE_TYPE_ATTRIBUTE];
       if (authoredType === undefined) {
@@ -257,6 +263,16 @@ const collectSlideTypes = ({
         diagnostics.add({
           message:
             "Slide must be a top-level self-closing marker immediately followed by the h2 or h3 it describes",
+          position: child.position,
+        });
+      } else if (next.tagName === "h3" && !hasOpenSlideGroup) {
+        // A sub-slide only exists inside a slide group, and groups are built
+        // from h2 sections. A typed h3 with no h2 above it would keep its
+        // marker, lose its frame, and render as a bare heading - the type
+        // silently dropped rather than refused.
+        diagnostics.add({
+          message:
+            "Slide on an h3 must sit inside an h2 slide group; add the h2 this sub-slide belongs to, or make it an h2 of its own",
           position: child.position,
         });
       } else if (

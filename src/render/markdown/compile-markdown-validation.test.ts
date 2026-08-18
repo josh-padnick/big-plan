@@ -155,6 +155,29 @@ flowchart LR
     }
   });
 
+  // A sub-slide exists only inside a slide group, and groups are built from h2
+  // sections. Without this the marker was consumed, the h3 rendered as a bare
+  // heading, and the authored type disappeared with nothing said about it.
+  it("should refuse a typed Slide marker on an h3 with no h2 group above it", () => {
+    expect(
+      diagnosticsFor(`# Bound the retry queue
+
+The lede.
+
+<Slide type="status-quo" />
+
+### Today the retries are unbounded
+
+Every failure repeats until the queue drains.
+`),
+    ).toEqual([
+      expect.objectContaining({
+        line: 5,
+        message: expect.stringContaining("must sit inside an h2 slide group"),
+      }),
+    ]);
+  });
+
   it("should report structural MDX diagnostics before Mermaid browser preparation", () => {
     const previous = process.env["PLAYWRIGHT_BROWSERS_PATH"];
     process.env["PLAYWRIGHT_BROWSERS_PATH"] =

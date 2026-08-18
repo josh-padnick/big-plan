@@ -68,7 +68,7 @@ Together, they show the handoffs around one payment identity.
 
 The lead line counts the actors, never the journeys: "The user journeys cover three actors:".
 Each actor is one bullet carrying only its bold name, with no journey count and no trailing punctuation; the sub-bullets carry the count, so an actor with two journeys simply shows two of them.
-Each journey is one sub-bullet written as a link whose text is the journey's bold slide number followed by its action phrase, and whose target is the slug of that journey's h2.
+Each journey is one sub-bullet written as a link whose text is the journey's bold slide number followed by its action phrase, and whose target is the slug of the heading that owns that journey - its h2 when the journeys are flat, or its h3 when each journey is a sub-slide of an actor group.
 Close with one line naming what the journeys share, opening "Together, they show".
 Title the slide with its claim ("Three journeys cover the recovery loop"), never "User journeys" again, because the container already carries that name and lint rejects the restatement.
 Every typed journey slide should contain a `Wireframe` with actual `Screen` mockups that show the interface states in the human loop; when no UI exists to show, add a non-empty `wireframeReason` attribute to the `Slide` marker and explain the opt-out. Prose may explain the screens but never replace them when a UI exists.

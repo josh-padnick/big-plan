@@ -86,6 +86,10 @@ export const collectAuthoredSubSections = (
     }
     if (isNamedFlowElement(child, "Part")) {
       partTitle = stringAttribute({ node: child, name: "title" });
+      // A Part opens a new act, so no heading before it can be the parent of
+      // anything after it. Carrying the previous h2 across would let a typed
+      // sub-slide inherit a container title from the act it just left.
+      parentTitle = undefined;
       nextPartOrdinal += 1;
       partOrdinal = nextPartOrdinal;
       continue;
