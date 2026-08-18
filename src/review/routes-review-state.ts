@@ -40,7 +40,10 @@ import {
   removeCommentFromQueuedFeedbackRequest,
   withResolvedCommentLock,
 } from "./request-mailbox.js";
-import { revertPlanSource } from "./staged-plan-mutation.js";
+import {
+  REVERT_SOURCE_MOVED_REASON,
+  revertPlanSource,
+} from "./staged-plan-mutation.js";
 import {
   anchorReviewStore,
   freezeRequestAttachments,
@@ -612,11 +615,7 @@ export const revertAgentChanges = async (
   }
   const currentSource = await readFile(resolvedPlanPath, "utf8");
   if (deriveSnapshotDigest(currentSource) !== agentResponse.resultSnapshot) {
-    return refusal({
-      status: 409,
-      reason:
-        "The plan changed after this response, so reverting it would overwrite newer work",
-    });
+    return refusal({ status: 409, reason: REVERT_SOURCE_MOVED_REASON });
   }
   let baselineSource: string;
   try {

@@ -33,6 +33,7 @@ import {
   type PreparedPlanAsset,
 } from "./plan-assets.js";
 import {
+  agentMutationJournalPath,
   anchorReviewStore,
   readStoreJson,
   removeAgentMutationStages,
@@ -141,10 +142,7 @@ const journalPath = ({
   readonly store: ReviewStore;
   readonly requestId: string;
 }): string =>
-  join(
-    store.agentMutationJournalDirectory,
-    `${checkedRequestId(requestId)}.json`,
-  );
+  agentMutationJournalPath({ store, requestId: checkedRequestId(requestId) });
 
 /**
  * Serializes every change to the plan source across this plan. It is taken
@@ -445,6 +443,28 @@ const readJournals = async (
   return journals;
 };
 
+/**
+ * The reviewer-facing reason a revert is refused. The route pre-checks the same
+ * condition outside the lock to avoid a wasted render, so both places say this
+ * one sentence rather than two that can drift apart.
+ */
+export const REVERT_SOURCE_MOVED_REASON =
+  "The plan changed after this response, so reverting it would overwrite newer work";
+
+const unsettleableJournal = ({
+  path,
+  requestId,
+  error,
+}: {
+  readonly path: string;
+  readonly requestId: string;
+  readonly error: unknown;
+}): StagedPlanMutationRejected =>
+  new StagedPlanMutationRejected(
+    "unavailable",
+    `The interrupted commit for request ${requestId} published its revision but its records could not be finished: ${error instanceof Error ? error.message : String(error)}. Delete ${path} to abandon the interrupted commit, then start \`big-plan review\` again.`,
+  );
+
 const externalSourceConflict = (
   recovery: Extract<MutationRecovery, { outcome: "conflict" }>,
 ): StagedPlanMutationRejected =>
@@ -481,11 +501,26 @@ export const recoverStagedPlanMutations = async ({
         const source = await readFile(planPath, "utf8");
         const currentSnapshot = deriveSnapshotDigest(source);
         if (currentSnapshot === journal.resultSnapshot) {
-          await completeRequestTerminal({
-            store: lockedStore,
-            response: journal.response,
-            now: journal.answeredAt,
-          });
+          try {
+            await completeRequestTerminal({
+              store: lockedStore,
+              response: journal.response,
+              now: journal.answeredAt,
+            });
+          } catch (error: unknown) {
+            // The rename already published this revision, so there is no
+            // rolling back and no guessing left to do. Naming the journal and
+            // the remedy is what keeps one unsettleable record from making the
+            // plan permanently unservable.
+            throw unsettleableJournal({
+              path: journalPath({
+                store: lockedStore,
+                requestId: journal.requestId,
+              }),
+              requestId: journal.requestId,
+              error,
+            });
+          }
           await finalizeCommittedMutation({
             store: lockedStore,
             journal,
@@ -563,7 +598,7 @@ export const revertPlanSource = async ({
       if (currentSnapshot !== expectedSnapshot) {
         throw new StagedPlanMutationRejected(
           "source-moved",
-          "The plan changed after this response, so reverting it would overwrite newer work",
+          REVERT_SOURCE_MOVED_REASON,
         );
       }
       await replacePlanSource({ path: planPath, source });

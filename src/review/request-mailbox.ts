@@ -33,6 +33,7 @@ import {
   appendProgressValue,
   compactProgressLog,
   deleteAgentRequestValue,
+  hasPreparedMutationJournal,
   nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
@@ -496,6 +497,15 @@ export const cancelAgentRequest = async ({
           "The agent has already answered this request",
         );
       }
+      // The commit writes its journal under this same request lock, so a
+      // journal on disk here means the answer has published or is one rename
+      // from publishing. Withdrawing it would leave the plan carrying a
+      // revision every record calls canceled.
+      if (await hasPreparedMutationJournal({ store: lockedStore, requestId })) {
+        throw new AgentExchangeRejected(
+          "The agent's answer for this request is already publishing, so it can no longer be canceled",
+        );
+      }
       const canceled = validateAgentRequest({ ...request, canceledAt: now });
       await writeAgentRequestValue({
         store: lockedStore,
@@ -645,6 +655,16 @@ export const commitRequestTerminal = async ({
  * refusing an already-answered request would strand the reviewer's message
  * rather than protect it. Writing what is already written is the correct
  * answer here, and it is the only place that is true.
+ *
+ * The rename is this design's linearization point, so a cancel recorded after
+ * it arrived too late by the model's own definition: the plan already carries
+ * the published revision, and every record has to converge on that. The
+ * withdrawal is therefore dropped as the answer is stamped, rather than left
+ * to contradict it.
+ *
+ * Nothing durable is written until the settled request is in hand, so an
+ * attempt that cannot settle leaves no response and no change-set revision for
+ * a request that never became terminal.
  */
 export const completeRequestTerminal = async ({
   store,
@@ -663,6 +683,12 @@ export const completeRequestTerminal = async ({
         store: lockedStore,
         requestId: response.requestId,
       });
+      if (request.answeredAt !== undefined) return request;
+      const answered = validateAgentRequest({
+        ...request,
+        canceledAt: undefined,
+        answeredAt: now,
+      });
       await writeAgentResponseValue({
         store: lockedStore,
         requestId: response.requestId,
@@ -672,8 +698,6 @@ export const completeRequestTerminal = async ({
         store: lockedStore,
         revision: committedRevisionOf({ request, response, at: now }),
       });
-      if (request.answeredAt !== undefined) return request;
-      const answered = validateAgentRequest({ ...request, answeredAt: now });
       await writeAgentRequestValue({
         store: lockedStore,
         requestId: response.requestId,

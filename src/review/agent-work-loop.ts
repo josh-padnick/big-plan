@@ -614,18 +614,24 @@ const nextWork = async ({
     // the digest the commit will demand are the same revision by construction
     // rather than by timing. A renewal keeps its generation, so this returns
     // the stage a resuming agent left behind instead of a fresh copy.
-    const stage = await openMutationStage({
-      store: session.store,
-      requestId: request.requestId,
-      generation: requestClaimGeneration(request),
-      claimedBy,
-      baseSnapshot: requestBaselineSnapshot(request),
-      baseSource: await readSnapshot({
+    let stage: Awaited<ReturnType<typeof openMutationStage>>;
+    try {
+      stage = await openMutationStage({
         store: session.store,
-        snapshot: requestBaselineSnapshot(request),
-      }),
-      now: new Date().toISOString(),
-    });
+        requestId: request.requestId,
+        generation: requestClaimGeneration(request),
+        claimedBy,
+        baseSnapshot: requestBaselineSnapshot(request),
+        baseSource: await readSnapshot({
+          store: session.store,
+          snapshot: requestBaselineSnapshot(request),
+        }),
+        now: new Date().toISOString(),
+      });
+    } catch (error: unknown) {
+      if (error instanceof AgentExchangeRejected) return fail(error.message);
+      return fail(`Cannot open this claim's plan candidate: ${String(error)}`);
+    }
     const respondCommand = agentRespondCommand({
       executablePath: binPath,
       planPath: session.planPath,
@@ -845,8 +851,11 @@ const respond = async ({
       now: new Date().toISOString(),
     });
   } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return fail(error.message);
+    if (error instanceof AgentExchangeRejected) return fail(error.message);
+    // The asset writes and the source swap happen inside the commit, so a
+    // full disk, a denied directory, or a colliding asset reaches the agent
+    // here and nowhere earlier.
+    return fail(`Cannot publish the plan revision: ${String(error)}`);
   }
   await appendProgressEvent({
     store: session.store,

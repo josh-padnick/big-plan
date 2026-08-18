@@ -74,13 +74,17 @@ export const readAgentSnapshot = async (
   context: ReviewRouteContext,
 ): Promise<ReviewRouteResponse> => {
   const { store, sessionId, planId, readerProgress } = context;
-  const exchange = await readAgentExchange({ store, sessionId, planId });
+  // The log is folded before the exchange is read, so a revision that lands
+  // between the two reads shows up in the exchange as well. The other order
+  // would report a snapshot whose response the same payload still calls
+  // pending, and the browser would swap in an article it cannot explain.
   for (const revision of await readUnobservedCommittedRevisions({
     store,
     hasObserved: readerProgress.hasObserved,
   })) {
     readerProgress.observe(revision);
   }
+  const exchange = await readAgentExchange({ store, sessionId, planId });
   const presence = await readAgentPresence({ store, sessionId });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
   return jsonResponse({

@@ -1531,6 +1531,43 @@ export type AgentRequestDeletionResult =
       readonly cleanupError: unknown;
     };
 
+/** Where one request's prepared commit journal lives, if it has one. */
+export const agentMutationJournalPath = ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): string => {
+  if (!/^[a-f0-9]{16}$/.test(requestId)) {
+    throw new Error(
+      "An agent exchange request id must be 16 hexadecimal characters",
+    );
+  }
+  return inside({
+    base: store.agentMutationJournalDirectory,
+    leaf: `${requestId}.json`,
+  });
+};
+
+/**
+ * Whether a commit for this request has already written its journal. A commit
+ * that got that far has published, or is one rename away from publishing, so
+ * this is what tells the reviewer's controls the answer is no longer theirs to
+ * withdraw.
+ */
+export const hasPreparedMutationJournal = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<boolean> =>
+  stat(agentMutationJournalPath({ store, requestId })).then(
+    () => true,
+    () => false,
+  );
+
 /**
  * Removes every claim stage one request owns, with the private plan candidate
  * each of them holds. A request that can no longer produce an answer - it

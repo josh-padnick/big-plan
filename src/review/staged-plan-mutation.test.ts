@@ -11,6 +11,7 @@ import {
   messageAgentRequest,
   readAgentExchange,
   requestClaimGeneration,
+  validateAgentRequest,
   validateAgentResponseDraft,
   writeAgentRequest,
 } from "./agent-exchange.js";
@@ -30,6 +31,7 @@ import {
   deriveReviewPlanId,
   prepareStore,
   reviewStoreFor,
+  writeAgentRequestValue,
   writeSnapshot,
   writeStoreJson,
 } from "./store.js";
@@ -578,6 +580,89 @@ describe("interrupted plan commit recovery", () => {
       expect(refusal).toBeInstanceOf(StagedPlanMutationRejected);
       expect((refusal as Error).message).toContain(path);
       expect((refusal as Error).message).toMatch(/[Dd]elete that file/u);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should complete an answer the reviewer canceled after the rename won", async () => {
+    const { directory, planPath, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const claimed = await claim({ store, claimedBy: AGENT_A });
+      const resultSnapshot = deriveSnapshotDigest(RESULT);
+      await prepareJournal({ store, request: claimed, resultSnapshot });
+      // The rename won and the process died before the response file existed,
+      // and the reviewer withdrew the request while that was the visible state.
+      await writeFile(planPath, RESULT, "utf8");
+      await writeAgentRequestValue({
+        store,
+        requestId: REQUEST,
+        value: validateAgentRequest({
+          ...claimed,
+          canceledAt: "2026-08-17T12:00:06.000Z",
+        }),
+      });
+
+      await expect(
+        recoverStagedPlanMutations({ store, planPath }),
+      ).resolves.toMatchObject([{ outcome: "completed", requestId: REQUEST }]);
+
+      // The plan already carries the published revision, so every record
+      // converges on that rather than on the withdrawal that arrived after it.
+      const exchange = await readAgentExchange({
+        store,
+        sessionId: SESSION,
+        planId,
+      });
+      expect(exchange.requests[0]?.answeredAt).toBe("2026-08-17T12:00:05.000Z");
+      expect(exchange.requests[0]?.canceledAt).toBeUndefined();
+      expect(exchange.responses).toHaveLength(1);
+      await expect(readFile(planPath, "utf8")).resolves.toBe(RESULT);
+      await expect(readCommittedRevisions({ store })).resolves.toMatchObject([
+        { requestId: REQUEST, resultSnapshot },
+      ]);
+      await expect(
+        readdir(store.agentMutationJournalDirectory),
+      ).resolves.toEqual([]);
+
+      await expect(
+        recoverStagedPlanMutations({ store, planPath }),
+      ).resolves.toEqual([]);
+      expect(
+        (await readAgentExchange({ store, sessionId: SESSION, planId }))
+          .responses,
+      ).toHaveLength(1);
+      await expect(readCommittedRevisions({ store })).resolves.toHaveLength(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse a cancel once the commit has prepared its journal", async () => {
+    const { directory, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const claimed = await claim({ store, claimedBy: AGENT_A });
+      await prepareJournal({
+        store,
+        request: claimed,
+        resultSnapshot: deriveSnapshotDigest(RESULT),
+      });
+
+      await expect(
+        cancelAgentRequest({
+          store,
+          requestId: REQUEST,
+          now: new Date().toISOString(),
+        }),
+      ).rejects.toThrow(/already publishing/u);
+      const exchange = await readAgentExchange({
+        store,
+        sessionId: SESSION,
+        planId,
+      });
+      expect(exchange.requests[0]?.canceledAt).toBeUndefined();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
