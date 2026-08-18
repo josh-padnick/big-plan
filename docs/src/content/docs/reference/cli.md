@@ -214,6 +214,7 @@ work.
 Only one request on a plan may hold a live claim, so a second agent waits rather than editing the plan in parallel.
 Without `--wait`, `agent next` reports that no work is available while another claim is live.
 With `--wait`, it continues once the holder answers or its lease lapses.
+A waiting `agent next` also ends when the process that started it does: it records that process at startup, rechecks it before every wait and once more before claiming, and exits rather than claiming work whose output nothing would read.
 A lapsed lease no longer risks the plan.
 Every claim carries a generation that a takeover raises, the displaced agent keeps writing only to its own candidate, and `agent respond` refuses a generation that no longer holds the claim.
 A takeover therefore starts from the last published revision, and the reviewer is told the previous agent's unpublished edits stayed in its own stage.

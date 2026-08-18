@@ -159,6 +159,39 @@ const stalledHint =
 const abandonedHint =
   "The agent has reported nothing for far longer than a turn takes. Connect a coding agent from the Agent tab to pick this up; doing so takes the work over, so the original agent's answer will no longer be accepted.";
 
+// The two reasons a connection edge can carry, and the rule that picks one.
+// A disconnect Big Plan inferred from silence and one the agent's own loop
+// reported are different facts, and the reviewer's log is worth only as much
+// as it keeps them apart.
+export const AGENT_SESSION_ENDED_REASON = "The agent session ended";
+export const AGENT_NO_SIGNAL_REASON = `No agent signal within ${AGENT_STALL_WINDOW_LABEL}`;
+
+/** Names why presence stopped, from the presence record alone. */
+export const agentDisconnectReason = ({
+  endedAtMs,
+}: {
+  readonly endedAtMs?: number;
+}): string =>
+  endedAtMs === undefined ? AGENT_NO_SIGNAL_REASON : AGENT_SESSION_ENDED_REASON;
+
+/**
+ * Dates a connection edge from the report when there is one.
+ *
+ * Only the observer of an event knows when it happened. A checker that polls
+ * can date what it inferred no better than the moment it looked, but it must
+ * not overwrite a reported instant with that, or the durable log lands one
+ * polling interval behind the fact and behind the instant every browser has
+ * already projected for it.
+ */
+export const agentConnectionEdgeAtMs = ({
+  endedAtMs,
+  nowMs,
+}: {
+  readonly endedAtMs?: number;
+  readonly nowMs: number;
+}): number =>
+  endedAtMs === undefined || !Number.isFinite(endedAtMs) ? nowMs : endedAtMs;
+
 /** Expires a browser-held presence snapshot at the same lease as the store. */
 export const agentPresenceIsFresh = ({
   connected,
@@ -186,11 +219,14 @@ export const agentPresenceIsFresh = ({
 export const projectAgentConnectionState = ({
   presenceConnected,
   heartbeatAt,
+  endedAtMs,
   now,
   events,
 }: {
   readonly presenceConnected: boolean;
   readonly heartbeatAt: number;
+  /** When the agent's own loop reported the session ending, if it did. */
+  readonly endedAtMs?: number;
   readonly now: number;
   readonly events: ReadonlyArray<BrowserConnectionEvent>;
 }): {
@@ -219,11 +255,11 @@ export const projectAgentConnectionState = ({
     Number.isFinite(now) &&
     heartbeatAt > 0 &&
     now - heartbeatAt > AGENT_STALL_MS;
+  // An observed end is dated by the loop that observed it. Aging only ever
+  // estimates when presence lapsed, so a reported instant outranks it.
   const observedAtMs = connected
     ? heartbeatAt
-    : leaseExpired
-      ? heartbeatAt + AGENT_STALL_MS + 1
-      : now;
+    : (endedAtMs ?? (leaseExpired ? heartbeatAt + AGENT_STALL_MS + 1 : now));
   const projectedAtMs = Math.max(observedAtMs, latest.atMs + 1);
   const projectedAt = new Date(projectedAtMs);
   if (Number.isNaN(projectedAt.getTime())) return { connected, events };
@@ -236,8 +272,12 @@ export const projectAgentConnectionState = ({
         eventId: `presence-${connected ? "connected" : "disconnected"}-${projectedAtMs}`,
         connected,
         at: projectedAt.toISOString(),
-        ...(!connected && leaseExpired
-          ? { reason: `No agent signal within ${AGENT_STALL_WINDOW_LABEL}` }
+        ...(!connected && (endedAtMs !== undefined || leaseExpired)
+          ? {
+              reason: agentDisconnectReason({
+                ...(endedAtMs === undefined ? {} : { endedAtMs }),
+              }),
+            }
           : {}),
       },
     ],
@@ -276,20 +316,34 @@ const stalledSupporting = ({
  */
 const disconnectedSupporting = ({
   heartbeatAt,
+  endedAtMs,
   now,
   claimStillOpen,
 }: {
   readonly heartbeatAt: number;
+  readonly endedAtMs?: number;
   readonly now: number;
   readonly claimStillOpen: boolean;
 }): string => {
+  const takeover = claimStillOpen
+    ? " An agent still holds work here, so connecting a session takes that work over and its answer will no longer be accepted."
+    : "";
+  // The threshold sentence explains an inference. Once the loop has reported
+  // its own end there is no inference left to explain, and naming the
+  // threshold anyway would offer the reviewer a guess in place of a fact.
+  if (endedAtMs !== undefined) {
+    const endedFor = compactDurationLabel({
+      start: endedAtMs,
+      end: Math.max(now, endedAtMs),
+    });
+    return endedFor === null
+      ? `The agent session ended. Reconnect the coding agent to continue.${takeover} All comments are safe.`
+      : `The agent session ended ${endedFor} ago. Reconnect the coding agent to continue.${takeover} All comments are safe.`;
+  }
   const quietFor = compactDurationLabel({
     start: heartbeatAt,
     end: Math.max(now, heartbeatAt),
   });
-  const takeover = claimStillOpen
-    ? " An agent still holds work here, so connecting a session takes that work over and its answer will no longer be accepted."
-    : "";
   return quietFor === null
     ? `Reconnect the coding agent to continue.${takeover} All comments are safe.`
     : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue.${takeover} All comments are safe.`;
@@ -445,6 +499,7 @@ export const deriveCurrentAgentActivity = ({
   runtimeOffline,
   now,
   heartbeatAt,
+  endedAtMs,
 }: {
   readonly requests: ReadonlyArray<AgentActivityRequest>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
@@ -453,6 +508,8 @@ export const deriveCurrentAgentActivity = ({
   readonly runtimeOffline: boolean;
   readonly now: number;
   readonly heartbeatAt: number;
+  /** When the agent's own loop reported the session ending, if it did. */
+  readonly endedAtMs?: number;
 }): CurrentAgentActivity => {
   if (runtimeOffline) {
     return {
@@ -529,6 +586,7 @@ export const deriveCurrentAgentActivity = ({
       headline: "The agent is disconnected",
       supporting: disconnectedSupporting({
         heartbeatAt,
+        ...(endedAtMs === undefined ? {} : { endedAtMs }),
         now,
         claimStillOpen:
           heldWorkQuiet({ requests, cancelPendingRequestIds, now }) === "stale",

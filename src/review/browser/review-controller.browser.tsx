@@ -4072,9 +4072,11 @@ export const ReviewController = () => {
   const agentStatusIsAvailable =
     agentPresenceIsObservable || agentProjection.state === "agent-unavailable";
   const agentProjectionNowMs = agentProjection.nowMs;
+  const agentEndedAtMs = agent.presence.endedAtMs;
   const agentConnection = projectAgentConnectionState({
     presenceConnected: agent.presence.connected,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
+    ...(agentEndedAtMs === undefined ? {} : { endedAtMs: agentEndedAtMs }),
     now: agentProjectionNowMs,
     events: agent.connectionLog,
   });
@@ -6215,6 +6217,7 @@ export const ReviewController = () => {
     runtimeOffline: pollIsOffline,
     now: agentProjectionNowMs,
     heartbeatAt: agent.presence.updatedAtMs ?? 0,
+    ...(agentEndedAtMs === undefined ? {} : { endedAtMs: agentEndedAtMs }),
   });
   const chatRequests = agent.requests.filter(
     (request) => request.kind === "chat",
@@ -7019,6 +7022,9 @@ export const ReviewController = () => {
                 connected: agentConnected,
                 heldWork: agentHeldWork,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
+                ...(agentEndedAtMs === undefined
+                  ? {}
+                  : { endedAtMs: agentEndedAtMs }),
                 modelName: claimedRequest?.claimedModel?.name,
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,

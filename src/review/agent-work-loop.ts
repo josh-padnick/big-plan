@@ -39,10 +39,12 @@ import {
   reviewStoreFor,
   writeAgentPrompt,
   writeAgentHeartbeat,
+  writeAgentHeartbeatEnded,
   writeSnapshot,
   ReviewStorePathRejected,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
+import { SPAWNER_PPID, spawnerIsGone } from "./agent-spawner.js";
 import { diffSnapshots } from "./snapshot-diff.js";
 import {
   liveReviewSessionForPlan,
@@ -426,6 +428,27 @@ const nextWork = async ({
   // waiting out its own lease.
   const claimedBy = agentToken ?? randomId(8);
   const resumingClaim = agentToken !== undefined;
+  // What this loop's presence is worth is exactly what this loop's life is
+  // worth, so every signal it sends is one it has just re-earned.
+  const writerId = randomId(8);
+  // Runs on every wait iteration and once directly before claiming, so a loop
+  // whose coding agent is gone can neither keep vouching for it nor take work
+  // its stdout has no reader for. The marker is what turns 75 seconds of
+  // inferred silence into an observed end; a loop killed outright never
+  // reaches it and stays on the unchanged aging path.
+  const endWhenSpawnerIsGone = async (): Promise<void> => {
+    if (
+      !spawnerIsGone({ recordedPpid: SPAWNER_PPID, livePpid: process.ppid })
+    ) {
+      return;
+    }
+    await writeAgentHeartbeatEnded({
+      store: session.store,
+      sessionId: session.sessionId,
+      writerId,
+    });
+    fail("The process that started this agent loop has exited");
+  };
   let request: AgentRequest | undefined;
   if (agentToken !== undefined) {
     const ownedRequest = resumeRequests?.find(
@@ -450,10 +473,12 @@ const nextWork = async ({
       nowMs: Date.now(),
     });
     while (request === undefined && shouldWait) {
+      await endWhenSpawnerIsGone();
       await writeAgentHeartbeat({
         store: session.store,
         sessionId: session.sessionId,
         state: "waiting",
+        writerId,
       });
       const liveness = await reviewSessionIsAvailable({
         store: session.store,
@@ -513,11 +538,13 @@ const nextWork = async ({
       agentToken: claimedBy,
     });
     const pickup = pickupProgress(request);
+    await endWhenSpawnerIsGone();
     await writeAgentHeartbeat({
       store: session.store,
       sessionId: session.sessionId,
       state: "working",
       requestId: request.requestId,
+      writerId,
     });
     const selectedRequest = request;
     try {

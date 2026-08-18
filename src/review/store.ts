@@ -116,6 +116,7 @@ export type ReviewStore = {
   readonly sessionLockPath: string;
   readonly heartbeatLockPath: string;
   readonly agentHeartbeatPath: string;
+  readonly agentHeartbeatLockPath: string;
 };
 
 /**
@@ -515,6 +516,14 @@ export const reviewStoreFor = ({
       base: agentDirectory,
       leaf: "agent-heartbeat.json",
     }),
+    // Both writers of the agent heartbeat take this one. The observed-end
+    // marker is a read-compare-write, so without it a newer loop's first
+    // heartbeat can land between the comparison and the write it guards, and
+    // a live agent gets a durable end recorded against it.
+    agentHeartbeatLockPath: inside({
+      base: agentDirectory,
+      leaf: ".agent-heartbeat.lock",
+    }),
   });
 };
 
@@ -825,6 +834,11 @@ export const freezeRequestAttachments = async ({
   }
 };
 
+/**
+ * How many times a caller retries a lock another process holds before giving
+ * up. Every retry waits `LOCK_WAIT_MS`, so this is what bounds how long a
+ * caller is willing to wait for the lock.
+ */
 const LOCK_ATTEMPTS = 200;
 const LOCK_WAIT_MS = 10;
 const LOCK_OWNER_FILE = "owner.json";
@@ -1057,20 +1071,30 @@ const withContendedLock = ({
   return error;
 };
 
-/** Runs one store change while other processes wait for the same resource. */
+/**
+ * Runs one store change while other processes wait for the same resource.
+ *
+ * `lockAttempts` bounds how long this call is willing to wait for a lock
+ * someone else holds, in retries of `LOCK_WAIT_MS` each. It is worth naming
+ * because the answer belongs to the caller: a write whose failure is survivable
+ * can decide the wait is not worth what it costs, while every ordinary caller
+ * keeps the store-wide budget.
+ */
 export const withReviewStoreLock = async <TResult>({
   lockPath,
   change,
   timeoutError,
   invalidLockError = () => new Error("The review store lock is unavailable"),
+  lockAttempts = LOCK_ATTEMPTS,
 }: {
   readonly lockPath: string;
   readonly change: () => Promise<TResult>;
   readonly timeoutError: () => Error;
   readonly invalidLockError?: () => Error;
+  readonly lockAttempts?: number;
 }): Promise<TResult> => {
   const startedAtMs = Date.now();
-  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < lockAttempts; attempt += 1) {
     const owner = await acquireStoreLock(lockPath, invalidLockError);
     if (owner === undefined) {
       await waitForLock();
@@ -2263,32 +2287,190 @@ export type AgentPresence = {
   readonly state: "waiting" | "working";
   readonly requestId?: string;
   readonly updatedAtMs?: number;
+  /**
+   * When the loop that wrote this heartbeat observed its own session ending.
+   * Its presence is the whole difference between a silence Big Plan is still
+   * inferring from and an end it was told about.
+   */
+  readonly endedAtMs?: number;
 };
 
-/** Refreshes the coding-agent liveness signal with its observable state. */
+/** The heartbeat lock stayed held for the whole waiting budget. */
+class AgentHeartbeatLockContended extends Error {
+  constructor() {
+    super("Another process is writing the agent heartbeat");
+    this.name = "AgentHeartbeatLockContended";
+  }
+}
+
+/**
+ * Runs one agent heartbeat write, reporting a lock it never took instead of
+ * raising it.
+ *
+ * The two failures are not the same fact and are not answered the same way.
+ * Never reaching the write - a lock held to the end of the budget, a lock path
+ * something else has taken over, a filesystem that would not hand one out - says
+ * nothing about the agent, and the write repeats in half a second, so both
+ * heartbeat writers report it and let the next one answer it; neither may end a
+ * session it still vouches for over a race it lost. A write that ran and failed
+ * is a different claim, and it keeps being raised exactly as it was before
+ * there was a lock to lose.
+ */
+const withAgentHeartbeatLock = async ({
+  store,
+  change,
+  lockAttempts,
+}: {
+  readonly store: ReviewStore;
+  readonly change: () => Promise<boolean>;
+  readonly lockAttempts?: number;
+}): Promise<boolean> => {
+  let wrote = false;
+  try {
+    return await withReviewStoreLock({
+      lockPath: store.agentHeartbeatLockPath,
+      change: () => {
+        wrote = true;
+        return change();
+      },
+      timeoutError: () => new AgentHeartbeatLockContended(),
+      lockAttempts,
+    });
+  } catch (error: unknown) {
+    if (wrote) throw error;
+    return false;
+  }
+};
+
+/** The writer the stored heartbeat currently names, if it names one. */
+const storedHeartbeatWriterId = async (
+  store: ReviewStore,
+): Promise<string | undefined> => {
+  const value = await readStoreJson(store.agentHeartbeatPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("writerId" in value) ||
+    typeof value.writerId !== "string"
+  ) {
+    return undefined;
+  }
+  return value.writerId;
+};
+
+/**
+ * Refreshes the coding-agent liveness signal with its observable state.
+ *
+ * `writerId` identifies the invocation doing the writing, because the session
+ * id is shared by every agent process attached to this review and so cannot
+ * tell two of them apart. Passing one claims the signal for this invocation.
+ * Omitting one keeps whichever writer the heartbeat already names, so a
+ * process that only reports progress cannot take the connection loop's
+ * identity away from it and leave a session with no one able to report its
+ * end. Reading that name is part of the write and not a step before it: a
+ * newer loop may claim the signal at any moment, and the two would otherwise
+ * race the same way the end marker's guard already refuses to.
+ *
+ * `lockAttempts` bounds the wait for the heartbeat lock.
+ *
+ * Returns whether the signal was refreshed. Contention is reported rather than
+ * raised because this runs every half second inside the connection loop's own
+ * wait: the next refresh answers a lost race, while an exception there would
+ * end the session this signal exists to vouch for.
+ */
 export const writeAgentHeartbeat = async ({
   store,
   sessionId,
   state,
   requestId,
+  writerId,
   now = Date.now(),
+  lockAttempts,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly state: "waiting" | "working";
   readonly requestId?: string;
+  readonly writerId?: string;
   readonly now?: number;
-}): Promise<void> => {
-  await writeStoreJson({
-    path: store.agentHeartbeatPath,
-    value: {
-      sessionId,
-      state,
-      ...(requestId === undefined ? {} : { requestId }),
-      updatedAtMs: now,
+  readonly lockAttempts?: number;
+}): Promise<boolean> =>
+  withAgentHeartbeatLock({
+    store,
+    lockAttempts,
+    change: async () => {
+      const writer = writerId ?? (await storedHeartbeatWriterId(store));
+      await writeStoreJson({
+        path: store.agentHeartbeatPath,
+        value: {
+          sessionId,
+          state,
+          ...(requestId === undefined ? {} : { requestId }),
+          ...(writer === undefined ? {} : { writerId: writer }),
+          updatedAtMs: now,
+        },
+      });
+      return true;
     },
   });
-};
+
+/**
+ * Records that this loop observed its own session end, and refuses to speak
+ * for any other.
+ *
+ * The guard is the point: by the time a loop can write this, a newer agent may
+ * already own the heartbeat, and marking that live session ended would be a
+ * worse lie than the stale connection this marker exists to remove. Every
+ * other field is carried through untouched, so whatever the live heartbeat
+ * says about the agent's identity keeps saying it after the session ends.
+ *
+ * The lock is what makes that guard worth stating: reading the writer and
+ * overwriting it are one step against every other heartbeat writer, so a newer
+ * loop's first heartbeat cannot land inside the comparison and be marked
+ * ended by the loop it replaced.
+ *
+ * Returns whether the marker was written. A refusal, including a contended
+ * lock, leaves the unchanged aging window to report the silence instead.
+ */
+export const writeAgentHeartbeatEnded = async ({
+  store,
+  sessionId,
+  writerId,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+  readonly now?: number;
+}): Promise<boolean> =>
+  withAgentHeartbeatLock({
+    store,
+    change: async () => {
+      const value = await readStoreJson(store.agentHeartbeatPath);
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        Array.isArray(value) ||
+        !("sessionId" in value) ||
+        value.sessionId !== sessionId ||
+        !("writerId" in value) ||
+        value.writerId !== writerId
+      ) {
+        return false;
+      }
+      await writeStoreJson({
+        path: store.agentHeartbeatPath,
+        value: {
+          ...(value as Readonly<Record<string, unknown>>),
+          state: "ended",
+          updatedAtMs: now,
+          endedAtMs: now,
+        },
+      });
+      return true;
+    },
+  });
 
 /** Reads the coding-agent presence signal without turning stale data into work. */
 export const readAgentPresence = async ({
@@ -2310,13 +2492,30 @@ export const readAgentPresence = async ({
     !("sessionId" in value) ||
     value.sessionId !== sessionId ||
     !("state" in value) ||
-    (value.state !== "waiting" && value.state !== "working") ||
+    (value.state !== "waiting" &&
+      value.state !== "working" &&
+      value.state !== "ended") ||
     !("updatedAtMs" in value) ||
     typeof value.updatedAtMs !== "number" ||
     !Number.isFinite(value.updatedAtMs) ||
     now - value.updatedAtMs < 0
   ) {
     return { connected: false, state: "waiting" };
+  }
+  // An end the loop observed needs no aging: the question aging answers has
+  // already been answered, by the only process that could answer it.
+  if (value.state === "ended") {
+    return {
+      connected: false,
+      state: "waiting",
+      updatedAtMs: value.updatedAtMs,
+      endedAtMs:
+        "endedAtMs" in value &&
+        typeof value.endedAtMs === "number" &&
+        Number.isFinite(value.endedAtMs)
+          ? value.endedAtMs
+          : value.updatedAtMs,
+    };
   }
   if (now - value.updatedAtMs > maximumAgeMs) {
     return {

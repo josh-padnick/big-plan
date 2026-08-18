@@ -29,6 +29,7 @@ import {
   readSnapshot,
   reviewStoreFor,
   writeAgentHeartbeat,
+  writeAgentHeartbeatEnded,
   writeResolvedCommentIds,
   writeSnapshot,
   writeSessionHeartbeatValue,
@@ -601,6 +602,337 @@ describe("review store agent presence", () => {
       state: "waiting",
       updatedAtMs: 10_000,
     });
+  });
+
+  it("reads an observed session end as an immediate disconnect", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "1111111111111111",
+      now: 10_000,
+    });
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "1111111111111111",
+        now: 10_500,
+      }),
+    ).resolves.toBe(true);
+    // One second later: far inside the aging window, and disconnected anyway.
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 11_500,
+      }),
+    ).resolves.toEqual({
+      connected: false,
+      state: "waiting",
+      updatedAtMs: 10_500,
+      endedAtMs: 10_500,
+    });
+  });
+
+  it("keeps an ended session's other heartbeat facts", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeFile(
+      store.agentHeartbeatPath,
+      JSON.stringify({
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "waiting",
+        model: { name: "Grok 4.6" },
+        writerId: "1111111111111111",
+        updatedAtMs: 10_000,
+      }),
+    );
+    await writeAgentHeartbeatEnded({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      writerId: "1111111111111111",
+      now: 10_500,
+    });
+    // A session that ended still names the agent that held it.
+    expect(
+      JSON.parse(await readFile(store.agentHeartbeatPath, "utf8")),
+    ).toMatchObject({ model: { name: "Grok 4.6" }, state: "ended" });
+  });
+
+  it("refuses to end a heartbeat another agent now owns", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "2222222222222222",
+      now: 20_000,
+    });
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "1111111111111111",
+        now: 20_500,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 20_500,
+      }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      updatedAtMs: 20_000,
+    });
+  });
+
+  it("refuses a stale end that races a newer agent's first heartbeat", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "1111111111111111",
+      now: 20_000,
+    });
+    let ended: Promise<boolean> | undefined;
+    // The dying loop's marker starts while the heartbeat lock is held, so its
+    // read and its write both land after the newer loop's first heartbeat
+    // rather than straddling it.
+    await withReviewStoreLock({
+      lockPath: store.agentHeartbeatLockPath,
+      change: async () => {
+        ended = writeAgentHeartbeatEnded({
+          store,
+          sessionId: "aaaaaaaaaaaaaaaa",
+          writerId: "1111111111111111",
+          now: 20_400,
+        });
+        await new Promise((settle) => setTimeout(settle, 100));
+        expect(
+          JSON.parse(await readFile(store.agentHeartbeatPath, "utf8")),
+        ).toMatchObject({ state: "waiting", writerId: "1111111111111111" });
+        await writeFile(
+          store.agentHeartbeatPath,
+          JSON.stringify({
+            sessionId: "aaaaaaaaaaaaaaaa",
+            state: "waiting",
+            writerId: "2222222222222222",
+            updatedAtMs: 20_300,
+          }),
+        );
+      },
+      timeoutError: () => new Error("The heartbeat lock was already held"),
+    });
+    await expect(ended).resolves.toBe(false);
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 20_500,
+      }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      updatedAtMs: 20_300,
+    });
+  });
+
+  it("reports a heartbeat it could not write instead of raising it", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    // The connection loop awaits this write every half second inside its own
+    // wait, so a lock it never wins has to be survivable: the next refresh
+    // answers it, while an exception here would end a live session.
+    await withReviewStoreLock({
+      lockPath: store.agentHeartbeatLockPath,
+      change: async () => {
+        await expect(
+          writeAgentHeartbeat({
+            store,
+            sessionId: "aaaaaaaaaaaaaaaa",
+            state: "waiting",
+            writerId: "1111111111111111",
+            now: 30_000,
+            // A lock this write will never win, waited for as briefly as
+            // losing it can be observed.
+            lockAttempts: 3,
+          }),
+        ).resolves.toBe(false);
+      },
+      timeoutError: () => new Error("The heartbeat lock was already held"),
+    });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 30_000,
+      }),
+    ).resolves.toEqual({ connected: false, state: "waiting" });
+  });
+
+  it("reports a heartbeat lock it could not take at all", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    // Something else owns the lock path, so no waiting can win it. Losing a
+    // lock is not evidence about the agent, and the loop that awaits this
+    // write every half second must survive being told so.
+    await writeFile(store.agentHeartbeatLockPath, "not a lock");
+    await expect(
+      writeAgentHeartbeat({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "waiting",
+        writerId: "1111111111111111",
+        now: 60_000,
+        lockAttempts: 3,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 60_000,
+      }),
+    ).resolves.toEqual({ connected: false, state: "waiting" });
+  });
+
+  it("raises a heartbeat write that ran and failed", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    // The heartbeat cannot be replaced by a file, so the guarded write itself
+    // fails once it holds the lock.
+    await mkdir(store.agentHeartbeatPath);
+    await expect(
+      writeAgentHeartbeat({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "waiting",
+        writerId: "1111111111111111",
+        now: 60_000,
+        lockAttempts: 3,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("keeps the writer a heartbeat names when a write claims no identity", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "1111111111111111",
+      now: 40_000,
+    });
+    // A second agent process reporting its progress mints no identity of its
+    // own, and must not take the waiting loop's away.
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "working",
+      requestId: "bbbbbbbbbbbbbbbb",
+      now: 40_100,
+    });
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "1111111111111111",
+        now: 40_200,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 40_300,
+      }),
+    ).resolves.toEqual({
+      connected: false,
+      state: "waiting",
+      updatedAtMs: 40_200,
+      endedAtMs: 40_200,
+    });
+  });
+
+  it("hands the heartbeat to a writer that claims it", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "1111111111111111",
+      now: 50_000,
+    });
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "working",
+      requestId: "bbbbbbbbbbbbbbbb",
+      now: 50_100,
+    });
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "2222222222222222",
+      now: 50_200,
+    });
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "1111111111111111",
+        now: 50_300,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "2222222222222222",
+        now: 50_400,
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it("refuses to end a heartbeat that names no writer", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      now: 20_000,
+    });
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "1111111111111111",
+        now: 20_500,
+      }),
+    ).resolves.toBe(false);
   });
 });
 

@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_RECOVERY_HORIZON_MS,
   AGENT_STALL_MS,
+  agentConnectionEdgeAtMs,
+  agentDisconnectReason,
   agentHoldsClaimedWork,
   heldWorkQuiet,
+  AGENT_NO_SIGNAL_REASON,
+  AGENT_SESSION_ENDED_REASON,
   agentPresenceIsFresh,
   deriveAgentStatus,
   deriveAgentHealthLabel,
@@ -901,5 +905,87 @@ describe("agent request status", () => {
     expect(status.stage).toBe("offline");
     expect(status.label).not.toContain("Working");
     expect(status.detail).toContain("All comments are safe");
+  });
+});
+
+// BIG-156: an end the agent's own loop reported is a fact, and everything the
+// reviewer reads about it has to stop guessing.
+describe("observed session end", () => {
+  it("should name a reported end apart from an inferred silence", () => {
+    expect(agentDisconnectReason({})).toBe(AGENT_NO_SIGNAL_REASON);
+    expect(agentDisconnectReason({ endedAtMs: NOW })).toBe(
+      AGENT_SESSION_ENDED_REASON,
+    );
+    expect(AGENT_SESSION_ENDED_REASON).toBe("The agent session ended");
+  });
+
+  it("should date a stored edge from the report rather than the poll", () => {
+    // The runtime's checker polls every 750ms, so dating a reported end from
+    // the poll would put the durable log behind the fact by up to an interval.
+    expect(agentConnectionEdgeAtMs({ endedAtMs: NOW - 700, nowMs: NOW })).toBe(
+      NOW - 700,
+    );
+    expect(agentConnectionEdgeAtMs({ nowMs: NOW })).toBe(NOW);
+    expect(agentConnectionEdgeAtMs({ endedAtMs: Number.NaN, nowMs: NOW })).toBe(
+      NOW,
+    );
+  });
+
+  it("should replace the threshold sentence with the reported end", () => {
+    const activity = deriveCurrentAgentActivity({
+      requests: [],
+      cancelPendingRequestIds: new Set(),
+      progressEvents: [],
+      agentConnected: false,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: NOW - 4_000,
+      endedAtMs: NOW - 4_000,
+    });
+    expect(activity.state).toBe("disconnected");
+    expect(activity.headline).toBe("The agent is disconnected");
+    expect(activity.supporting).toBe(
+      "The agent session ended 4s ago. Reconnect the coding agent to continue. All comments are safe.",
+    );
+    // Nothing is being inferred any more, so nothing may state a threshold.
+    expect(activity.supporting).not.toContain("disconnect threshold");
+  });
+
+  it("should keep the threshold sentence for a silence nobody reported", () => {
+    const activity = deriveCurrentAgentActivity({
+      requests: [],
+      cancelPendingRequestIds: new Set(),
+      progressEvents: [],
+      agentConnected: false,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: NOW - AGENT_STALL_MS - 1_000,
+    });
+    expect(activity.supporting).toContain("disconnect threshold");
+    expect(activity.supporting).not.toContain("session ended");
+  });
+
+  it("should date a projected end edge from the report, not the lease", () => {
+    const endedAtMs = NOW - 4_000;
+    const projected = projectAgentConnectionState({
+      presenceConnected: false,
+      heartbeatAt: NOW - 4_500,
+      endedAtMs,
+      now: NOW,
+      events: [
+        {
+          eventId: "connected-1",
+          connected: true,
+          at: new Date(NOW - 60_000).toISOString(),
+        },
+      ],
+    });
+    expect(projected.connected).toBe(false);
+    const edge = projected.events.at(-1);
+    expect(edge?.connected).toBe(false);
+    expect(edge?.reason).toBe(AGENT_SESSION_ENDED_REASON);
+    // The lease has not expired, so aging alone would have recorded nothing
+    // and dated it now; the reported instant is what the log must carry.
+    expect(Date.parse(edge?.at ?? "")).toBe(endedAtMs);
   });
 });

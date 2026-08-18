@@ -228,6 +228,52 @@ describe("review wire contract", () => {
     expect(decoded.presence).not.toHaveProperty("model");
   });
 
+  it("should carry a reported session end to the browser", () => {
+    const decoded = decodeAgentSnapshot(
+      encodeAgentSnapshot({
+        currentSnapshot: "a".repeat(16),
+        presence: {
+          connected: false,
+          state: "waiting",
+          updatedAtMs: 1_775_000_000_000,
+          endedAtMs: 1_775_000_000_000,
+        },
+        requests: [],
+        responses: [],
+        connectionLog: [],
+        plan: "/tmp/plan.mdx",
+        agentCommand: "big-plan agent /tmp/plan.mdx",
+        recoveryPrompt: "Reconnect this review",
+      }),
+    );
+    expect(decoded.presence).toEqual({
+      connected: false,
+      state: "waiting",
+      updatedAtMs: 1_775_000_000_000,
+      endedAtMs: 1_775_000_000_000,
+    });
+  });
+
+  it("should drop a session end that is not a number", () => {
+    const decoded = decodeAgentSnapshot(
+      encodeAgentSnapshot({
+        currentSnapshot: "a".repeat(16),
+        presence: {
+          connected: false,
+          state: "waiting",
+          endedAtMs: "just now",
+        },
+        requests: [],
+        responses: [],
+        connectionLog: [],
+        plan: "/tmp/plan.mdx",
+        agentCommand: "big-plan agent /tmp/plan.mdx",
+        recoveryPrompt: "Reconnect this review",
+      }),
+    );
+    expect(decoded.presence).not.toHaveProperty("endedAtMs");
+  });
+
   it("should reject a malformed model on a claim", () => {
     const encoded = encodeAgentSnapshot({
       currentSnapshot: "a".repeat(16),
