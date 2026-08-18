@@ -496,6 +496,39 @@ test("a marker hidden in an HTML comment satisfies nothing", () => {
   );
 });
 
+test("a marker Markdown pulls into the quote above it asserts nothing", () => {
+  // CommonMark continues a blockquote lazily: a plain line directly under a
+  // quoted one belongs to that quote, and GitHub renders it inside the quote
+  // box. A sign-off a reader sees quoted is not a sign-off.
+  const triaged = {
+    reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+    reviewThreads: [thread([finding(), reply()])],
+  };
+  const lazily = evaluateReviewTriage(
+    snapshot({
+      ...triaged,
+      issueComments: [
+        comment(`> Are we done?\nreview-triage: complete ${HEAD}`),
+      ],
+    }),
+  );
+  assert.equal(lazily.conclusion, "failure");
+  assert.match(lazily.title, /Sign-off missing/);
+
+  // A blank line ends the quote, so the same marker below one does assert.
+  const separated = evaluateReviewTriage(
+    snapshot({
+      ...triaged,
+      issueComments: [
+        comment(`> Are we done?\n\nreview-triage: complete ${HEAD}`),
+      ],
+    }),
+  );
+  assert.equal(separated.conclusion, "success");
+
+  assert.deepEqual(assertedLines("> quoted\nlazy\n\nplain"), ["plain"]);
+});
+
 test("a fence GitHub still considers open keeps suppressing markers", () => {
   // CommonMark closes a fence only on the same marker, at least as long, with
   // nothing after it but spaces. A line that fails that leaves the fence open,
@@ -581,9 +614,11 @@ test("shaNames accepts an unambiguous prefix and rejects a wrong one", () => {
 });
 
 test("assertedLines drops fenced, quoted, and indented text", () => {
+  // Each suppressed shape is separated by a blank line, because a line that
+  // follows a quoted one without one is part of that quote.
   assert.deepEqual(
     assertedLines(
-      "keep\n```\nfenced\n```\n> quoted\n    indented\n\ttabbed\nkeep2",
+      "keep\n```\nfenced\n```\n> quoted\n\n    indented\n\n\ttabbed\n\nkeep2",
     ),
     ["keep", "keep2"],
   );
@@ -595,7 +630,7 @@ test("assertedLines keeps only what a reader can see of an HTML comment", () => 
   ]);
   assert.deepEqual(
     assertedLines("keep\n<!--\nhidden\nstill hidden\n-->\nkeep2"),
-    ["keep", "", "", "", "", "keep2"],
+    ["keep", "keep2"],
   );
   assert.deepEqual(assertedLines("<!-- a --> mid <!-- b --> end"), [
     " mid  end",
@@ -603,7 +638,5 @@ test("assertedLines keeps only what a reader can see of an HTML comment", () => 
   // An unclosed span hides the rest of the comment, which fails closed.
   assert.deepEqual(assertedLines("keep\n<!-- open\nreview-triage: complete"), [
     "keep",
-    "",
-    "",
   ]);
 });

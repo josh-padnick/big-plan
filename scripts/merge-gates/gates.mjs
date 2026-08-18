@@ -184,23 +184,31 @@ const withoutHiddenSpans = (line, wasHidden) => {
  * after it but spaces. Anything less leaves the fence open and every later
  * line suppressed.
  *
+ * A blockquote continues LAZILY, again as CommonMark and GitHub do: a plain
+ * line following a quoted one, with no blank line between them, is part of
+ * that quote and renders inside the quote box, so it asserts nothing. The
+ * quote runs until a blank line, a fence, or a line that renders as nothing
+ * ends the paragraph.
+ *
  * This function is the whole boundary between what a comment quotes and what
- * it asserts, and three separate holes have been found in it. Every rule here
+ * it asserts, and four separate holes have been found in it. Every rule here
  * therefore errs one way: when this function and GitHub's renderer disagree,
  * this function must be the one treating MORE text as quoted, because the
  * reader trusts what GitHub renders and a gate may only be stricter than that.
- * A change to any rule below needs a test proving the new shape cannot promote
- * rendered-as-code text into an assertion.
+ * Where a case is genuinely ambiguous, suppress rather than assert. A change
+ * to any rule below needs a test proving the new shape cannot promote
+ * rendered-as-code or rendered-as-quoted text into an assertion.
  */
 export const assertedLines = (body) => {
   const lines = (body ?? "").split(/\r?\n/);
   const opensFence = /^\s*(`{3,}|~{3,})/;
   const closesFence = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
-  const quotedOrIndented = (text) =>
-    /^\s*>/.test(text) || /^(\s{4,}|\t)/.test(text);
+  const isQuoted = (text) => /^\s*>/.test(text);
+  const isIndented = (text) => /^(\s{4,}|\t)/.test(text);
   const asserted = [];
   let fence = null;
   let hidden = false;
+  let quoting = false;
   for (const line of lines) {
     if (fence !== null) {
       const close = closesFence.exec(line);
@@ -215,12 +223,24 @@ export const assertedLines = (body) => {
     }
     const span = withoutHiddenSpans(line, hidden);
     hidden = span.hidden;
-    if (quotedOrIndented(line) || quotedOrIndented(span.visible)) {
+    if (span.visible.trim() === "") {
+      quoting = false;
+      continue;
+    }
+    if (isQuoted(line) || isQuoted(span.visible)) {
+      quoting = true;
+      continue;
+    }
+    if (isIndented(line) || isIndented(span.visible)) {
       continue;
     }
     const open = opensFence.exec(span.visible);
     if (open !== null) {
+      quoting = false;
       fence = { marker: open[1][0], length: open[1].length };
+      continue;
+    }
+    if (quoting) {
       continue;
     }
     asserted.push(span.visible);

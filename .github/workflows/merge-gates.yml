@@ -31,15 +31,32 @@
 # from the local machine, but it does queue behind whatever that runner is
 # already building. Move it to a hosted runner if gate latency starts to matter.
 #
-# That runner is why the job is guarded by a same-repository condition. ci.yml
-# states the policy this workflow has to keep: trusted contributors only on the
-# self-hosted runner, because external contributions must never execute
-# workflows on the local machine. pull_request, pull_request_review, and
-# pull_request_review_comment all run the pull request's own ref, so on a fork
-# pull request they would check out and run fork-authored code here; the guard
-# skips them. issue_comment and workflow_dispatch run the default branch's copy
-# and read the pull request over the API, so they execute nothing the fork
-# wrote and may judge a fork pull request safely.
+# That runner is why fork pull requests matter here. ci.yml states the policy
+# this workflow has to keep: trusted contributors only on the self-hosted
+# runner, because external contributions must never execute workflows on the
+# local machine.
+#
+# What enforces that property is a repository setting, not this file. "Fork
+# pull request workflows from outside collaborators" is off, so a fork pull
+# request cannot run any workflow in this private repository. Re-verify it with
+#
+#     gh api repos/josh-padnick/big-plan/actions/permissions/fork-pr-workflows-private-repos
+#
+# which read run_workflows_from_fork_pull_requests: false on 2026-08-18.
+#
+# The same-repository condition on the job below is a second belt, not the
+# boundary. pull_request, pull_request_review, and pull_request_review_comment
+# all run the workflow definition from the pull request's own ref, so a fork
+# supplies this very file and could delete that condition; nothing written here
+# can stop it. The condition is worth keeping - it costs nothing and it states
+# the intent - but it must not be read as the thing that holds the property.
+# issue_comment and workflow_dispatch run the default branch's copy and read
+# the pull request over the API, so they execute nothing a fork wrote.
+#
+# Standing condition: if that repository setting is ever enabled, this gate
+# must move to pull_request_target or lose its pull_request,
+# pull_request_review, and pull_request_review_comment triggers, because the
+# job condition alone will not hold.
 #
 # The consequence, deliberately in the safe direction: a fork pull request gets
 # no gate report from its own pushes, so its two required checks never report
@@ -73,12 +90,14 @@ concurrency:
 
 jobs:
   judge:
-    # Never run fork-authored code on the self-hosted runner: the events that
-    # run the pull request's own ref are allowed only for a pull request whose
-    # head lives in this repository. issue_comment is allowed because it runs
-    # the default branch, and only for a comment on a pull request - plain
-    # issues fire it too, and they have no head to gate. workflow_dispatch is
-    # the maintainer path, including for a fork pull request.
+    # Second belt against running fork-authored code on the self-hosted runner:
+    # the events that run the pull request's own ref are allowed only for a
+    # pull request whose head lives in this repository. The header explains why
+    # this cannot be the boundary and names the repository setting that is.
+    # issue_comment is allowed because it runs the default branch, and only for
+    # a comment on a pull request - plain issues fire it too, and they have no
+    # head to gate. workflow_dispatch is the maintainer path, including for a
+    # fork pull request.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request) ||

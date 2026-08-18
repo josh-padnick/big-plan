@@ -87,6 +87,7 @@ A failing gate prints exactly what is missing and the next action to take, so re
 Post each marker as a plain line in a comment on the pull request conversation.
 A line inside a code fence, a blockquote, an indented code block, or an HTML comment does not count, so that documentation, quoted replies, a pasted failure report, and a bot's hidden bookkeeping cannot satisfy a gate by accident.
 Only text a human reading the pull request can see counts as a statement you are making.
+Leave a blank line between a marker and any quoted text above it: Markdown continues a blockquote onto the line that follows it, so a marker written directly under a `>` line renders inside the quote and is read as quoted.
 Any account may write any of them: a human, firstmate, or the lane's own agent.
 
 ```text
@@ -153,7 +154,8 @@ A gate re-runs by itself whenever the pull request changes: a push, a review, an
 Writing the missing comment is therefore enough to turn a gate green; no push is needed.
 
 One exception: a pull request from a fork.
-The events that carry a push, a review, or an inline comment run the pull request's own copy of the gate, and running fork-authored code on the self-hosted runner is what the policy at the top of `.github/workflows/ci.yml` forbids, so the job skips them.
+The events that carry a push, a review, or an inline comment run the pull request's own copy of the gate, and running fork-authored code on the self-hosted runner is what the policy at the top of `.github/workflows/ci.yml` forbids.
+What stops it is the repository setting "Fork pull request workflows from outside collaborators", which is off, so a fork pull request runs no workflow here at all; the same-repository condition in the job is a second belt, and the workflow header explains why a condition written in a file a fork supplies cannot be the boundary.
 A fork pull request therefore gets no gate report from its own pushes, its two required checks never report, and the merge stays blocked - the safe direction.
 A maintainer judges one deliberately by running the Merge gates workflow from the Actions tab with the pull request number.
 
