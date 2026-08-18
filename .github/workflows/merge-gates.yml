@@ -1,0 +1,70 @@
+# Merge gates: the two required checks from BIG-164. One says a third-party
+# review was triaged to completion on this exact head; the other says the
+# no-mistakes pipeline passed on it, or that skipping it was a deliberate,
+# attributable decision. CONTRIBUTING.md owns the protocol and the comment
+# formats; scripts/merge-gates/gates.mjs owns the rules.
+#
+# Branch protection must require these two check names, which the workflow
+# publishes through the Checks API rather than as job conclusions:
+#
+#     review-triage
+#     validation-attestation
+#
+# The comment triggers are the point of this design. Triage completes by
+# writing, not by pushing, so a gate has to be able to go green on a comment
+# alone. A workflow started by issue_comment runs against the default branch, so
+# its own job conclusion never lands on the pull request's checks - but a check
+# run it creates against the pull request's head sha does. Every trigger below
+# therefore runs the same evaluation and republishes the same two named checks.
+#
+# It runs on a GitHub-hosted runner, unlike CI. The job only reads the API, so
+# it needs nothing from the local machine, and keeping it off the self-hosted
+# runner means a merge gate never queues behind a lane's build - and never goes
+# unanswered while that runner is offline.
+name: Merge gates
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  issue_comment:
+    types: [created, edited, deleted]
+  # The manual re-check. Also the way to evaluate a pull request whose branch
+  # predates this workflow, since comment events always run the default
+  # branch's copy of it.
+  workflow_dispatch:
+    inputs:
+      pull-request:
+        description: Pull request number to judge
+        required: true
+
+# One judgment per pull request at a time. A burst of comments should settle on
+# the newest state, not race to publish an older one.
+concurrency:
+  group: merge-gates-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull-request }}
+  cancel-in-progress: true
+
+jobs:
+  judge:
+    # issue_comment also fires for plain issues, which have no head to gate.
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    permissions:
+      # Publishing the two named check runs.
+      checks: write
+      # Reading the pull request, its reviews, and its inline threads.
+      pull-requests: read
+      # Reading the pull request conversation, where every marker comment lives.
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+      # No toolchain: the gate is one Node script with no dependencies, and the
+      # runner image already has Node.
+      - name: Judge the merge gates
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_GATES_PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pull-request }}
+        run: node scripts/merge-gates/check.mjs
