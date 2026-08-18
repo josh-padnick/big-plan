@@ -76,6 +76,9 @@ describe("batch section tone", () => {
   });
 });
 
+const renderCount = (html: string, id: string): number =>
+  html.split(`>${id}<`).length - 1;
+
 const comment = (id: string): ReviewComment => ({
   id,
   body: `note ${id}`,
@@ -192,5 +195,49 @@ describe("queued card numbering", () => {
         batches: [],
       }),
     ).toContain("c1#1");
+  });
+});
+
+// BIG-162. A batch header owns its threads, so no lifecycle section may repeat
+// one: a reply canceled on an open batch's comment lands that thread in the
+// ready group while its package is still open, and rendering it in both places
+// leaves two nodes answering to the same comment id.
+describe("threads a batch header owns", () => {
+  it("should not repeat a headed thread under Ready for review", () => {
+    const answered = comment("a1");
+    const headed = [answered, comment("a2")];
+    const other = [comment("b1"), comment("b2")];
+
+    const html = surface({
+      groups: new Map([
+        ["ready", [answered]],
+        ["queued", other],
+      ]),
+      batches: [
+        batch("1111111111111111", headed),
+        batch("2222222222222222", other),
+      ],
+    });
+
+    expect(renderCount(html, "a1")).toBe(1);
+  });
+
+  it("should not repeat a headed thread under Needs input", () => {
+    const flagged = comment("a1");
+    const headed = [flagged, comment("a2")];
+    const other = [comment("b1"), comment("b2")];
+
+    const html = surface({
+      groups: new Map([
+        ["needs-input", [flagged]],
+        ["queued", other],
+      ]),
+      batches: [
+        batch("1111111111111111", headed),
+        batch("2222222222222222", other),
+      ],
+    });
+
+    expect(renderCount(html, "a1")).toBe(1);
   });
 });

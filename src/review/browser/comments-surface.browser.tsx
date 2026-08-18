@@ -158,10 +158,6 @@ export const CommentsSurface = ({
 }: {
   readonly model: CommentsSurfaceModel;
 }) => {
-  const ready = [
-    ...(model.groups.get("needs-input") ?? []),
-    ...(model.groups.get("ready") ?? []),
-  ];
   // A thread a batch header owns is shown there and nowhere else, so no
   // lifecycle section repeats it under a header that speaks for other work.
   const headed = new Set(
@@ -173,9 +169,10 @@ export const CommentsSurface = ({
     (model.groups.get(group) ?? []).filter(
       (comment) => !headed.has(comment.id),
     );
+  const ready = [...unheaded("needs-input"), ...unheaded("ready")];
   const working = unheaded("working");
   const queuedGroup = model.groups.get("queued") ?? [];
-  const queued = queuedGroup.filter((comment) => !headed.has(comment.id));
+  const queued = unheaded("queued");
   // A thread keeps its place among the queued threads on show, whether or not a
   // batch header speaks for the ones around it. Counting the whole queued group
   // rather than the leftovers is what keeps the number a position in that group
