@@ -28,6 +28,10 @@
 // reason. The pipeline runs on a laptop, so CI cannot rerun it; it can only
 // insist that completion or non-completion is stated out loud and attributable.
 //
+// Both gates judge a draft pull request exactly as they judge any other, and
+// report an unsatisfied one as neutral rather than red, because a draft cannot
+// merge. DRAFT_CONCLUSION below records why that is the whole of the leniency.
+//
 // This module is pure: it takes a snapshot of the pull request and returns a
 // verdict. github.mjs fetches the snapshot and publishes the verdict, and
 // check.mjs joins the two. Keeping the judgment pure is what lets gates.test.mjs
@@ -803,26 +807,63 @@ export const evaluateValidationAttestation = (snapshot) => {
   );
 };
 
-/** Runs both gates over one snapshot. */
-export const evaluateMergeGates = (snapshot) => [
-  evaluateReviewTriage(snapshot),
-  evaluateValidationAttestation(snapshot),
-];
+/**
+ * The conclusion an unsatisfied gate carries on a draft pull request.
+ *
+ * A draft cannot merge, so nothing is at risk while one is red, and the order
+ * this repository works in makes that red unavoidable rather than informative:
+ * the sign-off is posted after the final push and the pipeline attestation
+ * after the pipeline passes, so a draft under active work is missing both by
+ * construction. A `failure` there is a permanent red that blocks the very
+ * pipeline whose completion produces the markers, and it teaches every reader
+ * that these two checks are red for reasons nobody has to act on.
+ *
+ * `neutral` says the same thing without either cost: the check reports, its
+ * body still names exactly what is missing and the next action, and it does not
+ * claim the pull request is broken. The gate loses nothing, because a draft is
+ * unmergeable on its own and `ready_for_review` re-runs this evaluation - so
+ * the moment the pull request can merge, an unsatisfied gate is red again and
+ * branch protection holds it.
+ */
+const DRAFT_CONCLUSION = "neutral";
+
+/**
+ * Runs both gates over one snapshot.
+ *
+ * Downgrading here rather than inside either gate keeps each gate's rules about
+ * the pull request alone, and keeps this one policy - what an unsatisfied gate
+ * reports while a pull request cannot merge - in a single place.
+ */
+export const evaluateMergeGates = (snapshot) =>
+  [evaluateReviewTriage(snapshot), evaluateValidationAttestation(snapshot)].map(
+    (one) =>
+      snapshot.isDraft && one.conclusion === "failure"
+        ? { ...one, conclusion: DRAFT_CONCLUSION }
+        : one,
+  );
+
+/** How a verdict's conclusion reads at the top of its report. */
+const STATUS_WORD = {
+  success: "PASSED",
+  [DRAFT_CONCLUSION]: "NOT YET",
+};
 
 /** Renders one gate verdict for the workflow log and for the check run body. */
 export const formatVerdict = (verdictToFormat, snapshot) => {
-  const status = verdictToFormat.conclusion === "success" ? "PASSED" : "FAILED";
+  const status = STATUS_WORD[verdictToFormat.conclusion] ?? "FAILED";
   const lines = [
     `${verdictToFormat.name}: ${status} - ${verdictToFormat.title}`,
     `pull request #${snapshot.number}, head ${snapshot.headSha}`,
     "",
     ...verdictToFormat.details,
   ];
-  if (snapshot.isDraft && verdictToFormat.conclusion === "failure") {
+  if (snapshot.isDraft && verdictToFormat.conclusion !== "success") {
     lines.push(
       "",
-      "This pull request is a draft. A red gate is expected here mid-flow; the gate",
-      "binds when the pull request is ready and branch protection blocks the merge.",
+      "This pull request is a draft, so this gate reports neutral rather than red:",
+      "a draft cannot merge, and mid-flow it is missing these markers by design.",
+      "The action above is still the action. Marking the pull request ready for",
+      "review re-runs this gate, and it fails there until the action is done.",
     );
   }
   return lines.join("\n");

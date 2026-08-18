@@ -64,12 +64,12 @@ const main = async () => {
     const snapshot = await fetchSnapshot({ owner, repo, number });
     headSha = snapshot.headSha;
     const verdicts = evaluateMergeGates(snapshot);
-    let failed = 0;
+    let unsatisfied = 0;
     for (const verdict of verdicts) {
       const report = formatVerdict(verdict, snapshot);
       process.stdout.write(`\n${"=".repeat(78)}\n${report}\n`);
       if (verdict.conclusion !== "success") {
-        failed += 1;
+        unsatisfied += 1;
       }
       if (!dryRun) {
         await publishCheckRun({
@@ -85,9 +85,9 @@ const main = async () => {
       }
     }
     process.stdout.write(
-      `\n${"=".repeat(78)}\n${failed === 0 ? "Both merge gates pass." : `${failed} merge gate(s) fail; the pull request cannot merge until they pass.`}\n`,
+      `\n${"=".repeat(78)}\n${unsatisfied === 0 ? "Both merge gates pass." : `${unsatisfied} merge gate(s) not satisfied; the pull request cannot merge until they pass.`}\n`,
     );
-    if (argv.includes("--strict") && failed > 0) {
+    if (argv.includes("--strict") && unsatisfied > 0) {
       process.exitCode = 1;
     }
   } catch (error) {

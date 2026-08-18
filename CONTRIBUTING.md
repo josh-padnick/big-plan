@@ -119,7 +119,9 @@ Any push moves the head and invalidates both the sign-off and the pipeline attes
 That is deliberate: the reviewer's findings were raised against code that no longer exists.
 Re-triage, then re-post both markers naming the new head.
 
-Draft pull requests are judged too, and a red gate on a draft mid-flow is expected.
+Draft pull requests are judged too, and an unsatisfied gate on a draft reports neutral rather than red.
+A draft cannot merge, and mid-flow it is missing both markers by design: the sign-off comes after the final push and the attestation after the pipeline passes.
+The check still names what is missing and what to do about it, and marking the pull request ready for review re-runs the gate, which fails there until the work is done.
 The gate binds at merge, through branch protection.
 
 ### When no reviewer is available

@@ -10,6 +10,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   assertedLines,
+  CHECK_NAMES,
+  evaluateMergeGates,
   evaluateReviewTriage,
   evaluateValidationAttestation,
   formatVerdict,
@@ -337,14 +339,21 @@ test("an override scoped to an older head does not carry to this one", () => {
   assert.match(report(verdict), /names 00001111/);
 });
 
-test("a draft pull request still gets judged, with the mid-flow red explained", () => {
+test("a draft pull request still gets judged, with the mid-flow state explained", () => {
   const draft = snapshot({ isDraft: true });
-  const verdict = evaluateValidationAttestation(draft);
-  assert.equal(verdict.conclusion, "failure");
-  assert.match(
-    formatVerdict(verdict, draft),
-    /This pull request is a draft\. A red gate is expected here mid-flow/,
+  const [verdict] = evaluateMergeGates(draft).filter(
+    (one) => one.name === CHECK_NAMES.validationAttestation,
   );
+  assert.equal(verdict.conclusion, "neutral");
+  const report = formatVerdict(verdict, draft);
+  assert.match(report, /^validation-attestation: NOT YET/);
+  assert.match(
+    report,
+    /This pull request is a draft, so this gate reports neutral/,
+  );
+  // The reader still gets the action, or the leniency has cost them the reason
+  // the check reported at all.
+  assert.match(report, /no-mistakes: passed run <run-id> head /);
 
   const ready = snapshot();
   assert.doesNotMatch(
@@ -359,6 +368,57 @@ test("a draft pull request still gets judged, with the mid-flow red explained", 
   assert.doesNotMatch(
     formatVerdict(evaluateValidationAttestation(passing), passing),
     /is a draft/,
+  );
+});
+
+test("a draft never merges on the leniency: readying it fails the gate again", () => {
+  // The regression this closes: a draft under an active pipeline is missing the
+  // sign-off and the attestation by construction - the sign-off is posted after
+  // the final push, the attestation after the pipeline passes - so publishing
+  // `failure` there blocked the pipeline that produces both markers, on every
+  // pull request this repository opens. The leniency may not survive the draft.
+  const untriaged = {
+    reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+    reviewThreads: [thread([finding()])],
+  };
+
+  const asDraft = evaluateMergeGates(snapshot({ ...untriaged, isDraft: true }));
+  assert.deepEqual(
+    asDraft.map((one) => [one.name, one.conclusion]),
+    [
+      [CHECK_NAMES.reviewTriage, "neutral"],
+      [CHECK_NAMES.validationAttestation, "neutral"],
+    ],
+  );
+
+  const asReady = evaluateMergeGates(snapshot(untriaged));
+  assert.deepEqual(
+    asReady.map((one) => [one.name, one.conclusion]),
+    [
+      [CHECK_NAMES.reviewTriage, "failure"],
+      [CHECK_NAMES.validationAttestation, "failure"],
+    ],
+  );
+  // Same titles either way: only the conclusion is softened, never the finding.
+  assert.deepEqual(
+    asDraft.map((one) => one.title),
+    asReady.map((one) => one.title),
+  );
+});
+
+test("a satisfied gate on a draft passes rather than going neutral", () => {
+  const passing = snapshot({
+    isDraft: true,
+    reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+    reviewThreads: [thread([finding(), reply()])],
+    issueComments: [
+      comment(`review-triage: complete ${HEAD}`),
+      comment(`no-mistakes: passed run 918a82 head ${HEAD}`),
+    ],
+  });
+  assert.deepEqual(
+    evaluateMergeGates(passing).map((one) => one.conclusion),
+    ["success", "success"],
   );
 });
 
