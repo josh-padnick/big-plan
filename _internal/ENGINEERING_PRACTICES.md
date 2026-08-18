@@ -204,7 +204,7 @@ Follow these authoring rules:
 - Name tests `should ... when ...` so the promised behavior and triggering condition are visible from the title.
 - Avoid broad serialized snapshots.
   Prefer focused assertions that tell the reviewer what changed.
-  Visual quality is not asserted by pixel comparison; it is established by human review of the rendered document, as [CONTRIBUTING.md](CONTRIBUTING.md) describes.
+  Visual quality is not asserted by pixel comparison; it is established by human review of the rendered document, as [CONTRIBUTING.md](../CONTRIBUTING.md) describes.
 - Mock only an external boundary such as filesystem, process, or browser I/O; do not mock internal modules to manufacture an implementation-shaped test.
 - Keep browser specs independent and use user-facing roles, accessible names, and stable domain-scope identifiers.
   Use `data-*` attributes for unambiguous domain or component scoping when role and name alone cannot identify the scope, then locate controls within it by role and accessible name and assert their native or `aria-*` state.
@@ -213,7 +213,7 @@ Follow these authoring rules:
 - Add a browser journey only for a critical reader flow, cross-feature composition, or a regression no lower rung can express.
   Keep long journeys readable with named `test.step` phases.
 
-Run the focused test while iterating, then the contribution checks in [CONTRIBUTING.md](CONTRIBUTING.md) before delivery.
+Run the focused test while iterating, then the contribution checks in [CONTRIBUTING.md](../CONTRIBUTING.md) before delivery.
 Generated drift is fixed by changing the authored input and regenerating, never by editing generated output.
 
 ## Browser runtime and UI

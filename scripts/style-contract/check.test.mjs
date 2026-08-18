@@ -211,6 +211,25 @@ test("should reject a class-only rule that styles markup its own view renders", 
   assert.match(failures.join("\n"), /\.island-card\.is-wide/);
 });
 
+// A selector list is a set of rules sharing one body, so a permitted selector
+// beside a prohibited one does not license the prohibited one.
+test("should reject a class-only selector standing beside a permitted one in the same list", async () => {
+  const failures = await checkSource({
+    "render/global.css": `${HEADER}
+@layer theme, base, components, utilities, bp-state;
+`,
+    "components/island/styles.css": `${HEADER}
+@layer components {
+  .owned,
+  article .owned { padding: 1rem; }
+}
+`,
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures.join("\n"), /selects only classes/);
+  assert.match(failures.join("\n"), /\.owned/);
+});
+
 test("should accept a class-only rule whose utility form is written out, or a declared drawing system", async () => {
   const explained = await checkSource({
     "render/global.css": `${HEADER}

@@ -15,9 +15,22 @@ import { expect, test, type Page } from "./fixtures";
 const openSection = (page: Page, name: "Appearance" | "Color theme") =>
   page.getByRole("tab", { name, exact: true }).click();
 
+// A colour with no alpha component is fully opaque. The previous pattern
+// anchored on the last number before the closing parenthesis, so `rgb(0, 0, 0)`
+// matched its blue channel and reported an opaque black as fully transparent.
 const backdropOpacity = (color: string): number | null => {
-  const match = /(?:\/|,)\s*([\d.]+)\s*\)?$/u.exec(color);
-  return match?.[1] === undefined ? null : Number(match[1]);
+  const alpha = /\/\s*([\d.]+%?)\s*\)$/u.exec(color)?.[1];
+  if (alpha !== undefined) {
+    return alpha.endsWith("%")
+      ? Number(alpha.slice(0, -1)) / 100
+      : Number(alpha);
+  }
+  const legacy = /^rgba?\(([^)]*)\)$/u.exec(color)?.[1];
+  if (legacy === undefined) return null;
+  const parts = legacy.split(",").map((part) => part.trim());
+  const fourth = parts[3];
+  if (parts.length === 3) return 1;
+  return fourth === undefined ? null : Number(fourth);
 };
 
 test("should choose and persist appearance from the settings dialog", async ({
