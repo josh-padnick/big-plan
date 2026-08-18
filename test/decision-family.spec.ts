@@ -224,6 +224,14 @@ test("should compare, answer, and revise a Decision", async ({
   await expect(submitNow).toHaveCSS("border-color", accent);
   await expect(submitNow).toHaveCSS("color", accent);
   await expect(cancel).not.toHaveCSS("border-color", accent);
+  // One emphatic control in the trio: the setting and the way out are quiet,
+  // and only the submission carries weight.
+  await expect(submitNow).toHaveCSS("font-weight", "600");
+  await expect(cancel).toHaveCSS("font-weight", "400");
+  await expect(commentActions.locator("label")).toHaveCSS("font-weight", "400");
+  // Cancel is subordinate: a link beside the button, not a second button.
+  await expect(cancel).toHaveCSS("border-top-width", "0px");
+  expect(cancelBox?.width ?? 0).toBeLessThan(submitBox?.width ?? 0);
   // All of it hangs off the field's right edge.
   const textBox = await proposalField.boundingBox();
   expect(

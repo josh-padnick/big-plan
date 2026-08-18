@@ -693,8 +693,8 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 0.5rem;
-    margin-top: 0.625rem;
+    gap: 0.375rem;
+    margin-top: 0.5rem;
   }
   article .decision-send-row {
     display: flex;
@@ -706,10 +706,14 @@
   article .decision-proposal-buttons {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.625rem;
   }
+  /* The switch names a setting, not an action, so it carries the group's
+     quietest weight; only the submission is emphatic. */
   article .decision-send-switch {
     color: var(--color-muted);
+    font-size: var(--text-2xs);
+    font-weight: 400;
   }
   article .decision-comment-submit[hidden],
   article .decision-proposal-actions[hidden] {
@@ -756,25 +760,26 @@
     }
   }
 
-  /* Leaving the composer is a way out, not a third thing to weigh. */
+  /* Leaving the composer is a way out, not a third thing to weigh, so it is a
+     link beside the submission rather than a second button competing with it. */
   article .decision-proposal-cancel {
-    padding: 0.375rem 0.875rem;
-    border: 1px solid var(--edge-c);
-    border-radius: var(--radius-md);
+    padding: 0.25rem 0;
+    border: 0;
     cursor: pointer;
-    background: var(--bg);
-    color: var(--ink-c);
-    font-size: 0.75rem;
-    font-weight: var(--font-weight-semibold);
+    background: transparent;
+    color: var(--color-muted);
+    font-size: var(--text-2xs);
+    font-weight: 400;
+    line-height: var(--text-2xs--line-height);
   }
   article .decision-proposal-cancel:hover {
-    background: var(--surface-c);
+    color: var(--ink-c);
+    text-decoration: underline;
   }
 
   article .decision-proposal-cancel:focus-visible {
-    outline: none;
-    border-color: var(--color-accent);
-    box-shadow: var(--elevation-focus);
+    outline: 1px solid var(--color-accent);
+    outline-offset: 2px;
   }
   article .decision[data-decision-answered] .decision-proposal-cancel {
     display: none;
