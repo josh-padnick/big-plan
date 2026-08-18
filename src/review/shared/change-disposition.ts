@@ -55,6 +55,26 @@ export const ACCEPTED_CHANGE_LIMIT = 5_000;
 /** How many places one mutation may dispose of, so a single request stays bounded. */
 export const DISPOSITION_BATCH_LIMIT = 500;
 
+/**
+ * The places of one gesture split into mutations the record will accept. A
+ * change set can hold more places than a single request may name, and a
+ * reviewer closing all of them is one gesture either way, so the split belongs
+ * beside the bound that forces it rather than at the surface that trips over it.
+ */
+export const changeDispositionBatches = (
+  placeIds: ReadonlyArray<string>,
+): ReadonlyArray<ReadonlyArray<string>> => {
+  const batches: Array<ReadonlyArray<string>> = [];
+  for (
+    let start = 0;
+    start < placeIds.length;
+    start += DISPOSITION_BATCH_LIMIT
+  ) {
+    batches.push(placeIds.slice(start, start + DISPOSITION_BATCH_LIMIT));
+  }
+  return batches;
+};
+
 /** The key one disposition is stored and looked up under. */
 export const changeDispositionKey = ({
   from,

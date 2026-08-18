@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   acceptedChangeKeys,
+  changeDispositionBatches,
   changeDispositionKey,
   type ChangeDispositionState,
 } from "../shared/change-disposition.js";
@@ -33,7 +34,12 @@ const RETRY_DELAY_MS = 2_000;
 // The first failure is usually the runtime being briefly busy and is not worth
 // interrupting a reader over. A second one has outlived that explanation.
 const FAILURES_BEFORE_NOTICE = 2;
-const DISPOSITION_TOAST_ID = "big-plan-change-disposition";
+// The two notices say different things and are dismissed by different events:
+// a retry notice is resolved by the write finally landing, while a refusal is
+// the only surviving evidence that an acceptance was dropped and outlives every
+// later gesture.
+const DISPOSITION_RETRY_TOAST_ID = "big-plan-change-disposition-retry";
+const DISPOSITION_REFUSED_TOAST_ID = "big-plan-change-disposition-refused";
 
 /** One gesture on its way to the record. */
 type PendingDisposition = {
@@ -152,7 +158,7 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
           queue.current = queue.current.filter((entry) => entry !== head);
           setPending([...queue.current]);
           failures = 0;
-          toast.dismiss(DISPOSITION_TOAST_ID);
+          toast.dismiss(DISPOSITION_RETRY_TOAST_ID);
         } catch (error: unknown) {
           // The runtime looked at this gesture and refused it, so retrying
           // would collect the same refusal forever. Dropping it is what takes
@@ -160,8 +166,10 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
           if (isTerminalReviewRuntimeRefusal(error)) {
             queue.current = queue.current.filter((entry) => entry !== head);
             setPending([...queue.current]);
+            failures = 0;
+            toast.dismiss(DISPOSITION_RETRY_TOAST_ID);
             toast.error("Change acceptance not saved", {
-              id: DISPOSITION_TOAST_ID,
+              id: DISPOSITION_REFUSED_TOAST_ID,
               description:
                 error instanceof Error
                   ? error.message
@@ -173,7 +181,7 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
           failures += 1;
           if (failures === FAILURES_BEFORE_NOTICE) {
             toast.error("Change acceptance not saved yet", {
-              id: DISPOSITION_TOAST_ID,
+              id: DISPOSITION_RETRY_TOAST_ID,
               description:
                 "Big Plan will keep retrying. Keep this review open until the change set says it is accepted.",
               duration: Infinity,
@@ -190,7 +198,19 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
   const disposeOfChanges = useCallback(
     (input: PendingDisposition): void => {
       if (input.placeIds.length === 0) return;
-      queue.current = [...queue.current, input];
+      // One gesture can name more places than a single mutation may carry, so
+      // it is queued as successive batches. The overlay reads the whole queue,
+      // so every place stays shown while its own batch is still in flight, and
+      // a refusal takes back only the batch the runtime refused.
+      queue.current = [
+        ...queue.current,
+        ...changeDispositionBatches(input.placeIds).map((placeIds) => ({
+          op: input.op,
+          from: input.from,
+          to: input.to,
+          placeIds,
+        })),
+      ];
       setPending([...queue.current]);
       void flush();
     },

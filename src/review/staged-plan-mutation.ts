@@ -45,9 +45,9 @@ import {
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
 import { mkdir, writeFile } from "node:fs/promises";
+import { SNAPSHOT_DIGEST } from "./shared/change-disposition.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
-const SNAPSHOT_DIGEST = /^[a-f0-9]{16,64}$/;
 const JOURNAL_FILE = /^[a-f0-9]{16}\.json$/;
 const GENERATION_DIRECTORY = /^[0-9]{1,9}$/;
 const MANIFEST_VERSION = 1;
