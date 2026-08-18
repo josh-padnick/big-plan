@@ -6502,6 +6502,18 @@ export const ReviewController = () => {
       }),
     );
     setTab("comments");
+    // Bring the commented block to the top of the reading column rather than
+    // wherever the least scrolling would leave it. "Nearest" parks a block that
+    // is below the fold at the very bottom edge, which reads as the page having
+    // scrolled past the thing the reader asked to see; the shared scroll margin
+    // keeps it clear of the branding bar.
+    const planBlock = targetElement(comment.target);
+    if (planBlock !== null) {
+      (displayedStandIn(planBlock) ?? planBlock).scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         document

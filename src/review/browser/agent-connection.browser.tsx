@@ -522,8 +522,12 @@ const CurrentActivityCard = ({
         >
           Open the agent's chat
         </a>
-      ) : sessionAffordance.kind === "identifier" &&
-        sessionUrl !== undefined ? (
+      ) : sessionAffordance.kind === "identifier" ? (
+        /* Whatever was declared, and in every state. The identifier used to be
+           reachable only through the connection details, and those are hidden
+           while the agent works - so the one moment a reviewer most wants to
+           open the agent's own conversation was the moment they could not take
+           its address with them. */
         <CopySessionIdentifier value={sessionAffordance.value} />
       ) : null}
       {connection.sinceAtMs === undefined ||

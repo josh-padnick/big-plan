@@ -976,14 +976,22 @@ are declared, so a role or a scale step is the only thing a utility can name.
     }
   }
 
-  :target {
+  /* A jump lands its destination below the branding bar rather than under it.
+     Commented blocks share the rule because the agent surface scrolls to them
+     the same way a section link does, and a block that arrives beneath the bar
+     reads as the page having scrolled to the wrong place. */
+  :target,
+  [data-block-id],
+  [data-slide] {
     scroll-margin-top: 4.25rem;
   }
 
   /* Mobile section links land below the branding bar plus the sticky TOC
      rather than beneath them. */
   @media (width < 56rem) {
-    :target {
+    :target,
+    [data-block-id],
+    [data-slide] {
       scroll-margin-top: 7rem;
     }
   }

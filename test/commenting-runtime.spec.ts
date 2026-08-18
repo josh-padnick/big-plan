@@ -4098,6 +4098,30 @@ test("should restore and submit staged comments through the local review runtime
   );
   await expect(activeWork).toContainText("Agent working");
   await expect(activeWork).toContainText("Reviewing the shared feedback batch");
+
+  // Clicking the request brings its block to the top of the reading column.
+  // "Nearest" used to park a block below the fold at the very bottom edge,
+  // which reads as the page having scrolled past the thing that was asked for.
+  // This fixture's plan is shorter than the viewport, so this holds the
+  // behaviour rather than reproducing the geometry that exposed it; the
+  // measurement against a full-length plan is in the live preview.
+  await page.evaluate(() => window.scrollTo({ top: 0 }));
+  const subject = activeWork.getByRole("button").first();
+  const commentedBlockId = await subject.click().then(async () => {
+    await page.waitForTimeout(700);
+    return page.evaluate(() => {
+      const highlighted = document.querySelector<HTMLElement>(
+        "[data-review-associated]",
+      );
+      return highlighted?.getBoundingClientRect().top ?? null;
+    });
+  });
+  expect(commentedBlockId).not.toBeNull();
+  // Below the branding bar, and nowhere near the bottom of the viewport.
+  const viewportHeight = page.viewportSize()?.height ?? 0;
+  expect(commentedBlockId ?? 0).toBeGreaterThanOrEqual(0);
+  expect(commentedBlockId ?? 0).toBeLessThan(viewportHeight / 2);
+
   // Re-pressing the pressed control closes its window; it never hands the slot
   // to the other body.
   await agentStatusTrigger(page).click();
