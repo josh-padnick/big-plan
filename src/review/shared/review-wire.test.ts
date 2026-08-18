@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   decodeAgentSnapshot,
+  decodeChangeDispositions,
   decodeProgress,
   decodeRuntimeSession,
   decodeReviewSnapshot,
@@ -527,6 +528,33 @@ describe("review wire contract", () => {
       });
       expect(decoded).not.toBeNull();
       expect(decoded?.writesStalledMs).toBeUndefined();
+    }
+  });
+
+  it("should drop change dispositions a browser could not act on", () => {
+    const decoded = decodeChangeDispositions({
+      revision: 4,
+      accepted: [
+        {
+          from: "a".repeat(16),
+          to: "b".repeat(16),
+          placeId: "place-1",
+          acceptedAt: "2026-08-18T00:00:00.000Z",
+        },
+        { from: "not-a-digest", to: "b".repeat(16), placeId: "place-2" },
+        { from: "a".repeat(16), to: "b".repeat(16), placeId: "" },
+        "not a disposition",
+      ],
+    });
+    expect(decoded.revision).toBe(4);
+    expect(decoded.accepted.map((entry) => entry.placeId)).toEqual(["place-1"]);
+  });
+
+  // A body this build cannot read must never displace state the page already
+  // applied, so it decodes older than any accepted write rather than as empty.
+  it("should decode an unreadable disposition body as older than any write", () => {
+    for (const value of [null, {}, { accepted: [] }, { revision: "4" }]) {
+      expect(decodeChangeDispositions(value).revision).toBe(-1);
     }
   });
 });

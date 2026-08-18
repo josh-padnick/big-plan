@@ -113,6 +113,7 @@ import {
 import type { ReviewSessionDescriptor } from "./session-authority.js";
 import {
   createActivityClock,
+  createChangeDispositions,
   createDecisionAnswers,
   createPlanRenderer,
   createReaderProgress,
@@ -148,6 +149,10 @@ import {
   readDecisionAnswerState,
   stageDecisionAnswer,
 } from "./routes-inputs.js";
+import {
+  disposeOfChanges,
+  readChangeDispositionState,
+} from "./routes-dispositions.js";
 import { readRuntimeSession } from "./routes-session.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
@@ -201,6 +206,16 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
     handler: readDecisionAnswerState,
   },
   { method: "POST", path: "/api/inputs", handler: stageDecisionAnswer },
+  {
+    method: "GET",
+    path: "/api/change-dispositions",
+    handler: readChangeDispositionState,
+  },
+  {
+    method: "POST",
+    path: "/api/change-dispositions",
+    handler: disposeOfChanges,
+  },
   { method: "PUT", path: "/api/drafts", handler: updateReviewState },
   { method: "POST", path: "/api/feedback", handler: submitFeedback },
   { method: "POST", path: "/api/comments-delete", handler: deleteSentComment },
@@ -886,6 +901,7 @@ export const startReviewRuntime = async ({
       resolvedPlanPath,
       reportDiagnostic,
     }),
+    changeDispositions: createChangeDispositions({ store }),
     readerProgress: createReaderProgress({
       initialSnapshot,
       observedResponseIds: (await readCommittedRevisions({ store })).map(

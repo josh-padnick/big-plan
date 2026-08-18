@@ -242,7 +242,10 @@ and `DatabaseTableSchema` are compared field by field.
 The change navigator tours several places without losing reading context.
 
 Choose **Accept change** to mark the current place accepted and advance to the next unaccepted place, or **Accept all** to accept the remaining set.
-Acceptance is a browser-local review checklist: it does not edit the plan or resolve the comment thread.
+Acceptance is a review checklist rather than an edit: it does not change the plan or resolve the comment thread.
+It is recorded with the review, so it survives a reload and a runtime restart, and every place it is counted - the change digest on the agent's message and the navigator touring that same set - reports the same number.
+Acceptance is recorded against the two snapshots the change set compares, so a later revision arrives as its own set to review rather than inheriting what you already accepted.
+A read-only review session records nothing, so its accept controls say why instead of offering a checklist nothing reads back.
 After accepting the set, choose **Keep chatting**; a comment thread also offers **Resolve thread**.
 Resolving never cancels a message the thread is still waiting on: while the agent owes that thread an answer, the review runtime refuses the resolve and says so, so cancel the waiting message or wait for its answer first.
 A resolved thread will not accept a reply or new feedback until you unresolve it: a reply you have already typed is kept, and unresolving the thread clears the message so you can send it.

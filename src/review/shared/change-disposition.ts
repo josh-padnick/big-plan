@@ -1,0 +1,105 @@
+// Owns what it means for a reviewer to have disposed of a change, and the one
+// arithmetic that turns a change set plus the stored record into a count.
+//
+// A disposition is addressed by the revision it belongs to - the diff's two
+// snapshot digests - plus the place inside it. That address is content-pinned
+// by construction: a later plan revision produces a different result digest, so
+// an acceptance can never migrate onto content the reviewer never saw. Nothing
+// here needs a currency predicate for the same reason.
+//
+// The counting lives here rather than at each surface because a change set's
+// progress is shown in more than one place at once - the digest attached to an
+// agent message, the stepper reviewing that same set - and two surfaces that
+// each derive it are two surfaces that can disagree about whether a reviewer
+// still has work to do.
+
+/** The revision-scoped address of one change place. */
+export type ChangeDispositionAddress = {
+  readonly from: string;
+  readonly to: string;
+  readonly placeId: string;
+};
+
+/**
+ * One recorded verdict. Today a record holds only acceptances, so the verdict
+ * is implied by membership; the address is the whole of the fact.
+ */
+export type ChangeDisposition = ChangeDispositionAddress & {
+  readonly acceptedAt: string;
+};
+
+/**
+ * The whole stored record, with the revision that produced it. The revision is
+ * monotonic across accepted writes so a browser can order two responses without
+ * inspecting their bodies, exactly as the answers store does.
+ */
+export type ChangeDispositionState = {
+  readonly accepted: ReadonlyArray<ChangeDisposition>;
+  readonly revision: number;
+};
+
+/** A snapshot digest, as every review endpoint spells one. */
+export const SNAPSHOT_DIGEST = /^[a-f0-9]{16,64}$/u;
+
+/** A place id is the diff's own, so it is bounded like any other stored id. */
+export const PLACE_ID_LIMIT = 256;
+
+/**
+ * How many accepted changes one review may hold. Reached only by a review with
+ * more recorded acceptances than a person could read, and refused rather than
+ * trimmed: dropping the oldest entry would silently reopen a change set the
+ * reviewer had already closed.
+ */
+export const ACCEPTED_CHANGE_LIMIT = 5_000;
+
+/** How many places one mutation may dispose of, so a single request stays bounded. */
+export const DISPOSITION_BATCH_LIMIT = 500;
+
+/** The key one disposition is stored and looked up under. */
+export const changeDispositionKey = ({
+  from,
+  to,
+  placeId,
+}: ChangeDispositionAddress): string => `${from}:${to}:${placeId}`;
+
+/** The stored acceptances as the key set every surface asks its questions of. */
+export const acceptedChangeKeys = (
+  state: ChangeDispositionState,
+): ReadonlySet<string> =>
+  new Set(state.accepted.map((entry) => changeDispositionKey(entry)));
+
+/** How much of one change set the reviewer has closed, and how much is still open. */
+export type ChangeSetStanding = {
+  readonly total: number;
+  readonly accepted: number;
+  readonly open: number;
+  readonly isAccepted: boolean;
+};
+
+/**
+ * The one definition of a change set's standing. `isAccepted` is deliberately
+ * false for an empty set: a change set with nothing in it has not been closed
+ * by a reviewer, and calling it accepted would report work that never happened.
+ */
+export const changeSetStanding = ({
+  from,
+  to,
+  placeIds,
+  accepted,
+}: {
+  readonly from: string;
+  readonly to: string;
+  readonly placeIds: ReadonlyArray<string>;
+  readonly accepted: ReadonlySet<string>;
+}): ChangeSetStanding => {
+  const total = placeIds.length;
+  const closed = placeIds.filter((placeId) =>
+    accepted.has(changeDispositionKey({ from, to, placeId })),
+  ).length;
+  return {
+    total,
+    accepted: closed,
+    open: total - closed,
+    isAccepted: total > 0 && closed === total,
+  };
+};

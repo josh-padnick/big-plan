@@ -14,7 +14,7 @@ New work should state which subsystem it belongs to before it starts; when a cha
 
 Comment threads and diffs are one subsystem, not two.
 The diff's content is computed, not stored: `src/review/snapshot-diff.ts` turns two snapshot endpoints into aligned change places on demand, and `/api/snapshot-diff` accepts those endpoints directly, independent of any thread.
-What does persist is thread-scoped: a thread's baseline and current endpoints live as fields on its own exchange records (`src/review/shared/thread-projection.ts`), and per-place review acceptance is keyed by those same endpoints plus a place id (`src/review/browser/diff-tour.browser.tsx`).
+What does persist is thread-scoped: a thread's baseline and current endpoints live as fields on its own exchange records (`src/review/shared/thread-projection.ts`), and per-place review acceptance is recorded with the review, keyed by those same endpoints plus a place id (`src/review/change-dispositions-store.ts`).
 You cannot change diff semantics without changing thread semantics, so both live in the Change Engine.
 
 The session runtime is a different subsystem from either.
@@ -35,7 +35,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 **Problem set.** The core entity of review is the change set: a baseline snapshot, a current snapshot, acceptance state, provenance, and an optionally attached conversation, diffed from its start, rendered in place of what it changes, and closed by explicit acceptance.
 
-**Code anchors.** `src/review/snapshot-diff.ts`, `src/review/change-set-commit.ts`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/review/browser/wireframe-screen-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, snapshots in `src/review/store.ts`.
+**Code anchors.** `src/review/snapshot-diff.ts`, `src/review/change-set-commit.ts`, `src/review/change-dispositions-store.ts`, `src/review/shared/change-disposition.ts`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/review/browser/wireframe-screen-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, snapshots in `src/review/store.ts`.
 
 **Boundary rules.**
 
@@ -47,6 +47,8 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 - A change set describes committed revisions only.
   `src/review/change-set-commit.ts` is the seam: a revision is recorded inside the terminal commit and nowhere else, the reader's current snapshot advances from that log rather than from response files, and folding the log keeps a thread's baseline and provenance stable across every later reply.
   When the full aggregate lands it implements that contract without adopting claim stages as domain state.
+- A change set's disposition is a review fact, not a browser preference.
+  `src/review/change-dispositions-store.ts` owns the record and `src/review/shared/change-disposition.ts` owns the one selector that turns it into a count, so every surface showing how much of a set is still open reads the same number and a reload never reopens closed work.
 - Delivery (getting a message to the runtime) belongs to Session Reliability, and furniture (composer, tooltips, layout) belongs to Commenting Surface; only Change Engine code changes when acceptance semantics change.
 
 ### B. Session Reliability

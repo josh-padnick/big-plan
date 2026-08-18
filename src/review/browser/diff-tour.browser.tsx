@@ -1,9 +1,11 @@
-// Owns the one-at-a-time What-changed tour, acceptance state, and stepper
-// shared by comment threads and plan-wide chat.
+// Owns the one-at-a-time What-changed tour and the stepper shared by comment
+// threads and plan-wide chat. Acceptance itself belongs to the review store, so
+// this reads and writes it through the disposition record rather than holding a
+// copy: two surfaces show one change set's standing at the same moment, and a
+// reload must not reopen work the reviewer already closed.
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -16,6 +18,12 @@ import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { X_ICON } from "../../icons/lucide/x.js";
 import type { SnapshotDiff } from "../shared/review-wire.js";
+import {
+  changeDispositionKey,
+  changeSetStanding,
+  type ChangeSetStanding,
+} from "../shared/change-disposition.js";
+import { useChangeDispositions } from "./use-change-dispositions.browser.js";
 import { reviewerMessageLabel } from "../shared/reviewer-markdown.js";
 import { DiffLensPortal } from "./diff-lens.browser.js";
 import { tourStartIndex } from "./diff-anchor.js";
@@ -41,43 +49,32 @@ type DiffTourValue = {
   readonly activeDiff: SnapshotDiff | null;
   readonly activePlaceId: string | null;
   readonly isPlaceAccepted: (diff: SnapshotDiff, placeId: string) => boolean;
-  readonly togglePlaceAccepted: (diff: SnapshotDiff, placeId: string) => void;
+  /** How much of one change set is closed, from the one selector that decides. */
+  readonly standingOf: (
+    diff: SnapshotDiff,
+    placeIds: ReadonlyArray<string>,
+  ) => ChangeSetStanding;
   readonly setPlacesAccepted: (
     diff: SnapshotDiff,
     placeIds: ReadonlyArray<string>,
     accepted: boolean,
   ) => void;
+  /** False while this session may not record anything, so no control offers to. */
+  readonly canRecordAcceptance: boolean;
   readonly openTour: (tour: OpenTour) => void;
   readonly closeTour: () => void;
 };
 
 const DiffTourContext = createContext<DiffTourValue | null>(null);
-const ACCEPTED_PLACES_STORAGE_KEY = "big-plan.review.accepted-diff-places.v1";
-const ACCEPTED_PLACES_LIMIT = 2_000;
 type EscapeKeyboardEvent = KeyboardEvent & {
   bigPlanEscapeHandled?: boolean;
 };
 
-const acceptedPlaceKey = (diff: SnapshotDiff, placeId: string): string =>
-  `${diff.from}:${diff.to}:${placeId}`;
-
-/** Restores only bounded diff identifiers from optional browser preference state. */
-const initialAcceptedPlaces = (): ReadonlySet<string> => {
-  try {
-    const parsed: unknown = JSON.parse(
-      window.localStorage.getItem(ACCEPTED_PLACES_STORAGE_KEY) ?? "[]",
-    );
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(
-      parsed.filter(
-        (entry): entry is string =>
-          typeof entry === "string" && entry.length <= 256,
-      ),
-    );
-  } catch {
-    return new Set();
-  }
-};
+// Acceptance is recorded with the review, so a session that may not write
+// cannot accept anything. The control says why rather than accepting into a
+// place nothing reads back.
+export const UNRECORDABLE_ACCEPTANCE_LABEL =
+  "Accepting is unavailable because this review session is read-only";
 
 /** Gives change attachments one shared tour without coupling them together. */
 export const useDiffTour = (): DiffTourValue => {
@@ -97,7 +94,7 @@ export const DiffTourProvider = ({
   const [tour, setTour] = useState<OpenTour | null>(null);
   const [index, setIndex] = useState(0);
   const [showCompletionSummary, setShowCompletionSummary] = useState(false);
-  const [acceptedPlaces, setAcceptedPlaces] = useState(initialAcceptedPlaces);
+  const { accepted, canRecord, disposeOfChanges } = useChangeDispositions();
   const places = useMemo(() => {
     if (tour === null) return [];
     const allowed = new Set(tour.placeIds);
@@ -105,52 +102,43 @@ export const DiffTourProvider = ({
   }, [tour]);
   const active = places.at(index);
   const closeTour = () => setTour(null);
-  const isPlaceAccepted = useCallback(
-    (diff: SnapshotDiff, placeId: string): boolean =>
-      acceptedPlaces.has(acceptedPlaceKey(diff, placeId)),
-    [acceptedPlaces],
-  );
-  const togglePlaceAccepted = useCallback(
-    (diff: SnapshotDiff, placeId: string): void => {
-      setAcceptedPlaces((current) => {
-        const next = new Set(current);
-        const key = acceptedPlaceKey(diff, placeId);
-        if (next.has(key)) next.delete(key);
-        else next.add(key);
-        return next;
-      });
-    },
-    [],
-  );
-  const setPlacesAccepted = useCallback(
-    (
-      diff: SnapshotDiff,
-      placeIds: ReadonlyArray<string>,
-      accepted: boolean,
-    ): void => {
-      setAcceptedPlaces((current) => {
-        const next = new Set(current);
-        for (const placeId of placeIds) {
-          const key = acceptedPlaceKey(diff, placeId);
-          if (accepted) next.add(key);
-          else next.delete(key);
-        }
-        return next;
-      });
-    },
-    [],
-  );
-  useEffect(() => {
-    try {
-      const entries = [...acceptedPlaces].slice(-ACCEPTED_PLACES_LIMIT);
-      window.localStorage.setItem(
-        ACCEPTED_PLACES_STORAGE_KEY,
-        JSON.stringify(entries),
+  const tourValue = useMemo(() => {
+    const isPlaceAccepted = (diff: SnapshotDiff, placeId: string): boolean =>
+      accepted.has(
+        changeDispositionKey({ from: diff.from, to: diff.to, placeId }),
       );
-    } catch {
-      // Acceptance remains in memory for this session.
-    }
-  }, [acceptedPlaces]);
+    return {
+      isPlaceAccepted,
+      standingOf: (
+        diff: SnapshotDiff,
+        placeIds: ReadonlyArray<string>,
+      ): ChangeSetStanding =>
+        changeSetStanding({
+          from: diff.from,
+          to: diff.to,
+          placeIds,
+          accepted,
+        }),
+      setPlacesAccepted: (
+        diff: SnapshotDiff,
+        placeIds: ReadonlyArray<string>,
+        isAccepted: boolean,
+      ): void => {
+        // A gesture that would record what the store already holds is not a
+        // write; sending one would advance the revision for nothing.
+        const changing = placeIds.filter(
+          (placeId) => isPlaceAccepted(diff, placeId) !== isAccepted,
+        );
+        disposeOfChanges({
+          op: isAccepted ? "accept" : "withdraw",
+          from: diff.from,
+          to: diff.to,
+          placeIds: changing,
+        });
+      },
+    };
+  }, [accepted, disposeOfChanges]);
+  const { isPlaceAccepted, standingOf, setPlacesAccepted } = tourValue;
   const openTour = (next: OpenTour): void => {
     setTour(next);
     setIndex(tourStartIndex(next));
@@ -179,28 +167,25 @@ export const DiffTourProvider = ({
     () => ({
       activeDiff: tour?.diff ?? null,
       activePlaceId: active?.placeId ?? null,
-      isPlaceAccepted,
-      togglePlaceAccepted,
-      setPlacesAccepted,
+      canRecordAcceptance: canRecord,
+      ...tourValue,
       openTour,
       closeTour,
     }),
-    [
-      active?.placeId,
-      isPlaceAccepted,
-      setPlacesAccepted,
-      togglePlaceAccepted,
-      tour,
-    ],
+    [active?.placeId, canRecord, tourValue, tour],
   );
   const isActiveAccepted =
     tour !== null &&
     active !== undefined &&
     isPlaceAccepted(tour.diff, active.placeId);
-  const allAccepted =
-    tour !== null &&
-    places.length > 0 &&
-    places.every((place) => isPlaceAccepted(tour.diff, place.placeId));
+  const standing =
+    tour === null
+      ? null
+      : standingOf(
+          tour.diff,
+          places.map((place) => place.placeId),
+        );
+  const allAccepted = standing?.isAccepted === true;
   useEffect(() => {
     if (!allAccepted) setShowCompletionSummary(false);
     else setShowCompletionSummary(true);
@@ -210,7 +195,7 @@ export const DiffTourProvider = ({
   const acceptActivePlace = (): void => {
     if (tour === null || active === undefined) return;
     if (isActiveAccepted) {
-      togglePlaceAccepted(tour.diff, active.placeId);
+      setPlacesAccepted(tour.diff, [active.placeId], false);
       return;
     }
     setPlacesAccepted(tour.diff, [active.placeId], true);
@@ -249,9 +234,9 @@ export const DiffTourProvider = ({
               {/* Progress through the set and the fact that the set is
                   finished are the same piece of information, so they share one
                   slot beside the title instead of sitting at opposite ends. */}
-              {showCompletionSummary ? (
+              {showCompletionSummary && standing !== null ? (
                 <Badge tone="statusAccent" size="status">
-                  All changes accepted ({places.length} of {places.length})
+                  All changes accepted ({standing.accepted} of {standing.total})
                 </Badge>
               ) : (
                 <Badge tone="statusNeutral" size="status">
@@ -352,6 +337,12 @@ export const DiffTourProvider = ({
                     <Button
                       variant="accentOutline"
                       size="micro"
+                      disabled={!canRecord}
+                      aria-label={
+                        canRecord
+                          ? "Accept all changes"
+                          : UNRECORDABLE_ACCEPTANCE_LABEL
+                      }
                       onClick={() =>
                         setPlacesAccepted(
                           tour.diff,
@@ -388,7 +379,12 @@ export const DiffTourProvider = ({
                       <Button
                         variant="ghost"
                         size="micro"
-                        aria-label="Undo acceptance for this change"
+                        disabled={!canRecord}
+                        aria-label={
+                          canRecord
+                            ? "Undo acceptance for this change"
+                            : UNRECORDABLE_ACCEPTANCE_LABEL
+                        }
                         onClick={acceptActivePlace}
                       >
                         Undo
@@ -397,7 +393,12 @@ export const DiffTourProvider = ({
                   ) : (
                     <Button
                       size="micro"
-                      aria-label="Accept this change"
+                      disabled={!canRecord}
+                      aria-label={
+                        canRecord
+                          ? "Accept this change"
+                          : UNRECORDABLE_ACCEPTANCE_LABEL
+                      }
                       onClick={acceptActivePlace}
                     >
                       <Icon icon={CHECK_ICON} />
