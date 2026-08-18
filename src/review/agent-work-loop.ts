@@ -564,14 +564,22 @@ const nextWork = async ({
     });
     const pickup = pickupProgress(request);
     await endWhenSpawnerIsGone();
-    await writeAgentHeartbeat({
-      store: session.store,
-      sessionId: session.sessionId,
-      state: "working",
-      requestId: request.requestId,
-      writerId,
-      ...(model === undefined ? {} : { model }),
-    });
+    // Written before the claim on purpose: preparing a pickup reads the plan,
+    // writes a baseline snapshot, and takes locks, and the reviewer should see
+    // the agent working through that window rather than idle. The claim can
+    // still fail, so every exit below that does not hold this request puts the
+    // heartbeat back - otherwise it goes on naming work nobody took.
+    const markWorkingOn = (requestId: string | undefined) =>
+      writeAgentHeartbeat({
+        store: session.store,
+        sessionId: session.sessionId,
+        ...(requestId === undefined
+           ? { state: "waiting" as const }
+           : { state: "working" as const, requestId }),
+        writerId,
+        ...(model === undefined ? {} : { model }),
+      });
+    await markWorkingOn(request.requestId);
     const selectedRequest = request;
     try {
       const authority = await withRunningReviewSessionAuthority({
@@ -608,12 +616,14 @@ const nextWork = async ({
         },
       });
       if (!authority.authoritative) {
+        await markWorkingOn(undefined);
         return fail(
           "The review session stopped before this request was claimed",
         );
       }
       request = authority.value;
     } catch (error: unknown) {
+      await markWorkingOn(undefined);
       if (error instanceof RetryableAgentClaimRejected) {
         if (resumingClaim) {
           if (error instanceof AgentClaimCanceled) {
