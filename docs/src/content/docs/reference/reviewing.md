@@ -149,7 +149,7 @@ In a standalone rendered document, an answer lasts only for the reading session 
 
 ## Persistence
 
-Runtime-backed staged comments and recorded decision answers live under `.big-plan/review/<plan-id>/` beside the plan.
+Runtime-backed staged comments, recorded decision answers, and recorded change acceptances live under `.big-plan/review/<plan-id>/` beside the plan.
 The review id comes from the resolved source path, so staged comments survive the plan revision the agent creates in response to feedback.
 Comment text that is typed but not yet staged or sent is kept in a recovery record owned by its browser tab, so reloading or reopening after a crash gives back the tab's staged drafts, open comment composer, and half-written thread replies.
 Each tab keeps exactly one record, written and cleared only by the tab that owns it, and read once when the page loads.
@@ -246,6 +246,8 @@ Acceptance is a review checklist rather than an edit: it does not change the pla
 It is recorded with the review, so it survives a reload and a runtime restart, and every place it is counted - the change digest on the agent's message and the navigator touring that same set - reports the same number.
 Acceptance is recorded against the two snapshots the change set compares, so a later revision arrives as its own set to review rather than inheriting what you already accepted.
 A read-only review session records nothing, so its accept controls say why instead of offering a checklist nothing reads back.
+If recording an acceptance fails, Big Plan says it is not saved yet and keeps retrying; keep the review open until the change set reports itself accepted.
+If the runtime refuses the acceptance outright, the mark comes back off and the review says so, so the page never claims work that nothing recorded.
 After accepting the set, choose **Keep chatting**; a comment thread also offers **Resolve thread**.
 Resolving never cancels a message the thread is still waiting on: while the agent owes that thread an answer, the review runtime refuses the resolve and says so, so cancel the waiting message or wait for its answer first.
 A resolved thread will not accept a reply or new feedback until you unresolve it: a reply you have already typed is kept, and unresolving the thread clears the message so you can send it.
