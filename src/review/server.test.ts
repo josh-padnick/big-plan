@@ -3686,11 +3686,13 @@ describe("review runtime resolve invariant", () => {
         },
       });
 
-      // The route decided the comment was unanswered before the settle
-      // stamped the answer, so the mailbox is the one that has to refuse.
+      // Every decision is made from a read taken after the settle, so the
+      // route answers on the answer it now has rather than on the queued
+      // state it read a moment earlier.
       expect(refused.status).toBe(409);
       await expect(refused.json()).resolves.toMatchObject({
-        error: "The agent has already answered this request",
+        error:
+          "Only a queued, canceled, or reverted comment can be deleted from the review",
       });
       // Stripping the claim would make the published answer unreadable for
       // good while the plan still carries its revision.
@@ -3705,6 +3707,118 @@ describe("review runtime resolve invariant", () => {
         answeredAt: expect.any(String),
       });
       expect(history.responses).toHaveLength(1);
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({
+        sent: expect.arrayContaining([
+          expect.objectContaining({ id: commentId }),
+        ]),
+      });
+    } finally {
+      await close();
+    }
+  });
+
+  it("should leave every request untouched when one of them refuses the delete", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-partial-",
+    );
+    const replyRequestId = "9d9d9d9d9d9d9d9d";
+    try {
+      // An earlier reply on the same thread, still queued and never claimed.
+      await writeAgentRequest({
+        store: isolated.store,
+        request: messageAgentRequest({
+          kind: "reply",
+          requestId: replyRequestId,
+          sessionId: isolated.sessionId,
+          planId: isolated.planId,
+          premiseSnapshot: PLAN_SNAPSHOT,
+          createdAt: "2026-08-17T12:00:00.000Z",
+          body: "Please look at this again.",
+          commentId,
+        }),
+      });
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      const requestId = await queuedRequestId(isolated);
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      const claimed = await claimAgentRequest({
+        store: isolated.store,
+        activeSessionId: isolated.sessionId,
+        requestId,
+        claimedBy: isolated.sessionId,
+        baselineSnapshot: PLAN_SNAPSHOT,
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+      await commitRequestTerminal({
+        store: isolated.store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId,
+            outcomes: [
+              {
+                commentId,
+                state: "answered",
+                message: "The status quo section already says this.",
+              },
+            ],
+          },
+          request: claimed,
+          commentsById: new Map(),
+          changedBlocks: new Set<string>(),
+          currentSnapshot: PLAN_SNAPSHOT,
+          now: "2026-08-17T12:00:05.000Z",
+        }),
+        claimedBy: isolated.sessionId,
+        now: "2026-08-17T12:00:05.000Z",
+      });
+      // Written by a build this one no longer understands, so every reader
+      // drops it and the thread reads as unanswered while the mailbox still
+      // knows the batch is terminal. The reply sorts first, so a loop that
+      // wrote as it went would withdraw it before reaching the refusal.
+      await writeAgentResponseValue({
+        store: isolated.store,
+        requestId,
+        value: { version: 99, requestId },
+      });
+
+      const refused = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: {
+          commentId,
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toMatchObject({
+        error: "The agent has already answered this request",
+      });
+      // The reviewer never asked to withdraw the reply, so a retry once the
+      // state resolves is still open to them.
+      const exchange = await readAgentExchange({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+      });
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === replyRequestId,
+        )?.canceledAt,
+      ).toBeUndefined();
       await expect(
         (await isolatedCall({ path: "/api/drafts" })).json(),
       ).resolves.toMatchObject({

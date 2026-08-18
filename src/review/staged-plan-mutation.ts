@@ -642,6 +642,10 @@ export const assertNoExternalSourceConflict = (
  * Recovery takes the plan-mutation lock and resolves the whole store, so a
  * control with nothing to settle would otherwise start refusing on conditions
  * that have no bearing on the request it is about to change.
+ *
+ * Answers whether recovery ran, because settling stamps a request terminal:
+ * a caller that read those requests before this decided anything is holding a
+ * state that is now stale.
  */
 export const settleInterruptedCommitsFor = async ({
   store,
@@ -651,7 +655,7 @@ export const settleInterruptedCommitsFor = async ({
   readonly store: ReviewStore;
   readonly planPath: string;
   readonly requestIds: ReadonlyArray<string>;
-}): Promise<void> => {
+}): Promise<boolean> => {
   for (const requestId of requestIds) {
     // An id no request could carry names no journal, and this runs before the
     // route has resolved the id it was handed, so it answers rather than
@@ -659,8 +663,9 @@ export const settleInterruptedCommitsFor = async ({
     if (!REQUEST_ID.test(requestId)) continue;
     if (!(await hasPreparedMutationJournal({ store, requestId }))) continue;
     await recoverStagedPlanMutations({ store, planPath });
-    return;
+    return true;
   }
+  return false;
 };
 
 /**

@@ -3549,10 +3549,7 @@ const SentThread = ({
             className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)] [overflow-wrap:anywhere]"
             data-review-abandoned-claim-unlock
           >
-            The agent that picked this up has reported nothing for far longer
-            than a turn takes, and no agent is connected, so its claim has
-            expired. You can delete this comment again; if that agent comes
-            back, its answer will no longer be accepted.
+            {`${ABANDONED_CLAIM_REASON} You can delete this comment again. ${ABANDONED_CLAIM_CONSEQUENCE}`}
           </p>
         ) : null}
         <div
@@ -7400,7 +7397,7 @@ export const ReviewController = () => {
               : pendingDelete?.kind === "queued"
                 ? "This removes the comment before the agent picks it up. This action cannot be undone."
                 : pendingDelete?.kind === "abandoned"
-                  ? `${ABANDONED_CLAIM_REASON} This permanently removes the comment and its thread; if that agent comes back, its answer will no longer be accepted.`
+                  ? `${ABANDONED_CLAIM_REASON} This permanently removes the comment and its thread. ${ABANDONED_CLAIM_CONSEQUENCE}`
                   : pendingDelete?.kind === "reverted"
                     ? withAbandonedClaimNote({
                         description:
