@@ -2682,7 +2682,7 @@ test("should show the active claim's model despite a competing heartbeat", async
     activeSessionId: session.sessionId,
     requestId: request.requestId,
     claimedBy: "abababababababab",
-    model: { name: "Grok 4.6" },
+    model: { name: "Grok 4.6", effort: "high" },
     baselineSnapshot: request.premiseSnapshot,
     now: new Date().toISOString(),
   });
@@ -2715,6 +2715,10 @@ test("should show the active claim's model despite a competing heartbeat", async
     "viewBox",
     "0 0 34 33",
   );
+  // Effort is shown only because the connector reported it, and it travels with
+  // the name rather than standing beside it as a second fact.
+  await expect(modelBadge).toContainText("high");
+  await expect(modelBadge).toHaveAttribute("data-review-agent-effort", "high");
 
   await writeAgentHeartbeat({
     store,
@@ -3781,6 +3785,22 @@ test("should restore and submit staged comments through the local review runtime
   ).toBeVisible();
   // Item 4: one payload, not two - the connector command below it is gone.
   await expect(agentRail.locator("pre")).toHaveCount(1);
+  // The control is floated into the payload, so a label that grows would move
+  // the payload's line breaks at the moment a copy succeeds. Its width is
+  // reserved by the widest label it can ever show.
+  await agentRail
+    .locator("details[data-review-agent-recovery] > summary")
+    .click();
+  const copyControl = agentRail.getByRole("button", { name: /^Copy / });
+  const copyWidth = async () =>
+    Math.round((await copyControl.boundingBox())?.width ?? 0);
+  const restingWidth = await copyWidth();
+  expect(restingWidth).toBeGreaterThan(0);
+  await copyControl.evaluate((node: HTMLElement) => {
+    const label = node.querySelector("span > span:last-child");
+    if (label !== null) label.textContent = "Copy failed";
+  });
+  expect(await copyWidth()).toBe(restingWidth);
   const connectionLog = agentRail
     .getByText("Connection log", { exact: true })
     .locator("xpath=ancestor::summary");

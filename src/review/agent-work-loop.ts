@@ -1037,6 +1037,9 @@ export const runAgentWorkLoopAction = async (
       ...(action.modelName === undefined
         ? {}
         : { modelName: action.modelName }),
+      ...(action.modelEffort === undefined
+        ? {}
+        : { modelEffort: action.modelEffort }),
     });
   }
   if (action.kind === "respond") {
@@ -1052,5 +1055,8 @@ export const runAgentWorkLoopAction = async (
     detail: action.detail,
     agentToken: action.agentToken,
     ...(action.modelName === undefined ? {} : { modelName: action.modelName }),
+    ...(action.modelEffort === undefined
+      ? {}
+      : { modelEffort: action.modelEffort }),
   });
 };
