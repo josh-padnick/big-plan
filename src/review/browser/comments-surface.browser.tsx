@@ -7,30 +7,41 @@ import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { SEARCH_ICON } from "../../icons/lucide/search.js";
 import { TRASH_2_ICON } from "../../icons/lucide/trash-2.js";
-import type { AgentStatus } from "../shared/agent-status.js";
+import type { AgentStatus, AgentStatusStage } from "../shared/agent-status.js";
 import type { ReviewComment } from "../shared/comment.js";
 import type { ThreadGroup } from "../shared/thread-projection.js";
 import { Icon } from "./icon.browser.js";
 import { Badge, Button } from "./ui.browser.js";
 
+/** The stages that say an agent has this batch in hand. */
+const PICKED_UP_STAGES: ReadonlySet<AgentStatusStage> = new Set([
+  "working",
+  "stalled",
+]);
+
 /**
  * The treatment the active feedback batch's header wears.
  *
- * Only a danger reading, or cards that have already left the working group,
- * drop it out of the picked-up treatment. A warning reading is the ordinary
- * long turn this product expects - demoting that would swap the spinner for an
- * hourglass on every quiet stretch and back on every progress note, relabelling
- * started work as waiting in line through a treatment instead of a string
- * (BIG-147).
+ * Only the batch's own status decides, because the header speaks for that batch
+ * alone. The rail's working group answers a different question - whether
+ * anything on this plan is being worked - so consulting it dressed a batch
+ * nobody had picked up in the spinner whenever an earlier batch was running,
+ * putting the working treatment beside the batch's own queued label (BIG-158).
+ *
+ * A batch nothing has picked up is queued, and a danger reading drops out of
+ * the picked-up treatment. A warning reading is the ordinary long turn this
+ * product expects - demoting that would swap the spinner for an hourglass on
+ * every quiet stretch and back on every progress note, relabelling started work
+ * as waiting in line through a treatment instead of a string (BIG-147).
  */
 export const batchSectionTone = ({
   status,
-  workingCount,
 }: {
   readonly status: AgentStatus;
-  readonly workingCount: number;
 }): "working" | "queued" =>
-  status.tone === "danger" || workingCount === 0 ? "queued" : "working";
+  status.tone === "danger" || !PICKED_UP_STAGES.has(status.stage)
+    ? "queued"
+    : "working";
 
 type LifecycleSectionProps = {
   readonly label: string;
