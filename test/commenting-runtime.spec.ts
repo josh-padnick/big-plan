@@ -2704,7 +2704,7 @@ test("should show the active claim's model despite a competing heartbeat", async
       name: "grok-4.6",
       effort: "high",
       client: "grok-cli 0.2.99",
-      sessionUrl: "https://grok.example/chat/42",
+      sessionUrl: "https://grok.com/chat/42",
     },
     baselineSnapshot: request.premiseSnapshot,
     now: new Date().toISOString(),
@@ -2749,11 +2749,12 @@ test("should show the active claim's model despite a competing heartbeat", async
   await expect(modelBadge).toHaveAttribute("data-review-agent-effort", "high");
   // A declared URL is the one segment that becomes an affordance.
   const chatLink = rail.getByRole("link", { name: "Open the agent's chat" });
-  await expect(chatLink).toHaveAttribute(
-    "href",
-    "https://grok.example/chat/42",
-  );
+  await expect(chatLink).toHaveAttribute("href", "https://grok.com/chat/42");
   await expect(chatLink).toHaveAttribute("rel", /noreferrer/u);
+  await expect(chatLink).toHaveAttribute(
+    "data-review-agent-session-interface",
+    "grok-web",
+  );
 
   await writeAgentHeartbeat({
     store,
@@ -4059,9 +4060,10 @@ test("should restore and submit staged comments through the local review runtime
     animationIterationCount: "infinite",
     animationTimingFunction: "linear",
     transparentSides: 1,
-    // It must never outgrow the plain connected dot it replaces, so nothing in
-    // the toolbar moves when work starts or stops.
-    size: ["8px", "8px"],
+    // A step larger than the connected dot, at the captain's measurement: a
+    // ring encloses space where a disc fills it, so equal diameters do not read
+    // as equal weight.
+    size: ["10px", "10px"],
   });
 
   await page.emulateMedia({ colorScheme: "dark" });

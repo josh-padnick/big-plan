@@ -20,11 +20,11 @@ import {
   agentModelVendor,
   type AgentModelVendor,
 } from "../shared/agent-identity-catalog.js";
+import { agentSessionAffordance } from "../shared/agent-session-link.js";
 import {
   AGENT_SESSION_ENDED_REASON,
   agentHasEverConnected,
 } from "../shared/agent-status.js";
-import { AgentStatusGlyph } from "./agent-status.browser.js";
 import type {
   AgentHealth,
   AgentHealthIndicator,
@@ -38,7 +38,7 @@ import {
 } from "../shared/time-label.js";
 import { BrandIconView, Icon } from "./icon.browser.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
-import { Badge } from "./ui.browser.js";
+import { Badge, WorkingMark } from "./ui.browser.js";
 
 const VENDOR_ICONS: Record<AgentModelVendor, BrandIcon> = {
   openai: OPENAI_ICON,
@@ -145,13 +145,15 @@ const ReadOnlySessionCard = ({
   </article>
 );
 
-const CopyBlock = ({
-  value,
-  label,
-}: {
-  readonly value: string;
-  readonly label: string;
-}) => {
+/*
+Copying one string, with the outcome shown on the control that did it.
+
+Three surfaces need this now - the recovery payload, a session identifier that
+cannot be linked, and the session id in the details - and each needs the same
+three states and the same failure wording. The behaviour lives here; the shape
+of the control is the caller's.
+*/
+const useCopyToClipboard = (value: string) => {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
   const copy = async () => {
@@ -167,11 +169,84 @@ const CopyBlock = ({
     }
     window.setTimeout(() => setCopied(false), 1_500);
   };
-  const buttonLabel = failed
+  return { copied, failed, copy };
+};
+
+/** Names a copy control by what it does and what just happened. */
+const copyControlLabel = ({
+  label,
+  copied,
+  failed,
+}: {
+  readonly label: string;
+  readonly copied: boolean;
+  readonly failed: boolean;
+}): string =>
+  failed
     ? "Copy failed — select and copy manually"
     : copied
       ? `${label} copied`
       : `Copy ${label}`;
+
+/**
+ * Offers a session address the card cannot open as something to take away.
+ *
+ * The identifier itself is not shown: it is long, it is not for reading, and
+ * the reader either needs it in another tool or does not need it at all.
+ */
+const CopySessionIdentifier = ({ value }: { readonly value: string }) => {
+  const { copied, failed, copy } = useCopyToClipboard(value);
+  return (
+    <button
+      type="button"
+      className="inline-flex w-fit cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-2xs font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
+      aria-label={copyControlLabel({
+        label: "chat session identifier",
+        copied,
+        failed,
+      })}
+      data-review-agent-session-copy={value}
+      onClick={() => void copy()}
+    >
+      <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
+      {failed
+        ? "Copy failed"
+        : copied
+          ? "Copied"
+          : "Copy chat session identifier"}
+    </button>
+  );
+};
+
+/** A bare copy control, for a value already shown beside it. */
+const CopyIdentifierControl = ({ value }: { readonly value: string }) => {
+  const { copied, failed, copy } = useCopyToClipboard(value);
+  return (
+    <button
+      type="button"
+      className="inline-flex shrink-0 cursor-pointer items-center rounded-sm border-0 bg-transparent p-0 text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
+      aria-label={copyControlLabel({
+        label: "agent session identifier",
+        copied,
+        failed,
+      })}
+      data-review-agent-session-copy={value}
+      onClick={() => void copy()}
+    >
+      <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
+    </button>
+  );
+};
+
+const CopyBlock = ({
+  value,
+  label,
+}: {
+  readonly value: string;
+  readonly label: string;
+}) => {
+  const { copied, failed, copy } = useCopyToClipboard(value);
+  const buttonLabel = copyControlLabel({ label, copied, failed });
   // The control floats in the payload's own corner rather than being absolutely
   // positioned over it. A float reserves exactly its own width on exactly the
   // lines it covers, so no line runs underneath it at sidebar width and no
@@ -360,6 +435,10 @@ const CurrentActivityCard = ({
       ? undefined
       : { key: "effort", text: modelEffort },
   ].filter((segment) => segment !== undefined);
+  const sessionAffordance = agentSessionAffordance({
+    ...(sessionUrl === undefined ? {} : { sessionUrl }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+  });
   const requestId = "requestId" in activity ? activity.requestId : undefined;
   const requestKind = "requestId" in activity ? activity.requestKind : "";
   const footerLabel =
@@ -373,9 +452,13 @@ const CurrentActivityCard = ({
       className={`grid min-w-0 gap-1.5 rounded-lg border p-3 text-xs leading-[1.45] ${STATUS_CARD_TONE[status.indicator]}`}
       data-review-current-activity={activity.state}
     >
-      <div className="flex min-w-0 items-center gap-2">
+      {/* Six pixels rather than eight: the mark is round and the title starts
+          with a letter, so the measured gap reads wider than it is. */}
+      <div className="flex min-w-0 items-center gap-1.5">
         {activity.state === "working" ? (
-          <AgentStatusGlyph indicator="working" />
+          /* Sized to the mark the thread chips show, so the card's heading does
+             not say the same thing more quietly than a chip does. */
+          <WorkingMark className="size-3" />
         ) : null}
         <strong className="min-w-0 flex-1 text-sm text-ink">{title}</strong>
       </div>
@@ -422,48 +505,27 @@ const CurrentActivityCard = ({
           ))}
         </span>
       )}
-      {sessionUrl === undefined ? null : (
-        /* The agent's own conversation is somewhere else entirely, so the link
-           says where it goes rather than naming a destination the reader is
-           already looking at. */
+      {/*
+      A link only where one can actually be followed. Big Plan decides that from
+      the interfaces it knows, not from the declaration: an address it cannot
+      place is offered as a string to copy, which is useful in whatever tool it
+      belongs to and never sends the reader nowhere.
+      */}
+      {sessionAffordance.kind === "link" ? (
         <a
           className="inline-flex w-fit items-center gap-1 text-2xs font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          href={sessionUrl}
+          href={sessionAffordance.href}
           target="_blank"
           rel="noreferrer noopener"
-          data-review-agent-session-url={sessionUrl}
+          data-review-agent-session-url={sessionAffordance.href}
+          data-review-agent-session-interface={sessionAffordance.interfaceId}
         >
           Open the agent's chat
         </a>
-      )}
-      {workHeadline === undefined || subjectLabel === undefined ? null : (
-        <p className="m-0 text-ink [overflow-wrap:anywhere]">{workHeadline}</p>
-      )}
-      {subjectLabel === undefined ? (
-        <p className="m-0 text-ink [overflow-wrap:anywhere]">{body}</p>
-      ) : (
-        <div
-          className="grid min-w-0 gap-1 border-t border-current/20 pt-1.5"
-          data-review-agent-target={targetLabel ?? subjectLabel}
-        >
-          {requestId === undefined ? (
-            <p className="m-0 flex min-w-0 items-center gap-1.5 font-semibold text-ink">
-              <SubjectMark />
-              <span className="min-w-0 truncate">{subjectLabel}</span>
-            </p>
-          ) : (
-            <button
-              type="button"
-              className="flex min-w-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-left font-semibold text-ink hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              onClick={() => onViewRequest(requestId, requestKind)}
-            >
-              <SubjectMark />
-              <span className="min-w-0 truncate">{subjectLabel}</span>
-            </button>
-          )}
-          <p className="m-0 text-muted [overflow-wrap:anywhere]">{body}</p>
-        </div>
-      )}
+      ) : sessionAffordance.kind === "identifier" &&
+        sessionUrl !== undefined ? (
+        <CopySessionIdentifier value={sessionAffordance.value} />
+      ) : null}
       {connection.sinceAtMs === undefined ||
       !connection.everConnected ||
       activity.state === "working" ? null : (
@@ -489,11 +551,16 @@ const CurrentActivityCard = ({
                rather than beside the state they are reading. */
             <div className="min-w-0">
               <dt className="font-semibold">Agent session</dt>
-              <dd
-                className="m-0 truncate text-ink"
-                data-review-agent-session-id={sessionId}
-              >
-                {sessionId}
+              <dd className="m-0 flex min-w-0 items-center gap-1 text-ink">
+                <span
+                  className="min-w-0 truncate"
+                  data-review-agent-session-id={sessionId}
+                >
+                  {sessionId}
+                </span>
+                {/* The row truncates because the identifier is long and not for
+                    reading; the control hands over the whole of it. */}
+                <CopyIdentifierControl value={sessionId} />
               </dd>
             </div>
           )}
@@ -508,6 +575,37 @@ const CurrentActivityCard = ({
             </dd>
           </div>
         </dl>
+      )}
+      {workHeadline === undefined || subjectLabel === undefined ? null : (
+        <p className="m-0 text-ink [overflow-wrap:anywhere]">{workHeadline}</p>
+      )}
+      {subjectLabel === undefined ? (
+        <p className="m-0 text-ink [overflow-wrap:anywhere]">{body}</p>
+      ) : (
+        /* The request is a thing inside the card rather than another paragraph
+           of it: one border, one step of ground away from the card it sits in,
+           and no rule above, which would draw the same separation twice. */
+        <div
+          className="grid min-w-0 gap-1 rounded-md border border-current/25 bg-[color-mix(in_srgb,currentColor_6%,transparent)] p-2"
+          data-review-agent-target={targetLabel ?? subjectLabel}
+        >
+          {requestId === undefined ? (
+            <p className="m-0 flex min-w-0 items-center gap-1.5 font-semibold text-ink">
+              <SubjectMark />
+              <span className="min-w-0 truncate">{subjectLabel}</span>
+            </p>
+          ) : (
+            <button
+              type="button"
+              className="flex min-w-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-left font-semibold text-ink hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onClick={() => onViewRequest(requestId, requestKind)}
+            >
+              <SubjectMark />
+              <span className="min-w-0 truncate">{subjectLabel}</span>
+            </button>
+          )}
+          <p className="m-0 text-muted [overflow-wrap:anywhere]">{body}</p>
+        </div>
       )}
       {footerLabel === null ? null : (
         <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-1.5 text-2xs">
@@ -933,7 +1031,10 @@ export const AgentConnectionPanel = ({
     activity.state === "disconnected" || activity.state === "offline";
   const [recoveryIsOpen, setRecoveryIsOpen] = useState(agentIsGone);
   useEffect(() => {
-    if (agentIsGone) setRecoveryIsOpen(true);
+    // Follows the transition, not the render: the section opens when the agent
+    // goes and closes when one arrives, and a reader who toggles it in between
+    // keeps their choice until the state changes under them again.
+    setRecoveryIsOpen(agentIsGone);
   }, [agentIsGone]);
   const connection = summarizeAgentConnection({ events: connectionLog });
   // The activity already answers "has an agent ever been here", and answers it

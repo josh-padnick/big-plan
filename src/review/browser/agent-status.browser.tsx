@@ -38,9 +38,11 @@ export const AGENT_STATUS_TRIGGER_ID = "review-agent-trigger";
 const FILLED_MARK = "[&>svg]:size-2 [&>svg]:fill-current";
 const OUTLINED_MARK = "[&>svg]:size-3.5";
 
-// The working state draws the product's one working mark rather than an icon,
-// at the size of the dot it replaces so nothing in the toolbar moves when work
-// starts or stops.
+// The working state draws the product's one working mark rather than an icon.
+// It is drawn a step larger than the connected dot at the captain's
+// measurement: a ring encloses space where a disc fills it, so the same
+// diameter reads smaller, and the control grows by two pixels when work starts
+// rather than the mark reading as an afterthought.
 const INDICATOR_PRESENTATION: Record<
   AgentHealthIndicator,
   { readonly icon: LucideIcon; readonly className: string }
@@ -80,7 +82,7 @@ export const AgentStatusGlyph = ({
       aria-hidden="true"
     >
       {indicator === "working" ? (
-        <WorkingMark className="size-2" />
+        <WorkingMark className="size-2.5" />
       ) : (
         <Icon icon={presentation.icon} />
       )}

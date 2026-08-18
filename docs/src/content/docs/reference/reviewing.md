@@ -246,8 +246,21 @@ read from the environment the coding-agent session was launched in:
 model, and effort read as one line, each segment appearing only if the agent
 stated it, and a session with no declaration shows no identity at all rather
 than a note about its absence.
-A declared URL becomes an **Open the agent's chat** link; a bare session id
-appears among the connection details instead, since it cannot be followed.
+Whether a declared session can be opened is Big Plan's judgment, not the
+agent's. A URL becomes an **Open the agent's chat** link only when it matches an
+interface known to serve conversations a browser can follow:
+
+| Interface                         | Shape                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| Claude Code on the web or desktop | `https://claude.ai/code/<id>` or `https://claude.com/code/<id>`          |
+| Codex on the web or desktop       | `https://chatgpt.com/codex/<id>` or `https://chat.openai.com/codex/<id>` |
+| Grok on the web                   | `https://grok.com/chat/<id>` or `https://grok.com/c/<id>`                |
+
+Anything else - a CLI serving its own session, a private host, a custom scheme,
+a bare id - is offered as **Copy chat session identifier** instead. A link that
+does not open costs the reader their attention and their trust, so Big Plan
+offers one only where it can stand behind it. Adding an interface is a change to
+that table rather than a change to what a connector may declare.
 
 Model ids are looked up, never rewritten. A known id prints the name its vendor
 writes - `grok-4.6` shows as `Grok 4.6` - and uses that vendor's own logo. An id
