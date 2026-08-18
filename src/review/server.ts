@@ -51,6 +51,7 @@ import {
 import { buildFeedbackPackage } from "./feedback-package.js";
 import {
   deriveSnapshotDigest,
+  AgentExchangeRejected,
   feedbackAgentRequest,
   messageAgentRequest,
   readAgentExchange,
@@ -1098,6 +1099,13 @@ export const startReviewRuntime = async ({
         return;
       }
       if (error instanceof CommentRejected) {
+        refuse({ response, status: 400, reason: error.message });
+        return;
+      }
+      // A message the exchange refused is a bad request, the same as one the
+      // comment validator refused. Letting it fall through reported the
+      // reviewer's own malformed reply as a runtime failure.
+      if (error instanceof AgentExchangeRejected) {
         refuse({ response, status: 400, reason: error.message });
         return;
       }

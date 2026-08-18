@@ -456,11 +456,18 @@ const validateStoredTarget = (value: unknown): CommentTarget => {
           return value;
         })
       : undefined;
+  // A malformed end block is a broken address, not a reversed range: saying so
+  // is what lets a reader tell "this comment points nowhere" from "these two
+  // offsets are the wrong way round".
   if (
-    ((endBlockId === undefined || endBlockId === target.blockId) &&
-      end < start) ||
-    (endBlockId !== undefined &&
-      (typeof endBlockId !== "string" || !BLOCK_ID.test(endBlockId)))
+    endBlockId !== undefined &&
+    (typeof endBlockId !== "string" || !BLOCK_ID.test(endBlockId))
+  ) {
+    throw new CommentRejected("A stored comment target is invalid");
+  }
+  if (
+    (endBlockId === undefined || endBlockId === target.blockId) &&
+    end < start
   ) {
     throw new CommentRejected("A stored comment range is invalid");
   }

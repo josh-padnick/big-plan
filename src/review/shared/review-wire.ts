@@ -803,7 +803,9 @@ export const decodeRuntimeSession = ({
   }
   return {
     plan: value.plan,
-    authoritative: value.authoritative !== false,
+    // A malformed payload must withhold authority, not grant it: `!== false`
+    // read a missing field, a null, and the string "false" as authoritative.
+    authoritative: value.authoritative === true,
     ...(typeof value.latestReviewUrl === "string"
       ? { latestReviewUrl: value.latestReviewUrl }
       : {}),

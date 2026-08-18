@@ -542,8 +542,16 @@ const floatingComposerPosition = ({
     edge,
     Math.min(preferred.left, window.innerWidth - width - edge),
   );
+  // The viewport's own top is not the first free pixel: fixed chrome sits
+  // above it, so the floor is whichever is lower - the reading edge, or the
+  // bottom of the chrome that would otherwise cover the composer.
+  const chromeBottom = obstacles.reduce(
+    (lowest, obstacle) =>
+      obstacle.top <= edge ? Math.max(lowest, obstacle.bottom + gap) : lowest,
+    edge,
+  );
   const clampTop = (top: number) =>
-    Math.max(edge, Math.min(top, window.innerHeight - height - edge));
+    Math.max(chromeBottom, Math.min(top, window.innerHeight - height - edge));
   const candidates = [
     clampTop(preferred.top),
     ...obstacles.flatMap((obstacle) => [
@@ -2151,9 +2159,12 @@ const CommentComposer = ({
     const frame = requestAnimationFrame(() => {
       const rect = composerRef.current?.getBoundingClientRect();
       if (rect === undefined) return;
+      // The shell's own fixed bars count as obstacles too. They are painted
+      // above the composer and are not part of the review island, so a slot
+      // chosen without them looks free and lands underneath the header.
       const obstacles = Array.from(
         document.querySelectorAll<HTMLElement>(
-          '[data-review-thread-side], button[aria-label^="Comment on"]',
+          '[data-review-thread-side], button[aria-label^="Comment on"], [data-shell-chrome]',
         ),
         (node) => node.getBoundingClientRect(),
       ).filter((obstacle) => obstacle.width > 0 && obstacle.height > 0);

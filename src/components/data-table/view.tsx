@@ -336,7 +336,11 @@ export const DataTable = ({ model }: { readonly model: CompiledDataTable }) => (
             <tr
               key={rowIndex}
               data-commentable-kind="table-row"
-              data-commentable-label={row.cells[0]?.text ?? "Table row"}
+              data-commentable-label={
+                row.cells[0]?.text === undefined || row.cells[0].text === ""
+                  ? "Table row"
+                  : row.cells[0].text
+              }
               data-table-row={rowIndex}
             >
               {row.cells.map((cell, cellIndex) => {

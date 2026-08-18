@@ -427,7 +427,7 @@ const renderMobileToc = ({
     groupedLinkClasses: MOBILE_TOC_GROUPED_LINK_CLASSES,
     partHeaderClasses: MOBILE_TOC_PART_HEADER_CLASSES,
   });
-  return `<nav class="${MOBILE_TOC_BAR_CLASSES}" data-mobile-toc aria-label="Contents">
+  return `<nav class="${MOBILE_TOC_BAR_CLASSES}" data-mobile-toc data-shell-chrome aria-label="Contents">
 <details class="group relative mx-auto h-full max-w-[74ch]">
 <summary class="flex h-full cursor-pointer list-none items-center gap-3 px-6 py-2 [&amp;::-webkit-details-marker]:hidden">
 <span class="font-semibold text-ink">Sections</span>
@@ -475,7 +475,7 @@ export const renderShell = ({
   const standalone = chrome === "standalone";
   const hasToc = nav.length > 0;
   const overviewId = createOverviewId(contentIds);
-  const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-paper/90 backdrop-blur">
+  const html = `<header class="sticky top-0 z-40 h-11 border-b border-edge bg-paper/90 backdrop-blur" data-shell-chrome>
 <div class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-6">
 <a class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href="https://big-plan.ai" target="_blank" rel="noreferrer">
 <img class="w-27 h-auto" data-logo-light src="${LOGO_LIGHT_SRC}" alt="Big Plan" width="1200" height="220">
