@@ -816,9 +816,16 @@ export const startReviewRuntime = async ({
     .then((recoveries) => {
       for (const recovery of recoveries) {
         if (recovery.outcome === "conflict") {
-          process.stderr.write(
-            `Big Plan stopped agent edits for ${resolvedPlanPath}: its source is ${recovery.currentSnapshot}, which matches neither side of the interrupted commit for request ${recovery.requestId}.\n`,
-          );
+          // A diagnostic sink failure must not fail the review request: a
+          // closed or full stderr would otherwise tear down a runtime whose
+          // recovery succeeded and whose only failure was reporting it.
+          try {
+            process.stderr.write(
+              `Big Plan stopped agent edits for ${resolvedPlanPath}: its source is ${recovery.currentSnapshot}, which matches neither side of the interrupted commit for request ${recovery.requestId}.\n`,
+            );
+          } catch {
+            // Nothing left to report it with.
+          }
         }
       }
     })

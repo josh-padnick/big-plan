@@ -1695,11 +1695,20 @@ export const hasPreparedMutationJournal = async ({
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
-}): Promise<boolean> =>
-  stat(agentMutationJournalPath({ store, requestId })).then(
-    () => true,
-    () => false,
-  );
+}): Promise<boolean> => {
+  try {
+    await stat(agentMutationJournalPath({ store, requestId }));
+    return true;
+  } catch (error: unknown) {
+    // Only a missing file proves there is no prepared commit. Reading any
+    // other failure as absence would let a cancel withdraw a request whose
+    // revision may already be published, so the caller refuses instead.
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+};
 
 /**
  * The highest claim generation this request has a stage directory for, or 0

@@ -45,6 +45,7 @@ import {
   REVERT_SOURCE_MOVED_REASON,
   revertPlanSource,
   settleInterruptedCommitsFor,
+  StagedPlanMutationRejected,
 } from "./staged-plan-mutation.js";
 import {
   anchorReviewStore,
@@ -144,7 +145,7 @@ type FeedbackSubmission = {
 // One submission carries a set of comments, not a sequence, so a retry that
 // sends the same comments in a different order has to reach the same stored
 // submission instead of duplicating the artifacts and the agent request.
-const canonicalSubmissionComments = (
+export const canonicalSubmissionComments = (
   comments: ReadonlyArray<ReviewComment>,
 ): ReadonlyArray<{
   readonly id: string;
@@ -390,15 +391,6 @@ export const submitFeedback = async (
   if (comments.length === 0) {
     return refusal({ status: 400, reason: "Nothing to send" });
   }
-  try {
-    await assertCommentsAreUnresolved({
-      store,
-      commentIds: comments.map((comment) => comment.id),
-    });
-  } catch (error: unknown) {
-    if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
-  }
   const alreadySent = await planRenderer.readStoredComments(store.sentPath);
   const sentById = new Map(alreadySent.map((comment) => [comment.id, comment]));
   if (
@@ -416,6 +408,18 @@ export const submitFeedback = async (
     });
   }
   const newlySent = comments.filter((comment) => !sentById.has(comment.id));
+  // The refusal is defined for new work, so it is asked of new work only. A
+  // resend of something already sent is the retry this route answers with 200,
+  // and refusing it would make a retry harder to complete than the first try.
+  try {
+    await assertCommentsAreUnresolved({
+      store,
+      commentIds: newlySent.map((comment) => comment.id),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
   const submittedIds = new Set(comments.map((comment) => comment.id));
   const remainingDrafts = (
     await planRenderer.readStoredComments(store.draftsPath)
@@ -650,7 +654,17 @@ export const revertAgentChanges = async (
     });
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;
-    return refusal({ status: 409, reason: error.message });
+    // A contended lock is not a settled conflict. The message tells the
+    // reviewer to try again, so the status has to say the same thing, or a
+    // client that treats 409 as final never will.
+    return refusal({
+      status:
+        error instanceof StagedPlanMutationRejected &&
+        error.code === "unavailable"
+          ? 503
+          : 409,
+      reason: error.message,
+    });
   }
   readerProgress.accept(request.baselineSnapshot);
   return jsonResponse({

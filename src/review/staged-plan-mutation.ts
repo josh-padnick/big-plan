@@ -427,6 +427,10 @@ type JournalScan = {
   readonly unreadable: ReadonlyArray<string>;
 };
 
+/** True only for the one filesystem failure that proves a path is absent. */
+const isMissingPath = (error: unknown): boolean =>
+  error instanceof Error && "code" in error && error.code === "ENOENT";
+
 /**
  * Reads every prepared journal, keeping the ones it can settle apart from the
  * ones it cannot.
@@ -440,7 +444,17 @@ const readJournals = async (store: ReviewStore): Promise<JournalScan> => {
   let names: ReadonlyArray<string>;
   try {
     names = await readdir(store.agentMutationJournalDirectory);
-  } catch {
+  } catch (error: unknown) {
+    // Only a missing directory proves there is no journal. Any other failure
+    // leaves the outcome of an interrupted commit unknown, and answering
+    // "none" would let the runtime serve work over a revision that may already
+    // be published.
+    if (!isMissingPath(error)) {
+      throw new StagedPlanMutationRejected(
+        "unavailable",
+        "The interrupted-commit journals could not be read, so an interrupted plan commit cannot be settled",
+      );
+    }
     return { journals: [], unreadable: [] };
   }
   const journals: Array<MutationJournal> = [];
@@ -453,11 +467,7 @@ const readJournals = async (store: ReviewStore): Promise<JournalScan> => {
     } catch (error: unknown) {
       // A journal that vanished between the listing and the read has nothing
       // left to settle; anything else is a commit of unknown outcome.
-      if (!(
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "ENOENT"
-      )) {
+      if (!isMissingPath(error)) {
         unreadable.push(path);
       }
       continue;

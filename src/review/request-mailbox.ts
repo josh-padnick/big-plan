@@ -397,9 +397,15 @@ const assertRequestIsWithdrawable = async ({
   // on disk here means the answer has published or is one rename from
   // publishing. Withdrawing it would leave the plan carrying a revision every
   // record calls canceled.
-  if (
-    await hasPreparedMutationJournal({ store, requestId: request.requestId })
-  ) {
+  const publishing = await hasPreparedMutationJournal({
+    store,
+    requestId: request.requestId,
+  }).catch(() => {
+    throw new AgentExchangeRejected(
+      "Big Plan cannot tell whether the agent's answer for this request is already publishing, so it cannot be canceled",
+    );
+  });
+  if (publishing) {
     throw new AgentExchangeRejected(
       "The agent's answer for this request is already publishing, so it can no longer be canceled",
     );
