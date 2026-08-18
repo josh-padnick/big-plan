@@ -7,7 +7,9 @@ import {
   decodeChangeDispositions,
   decodeProgress,
   decodeRuntimeSession,
+  decodeReviewInputContract,
   decodeReviewSnapshot,
+  decodeReviewState,
   decodeSnapshotDiff,
   encodeAgentSnapshot,
   encodeProgress,
@@ -602,5 +604,40 @@ describe("review wire contract", () => {
     for (const value of [null, {}, { accepted: [] }, { revision: "4" }]) {
       expect(decodeChangeDispositions(value).revision).toBe(-1);
     }
+  });
+
+  // A revision no store could have written is worse than useless if accepted:
+  // it sits above the legitimate write that follows it, and would discard
+  // every later response until the count climbed past it.
+  it("should refuse a revision that is not a whole write count", () => {
+    for (const revision of [
+      0.5,
+      -1,
+      -2,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+    ]) {
+      expect(
+        decodeChangeDispositions({ accepted: [], revision }).revision,
+      ).toBe(-1);
+      expect(decodeReviewState({ answers: [], revision }).revision).toBe(-1);
+      expect(
+        decodeReviewInputContract({
+          inputs: [],
+          answersRevision: revision,
+          dispositionsRevision: revision,
+        }),
+      ).toMatchObject({ answersRevision: -1, dispositionsRevision: -1 });
+    }
+  });
+
+  it("should keep a whole write count, including the first one", () => {
+    expect(
+      decodeReviewInputContract({
+        inputs: [],
+        answersRevision: 0,
+        dispositionsRevision: 7,
+      }),
+    ).toMatchObject({ answersRevision: 0, dispositionsRevision: 7 });
   });
 });

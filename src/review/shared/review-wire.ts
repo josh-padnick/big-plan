@@ -347,6 +347,20 @@ export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
   };
 };
 
+/**
+ * A record's write count as a reader may use it. Every store advances this by
+ * whole steps from zero, so a value that is not a whole count is not a write
+ * this build can order against - and accepting one would be worse than
+ * refusing it: a fractional revision sits above the legitimate write that
+ * follows it, and would silently discard every later response until the count
+ * climbed past it. Anything unusable decodes to -1, which is older than any
+ * accepted write and can therefore never displace applied state.
+ */
+const storedRevision = (candidate: unknown): number =>
+  typeof candidate === "number" && Number.isInteger(candidate) && candidate >= 0
+    ? candidate
+    : -1;
+
 /** Encodes the change dispositions a review has recorded. */
 export const encodeChangeDispositions = (
   value: ChangeDispositionStateSource,
@@ -365,10 +379,7 @@ export const decodeChangeDispositions = (
     return { accepted: [], revision: -1 };
   }
   return {
-    revision:
-      typeof value.revision === "number" && Number.isFinite(value.revision)
-        ? value.revision
-        : -1,
+    revision: storedRevision(value.revision),
     accepted: value.accepted.flatMap(
       (entry): ReadonlyArray<ChangeDisposition> =>
         isReviewWireRecord(entry) &&
@@ -420,13 +431,9 @@ export const decodeReviewInputContract = (
   if (!isReviewWireRecord(value) || !Array.isArray(value.inputs)) {
     return emptyReviewInputContract();
   }
-  const revision = (candidate: unknown): number =>
-    typeof candidate === "number" && Number.isFinite(candidate)
-      ? candidate
-      : -1;
   return {
-    answersRevision: revision(value.answersRevision),
-    dispositionsRevision: revision(value.dispositionsRevision),
+    answersRevision: storedRevision(value.answersRevision),
+    dispositionsRevision: storedRevision(value.dispositionsRevision),
     inputs: value.inputs.flatMap((input): ReadonlyArray<ReviewInput> =>
       isReviewWireRecord(input) &&
       typeof input.inputId === "string" &&
@@ -467,10 +474,7 @@ export const decodeReviewState = (value: unknown): ReviewState => {
     return { answers: [], supersededDecisionIds: [], revision: -1 };
   }
   return {
-    revision:
-      typeof value.revision === "number" && Number.isFinite(value.revision)
-        ? value.revision
-        : -1,
+    revision: storedRevision(value.revision),
     supersededDecisionIds: Array.isArray(value.supersededDecisionIds)
       ? value.supersededDecisionIds.filter(
           (id): id is string => typeof id === "string",
