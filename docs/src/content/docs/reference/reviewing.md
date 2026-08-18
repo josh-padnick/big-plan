@@ -229,7 +229,7 @@ valid answer publishes, so an agent that stalls, is taken over, or dies
 mid-edit leaves your plan exactly as it was.
 
 Messages sent while the agent is handling another request are received immediately and wait in delivery order.
-A comment you send on its own reports that wait in two places until an agent picks its request up: the comments sidebar groups it under the **Queued** heading and numbers its card by its place in the queue, while the status block inside the thread reads **Waiting for an agent**.
+A comment you send on its own reports that wait in two places until an agent picks its request up: the comments sidebar groups it under the **Queued** heading and numbers its card by its position among the queued threads currently shown, while the status block inside the thread reads **Waiting for an agent**.
 That in-thread block adds the line **Queued, _N_ ahead** above the headline when earlier unanswered work exists, then reaches the agent when every earlier request is answered or canceled.
 Canceling the active request releases the plan immediately, so the next queued request advances without waiting for the canceled claim's lease to lapse.
 Once an agent picks the request up the thread says **Working**, and it stays picked up from then on.
@@ -245,7 +245,7 @@ Either way a message you send once the agent is gone reads **Blocked - no agent 
 Sending several comments at once makes one feedback package, and the sidebar heads that package with what the package itself is doing.
 One open package keeps one heading above the sent threads.
 Send a second package while the first is still being worked, and each package heads its own threads: the package being worked keeps the spinner, the package behind it reads **Queued, _N_ ahead** under an hourglass, and neither heading speaks for the other's threads.
-A thread its package heads reports its wait through that heading instead of repeating it inside the card, and it leaves the **Queued** heading to the threads no package speaks for - each of which keeps its own place in the queue, counting the package-headed threads sent before it and none of those sent after.
+A thread its package heads reports its wait through that heading instead of repeating it inside the card, and it leaves the **Queued** heading to the threads no package speaks for - each of which keeps its position among the queued threads currently shown, counting only the packages still waiting ahead of it.
 
 **Agent Status** offers **Reconnect your agent**, holding the one prompt that starts a coding-agent session; a session that has never had an agent reads **Connect your agent** instead.
 An agent going quiet never hides that section, because it is the only place that prompt lives and losing your route back is the last thing a silence should cost you; only a read-only session or a review runtime you cannot reach hides it.

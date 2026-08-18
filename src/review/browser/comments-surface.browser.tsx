@@ -139,9 +139,9 @@ export type CommentsSurfaceModel = {
   readonly renderDraft: (comment: ReviewComment, compact: boolean) => ReactNode;
   readonly renderResolvedDraft: (comment: ReviewComment) => ReactNode;
   /**
-   * Renders one sent thread. queuePosition is that thread's place in the
-   * sidebar's queue of waiting threads, counting the ones a batch header owns,
-   * so it is not the card's index in the list it renders into.
+   * Renders one sent thread. queuePosition is that thread's position among the
+   * queued threads the sidebar is showing, counting the ones a batch header
+   * owns, so it is not the card's index in the list it renders into.
    */
   readonly renderSent: (
     comment: ReviewComment,
@@ -176,9 +176,9 @@ export const CommentsSurface = ({
   const working = unheaded("working");
   const queuedGroup = model.groups.get("queued") ?? [];
   const queued = queuedGroup.filter((comment) => !headed.has(comment.id));
-  // A thread keeps the place in line it was sent into, whether or not a batch
-  // header speaks for the threads around it. Counting the whole queued group
-  // rather than the leftovers is what keeps the number a queue position instead
+  // A thread keeps its place among the queued threads on show, whether or not a
+  // batch header speaks for the ones around it. Counting the whole queued group
+  // rather than the leftovers is what keeps the number a place in line instead
   // of an index into whatever this section happens to hold.
   const queuePosition = (comment: ReviewComment): number =>
     queuedGroup.indexOf(comment) + 1;
