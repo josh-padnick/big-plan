@@ -29,7 +29,7 @@ Everything on this page is shipped and works today.
 - `big-plan review` serves a loopback session with a per-session API token, comments on slides, components, or selected text, plus plan-wide chat and coding-agent status.
 - Sent feedback stays attached to durable threads while the connected coding agent answers, asks for input, declines, warns, or publishes a validated plan revision.
 - **What changed** compares each request's claim-time baseline with its result, keeps later historical and stale-premise diffs reviewable, preserves structured component presentation, and guides the reviewer through accepting each changed place; comment threads then offer resolution.
-- Confirmed decision answers are saved with the review, stay current only while their decision's content is unchanged, and reach the agent when the plan is approved; a standalone rendered document keeps answers for the reading session only.
+- Confirmed decision answers are saved with the review and stay current only while their decision's content is unchanged; they are readable within the review session rather than delivered to the agent, and a standalone rendered document keeps answers for the reading session only.
 - Review state and feedback packages stay in an ignored, owner-only `.big-plan/` directory beside the plan.
 
 See [Reviewing a plan](/reference/reviewing/) for the workflow, persistence model, causal diff behavior, and trust boundaries.

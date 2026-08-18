@@ -43,10 +43,11 @@ export const DRAWING_SYSTEM_STYLESHEETS = new Set([
  */
 export const STYLESHEET_BUDGETS = {
   "src/components/_shared/decision-card/decision-card.css": {
-    // Bought for the Clear answer control, the change flow's exit, and the two
-    // notices the review island reveals: a superseded answer and a read-only
-    // review.
-    declarations: 315,
+    // Bought for the answer composer: its two modes and their controls, the
+    // Clear answer exit from the change flow, the narrow-viewport touch floor
+    // those controls keep, and the two notices the review island reveals - a
+    // superseded answer and a read-only review.
+    declarations: 394,
   },
   "src/components/_shared/figure-controls/figure-controls.css": {
     declarations: 58,

@@ -910,6 +910,15 @@
     article .decision-matrix {
       min-width: 34rem;
     }
+    /* Below the reading breakpoint the reader is plausibly using a thumb, so
+       every control the composer offers meets the touch floor. Above it the
+       rail's own buttons release the same minimum, and so do these. */
+    article .decision-comment-submit,
+    article .decision-proposal-cancel,
+    article .decision-clear {
+      min-width: 2.75rem;
+      min-height: 2.75rem;
+    }
   }
   @media (width < 36rem) {
     article .decision-options-heading {

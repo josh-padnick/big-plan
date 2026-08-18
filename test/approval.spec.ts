@@ -51,9 +51,9 @@ Choose the release path before implementation begins.
 // The captions say what a recorded answer means, so they are asserted as whole
 // sentences rather than as the presence of a word.
 const SAVED_CAPTION =
-  "Saved with this review. Your agent receives it when you approve the plan.";
+  "Saved with this review. It survives reload and runtime restarts.";
 const READING_CAPTION =
-  "Noted for this reading session. It is not recorded for your agent.";
+  "Noted for this reading session. It is not saved with the review.";
 
 const releaseDecision = (page: Page) => page.locator("[data-decision]").first();
 const rollbackDecision = (page: Page) => page.locator("[data-decision]").nth(1);
@@ -64,11 +64,14 @@ const answerGradualRollout = async (page: Page): Promise<void> => {
   await decision.getByRole("button", { name: "Confirm choice" }).click();
 };
 
-const startCompiledReviewRuntime = async (planPath: string) => {
+const startCompiledReviewRuntime = async (
+  planPath: string,
+  { takeover = false }: { readonly takeover?: boolean } = {},
+) => {
   // Playwright wraps JSX values during source transformation, so component
   // journeys use the built renderer exactly as the shipped runtime does.
   const { startReviewRuntime } = await import("../dist/review/server.js");
-  return startReviewRuntime({ planPath });
+  return startReviewRuntime({ planPath, takeover });
 };
 
 const isInputOperation = (
@@ -529,7 +532,11 @@ test("should turn a held confirm into a reading-session answer when read-only", 
     });
     await page.goto(runtime.url);
     await sessionRequestStarted;
-    const replacement = await startCompiledReviewRuntime(planPath);
+    // Taking custody is what makes the first page read-only, and custody is
+    // never taken by accident: a second runtime has to ask for it.
+    const replacement = await startCompiledReviewRuntime(planPath, {
+      takeover: true,
+    });
     try {
       await answerGradualRollout(page);
       expect(inputWrites).toBe(0);

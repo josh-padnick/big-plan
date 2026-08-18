@@ -2541,6 +2541,12 @@ const wireDecisions = () => {
     const sendNow = own("[data-decision-send-now]");
     const modeRow = own("[data-decision-mode]");
 
+    // Cancelling the composer puts the reader back where they were, so each
+    // card remembers its own last column choice. It is per card because one
+    // shared record would let cancelling here re-check a radio over there.
+    let previousOptionChoice =
+      choices.find((choice) => choice.checked && !proposes(choice)) || null;
+
     // True while the reader is changing an answer they already gave. Only then
     // is there an answer to clear, which is why the exit is offered here and
     // not to a reader who has merely selected something for the first time.
@@ -3006,12 +3012,12 @@ const wireDecisions = () => {
     };
     const showPersistenceSaved = () => {
       showPersistenceState(
-        "Saved with this review. Your agent receives it when you approve the plan.",
+        "Saved with this review. It survives reload and runtime restarts.",
       );
     };
     const showReadingSession = () => {
       showPersistenceState(
-        "Noted for this reading session. It is not recorded for your agent.",
+        "Noted for this reading session. It is not saved with the review.",
       );
     };
     const recordAnswer = (choice, replay) => {

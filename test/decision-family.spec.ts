@@ -293,6 +293,36 @@ test("should compare, answer, and revise a Decision", async ({
   );
 });
 
+test("should leave the composer when it was opened without a prior selection", async ({
+  page,
+  decisionViewerUrl,
+}) => {
+  // Cancelling puts the reader back on the option they had before. A reader who
+  // never chose one has nothing to go back to, and the exit still has to work:
+  // the field empties, the composer closes, and nothing ends up selected.
+  await page.goto(decisionViewerUrl);
+  const card = page.locator("[data-decision-selector]").first();
+  const proposal = card.locator("[data-decision-proposal]");
+  const field = card.locator("[data-decision-proposal-text]");
+  const chosen = card.locator("[data-decision-choice]:checked");
+
+  await card.locator(".decision-propose-link").click();
+  await field.fill("Publish a signed standalone archive.");
+  await card.locator("[data-decision-proposal-cancel]").click();
+  await expect(proposal).toBeHidden();
+  await expect(field).toHaveValue("");
+  await expect(chosen).toHaveCount(0);
+  await expect(card.locator("[data-decision-confirm]")).toBeDisabled();
+
+  // Escape is the same exit reached from the keyboard.
+  await card.locator(".decision-propose-link").click();
+  await field.fill("Publish through the repository release.");
+  await field.press("Escape");
+  await expect(proposal).toBeHidden();
+  await expect(field).toHaveValue("");
+  await expect(chosen).toHaveCount(0);
+});
+
 test("should submit a suggestion through the review's own comment controls", async ({
   page,
   decisionViewerUrl,
@@ -339,6 +369,14 @@ test("should keep decision content readable and script-only controls dormant wit
   await expect(decisionPage.locator("[data-noscript-notice]")).toBeVisible();
   await expect(
     decisionPage.locator("[data-decision-proposal-cancel]"),
+  ).toBeHidden();
+  // Comment mode is the shell's to reveal, so without it the composer offers
+  // no control that cannot act.
+  await expect(
+    decisionPage.locator("[data-decision-comment-actions]").first(),
+  ).toBeHidden();
+  await expect(
+    decisionPage.locator("[data-decision-comment-submit]").first(),
   ).toBeHidden();
   await expect(
     decisionPage.locator("[data-decision-question]").first(),

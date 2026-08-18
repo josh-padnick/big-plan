@@ -196,7 +196,11 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
             business, so Cancel sits outside the comment controls and stays
             reachable in both. */}
         <div className="decision-proposal-actions">
-          <div className="decision-send-row" data-decision-comment-actions="">
+          <div
+            className="decision-send-row"
+            hidden
+            data-decision-comment-actions=""
+          >
             <label className="decision-mode-switch decision-send-switch">
               <input
                 className="decision-mode-check sr-only"
@@ -221,6 +225,7 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
             <button
               className="decision-comment-submit"
               type="button"
+              hidden
               data-decision-comment-submit=""
             >
               {"Submit Now"}

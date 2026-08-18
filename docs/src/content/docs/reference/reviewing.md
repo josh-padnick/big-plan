@@ -124,7 +124,8 @@ server-rendered article without client-rendering or gating the plan.
 ## Decision answers
 
 An open decision card - a `Decision`, a `QuickDecision`, or a `DecisionAnalysis` with `interaction="choose"` - can be answered during a live review.
-A confirmed choice is saved with the review: it survives reload and runtime restarts, and your agent receives it when you approve the plan.
+A confirmed choice is saved with the review: it survives reload and runtime restarts, so the answer is still there when you come back to the page.
+The answer stays inside the review session; Big Plan does not yet deliver it to your agent, so tell the agent your decision through the feedback flow when you want it acted on.
 The card's caption always states what is true right now: saving, saved with this review, or noted for this reading session only.
 If a save fails, the card says the answer is not saved yet and retries automatically; keep the page open until it reports the answer saved.
 
@@ -138,7 +139,7 @@ Choose **Change**, then **Clear answer**, to leave a decision deliberately unans
 A read-only review page - one whose plan a newer review session took custody of - cannot record answers: every answering control is disabled, with a note beside it saying why.
 A confirm made before the page has learned whether it may write is held rather than guessed at: it is saved once the session proves writable, and kept as a reading-session note when the session proves read-only.
 A proposed alternative approach is a reading-session note either way; send it to the agent through the feedback flow.
-In a standalone rendered document, an answer lasts only for the reading session and is not recorded for your agent.
+In a standalone rendered document, an answer lasts only for the reading session and is not saved with a review.
 
 ## Persistence
 
