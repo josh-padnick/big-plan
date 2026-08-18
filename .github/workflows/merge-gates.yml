@@ -17,10 +17,10 @@
 # run it creates against the pull request's head sha does. Every trigger below
 # therefore runs the same evaluation and republishes the same two named checks.
 #
-# It runs on a GitHub-hosted runner, unlike CI. The job only reads the API, so
-# it needs nothing from the local machine, and keeping it off the self-hosted
-# runner means a merge gate never queues behind a lane's build - and never goes
-# unanswered while that runner is offline.
+# It shares CI's self-hosted runner because this account has no GitHub-hosted
+# minutes. The job only reads the API, so it is seconds long and needs nothing
+# from the local machine, but it does queue behind whatever that runner is
+# already building. Move it to a hosted runner if gate latency starts to matter.
 name: Merge gates
 
 on:
@@ -51,7 +51,10 @@ jobs:
   judge:
     # issue_comment also fires for plain issues, which have no head to gate.
     if: github.event_name != 'issue_comment' || github.event.issue.pull_request
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    # The gate is one API-reading script. Anything longer than this is wedged,
+    # and it is holding a runner every other lane's build needs.
+    timeout-minutes: 10
     permissions:
       # Publishing the two named check runs.
       checks: write
@@ -61,8 +64,8 @@ jobs:
       issues: read
     steps:
       - uses: actions/checkout@v4
-      # No toolchain: the gate is one Node script with no dependencies, and the
-      # runner image already has Node.
+      # No toolchain step: the gate is one Node script with no dependencies, and
+      # the runner already has Node for the merge guard.
       - name: Judge the merge gates
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
