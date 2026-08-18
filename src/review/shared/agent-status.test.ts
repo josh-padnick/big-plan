@@ -4,13 +4,14 @@ import {
   AGENT_STALL_MS,
   agentConnectionEdgeAtMs,
   agentDisconnectReason,
+  agentHasEverConnected,
   agentHoldsClaimedWork,
   heldWorkQuiet,
   AGENT_NO_SIGNAL_REASON,
   AGENT_SESSION_ENDED_REASON,
   agentPresenceIsFresh,
   deriveAgentStatus,
-  deriveAgentHealthLabel,
+  deriveAgentHealth,
   deriveCurrentAgentActivity,
   projectAgentConnectionState,
   selectActiveAgentRequest,
@@ -32,10 +33,102 @@ const liveClaim = (claimedAtMs = NOW) => ({
   claimExpiresAtMs: claimedAtMs + AGENT_STALL_MS,
 });
 
+describe("agent health", () => {
+  const idle = (heartbeatAt: number, now: number) =>
+    deriveCurrentAgentActivity({
+      everConnected: true,
+      requests: [],
+      cancelPendingRequestIds: new Set(),
+      progressEvents: [],
+      agentConnected: true,
+      runtimeOffline: false,
+      now,
+      heartbeatAt,
+    });
+
+  // Presence is read on one window, the narration window, because nothing
+  // renews the plan-wide heartbeat while a turn runs (BIG-147). Detecting a
+  // cancelled agent sooner is real and wanted, but it belongs to the loop layer
+  // that would keep the heartbeat fresh while a turn is in flight (BIG-156);
+  // narrowing this window instead would call working agents disconnected.
+  it("should stop calling a silent agent connected once its signal ages out", () => {
+    const stillAttached = deriveAgentHealth({
+      activity: idle(NOW - AGENT_STALL_MS + 1, NOW),
+      hasAgentRuntime: true,
+      isReadOnly: false,
+      isObservable: true,
+    });
+    expect(stillAttached).toEqual({
+      indicator: "healthy",
+      label: "Agent connected",
+    });
+    const gone = deriveAgentHealth({
+      activity: idle(NOW - AGENT_STALL_MS - 1, NOW),
+      hasAgentRuntime: true,
+      isReadOnly: false,
+      isObservable: true,
+    });
+    expect(gone).toEqual({ indicator: "error", label: "Agent disconnected" });
+  });
+
+  it("should read a queued request as connected rather than as a fault", () => {
+    const queued = deriveCurrentAgentActivity({
+      everConnected: true,
+      requests: [request()],
+      cancelPendingRequestIds: new Set(),
+      progressEvents: [],
+      agentConnected: true,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: NOW,
+    });
+    expect(queued).toMatchObject({ state: "waiting", tone: "neutral" });
+    expect(
+      deriveAgentHealth({
+        activity: queued,
+        hasAgentRuntime: true,
+        isReadOnly: false,
+        isObservable: true,
+      }),
+    ).toEqual({ indicator: "healthy", label: "Agent connected" });
+  });
+
+  it("should rank a superseded session above every observable agent state", () => {
+    expect(
+      deriveAgentHealth({
+        activity: idle(NOW, NOW),
+        hasAgentRuntime: true,
+        isReadOnly: true,
+        isObservable: true,
+      }),
+    ).toEqual({ indicator: "warning", label: "Using read-only session" });
+  });
+
+  it("should report an unobservable review session as unknown, never as bad", () => {
+    expect(
+      deriveAgentHealth({
+        activity: idle(NOW, NOW),
+        hasAgentRuntime: true,
+        isReadOnly: false,
+        isObservable: false,
+      }),
+    ).toEqual({ indicator: "unavailable", label: "Agent status unavailable" });
+    expect(
+      deriveAgentHealth({
+        activity: idle(NOW, NOW),
+        hasAgentRuntime: false,
+        isReadOnly: false,
+        isObservable: true,
+      }),
+    ).toEqual({ indicator: "unavailable", label: "No agent session" });
+  });
+});
+
 describe("current agent activity", () => {
   it("should prioritize disconnected status even without queued work", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [],
         cancelPendingRequestIds: new Set(),
         progressEvents: [],
@@ -46,15 +139,16 @@ describe("current agent activity", () => {
       }),
     ).toMatchObject({
       state: "disconnected",
-      headline: "The agent is disconnected",
+      headline: "The agent has disconnected.",
       supporting:
-        "Reconnect the coding agent to continue. All comments are safe.",
+        "The session has ended or the agent stopped. Reconnect to continue. All comments are safe.",
     });
   });
 
   it("should report an idle connected agent as healthy", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [],
         cancelPendingRequestIds: new Set(),
         progressEvents: [],
@@ -70,23 +164,27 @@ describe("current agent activity", () => {
     });
   });
 
+  // Presence answers "is an agent attached", which the waiting loop proves
+  // twice a second, so it expires on the attachment window rather than on the
+  // much longer window a working agent gets to narrate in.
   it("should expire a previously connected agent when its heartbeat is stale", () => {
     expect(
       agentPresenceIsFresh({
         connected: true,
-        heartbeatAt: NOW - 75_000,
+        heartbeatAt: NOW - AGENT_STALL_MS,
         now: NOW,
       }),
     ).toBe(true);
     expect(
       agentPresenceIsFresh({
         connected: true,
-        heartbeatAt: NOW - 75_001,
+        heartbeatAt: NOW - AGENT_STALL_MS - 1,
         now: NOW,
       }),
     ).toBe(false);
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [],
         cancelPendingRequestIds: new Set(),
         progressEvents: [],
@@ -97,13 +195,15 @@ describe("current agent activity", () => {
       }),
     ).toMatchObject({
       state: "disconnected",
-      headline: "The agent is disconnected",
-      supporting: expect.stringContaining("disconnect threshold: 75 seconds"),
+      headline: "The agent has disconnected.",
+      supporting:
+        "The session has ended or the agent stopped. Reconnect to continue. All comments are safe.",
     });
   });
 
   it("should distinguish a disconnected agent from an ordinary wait", () => {
     const activity = deriveCurrentAgentActivity({
+      everConnected: true,
       requests: [request()],
       cancelPendingRequestIds: new Set(),
       progressEvents: [],
@@ -115,16 +215,64 @@ describe("current agent activity", () => {
     expect(activity).toMatchObject({
       state: "disconnected",
       tone: "danger",
-      headline: "The agent is disconnected",
+      headline: "The agent has disconnected.",
       supporting:
-        "Reconnect the coding agent to continue. All comments are safe.",
+        "The session has ended or the agent stopped. Reconnect to continue. All comments are safe.",
     });
     expect(activity).not.toHaveProperty("requestId");
+  });
+
+  it("should not claim a connection ended when none ever began", () => {
+    const activity = deriveCurrentAgentActivity({
+      everConnected: false,
+      requests: [],
+      cancelPendingRequestIds: new Set(),
+      progressEvents: [],
+      agentConnected: false,
+      runtimeOffline: false,
+      now: NOW,
+      heartbeatAt: 0,
+    });
+    expect(activity).toMatchObject({
+      state: "never-connected",
+      tone: "neutral",
+      headline: "No agent has connected to this session yet.",
+      supporting: "Connect one to continue. All comments are safe.",
+    });
+    // The distinction is the whole point: a fresh session must not inherit the
+    // account of a connection that ended, nor its alarm.
+    expect(
+      deriveAgentHealth({
+        activity,
+        hasAgentRuntime: true,
+        isReadOnly: false,
+        isObservable: true,
+      }),
+    ).toEqual({ indicator: "unavailable", label: "No agent connected yet" });
+  });
+
+  it("should read the connection log, not the lease, for a first connection", () => {
+    const at = new Date(NOW).toISOString();
+    expect(agentHasEverConnected({ events: [] })).toBe(false);
+    expect(
+      agentHasEverConnected({
+        events: [{ eventId: "a", connected: false, at }],
+      }),
+    ).toBe(false);
+    expect(
+      agentHasEverConnected({
+        events: [
+          { eventId: "a", connected: true, at },
+          { eventId: "b", connected: false, at },
+        ],
+      }),
+    ).toBe(true);
   });
 
   it("should keep progress-only work waiting for a durable claim", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [request()],
         cancelPendingRequestIds: new Set(),
         progressEvents: [
@@ -150,6 +298,7 @@ describe("current agent activity", () => {
   it("should ignore an answered request when its response is unavailable", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [
           {
             ...request(),
@@ -172,6 +321,7 @@ describe("current agent activity", () => {
 
   it("should keep fresh claimed work visible when presence is stale", () => {
     const activity = deriveCurrentAgentActivity({
+      everConnected: true,
       requests: [{ ...request(), ...liveClaim() }],
       cancelPendingRequestIds: new Set(),
       progressEvents: [
@@ -192,13 +342,15 @@ describe("current agent activity", () => {
       state: "working",
       headline: "Responding to a comment",
     });
+    // Live claimed work outranks stale presence, and the control says so.
     expect(
-      deriveAgentHealthLabel({
+      deriveAgentHealth({
         activity,
         hasAgentRuntime: true,
         isReadOnly: false,
+        isObservable: true,
       }),
-    ).toBeNull();
+    ).toEqual({ indicator: "working", label: "Agent working" });
   });
 
   it.each([
@@ -208,6 +360,7 @@ describe("current agent activity", () => {
   ] as const)("should name %s work", (kind, headline) => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [{ ...request(kind), ...liveClaim() }],
         cancelPendingRequestIds: new Set(),
         progressEvents: [
@@ -230,6 +383,7 @@ describe("current agent activity", () => {
   it("should present an ordinary queue wait without a warning tone", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [request()],
         cancelPendingRequestIds: new Set(),
         progressEvents: [],
@@ -248,6 +402,7 @@ describe("current agent activity", () => {
   it("should keep a reviewer queue edit waiting before agent pickup", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [request("chat")],
         cancelPendingRequestIds: new Set(),
         progressEvents: [
@@ -274,6 +429,7 @@ describe("current agent activity", () => {
   it("should report picked-up work as stalled rather than queued after its claim lapses", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [
           {
             ...request(),
@@ -301,6 +457,7 @@ describe("current agent activity", () => {
   // the plan from the one still editing it.
   it("should not call a working agent disconnected while it holds quiet work", () => {
     const activity = deriveCurrentAgentActivity({
+      everConnected: true,
       requests: [
         {
           ...request(),
@@ -329,17 +486,19 @@ describe("current agent activity", () => {
       expect.stringContaining("Reconnect"),
     );
     expect(
-      deriveAgentHealthLabel({
+      deriveAgentHealth({
         activity,
         hasAgentRuntime: true,
         isReadOnly: false,
+        isObservable: true,
       }),
-    ).toBe("Agent not responding");
+    ).toEqual({ indicator: "warning", label: "Agent not responding" });
   });
 
   it("should still report disconnection once no agent holds any work", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [
           {
             ...request(),
@@ -356,13 +515,14 @@ describe("current agent activity", () => {
       }),
     ).toMatchObject({
       state: "disconnected",
-      headline: "The agent is disconnected",
+      headline: "The agent has disconnected.",
     });
   });
 
   it("should keep a failed step ahead of the silence that follows it", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [
           {
             ...request(),
@@ -393,6 +553,7 @@ describe("current agent activity", () => {
   it("should prefer live claimed work over an older lapsed request", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [
           {
             ...request(),
@@ -422,6 +583,7 @@ describe("current agent activity", () => {
   it("should keep renewed claimed work current when side channels are stale", () => {
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [
           {
             ...request(),
@@ -585,6 +747,7 @@ describe("claimed work attribution", () => {
     const abandoned = claimedAt("1111111111111111", AGENT_STALL_MS * 12);
     const working = claimedAt("2222222222222222", AGENT_STALL_MS * 2);
     const activity = deriveCurrentAgentActivity({
+      everConnected: true,
       requests: [abandoned, working],
       cancelPendingRequestIds: new Set(),
       progressEvents: [],
@@ -610,6 +773,7 @@ describe("claimed work attribution", () => {
   it("should name the takeover when a stale claim is still open", () => {
     const supporting = (requests: ReadonlyArray<AgentActivityRequest>) => {
       const activity = deriveCurrentAgentActivity({
+        everConnected: true,
         requests,
         cancelPendingRequestIds: new Set<string>(),
         progressEvents: [],
@@ -631,6 +795,7 @@ describe("claimed work attribution", () => {
 
   it("should stop claiming a stall once every claim passes the horizon", () => {
     const activity = deriveCurrentAgentActivity({
+      everConnected: true,
       requests: [claimedAt("1111111111111111", AGENT_RECOVERY_HORIZON_MS + 1)],
       cancelPendingRequestIds: new Set(),
       progressEvents: [],
@@ -641,15 +806,16 @@ describe("claimed work attribution", () => {
     });
     expect(activity).toMatchObject({
       state: "disconnected",
-      headline: "The agent is disconnected",
+      headline: "The agent has disconnected.",
     });
     expect(
-      deriveAgentHealthLabel({
+      deriveAgentHealth({
         activity,
         hasAgentRuntime: true,
         isReadOnly: false,
+        isObservable: true,
       }),
-    ).toBe("Agent disconnected");
+    ).toEqual({ indicator: "error", label: "Agent disconnected" });
   });
 });
 
@@ -660,22 +826,22 @@ describe("agent connection events", () => {
     at: new Date(NOW - 80_000).toISOString(),
   };
 
-  it("should keep the connected event current when the heartbeat is exactly 75 seconds old", () => {
+  it("should keep the connected event current at the attachment boundary", () => {
     expect(
       projectAgentConnectionState({
         presenceConnected: true,
-        heartbeatAt: NOW - 75_000,
+        heartbeatAt: NOW - AGENT_STALL_MS,
         now: NOW,
         events: [connectedEvent],
       }),
     ).toEqual({ connected: true, events: [connectedEvent] });
   });
 
-  it("should project disconnection when the heartbeat is 75,001 milliseconds old", () => {
+  it("should project disconnection one millisecond past the signal window", () => {
     expect(
       projectAgentConnectionState({
         presenceConnected: true,
-        heartbeatAt: NOW - 75_001,
+        heartbeatAt: NOW - AGENT_STALL_MS - 1,
         now: NOW,
         events: [connectedEvent],
       }),
@@ -713,6 +879,7 @@ describe("agent connection events", () => {
     ).toEqual({ connected: false, events: [] });
     expect(
       deriveCurrentAgentActivity({
+        everConnected: true,
         requests: [abandoned],
         cancelPendingRequestIds: new Set(),
         progressEvents: [],

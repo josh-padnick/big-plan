@@ -47,7 +47,11 @@ import {
   type ReviewImageAttachment,
   type ReviewImageDescriptor,
 } from "./shared/review-image.js";
-import { AGENT_STALL_MS } from "./shared/agent-status.js";
+import {
+  decodeAgentModelIdentity,
+  type AgentModelIdentity,
+} from "./shared/agent-model.js";
+import { AGENT_STALL_MS } from "./shared/agent-timing.js";
 import {
   isProgressState,
   isProgressStepCode,
@@ -2293,6 +2297,7 @@ export type AgentPresence = {
    * inferring from and an end it was told about.
    */
   readonly endedAtMs?: number;
+  readonly model?: AgentModelIdentity;
 };
 
 /** The heartbeat lock stayed held for the whole waiting budget. */
@@ -2385,6 +2390,7 @@ export const writeAgentHeartbeat = async ({
   state,
   requestId,
   writerId,
+  model,
   now = Date.now(),
   lockAttempts,
 }: {
@@ -2393,6 +2399,8 @@ export const writeAgentHeartbeat = async ({
   readonly state: "waiting" | "working";
   readonly requestId?: string;
   readonly writerId?: string;
+  /** Which model is running the connector. */
+  readonly model?: AgentModelIdentity;
   readonly now?: number;
   readonly lockAttempts?: number;
 }): Promise<boolean> =>
@@ -2408,6 +2416,7 @@ export const writeAgentHeartbeat = async ({
           state,
           ...(requestId === undefined ? {} : { requestId }),
           ...(writer === undefined ? {} : { writerId: writer }),
+          ...(model === undefined ? {} : { model }),
           updatedAtMs: now,
         },
       });
@@ -2530,10 +2539,13 @@ export const readAgentPresence = async ({
     /^[a-f0-9]{16}$/.test(value.requestId)
       ? value.requestId
       : undefined;
+  const model =
+    "model" in value ? decodeAgentModelIdentity(value.model) : undefined;
   return {
     connected: true,
     state: value.state,
     ...(requestId === undefined ? {} : { requestId }),
+    ...(model === undefined ? {} : { model }),
     updatedAtMs: value.updatedAtMs,
   };
 };

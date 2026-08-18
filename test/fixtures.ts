@@ -1039,3 +1039,18 @@ export const boxOf = async (
   }
   return box;
 };
+
+/**
+ * The one viewer-chrome control that opens the agent sidebar. Its visible label
+ * is fixed, so tests match the stable accessible-name prefix and read the state
+ * from the shape-and-colour mark rather than from changing text.
+ */
+export const agentStatusTrigger = (page: Page): Locator =>
+  page.getByRole("button", { name: /^Agent Status:/u });
+
+export const agentStatusIndicator = (page: Page): Locator =>
+  agentStatusTrigger(page).locator("[data-review-agent-status]");
+
+/** The sidebar while it is showing the agent, not the feedback it replaced. */
+export const agentSidebar = (page: Page): Locator =>
+  page.getByRole("complementary", { name: "Agent Status" });

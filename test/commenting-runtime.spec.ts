@@ -31,6 +31,9 @@ import {
 import { renderDocument } from "../src/render/render-document.js";
 import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
 import {
+  agentSidebar,
+  agentStatusIndicator,
+  agentStatusTrigger,
   boxOf,
   expect,
   stageComment,
@@ -2640,19 +2643,17 @@ test("should expire a held connected snapshot when the reviewer returns", async 
     now,
   });
   await page.clock.runFor(1_600);
-  await expect(
-    page.getByRole("button", { name: "Agent session active" }),
-  ).toBeVisible();
+  await expect(agentStatusTrigger(page)).toBeVisible();
 
   await page.clock.setSystemTime(now + 6 * 60 * 60_000);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  const connectionLost = page.getByRole("button", {
-    name: /Agent disconnected/u,
-  });
+  const connectionLost = agentStatusTrigger(page);
   await expect(connectionLost).toBeVisible();
   await connectionLost.click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
-  await expect(rail).toContainText("No agent signal for 6h 00m");
+  // The card no longer measures the silence; it names the state and leaves
+  // "since" to say when the agent was last here.
+  await expect(agentSidebar(page)).toContainText("The agent has disconnected.");
+  await expect(agentSidebar(page)).toContainText("Since");
 });
 
 test("should show the active claim's model despite a competing heartbeat", async ({
@@ -2704,8 +2705,8 @@ test("should show the active claim's model despite a competing heartbeat", async
       return snapshot.requests[0]?.claimedModel?.name;
     })
     .toBe("Grok 4.6");
-  await page.getByRole("button", { name: "Agent working" }).click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
+  await agentStatusTrigger(page).click();
+  const rail = agentSidebar(page);
   const modelBadge = rail.locator("[data-review-agent-model]");
   await expect(modelBadge).toBeVisible();
   await expect(modelBadge).toContainText("Grok 4.6");
@@ -2761,18 +2762,18 @@ test("should keep progress-only requests waiting in chat and agent status", asyn
     },
   });
 
-  const sessionButton = page.getByRole("button", {
-    name: "Agent session active",
-  });
+  const sessionButton = agentStatusTrigger(page);
   await expect(sessionButton).toBeVisible();
   await sessionButton.click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const rail = agentSidebar(page);
   await expect(
     rail.locator("[data-review-current-activity='waiting']"),
   ).toContainText("Waiting for agent");
-  await rail.getByRole("tab", { name: "Chat" }).click();
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  const feedbackRail = page.getByRole("complementary", { name: "Feedback" });
+  await feedbackRail.getByRole("tab", { name: "Chat" }).click();
   await expect(
-    rail.locator("li").filter({ hasText: request.body }),
+    feedbackRail.locator("li").filter({ hasText: request.body }),
   ).toContainText("Waiting for an agent");
 });
 
@@ -2814,17 +2815,17 @@ test("should keep answered requests terminal when their response is unavailable"
     state: "waiting",
   });
 
-  const sessionButton = page.getByRole("button", {
-    name: "Agent session active",
-  });
+  const sessionButton = agentStatusTrigger(page);
   await expect(sessionButton).toBeVisible();
   await sessionButton.click();
-  const rail = page.getByRole("complementary", { name: "Feedback" });
+  const rail = agentSidebar(page);
   await expect(
     rail.locator("[data-review-current-activity='idle']"),
   ).toContainText("Agent connected");
-  await rail.getByRole("tab", { name: "Chat" }).click();
-  const exchange = rail.locator("li").filter({ hasText: request.body });
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  const feedback = page.getByRole("complementary", { name: "Feedback" });
+  await feedback.getByRole("tab", { name: "Chat" }).click();
+  const exchange = feedback.locator("li").filter({ hasText: request.body });
   await expect(exchange).toContainText("The agent has answered");
   await expect(exchange).not.toContainText("Waiting");
 });
@@ -3486,9 +3487,7 @@ test("should restore and submit staged comments through the local review runtime
 }, testInfo) => {
   await page.goto(reviewRuntimeUrl);
 
-  const agentStatus = page.getByRole("button", {
-    name: /Agent session active|open agent connection status/u,
-  });
+  const agentStatus = agentStatusTrigger(page);
   const feedbackAction = page.getByRole("button", {
     name: "Feedback",
     exact: true,
@@ -3732,9 +3731,7 @@ test("should restore and submit staged comments through the local review runtime
     planId: session.planId,
   });
   await rm(store.agentHeartbeatPath, { force: true });
-  await expect(
-    page.getByRole("button", { name: /Agent disconnected/u }),
-  ).toBeVisible();
+  await expect(agentStatusTrigger(page)).toBeVisible();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
   const blockedSummary = page.locator(
     ".review-contextual-summary[data-review-sent-thread='queued']",
@@ -3757,28 +3754,39 @@ test("should restore and submit staged comments through the local review runtime
   ).toBeVisible();
   await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
 
-  await rail.getByRole("tab", { name: "Agent" }).click();
-  await expect(rail.getByText("Current status", { exact: true })).toBeVisible();
-  const currentActivity = rail.locator("[data-review-current-activity]");
+  await agentStatusTrigger(page).click();
+  const agentRail = agentSidebar(page);
+  await expect(
+    agentRail.getByText("Current status", { exact: true }),
+  ).toHaveCount(0);
+  const currentActivity = agentRail.locator("[data-review-current-activity]");
+  // No agent has attached to this session, so the card must not report a
+  // connection that ended, and must not date one with a "since".
   await expect(currentActivity).toHaveAttribute(
     "data-review-current-activity",
-    "disconnected",
+    "never-connected",
   );
-  await expect(currentActivity).toContainText("The agent is disconnected");
+  await expect(currentActivity).toContainText(
+    "No agent has connected to this session yet.",
+  );
+  await expect(currentActivity).not.toContainText("Since");
   await expect(currentActivity).not.toContainText("1 · Details");
+  // Nothing here is a request, so the card offers nothing to open.
+  await expect(currentActivity.getByRole("button")).toHaveCount(0);
+  await expect(agentRail.getByText("offline", { exact: true })).toHaveCount(0);
+  // Nothing has connected, so the section offers to connect rather than to
+  // reconnect; it is present either way.
   await expect(
-    currentActivity.getByRole("button", { name: "View thread →" }),
-  ).toHaveCount(0);
-  await expect(currentActivity.getByText("offline")).toHaveCSS(
-    "text-transform",
-    "uppercase",
-  );
-  const connectionLog = rail
+    agentRail.getByText("Connect your agent", { exact: true }),
+  ).toBeVisible();
+  // Item 4: one payload, not two - the connector command below it is gone.
+  await expect(agentRail.locator("pre")).toHaveCount(1);
+  const connectionLog = agentRail
     .getByText("Connection log", { exact: true })
     .locator("xpath=ancestor::summary");
   await expect(connectionLog.locator("svg")).toHaveCount(1);
   await connectionLog.click();
-  const currentConnectionEvent = rail.locator(
+  const currentConnectionEvent = agentRail.locator(
     "[data-review-connection-current]",
   );
   await expect(currentConnectionEvent).toHaveCSS("line-height", "12px");
@@ -3836,6 +3844,7 @@ test("should restore and submit staged comments through the local review runtime
     expect(current).toBeGreaterThan(previous);
     expect(current - previous).toBeLessThanOrEqual(2);
   }
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
   await rail.getByRole("tab", { name: "Comments" }).click();
   const selectedThread = rail
     .locator("[data-review-comment-id]")
@@ -3869,14 +3878,20 @@ test("should restore and submit staged comments through the local review runtime
       name: /view Agent tab$/u,
     })
     .click();
-  await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
-    "aria-selected",
+  await expect(agentStatusTrigger(page)).toHaveAttribute(
+    "aria-expanded",
     "true",
   );
-  await expect(rail.locator("[data-review-current-activity]")).toHaveAttribute(
-    "data-review-attention",
-    "true",
+  // Opening the sidebar shows the status card; it does not ring it. A ring
+  // means the keyboard is here, and clicking a control is not that.
+  const openedCard = agentSidebar(page).locator(
+    "[data-review-current-activity]",
   );
+  await expect(openedCard).toBeVisible();
+  expect(
+    await openedCard.evaluate((card) => getComputedStyle(card).outlineStyle),
+  ).toBe("none");
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
   await rail.getByRole("tab", { name: "Comments" }).click();
   await expect(reply).toBeVisible();
   await selectedTitle.click();
@@ -3927,117 +3942,112 @@ test("should restore and submit staged comments through the local review runtime
     },
   });
 
-  await expect(
-    page.getByRole("button", { name: /Agent disconnected/u }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Agent working" }),
-  ).toBeVisible();
-  const workingAgent = page.getByRole("button", { name: "Agent working" });
-  const workingIndicator = workingAgent.locator(
-    ".review-agent-active-indicator--working",
+  const workingAgent = agentStatusTrigger(page);
+  await expect(workingAgent).toHaveAccessibleName(
+    "Agent Status: Agent working",
   );
-  // Read the shipped pseudo-element through the browser so this test observes
-  // the rendered orbit contract rather than its stylesheet implementation.
-  const readOrbitPresentation = () =>
-    workingIndicator.evaluate((indicator) => {
-      const style = getComputedStyle(indicator, "::before");
+  const workingMark = agentStatusIndicator(page);
+  await expect(workingMark).toHaveAttribute(
+    "data-review-agent-status",
+    "working",
+  );
+  // Working separates itself from merely connected by motion, so this reads the
+  // shipped animation rather than a class name. The mark is a nine-dot grid
+  // whose ring brightens one position at a time, and the sweep is only a sweep
+  // if the dots run the same animation at different offsets. They are SVG
+  // circles rather than boxes because a round box this small antialiases into
+  // an oval, so this pins that they are circles at all, and identical ones.
+  const readFade = () =>
+    workingMark.evaluate((mark) => {
+      const dots = [...mark.querySelectorAll("svg > circle")];
+      const ring = dots.map((dot) => getComputedStyle(dot));
+      const first = ring[0];
       return {
-        animationDuration: style.animationDuration,
-        animationName: style.animationName,
-        backgroundImage: style.backgroundImage,
-        bottom: style.bottom,
-        height: style.height,
-        left: style.left,
-        maskImage: style.maskImage,
-        right: style.right,
-        top: style.top,
-        transform: style.transform,
-        width: style.width,
+        dots: dots.length,
+        animationName: first?.animationName,
+        animationDuration: first?.animationDuration,
+        animationIterationCount: first?.animationIterationCount,
+        animationTimingFunction: first?.animationTimingFunction,
+        distinctDelays: new Set(ring.map((style) => style.animationDelay)).size,
+        still: ring.filter((style) => style.animationName === "none").length,
       };
     });
-  // A rotating matrix has unit scale and no translation at every sampled frame.
-  const readRotationMatrix = () =>
-    workingIndicator.evaluate((indicator) => {
-      const matrix = new DOMMatrix(
-        getComputedStyle(indicator, "::before").transform,
-      );
-      return {
-        scaleX: Math.hypot(matrix.a, matrix.b),
-        scaleY: Math.hypot(matrix.c, matrix.d),
-        translateX: matrix.e,
-        translateY: matrix.f,
-      };
-    });
-  const lightOrbit = await readOrbitPresentation();
-  expect(lightOrbit).toMatchObject({
+  expect(await readFade()).toMatchObject({
+    dots: 9,
+    animationName: "agent-sweep",
     animationDuration: "1.6s",
-    bottom: "-2.5px",
-    height: "15px",
-    left: "-2.5px",
-    right: "-2.5px",
-    top: "-2.5px",
-    width: "15px",
+    animationIterationCount: "infinite",
+    animationTimingFunction: "ease-in-out",
+    // Eight offsets around the ring; the centre shares the first one's zero
+    // because it never animates at all, which is what keeps the mark present
+    // at the dimmest point of the sweep.
+    distinctDelays: 8,
+    still: 1,
   });
-  expect(lightOrbit.animationName).not.toBe("none");
-  expect(lightOrbit.backgroundImage).toContain("295deg");
-  expect(lightOrbit.backgroundImage).toContain("rgb(230, 230, 230)");
-  expect(lightOrbit.backgroundImage).toContain("360deg");
-  expect(lightOrbit.maskImage).toContain("calc(50% - 1px)");
-  const firstRotation = await readRotationMatrix();
-  await expect
-    .poll(async () => (await readOrbitPresentation()).transform)
-    .not.toBe(lightOrbit.transform);
-  const nextRotation = await readRotationMatrix();
-  for (const rotation of [firstRotation, nextRotation]) {
-    expect(rotation.scaleX).toBeCloseTo(1, 5);
-    expect(rotation.scaleY).toBeCloseTo(1, 5);
-    expect(rotation.translateX).toBe(0);
-    expect(rotation.translateY).toBe(0);
-  }
-  await page.screenshot({
-    path: testInfo.outputPath("agent-working-orbit-light.png"),
-  });
-  await workingAgent.screenshot({
-    path: testInfo.outputPath("agent-working-orbit-light-detail.png"),
-  });
+  expect(
+    await workingMark.evaluate((node) => {
+      const circles = [...node.querySelectorAll("svg > circle")];
+      return {
+        radii: [...new Set(circles.map((circle) => circle.getAttribute("r")))],
+        boxes: [
+          ...new Set(
+            circles.map((circle) => {
+              const box = circle.getBoundingClientRect();
+              return `${String(Math.round(box.width * 100))}x${String(Math.round(box.height * 100))}`;
+            }),
+          ),
+        ],
+      };
+    }),
+  ).toEqual({ radii: ["3"], boxes: ["200x200"] });
+  // It must never outgrow the plain connected dot it replaces.
+  expect(
+    await workingMark.evaluate((mark) => {
+      const box = mark.getBoundingClientRect();
+      return [Math.round(box.width), Math.round(box.height)];
+    }),
+  ).toEqual([8, 8]);
+  const readOpacity = () =>
+    workingMark.evaluate((mark) => {
+      const dot = mark.querySelector("svg > circle");
+      return dot === null ? null : getComputedStyle(dot).opacity;
+    });
+  const firstOpacity = await readOpacity();
+  await expect.poll(readOpacity, { timeout: 3_000 }).not.toBe(firstOpacity);
 
   await page.emulateMedia({ colorScheme: "dark" });
-  await expect
-    .poll(async () => (await readOrbitPresentation()).backgroundImage)
-    .toContain("rgb(69, 69, 69)");
-  await page.screenshot({
-    path: testInfo.outputPath("agent-working-orbit-dark.png"),
-  });
+  expect((await readFade()).animationName).toBe("agent-sweep");
   await workingAgent.screenshot({
-    path: testInfo.outputPath("agent-working-orbit-dark-detail.png"),
+    path: testInfo.outputPath("agent-working-fade-dark.png"),
+  });
+  // Readers who ask the OS for less motion get the mark without the fade.
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  expect((await readFade()).animationName).toBe("none");
+  await workingAgent.screenshot({
+    path: testInfo.outputPath("agent-working-fade-reduced-motion.png"),
   });
 
-  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  const reducedMotionOrbit = await readOrbitPresentation();
-  expect(reducedMotionOrbit.animationName).toBe("none");
-  expect(reducedMotionOrbit.transform).toBe("none");
-  expect(reducedMotionOrbit).toMatchObject({
-    backgroundImage: lightOrbit.backgroundImage,
-    bottom: lightOrbit.bottom,
-    height: lightOrbit.height,
-    left: lightOrbit.left,
-    maskImage: lightOrbit.maskImage,
-    right: lightOrbit.right,
-    top: lightOrbit.top,
-    width: lightOrbit.width,
-  });
-  await workingAgent.screenshot({
-    path: testInfo.outputPath("agent-working-orbit-reduced-motion.png"),
-  });
   await page.emulateMedia({
     colorScheme: "light",
     reducedMotion: "no-preference",
   });
-  await rail.getByRole("tab", { name: "Agent" }).click();
-  const activeWork = rail.locator("[data-review-current-activity='working']");
-  await expect(activeWork).toContainText("Responding to a comment");
+  await agentStatusTrigger(page).click();
+  const activeWork = agentSidebar(page).locator(
+    "[data-review-current-activity='working']",
+  );
+  await expect(activeWork).toContainText("Agent working");
   await expect(activeWork).toContainText("Reviewing the shared feedback batch");
+  // Re-pressing the pressed control closes its window; it never hands the slot
+  // to the other body.
+  await agentStatusTrigger(page).click();
+  await expect(agentSidebar(page)).toHaveCount(0);
+  await writeAgentHeartbeat({
+    store,
+    sessionId: session.sessionId,
+    state: "working",
+    requestId: request.requestId,
+  });
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
   await rail.getByRole("tab", { name: "Chat" }).click();
   await rail
     .getByPlaceholder("Ask about the plan as a whole…")
@@ -4077,17 +4087,19 @@ test("should restore and submit staged comments through the local review runtime
   await expect(threadActivity).toContainText(
     "Reviewing the shared feedback batch",
   );
-  await rail.getByRole("tab", { name: "Agent" }).click();
+  await agentStatusTrigger(page).click();
   await writeAgentHeartbeat({
     store,
     sessionId: session.sessionId,
     state: "working",
     requestId: request.requestId,
   });
-  await rail
+  await agentSidebar(page)
     .getByText("Connection log", { exact: true })
     .locator("xpath=ancestor::summary")
     .click();
+  await agentStatusTrigger(page).click();
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
   await rail.getByRole("tab", { name: "Comments" }).click();
 
   await rail.getByRole("button", { name: "Close feedback" }).click();
@@ -4313,11 +4325,11 @@ test("should restore and submit staged comments through the local review runtime
   ).toBe(true);
   expect(
     await sentThread.evaluate((thread) => {
-      const rail = thread.closest("#big-plan-feedback-rail");
-      if (rail === null) throw new Error("The feedback rail is missing");
+      const sidebar = thread.closest("#big-plan-feedback-sidebar");
+      if (sidebar === null) throw new Error("The feedback sidebar is missing");
       return (
         Math.ceil(thread.getBoundingClientRect().right) <=
-        Math.ceil(rail.getBoundingClientRect().right)
+        Math.ceil(sidebar.getBoundingClientRect().right)
       );
     }),
   ).toBe(true);
@@ -6588,9 +6600,9 @@ test("should mark a superseded review as read-only and link to its replacement",
     });
     await expect(readOnly).toBeVisible();
     await readOnly.click();
-    const rail = page.getByRole("complementary", { name: "Feedback" });
-    await expect(rail.getByRole("tab", { name: "Agent" })).toHaveAttribute(
-      "aria-selected",
+    const rail = agentSidebar(page);
+    await expect(agentStatusTrigger(page)).toHaveAttribute(
+      "aria-expanded",
       "true",
     );
     await expect(rail).toContainText("This review was replaced");
@@ -8201,12 +8213,11 @@ test.describe("recovery section visibility", () => {
     );
     const runtime = await startReviewRuntime({ planPath });
     const recoveryPanel = page.locator("[data-review-agent-recovery]");
+    // The agent surface has its own control in viewer chrome now; it is no
+    // longer a tab inside the feedback sidebar.
     const openAgentTab = async () => {
-      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
-      await page
-        .getByRole("complementary", { name: "Feedback" })
-        .getByRole("tab", { name: "Agent" })
-        .click();
+      await agentStatusTrigger(page).click();
+      await expect(agentSidebar(page)).toBeVisible();
     };
     try {
       await page.goto(runtime.url);
@@ -8218,7 +8229,7 @@ test.describe("recovery section visibility", () => {
       await page.route("**/api/agent", (route) => route.abort());
       await page.reload();
       await openAgentTab();
-      const rail = page.getByRole("complementary", { name: "Feedback" });
+      const rail = agentSidebar(page);
       await expect(
         rail.locator("[data-review-connection-health='unobservable']"),
       ).toBeVisible({ timeout: 10_000 });

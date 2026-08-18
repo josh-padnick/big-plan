@@ -479,6 +479,7 @@ const nextWork = async ({
         sessionId: session.sessionId,
         state: "waiting",
         writerId,
+        ...(model === undefined ? {} : { model }),
       });
       const liveness = await reviewSessionIsAvailable({
         store: session.store,
@@ -545,6 +546,7 @@ const nextWork = async ({
       state: "working",
       requestId: request.requestId,
       writerId,
+      ...(model === undefined ? {} : { model }),
     });
     const selectedRequest = request;
     try {

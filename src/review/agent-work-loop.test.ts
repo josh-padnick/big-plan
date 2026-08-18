@@ -2917,12 +2917,15 @@ describe("agent work loop lifecycle", () => {
           }),
         ],
       });
+      // The connector names itself on its heartbeat as well as on its claim, so
+      // a reviewer can see which agent is attached while nothing is claimed.
+      // The claim stays authoritative wherever both exist.
       await expect(
         reviewStore.readAgentPresence({
           store: review.store,
           sessionId: review.sessionId,
         }),
-      ).resolves.not.toHaveProperty("model");
+      ).resolves.toMatchObject({ model: { name: "Grok 4.6" } });
     } finally {
       await review.close();
       await rm(directory, { recursive: true, force: true });

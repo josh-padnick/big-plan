@@ -89,9 +89,15 @@ export type CurrentAgentActivity =
       readonly supporting: string;
     } & ActivityRequestFacts)
   | {
+      readonly state: "never-connected";
+      readonly tone: "neutral";
+      readonly headline: "No agent has connected to this session yet.";
+      readonly supporting: "Connect one to continue. All comments are safe.";
+    }
+  | {
       readonly state: "disconnected";
       readonly tone: "danger";
-      readonly headline: "The agent is disconnected";
+      readonly headline: "The agent has disconnected.";
       readonly supporting: string;
     }
   | {
@@ -108,23 +114,74 @@ export type CurrentAgentActivity =
     };
 
 /** Maps current activity to the one exceptional label shown in viewer chrome. */
-export const deriveAgentHealthLabel = ({
+/**
+ * The states the Agent Status control can be in. Each owns a distinct glyph
+ * shape as well as a colour, so a reader who cannot separate green from amber
+ * from red still reads the state from the mark alone.
+ *
+ * `working` is the one state that shares a shape with another, because it is a
+ * live connection that happens to be busy rather than a different kind of
+ * health. It separates itself by motion instead: the same green dot, fading.
+ */
+export type AgentHealthIndicator =
+  "healthy" | "working" | "warning" | "error" | "unavailable";
+
+export type AgentHealth = {
+  readonly indicator: AgentHealthIndicator;
+  /** Names the state in words, for the control's accessible name and tooltip. */
+  readonly label: string;
+};
+
+/**
+ * Maps runtime facts to the single agent status shown in viewer chrome and at
+ * the head of the agent sidebar. It is one derivation because the chrome and
+ * the sidebar must never disagree about what state the agent is in.
+ *
+ * A queued request is not a fault: the agent is attached and will pick it up,
+ * so it reads as connected rather than as a warning.
+ *
+ * `isObservable` is false while the review session itself is down: agent
+ * presence is then unknown rather than bad, and claiming either would be a lie.
+ */
+export const deriveAgentHealth = ({
   activity,
   hasAgentRuntime,
   isReadOnly,
+  isObservable,
 }: {
   readonly activity: CurrentAgentActivity;
   readonly hasAgentRuntime: boolean;
   readonly isReadOnly: boolean;
-}): string | null => {
-  if (isReadOnly) return "Using read-only session";
-  if (!hasAgentRuntime) return null;
-  if (activity.state === "offline" || activity.state === "disconnected") {
-    return "Agent disconnected";
+  readonly isObservable: boolean;
+}): AgentHealth => {
+  if (!hasAgentRuntime) {
+    return { indicator: "unavailable", label: "No agent session" };
   }
-  if (activity.state === "stalled") return "Agent not responding";
-  if (activity.state === "errored") return "Agent error";
-  return null;
+  if (isReadOnly) {
+    return { indicator: "warning", label: "Using read-only session" };
+  }
+  if (!isObservable) {
+    return { indicator: "unavailable", label: "Agent status unavailable" };
+  }
+  if (activity.state === "never-connected") {
+    return { indicator: "unavailable", label: "No agent connected yet" };
+  }
+  if (activity.state === "offline" || activity.state === "disconnected") {
+    return { indicator: "error", label: "Agent disconnected" };
+  }
+  if (activity.state === "errored") {
+    return { indicator: "error", label: "Agent error" };
+  }
+  if (activity.state === "stalled") {
+    return { indicator: "warning", label: "Agent not responding" };
+  }
+  if (activity.state === "working") {
+    return { indicator: "working", label: "Agent working" };
+  }
+  if (activity.state === "waiting") {
+    return { indicator: "healthy", label: "Agent connected" };
+  }
+  return { indicator: "healthy", label: "Agent connected" };
 };
 
 const requestHeadline = (request: AgentActivityRequest): string =>
@@ -314,6 +371,16 @@ const stalledSupporting = ({
  * that claim over. The card has to tell the same story as the prompt below it
  * rather than end on a bare invitation to reconnect (BIG-147).
  */
+/*
+Explains a lost lease without claiming why the external agent stopped, and
+without measuring it. How long the reader has been without an agent, and the
+threshold that decided it, both read as diagnostics to explain away rather than
+as a state to act on; the card's own SINCE field already says when the agent was
+last here, so the copy says what happened and what to do about it.
+
+The takeover sentence stays: it is not a measurement but a consequence, and a
+reviewer who connects over held work has to be told what it costs them.
+*/
 const disconnectedSupporting = ({
   heartbeatAt,
   endedAtMs,
@@ -348,6 +415,20 @@ const disconnectedSupporting = ({
     ? `Reconnect the coding agent to continue.${takeover} All comments are safe.`
     : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue.${takeover} All comments are safe.`;
 };
+
+/**
+ * Answers whether this session has ever recorded an agent being present.
+ *
+ * The presence lease cannot answer it: a lease that has expired and a lease
+ * that was never taken both read as absent. Only the connection log
+ * distinguishes them, and the difference decides whether the reader is told a
+ * connection ended or that none has begun.
+ */
+export const agentHasEverConnected = ({
+  events,
+}: {
+  readonly events: ReadonlyArray<BrowserConnectionEvent>;
+}): boolean => events.some((event) => event.connected);
 
 /** What the plan's open claims say about why nothing is being reported. */
 export type HeldWorkQuiet =
@@ -500,6 +581,7 @@ export const deriveCurrentAgentActivity = ({
   now,
   heartbeatAt,
   endedAtMs,
+  everConnected,
 }: {
   readonly requests: ReadonlyArray<AgentActivityRequest>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
@@ -510,6 +592,7 @@ export const deriveCurrentAgentActivity = ({
   readonly heartbeatAt: number;
   /** When the agent's own loop reported the session ending, if it did. */
   readonly endedAtMs?: number;
+  readonly everConnected: boolean;
 }): CurrentAgentActivity => {
   if (runtimeOffline) {
     return {
@@ -580,10 +663,22 @@ export const deriveCurrentAgentActivity = ({
     now,
   });
   if (!agentPresenceIsFresh({ connected: agentConnected, heartbeatAt, now })) {
+    // A claim is evidence too. An agent that picked work up was demonstrably
+    // here, even in a session whose log never recorded the edge that would have
+    // said so, and telling that reader no agent has ever connected would be
+    // exactly the false assertion this state exists to avoid.
+    if (!everConnected && !requests.some(requestWasClaimed)) {
+      return {
+        state: "never-connected",
+        tone: "neutral",
+        headline: "No agent has connected to this session yet.",
+        supporting: "Connect one to continue. All comments are safe.",
+      };
+    }
     return {
       state: "disconnected",
       tone: "danger",
-      headline: "The agent is disconnected",
+      headline: "The agent has disconnected.",
       supporting: disconnectedSupporting({
         heartbeatAt,
         ...(endedAtMs === undefined ? {} : { endedAtMs }),

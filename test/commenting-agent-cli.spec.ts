@@ -15,10 +15,12 @@ import { startReviewRuntime } from "../src/review/server.js";
 import { readProgress, writeAgentRequestValue } from "../src/review/store.js";
 import {
   agentIdOf,
+  agentSidebar,
+  agentStatusTrigger,
+  closeReviewRuntime,
   expect,
   runAgentCli,
   test,
-  closeReviewRuntime,
 } from "./fixtures";
 
 /** The claim's own response draft path, as pickup hands it to the agent. */
@@ -312,8 +314,10 @@ test("should report a quiet working agent as stalled rather than disconnected", 
     await expect(
       page.getByRole("button", { name: /Agent disconnected/u }),
     ).toHaveCount(0);
-    await rail.getByRole("tab", { name: "Agent" }).click();
-    const currentActivity = rail.locator("[data-review-current-activity]");
+    await agentStatusTrigger(page).click();
+    const currentActivity = agentSidebar(page).locator(
+      "[data-review-current-activity]",
+    );
     await expect(currentActivity).toHaveAttribute(
       "data-review-current-activity",
       "stalled",
@@ -381,13 +385,12 @@ test("should warn about a takeover before inviting one while work is held", asyn
     "Connect an agent and take over this work",
     { exact: true },
   );
+  // The agent surface has its own control in viewer chrome now; it is no longer
+  // a tab inside the feedback sidebar.
   const openAgentTab = async () => {
     await page.reload();
-    await page.getByRole("button", { name: /Feedback/u }).click();
-    await page
-      .getByRole("complementary", { name: "Feedback" })
-      .getByRole("tab", { name: "Agent" })
-      .click();
+    await agentStatusTrigger(page).click();
+    await expect(agentSidebar(page)).toBeVisible();
   };
   // Ages the claim's own last signal by `quietForMs`, which is what the wall
   // clock does to an agent that has not narrated since pickup.
@@ -448,8 +451,10 @@ test("should warn about a takeover before inviting one while work is held", asyn
     await goQuiet(requestId);
 
     await openAgentTab();
+    // Chat lives in the feedback sidebar; the activity card lives in the agent
+    // one, and they are two surfaces now rather than two tabs of one.
     await expect(
-      rail.locator("[data-review-current-activity]"),
+      agentSidebar(page).locator("[data-review-current-activity]"),
     ).toHaveAttribute("data-review-current-activity", "stalled");
     // The claim explains the quiet, so the section is present but warns before
     // the reviewer copies anything.
@@ -481,7 +486,7 @@ test("should warn about a takeover before inviting one while work is held", asyn
       "plain",
     );
     await expect(
-      rail.locator("[data-review-current-activity]"),
+      agentSidebar(page).locator("[data-review-current-activity]"),
     ).not.toHaveAttribute("data-review-current-activity", "stalled");
 
     // Back inside the horizon the pickup explains the quiet again, so the

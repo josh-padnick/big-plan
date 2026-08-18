@@ -14,7 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { AGENT_STALL_MS } from "./shared/agent-status.js";
+import { AGENT_STALL_MS } from "./shared/agent-timing.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import {
   appendAgentConnectionEvent,
@@ -512,6 +512,42 @@ describe("review store session files", () => {
 });
 
 describe("review store agent presence", () => {
+  // Which agent is attached is a fact about the session, so a reviewer can ask
+  // it while no request is being worked on at all.
+  it("reports the attached connector's model with or without a claim", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      model: { name: "Claude Opus 5" },
+      now: 10_000,
+    });
+    await expect(
+      readAgentPresence({ store, sessionId: "aaaaaaaaaaaaaaaa", now: 12_000 }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      model: { name: "Claude Opus 5" },
+      updatedAtMs: 10_000,
+    });
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      now: 10_000,
+    });
+    await expect(
+      readAgentPresence({ store, sessionId: "aaaaaaaaaaaaaaaa", now: 12_000 }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      updatedAtMs: 10_000,
+    });
+  });
+
   it("reports only a fresh heartbeat from the matching agent session", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
@@ -567,7 +603,7 @@ describe("review store agent presence", () => {
     });
   });
 
-  it("ignores request-specific metadata in the presence record", async () => {
+  it("keeps connector identity but drops request-specific metadata", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
     await prepareStore(store);
@@ -589,6 +625,7 @@ describe("review store agent presence", () => {
     ).resolves.toEqual({
       connected: true,
       state: "waiting",
+      model: { name: "Grok 4.6" },
       updatedAtMs: 10_000,
     });
     await expect(

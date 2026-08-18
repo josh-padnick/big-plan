@@ -104,6 +104,8 @@ export type AgentPresence = {
   readonly connected: boolean;
   readonly state: "waiting" | "working";
   readonly requestId?: string;
+  /** Which model is running the attached connector, claim or no claim. */
+  readonly model?: AgentModelIdentity;
   readonly updatedAtMs?: number;
   /** When the agent's own loop reported the session ending, if it did. */
   readonly endedAtMs?: number;
@@ -686,6 +688,10 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
         ...(typeof value.presence.requestId === "string"
           ? { requestId: value.presence.requestId }
           : {}),
+        ...(() => {
+          const model = decodeAgentModelIdentity(value.presence.model);
+          return model === undefined ? {} : { model };
+        })(),
         ...(typeof value.presence.updatedAtMs === "number"
           ? { updatedAtMs: value.presence.updatedAtMs }
           : {}),
