@@ -174,6 +174,24 @@ export const agentDisconnectReason = ({
 }): string =>
   endedAtMs === undefined ? AGENT_NO_SIGNAL_REASON : AGENT_SESSION_ENDED_REASON;
 
+/**
+ * Dates a connection edge from the report when there is one.
+ *
+ * Only the observer of an event knows when it happened. A checker that polls
+ * can date what it inferred no better than the moment it looked, but it must
+ * not overwrite a reported instant with that, or the durable log lands one
+ * polling interval behind the fact and behind the instant every browser has
+ * already projected for it.
+ */
+export const agentConnectionEdgeAtMs = ({
+  endedAtMs,
+  nowMs,
+}: {
+  readonly endedAtMs?: number;
+  readonly nowMs: number;
+}): number =>
+  endedAtMs === undefined || !Number.isFinite(endedAtMs) ? nowMs : endedAtMs;
+
 /** Expires a browser-held presence snapshot at the same lease as the store. */
 export const agentPresenceIsFresh = ({
   connected,

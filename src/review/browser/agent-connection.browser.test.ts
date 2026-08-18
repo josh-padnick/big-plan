@@ -6,6 +6,9 @@ import {
   connectionEventEnded,
   connectionHealthReading,
   connectionLogRowReading,
+  connectionLogState,
+  connectionLogTally,
+  connectionLogTallyLabel,
 } from "./agent-connection.browser.js";
 import { AGENT_SESSION_ENDED_REASON } from "../shared/agent-status.js";
 
@@ -128,7 +131,9 @@ describe("connectionLogRowReading", () => {
     ).toEqual({
       label: "Session ended",
       prefix: "Signal returned after ",
-      suffix: " quiet",
+      // Not "quiet": the gap after a reported end is a measured interval, not
+      // a silence anyone had to interpret.
+      suffix: "",
       showReason: false,
     });
     expect(
@@ -160,5 +165,80 @@ describe("connectionLogRowReading", () => {
       suffix: "",
       showReason: true,
     });
+  });
+});
+
+const quietEdge = {
+  connected: false,
+  reason: "No agent signal within 75 seconds",
+};
+const endedEdge = { connected: false, reason: AGENT_SESSION_ENDED_REASON };
+const connectedEdge = { connected: true };
+
+describe("connectionLogState", () => {
+  it("answers with the same word as the card above it", () => {
+    expect(connectionLogState({ connected: false, ended: true })).toBe(
+      "SESSION ENDED",
+    );
+    expect(connectionLogState({ connected: false, ended: false })).toBe(
+      "NO SIGNAL",
+    );
+    expect(connectionLogState({ connected: true, ended: false })).toBe(
+      "CONNECTED",
+    );
+  });
+});
+
+describe("connectionLogTally", () => {
+  it("counts a reported end apart from an inferred gap", () => {
+    expect(
+      connectionLogTally([
+        connectedEdge,
+        quietEdge,
+        connectedEdge,
+        endedEdge,
+        connectedEdge,
+      ]),
+    ).toEqual({ quietPeriods: 1, sessionsEnded: 1, resumed: 2 });
+  });
+
+  it("counts nothing for a session that has only ever been connected", () => {
+    expect(connectionLogTally([connectedEdge])).toEqual({
+      quietPeriods: 0,
+      sessionsEnded: 0,
+      resumed: 0,
+    });
+  });
+
+  it("does not count a first signal as a resumption", () => {
+    // The store's opening edge can be a disconnect, and the connect that
+    // follows it is the session starting rather than recovering (BIG-147).
+    expect(connectionLogTally([quietEdge, connectedEdge])).toEqual({
+      quietPeriods: 0,
+      sessionsEnded: 0,
+      resumed: 0,
+    });
+  });
+});
+
+describe("connectionLogTallyLabel", () => {
+  it("stays out of the way until a session has actually ended", () => {
+    expect(
+      connectionLogTallyLabel({
+        quietPeriods: 2,
+        sessionsEnded: 0,
+        resumed: 1,
+      }),
+    ).toBe("2 quiet periods · 1 resumed");
+  });
+
+  it("names ended sessions once there are some", () => {
+    expect(
+      connectionLogTallyLabel({
+        quietPeriods: 1,
+        sessionsEnded: 1,
+        resumed: 2,
+      }),
+    ).toBe("1 quiet period · 1 ended session · 2 resumed");
   });
 });

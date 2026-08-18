@@ -479,7 +479,10 @@ export const connectionLogRowReading = ({
     return {
       label,
       prefix: knownSession ? "Signal returned after " : "First signal after ",
-      suffix: " quiet",
+      // "Quiet" is the word for a gap Big Plan inferred. The time between a
+      // reported end and the next session is a measured interval, not a
+      // silence anyone had to interpret, so it is stated without that word.
+      suffix: ended ? "" : " quiet",
       showReason,
     };
   }
@@ -487,6 +490,69 @@ export const connectionLogRowReading = ({
     ? { label, prefix: "Ended ", suffix: " ago", showReason }
     : { label, prefix: "Quiet for ", suffix: "", showReason };
 };
+
+export type ConnectionLogTally = {
+  readonly quietPeriods: number;
+  readonly sessionsEnded: number;
+  readonly resumed: number;
+};
+
+/**
+ * Names the state the log's summary reports.
+ *
+ * It has to answer with the same word as the health card above it: a summary
+ * reading "NO SIGNAL" under a card reading "Agent session ended" tells the
+ * reviewer the two disagree about what happened.
+ */
+export const connectionLogState = ({
+  connected,
+  ended,
+}: {
+  readonly connected: boolean;
+  readonly ended: boolean;
+}): string => (connected ? "CONNECTED" : ended ? "SESSION ENDED" : "NO SIGNAL");
+
+/**
+ * Counts what the log's edges say, keeping reported ends out of the count of
+ * gaps Big Plan inferred. Those are different events, and a summary that
+ * merges them re-imports the guess the row above it just stopped making.
+ */
+export const connectionLogTally = (
+  events: ReadonlyArray<Pick<BrowserConnectionEvent, "connected" | "reason">>,
+): ConnectionLogTally => {
+  let quietPeriods = 0;
+  let sessionsEnded = 0;
+  let resumed = 0;
+  let hasConnected = false;
+  events.forEach((event, index) => {
+    const previous = events[index - 1];
+    if (!event.connected && previous?.connected) {
+      if (connectionEventEnded(event)) sessionsEnded += 1;
+      else quietPeriods += 1;
+    }
+    if (event.connected && hasConnected && previous?.connected === false) {
+      resumed += 1;
+    }
+    if (event.connected) hasConnected = true;
+  });
+  return { quietPeriods, sessionsEnded, resumed };
+};
+
+/** Renders the tally, naming reported ends only once there are some. */
+export const connectionLogTallyLabel = ({
+  quietPeriods,
+  sessionsEnded,
+  resumed,
+}: ConnectionLogTally): string =>
+  [
+    `${quietPeriods} quiet ${quietPeriods === 1 ? "period" : "periods"}`,
+    ...(sessionsEnded === 0
+      ? []
+      : [
+          `${sessionsEnded} ended ${sessionsEnded === 1 ? "session" : "sessions"}`,
+        ]),
+    `${resumed} resumed`,
+  ].join(" · ");
 
 /** True when this edge carries the loop's own report that its session ended. */
 export const connectionEventEnded = (
@@ -512,20 +578,11 @@ const ConnectionLog = ({
   // A gap in the signal is a quiet period, not an observed disconnection. The
   // runtime records an edge whenever the heartbeat ages out, and nothing renews
   // it while a turn runs, so counting these as disconnects and reconnects put
-  // events in the reviewer's log that never happened (BIG-147).
-  let quietPeriods = 0;
-  let resumed = 0;
-  let hasConnected = false;
-  ordered.forEach((event, index) => {
-    if (!event.connected && ordered[index - 1]?.connected) quietPeriods += 1;
-    if (
-      event.connected &&
-      hasConnected &&
-      ordered[index - 1]?.connected === false
-    )
-      resumed += 1;
-    if (event.connected) hasConnected = true;
-  });
+  // events in the reviewer's log that never happened (BIG-147). An end the
+  // agent's loop reported is the one edge that is not a guess, and it is
+  // counted apart from them (BIG-156).
+  const tally = connectionLogTally(ordered);
+  const latestEnded = latest !== undefined && connectionEventEnded(latest);
   const groups = new Map<string, Array<(typeof ordered)[number]>>();
   for (const event of [...ordered].reverse()) {
     const date = new Intl.DateTimeFormat(undefined, {
@@ -576,7 +633,7 @@ const ConnectionLog = ({
                     : "m-0 text-xs font-[750] text-warning [overflow-wrap:anywhere]"
                 }
               >
-                {connected ? "CONNECTED" : "NO SIGNAL"}
+                {connectionLogState({ connected, ended: latestEnded })}
               </dd>
             </div>
             <div className="min-w-0">
@@ -600,8 +657,7 @@ const ConnectionLog = ({
                 Events
               </dt>
               <dd className="m-0 text-xs text-ink [overflow-wrap:anywhere]">
-                {quietPeriods} quiet {quietPeriods === 1 ? "period" : "periods"}{" "}
-                · {resumed} resumed
+                {connectionLogTallyLabel(tally)}
               </dd>
             </div>
           </dl>

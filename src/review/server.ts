@@ -99,7 +99,10 @@ import {
   reviewRestartCommand,
 } from "./shared/agent-command.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
-import { agentDisconnectReason } from "./shared/agent-status.js";
+import {
+  agentConnectionEdgeAtMs,
+  agentDisconnectReason,
+} from "./shared/agent-status.js";
 import {
   activateReviewSession,
   liveReviewCustody,
@@ -1171,7 +1174,9 @@ export const startReviewRuntime = async ({
           store,
           sessionId,
           connected: presence.connected,
-          at: new Date().toISOString(),
+          at: new Date(
+            agentConnectionEdgeAtMs({ ...presence, nowMs: Date.now() }),
+          ).toISOString(),
           disconnectReason: agentDisconnectReason(presence),
         });
       })

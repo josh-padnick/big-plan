@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_RECOVERY_HORIZON_MS,
   AGENT_STALL_MS,
+  agentConnectionEdgeAtMs,
   agentDisconnectReason,
   agentHoldsClaimedWork,
   heldWorkQuiet,
@@ -916,6 +917,18 @@ describe("observed session end", () => {
       AGENT_SESSION_ENDED_REASON,
     );
     expect(AGENT_SESSION_ENDED_REASON).toBe("The agent session ended");
+  });
+
+  it("should date a stored edge from the report rather than the poll", () => {
+    // The runtime's checker polls every 750ms, so dating a reported end from
+    // the poll would put the durable log behind the fact by up to an interval.
+    expect(agentConnectionEdgeAtMs({ endedAtMs: NOW - 700, nowMs: NOW })).toBe(
+      NOW - 700,
+    );
+    expect(agentConnectionEdgeAtMs({ nowMs: NOW })).toBe(NOW);
+    expect(agentConnectionEdgeAtMs({ endedAtMs: Number.NaN, nowMs: NOW })).toBe(
+      NOW,
+    );
   });
 
   it("should replace the threshold sentence with the reported end", () => {
