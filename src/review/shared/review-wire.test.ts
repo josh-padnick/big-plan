@@ -631,13 +631,26 @@ describe("review wire contract", () => {
     }
   });
 
+  // Zero earns its own case: it is the first write every store makes, and a
+  // predicate that refused it would report a fresh record as unreadable.
   it("should keep a whole write count, including the first one", () => {
-    expect(
-      decodeReviewInputContract({
-        inputs: [],
-        answersRevision: 0,
-        dispositionsRevision: 7,
-      }),
-    ).toMatchObject({ answersRevision: 0, dispositionsRevision: 7 });
+    for (const revision of [0, 7]) {
+      expect(
+        decodeChangeDispositions({ accepted: [], revision }).revision,
+      ).toBe(revision);
+      expect(decodeReviewState({ answers: [], revision }).revision).toBe(
+        revision,
+      );
+      expect(
+        decodeReviewInputContract({
+          inputs: [],
+          answersRevision: revision,
+          dispositionsRevision: revision,
+        }),
+      ).toMatchObject({
+        answersRevision: revision,
+        dispositionsRevision: revision,
+      });
+    }
   });
 });
