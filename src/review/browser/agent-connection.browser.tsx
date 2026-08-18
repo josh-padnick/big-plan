@@ -292,6 +292,8 @@ export type ConnectionHealthReading = {
   readonly badge: string;
   readonly connection: string;
   readonly signalTerm: string;
+  /** The instant this card's second label dates itself from. */
+  readonly signalAtMs: number;
 };
 
 /**
@@ -306,10 +308,12 @@ export type ConnectionHealthReading = {
  */
 export const connectionHealthReading = ({
   connected,
-  ended,
+  heartbeatAt,
+  endedAtMs,
 }: {
   readonly connected: boolean;
-  readonly ended: boolean;
+  readonly heartbeatAt: number;
+  readonly endedAtMs?: number;
 }): ConnectionHealthReading => {
   if (connected) {
     return {
@@ -318,15 +322,17 @@ export const connectionHealthReading = ({
       badge: "online",
       connection: "Healthy",
       signalTerm: "Last signal",
+      signalAtMs: heartbeatAt,
     };
   }
-  if (ended) {
+  if (endedAtMs !== undefined) {
     return {
       state: "ended",
       headline: "Agent session ended",
       badge: "ended",
       connection: "Session ended",
       signalTerm: "Ended",
+      signalAtMs: endedAtMs,
     };
   }
   return {
@@ -335,6 +341,7 @@ export const connectionHealthReading = ({
     badge: "quiet",
     connection: "No signal",
     signalTerm: "Last signal",
+    signalAtMs: heartbeatAt,
   };
 };
 
@@ -351,7 +358,8 @@ const ConnectionHealthCard = ({
 }) => {
   const reading = connectionHealthReading({
     connected,
-    ended: endedAtMs !== undefined,
+    heartbeatAt,
+    ...(endedAtMs === undefined ? {} : { endedAtMs }),
   });
   return (
     <article
@@ -382,10 +390,7 @@ const ConnectionHealthCard = ({
             {reading.signalTerm}
           </dt>
           <dd className="m-0 text-ink [overflow-wrap:anywhere]">
-            {relativeSignalLabel({
-              now: nowMs,
-              at: endedAtMs ?? heartbeatAt,
-            })}
+            {relativeSignalLabel({ now: nowMs, at: reading.signalAtMs })}
           </dd>
         </div>
       </dl>

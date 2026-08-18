@@ -9,38 +9,54 @@ import {
 } from "./agent-connection.browser.js";
 import { AGENT_SESSION_ENDED_REASON } from "../shared/agent-status.js";
 
+const HEARTBEAT_AT = 1_775_000_000_000;
+const ENDED_AT = HEARTBEAT_AT + 400;
+
 describe("connectionHealthReading", () => {
   it("reports a live connection", () => {
-    expect(connectionHealthReading({ connected: true, ended: false })).toEqual({
+    expect(
+      connectionHealthReading({ connected: true, heartbeatAt: HEARTBEAT_AT }),
+    ).toEqual({
       state: "connected",
       headline: "Agent connected",
       badge: "online",
       connection: "Healthy",
       signalTerm: "Last signal",
+      signalAtMs: HEARTBEAT_AT,
     });
   });
 
   it("names a reported end instead of a missing signal", () => {
-    expect(connectionHealthReading({ connected: false, ended: true })).toEqual({
+    expect(
+      connectionHealthReading({
+        connected: false,
+        heartbeatAt: HEARTBEAT_AT,
+        endedAtMs: ENDED_AT,
+      }),
+    ).toEqual({
       state: "ended",
       headline: "Agent session ended",
       badge: "ended",
       connection: "Session ended",
       signalTerm: "Ended",
+      // The label says "Ended", so it has to date itself from the end and not
+      // from the last heartbeat that happened to precede it.
+      signalAtMs: ENDED_AT,
     });
   });
 
   it("keeps calling an unreported silence a silence", () => {
     // Nothing observed this end, so the card must not claim one (BIG-147).
-    expect(connectionHealthReading({ connected: false, ended: false })).toEqual(
-      {
-        state: "quiet",
-        headline: "No recent agent signal",
-        badge: "quiet",
-        connection: "No signal",
-        signalTerm: "Last signal",
-      },
-    );
+    expect(
+      connectionHealthReading({ connected: false, heartbeatAt: HEARTBEAT_AT }),
+    ).toEqual({
+      state: "quiet",
+      headline: "No recent agent signal",
+      badge: "quiet",
+      connection: "No signal",
+      signalTerm: "Last signal",
+      signalAtMs: HEARTBEAT_AT,
+    });
   });
 });
 
