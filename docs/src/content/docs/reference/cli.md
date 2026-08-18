@@ -217,6 +217,8 @@ With `--wait`, it continues once the holder answers or its lease lapses.
 A lapsed lease no longer risks the plan.
 Every claim carries a generation that a takeover raises, the displaced agent keeps writing only to its own candidate, and `agent respond` refuses a generation that no longer holds the claim.
 A takeover therefore starts from the last published revision, and the reviewer is told the previous agent's unpublished edits stayed in its own stage.
+A claim also ends when the reviewer takes the message back: once an agent has reported nothing for far longer than a turn takes and no agent is connected, that claim counts as abandoned and the message becomes editable and deletable again.
+Taking a message back discards the stage its claim was drafting, and a returning agent's `agent respond` is refused rather than published, so pick up current work with `agent next`.
 
 `agent respond` publishes under one plan-mutation lock: it re-proves the claim, requires the plan to still carry the revision the candidate started from, and swaps the candidate in with one atomic rename.
 A response that finds the plan changed underneath it is refused rather than applied, so the agent takes the work again from the current plan.
