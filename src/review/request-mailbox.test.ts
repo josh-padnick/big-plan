@@ -30,6 +30,7 @@ import {
 } from "./agent-exchange.js";
 import { buildFeedbackPackage } from "./feedback-package.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
+import { AGENT_RECOVERY_HORIZON_MS } from "./shared/agent-timing.js";
 import {
   appendProgressEvent,
   assertResolvableComment,
@@ -1323,6 +1324,7 @@ describe("request mailbox", () => {
     await writeAgentRequest({ store, request });
     await removeCommentFromQueuedFeedbackRequest({
       store,
+      agentConnected: true,
       requestId: request.requestId,
       commentId: removedId,
       now: "2026-08-10T12:00:01.000Z",
@@ -1330,6 +1332,7 @@ describe("request mailbox", () => {
 
     const repeated = await removeCommentFromQueuedFeedbackRequest({
       store,
+      agentConnected: true,
       requestId: request.requestId,
       commentId: removedId,
       now: "2026-08-10T12:00:02.000Z",
@@ -1365,6 +1368,7 @@ describe("request mailbox", () => {
       }),
       removeCommentFromQueuedFeedbackRequest({
         store,
+        agentConnected: true,
         requestId: request.requestId,
         commentId: removedId,
         now: "2026-08-10T12:00:02.000Z",
@@ -1518,6 +1522,7 @@ describe("request mailbox", () => {
     await expect(
       reviseQueuedRequest({
         store,
+        agentConnected: true,
         requestId: request.requestId,
         body: "What is the retry boundary?",
       }),
@@ -1566,6 +1571,7 @@ describe("request mailbox", () => {
 
     const revised = await reviseQueuedRequest({
       store,
+      agentConnected: true,
       requestId: request.requestId,
       body: [
         buildReviewImageReference({
@@ -1584,6 +1590,7 @@ describe("request mailbox", () => {
     ]);
     const restored = await reviseQueuedRequest({
       store,
+      agentConnected: true,
       requestId: request.requestId,
       body: buildReviewImageReference({
         alt: "Restored timeout graph",
@@ -1598,6 +1605,7 @@ describe("request mailbox", () => {
     await expect(
       reviseQueuedRequest({
         store,
+        agentConnected: true,
         requestId: request.requestId,
         body: buildReviewImageReference({
           alt: "New graph",
@@ -1625,6 +1633,7 @@ describe("request mailbox", () => {
     await expect(
       reviseQueuedRequest({
         store,
+        agentConnected: true,
         requestId: request.requestId,
         body: "What is the retry boundary?",
       }),
@@ -1648,6 +1657,7 @@ describe("request mailbox", () => {
     await expect(
       reviseQueuedRequest({
         store,
+        agentConnected: true,
         requestId: request.requestId,
         body: "What is the retry boundary?",
       }),
@@ -1664,6 +1674,7 @@ describe("request mailbox", () => {
     await expect(
       reviseQueuedRequest({
         store,
+        agentConnected: true,
         requestId: request.requestId,
         body: "A different body.",
       }),
@@ -1685,6 +1696,7 @@ describe("request mailbox", () => {
       }),
       reviseQueuedRequest({
         store,
+        agentConnected: true,
         requestId: request.requestId,
         body: "What is the retry boundary?",
       }),
@@ -1708,7 +1720,11 @@ describe("request mailbox", () => {
     const request = chatRequest("Never mind this question.");
     await writeAgentRequest({ store, request });
 
-    await deleteQueuedRequest({ store, requestId: request.requestId });
+    await deleteQueuedRequest({
+      store,
+      requestId: request.requestId,
+      agentConnected: true,
+    });
 
     await expect(
       readAgentExchange({ store, sessionId, planId }),
@@ -1728,7 +1744,11 @@ describe("request mailbox", () => {
     });
 
     await expect(
-      deleteQueuedRequest({ store, requestId: request.requestId }),
+      deleteQueuedRequest({
+        store,
+        requestId: request.requestId,
+        agentConnected: true,
+      }),
     ).rejects.toThrow(/already started/);
     const exchange = await readAgentExchange({ store, sessionId, planId });
     expect(exchange.requests).toHaveLength(1);
@@ -1747,7 +1767,11 @@ describe("request mailbox", () => {
         baselineSnapshot: snapshot,
         now: "2026-08-10T12:00:01.000Z",
       }),
-      deleteQueuedRequest({ store, requestId: request.requestId }),
+      deleteQueuedRequest({
+        store,
+        requestId: request.requestId,
+        agentConnected: true,
+      }),
     ]);
 
     const exchange = await readAgentExchange({ store, sessionId, planId });
@@ -1761,6 +1785,165 @@ describe("request mailbox", () => {
         message: "The agent already started on this message",
       });
     }
+  });
+
+  it("should return a message to the reviewer once its claim is abandoned", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Waht about the timeout?");
+    await writeAgentRequest({ store, request });
+    const abandonedAtMs = Date.parse("2026-08-10T12:00:01.000Z");
+    const reviewerNowMs = abandonedAtMs + AGENT_RECOVERY_HORIZON_MS + 1;
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: new Date(abandonedAtMs).toISOString(),
+      clock: () => abandonedAtMs,
+    });
+
+    const revised = await reviseQueuedRequest({
+      store,
+      requestId: request.requestId,
+      body: "What about the timeout?",
+      agentConnected: false,
+      clock: () => reviewerNowMs,
+    });
+
+    expect(revised).toMatchObject({ body: "What about the timeout?" });
+    // The edit has to invalidate the claim rather than sit under it, or the
+    // agent that stopped could still answer the message it replaced.
+    expect(revised.claimedAt).toBeUndefined();
+    expect(revised.claimedBy).toBeUndefined();
+    expect(revised.baselineSnapshot).toBeUndefined();
+    await expect(readProgress({ store, sessionId })).resolves.toMatchObject([
+      expect.objectContaining({ stepCode: "claim-released" }),
+    ]);
+
+    // The late agent drafts against the claim it still holds, which is what
+    // makes its refusal at delivery the thing under test.
+    const late = validateAgentResponseDraft({
+      value: {
+        requestId: request.requestId,
+        message: "Answered long after the claim lapsed.",
+      },
+      request: claimed,
+      commentsById: new Map(),
+      changedBlocks: new Set(),
+      currentSnapshot: snapshot,
+      now: new Date(reviewerNowMs + 1).toISOString(),
+    });
+    await expect(
+      commitRequestTerminal({
+        store,
+        response: late,
+        claimedBy: agentA,
+        now: new Date(reviewerNowMs + 2).toISOString(),
+      }),
+    ).rejects.toThrow(/must be claimed/);
+  });
+
+  it("should keep a message held while its claim still explains the quiet", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Never mind this question.");
+    await writeAgentRequest({ store, request });
+    const claimedAtMs = Date.parse("2026-08-10T12:00:01.000Z");
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: new Date(claimedAtMs).toISOString(),
+      clock: () => claimedAtMs,
+    });
+
+    // A lapsed lease is what every ordinary turn looks like, so it unlocks
+    // nothing on its own.
+    await expect(
+      deleteQueuedRequest({
+        store,
+        requestId: request.requestId,
+        agentConnected: false,
+        clock: () => claimedAtMs + AGENT_CLAIM_LEASE_MS * 2,
+      }),
+    ).rejects.toThrow(/already started/);
+    // Neither does silence past the horizon while an agent is attached.
+    await expect(
+      deleteQueuedRequest({
+        store,
+        requestId: request.requestId,
+        agentConnected: true,
+        clock: () => claimedAtMs + AGENT_RECOVERY_HORIZON_MS + 1,
+      }),
+    ).rejects.toThrow(/already started/);
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [{ claimedBy: agentA }] });
+  });
+
+  it("should delete a message whose claim is abandoned", async () => {
+    const { store } = await preparedReview();
+    const request = chatRequest("Never mind this question.");
+    await writeAgentRequest({ store, request });
+    const abandonedAtMs = Date.parse("2026-08-10T12:00:01.000Z");
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: new Date(abandonedAtMs).toISOString(),
+      clock: () => abandonedAtMs,
+    });
+
+    await deleteQueuedRequest({
+      store,
+      requestId: request.requestId,
+      agentConnected: false,
+      clock: () => abandonedAtMs + AGENT_RECOVERY_HORIZON_MS + 1,
+    });
+
+    await expect(
+      readAgentExchange({ store, sessionId, planId }),
+    ).resolves.toMatchObject({ requests: [] });
+  });
+
+  it("should release an abandoned claim when a queued comment leaves its batch", async () => {
+    const { store } = await preparedReview();
+    const kept = reviewComment({
+      id: "4444444444444444",
+      body: "Keep this one.",
+    });
+    const removed = reviewComment({
+      id: "5555555555555555",
+      body: "Take this one back.",
+    });
+    const request = requestWith([kept, removed]);
+    await writeAgentRequest({ store, request });
+    const abandonedAtMs = Date.parse("2026-08-10T12:00:01.000Z");
+    await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: new Date(abandonedAtMs).toISOString(),
+      clock: () => abandonedAtMs,
+    });
+
+    const updated = await removeCommentFromQueuedFeedbackRequest({
+      store,
+      requestId: request.requestId,
+      commentId: removed.id,
+      now: "2026-08-10T12:40:00.000Z",
+      agentConnected: false,
+      clock: () => abandonedAtMs + AGENT_RECOVERY_HORIZON_MS + 1,
+    });
+
+    expect(updated.comments.map((comment) => comment.id)).toEqual([kept.id]);
+    expect(updated.claimedBy).toBeUndefined();
   });
 
   it("should allocate unique progress sequences when writers overlap", async () => {

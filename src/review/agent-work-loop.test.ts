@@ -596,6 +596,7 @@ describe("agent work loop lifecycle", () => {
       await expect(
         reviseQueuedRequest({
           store: review.store,
+          agentConnected: true,
           requestId: request.requestId,
           body: "Please inspect this later.",
         }),
@@ -603,6 +604,7 @@ describe("agent work loop lifecycle", () => {
       await expect(
         deleteQueuedRequest({
           store: review.store,
+          agentConnected: true,
           requestId: request.requestId,
         }),
       ).resolves.toEqual({ attachmentCleanup: "complete" });
@@ -935,6 +937,7 @@ describe("agent work loop lifecycle", () => {
       await expect(
         deleteQueuedRequest({
           store: review.store,
+          agentConnected: true,
           requestId: request.requestId,
         }),
       ).resolves.toEqual({ attachmentCleanup: "complete" });
@@ -983,6 +986,7 @@ describe("agent work loop lifecycle", () => {
       await expect(
         deleteQueuedRequest({
           store: review.store,
+          agentConnected: true,
           requestId: request.requestId,
         }),
       ).resolves.toEqual({ attachmentCleanup: "complete" });
@@ -1044,6 +1048,7 @@ describe("agent work loop lifecycle", () => {
       .mockImplementationOnce(async () => {
         await deleteQueuedRequest({
           store: review.store,
+          agentConnected: true,
           requestId: first.requestId,
         });
         return selectedValues;

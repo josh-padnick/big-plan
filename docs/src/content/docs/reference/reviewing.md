@@ -204,6 +204,9 @@ Your comments are safe whichever you choose.
 
 The stalled reading is bounded, because a pickup cannot account for silence indefinitely.
 After 30 minutes without a single report Big Plan stops treating the pickup as an explanation: the **Agent** tab gives way to the ordinary connection reading, the thread reads **No longer reporting**, drops its promise to resolve itself, leaves the **Working** group and offers **Show setup instructions →**, a message you send now reads **Blocked - no agent connected**, and the recovery section returns to its plain wording.
+Past that point, and only while no agent is connected, the pickup also stops holding your comment: the claim is treated as abandoned, and **Delete comment the agent left?** returns with a confirmation that says the agent stopped reporting and its claim expired.
+Both halves of that proof are required, because a quiet lease alone is what an ordinary turn looks like: a connected agent, or a silence still inside the 30 minutes, keeps the comment held exactly as before.
+Deleting or editing what an abandoned claim was holding releases the claim, so an agent that comes back afterwards is refused rather than allowed to answer a message you have already changed.
 A real response records an `answered`, `changed`, `warning`, `needs-input`, or `declined` outcome and shows the agent's message.
 A warning leaves the plan unchanged, shows its short one-line summary directly under the **Warning** badge, explains the standard or template the request would cross, and lets the reviewer explicitly choose **Do it anyway**.
 A changed result updates the plan in place without discarding staged comments, open threads, or scroll position.

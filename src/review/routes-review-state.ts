@@ -47,6 +47,7 @@ import {
 import {
   anchorReviewStore,
   freezeRequestAttachments,
+  readAgentPresence,
   readFeedbackSubmissionValue,
   readResolvedCommentIds,
   readSnapshot,
@@ -61,7 +62,7 @@ import {
   MAX_IMAGES_PER_MESSAGE,
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
-import { agentOwnsRequest } from "./shared/request-ownership.js";
+import { agentStillOwnsRequest } from "./shared/request-ownership.js";
 import { reviewStateVersion } from "./review-state-version.js";
 import {
   encodeReviewSnapshot,
@@ -730,7 +731,23 @@ export const deleteSentComment = async (
         "Only a queued, canceled, or reverted comment can be deleted from the review",
     });
   }
-  if (answeredRequestIds.size === 0 && commentRequests.some(agentOwnsRequest)) {
+  // Pickup locks the comment only while the claim on it still means something.
+  // A claim proven abandoned - nothing attached, and quiet past the recovery
+  // horizon - releases the comment back to the reviewer, on the same rule the
+  // browser used to decide whether to offer delete at all (BIG-120).
+  const agentConnected = (await readAgentPresence({ store, sessionId }))
+    .connected;
+  const deletionNowMs = Date.now();
+  if (
+    answeredRequestIds.size === 0 &&
+    commentRequests.some((candidate) =>
+      agentStillOwnsRequest({
+        request: candidate,
+        agentConnected,
+        nowMs: deletionNowMs,
+      }),
+    )
+  ) {
     return refusal({
       status: 409,
       reason: "The agent has already picked up this comment",
@@ -765,6 +782,7 @@ export const deleteSentComment = async (
         requestId: pending.requestId,
         commentId,
         now,
+        agentConnected,
       });
     } else {
       await cancelAgentRequest({

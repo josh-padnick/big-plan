@@ -221,8 +221,29 @@ type PendingDelete =
   | { readonly kind: "comment"; readonly comment: ReviewComment }
   | { readonly kind: "queued"; readonly comment: ReviewComment }
   | { readonly kind: "canceled"; readonly comment: ReviewComment }
+  | { readonly kind: "abandoned"; readonly comment: ReviewComment }
   | { readonly kind: "reverted"; readonly comment: ReviewComment }
   | { readonly kind: "all"; readonly count: number };
+
+/**
+ * Which confirmation one sent thread's delete earns. A comment released by an
+ * abandoned claim gets its own, because the queued wording promises the agent
+ * never picked it up and here it did (BIG-120).
+ */
+const sentDeleteKind = ({
+  thread,
+  currentSnapshot,
+}: {
+  readonly thread: CommentThreadProjection<AgentRequest, AgentResponse>;
+  readonly currentSnapshot: string;
+}): "reverted" | "canceled" | "abandoned" | "queued" =>
+  thread.latestChanged?.baselineSnapshot === currentSnapshot
+    ? "reverted"
+    : thread.latestCanceled
+      ? "canceled"
+      : thread.deleteUnlockedByAbandonedClaim
+        ? "abandoned"
+        : "queued";
 
 type PendingRevert = {
   readonly requestId: string;
@@ -3100,6 +3121,7 @@ const SentThread = ({
     latestCanceled,
     canDeleteQueued,
     canDeleteCanceled,
+    deleteUnlockedByAbandonedClaim,
     group,
   } = thread;
   useEffect(() => {
@@ -3160,11 +3182,16 @@ const SentThread = ({
       : "Revert unavailable - the plan changed again";
   const canDeleteComment =
     canDeleteQueued || canDeleteCanceled || latestChangeWasReverted;
-  const deleteCommentLabel = latestChangeWasReverted
-    ? "Delete comment"
-    : latestCanceled
-      ? "Delete canceled comment"
-      : "Delete queued comment";
+  // An affordance a pickup had taken away says why it is back, wherever it
+  // appears. The rail and the summary card have room for the label alone, so
+  // the label carries the reason and the expanded card explains it in full.
+  const deleteCommentLabel = deleteUnlockedByAbandonedClaim
+    ? "Delete comment - the agent that picked it up stopped reporting"
+    : latestChangeWasReverted
+      ? "Delete comment"
+      : latestCanceled
+        ? "Delete canceled comment"
+        : "Delete queued comment";
 
   // Every control in this thread that writes - replying, deleting, reverting,
   // and canceling - is held back by the same answer, so a reviewer is told the
@@ -3481,6 +3508,17 @@ const SentThread = ({
           <p className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)] [overflow-wrap:anywhere]">
             The part of the plan you commented on has since been changed. You
             can still review this thread, but won&apos;t see a full diff.
+          </p>
+        ) : null}
+        {deleteUnlockedByAbandonedClaim ? (
+          <p
+            className="mt-3 mb-0 rounded-md bg-[var(--callout-warning-bg)] p-2 text-xs text-[var(--callout-warning-ink)] [overflow-wrap:anywhere]"
+            data-review-abandoned-claim-unlock
+          >
+            The agent that picked this up has reported nothing for far longer
+            than a turn takes, and no agent is connected, so its claim has
+            expired. You can delete this comment again; if that agent comes
+            back, its answer will no longer be accepted.
           </p>
         ) : null}
         <div
@@ -5922,7 +5960,7 @@ export const ReviewController = () => {
       setStatus(
         kind === "canceled"
           ? "Canceled comment deleted."
-          : kind === "reverted"
+          : kind === "reverted" || kind === "abandoned"
             ? "Comment deleted."
             : "Queued comment deleted.",
       );
@@ -6867,13 +6905,7 @@ export const ReviewController = () => {
                       }
                       onDelete={() =>
                         setPendingDelete({
-                          kind:
-                            thread.latestChanged?.baselineSnapshot ===
-                            currentSnapshot
-                              ? "reverted"
-                              : thread.latestCanceled
-                                ? "canceled"
-                                : "queued",
+                          kind: sentDeleteKind({ thread, currentSnapshot }),
                           comment,
                         })
                       }
@@ -7203,12 +7235,7 @@ export const ReviewController = () => {
                 onCancelRequest={(requestId) => void cancelRequest(requestId)}
                 onDelete={() =>
                   setPendingDelete({
-                    kind:
-                      thread.latestChanged?.baselineSnapshot === currentSnapshot
-                        ? "reverted"
-                        : thread.latestCanceled
-                          ? "canceled"
-                          : "queued",
+                    kind: sentDeleteKind({ thread, currentSnapshot }),
                     comment,
                   })
                 }
@@ -7321,8 +7348,8 @@ export const ReviewController = () => {
               ? "Delete canceled comment?"
               : pendingDelete?.kind === "queued"
                 ? "Delete queued comment?"
-                : pendingDelete?.kind === "reverted"
-                  ? "Delete comment?"
+                : pendingDelete?.kind === "abandoned"
+                  ? "Delete comment the agent left?"
                   : "Delete comment?"
         }
         description={
@@ -7332,9 +7359,11 @@ export const ReviewController = () => {
               ? "This permanently removes the canceled comment and its thread. This action cannot be undone."
               : pendingDelete?.kind === "queued"
                 ? "This removes the comment before the agent picks it up. This action cannot be undone."
-                : pendingDelete?.kind === "reverted"
-                  ? "This permanently removes the comment and its thread. The reverted plan changes stay reverted."
-                  : "This permanently removes your staged comment. This action cannot be undone."
+                : pendingDelete?.kind === "abandoned"
+                  ? "The agent that picked this up has reported nothing for far longer than a turn takes, and no agent is connected, so its claim has expired. This permanently removes the comment and its thread; if that agent comes back, its answer will no longer be accepted."
+                  : pendingDelete?.kind === "reverted"
+                    ? "This permanently removes the comment and its thread. The reverted plan changes stay reverted."
+                    : "This permanently removes your staged comment. This action cannot be undone."
         }
         actionLabel={pendingDelete?.kind === "all" ? "Delete all" : "Delete"}
         onCancel={() => setPendingDelete(null)}
@@ -7346,6 +7375,7 @@ export const ReviewController = () => {
           } else if (
             pendingDelete?.kind === "queued" ||
             pendingDelete?.kind === "canceled" ||
+            pendingDelete?.kind === "abandoned" ||
             pendingDelete?.kind === "reverted"
           ) {
             void deleteSentComment(pendingDelete.comment.id);

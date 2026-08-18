@@ -175,6 +175,10 @@ export const sendAgentRequest = async (
         store,
         requestId,
         body: messageBody,
+        // Presence is half the proof that a claim was abandoned, and the
+        // mailbox refuses on the same rule the browser offered on (BIG-120).
+        agentConnected: (await readAgentPresence({ store, sessionId }))
+          .connected,
       });
     } catch (error: unknown) {
       if (!(error instanceof AgentExchangeRejected)) throw error;
@@ -314,6 +318,7 @@ export const deleteQueuedAgentRequest = async (
     deletion = await deleteQueuedRequest({
       store,
       requestId,
+      agentConnected: (await readAgentPresence({ store, sessionId })).connected,
     });
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;

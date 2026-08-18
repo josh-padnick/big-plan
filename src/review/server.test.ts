@@ -52,6 +52,7 @@ import {
 } from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
 import { validateResolvedCommentIds } from "./shared/comment.js";
+import { AGENT_RECOVERY_HORIZON_MS } from "./shared/agent-timing.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import { REVIEW_POLL_INTERVAL_MS } from "./shared/review-polling.js";
 import {
@@ -3411,6 +3412,112 @@ describe("review runtime resolve invariant", () => {
       ).resolves.toEqual([]);
     } finally {
       await release?.();
+      await close();
+    }
+  });
+
+  it("should keep a comment the agent is holding out of the reviewer's hands", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-live-claim-",
+    );
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      await claimAgentRequest({
+        store: isolated.store,
+        activeSessionId: isolated.sessionId,
+        requestId: await queuedRequestId(isolated),
+        claimedBy: isolated.sessionId,
+        baselineSnapshot: PLAN_SNAPSHOT,
+        now: new Date().toISOString(),
+      });
+
+      const refused = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: {
+          commentId,
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toMatchObject({
+        error: "The agent has already picked up this comment",
+      });
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({
+        sent: [expect.objectContaining({ id: commentId })],
+      });
+    } finally {
+      await close();
+    }
+  });
+
+  it("should delete a comment whose claim was proven abandoned", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-abandoned-claim-",
+    );
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      // Nothing has ever heartbeated on this runtime, so presence reports no
+      // agent attached; the claim below is the whole of the reviewer's proof.
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      await claimAgentRequest({
+        store: isolated.store,
+        activeSessionId: isolated.sessionId,
+        requestId: await queuedRequestId(isolated),
+        claimedBy: isolated.sessionId,
+        baselineSnapshot: PLAN_SNAPSHOT,
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+
+      const deleted = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: {
+          commentId,
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+
+      expect(deleted.status).toBe(200);
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({ sent: [] });
+      await expect(
+        readAgentExchange({
+          store: isolated.store,
+          sessionId: isolated.sessionId,
+          planId: isolated.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [expect.objectContaining({ canceledAt: expect.any(String) })],
+      });
+    } finally {
       await close();
     }
   });
