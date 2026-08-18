@@ -36,7 +36,7 @@ This guide owns the durable implementation model contributors must preserve.
 ### Concepts
 
 - **Agent plan** is the agent's proposed approach for achieving the user's intent before implementation begins.
-- **Plan source** is the authoritative plan document on disk. The agent edits this source in response to feedback.
+- **Plan source** is the authoritative plan document on disk. During a review the agent edits a claim-scoped candidate copy of it, and Big Plan publishes that copy into this source.
 - **Component** is a built-in, opinionated way to present a specific kind of plan information, such as a decision, code diff, schema, or file tree.
 - **Review document** is Big Plan's human-friendly presentation of the plan source.
 - **Plan review** is the conversation in which the human works to understand the proposed approach, gives feedback, and resolves concerns with the agent.
