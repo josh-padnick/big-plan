@@ -357,7 +357,9 @@ export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
  * accepted write and can therefore never displace applied state.
  */
 const storedRevision = (candidate: unknown): number =>
-  typeof candidate === "number" && Number.isInteger(candidate) && candidate >= 0
+  typeof candidate === "number" &&
+  Number.isSafeInteger(candidate) &&
+  candidate >= 0
     ? candidate
     : -1;
 

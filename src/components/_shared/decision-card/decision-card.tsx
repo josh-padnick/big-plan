@@ -102,7 +102,11 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
   const modeId = `${model.id}-proposal-mode`;
   return (
     <div className="decision-propose" data-option-proposal="">
-      <label className="decision-propose-link" htmlFor={inputId}>
+      <label
+        className="decision-propose-link"
+        data-decision-propose-link
+        htmlFor={inputId}
+      >
         <input
           className="sr-only"
           type="radio"
@@ -196,7 +200,10 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
             across the row from it. Leaving the composer is not one mode's
             business, so Cancel sits outside the comment controls and stays
             reachable in both. */}
-        <div className="decision-proposal-actions">
+        <div
+          className="decision-proposal-actions"
+          data-decision-proposal-actions
+        >
           <div
             className="decision-send-row"
             hidden

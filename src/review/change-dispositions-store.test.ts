@@ -122,6 +122,26 @@ describe("validateChangeDispositionMutation", () => {
     ).toThrow(/"accept" or "withdraw"/u);
   });
 
+  // A place id is the caller's own address for one part of a diff, so it is
+  // stored exactly as given: a trimmed id would accept a place nobody named.
+  it("keeps a place id exactly as the caller wrote it", () => {
+    expect(
+      validateChangeDispositionMutation({
+        value: { op: "accept", from: FROM, to: TO, placeIds: [" p1 "] },
+        now: NOW,
+      }).placeIds,
+    ).toEqual([" p1 "]);
+  });
+
+  it("refuses a place id that is only whitespace", () => {
+    expect(() =>
+      validateChangeDispositionMutation({
+        value: { op: "accept", from: FROM, to: TO, placeIds: ["   "] },
+        now: NOW,
+      }),
+    ).toThrow(/non-empty text/u);
+  });
+
   it("refuses a mutation that names no change", () => {
     expect(() =>
       validateChangeDispositionMutation({

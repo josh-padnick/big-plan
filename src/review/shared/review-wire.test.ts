@@ -620,6 +620,7 @@ describe("review wire contract", () => {
       0.5,
       -1,
       -2,
+      Number.MAX_SAFE_INTEGER + 2,
       Number.NaN,
       Number.POSITIVE_INFINITY,
     ]) {

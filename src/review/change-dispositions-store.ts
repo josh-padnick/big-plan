@@ -1,15 +1,9 @@
 // Owns validation, bounds, and immutable updates for the change dispositions a
 // live review records.
 //
-// This store is the answers store's sibling and deliberately its simpler one.
-// Both carry a revision that increases on every accepted write, so a reader can
-// order two responses without inspecting their bodies. Neither needs anything
-// else in common, because currency is decided differently: an answer refers to
-// decision content that can be reworded underneath it and so must be pinned to
-// a digest of what it answered, while a disposition already names the two
-// snapshot digests of the revision it closed. A later revision has a different
-// result digest and therefore a different address, so an acceptance can never
-// migrate onto content the reviewer never saw, and nothing here has to ask.
+// Why a disposition needs no currency predicate, and why its revision is
+// ordered rather than counted, belong to ./shared/change-disposition.js; this
+// module only enforces them.
 //
 // What this does own is refusal. The record is bounded, and a mutation past the
 // bound is refused rather than trimmed to fit: dropping the oldest acceptance
@@ -83,13 +77,16 @@ const placeId = (value: unknown): string => {
   if (typeof value !== "string" || value.trim() === "") {
     throw new ChangeDispositionsRejected('"placeId" must be non-empty text');
   }
-  const trimmed = value.trim();
-  if (trimmed.length > PLACE_ID_LIMIT) {
+  // Blank text names nothing, but the id itself is returned exactly as the
+  // caller gave it: trimming would store an acceptance under an address the
+  // browser never asked for, and the record would then answer for a different
+  // place than the one the reviewer closed.
+  if (value.length > PLACE_ID_LIMIT) {
     throw new ChangeDispositionsRejected(
       `"placeId" is longer than ${PLACE_ID_LIMIT} characters`,
     );
   }
-  return trimmed;
+  return value;
 };
 
 const timestamp = ({
