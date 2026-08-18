@@ -6351,11 +6351,14 @@ export const ReviewController = () => {
                         count: activeBatchCommentIds.length,
                         label: statusForRequest(activeBatchRequest, "thread")
                           .label,
+                        // Derived from the reading it labels, so a warning or
+                        // danger status never heads its cards in the active
+                        // treatment. Only the working stage is positive.
                         tone:
                           statusForRequest(activeBatchRequest, "thread")
-                            .stage === "waiting"
-                            ? ("queued" as const)
-                            : ("working" as const),
+                            .tone === "positive"
+                            ? ("working" as const)
+                            : ("queued" as const),
                         content: (
                           <Card
                             className="m-0 w-full max-w-none border border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-ink)] shadow-none"

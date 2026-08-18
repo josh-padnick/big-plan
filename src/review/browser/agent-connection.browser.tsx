@@ -648,10 +648,18 @@ export const AgentConnectionPanel = ({
       )}
       <AnotherViewTip />
       {/*
-       * Always on screen: this is the only place the recovery prompt and the
-       * connector command are rendered, and every "connect an agent" link in
-       * the review routes here. Nothing about held work, the recovery horizon,
-       * or presence may gate whether it appears.
+       * The gate is exactly this, and it must not be simplified further:
+       * read-only, or a runtime that cannot be reached, hides the recovery
+       * section. Agent presence never hides it.
+       *
+       * This is the only place the recovery prompt and the connector command
+       * are rendered, and every "connect an agent" link in the review routes
+       * here, so an agent falling quiet must not make the reviewer's route back
+       * vanish - held work and the recovery horizon change only the copy. A
+       * runtime that is itself offline is a different question: the connector
+       * command would be advice about a dead endpoint, printed under a card
+       * that already says the review session is offline, while every other
+       * surface for that state tells the reviewer to restart `big-plan review`.
        *
        * All of the safety therefore lives in the copy. While a claim still
        * explains the quiet, an agent may genuinely be mid-turn, and under
@@ -659,7 +667,7 @@ export const AgentConnectionPanel = ({
        * the first agent was doing - so the reviewer is told that before they
        * copy anything, rather than nudged into it (BIG-147).
        */}
-      {isReadOnly ? null : (
+      {isReadOnly || !agentStatusIsAvailable ? null : (
         <details
           className="group mt-3 rounded-md border border-edge text-xs text-muted"
           data-review-agent-recovery={

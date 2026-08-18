@@ -8040,3 +8040,63 @@ test("should re-anchor an open lens, its highlights, and hover association when 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+// BIG-147. The recovery section is the only place the recovery prompt and the
+// connector command are rendered, so an agent falling quiet must never hide it -
+// that half is pinned by "should warn about a takeover before inviting one while
+// work is held" in commenting-agent-cli.spec.ts. A runtime that cannot be
+// reached is the other half: the connector command would be advice about a dead
+// endpoint, under a card that already says the review session is offline.
+test.describe("recovery section visibility", () => {
+  // Aborting every agent poll is how a dead `big-plan review` looks to the
+  // page, and the browser logs the failed fetches it is meant to survive.
+  test.use({
+    allowedConsoleErrors: [/Failed to load resource: net::ERR_FAILED/u],
+  });
+
+  test("should withhold the recovery section while the review runtime is unreachable", async ({
+    page,
+  }) => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-recovery-gate-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(
+      planPath,
+      "# Unreachable runtime\n\nThe review session dies before the agent is ever polled.\n",
+      "utf8",
+    );
+    const runtime = await startReviewRuntime({ planPath });
+    const recoveryPanel = page.locator("[data-review-agent-recovery]");
+    const openAgentTab = async () => {
+      await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+      await page
+        .getByRole("complementary", { name: "Feedback" })
+        .getByRole("tab", { name: "Agent" })
+        .click();
+    };
+    try {
+      await page.goto(runtime.url);
+      await openAgentTab();
+      await expect(recoveryPanel).toBeVisible();
+
+      // Every agent poll fails at the network layer, which is what a dead
+      // `big-plan review` looks like to the page.
+      await page.route("**/api/agent", (route) => route.abort());
+      await page.reload();
+      await openAgentTab();
+      const rail = page.getByRole("complementary", { name: "Feedback" });
+      await expect(
+        rail.locator("[data-review-connection-health='unobservable']"),
+      ).toBeVisible({ timeout: 10_000 });
+      await expect(recoveryPanel).toHaveCount(0);
+
+      // It returns as soon as the runtime answers again.
+      await page.unroute("**/api/agent");
+      await page.reload();
+      await openAgentTab();
+      await expect(recoveryPanel).toBeVisible();
+    } finally {
+      await runtime.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
