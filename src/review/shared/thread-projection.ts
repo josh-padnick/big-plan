@@ -171,6 +171,25 @@ export const selectOpenFeedbackBatches = <Request extends ThreadRequest>({
       }),
   );
 
+/**
+ * The threads a batch header still speaks for. A header stands for work the
+ * agent has yet to answer, so a thread that has reached an outcome has left
+ * that batch's queue and belongs to the lifecycle section for its outcome -
+ * whatever number of batches happen to be open. A thread's own state decides
+ * where it lives, and a header that kept it would be the only thing showing it.
+ */
+export const selectThreadsAwaitingAgent = ({
+  comments,
+  groupOf,
+}: {
+  readonly comments: ReadonlyArray<ReviewComment>;
+  readonly groupOf: (commentId: string) => ThreadGroup | undefined;
+}): ReadonlyArray<ReviewComment> =>
+  comments.filter((comment) => {
+    const group = groupOf(comment.id);
+    return group === "working" || group === "queued";
+  });
+
 export const projectRequestActivity = ({
   request,
   progressEvents,

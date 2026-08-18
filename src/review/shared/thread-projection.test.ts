@@ -11,6 +11,8 @@ import {
   queuedRequestsAhead,
   requestCommentIds,
   selectOpenFeedbackBatches,
+  selectThreadsAwaitingAgent,
+  type ThreadGroup,
   type ThreadRequest,
   type ThreadResponse,
 } from "./thread-projection.js";
@@ -1049,5 +1051,42 @@ describe("review-wide agent status", () => {
         ],
       }).stage,
     ).not.toBe("stalled");
+  });
+});
+
+// BIG-162. A batch header stands for work the agent still owes an answer on.
+// Reply on one of an open package's comments and cancel that reply and the
+// thread reaches an outcome while its package is still open; a header that
+// kept heading it would be the only place it rendered, hiding it from the
+// Ready for review section that owns its state.
+describe("the threads a batch header still speaks for", () => {
+  const threads = (
+    ...ids: ReadonlyArray<string>
+  ): ReadonlyArray<ReviewComment> => ids.map((id) => ({ ...comment, id }));
+  const groups = new Map<string, ThreadGroup>([
+    ["working0000000a", "working"],
+    ["queued00000000a", "queued"],
+    ["ready000000000a", "ready"],
+    ["needsinput0000a", "needs-input"],
+  ]);
+  const awaiting = (ids: ReadonlyArray<string>): ReadonlyArray<string> =>
+    selectThreadsAwaitingAgent({
+      comments: threads(...ids),
+      groupOf: (commentId) => groups.get(commentId),
+    }).map((entry) => entry.id);
+
+  it("should keep the threads still waiting on the agent", () => {
+    expect(awaiting(["working0000000a", "queued00000000a"])).toEqual([
+      "working0000000a",
+      "queued00000000a",
+    ]);
+  });
+
+  it("should release a thread that has reached an outcome", () => {
+    expect(awaiting(["ready000000000a", "needsinput0000a"])).toEqual([]);
+  });
+
+  it("should release a thread it knows nothing about", () => {
+    expect(awaiting(["unprojected0000"])).toEqual([]);
   });
 });

@@ -81,6 +81,7 @@ import {
   queuedRequestsAhead,
   requestCommentIds,
   selectOpenFeedbackBatches,
+  selectThreadsAwaitingAgent,
   type CommentThreadProjection,
   type RequestDelivery,
   type ThreadGroup,
@@ -6658,12 +6659,15 @@ export const ReviewController = () => {
       batchSection({
         request,
         count: commentIds.length,
-        comments:
-          openBatchThreads.length > 1
-            ? visibleUnresolvedSent.filter((comment) =>
-                commentIds.includes(comment.id),
-              )
-            : (sentByGroup.get("working") ?? []),
+        comments: selectThreadsAwaitingAgent({
+          comments:
+            openBatchThreads.length > 1
+              ? visibleUnresolvedSent.filter((comment) =>
+                  commentIds.includes(comment.id),
+                )
+              : (sentByGroup.get("working") ?? []),
+          groupOf: (commentId) => threadProjections.get(commentId)?.group,
+        }),
       }),
     );
   // A card whose batch carries a status strip above it does not repeat that

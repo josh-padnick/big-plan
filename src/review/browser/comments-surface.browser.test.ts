@@ -125,7 +125,7 @@ const surface = ({
         renderSent: (sent, _resolved, _compact, queuePosition) =>
           createElement(
             "span",
-            null,
+            { key: sent.id },
             `${sent.id}${queuePosition === undefined ? "" : `#${queuePosition}`}`,
           ),
         onResolveAll: () => undefined,
@@ -199,45 +199,54 @@ describe("queued card numbering", () => {
 });
 
 // BIG-162. A batch header owns its threads, so no lifecycle section may repeat
-// one: a reply canceled on an open batch's comment lands that thread in the
-// ready group while its package is still open, and rendering it in both places
-// leaves two nodes answering to the same comment id.
+// one, and a thread the header has stopped owning has to be shown somewhere:
+// cancel a reply on an open package's comment and that thread reaches an
+// outcome while its package is still open, so the header no longer speaks for
+// it and the Ready for review section does.
 describe("threads a batch header owns", () => {
-  it("should not repeat a headed thread under Ready for review", () => {
-    const answered = comment("a1");
-    const headed = [answered, comment("a2")];
-    const other = [comment("b1"), comment("b2")];
+  const headed = [comment("a1"), comment("a2")];
+  const other = [comment("b1"), comment("b2")];
 
+  it("should show each thread it heads exactly once", () => {
     const html = surface({
       groups: new Map([
-        ["ready", [answered]],
+        ["working", headed],
         ["queued", other],
       ]),
       batches: [
-        batch("1111111111111111", headed),
+        {
+          ...batch("1111111111111111", headed),
+          tone: "working",
+          label: "Working",
+        },
         batch("2222222222222222", other),
       ],
     });
 
     expect(renderCount(html, "a1")).toBe(1);
+    expect(renderCount(html, "b1")).toBe(1);
   });
 
-  it("should not repeat a headed thread under Needs input", () => {
-    const flagged = comment("a1");
-    const headed = [flagged, comment("a2")];
-    const other = [comment("b1"), comment("b2")];
+  it("should leave a thread its batch no longer heads in Ready for review", () => {
+    const settled = comment("a1");
 
     const html = surface({
       groups: new Map([
-        ["needs-input", [flagged]],
+        ["ready", [settled]],
+        ["working", [headed[1]]],
         ["queued", other],
       ]),
       batches: [
-        batch("1111111111111111", headed),
+        {
+          ...batch("1111111111111111", [headed[1]]),
+          tone: "working",
+          label: "Working",
+        },
         batch("2222222222222222", other),
       ],
     });
 
+    expect(html).toContain("Ready for review");
     expect(renderCount(html, "a1")).toBe(1);
   });
 });
