@@ -26,6 +26,7 @@ import {
   startReviewRuntime,
 } from "../../review/server.js";
 import { ReviewCustodyHeld } from "../../review/session-authority.js";
+import { publishStableReviewLink } from "../../review/service/announce.js";
 import { quoteShellArgument } from "../../review/shared/agent-command.js";
 import { reviewIdleDurationLabel } from "../../review/shared/review-lifetime.js";
 import { renderDocument } from "../../render/render-document.js";
@@ -172,14 +173,29 @@ export const reviewCommand = async (
     });
   });
 
+  // The stable link is published alongside today's direct address rather than
+  // replacing it, so nothing an existing caller reads changes. A machine where
+  // the service cannot run keeps working exactly as it does today, with one
+  // line saying why the permanent link is missing.
+  const stableLink = await publishStableReviewLink({
+    planId: runtime.planId,
+    planPath: runtime.planPath,
+  });
+
   return {
     review: runtime.url,
+    ...(stableLink.kind === "published" ? { link: stableLink.url } : {}),
     plan: runtime.planPath,
     session: runtime.sessionId,
     feedback: runtime.store.feedbackDirectory,
     custody: runtime.replacedSession === undefined ? "activated" : "seized",
     help: [
       ...warnings,
+      ...(stableLink.kind === "published"
+        ? [
+            `${stableLink.url} keeps working after this session ends: it opens the review while one is running, and explains what happened when none is`,
+          ]
+        : [stableLink.reason]),
       ...(runtime.replacedSession === undefined
         ? []
         : [

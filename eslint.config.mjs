@@ -240,7 +240,18 @@ export default tseslint.config(
           "src/review/shared/**/*.tsx",
         ],
         imports: ["**/review/**"],
-        mayImport: ["composer", "icons", "model", "planLint", "reviewShared"],
+        // escapeHtml is granted because the service writes its own small
+        // pages - the ended-review explanation and the identity page - which
+        // interpolate a plan path and a stop reason read from disk. Plan
+        // content still never reaches this layer as HTML.
+        mayImport: [
+          "composer",
+          "escapeHtml",
+          "icons",
+          "model",
+          "planLint",
+          "reviewShared",
+        ],
       },
       cli: {
         files: ["src/cli/**/*.ts"],

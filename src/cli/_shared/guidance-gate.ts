@@ -9,9 +9,9 @@
 
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { AxiError } from "axi-sdk-js";
+import { candidateStateDirectories } from "../../review/state-directory.js";
 import { GUIDANCE_VERSION } from "../guidance/content.generated.js";
 
 // A fresh session the next day should reread the guidance; iteration loops
@@ -41,19 +41,6 @@ export type GuidanceStateStorage = {
   readonly probeWritable: (input: {
     readonly directory: string;
   }) => Promise<boolean>;
-};
-
-// BIG_PLAN_STATE_DIR pins state to one directory for tests and sandboxed
-// environments. Without it, the home directory is preferred and the system
-// temporary directory is the fallback for sandboxes that block home writes.
-// The environment is read per call so a caller-scoped override takes effect
-// without rebuilding the gate.
-const candidateStateDirectories = (): ReadonlyArray<string> => {
-  const override = process.env["BIG_PLAN_STATE_DIR"];
-  if (override !== undefined) {
-    return [override];
-  }
-  return [join(homedir(), ".big-plan"), join(tmpdir(), "big-plan")];
 };
 
 /** Creates the production storage adapter over the local filesystem. */

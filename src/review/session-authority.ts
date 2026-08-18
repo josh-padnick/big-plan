@@ -533,6 +533,53 @@ export const refreshReviewSessionHeartbeat = async ({
     timeoutError: () => new Error("Another process is writing this heartbeat"),
   });
 
+/**
+ * What became of one review session, as far as its own files can prove.
+ *
+ * `reviewSessionIsRunning` answers the yes-or-no question an open page asks.
+ * This answers the question a visitor arriving after the fact asks, and it
+ * keeps the distinction the heartbeat already records: a session that wrote a
+ * stop reason ended on purpose, and one whose heartbeat simply stopped
+ * advancing did not. Nothing here infers a clean ending it cannot prove.
+ */
+export type ReviewSessionOutcome =
+  | { readonly kind: "running" }
+  | { readonly kind: "ended"; readonly reason: string; readonly atMs: number }
+  | { readonly kind: "interrupted"; readonly lastSeenAtMs: number }
+  | { readonly kind: "unknown" };
+
+/** Reads what became of one session from its heartbeat alone. */
+export const readReviewSessionOutcome = async ({
+  store,
+  sessionId,
+  now,
+  maximumAgeMs = SESSION_MAXIMUM_AGE_MS,
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly now?: number;
+  readonly maximumAgeMs?: number;
+}): Promise<ReviewSessionOutcome> => {
+  const heartbeat = validateReviewSessionHeartbeat(
+    await readSessionHeartbeatValue(store),
+  );
+  if (heartbeat === undefined || heartbeat.sessionId !== sessionId) {
+    return { kind: "unknown" };
+  }
+  const observedAtMs = now ?? Date.now();
+  if (heartbeatIsFresh({ heartbeat, sessionId, observedAtMs, maximumAgeMs })) {
+    return { kind: "running" };
+  }
+  if (!heartbeat.running && heartbeat.stopReason !== undefined) {
+    return {
+      kind: "ended",
+      reason: heartbeat.stopReason,
+      atMs: heartbeat.updatedAtMs,
+    };
+  }
+  return { kind: "interrupted", lastSeenAtMs: heartbeat.updatedAtMs };
+};
+
 /** Returns the current live session for one exact plan or a stable reason. */
 export const liveReviewSessionForPlan = async ({
   store,
