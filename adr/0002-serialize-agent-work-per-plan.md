@@ -26,7 +26,7 @@ The check can narrow the window but cannot guarantee that a successful answer pr
 Big Plan permits one live request claim per plan, so pickup is serialized across that plan.
 A per-pickup agent token is the claim identity.
 The token holder may resume its request, renew the lease through progress notes, and commit the response.
-A second agent waits until the holder answers or the lease lapses instead of editing the plan in parallel.
+A second agent waits until the holder's request is answered or canceled, or the lease lapses, instead of editing the plan in parallel.
 A lapsed claim may be taken over, and the takeover is disclosed through the progress channel.
 
 The request file is the single terminal commit point.

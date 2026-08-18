@@ -1165,14 +1165,8 @@ export const writeAgentRequest = async ({
 };
 
 /**
- * A plan-wide pickup block releases only when its writer can no longer reach
- * the plan source. Either terminal outcome proves that: an answer because the
- * agent finished, and a cancellation because the commit boundary refuses a
- * canceled request outright and its claim stages are dropped as it is
- * withdrawn. A canceled holder that has not noticed yet is therefore fenced
- * out more completely than a displaced one, so keeping its lapsed-lease block
- * bought no safety and cost the reviewer a stalled queue: the next message sat
- * queued for the rest of the lease instead of starting (BIG-159).
+ * Applies ADR 0002's pickup release rule: a terminal request cannot block the
+ * plan, while an unterminated request blocks only for its live claim.
  */
 export const requestBlocksPlanPickup = ({
   request,
