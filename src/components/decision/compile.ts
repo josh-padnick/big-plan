@@ -27,6 +27,7 @@ const TONES: ReadonlyArray<DecisionCardTone> = [
 ];
 const DECISION_SCHEMA = {
   question: { kind: "string", required: true, nonEmpty: true },
+  critical: { kind: "booleanShorthand" },
 } satisfies ComponentAttributeSchema;
 const OPTION_SCHEMA = {
   title: { kind: "string", required: true, nonEmpty: true },
@@ -218,6 +219,7 @@ export const compileDecisionComponent = ({
     layout: "rows",
     scoring: "qualitative",
     interaction: "choose",
+    isCritical: validated.critical === true,
     context: meaningfulChildren(children),
     detail: [],
     criteria,

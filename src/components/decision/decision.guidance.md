@@ -2,6 +2,8 @@
 
 Use `Decision` for one lightweight choice whose tradeoffs can be explained inline. Add at least two `Option` children. Each option may contain short `Consideration` children with a `label`, terse `verdict`, optional `tone`, and optional one-sentence body. When the body explains what a criterion means, its label shows the explanation on hover and keyboard focus.
 
+Add `critical` when the plan should not be approved until the reviewer answers this question. Mark only the questions whose answer would change what gets built; a plan where everything is critical says nothing.
+
 ```mdx
 <Decision question="Which release path should we use?">
   <Option

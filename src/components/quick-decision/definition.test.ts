@@ -20,6 +20,23 @@ describe("QuickDecision", () => {
     expect(html).not.toContain("Compare all three");
   });
 
+  it("should mark a critical question where the reader is looking", () => {
+    const html = render(
+      '<QuickDecision critical question="Ship behind a flag?">\n\n<Option title="Yes" recommended />\n\n<Option title="No" />\n\n</QuickDecision>',
+    );
+
+    expect(html).toContain("data-decision-critical");
+    expect(html).toContain("Critical");
+  });
+
+  it("should leave a question unmarked when the author did not mark it", () => {
+    const html = render(
+      '<QuickDecision question="Ship behind a flag?">\n\n<Option title="Yes" recommended />\n\n<Option title="No" />\n\n</QuickDecision>',
+    );
+
+    expect(html).not.toContain("data-decision-critical");
+  });
+
   it("should reject an option body instead of dropping it", () => {
     expect(() =>
       render(

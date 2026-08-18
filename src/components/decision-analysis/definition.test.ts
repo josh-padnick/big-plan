@@ -105,6 +105,29 @@ describe("DecisionAnalysis", () => {
     );
   });
 
+  it("should mark a critical question the reader must still answer", () => {
+    const html = render(
+      analysis({ interaction: "choose" }).replace(
+        'question="Which store?"',
+        'critical question="Which store?"',
+      ),
+    );
+
+    expect(html).toContain("data-decision-critical");
+    expect(html).toContain("Critical");
+  });
+
+  it("should reject criticality on a question nobody can answer", () => {
+    expect(() =>
+      render(
+        analysis({ interaction: "audit" }).replace(
+          'question="Which store?"',
+          'critical question="Which store?"',
+        ),
+      ),
+    ).toThrow(MarkdownDiagnosticsError);
+  });
+
   it("should reject choose mode after a decision is settled", () => {
     expect(() =>
       render(

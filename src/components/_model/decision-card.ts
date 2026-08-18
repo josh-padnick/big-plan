@@ -49,6 +49,13 @@ export type CompiledDecisionCard = {
   readonly layout: DecisionCardLayout;
   readonly scoring: DecisionCardScoring;
   readonly interaction: DecisionCardInteraction;
+  /**
+   * The author's judgment that this question must be settled before the plan
+   * is approved. Criticality is authored rather than derived because only the
+   * person proposing the work knows which of its open questions would change
+   * what gets built; nothing about a decision's shape can be read for that.
+   */
+  readonly isCritical: boolean;
   readonly context: ReadonlyArray<ElementContent>;
   readonly detail: ReadonlyArray<ElementContent>;
   readonly criteria: ReadonlyArray<CompiledDecisionCardCriterion>;
@@ -68,3 +75,12 @@ export type CompiledDecisionCard = {
 export const isAnswerableDecisionCard = (
   model: CompiledDecisionCard,
 ): boolean => model.status === "open" && model.interaction === "choose";
+
+/**
+ * True when this decision must be answered before the plan can be approved.
+ * A settled or audited question carries no such obligation whatever it was
+ * authored with, so criticality is read through answerability rather than
+ * beside it: a decision nobody can answer can never be an unmet obligation.
+ */
+export const isCriticalDecisionCard = (model: CompiledDecisionCard): boolean =>
+  model.isCritical && isAnswerableDecisionCard(model);

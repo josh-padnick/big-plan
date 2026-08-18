@@ -19,6 +19,7 @@ import type {
 const QUICK_DECISION_SCHEMA = {
   question: { kind: "string", required: true, nonEmpty: true },
   context: { kind: "string" },
+  critical: { kind: "booleanShorthand" },
 } satisfies ComponentAttributeSchema;
 const OPTION_SCHEMA = {
   title: { kind: "string", required: true, nonEmpty: true },
@@ -146,6 +147,7 @@ export const compileQuickDecisionComponent = ({
     layout: "brief",
     scoring: "qualitative",
     interaction: "choose",
+    isCritical: validated.critical === true,
     context:
       validated.context === undefined ? [] : [paragraph(validated.context)],
     detail: [],

@@ -13,6 +13,7 @@
 
 import {
   isAnswerableDecisionCard,
+  isCriticalDecisionCard,
   type CompiledDecisionCard,
   type CompiledDecisionCardOption,
   type DecisionCardStatus,
@@ -427,6 +428,7 @@ export const DecisionCard = ({
   readonly model: CompiledDecisionCard;
 }) => {
   const answerable = isAnswerableDecisionCard(model);
+  const critical = isCriticalDecisionCard(model);
   const defaultIndex = defaultPanelIndex(model);
   return (
     <figure
@@ -438,6 +440,7 @@ export const DecisionCard = ({
       data-decision-scoring={model.scoring}
       data-decision-interaction={model.interaction}
       {...(answerable ? { "data-decision-selector": "" } : {})}
+      {...(critical ? { "data-decision-critical": "" } : {})}
     >
       <figcaption className="decision-zone-question bg-header px-6 py-4">
         {model.layout === "rows" ? (
@@ -455,6 +458,18 @@ export const DecisionCard = ({
             ]}
           />
         )}
+        {/* The word carries the meaning, so the tint is reinforcement rather
+            than the signal a reader has to see colour to receive. */}
+        {critical ? (
+          <BadgePill
+            label={"Critical"}
+            classNames={[
+              "decision-critical-pill",
+              "bg-[var(--callout-warning-bg)]",
+              "text-[var(--callout-warning-c)]",
+            ]}
+          />
+        ) : null}
         <p
           id={model.questionId}
           className={`mt-2 mb-0 font-semibold text-ink first:mt-0 ${
