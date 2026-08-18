@@ -1,7 +1,7 @@
 // BIG-128. Proves the review's input contract over the live runtime: the
-// sidebar's Inputs tab lists every decision the plan asks and which of them the
-// author called critical, and answering one turns that input Answered without a
-// reload.
+// sidebar's Inputs tab says honestly what it knows, lists every decision the
+// plan asks and which of them the author called critical, and turns an input
+// Answered without a reload once the reviewer answers it.
 //
 // The reload matters. The list and the decision cards are driven by the same
 // record, and the panel learns a newer copy arrived only because the page that
@@ -47,6 +47,22 @@ const sidebar = (page: Page) => page.locator("#review-panel-inputs");
 const inputRow = (page: Page, inputId: string) =>
   sidebar(page).locator(`[data-review-input="${inputId}"]`);
 
+const unavailable = (page: Page) =>
+  sidebar(page).locator("[data-review-input-unavailable]");
+
+const summary = (page: Page) =>
+  sidebar(page).locator("[data-review-input-standing]");
+
+/** How the runtime answers the panel's read of the contract, for this moment. */
+type ContractRead = "unreadable" | "unreachable" | "answered";
+
+// The journey aborts one contract read on purpose to prove the panel says so,
+// and the browser logs the fetch it is meant to survive. The allowance names
+// that one message; every other console error still fails this spec.
+test.use({
+  allowedConsoleErrors: [/Failed to load resource: net::ERR_FAILED/u],
+});
+
 test("should list what the review needs and answer an input without a reload", async ({
   page,
 }) => {
@@ -58,15 +74,52 @@ test("should list what the review needs and answer an input without a reload", a
   const { startReviewRuntime } = await import("../dist/review/server.js");
   const runtime = await startReviewRuntime({ planPath });
   try {
+    let contractRead: ContractRead = "unreachable";
+    await page.route("**/api/input-contract", async (route) => {
+      if (contractRead === "answered") return route.continue();
+      if (contractRead === "unreachable") return route.abort();
+      // A body the browser cannot read is not an empty contract, and the panel
+      // must not turn one into the other.
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "{}",
+      });
+    });
     await page.goto(runtime.url);
     await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
     // The panel mounts with the tab, so the first read of the contract is the
     // one this click starts.
-    const contract = page.waitForResponse((response) =>
-      response.url().endsWith("/api/input-contract"),
-    );
     await feedbackSidebar(page).getByRole("tab", { name: "Inputs" }).click();
-    expect((await contract).ok()).toBe(true);
+
+    // A read nobody could answer must never leave the panel claiming it is
+    // still reading, and must never be reported as a plan that asks nothing.
+    await test.step("a contract it could not read says so, and reads again", async () => {
+      await expect(unavailable(page)).toContainText(
+        "Could not read what this review needs",
+      );
+      await expect(summary(page)).toHaveText("Not known");
+      await expect(sidebar(page)).not.toContainText("Reading what this review");
+
+      // A 200 the browser cannot decode is the other way into this state, and
+      // the response proves the retry really read again rather than sat still.
+      contractRead = "unreadable";
+      const undecodable = page.waitForResponse((response) =>
+        response.url().endsWith("/api/input-contract"),
+      );
+      await unavailable(page)
+        .getByRole("button", { name: "Try again" })
+        .click();
+      expect((await undecodable).ok()).toBe(true);
+      await expect(unavailable(page)).toBeVisible();
+      await expect(summary(page)).toHaveText("Not known");
+
+      contractRead = "answered";
+      await unavailable(page)
+        .getByRole("button", { name: "Try again" })
+        .click();
+      await expect(unavailable(page)).toHaveCount(0);
+    });
 
     await test.step("the inventory names every decision and which is critical", async () => {
       await expect(
