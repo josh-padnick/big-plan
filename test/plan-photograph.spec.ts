@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startReviewRuntime } from "../src/review/server.js";
 import {
+  agentIdOf,
   expect,
   runAgentCli,
   stageComment,
@@ -135,19 +136,14 @@ test("should render a photograph a real agent adds during the review", async ({
 
     const claim = await runAgentCli(["next", planPath, "--wait"]);
     expect(claim.stdout).toContain("pending: true");
-    const requestId = /requestId: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
-    const commentId = /- id: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
+    const requestId = agentIdOf(claim.stdout, "requestId");
+    const commentId = agentIdOf(claim.stdout, "- id");
     // Pickup mints the token proving this process holds the request.
-    const agentToken = /agent_token: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
+    const agentToken = agentIdOf(claim.stdout, "agent_token");
     // The agent edits its own candidate; Big Plan writes the plan when the
     // answer publishes.
     const candidatePath = /candidate_plan: (\S+)/u.exec(claim.stdout)?.[1];
-    if (
-      requestId === undefined ||
-      commentId === undefined ||
-      agentToken === undefined ||
-      candidatePath === undefined
-    ) {
+    if (candidatePath === undefined) {
       throw new Error(`The claim named no work: ${claim.stdout}`);
     }
 
@@ -188,7 +184,7 @@ test("should render a photograph a real agent adds during the review", async ({
         "--agent",
         agentToken,
       ]);
-      expect(response.stdout).toContain(`responded: ${requestId}`);
+      expect(agentIdOf(response.stdout, "responded")).toBe(requestId);
     });
 
     const photograph = page.getByRole("img", {

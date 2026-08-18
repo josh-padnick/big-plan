@@ -1012,6 +1012,21 @@ export const runRefusedAgentCli = async (
 };
 
 /**
+ * Reads one hexadecimal identifier - a claim token, a request id, a comment
+ * id - out of an agent CLI's stdout. The CLI prints TOON, which quotes any
+ * scalar that would otherwise read as a number, so a digit-only identifier
+ * arrives as `agent_token: "9983087100926270"`. Accepting those quotes keeps
+ * the encoding from reading as a missing field once every few hundred runs.
+ */
+export const agentIdOf = (stdout: string, field: string): string => {
+  const id = new RegExp(`${field}: "?([a-f0-9]{16})"?`, "u").exec(stdout)?.[1];
+  if (id === undefined) {
+    throw new Error(`The agent CLI printed no ${field}:\n${stdout}`);
+  }
+  return id;
+};
+
+/**
  * Returns the locator's bounding box, failing the test when the element has
  * none, so geometry assertions read as arithmetic instead of null handling.
  */
