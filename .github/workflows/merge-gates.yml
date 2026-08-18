@@ -56,6 +56,9 @@ jobs:
     # and it is holding a runner every other lane's build needs.
     timeout-minutes: 10
     permissions:
+      # An explicit block sets every scope it omits to none, so the checkout of
+      # this private repository needs its read stated here.
+      contents: read
       # Publishing the two named check runs.
       checks: write
       # Reading the pull request, its reviews, and its inline threads.
