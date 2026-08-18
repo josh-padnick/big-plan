@@ -169,6 +169,9 @@ export const fetchSnapshot = async ({ owner, repo, number }) => {
       rest(`${base}/pulls/${number}`),
       restAll(`${base}/issues/${number}/comments`),
       restAll(`${base}/pulls/${number}/reviews`),
+      // GitHub itself caps this list at 250 commits, which no pull request here
+      // approaches. A longer one would narrow what an attestation may name, not
+      // widen it, so it errs in the safe direction.
       restAll(`${base}/pulls/${number}/commits`),
       fetchReviewThreads(owner, repo, number),
     ]);
