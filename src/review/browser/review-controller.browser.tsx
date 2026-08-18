@@ -6359,8 +6359,6 @@ export const ReviewController = () => {
                             activeBatchRequest,
                             "thread",
                           ),
-                          workingCount: (sentByGroup.get("working") ?? [])
-                            .length,
                         }),
                         content: (
                           <Card

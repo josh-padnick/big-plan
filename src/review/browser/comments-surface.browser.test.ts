@@ -19,12 +19,9 @@ describe("batch section tone", () => {
     expect(
       batchSectionTone({
         status: status({ stage: "stalled", label: "Working", tone: "warning" }),
-        workingCount: 3,
       }),
     ).toBe("working");
-    expect(batchSectionTone({ status: status(), workingCount: 3 })).toBe(
-      "working",
-    );
+    expect(batchSectionTone({ status: status() })).toBe("working");
   });
 
   it("should demote a batch whose reading has turned to danger", () => {
@@ -35,14 +32,37 @@ describe("batch section tone", () => {
           label: "No longer reporting",
           tone: "danger",
         }),
-        workingCount: 3,
       }),
     ).toBe("queued");
   });
 
-  it("should demote a batch whose cards have left the working group", () => {
-    expect(batchSectionTone({ status: status(), workingCount: 0 })).toBe(
-      "queued",
-    );
+  // BIG-158. The reviewer sends B1, the agent claims it and works, then the
+  // reviewer sends B2. B2 heads the section while B1's threads fill the rail's
+  // working group, so a rail-wide count put the spinner beside B2's own
+  // "Queued, 1 ahead" label - asserting work nothing had picked up.
+  it("should queue a batch nobody has picked up while an earlier batch works", () => {
+    expect(
+      batchSectionTone({
+        status: status({
+          stage: "waiting",
+          label: "Queued, 1 ahead",
+          headline: "Waiting for an agent",
+          tone: "neutral",
+        }),
+      }),
+    ).toBe("queued");
+  });
+
+  it("should queue a batch that cannot start because no agent is connected", () => {
+    expect(
+      batchSectionTone({
+        status: status({
+          stage: "blocked",
+          label: "Blocked",
+          headline: "Blocked - no agent connected",
+          tone: "warning",
+        }),
+      }),
+    ).toBe("queued");
   });
 });
