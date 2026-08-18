@@ -235,16 +235,10 @@ A warning leaves the plan unchanged, shows its short one-line summary directly u
 A changed result updates the plan in place without discarding staged comments, open threads, or scroll position.
 The [agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) owns why pickup is serialized and what must change before concurrent plan editing can return.
 
-A connected agent may declare four things about itself, each optional,
-independent of the others, and read from the environment the coding-agent
-session was launched in:
-
-| Variable                     | What it declares                                                                                            |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `BIG_PLAN_AGENT_MODEL`       | The provider's own canonical model id, for example `grok-4.6` or `claude-fable-5`.                          |
-| `BIG_PLAN_AGENT_EFFORT`      | How hard the model was told to think, for example `high`.                                                   |
-| `BIG_PLAN_AGENT_CLIENT`      | Which tool is connected, for example `grok-cli 0.2.99`.                                                     |
-| `BIG_PLAN_AGENT_SESSION_URL` | A link to the agent's own conversation. Use `BIG_PLAN_AGENT_SESSION` instead when it has an id but no link. |
+A connected agent may declare its model, its reasoning effort, its client, and
+its own conversation, each optional and independent of the others, by exporting
+the environment variables the [CLI reference](/reference/cli/) lists for
+`big-plan agent` in the session it was launched in.
 
 **Agent Status** shows what was declared, and only what was declared: client,
 model, and effort read as one line, each segment appearing only if the agent
@@ -261,7 +255,7 @@ interface known to serve conversations a browser can follow:
 | Grok on the web                   | `https://grok.com/chat/<id>` or `https://grok.com/c/<id>`                |
 
 Anything else - a CLI serving its own session, a private host, a custom scheme,
-a bare id - is offered as **Copy chat session identifier** instead. A link that
+a bare id - is offered as **Copy agent session identifier** instead. A link that
 does not open costs the reader their attention and their trust, so Big Plan
 offers one only where it can stand behind it. Adding an interface is a change to
 that table rather than a change to what a connector may declare.
@@ -272,6 +266,9 @@ Big Plan does not hold prints exactly as declared, and shows a logo only where
 Big Plan holds a mark faithful to the vendor's published one, so a different
 GPT-named model such as EleutherAI's GPT-J neither borrows the OpenAI logo nor
 stands behind a generic one.
+A client is read the same way, except that a recognized one drops the version it
+declared - `grok-cli 0.2.99` shows as `Grok CLI` - because which build is running
+is a fact about the agent's machine rather than about your review.
 
 Identity belongs to the session's agent rather than to its heartbeat. Once
 declared it stays on the card through working turns, quiet periods, stalls, and

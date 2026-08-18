@@ -35,6 +35,9 @@ const hasSubject = (rawMessage, commentMarker) =>
     (line) => line.trim() !== "",
   );
 
+// Git recognizes only `:` as a trailer separator unless trailer.separators
+// says otherwise; `=` is accepted here regardless, so an authored body line
+// such as `Refs=BIG-102` is still misread as a trailer-only suffix.
 const trailerLinePattern = /^[^\s:=]+[=:][ \t]*\S/;
 
 const findTrailerBlockStart = (lines, subjectIndex) => {
@@ -124,7 +127,9 @@ const unusedCommentMarker = (rawMessage) => {
   return marker;
 };
 
-/** Finds the marker Git selected for an auto-configured trailing comment block. */
+/** Finds the marker Git selected for an auto-configured trailing comment
+ * block. The selection is re-guessed from the message after editing, so a
+ * template that shifted Git off `#` can be reconstructed wrongly here. */
 const inferAutomaticCommentMarker = (rawMessage) => {
   const lines = rawMessage.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -139,7 +144,10 @@ const inferAutomaticCommentMarker = (rawMessage) => {
 };
 
 /** Reads the last configured spelling because commentChar and commentString
- * are aliases whose effective value follows Git's config order. */
+ * are aliases whose effective value follows Git's config order. Editor-driven
+ * `git commit -c` and non-editor `git commit -C` both arrive as source
+ * `commit`, so the comments Git generates for `-c` are still counted as a
+ * body. */
 const currentCommentMarker = (rawMessage, source) => {
   if (
     source !== undefined &&
