@@ -233,19 +233,21 @@ A changed result updates the plan in place without discarding staged comments, o
 The [agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) owns why pickup is serialized and what must change before concurrent plan editing can return.
 
 Set `BIG_PLAN_AGENT_MODEL` before starting the coding-agent session to report
-the model identity for each pickup, for example `Grok 4.6` or
-`GPT-5.6-Luna`.
-The **Agent** tab shows the model name and icon of the request it is describing,
-for as long as that pickup still explains the quiet - through the working
-reading and the whole stalled window, not only while the claim is live.
-With nothing picked up, or once a pickup has gone quiet past 30 minutes, the tab
-shows connection status and no model badge.
-A name containing `openai`, a `gpt-4` or `gpt-5` family name, `claude`, or
-`grok` uses that vendor's own logo; any other reported name uses a generic
-model icon instead of guessing a vendor. This keeps a different GPT-named
-model, such as EleutherAI's GPT-J, from showing the OpenAI logo.
-Leave `BIG_PLAN_AGENT_MODEL` unset and an active claim still appears with no
-name guessed on its behalf.
+the model identity, for example `Grok 4.6` or `GPT-5.6-Luna`, and
+`BIG_PLAN_AGENT_EFFORT` to report how hard it was told to think, for example
+`high`.
+**Agent Status** shows the model of the request it is describing, for as long as
+that pickup still explains the quiet - through the working reading and the whole
+stalled window, not only while the claim is live - and falls back to the model
+the attached connector reports when nothing is picked up.
+A name containing `openai`, a `gpt-4` or `gpt-5` family name, `claude`, `grok`,
+or one of Mistral's own families uses that vendor's own logo. Any other reported
+name shows as a name alone: a mark is used only where Big Plan holds one
+faithful to the vendor's published mark, so a different GPT-named model such as
+EleutherAI's GPT-J neither borrows the OpenAI logo nor stands behind a generic
+one.
+Leave both unset and the card reads `Model not reported` rather than showing
+nothing, so an empty identity is never mistaken for one that failed to load.
 
 ## Diff and anchor truth
 

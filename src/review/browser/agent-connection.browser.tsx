@@ -324,6 +324,12 @@ const CurrentActivityCard = ({
       : activity.state === "working"
         ? workHeadline
         : undefined;
+  // Whether there is an agent for an identity to belong to. A session with none
+  // has nothing to report and no gap to explain.
+  const identityIsKnowable =
+    activity.state !== "disconnected" &&
+    activity.state !== "never-connected" &&
+    activity.state !== "offline";
   const requestId = "requestId" in activity ? activity.requestId : undefined;
   const requestKind = "requestId" in activity ? activity.requestKind : "";
   const footerLabel =
@@ -343,7 +349,24 @@ const CurrentActivityCard = ({
         ) : null}
         <strong className="min-w-0 flex-1 text-sm text-ink">{title}</strong>
       </div>
-      {modelName === undefined ? null : (
+      {/*
+      An attached agent always says something about its identity, because the
+      absence of a badge is indistinguishable from a badge that failed to
+      render, and a reader looking for "which model is this" should not have to
+      decide which of those they are seeing. When the connector reports nothing
+      the card says so in words: it is a fact about the connection, not a
+      placeholder standing in for a mark we do not have.
+      */}
+      {modelName === undefined ? (
+        identityIsKnowable ? (
+          <span
+            className="inline-flex w-fit max-w-full items-center rounded-full border border-current/20 px-2 py-0.5 text-2xs text-muted"
+            data-review-agent-model=""
+          >
+            Model not reported
+          </span>
+        ) : null
+      ) : (
         <span
           className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-current/20 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2 py-0.5 text-2xs font-semibold text-ink [&>svg]:size-3"
           data-review-agent-model={modelName}
@@ -725,7 +748,7 @@ const ConnectionLog = ({
                   return (
                     <li
                       key={event.eventId ?? event.at}
-                      className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-px py-1 leading-none first:pt-0.5 last:pb-0 [&_*]:leading-[1.2]"
+                      className="relative grid min-w-0 grid-cols-[0.65rem_4.6rem_minmax(0,1fr)_auto] items-baseline gap-x-1.5 gap-y-0.5 py-1 leading-none first:pt-0.5 last:pb-0 [&>*]:min-h-4 [&_*]:leading-[1.2]"
                       data-review-connection-event={
                         event.connected
                           ? "connected"
@@ -751,7 +774,11 @@ const ConnectionLog = ({
                         {reading.label}
                       </strong>
                       {event === latest ? (
-                        <Badge size="compact" tone="secondary">
+                        <Badge
+                          size="compact"
+                          tone="secondary"
+                          className="h-4 py-0"
+                        >
                           Current
                         </Badge>
                       ) : null}
@@ -919,12 +946,15 @@ export const AgentConnectionPanel = ({
         <AgentActivityTip />
       </div>
       {isReadOnly || !agentStatusIsAvailable ? null : (
-        <ConnectionLog
-          connected={isConnected}
-          heartbeatAt={endedAtMs ?? heartbeatAt}
-          events={connectionLog}
-          nowMs={currentNowMs}
-        />
+        <>
+          <hr className="mt-3 border-0 border-t border-edge" />
+          <ConnectionLog
+            connected={isConnected}
+            heartbeatAt={endedAtMs ?? heartbeatAt}
+            events={connectionLog}
+            nowMs={currentNowMs}
+          />
+        </>
       )}
     </section>
   );

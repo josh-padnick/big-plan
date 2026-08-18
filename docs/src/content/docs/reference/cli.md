@@ -227,8 +227,11 @@ If the process dies mid-publish, the next `agent` command and the next `big-plan
 
 Set the `BIG_PLAN_AGENT_MODEL` environment variable before running `agent
 next` or `agent note` to report which model is connected, for example `Grok
-4.6`.
-Use a non-empty model name of at most 80 characters.
+4.6`, and `BIG_PLAN_AGENT_EFFORT` to report how hard it was told to think, for
+example `high`.
+Use a non-empty model name of at most 80 characters, and an effort of at most 24.
+Neither is guessed on the connector's behalf: unset them and the reviewer is
+told the model was not reported rather than shown a name Big Plan invented.
 `agent next` stores the reported name with the durable per-pickup claim, and `agent note` preserves or refreshes that claim identity.
 The reviewer's browser reads the model from the pickup it is describing, for as long as that pickup still explains the plan's quiet, so a waiting agent's heartbeat cannot relabel another agent's request.
 

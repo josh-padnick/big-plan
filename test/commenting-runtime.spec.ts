@@ -3810,6 +3810,27 @@ test("should restore and submit staged comments through the local review runtime
     "[data-review-connection-current]",
   );
   await expect(currentConnectionEvent).toHaveCSS("line-height", "12px");
+  // The current entry carries a badge on its title line and every other entry
+  // does not, so the title line is the one place these states could drift
+  // apart. Every entry must put the same distance between its title and its
+  // description, whatever else sits on that line.
+  const titleGaps = await agentRail
+    .locator("[data-review-connection-event]")
+    .evaluateAll((rows) =>
+      rows.map((row) => {
+        const title = row.querySelector("strong");
+        const description = row.querySelector(
+          "[data-review-connection-duration]",
+        );
+        if (title === null || description === null) return null;
+        return Math.round(
+          description.getBoundingClientRect().top -
+            title.getBoundingClientRect().bottom,
+        );
+      }),
+    );
+  expect(titleGaps.length).toBeGreaterThan(0);
+  expect(new Set(titleGaps)).toEqual(new Set([2]));
   const currentDuration = currentConnectionEvent.locator(
     "[data-review-connection-duration]",
   );
