@@ -530,11 +530,14 @@ const floatingComposerPosition = ({
   width,
   height,
   obstacles,
+  chrome,
 }: {
   readonly preferred: FloatingPosition;
   readonly width: number;
   readonly height: number;
   readonly obstacles: ReadonlyArray<FloatingRect>;
+  /** Fixed bars painted above the composer, which no slot may sit under. */
+  readonly chrome: ReadonlyArray<FloatingRect>;
 }): FloatingPosition => {
   const edge = 24;
   const gap = 12;
@@ -545,9 +548,12 @@ const floatingComposerPosition = ({
   // The viewport's own top is not the first free pixel: fixed chrome sits
   // above it, so the floor is whichever is lower - the reading edge, or the
   // bottom of the chrome that would otherwise cover the composer.
-  const chromeBottom = obstacles.reduce(
-    (lowest, obstacle) =>
-      obstacle.top <= edge ? Math.max(lowest, obstacle.bottom + gap) : lowest,
+  //
+  // Only chrome raises the floor. Every other obstacle is scored by actual
+  // overlap, so a tall thread near the top would otherwise push a composer
+  // below it even when the two never meet horizontally.
+  const chromeBottom = chrome.reduce(
+    (lowest, bar) => Math.max(lowest, bar.bottom + gap),
     edge,
   );
   const clampTop = (top: number) =>
@@ -2159,15 +2165,22 @@ const CommentComposer = ({
     const frame = requestAnimationFrame(() => {
       const rect = composerRef.current?.getBoundingClientRect();
       if (rect === undefined) return;
-      // The shell's own fixed bars count as obstacles too. They are painted
-      // above the composer and are not part of the review island, so a slot
-      // chosen without them looks free and lands underneath the header.
+      const visible = (node: HTMLElement) => node.getBoundingClientRect();
+      const laidOut = (rect: DOMRect) => rect.width > 0 && rect.height > 0;
       const obstacles = Array.from(
         document.querySelectorAll<HTMLElement>(
-          '[data-review-thread-side], button[aria-label^="Comment on"], [data-shell-chrome]',
+          '[data-review-thread-side], button[aria-label^="Comment on"]',
         ),
-        (node) => node.getBoundingClientRect(),
-      ).filter((obstacle) => obstacle.width > 0 && obstacle.height > 0);
+        visible,
+      ).filter(laidOut);
+      // The shell's own fixed bars are kept apart from those. They are painted
+      // above the composer and are not part of the review island, so a slot
+      // chosen without them looks free and lands underneath the header - but
+      // they set a floor rather than competing for space by overlap.
+      const chrome = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-shell-chrome]"),
+        visible,
+      ).filter(laidOut);
       const next = floatingComposerPosition({
         preferred: {
           top: compose.top - window.scrollY,
@@ -2176,6 +2189,7 @@ const CommentComposer = ({
         width: rect.width,
         height: rect.height,
         obstacles,
+        chrome,
       });
       setFloatingPosition({
         top: next.top + window.scrollY,

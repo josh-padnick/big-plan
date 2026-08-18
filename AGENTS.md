@@ -145,8 +145,7 @@ Use these placement tests:
 
 ## Subsystems
 
-Big Plan's product work is partitioned into seven subsystems.
-[docs/subsystems.md](docs/subsystems.md) owns that partition: the names, what each one covers, its code anchors, and the boundary rules between them.
+[docs/subsystems.md](docs/subsystems.md) owns the subsystem partition Big Plan's product work is organized into: how many there are, their names, what each one covers, its code anchors, and the boundary rules between them.
 
 State which subsystem new work belongs to before starting it; when work spans more than one, say so explicitly.
 

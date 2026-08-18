@@ -1068,12 +1068,13 @@ export const runRefusedAgentCli = async (
  * the encoding from reading as a missing field once every few hundred runs.
  */
 export const agentIdOf = (stdout: string, field: string): string => {
-  // The field is matched literally, and the value has to end where the
-  // identifier ends: without that boundary the first 16 characters of a longer
-  // value read as a whole id, and the test would compare a prefix.
+  // The field is matched literally, and bounded at both ends: without the
+  // leading boundary a request for "agent_token" matches "notagent_token", and
+  // without the trailing one the first 16 characters of a longer value read as
+  // a whole id. Either way the test would compare something it did not ask for.
   const literal = field.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const id = new RegExp(
-    `${literal}: (?:"([a-f0-9]{16})"|([a-f0-9]{16})(?![a-f0-9]))`,
+    `(?<![A-Za-z0-9_])${literal}: (?:"([a-f0-9]{16})"|([a-f0-9]{16})(?![a-f0-9]))`,
     "u",
   ).exec(stdout);
   const value = id?.[1] ?? id?.[2];

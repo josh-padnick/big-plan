@@ -227,8 +227,15 @@ const collectSlideTypes = ({
         index += 1;
         continue;
       }
-      if (parent.type === "root" && child.tagName === "h2") {
-        hasOpenSlideGroup = true;
+      if (parent.type === "root") {
+        // A Part opens a new act, so the group an earlier h2 opened does not
+        // reach across it - the same boundary `src/lint/authored-sections.ts`
+        // draws for a sub-slide's parent title.
+        if (child.properties[OUTLINE_PART_TITLE_ATTRIBUTE] !== undefined) {
+          hasOpenSlideGroup = false;
+        } else if (child.tagName === "h2") {
+          hasOpenSlideGroup = true;
+        }
       }
       const authoredType = child.properties[OUTLINE_SLIDE_TYPE_ATTRIBUTE];
       if (authoredType === undefined) {

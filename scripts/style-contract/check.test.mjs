@@ -226,8 +226,10 @@ test("should reject a class-only selector standing beside a permitted one in the
 `,
   });
   assert.equal(failures.length, 1);
-  assert.match(failures.join("\n"), /selects only classes/);
-  assert.match(failures.join("\n"), /\.owned/);
+  // The clause, not just the selector text: the whole selector list is already
+  // in the message, so matching ".owned" alone would pass even if the clause
+  // were missing or named the permitted half.
+  assert.match(failures.join("\n"), /selects only classes in "\.owned"/);
 });
 
 test("should accept a class-only rule whose utility form is written out, or a declared drawing system", async () => {

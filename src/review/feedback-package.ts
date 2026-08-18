@@ -138,7 +138,7 @@ const slideScope = (comment: ReviewComment): string => {
     subSlides.length === 0
       ? "Weigh the note against everything below and revise whichever parts of the slide it asks about."
       : `That slide continues into sub-slides of its own - ${subSlides
-          .map((heading) => `"${heading}"`)
+          .map((heading) => `"${asOneLine(heading)}"`)
           .join(
             ", ",
           )} - whose content is in the plan source rather than below. Weigh the note against the whole of it, those sub-slides included, and revise whichever parts it asks about.`;

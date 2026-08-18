@@ -66,6 +66,12 @@ export const ComposeImages = ({
 }) => {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
+  // The body a chained upload splices into. `onBodyChange` schedules a
+  // controlled-state update, so the next upload in a batch can run before the
+  // textarea or the `body` prop carries the reference the previous one
+  // inserted - and would then splice an advanced caret into stale text,
+  // overwriting that reference. This ref is what each upload actually edits.
+  const chainedBody = useRef(body);
   const [pending, setPending] = useState(0);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -117,14 +123,14 @@ export const ComposeImages = ({
           "error" in value && value.error ? value.error : "Image upload failed",
         );
       }
-      const current = textarea.current?.value ?? body;
+      const current = chainedBody.current;
       const reference = buildReviewImageReference({
         alt: value.alt,
         id: value.id,
       });
-      onBodyChange(
-        `${current.slice(0, caret)}${reference}${current.slice(caret)}`,
-      );
+      const next = `${current.slice(0, caret)}${reference}${current.slice(caret)}`;
+      chainedBody.current = next;
+      onBodyChange(next);
       setError("");
       return caret + reference.length;
     } catch (uploadError: unknown) {
@@ -145,7 +151,11 @@ export const ComposeImages = ({
       );
       return;
     }
-    const caret = textarea.current?.selectionStart ?? body.length;
+    // The chain starts from what is on screen now; every upload after the
+    // first continues from what the one before it produced.
+    chainedBody.current = textarea.current?.value ?? body;
+    const caret =
+      textarea.current?.selectionStart ?? chainedBody.current.length;
     void files.reduce(
       (chain, file) => chain.then((next) => upload(file, next, altOverride)),
       Promise.resolve(caret),

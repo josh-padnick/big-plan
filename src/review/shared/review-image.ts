@@ -71,7 +71,7 @@ export const buildReviewImageReference = ({
   // produced Markdown that nothing downstream could recognize, and the image
   // was silently never frozen as an attachment.
 }): string =>
-  `![${alt.replaceAll(/[\]\r\n]/gu, " ").trim()}](review-image:${id})`;
+  `![${alt.replaceAll(/[\]\r\n]+/gu, " ").trim()}](review-image:${id})`;
 
 /**
  * The one pattern that recognizes a stored image reference.
@@ -81,7 +81,7 @@ export const buildReviewImageReference = ({
  * nothing, so there is only one copy. Callers that need their own lastIndex
  * take a fresh instance through `reviewImageReferencePattern()`.
  */
-const REFERENCE = /!\[([^\]\n]*)\]\(review-image:([a-f0-9]{64})\)/gu;
+const REFERENCE = /!\[([^\]\r\n]*)\]\(review-image:([a-f0-9]{64})\)/gu;
 
 export const reviewImageReferencePattern = (): RegExp =>
   new RegExp(REFERENCE.source, REFERENCE.flags);

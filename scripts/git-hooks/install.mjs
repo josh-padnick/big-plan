@@ -189,17 +189,36 @@ const deployCompositeHook = (hooksDirectory, hookName, commonDirectory) => {
  * A missing repository is the one failure `prepare` absorbs, so it is answered
  * before installing rather than inferred from a caught error - which would
  * also swallow the refusals this script exists to raise.
+ *
+ * Two absences count, and only two: no `git` on PATH (`ENOENT` from the spawn)
+ * and a tree that simply is not in a repository. Anything else - unreadable
+ * git data, a broken install - is a real error about a checkout that may well
+ * exist, and it is raised rather than read as "nothing to install into".
+ *
+ * `GIT_DIR` is what separates the second case from a misconfiguration, because
+ * git reports both as "not a git repository". Nobody sets `GIT_DIR` by
+ * accident: if it is set and git still cannot find a repository, the answer is
+ * that the setting is wrong, not that there is nothing here.
  */
 export const gitCheckoutIsAvailable = (repoRoot) => {
   try {
     execFileSync("git", ["rev-parse", "--git-common-dir"], {
       cwd: repoRoot,
       encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return false;
+    }
+    if (
+      process.env["GIT_DIR"] === undefined &&
+      /not a git repository/i.test(String(error?.stderr ?? ""))
+    ) {
+      return false;
+    }
+    throw error;
   }
 };
 

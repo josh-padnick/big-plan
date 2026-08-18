@@ -178,6 +178,34 @@ Every failure repeats until the queue drains.
     ]);
   });
 
+  // A Part opens a new act, so the group an earlier h2 opened does not reach
+  // across it - otherwise the first h2 in a document licensed every later
+  // typed h3, however many Parts stood between them.
+  it("should refuse a typed Slide marker on an h3 whose h2 group a later Part closed", () => {
+    expect(
+      diagnosticsFor(`# Bound the retry queue
+
+The lede.
+
+## Today the retries are unbounded
+
+Every failure repeats until the queue drains.
+
+<Part title="Shipping" />
+
+<Slide type="status-quo" />
+
+### A later act adds its own typed sub-slide
+
+This h3 sits after a Part with no h2 of its own above it.
+`),
+    ).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining("must sit inside an h2 slide group"),
+      }),
+    ]);
+  });
+
   it("should report structural MDX diagnostics before Mermaid browser preparation", () => {
     const previous = process.env["PLAYWRIGHT_BROWSERS_PATH"];
     process.env["PLAYWRIGHT_BROWSERS_PATH"] =
