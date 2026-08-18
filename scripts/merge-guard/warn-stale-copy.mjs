@@ -58,6 +58,7 @@ import {
   resolveResultTree,
   collectDeclaredPaths,
   resolveHead,
+  refOrUnset,
 } from "./repo.mjs";
 
 // THE THRESHOLD, AND WHY IT HAS THREE PARTS.
@@ -569,8 +570,8 @@ if (isMain) {
   try {
     const result = await checkStaleCopyWarning({
       repoRoot: process.cwd(),
-      mainRef: process.env.MERGE_GUARD_MAIN_REF,
-      headRef: process.env.MERGE_GUARD_HEAD_REF,
+      mainRef: refOrUnset(process.env.MERGE_GUARD_MAIN_REF),
+      headRef: refOrUnset(process.env.MERGE_GUARD_HEAD_REF),
       thresholdLines: numberFromEnv(
         "MERGE_GUARD_WARN_THRESHOLD",
         DEFAULT_THRESHOLD_LINES,
