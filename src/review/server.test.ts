@@ -1043,7 +1043,6 @@ describe("review runtime input contract", () => {
       expect(await contractOf(target, sessionToken)).toEqual([
         {
           inputId: DECISION_ID,
-          kind: "decision",
           label: "Which release path should we use?",
           isCritical: true,
           state: "unanswered",
@@ -1051,7 +1050,6 @@ describe("review runtime input contract", () => {
         },
         {
           inputId: RENAME_ID,
-          kind: "decision",
           label: "Do we rename the endpoint?",
           isCritical: false,
           state: "unanswered",

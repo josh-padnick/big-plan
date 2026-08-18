@@ -91,52 +91,25 @@ export const requestJson = async ({
 };
 
 /**
- * Announces that this page has applied a newer copy of a record the review's
+ * Announces that this page has applied a newer copy of the record the review's
  * input contract is derived from.
  *
- * The contract is a join over the answers and disposition records, so a surface
- * that showed it on a clock of its own would be more current than the surfaces
- * those records drive - and the two would disagree about the same review for as
- * long as the clocks were apart. Deriving it from what this page has already
- * applied is what keeps every surface on one revision of the truth.
+ * A surface that showed the contract on a clock of its own would be more
+ * current than the surfaces that record drives - and the two would disagree
+ * about the same review for as long as the clocks were apart. Deriving it from
+ * what this page has already applied is what keeps every surface on one
+ * revision of the truth.
  */
 const REVIEW_RECORD_APPLIED_EVENT = "bigplan:review-record-applied";
 
-/** The last record revision one surface applied. A React ref satisfies it. */
-export type AppliedRecordRevision = { current: number };
-
-/**
- * Applies one record response, and announces the ones it applied.
- *
- * Every response from these records carries the whole current record and the
- * revision that produced it, so applying one is the only way this page learns
- * what is stored, and a strictly older revision lost a race with a write
- * already applied and is dropped without comment.
- *
- * Announcing lives here rather than at each record's own reader because a
- * reader that applied a record without saying so leaves every surface derived
- * from more than one record showing an older review than the surfaces beside
- * it - and nothing throws, so the disagreement is only ever found by looking.
- */
-export const applyReviewRecord = ({
-  revision,
-  applied,
-  apply,
-}: {
-  readonly revision: number;
-  readonly applied: AppliedRecordRevision;
-  readonly apply: () => void;
-}): boolean => {
-  if (revision < applied.current) return false;
-  applied.current = revision;
-  apply();
+/** Announces one applied record, for surfaces derived from it. */
+export const announceAppliedReviewRecord = (): void => {
   document.dispatchEvent(new CustomEvent(REVIEW_RECORD_APPLIED_EVENT));
-  return true;
 };
 
 /**
- * Subscribes a surface derived from more than one record to the moments this
- * page applied a newer copy of one, and returns how to stop.
+ * Subscribes a surface derived from an applied record to the moments this page
+ * applied a newer copy of one, and returns how to stop.
  */
 export const onAppliedReviewRecord = (react: () => void): (() => void) => {
   document.addEventListener(REVIEW_RECORD_APPLIED_EVENT, react);

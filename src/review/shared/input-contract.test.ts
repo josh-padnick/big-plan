@@ -6,7 +6,6 @@ import { reviewInputStanding, type ReviewInput } from "./input-contract.js";
 
 const input = (overrides: Partial<ReviewInput> = {}): ReviewInput => ({
   inputId: "decision-one",
-  kind: "decision",
   label: "Which release path?",
   isCritical: false,
   state: "unanswered",
@@ -46,7 +45,7 @@ describe("reviewInputStanding", () => {
     expect(
       reviewInputStanding([
         input({ inputId: "a", state: "answered" }),
-        input({ inputId: "b", state: "answered", kind: "change-set" }),
+        input({ inputId: "b", state: "answered" }),
       ]).isSettled,
     ).toBe(true);
   });

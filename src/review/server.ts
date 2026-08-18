@@ -117,7 +117,6 @@ import type { ReviewSessionDescriptor } from "./session-authority.js";
 import {
   createActivityClock,
   createChangeDispositions,
-  createPlanChangeSets,
   createDecisionAnswers,
   createPlanRenderer,
   createReaderProgress,
@@ -887,19 +886,6 @@ export const startReviewRuntime = async ({
     }
   };
 
-  // Named before the context because the change-set inventory reads comments
-  // through it: a thread's change set takes its name from the comment that
-  // started the thread.
-  const planRenderer = createPlanRenderer({
-    store,
-    planId,
-    sessionId,
-    token,
-    resolvedPlanPath,
-    initialSnapshot,
-    isDiffPreview: diffPreviewSource !== undefined,
-  });
-
   // Every piece of state the routes share is built once, here, and named after
   // what it means. Anything a route may read travels through this record.
   const context: ReviewRouteContext = {
@@ -910,18 +896,21 @@ export const startReviewRuntime = async ({
     agentCommand,
     restartCommand,
     recoveryPrompt,
-    planRenderer,
+    planRenderer: createPlanRenderer({
+      store,
+      planId,
+      sessionId,
+      token,
+      resolvedPlanPath,
+      initialSnapshot,
+      isDiffPreview: diffPreviewSource !== undefined,
+    }),
     decisionAnswers: createDecisionAnswers({
       store,
       resolvedPlanPath,
       reportDiagnostic,
     }),
     changeDispositions: createChangeDispositions({ store }),
-    planChangeSets: createPlanChangeSets({
-      store,
-      resolvedPlanPath,
-      planRenderer,
-    }),
     readerProgress: createReaderProgress({
       initialSnapshot,
       observedResponseIds: (await readCommittedRevisions({ store })).map(
@@ -932,6 +921,7 @@ export const startReviewRuntime = async ({
     activityClock: createActivityClock(idleTimeoutMs),
     reportDiagnostic,
   };
+  const { planRenderer } = context;
 
   /** Writes a route's decided response with the headers its kind carries. */
   const sendRouteResponse = ({

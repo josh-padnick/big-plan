@@ -87,7 +87,6 @@ import {
   decodeAgentSnapshot as parseAgentSnapshot,
   decodeSnapshotDiff as parseSnapshotDiff,
   decodeProgress as parseProgress,
-  decodeReviewState as parseReviewState,
   decodeReviewSnapshot as parseSnapshot,
   decodeRuntimeSession as parseRuntimeSession,
   emptyAgentSnapshot,
@@ -191,11 +190,11 @@ import {
 } from "./review-recovery-storage.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 import {
-  applyReviewRecord,
   requestJson,
   runtimeIdentity,
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
+import { applyAnswersRecord } from "./answers-record.browser.js";
 import {
   AlertDialog,
   Badge,
@@ -4536,11 +4535,10 @@ export const ReviewController = () => {
     [],
   );
   const applyAnswersResponse = useCallback((value: unknown): void => {
-    const state = parseReviewState(value);
-    applyReviewRecord({
-      revision: state.revision,
+    applyAnswersRecord({
+      value,
       applied: appliedAnswerRevision,
-      apply: () => {
+      show: (state) => {
         setStoredAnswers(state.answers);
         setSupersededDecisionIds(state.supersededDecisionIds);
       },

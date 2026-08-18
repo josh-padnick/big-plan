@@ -18,7 +18,6 @@ import {
   emptyReviewInputContract,
   type ReviewInput,
   type ReviewInputContract,
-  type ReviewInputKind,
   type ReviewInputState,
 } from "./input-contract.js";
 
@@ -409,10 +408,6 @@ export const encodeReviewInputContract = (
   value: ReviewInputContract,
 ): ReviewInputContract => value;
 
-const INPUT_KINDS: ReadonlySet<string> = new Set<ReviewInputKind>([
-  "decision",
-  "change-set",
-]);
 const INPUT_STATES: ReadonlySet<string> = new Set<ReviewInputState>([
   "answered",
   "unanswered",
@@ -420,10 +415,10 @@ const INPUT_STATES: ReadonlySet<string> = new Set<ReviewInputState>([
 ]);
 
 /**
- * Decodes the input contract while dropping malformed transport entries. Both
- * revisions decode to -1 when unusable, which is older than any accepted write
- * to either record, so a body this build cannot read can never displace a
- * contract the page already applied.
+ * Decodes the input contract while dropping malformed transport entries. The
+ * revision decodes to -1 when unusable, which is older than any accepted write
+ * to the record it came from, so a body this build cannot read can never
+ * displace a contract the page already applied.
  */
 export const decodeReviewInputContract = (
   value: unknown,
@@ -432,13 +427,10 @@ export const decodeReviewInputContract = (
     return emptyReviewInputContract();
   }
   return {
-    answersRevision: storedRevision(value.answersRevision),
-    dispositionsRevision: storedRevision(value.dispositionsRevision),
+    revision: storedRevision(value.revision),
     inputs: value.inputs.flatMap((input): ReadonlyArray<ReviewInput> =>
       isReviewWireRecord(input) &&
       typeof input.inputId === "string" &&
-      typeof input.kind === "string" &&
-      INPUT_KINDS.has(input.kind) &&
       typeof input.label === "string" &&
       typeof input.isCritical === "boolean" &&
       typeof input.state === "string" &&
@@ -447,7 +439,6 @@ export const decodeReviewInputContract = (
         ? [
             {
               inputId: input.inputId,
-              kind: input.kind as ReviewInputKind,
               label: input.label,
               isCritical: input.isCritical,
               state: input.state as ReviewInputState,

@@ -150,14 +150,13 @@ In a standalone rendered document, an answer lasts only for the reading session 
 
 ## What the review is waiting for
 
-A live review's **Inputs** tab lists everything the review is waiting on: every open decision the plan asks, and every change set an agent published.
+A live review's **Inputs** tab lists what the review is waiting on: for now, every decision the plan asks.
 Each row says where that input stands - answered, not answered, or stale - and a decision the plan's author marked `critical` says so beside its state.
-A decision row scrolls the plan to its card.
+Selecting a row scrolls the plan to that decision's card.
 
 The list is the runtime's answer rather than the page's, so two browsers reading the same review read the same list, and a reload cannot invent a different one.
 **Stale** is its own state rather than a kind of unanswered: you answered, and the plan moved underneath the answer.
 A decision goes stale under exactly the edits that mask its answer on the card, and restoring the wording it answered makes it answered again.
-A change set goes stale when a later revision reopened changes you had already accepted, because an acceptance names the revision it closed and never migrates onto content you did not see.
 
 A standalone rendered document has no Inputs tab: the contract is derived by the review runtime, and a document opened without one has nothing to derive it from.
 

@@ -621,13 +621,9 @@ describe("review wire contract", () => {
         decodeChangeDispositions({ accepted: [], revision }).revision,
       ).toBe(-1);
       expect(decodeReviewState({ answers: [], revision }).revision).toBe(-1);
-      expect(
-        decodeReviewInputContract({
-          inputs: [],
-          answersRevision: revision,
-          dispositionsRevision: revision,
-        }),
-      ).toMatchObject({ answersRevision: -1, dispositionsRevision: -1 });
+      expect(decodeReviewInputContract({ inputs: [], revision }).revision).toBe(
+        -1,
+      );
     }
   });
 
@@ -641,16 +637,9 @@ describe("review wire contract", () => {
       expect(decodeReviewState({ answers: [], revision }).revision).toBe(
         revision,
       );
-      expect(
-        decodeReviewInputContract({
-          inputs: [],
-          answersRevision: revision,
-          dispositionsRevision: revision,
-        }),
-      ).toMatchObject({
-        answersRevision: revision,
-        dispositionsRevision: revision,
-      });
+      expect(decodeReviewInputContract({ inputs: [], revision }).revision).toBe(
+        revision,
+      );
     }
   });
 });
