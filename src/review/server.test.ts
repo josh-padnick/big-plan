@@ -494,16 +494,18 @@ describe("review runtime transport", () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-orphan-socket-"));
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, PLAN);
+    // The baseline is taken before the probe binds anything, so the probe's own
+    // listener can never be counted into it. A baseline read afterwards could
+    // still include it, and that listener leaving later would offset a leaked
+    // one and let this regression test pass.
+    const before = listeningSockets();
     const probe = await startReviewRuntime({ planPath });
     const sessionPath = probe.store.sessionPath;
     await probe.close();
     // A directory in place of the descriptor is a write this runtime cannot do.
     await rm(sessionPath, { force: true });
     await mkdir(sessionPath);
-    // A closed listener leaves the event loop one timer turn later, so the
-    // count is read after that turn rather than in the same one.
-    await new Promise((settle) => setTimeout(settle, 25));
-    const before = listeningSockets();
+    expect(await settledListeningSockets(before)).toBe(before);
     await expect(startReviewRuntime({ planPath })).rejects.toThrow();
     expect(await settledListeningSockets(before)).toBe(before);
     await rm(directory, { recursive: true, force: true });
