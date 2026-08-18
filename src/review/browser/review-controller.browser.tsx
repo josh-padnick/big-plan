@@ -6654,26 +6654,33 @@ export const ReviewController = () => {
   // to the batch the header names, so each batch heads its own threads
   // (BIG-162). One batch has nothing to be confused with, so it keeps the
   // sidebar's existing shape - the whole working group beneath the one header.
-  const batchSections: ReadonlyArray<CommentsSurfaceBatch> =
-    openBatchThreads.map(({ request, commentIds }) =>
-      batchSection({
-        request,
-        count: commentIds.length,
-        comments: selectThreadsAwaitingAgent({
-          comments:
-            openBatchThreads.length > 1
-              ? visibleUnresolvedSent.filter((comment) =>
-                  commentIds.includes(comment.id),
-                )
-              : (sentByGroup.get("working") ?? []),
-          groupOf: (commentId) => threadProjections.get(commentId)?.group,
-        }),
-      }),
-    );
-  // A card whose batch carries a status strip above it does not repeat that
-  // status on the card itself.
+  const batchGroups = openBatchThreads.map(({ request, commentIds }) => {
+    const comments = selectThreadsAwaitingAgent({
+      comments:
+        openBatchThreads.length > 1
+          ? visibleUnresolvedSent.filter((comment) =>
+              commentIds.includes(comment.id),
+            )
+          : (sentByGroup.get("working") ?? []),
+      groupOf: (commentId) => threadProjections.get(commentId)?.group,
+    });
+    return {
+      section: batchSection({ request, count: commentIds.length, comments }),
+      // A card whose batch carries a status strip above it does not repeat that
+      // status on the card itself. Only the threads this header both renders
+      // and speaks for qualify: one it has stopped rendering carries its own
+      // status again, and a thread from another request that the lone-batch
+      // path happens to list is not this batch's to speak for.
+      headedCommentIds: comments
+        .filter((comment) => commentIds.includes(comment.id))
+        .map((comment) => comment.id),
+    };
+  });
+  const batchSections: ReadonlyArray<CommentsSurfaceBatch> = batchGroups.map(
+    ({ section }) => section,
+  );
   const headedBatchCommentIds = new Set(
-    openBatchThreads.flatMap(({ commentIds }) => commentIds),
+    batchGroups.flatMap(({ headedCommentIds }) => headedCommentIds),
   );
 
   return (
