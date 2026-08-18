@@ -10,6 +10,9 @@
 #     review-triage
 #     validation-attestation
 #
+# The gate updates only check runs its own app created; a run of the same name
+# from another installed app belongs to that app, and patching it is refused.
+#
 # The comment triggers are the point of this design. Triage completes by
 # writing, not by pushing, so a gate has to be able to go green on a comment
 # alone. A workflow started by issue_comment runs against the default branch, so

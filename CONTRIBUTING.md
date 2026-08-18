@@ -71,13 +71,13 @@ Silence is therefore not a promise that no work was lost. It only means the bran
 ## Merge gates
 
 Two required status checks decide whether a pull request may merge.
-They exist because PR #163 merged with seven reviewer findings that nobody had answered, and no check noticed.
+They exist because PR #163 merged with seven reviewer findings that nobody had resolved, and no check noticed.
 Both gates are statements a machine can verify, so the protocol cannot be forgotten rather than merely agreed to.
 
-| Check                    | Passes when                                                                                                                                |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `review-triage`          | Exactly one accepted third-party review exists, every inline finding it raised has a written reply, and a sign-off names the current head. |
-| `validation-attestation` | The pull request states that the `no-mistakes` pipeline passed on the current head, or that it was deliberately skipped and why.           |
+| Check                    | Passes when                                                                                                                        |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `review-triage`          | Exactly one accepted third-party review exists, every inline finding it raised is resolved, and a sign-off names the current head. |
+| `validation-attestation` | The pull request states that the `no-mistakes` pipeline passed on the current head, or that it was deliberately skipped and why.   |
 
 `.github/workflows/merge-gates.yml` runs the gates and `scripts/merge-gates/gates.mjs` decides them.
 A failing gate prints exactly what is missing and the next action to take, so read the check before asking anyone.
@@ -103,10 +103,12 @@ Sign off last, after every finding has a reply and after the final push.
 1. Get one review.
    Any of CodeRabbit, Greptile, or Devin counts; the gate does not care which, so BIG-143's credit-based picker can choose freely.
    Exactly one, because one review per pull request is the budget, and a second review means one of the two was never triaged.
-2. Answer every inline finding.
+   A reviewer counts while it holds either a review it has not taken back or an unresolved inline thread, so dismissing a review drops that reviewer only once every finding it left is resolved.
+2. Resolve every inline finding.
    Reply in the thread saying what you did: the commit that fixes it, or the reason you decline it.
-   Resolving a thread without a reply does not count, and the reviewer replying to itself does not count.
-   The written response is the record a later reader needs.
+   A thread is resolved, in this gate's sense, once a comment by somebody other than the reviewer exists in it.
+   That is this repository's meaning of the word, not GitHub's: ticking GitHub's resolve checkbox resolves nothing here, and the reviewer replying to itself resolves nothing either.
+   The written reply is the record a later reader needs.
 3. Run `no-mistakes` and post its attestation.
 4. Post the `review-triage: complete <head-sha>` sign-off.
 
@@ -130,13 +132,15 @@ findings: <n>
 ```
 
 The sha must be a commit on this pull request, and the number of findings declared must not exceed the number of disposition lines.
-Post at most one accepted review per pull request: an attestation posted while a bot has already reviewed fails the gate, and deleting the surplus comment clears it.
+Post at most one accepted review per pull request: an attestation posted while a bot has already reviewed fails the gate.
+Clear it by deleting the attestation comment, or by resolving the bot's findings and then dismissing its review - dismissal alone leaves the bot counted while any of its threads is unresolved.
 
 ### The override rule
 
 `no-mistakes: overridden - <reason>` is the sanctioned path for work the pipeline genuinely does not apply to.
 It passes the gate and says so loudly: the check's title reads `OVERRIDDEN`, and its body names the reason and the account that declared it.
-The reason has to be one a reader can weigh; a shrug is rejected.
+The reason has to be one a reader can weigh: at least eight characters, so a shrug such as `n/a` is refused.
+A refused override is named in the failing check, with the reason it was refused, rather than dropped silently.
 
 An override with no sha stays in force for the rest of the pull request.
 Add a trailing `head <sha>` to scope it to one commit instead, and a later push then requires a fresh statement.

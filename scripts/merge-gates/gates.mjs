@@ -1,5 +1,5 @@
 // Decides the two merge gates the captain ratified on 2026-08-18 (BIG-164),
-// after PR #163 merged with seven reviewer findings that nobody had answered.
+// after PR #163 merged with seven reviewer findings that nobody had resolved.
 // The lesson of that incident is that a convention nobody can forget to follow
 // is worth more than a convention everybody agrees with: both gates are
 // therefore statements a machine can check, not manners.
@@ -10,9 +10,15 @@
 //      adversarial-review attestation from our own agent when reviewer credits
 //      are gone. Exactly one, because BIG-143 buys one review per pull request;
 //      two reviews mean one of them was never paid for or never triaged.
-//   b. Every inline finding that reviewer raised has a written reply from
-//      somebody else. A reply, not a resolved checkbox: silently resolving a
-//      thread is the exact shape of the incident this gate exists to stop.
+//      A reviewer counts while it has either a review it has not taken back or
+//      an unresolved inline thread, so dismissing a review drops it from the
+//      count only once every finding it left is resolved.
+//   b. Every inline finding that reviewer raised is resolved, which here means
+//      a written reply from somebody other than the reviewer. Resolved is this
+//      gate's word, not GitHub's: ticking GitHub's resolve checkbox resolves
+//      nothing, and neither does the reviewer replying to itself. Silently
+//      resolving a thread is the exact shape of the incident this gate exists
+//      to stop, so the written reply is the record.
 //   c. A sign-off comment names the CURRENT head. Any push moves the head and
 //      invalidates the sign-off, including a push that only fixes lint, because
 //      a reviewer's findings were raised against code that no longer exists.
@@ -81,8 +87,13 @@ export const CHECK_NAMES = {
 
 const SHORT_SHA = 8;
 
-/** An override reason shorter than this is not a reason, it is a shrug. */
-const MIN_OVERRIDE_REASON = 8;
+/**
+ * An override reason shorter than this is not a reason, it is a shrug. A marker
+ * rejected for this is reported as rejected rather than dropped, because an
+ * agent that posted one and read "nothing attests this head" would have no way
+ * to tell that the gate saw its comment and refused it.
+ */
+export const MIN_OVERRIDE_REASON = 8;
 
 const short = (sha) => (sha ?? "").slice(0, SHORT_SHA);
 
@@ -152,9 +163,9 @@ const OVERRIDE_HEAD = /\s+head\s+([0-9a-f]{7,40})\s*$/i;
 
 /**
  * Review states that count as a review having happened. A dismissed review has
- * been taken back, and the two-review failure tells a reader to dismiss the
- * surplus one, so counting it would make that instruction a lie. A pending
- * review has not been submitted at all.
+ * been taken back, so it stops counting on its own; its reviewer keeps counting
+ * only while one of its inline findings is still unresolved, because findings
+ * outlive the review that carried them. A pending review was never submitted.
  */
 const COUNTED_REVIEW_STATES = new Set([
   "APPROVED",
@@ -167,6 +178,42 @@ const botFor = (login) =>
   REVIEW_BOTS.find((bot) =>
     bot.logins.some((alias) => lower(alias) === lower(login)),
   ) ?? null;
+
+/** True when a login belongs to the reviewer whose threads are being judged. */
+const wrote = (logins, login) =>
+  logins.some((alias) => lower(alias) === lower(login));
+
+/**
+ * True when a thread is one this reviewer opened and still stands behind.
+ * A minimized root is a finding the reviewer withdrew, so it does not gate.
+ */
+const isLiveReviewerThread = (thread, reviewerLogins) => {
+  const root = thread.comments[0];
+  return (
+    root !== undefined &&
+    wrote(reviewerLogins, root.author) &&
+    root.isMinimized !== true
+  );
+};
+
+/**
+ * The reply that resolves a thread, or undefined while it is unresolved.
+ *
+ * Resolved is this gate's word: a live comment from somebody other than the
+ * thread's author. The author replying to itself resolves nothing, and neither
+ * does GitHub's resolve checkbox, because resolving without replying leaves no
+ * record of what was done - which is what made the PR #163 findings invisible.
+ */
+const resolvingReply = (thread, authorLogins) =>
+  thread.comments
+    .slice(1)
+    .find(
+      (comment) =>
+        !wrote(authorLogins, comment.author) && comment.isMinimized !== true,
+    );
+
+const isResolved = (thread, authorLogins) =>
+  resolvingReply(thread, authorLogins) !== undefined;
 
 /**
  * Collects the adversarial-review attestations the pull request carries, newest
@@ -221,10 +268,17 @@ export const collectAttestations = (snapshot) => {
 };
 
 /**
- * Identifies which accepted reviews exist. A bot counts once it has either
- * submitted a review or opened an inline thread; an attestation counts once it
- * is well-formed. All attestations collapse into one identity because they all
- * stand for the same thing, our own agent reviewing in a bot's place.
+ * Identifies which accepted reviews exist. A bot counts while it holds either a
+ * review it has not taken back or an unresolved inline thread; an attestation
+ * counts once it is well-formed. All attestations collapse into one identity
+ * because they all stand for the same thing, our own agent reviewing in a bot's
+ * place.
+ *
+ * The unresolved-thread half is what makes the two-review recovery honest.
+ * Dismissing a review that left findings would otherwise drop the reviewer from
+ * the count while its findings sat unread, which is the incident this gate
+ * exists to stop; a dismissal clears the reviewer only once every thread it
+ * opened carries a reply from somebody else.
  */
 export const identifyReviews = (snapshot) => {
   const byBot = new Map();
@@ -239,7 +293,13 @@ export const identifyReviews = (snapshot) => {
   }
   for (const thread of snapshot.reviewThreads) {
     const bot = botFor(thread.comments[0]?.author);
-    if (bot !== null) {
+    if (bot === null || byBot.has(bot.id)) {
+      continue;
+    }
+    if (
+      isLiveReviewerThread(thread, bot.logins) &&
+      !isResolved(thread, bot.logins)
+    ) {
       byBot.set(bot.id, bot);
     }
   }
@@ -261,42 +321,34 @@ export const identifyReviews = (snapshot) => {
 };
 
 /**
- * Splits a bot reviewer's inline threads into triaged and untriaged.
+ * Splits a reviewer's inline threads into resolved and unresolved, and lists
+ * the unresolved threads other authors left.
  *
- * A thread is triaged when somebody other than the reviewer replied in it. The
- * reviewer answering itself is not triage, and GitHub's resolved flag is not
- * triage either: resolving without replying leaves no record of what was done,
- * which is what made the PR #163 findings invisible. Threads the reviewer
- * minimized are skipped, because a hidden comment is one the reviewer withdrew.
+ * Only the accepted reviewer's threads gate the merge; the foreign list is
+ * reported for information, and is judged by the same definition of resolved so
+ * the word means one thing everywhere the gate prints it. Pass an empty list of
+ * reviewer logins to collect the foreign list alone.
  */
 export const triageThreads = (snapshot, reviewerLogins) => {
-  const isReviewer = (login) =>
-    reviewerLogins.some((alias) => lower(alias) === lower(login));
-  const own = snapshot.reviewThreads.filter((thread) => {
+  const own = snapshot.reviewThreads.filter((thread) =>
+    isLiveReviewerThread(thread, reviewerLogins),
+  );
+  const resolved = [];
+  const unresolved = [];
+  for (const thread of own) {
+    const reply = resolvingReply(thread, reviewerLogins);
+    (reply === undefined ? unresolved : resolved).push({ ...thread, reply });
+  }
+  const foreign = snapshot.reviewThreads.filter((thread) => {
     const root = thread.comments[0];
     return (
-      root !== undefined && isReviewer(root.author) && root.isMinimized !== true
+      root !== undefined &&
+      !wrote(reviewerLogins, root.author) &&
+      root.isMinimized !== true &&
+      !isResolved(thread, [root.author])
     );
   });
-  const answered = [];
-  const unanswered = [];
-  for (const thread of own) {
-    const reply = thread.comments
-      .slice(1)
-      .find(
-        (comment) =>
-          !isReviewer(comment.author) && comment.isMinimized !== true,
-      );
-    (reply === undefined ? unanswered : answered).push({ ...thread, reply });
-  }
-  const foreign = snapshot.reviewThreads.filter(
-    (thread) =>
-      thread.comments[0] !== undefined &&
-      !isReviewer(thread.comments[0].author) &&
-      thread.comments.length === 1 &&
-      thread.isResolved !== true,
-  );
-  return { threads: own, answered, unanswered, foreign };
+  return { threads: own, resolved, unresolved, foreign };
 };
 
 /** Where an inline thread sits, for a reader who has to go answer it. */
@@ -364,6 +416,18 @@ export const evaluateReviewTriage = (snapshot) => {
   }
 
   if (accepted.length > 1) {
+    const retractions = accepted.flatMap((one) =>
+      one.kind === "bot"
+        ? [
+            `  - ${one.bot.label}: reply in every thread it opened, saying what you`,
+            "    did, and then dismiss its review. Dismissing alone is not enough - a",
+            "    reviewer keeps counting while any of its inline threads is unresolved.",
+          ]
+        : [
+            `  - ${ADVERSARIAL_REVIEWER.label} by ${one.attestation.agent}: delete that`,
+            `    attestation comment. ${one.attestation.url}`,
+          ],
+    );
     return verdict(
       CHECK_NAMES.reviewTriage,
       "failure",
@@ -375,9 +439,10 @@ export const evaluateReviewTriage = (snapshot) => {
         "One review per pull request is the budget (BIG-143), and two reviews mean",
         "one of them was never triaged.",
         "",
-        "Next action: keep one and retract the other. Delete the adversarial-review",
-        "attestation comment if the bot already reviewed, or dismiss the surplus bot",
-        "review. This check re-runs on its own when the comment goes away.",
+        "Next action: keep one and retract the other.",
+        ...retractions,
+        "",
+        "This check re-runs on its own when the comment or the review changes.",
         ...notes,
       ],
     );
@@ -396,21 +461,22 @@ export const evaluateReviewTriage = (snapshot) => {
   const findingLines = [];
   let findingsOk = true;
 
+  // An attestation has no inline threads of its own, so it passes no reviewer
+  // logins; the foreign listing below is then every unresolved thread, and it
+  // is printed for both reviewer kinds rather than only for a bot.
+  const { threads, resolved, unresolved, foreign } = triageThreads(
+    snapshot,
+    review.kind === "bot" ? review.bot.logins : [],
+  );
+
   if (review.kind === "bot") {
-    const { threads, answered, unanswered, foreign } = triageThreads(
-      snapshot,
-      review.bot.logins,
-    );
     findingLines.push(
-      `Reviewer: ${review.bot.label}. Inline findings: ${threads.length}, answered: ${answered.length}, unanswered: ${unanswered.length}.`,
+      `Reviewer: ${review.bot.label}. Inline findings: ${threads.length}, resolved: ${resolved.length}, unresolved: ${unresolved.length}.`,
     );
-    if (unanswered.length > 0) {
+    if (unresolved.length > 0) {
       findingsOk = false;
-      findingLines.push(
-        "",
-        `${unanswered.length} finding(s) have no response:`,
-      );
-      for (const thread of unanswered) {
+      findingLines.push("", `${unresolved.length} finding(s) are unresolved:`);
+      for (const thread of unresolved) {
         findingLines.push(`  - ${locate(thread)}`);
         findingLines.push(`      ${gist(thread)}`);
         findingLines.push(`      ${thread.url}`);
@@ -418,18 +484,8 @@ export const evaluateReviewTriage = (snapshot) => {
       findingLines.push(
         "",
         "Next action: reply in each thread above saying what you did - the commit",
-        "that fixes it, or the reason you decline it. Resolving a thread without a",
-        "reply does not count; the written response is the record.",
-      );
-    }
-    if (foreign.length > 0) {
-      findingLines.push(
-        "",
-        `For information only, not gating: ${foreign.length} unanswered inline thread(s) from other authors.`,
-        ...foreign.map(
-          (thread) =>
-            `  - ${locate(thread)} by ${thread.comments[0].author}: ${thread.url}`,
-        ),
+        "that fixes it, or the reason you decline it. Ticking GitHub's resolve",
+        "checkbox does not resolve a thread here; the written reply is the record.",
       );
     }
   } else {
@@ -437,6 +493,17 @@ export const evaluateReviewTriage = (snapshot) => {
     findingLines.push(
       `Reviewer: ${ADVERSARIAL_REVIEWER.label} by ${attestation.agent}, over commit ${short(attestation.reviewedCommit)}.`,
       `Findings declared: ${attestation.findings}, each with a disposition. ${attestation.url}`,
+    );
+  }
+
+  if (foreign.length > 0) {
+    findingLines.push(
+      "",
+      `For information only, not gating: ${foreign.length} unresolved inline thread(s) from other authors.`,
+      ...foreign.map(
+        (thread) =>
+          `  - ${locate(thread)} by ${thread.comments[0].author}: ${thread.url}`,
+      ),
     );
   }
 
@@ -471,7 +538,7 @@ export const evaluateReviewTriage = (snapshot) => {
     "failure",
     findingsOk
       ? `Sign-off missing for head ${head}`
-      : "Reviewer findings have no response",
+      : "Reviewer findings are unresolved",
     [
       ...findingLines,
       ...(signOff === undefined
@@ -495,6 +562,7 @@ export const evaluateValidationAttestation = (snapshot) => {
   const head = short(snapshot.headSha);
   const passes = [];
   const overrides = [];
+  const shrugs = [];
   const staleShas = [];
   for (const comment of snapshot.issueComments) {
     for (const [, runId, sha] of matchMarker(comment, VALIDATION_PASSED)) {
@@ -514,6 +582,8 @@ export const evaluateValidationAttestation = (snapshot) => {
       }
       if (reason.length >= MIN_OVERRIDE_REASON) {
         overrides.push({ comment, reason });
+      } else {
+        shrugs.push({ comment, reason });
       }
     }
   }
@@ -560,6 +630,16 @@ export const evaluateValidationAttestation = (snapshot) => {
     `No validation attestation for head ${head}`,
     [
       `Nothing on this pull request attests validation of head ${head}.`,
+      ...(shrugs.length > 0
+        ? [
+            "",
+            `${shrugs.length} override(s) were refused because the reason is shorter than ${MIN_OVERRIDE_REASON} characters, which is a shrug rather than a reason a reader can weigh:`,
+            ...shrugs.map(
+              (one) =>
+                `  - refused "${one.reason}" (${one.reason.length} character(s)) by ${one.comment.author}: ${one.comment.url}`,
+            ),
+          ]
+        : []),
       ...(staleShas.length > 0
         ? [
             "",
@@ -580,6 +660,9 @@ export const evaluateValidationAttestation = (snapshot) => {
       "instead, with a reason a reader can weigh:",
       "",
       `    ${MARKERS.validationOverride}`,
+      "",
+      `The reason has to be at least ${MIN_OVERRIDE_REASON} characters, because a reader has to be`,
+      "able to judge the decision from it.",
     ],
   );
 };

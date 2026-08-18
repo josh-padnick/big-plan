@@ -1,5 +1,5 @@
 // Proves the merge gates fail the exact shape of the PR #163 incident - a
-// reviewer's inline findings sitting unanswered while the pull request merges -
+// reviewer's inline findings sitting unresolved while the pull request merges -
 // and that the ways an agent might accidentally look compliant do not work: a
 // reviewer replying to itself, a thread resolved without a word, a sign-off left
 // behind by a later push, a marker pasted inside a code fence. The passing cases
@@ -88,7 +88,7 @@ test("a triaged review with a matching sign-off passes", () => {
   assert.match(verdict.title, /signed off/);
 });
 
-test("an unanswered finding fails the gate and names where it is", () => {
+test("an unresolved finding fails the gate and names where it is", () => {
   const verdict = evaluateReviewTriage(
     snapshot({
       issueComments: [signOff],
@@ -100,7 +100,7 @@ test("an unanswered finding fails the gate and names where it is", () => {
     }),
   );
   assert.equal(verdict.conclusion, "failure");
-  assert.match(report(verdict), /1 finding\(s\) have no response/);
+  assert.match(report(verdict), /1 finding\(s\) are unresolved/);
   assert.match(report(verdict), /src\/review\/live-target\.browser\.ts:42/);
   assert.match(report(verdict), /Reject non-integer revisions/);
   assert.match(report(verdict), /discussion_r1/);
@@ -116,7 +116,7 @@ test("the reviewer answering itself is not a response", () => {
     }),
   );
   assert.equal(verdict.conclusion, "failure");
-  assert.match(report(verdict), /unanswered: 1/);
+  assert.match(report(verdict), /unresolved: 1/);
 });
 
 test("resolving a thread without replying is not a response", () => {
@@ -128,7 +128,7 @@ test("resolving a thread without replying is not a response", () => {
     }),
   );
   assert.equal(verdict.conclusion, "failure");
-  assert.match(report(verdict), /Resolving a thread without a/);
+  assert.match(report(verdict), /Ticking GitHub's resolve/);
 });
 
 test("a finding the reviewer withdrew does not gate", () => {
@@ -194,7 +194,18 @@ test("two accepted reviews fail, because the budget is one", () => {
   );
   assert.equal(verdict.conclusion, "failure");
   assert.match(verdict.title, /2 accepted reviews/);
-  assert.match(report(verdict), /Delete the adversarial-review/);
+  // Both recoveries have to be printed, because dismissing the bot review is
+  // only half of dropping a reviewer that left findings.
+  assert.match(report(verdict), /CodeRabbit: reply in every thread it opened/);
+  assert.match(report(verdict), /then dismiss its review/);
+  assert.match(
+    report(verdict),
+    /keeps counting while any of its inline threads is unresolved/,
+  );
+  assert.match(
+    report(verdict),
+    /by claude-opus-5: delete that\n\s+attestation comment/,
+  );
 });
 
 test("an adversarial attestation stands in for a bot review", () => {
@@ -286,11 +297,15 @@ test("an override passes, and says so loudly", () => {
   assert.match(report(verdict), /docs-only change/);
 });
 
-test("an override with no real reason does not pass", () => {
+test("an override with no real reason is refused out loud, not ignored", () => {
   const verdict = evaluateValidationAttestation(
     snapshot({ issueComments: [comment("no-mistakes: overridden - n/a")] }),
   );
   assert.equal(verdict.conclusion, "failure");
+  // The agent that posted it has to learn the gate saw it and refused it.
+  assert.match(report(verdict), /1 override\(s\) were refused/);
+  assert.match(report(verdict), /refused "n\/a" \(3 character\(s\)\)/);
+  assert.match(report(verdict), /at least 8 characters/);
 });
 
 test("an override scoped to an older head does not carry to this one", () => {
@@ -332,7 +347,7 @@ test("pasting a failure report back does not satisfy the gate that printed it", 
   );
 });
 
-test("a dismissed review is not a review", () => {
+test("a dismissed review with no findings left behind is not a review", () => {
   const verdict = evaluateReviewTriage(
     snapshot({
       issueComments: [signOff],
@@ -341,6 +356,63 @@ test("a dismissed review is not a review", () => {
   );
   assert.equal(verdict.conclusion, "failure");
   assert.match(verdict.title, /No accepted review/);
+});
+
+test("dismissing a review does not drop findings that are still unresolved", () => {
+  // The recovery printed for two accepted reviews is "resolve, then dismiss".
+  // Dismissing first must therefore leave the reviewer counted, or the gate
+  // would forget findings nobody resolved - the PR #163 shape exactly.
+  const dismissed = {
+    issueComments: [signOff],
+    reviews: [{ author: "coderabbitai[bot]", state: "DISMISSED", body: "" }],
+  };
+  const unresolved = evaluateReviewTriage(
+    snapshot({ ...dismissed, reviewThreads: [thread([finding()])] }),
+  );
+  assert.equal(unresolved.conclusion, "failure");
+  assert.match(unresolved.title, /Reviewer findings are unresolved/);
+  assert.match(report(unresolved), /Reviewer: CodeRabbit/);
+
+  const resolved = evaluateReviewTriage(
+    snapshot({ ...dismissed, reviewThreads: [thread([finding(), reply()])] }),
+  );
+  assert.equal(resolved.conclusion, "failure");
+  assert.match(resolved.title, /No accepted review/);
+});
+
+test("a dismissed reviewer that only replied to itself still counts", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [{ author: "coderabbitai[bot]", state: "DISMISSED", body: "" }],
+      reviewThreads: [thread([finding(), reply("coderabbitai[bot]")])],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /Reviewer findings are unresolved/);
+});
+
+test("unresolved threads from other authors are reported under an attestation too", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [
+        comment(
+          `adversarial-review: complete ${OLD} by claude-opus-5\nfindings: 1\n1. Race on replay - resolved: fixed - guarded`,
+        ),
+        signOff,
+      ],
+      reviewThreads: [
+        thread([{ ...finding("Widen the lock."), author: "a-human" }]),
+      ],
+    }),
+  );
+  // Informational only: the gate still passes, but the threads are named.
+  assert.equal(verdict.conclusion, "success");
+  assert.match(
+    report(verdict),
+    /For information only, not gating: 1 unresolved inline thread\(s\) from other authors/,
+  );
+  assert.match(report(verdict), /by a-human/);
 });
 
 test("shaNames accepts an unambiguous prefix and rejects a wrong one", () => {

@@ -60,7 +60,7 @@ const rest = async (path, init = {}) => {
 
 // Every paging bound below fails closed rather than returning what it has. A
 // truncated snapshot loses comments, commits, or replies, and each loss points
-// the same way: an unanswered finding or an absent attestation that the gate
+// the same way: an unresolved finding or an absent attestation that the gate
 // then cannot see. A gate that passes on partial data is worse than one that
 // refuses to judge.
 const PAGE_LIMIT = 20;
@@ -128,7 +128,7 @@ const fetchReviewThreads = async (owner, name, number) => {
     for (const node of connection.nodes) {
       if (node.comments.pageInfo.hasNextPage) {
         throw new GitHubFailure(
-          `the thread on ${node.path} has more than 100 comments, so the gate cannot see whether it was answered`,
+          `the thread on ${node.path} has more than 100 comments, so the gate cannot see whether it was resolved`,
         );
       }
       threads.push({
@@ -195,6 +195,19 @@ export const fetchSnapshot = async ({ owner, repo, number }) => {
   };
 };
 
+/**
+ * The app whose check runs this publisher may update.
+ *
+ * A check name is not an ownership proof: any app installed on the repository
+ * may publish a check run called `review-triage` on the same commit, and
+ * patching that one answers 403 instead of publishing a verdict - which would
+ * take down both gates at once, since the failure handler republishes through
+ * this same call. In Actions the gate publishes under GITHUB_TOKEN, whose check
+ * runs belong to the `github-actions` app; another installation can name its
+ * own app through the environment.
+ */
+const PUBLISHER_APP_SLUG = process.env.MERGE_GATES_APP_SLUG ?? "github-actions";
+
 /** A check run body caps at 65535 characters; keep the head of the report. */
 const cap = (text, limit) =>
   text.length <= limit
@@ -202,9 +215,11 @@ const cap = (text, limit) =>
     : `${text.slice(0, limit - 40)}\n... report truncated ...`;
 
 /**
- * Publishes one verdict as a check run on the head commit, updating the run of
- * the same name when one already exists so a gate keeps a single row in the
- * pull request's checks list instead of a new row per comment.
+ * Publishes one verdict as a check run on the head commit, updating this app's
+ * own run of the same name when one already exists so a gate keeps a single row
+ * in the pull request's checks list instead of a new row per comment. A run of
+ * that name belonging to another app is left alone and a fresh one is created,
+ * because only the app that created a check run may update it.
  */
 export const publishCheckRun = async ({
   owner,
@@ -231,7 +246,10 @@ export const publishCheckRun = async ({
   const existing = await rest(
     `/repos/${owner}/${repo}/commits/${headSha}/check-runs?check_name=${encodeURIComponent(name)}&per_page=100`,
   );
-  const mine = existing.check_runs?.[0];
+  const mine = (existing.check_runs ?? []).find(
+    (run) =>
+      (run.app?.slug ?? "").toLowerCase() === PUBLISHER_APP_SLUG.toLowerCase(),
+  );
   if (mine === undefined) {
     return rest(`/repos/${owner}/${repo}/check-runs`, {
       method: "POST",
