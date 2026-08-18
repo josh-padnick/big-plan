@@ -29,6 +29,7 @@ import {
   readSnapshot,
   reviewStoreFor,
   writeAgentHeartbeat,
+  writeAgentHeartbeatEnded,
   writeResolvedCommentIds,
   writeSnapshot,
   writeSessionHeartbeatValue,
@@ -601,6 +602,118 @@ describe("review store agent presence", () => {
       state: "waiting",
       updatedAtMs: 10_000,
     });
+  });
+
+  it("reads an observed session end as an immediate disconnect", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "1111111111111111",
+      now: 10_000,
+    });
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "1111111111111111",
+        now: 10_500,
+      }),
+    ).resolves.toBe(true);
+    // One second later: far inside the aging window, and disconnected anyway.
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 11_500,
+      }),
+    ).resolves.toEqual({
+      connected: false,
+      state: "waiting",
+      updatedAtMs: 10_500,
+      endedAtMs: 10_500,
+    });
+  });
+
+  it("keeps an ended session's other heartbeat facts", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeFile(
+      store.agentHeartbeatPath,
+      JSON.stringify({
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "waiting",
+        model: { name: "Grok 4.6" },
+        writerId: "1111111111111111",
+        updatedAtMs: 10_000,
+      }),
+    );
+    await writeAgentHeartbeatEnded({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      writerId: "1111111111111111",
+      now: 10_500,
+    });
+    // A session that ended still names the agent that held it.
+    expect(
+      JSON.parse(await readFile(store.agentHeartbeatPath, "utf8")),
+    ).toMatchObject({ model: { name: "Grok 4.6" }, state: "ended" });
+  });
+
+  it("refuses to end a heartbeat another agent now owns", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "2222222222222222",
+      now: 20_000,
+    });
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "1111111111111111",
+        now: 20_500,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 20_500,
+      }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      updatedAtMs: 20_000,
+    });
+  });
+
+  it("refuses to end a heartbeat that names no writer", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      now: 20_000,
+    });
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "1111111111111111",
+        now: 20_500,
+      }),
+    ).resolves.toBe(false);
   });
 });
 

@@ -2263,20 +2263,36 @@ export type AgentPresence = {
   readonly state: "waiting" | "working";
   readonly requestId?: string;
   readonly updatedAtMs?: number;
+  /**
+   * When the loop that wrote this heartbeat observed its own session ending.
+   * Its presence is the whole difference between a silence Big Plan is still
+   * inferring from and an end it was told about.
+   */
+  readonly endedAtMs?: number;
 };
 
-/** Refreshes the coding-agent liveness signal with its observable state. */
+/**
+ * Refreshes the coding-agent liveness signal with its observable state.
+ *
+ * `writerId` identifies the invocation doing the writing, because the session
+ * id is shared by every agent process attached to this review and so cannot
+ * tell two of them apart. A loop that intends to record its own end has to
+ * pass one, or `writeAgentHeartbeatEnded` has no way to prove the heartbeat it
+ * would overwrite is still its own.
+ */
 export const writeAgentHeartbeat = async ({
   store,
   sessionId,
   state,
   requestId,
+  writerId,
   now = Date.now(),
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
   readonly state: "waiting" | "working";
   readonly requestId?: string;
+  readonly writerId?: string;
   readonly now?: number;
 }): Promise<void> => {
   await writeStoreJson({
@@ -2285,9 +2301,57 @@ export const writeAgentHeartbeat = async ({
       sessionId,
       state,
       ...(requestId === undefined ? {} : { requestId }),
+      ...(writerId === undefined ? {} : { writerId }),
       updatedAtMs: now,
     },
   });
+};
+
+/**
+ * Records that this loop observed its own session end, and refuses to speak
+ * for any other.
+ *
+ * The guard is the point: by the time a loop can write this, a newer agent may
+ * already own the heartbeat, and marking that live session ended would be a
+ * worse lie than the stale connection this marker exists to remove. Every
+ * other field is carried through untouched, so whatever the live heartbeat
+ * says about the agent's identity keeps saying it after the session ends.
+ *
+ * Returns whether the marker was written.
+ */
+export const writeAgentHeartbeatEnded = async ({
+  store,
+  sessionId,
+  writerId,
+  now = Date.now(),
+}: {
+  readonly store: ReviewStore;
+  readonly sessionId: string;
+  readonly writerId: string;
+  readonly now?: number;
+}): Promise<boolean> => {
+  const value = await readStoreJson(store.agentHeartbeatPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("sessionId" in value) ||
+    value.sessionId !== sessionId ||
+    !("writerId" in value) ||
+    value.writerId !== writerId
+  ) {
+    return false;
+  }
+  await writeStoreJson({
+    path: store.agentHeartbeatPath,
+    value: {
+      ...(value as Readonly<Record<string, unknown>>),
+      state: "ended",
+      updatedAtMs: now,
+      endedAtMs: now,
+    },
+  });
+  return true;
 };
 
 /** Reads the coding-agent presence signal without turning stale data into work. */
@@ -2310,13 +2374,30 @@ export const readAgentPresence = async ({
     !("sessionId" in value) ||
     value.sessionId !== sessionId ||
     !("state" in value) ||
-    (value.state !== "waiting" && value.state !== "working") ||
+    (value.state !== "waiting" &&
+      value.state !== "working" &&
+      value.state !== "ended") ||
     !("updatedAtMs" in value) ||
     typeof value.updatedAtMs !== "number" ||
     !Number.isFinite(value.updatedAtMs) ||
     now - value.updatedAtMs < 0
   ) {
     return { connected: false, state: "waiting" };
+  }
+  // An end the loop observed needs no aging: the question aging answers has
+  // already been answered, by the only process that could answer it.
+  if (value.state === "ended") {
+    return {
+      connected: false,
+      state: "waiting",
+      updatedAtMs: value.updatedAtMs,
+      endedAtMs:
+        "endedAtMs" in value &&
+        typeof value.endedAtMs === "number" &&
+        Number.isFinite(value.endedAtMs)
+          ? value.endedAtMs
+          : value.updatedAtMs,
+    };
   }
   if (now - value.updatedAtMs > maximumAgeMs) {
     return {
