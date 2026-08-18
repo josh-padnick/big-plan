@@ -14,13 +14,15 @@
 
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { answerForPlan } from "./plan-status.js";
 import {
+  confirmStopPage,
   endedReviewPage,
   identityPage,
   interruptedReviewPage,
   neverStartedReviewPage,
+  serviceStoppedPage,
   unknownPlanPage,
 } from "./pages.js";
 import { servicePort } from "./paths.js";
@@ -28,6 +30,14 @@ import { isServicePlanId } from "./registry.js";
 
 const TOKEN_HEADER = "x-big-plan-service-token";
 const PLAN_ROUTE = /^\/plan\/([a-z0-9]+)\/?$/;
+
+// A stop posted from the identity page carries this instead of the owner
+// token. The browser must never hold the token that authorizes the CLI, but
+// same-origin checks alone are not a credential, so the page gets one of its
+// own: minted per boot, kept in memory, never written to disk, and embedded
+// only in pages this very process served. It dies with the process, which is
+// exactly the lifetime a page-scoped credential should have.
+const MAX_FORM_BYTES = 4 * 1024;
 
 /** What `GET /healthz` answers, and the only thing that proves identity. */
 export const SERVICE_PRODUCT = "big-plan-service";
@@ -68,9 +78,12 @@ const sendHtml = ({
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
     // The pages are self-contained; nothing they need comes from anywhere
-    // else, so the policy that says so is free to be this strict.
+    // else, so the policy that says so is free to be this strict. form-action
+    // is named explicitly because it does not fall back to default-src, and
+    // the stop flow is a form: this is what stops a page from being tricked
+    // into posting it somewhere else.
     "content-security-policy":
-      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
+      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
   });
@@ -106,6 +119,32 @@ const refuse = ({
   response.end(`${reason}\n`);
 };
 
+// A stop form is a handful of bytes; anything larger is not one, and reading
+// it would only give an unauthenticated caller a way to occupy memory.
+const readFormNonce = async (
+  request: IncomingMessage,
+): Promise<string | undefined> =>
+  new Promise((settle) => {
+    let body = "";
+    let overflowed = false;
+    request.on("data", (chunk: Buffer) => {
+      if (overflowed) return;
+      body += chunk.toString("utf8");
+      if (body.length > MAX_FORM_BYTES) {
+        overflowed = true;
+        body = "";
+      }
+    });
+    request.on("end", () => {
+      settle(
+        overflowed
+          ? undefined
+          : (new URLSearchParams(body).get("nonce") ?? undefined),
+      );
+    });
+    request.on("error", () => settle(undefined));
+  });
+
 const constantTimeEquals = (supplied: string, expected: string): boolean => {
   const a = Buffer.from(supplied);
   const b = Buffer.from(expected);
@@ -133,6 +172,7 @@ export const startService = async ({
   readonly now?: number;
 }): Promise<ServiceRuntime> => {
   const startedAtMs = now;
+  const pageNonce = randomBytes(32).toString("base64url");
 
   const handle = async ({
     request,
@@ -235,13 +275,33 @@ export const startService = async ({
       }
     }
 
+    if (method === "GET" && target.pathname === "/stop") {
+      // A link, not a scripted button, so the whole stop flow works with
+      // scripts disabled.
+      sendHtml({
+        response,
+        status: 200,
+        html: confirmStopPage({ nonce: pageNonce }),
+      });
+      return;
+    }
+
     if (method === "POST" && target.pathname === "/stop") {
       // No CORS allowance is ever sent, so a browser hides the response - but
       // a simple cross-origin POST still arrives and would still be executed
       // without these checks.
+      //
+      // "null" is an absent origin claim, not a foreign one, and this page
+      // produces it on purpose: a form navigation from a response carrying
+      // Referrer-Policy: no-referrer is sent with Origin: null. Refusing it
+      // would mean refusing the service's own stop form. Sec-Fetch-Site below
+      // is the check that actually distinguishes where a request came from,
+      // and it stays unconditional; the credential still has to be one this
+      // process issued.
       const requestOrigin = request.headers.origin;
       if (
         requestOrigin !== undefined &&
+        requestOrigin !== "null" &&
         requestOrigin !== `http://127.0.0.1:${boundPort}` &&
         requestOrigin !== `http://localhost:${boundPort}`
       ) {
@@ -253,17 +313,33 @@ export const startService = async ({
         refuse({ response, status: 403, reason: "Foreign site" });
         return;
       }
+      // Either credential authorizes a stop, and one of them is required:
+      // the owner token for the CLI and the runtime relay, the page nonce for
+      // a page this process served. A request carrying neither is refused.
       const supplied = request.headers[TOKEN_HEADER];
       const expected = await readToken();
-      if (
-        expected === undefined ||
-        typeof supplied !== "string" ||
-        !constantTimeEquals(supplied, expected)
-      ) {
-        refuse({ response, status: 401, reason: "Missing or wrong token" });
+      const byToken =
+        expected !== undefined &&
+        typeof supplied === "string" &&
+        constantTimeEquals(supplied, expected);
+      const byNonce =
+        !byToken &&
+        constantTimeEquals((await readFormNonce(request)) ?? "", pageNonce);
+      if (!byToken && !byNonce) {
+        refuse({
+          response,
+          status: 401,
+          reason: "Missing or wrong credential",
+        });
         return;
       }
-      sendJson({ response, status: 200, value: { stopping: true } });
+      // The dying process serves the last page itself; after this the address
+      // stops answering, which is the honest end state.
+      if (byNonce) {
+        sendHtml({ response, status: 200, html: serviceStoppedPage() });
+      } else {
+        sendJson({ response, status: 200, value: { stopping: true } });
+      }
       // Answered before the listener closes, so the caller learns the request
       // was accepted rather than seeing its connection cut mid-reply.
       response.on("finish", () => {

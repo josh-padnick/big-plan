@@ -172,7 +172,8 @@ describe("the service listener", () => {
       value: { sessionId, running: true, updatedAtMs: Date.now() - 30_000 },
     });
     const html = await (await get(`/plan/${planId}`)).text();
-    expect(html).toContain("stopped unexpectedly");
+    expect(html).toContain("The review stopped unexpectedly.");
+    expect(html).toContain("Last seen at");
     expect(html).not.toContain("ended normally");
   });
 
@@ -186,6 +187,118 @@ describe("the service listener", () => {
   it("should answer a malformed plan id like an unknown one", async () => {
     const response = await get("/plan/not-a-plan-id");
     expect(response.status).toBe(404);
+  });
+
+  it("should welcome a visitor who opened the port, and offer the way out", async () => {
+    const html = await (await get("/")).text();
+    expect(html).toContain("Welcome to Big Plan.");
+    expect(html).toContain("Big Plan service");
+    expect(html).toContain(`Hosted at 127.0.0.1:${runtime.port}.`);
+    expect(html).toContain('href="/stop"');
+  });
+
+  it("should confirm a stop with the consequence before the control", async () => {
+    const response = await get("/stop");
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("Stop the service?");
+    expect(html).toContain(
+      "Nothing is listening on this address after you stop.",
+    );
+    expect(html).toContain('name="nonce"');
+    // The service is still running: reaching the confirm page changes nothing.
+    expect((await get("/healthz")).status).toBe(200);
+  });
+
+  it("should let a page this process served stop it, without the owner token", async () => {
+    const nonce = /name="nonce" value="([^"]+)"/u.exec(
+      await (await get("/stop")).text(),
+    )?.[1];
+    expect(nonce).toBeDefined();
+    const response = await get("/stop", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "sec-fetch-site": "same-origin",
+      },
+      body: new URLSearchParams({ nonce: nonce ?? "" }).toString(),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("The service is stopped.");
+    await expect(get("/healthz")).rejects.toThrow();
+  });
+
+  it("should refuse a stop carrying a nonce it never issued", async () => {
+    const response = await get("/stop", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ nonce: "not-the-nonce" }).toString(),
+    });
+    expect(response.status).toBe(401);
+    expect((await get("/healthz")).status).toBe(200);
+  });
+
+  it("should accept the stop form a browser sends with no origin claim", async () => {
+    // Regression: this page sets Referrer-Policy: no-referrer, so Chrome sends
+    // its own same-origin form navigation with Origin: null. Refusing that
+    // refused the service's own stop button, and only a real browser showed it.
+    const nonce = /name="nonce" value="([^"]+)"/u.exec(
+      await (await get("/stop")).text(),
+    )?.[1];
+    const response = await get("/stop", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "null",
+        "sec-fetch-site": "same-origin",
+      },
+      body: new URLSearchParams({ nonce: nonce ?? "" }).toString(),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("The service is stopped.");
+  });
+
+  it("should still refuse an absent origin claim that came from another site", async () => {
+    // A sandboxed cross-site frame also sends Origin: null, so Sec-Fetch-Site
+    // is what has to carry the refusal once null is admitted.
+    const nonce = /name="nonce" value="([^"]+)"/u.exec(
+      await (await get("/stop")).text(),
+    )?.[1];
+    const response = await get("/stop", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "null",
+        "sec-fetch-site": "cross-site",
+      },
+      body: new URLSearchParams({ nonce: nonce ?? "" }).toString(),
+    });
+    expect(response.status).toBe(403);
+    expect((await get("/healthz")).status).toBe(200);
+  });
+
+  it("should tell the browser the stop form may only post to this service", async () => {
+    const policy = (await get("/stop")).headers.get("content-security-policy");
+    expect(policy).toContain("form-action 'self'");
+    expect(policy).toContain("base-uri 'none'");
+  });
+
+  it("should refuse a nonce replayed from another site", async () => {
+    // The nonce proves the page came from this process, not that the request
+    // did, so the origin and site checks stay unconditional in front of it.
+    const nonce = /name="nonce" value="([^"]+)"/u.exec(
+      await (await get("/stop")).text(),
+    )?.[1];
+    const response = await get("/stop", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "http://evil.test",
+      },
+      body: new URLSearchParams({ nonce: nonce ?? "" }).toString(),
+    });
+    expect(response.status).toBe(403);
+    expect((await get("/healthz")).status).toBe(200);
   });
 
   it("should send inert, uncacheable pages that reveal no referrer", async () => {
