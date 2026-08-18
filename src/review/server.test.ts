@@ -35,6 +35,7 @@ import {
   commitRequestTerminal,
   withResolvedCommentLock,
 } from "./request-mailbox.js";
+import { agentMutationJournalPath, writeStoreJson } from "./store.js";
 import {
   prepareReviewImageAssets,
   publishPreparedPlanAssets,
@@ -4123,5 +4124,164 @@ describe("review runtime queued messages", () => {
     expect(await storedRequest(requestId)).toMatchObject({
       body: "Keep this one after all.",
     });
+  });
+});
+
+/**
+ * The commit writes its journal before the rename, so a crash can leave one
+ * behind for work that never published. The reviewer's cancel is exactly the
+ * control someone reaches for then, so it settles that journal before it
+ * decides.
+ */
+describe("review runtime cancel versus an interrupted commit", () => {
+  const strandedJournal = async ({
+    runtime: live,
+    requestId,
+    planPath,
+    published,
+  }: {
+    readonly runtime: ReviewRuntime;
+    readonly requestId: string;
+    readonly planPath: string;
+    readonly published: string;
+  }): Promise<void> => {
+    const source = await readFile(planPath, "utf8");
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId,
+      sessionId: live.sessionId,
+      planId: live.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-17T12:00:00.000Z",
+      body: "Is the plan ready?",
+    });
+    await writeAgentRequest({ store: live.store, request });
+    await writeSnapshot({
+      store: live.store,
+      snapshot: deriveSnapshotDigest(source),
+      source,
+    });
+    const claimed = await claimAgentRequest({
+      store: live.store,
+      activeSessionId: live.sessionId,
+      requestId,
+      claimedBy: live.sessionId,
+      baselineSnapshot: deriveSnapshotDigest(source),
+      now: "2026-08-17T12:00:01.000Z",
+    });
+    await writeStoreJson({
+      path: agentMutationJournalPath({ store: live.store, requestId }),
+      value: {
+        version: 1,
+        requestId,
+        generation: 1,
+        claimedBy: live.sessionId,
+        baseSnapshot: deriveSnapshotDigest(source),
+        resultSnapshot: deriveSnapshotDigest(published),
+        answeredAt: "2026-08-17T12:00:05.000Z",
+        response: validateAgentResponseDraft({
+          value: { requestId, message: "The plan is ready." },
+          request: claimed,
+          commentsById: new Map(),
+          changedBlocks: new Set<string>(),
+          currentSnapshot: deriveSnapshotDigest(published),
+          now: "2026-08-17T12:00:05.000Z",
+        }),
+      },
+    });
+  };
+
+  const runtimeFor = async (prefix: string) => {
+    const directory = await mkdtemp(join(tmpdir(), prefix));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, PLAN);
+    const live = await startReviewRuntime({ planPath });
+    const descriptor: unknown = JSON.parse(
+      await readFile(live.store.sessionPath, "utf8"),
+    );
+    const liveToken =
+      typeof descriptor === "object" &&
+      descriptor !== null &&
+      "token" in descriptor &&
+      typeof descriptor.token === "string"
+        ? descriptor.token
+        : "";
+    const cancel = (requestId: string) =>
+      fetch(`${live.url.replace(/\/$/u, "")}/api/agent-cancel`, {
+        method: "POST",
+        headers: {
+          "x-big-plan-review-token": liveToken,
+          "sec-fetch-site": "same-origin",
+          origin: live.url.replace(/\/$/u, ""),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ requestId }),
+      });
+    const close = async () => {
+      await live.close();
+      await rm(directory, { recursive: true, force: true });
+    };
+    return { live, planPath, cancel, close };
+  };
+
+  it("should cancel through a journal whose rename never ran", async () => {
+    const { live, planPath, cancel, close } = await runtimeFor(
+      "big-plan-cancel-stranded-",
+    );
+    const requestId = "abababababababab";
+    try {
+      // The plan never moved, so nothing this journal describes was published.
+      await strandedJournal({
+        runtime: live,
+        requestId,
+        planPath,
+        published: `${PLAN}\nA revision that never landed.\n`,
+      });
+
+      expect((await cancel(requestId)).status).toBe(200);
+      const exchange = await readAgentExchange({
+        store: live.store,
+        sessionId: live.sessionId,
+        planId: live.planId,
+      });
+      expect(
+        exchange.requests.find((candidate) => candidate.requestId === requestId)
+          ?.canceledAt,
+      ).toBeDefined();
+      await expect(
+        readdir(live.store.agentMutationJournalDirectory),
+      ).resolves.toEqual([]);
+      await expect(readFile(planPath, "utf8")).resolves.toBe(PLAN);
+    } finally {
+      await close();
+    }
+  });
+
+  it("should refuse a cancel once that journal's rename won", async () => {
+    const { live, planPath, cancel, close } = await runtimeFor(
+      "big-plan-cancel-published-",
+    );
+    const requestId = "cdcdcdcdcdcdcdcd";
+    const published = `${PLAN}\nThe published revision.\n`;
+    try {
+      await strandedJournal({ runtime: live, requestId, planPath, published });
+      // The rename won before the crash, so the answer really is published.
+      await writeFile(planPath, published);
+
+      expect((await cancel(requestId)).status).toBe(409);
+      const exchange = await readAgentExchange({
+        store: live.store,
+        sessionId: live.sessionId,
+        planId: live.planId,
+      });
+      const settled = exchange.requests.find(
+        (candidate) => candidate.requestId === requestId,
+      );
+      expect(settled?.canceledAt).toBeUndefined();
+      expect(settled?.answeredAt).toBeDefined();
+      await expect(readFile(planPath, "utf8")).resolves.toBe(published);
+    } finally {
+      await close();
+    }
   });
 });

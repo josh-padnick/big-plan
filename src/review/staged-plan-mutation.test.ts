@@ -2,7 +2,14 @@
 // only under a live claim generation from an unmoved base, and an interrupted
 // commit has exactly one answer on each side of its rename.
 
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -663,6 +670,61 @@ describe("interrupted plan commit recovery", () => {
         planId,
       });
       expect(exchange.requests[0]?.canceledAt).toBeUndefined();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should report a journal it cannot read at all", async () => {
+    const { directory, planPath, store } = await preparedPlan();
+    try {
+      // A journal damaged after its commit crashed. Skipping it silently would
+      // leave a published revision with no response and its request still open,
+      // which is exactly the divergence the journal exists to prevent.
+      const path = join(store.agentMutationJournalDirectory, `${REQUEST}.json`);
+      await writeFile(path, "{ truncated", "utf8");
+
+      const refusal = await recoverStagedPlanMutations({
+        store,
+        planPath,
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(refusal).toBeInstanceOf(StagedPlanMutationRejected);
+      expect((refusal as Error).message).toContain(path);
+      expect((refusal as Error).message).toMatch(/[Dd]elete that file/u);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should name the journal when finishing its records fails", async () => {
+    const { directory, planPath, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const claimed = await claim({ store, claimedBy: AGENT_A });
+      const resultSnapshot = deriveSnapshotDigest(RESULT);
+      await prepareJournal({ store, request: claimed, resultSnapshot });
+      await writeFile(planPath, RESULT, "utf8");
+      // The published revision's snapshot cannot be retained, so finishing the
+      // records fails after the answer is already stamped.
+      await mkdir(join(store.snapshotDirectory, `${resultSnapshot}.mdx`), {
+        recursive: true,
+      });
+
+      const refusal = await recoverStagedPlanMutations({
+        store,
+        planPath,
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(refusal).toBeInstanceOf(StagedPlanMutationRejected);
+      expect((refusal as Error).message).toContain(
+        join(store.agentMutationJournalDirectory, `${REQUEST}.json`),
+      );
+      expect((refusal as Error).message).toMatch(/[Dd]elete /u);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

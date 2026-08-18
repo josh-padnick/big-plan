@@ -230,25 +230,22 @@ export const readCommittedRevisions = async ({
   readRevisionsWhere({ store, wanted: () => true });
 
 /**
- * Reads only the revisions a reader has not been moved onto yet.
+ * Reads only the revisions the caller is ready to move a reader onto.
  *
  * The browser polls the exchange every couple of seconds for the life of the
  * review, and the log grows by one file per answered request and is never
  * pruned. Folding all of it on every poll is the read-every-file pattern
- * BIG-44 removed from these routes, so the poll path asks for the unobserved
- * ids and reads nothing else.
+ * BIG-44 removed from these routes, so the poll path names the ids it can act
+ * on and reads nothing else.
  */
-export const readUnobservedCommittedRevisions = async ({
+export const readCommittedRevisionsToObserve = async ({
   store,
-  hasObserved,
+  shouldObserve,
 }: {
   readonly store: ReviewStore;
-  readonly hasObserved: (requestId: string) => boolean;
+  readonly shouldObserve: (requestId: string) => boolean;
 }): Promise<ReadonlyArray<CommittedPlanRevision>> =>
-  readRevisionsWhere({
-    store,
-    wanted: (requestId) => !hasObserved(requestId),
-  });
+  readRevisionsWhere({ store, wanted: shouldObserve });
 
 /**
  * Folds the revision log into change sets. The baseline and provenance come

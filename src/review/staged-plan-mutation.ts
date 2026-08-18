@@ -436,8 +436,24 @@ const readJournals = async (
   const journals: Array<MutationJournal> = [];
   for (const name of names.filter((entry) => JOURNAL_FILE.test(entry))) {
     const path = join(store.agentMutationJournalDirectory, name);
-    const value = await readStoreJson(path);
-    if (value === undefined) continue;
+    let value: unknown;
+    try {
+      value = JSON.parse(await readFile(path, "utf8"));
+    } catch (error: unknown) {
+      // A journal that vanished between the listing and the read has nothing
+      // left to settle. Anything else - unparseable, truncated, unreadable -
+      // is a commit whose outcome this build cannot determine, and skipping it
+      // silently is what would leave the plan and its records disagreeing
+      // forever with nobody told.
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        continue;
+      }
+      throw unreadableJournal(path);
+    }
     journals.push(validateJournal(value, path));
   }
   return journals;
@@ -507,11 +523,17 @@ export const recoverStagedPlanMutations = async ({
               response: journal.response,
               now: journal.answeredAt,
             });
+            await finalizeCommittedMutation({
+              store: lockedStore,
+              journal,
+              resultSource: source,
+            });
           } catch (error: unknown) {
             // The rename already published this revision, so there is no
             // rolling back and no guessing left to do. Naming the journal and
             // the remedy is what keeps one unsettleable record from making the
-            // plan permanently unservable.
+            // plan permanently unservable - and finishing the records is as
+            // able to fail as stamping the answer was.
             throw unsettleableJournal({
               path: journalPath({
                 store: lockedStore,
@@ -521,11 +543,6 @@ export const recoverStagedPlanMutations = async ({
               error,
             });
           }
-          await finalizeCommittedMutation({
-            store: lockedStore,
-            journal,
-            resultSource: source,
-          });
           recoveries.push({
             outcome: "completed",
             requestId: journal.requestId,

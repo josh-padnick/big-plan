@@ -322,7 +322,7 @@ describe("the agent exchange read window", () => {
  * The browser polls the exchange for the life of the review, and the committed
  * revision log grows by one file per answered request and is never pruned. It
  * is the same directory-shaped hazard as the response window, so it is held to
- * the same rule: read only what the reader has not been moved onto yet.
+ * the same rule: read only what the reader can act on right now.
  */
 describe("the polled agent snapshot", () => {
   const revisionAt = ({
@@ -341,6 +341,25 @@ describe("the polled agent snapshot", () => {
     provenance: "chat" as const,
     committedAt,
   });
+
+  /** One request the exchange reports as answered, and the revision it published. */
+  const publishedRevision = async ({
+    store,
+    index,
+    resultSnapshot,
+    committedAt,
+  }: {
+    readonly store: Awaited<ReturnType<typeof temporaryStore>>;
+    readonly index: number;
+    readonly resultSnapshot: string;
+    readonly committedAt: string;
+  }): Promise<void> => {
+    await answeredChat({ store, index });
+    await recordCommittedRevision({
+      store,
+      revision: revisionAt({ index, resultSnapshot, committedAt }),
+    });
+  };
 
   // Only the fields the polled read touches; the rest of the runtime's shared
   // state has no part in what this route reads from disk.
@@ -364,24 +383,22 @@ describe("the polled agent snapshot", () => {
   const currentSnapshotOf = (response: { readonly value: unknown }): unknown =>
     (response.value as { readonly currentSnapshot: unknown }).currentSnapshot;
 
+  const freshProgress = () =>
+    createReaderProgress({
+      initialSnapshot: SNAPSHOT,
+      observedResponseIds: [],
+    });
+
   it("should not read a committed revision it has already moved the reader onto", async () => {
     const store = await temporaryStore();
     const published = "b".repeat(16);
-    await recordCommittedRevision({
+    await publishedRevision({
       store,
-      revision: revisionAt({
-        index: 1,
-        resultSnapshot: published,
-        committedAt: "2026-08-17T12:00:00.000Z",
-      }),
+      index: 1,
+      resultSnapshot: published,
+      committedAt: "2026-08-17T12:00:00.000Z",
     });
-    const context = pollContext({
-      store,
-      readerProgress: createReaderProgress({
-        initialSnapshot: SNAPSHOT,
-        observedResponseIds: [],
-      }),
-    });
+    const context = pollContext({ store, readerProgress: freshProgress() });
 
     counters.revisionReads = [];
     expect(currentSnapshotOf(await readAgentSnapshot(context))).toBe(published);
@@ -395,31 +412,21 @@ describe("the polled agent snapshot", () => {
   it("should still read a revision published since the last poll", async () => {
     const store = await temporaryStore();
     const first = "b".repeat(16);
-    await recordCommittedRevision({
+    await publishedRevision({
       store,
-      revision: revisionAt({
-        index: 1,
-        resultSnapshot: first,
-        committedAt: "2026-08-17T12:00:00.000Z",
-      }),
+      index: 1,
+      resultSnapshot: first,
+      committedAt: "2026-08-17T12:00:00.000Z",
     });
-    const context = pollContext({
-      store,
-      readerProgress: createReaderProgress({
-        initialSnapshot: SNAPSHOT,
-        observedResponseIds: [],
-      }),
-    });
+    const context = pollContext({ store, readerProgress: freshProgress() });
     await readAgentSnapshot(context);
 
     const second = "c".repeat(16);
-    await recordCommittedRevision({
+    await publishedRevision({
       store,
-      revision: revisionAt({
-        index: 2,
-        resultSnapshot: second,
-        committedAt: "2026-08-17T12:00:10.000Z",
-      }),
+      index: 2,
+      resultSnapshot: second,
+      committedAt: "2026-08-17T12:00:10.000Z",
     });
 
     counters.revisionReads = [];
@@ -429,14 +436,11 @@ describe("the polled agent snapshot", () => {
 
   it("should read nothing at all from a log the runtime seeded it with", async () => {
     const store = await temporaryStore();
-    const published = "b".repeat(16);
-    await recordCommittedRevision({
+    await publishedRevision({
       store,
-      revision: revisionAt({
-        index: 1,
-        resultSnapshot: published,
-        committedAt: "2026-08-17T12:00:00.000Z",
-      }),
+      index: 1,
+      resultSnapshot: "b".repeat(16),
+      committedAt: "2026-08-17T12:00:00.000Z",
     });
     const context = pollContext({
       store,
@@ -451,5 +455,42 @@ describe("the polled agent snapshot", () => {
     counters.revisionReads = [];
     expect(currentSnapshotOf(await readAgentSnapshot(context))).toBe(SNAPSHOT);
     expect(counters.revisionReads).toEqual([]);
+  });
+
+  it("should defer a revision the same payload still calls pending", async () => {
+    const store = await temporaryStore();
+    const published = "b".repeat(16);
+    // The commit records its revision before it marks the request answered, so
+    // a poll can land between the two. Sending the new snapshot now would hand
+    // the browser an article whose response is absent from the same payload.
+    await writeAgentRequest({
+      store,
+      request: messageAgentRequest({
+        kind: "chat",
+        requestId: requestId(1),
+        sessionId: SESSION,
+        planId: PLAN_ID,
+        premiseSnapshot: SNAPSHOT,
+        createdAt: "2026-08-17T11:59:00.000Z",
+        body: "Question 1",
+      }),
+    });
+    await recordCommittedRevision({
+      store,
+      revision: revisionAt({
+        index: 1,
+        resultSnapshot: published,
+        committedAt: "2026-08-17T12:00:00.000Z",
+      }),
+    });
+    const context = pollContext({ store, readerProgress: freshProgress() });
+
+    counters.revisionReads = [];
+    expect(currentSnapshotOf(await readAgentSnapshot(context))).toBe(SNAPSHOT);
+    expect(counters.revisionReads).toEqual([]);
+
+    // The commit finishes, and the very next poll moves the reader.
+    await answeredChat({ store, index: 1 });
+    expect(currentSnapshotOf(await readAgentSnapshot(context))).toBe(published);
   });
 });
