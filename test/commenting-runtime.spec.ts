@@ -2958,7 +2958,7 @@ test("should head each open batch with its own state and its own threads", async
   const threadsIn = (request: AgentFeedbackRequest) =>
     batchGroup(request).locator("[data-review-comment-id]");
   const spinnerIn = (request: AgentFeedbackRequest) =>
-    batchGroup(request).locator("h3 span.animate-spin");
+    batchGroup(request).locator("h3 [data-review-working-indicator]");
 
   const sendBatch = async (first: string, second: string): Promise<void> => {
     await stageComment(page, first);

@@ -80,7 +80,12 @@ const LifecycleSection = ({
   >
     <h3 className="m-0 mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-caps">
       {tone === "working" ? (
-        <WorkingMark />
+        <WorkingMark
+          // The heading's working treatment, addressable without naming a
+          // presentation class. It is decoration to a reader, so it carries no
+          // role or name a journey could assert instead.
+          data-review-working-indicator=""
+        />
       ) : tone === "ready" ? (
         <Icon icon={CHECK_ICON} />
       ) : tone === "queued" ? (
@@ -101,9 +106,11 @@ export type CommentsSurfaceBatch = {
   /** Gives one batch's group a stable address for scoping and testing. */
   readonly requestId: string;
   /**
-   * The batch's own size, which is not always the length of the list below: a
-   * lone batch heads its section while the threads it covers stay in the
-   * lifecycle group that describes them.
+   * How many of this batch's comments the sidebar is showing, which is not
+   * always the length of the list below. Grouped batches head exactly the
+   * threads counted here. A lone batch instead heads the sidebar's working
+   * group, which holds its threads once an agent picks the batch up and
+   * nothing while the batch is still waiting in the queued group.
    */
   readonly count: number;
   readonly content: ReactNode;
