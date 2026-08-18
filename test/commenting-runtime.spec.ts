@@ -3102,6 +3102,26 @@ test("should head each open batch with its own state and its own threads", async
     }
   });
 
+  await test.step("a search query cannot hand a batch another batch's threads", async () => {
+    // How many batches are open is a fact about the plan, not about what the
+    // query shows. Counting only the batches with visible comments dropped the
+    // sidebar back to the lone-batch path, which hands the batch still on
+    // screen the whole working group - the composition BIG-162 removes.
+    const search = sidebar.getByRole("searchbox", { name: "Search comments" });
+    await search.fill("second batch");
+    await expect(batchGroup(firstBatch)).toHaveCount(0);
+    await expect(threadsIn(secondBatch)).toHaveCount(2);
+    for (const comment of secondBatch.comments) {
+      await expect(
+        batchGroup(secondBatch).locator(
+          `[data-review-comment-id="${comment.id}"]`,
+        ),
+      ).toHaveCount(1);
+    }
+    await search.fill("");
+    await expect(threadsIn(firstBatch)).toHaveCount(2);
+  });
+
   await test.step("pickup moves the treatment to the next batch", async () => {
     // Only pickup earns the spinner. An agent takes one batch at a time, so
     // the first has to finish before the second can start.

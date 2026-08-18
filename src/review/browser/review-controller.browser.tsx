@@ -6653,10 +6653,17 @@ export const ReviewController = () => {
   // to the batch the header names, so each batch heads its own threads
   // (BIG-162). One batch has nothing to be confused with, so it keeps the
   // sidebar's existing shape - the whole working group beneath the one header.
+  //
+  // How many batches are open is a fact about the plan, so it is read from
+  // openBatches rather than from the sections that survive the search query.
+  // Counting the survivors let a query that hid one batch's comments drop the
+  // sidebar back to the lone-batch path, which hands the batch still on screen
+  // the whole working group - putting another request's working thread under
+  // that batch's header, which is the composition BIG-162 exists to remove.
   const batchGroups = openBatchThreads.map(({ request, commentIds }) => {
     const comments = selectThreadsAwaitingAgent({
       comments:
-        openBatchThreads.length > 1
+        openBatches.length > 1
           ? visibleUnresolvedSent.filter((comment) =>
               commentIds.includes(comment.id),
             )
