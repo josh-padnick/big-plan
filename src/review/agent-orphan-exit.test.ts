@@ -26,6 +26,10 @@ import { readAgentPresence } from "./store.js";
 // The observed-end path is bounded by one wait iteration plus a file write.
 // Anything approaching this budget means the loop is no longer checking its
 // spawner on every iteration.
+//
+// It bounds what is asserted, never what is waited for. A loaded machine that
+// takes longer has to fail with the time it actually took, because "timed out
+// after 2000ms" cannot tell a lost regression apart from a busy runner.
 const EXIT_BUDGET_MS = 2_000;
 
 const CONNECT_TIMEOUT_MS = 20_000;
@@ -159,7 +163,7 @@ describe("an agent loop whose spawner dies", () => {
               sessionId: runtime.sessionId,
             })
           ).endedAtMs !== undefined,
-        timeoutMs: EXIT_BUDGET_MS,
+        timeoutMs: CONNECT_TIMEOUT_MS,
         describe: "the loop to report its session ending",
       });
       expect(endedAfterMs).toBeLessThanOrEqual(EXIT_BUDGET_MS);
@@ -170,11 +174,12 @@ describe("an agent loop whose spawner dies", () => {
       });
       expect(presence.connected).toBe(false);
 
-      await until({
+      const exitedAfterMs = await until({
         condition: async () => !processIsAlive(loopPid),
-        timeoutMs: EXIT_BUDGET_MS,
+        timeoutMs: CONNECT_TIMEOUT_MS,
         describe: "the agent loop process to exit",
       });
+      expect(exitedAfterMs).toBeLessThanOrEqual(EXIT_BUDGET_MS);
 
       // The whole point: a dead agent's request stays available for a live one
       // instead of being taken to a pipe with no reader.

@@ -116,6 +116,7 @@ export type ReviewStore = {
   readonly sessionLockPath: string;
   readonly heartbeatLockPath: string;
   readonly agentHeartbeatPath: string;
+  readonly agentHeartbeatLockPath: string;
 };
 
 /**
@@ -514,6 +515,14 @@ export const reviewStoreFor = ({
     agentHeartbeatPath: inside({
       base: agentDirectory,
       leaf: "agent-heartbeat.json",
+    }),
+    // Both writers of the agent heartbeat take this one. The observed-end
+    // marker is a read-compare-write, so without it a newer loop's first
+    // heartbeat can land between the comparison and the write it guards, and
+    // a live agent gets a durable end recorded against it.
+    agentHeartbeatLockPath: inside({
+      base: agentDirectory,
+      leaf: ".agent-heartbeat.lock",
     }),
   });
 };
@@ -2272,6 +2281,39 @@ export type AgentPresence = {
 };
 
 /**
+ * The heartbeat lock stayed held for the whole waiting budget, so this write
+ * never ran. Both heartbeat writers answer it by reporting the write they did
+ * not make: the liveness signal repeats, and neither of its writers may end
+ * the session it is describing just because it lost a race for the file.
+ */
+class AgentHeartbeatLockContended extends Error {
+  constructor() {
+    super("Another process is writing the agent heartbeat");
+    this.name = "AgentHeartbeatLockContended";
+  }
+}
+
+/** Runs one agent heartbeat write, reporting contention instead of raising it. */
+const withAgentHeartbeatLock = async ({
+  store,
+  change,
+}: {
+  readonly store: ReviewStore;
+  readonly change: () => Promise<boolean>;
+}): Promise<boolean> => {
+  try {
+    return await withReviewStoreLock({
+      lockPath: store.agentHeartbeatLockPath,
+      change,
+      timeoutError: () => new AgentHeartbeatLockContended(),
+    });
+  } catch (error: unknown) {
+    if (error instanceof AgentHeartbeatLockContended) return false;
+    throw error;
+  }
+};
+
+/**
  * Refreshes the coding-agent liveness signal with its observable state.
  *
  * `writerId` identifies the invocation doing the writing, because the session
@@ -2279,6 +2321,11 @@ export type AgentPresence = {
  * tell two of them apart. A loop that intends to record its own end has to
  * pass one, or `writeAgentHeartbeatEnded` has no way to prove the heartbeat it
  * would overwrite is still its own.
+ *
+ * Returns whether the signal was refreshed. Contention is reported rather than
+ * raised because this runs every half second inside the connection loop's own
+ * wait: the next refresh answers a lost race, while an exception there would
+ * end the session this signal exists to vouch for.
  */
 export const writeAgentHeartbeat = async ({
   store,
@@ -2294,18 +2341,23 @@ export const writeAgentHeartbeat = async ({
   readonly requestId?: string;
   readonly writerId?: string;
   readonly now?: number;
-}): Promise<void> => {
-  await writeStoreJson({
-    path: store.agentHeartbeatPath,
-    value: {
-      sessionId,
-      state,
-      ...(requestId === undefined ? {} : { requestId }),
-      ...(writerId === undefined ? {} : { writerId }),
-      updatedAtMs: now,
+}): Promise<boolean> =>
+  withAgentHeartbeatLock({
+    store,
+    change: async () => {
+      await writeStoreJson({
+        path: store.agentHeartbeatPath,
+        value: {
+          sessionId,
+          state,
+          ...(requestId === undefined ? {} : { requestId }),
+          ...(writerId === undefined ? {} : { writerId }),
+          updatedAtMs: now,
+        },
+      });
+      return true;
     },
   });
-};
 
 /**
  * Records that this loop observed its own session end, and refuses to speak
@@ -2317,7 +2369,13 @@ export const writeAgentHeartbeat = async ({
  * other field is carried through untouched, so whatever the live heartbeat
  * says about the agent's identity keeps saying it after the session ends.
  *
- * Returns whether the marker was written.
+ * The lock is what makes that guard worth stating: reading the writer and
+ * overwriting it are one step against every other heartbeat writer, so a newer
+ * loop's first heartbeat cannot land inside the comparison and be marked
+ * ended by the loop it replaced.
+ *
+ * Returns whether the marker was written. A refusal, including a contended
+ * lock, leaves the unchanged aging window to report the silence instead.
  */
 export const writeAgentHeartbeatEnded = async ({
   store,
@@ -2329,30 +2387,34 @@ export const writeAgentHeartbeatEnded = async ({
   readonly sessionId: string;
   readonly writerId: string;
   readonly now?: number;
-}): Promise<boolean> => {
-  const value = await readStoreJson(store.agentHeartbeatPath);
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    !("sessionId" in value) ||
-    value.sessionId !== sessionId ||
-    !("writerId" in value) ||
-    value.writerId !== writerId
-  ) {
-    return false;
-  }
-  await writeStoreJson({
-    path: store.agentHeartbeatPath,
-    value: {
-      ...(value as Readonly<Record<string, unknown>>),
-      state: "ended",
-      updatedAtMs: now,
-      endedAtMs: now,
+}): Promise<boolean> =>
+  withAgentHeartbeatLock({
+    store,
+    change: async () => {
+      const value = await readStoreJson(store.agentHeartbeatPath);
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        Array.isArray(value) ||
+        !("sessionId" in value) ||
+        value.sessionId !== sessionId ||
+        !("writerId" in value) ||
+        value.writerId !== writerId
+      ) {
+        return false;
+      }
+      await writeStoreJson({
+        path: store.agentHeartbeatPath,
+        value: {
+          ...(value as Readonly<Record<string, unknown>>),
+          state: "ended",
+          updatedAtMs: now,
+          endedAtMs: now,
+        },
+      });
+      return true;
     },
   });
-  return true;
-};
 
 /** Reads the coding-agent presence signal without turning stale data into work. */
 export const readAgentPresence = async ({

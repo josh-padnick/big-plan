@@ -696,6 +696,91 @@ describe("review store agent presence", () => {
     });
   });
 
+  it("refuses a stale end that races a newer agent's first heartbeat", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "1111111111111111",
+      now: 20_000,
+    });
+    let ended: Promise<boolean> | undefined;
+    // The dying loop's marker starts while the heartbeat lock is held, so its
+    // read and its write both land after the newer loop's first heartbeat
+    // rather than straddling it.
+    await withReviewStoreLock({
+      lockPath: store.agentHeartbeatLockPath,
+      change: async () => {
+        ended = writeAgentHeartbeatEnded({
+          store,
+          sessionId: "aaaaaaaaaaaaaaaa",
+          writerId: "1111111111111111",
+          now: 20_400,
+        });
+        await new Promise((settle) => setTimeout(settle, 100));
+        expect(
+          JSON.parse(await readFile(store.agentHeartbeatPath, "utf8")),
+        ).toMatchObject({ state: "waiting", writerId: "1111111111111111" });
+        await writeFile(
+          store.agentHeartbeatPath,
+          JSON.stringify({
+            sessionId: "aaaaaaaaaaaaaaaa",
+            state: "waiting",
+            writerId: "2222222222222222",
+            updatedAtMs: 20_300,
+          }),
+        );
+      },
+      timeoutError: () => new Error("The heartbeat lock was already held"),
+    });
+    await expect(ended).resolves.toBe(false);
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 20_500,
+      }),
+    ).resolves.toEqual({
+      connected: true,
+      state: "waiting",
+      updatedAtMs: 20_300,
+    });
+  });
+
+  it("reports a heartbeat it could not write instead of raising it", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    // The connection loop awaits this write every half second inside its own
+    // wait, so a lock it never wins has to be survivable: the next refresh
+    // answers it, while an exception here would end a live session.
+    await withReviewStoreLock({
+      lockPath: store.agentHeartbeatLockPath,
+      change: async () => {
+        await expect(
+          writeAgentHeartbeat({
+            store,
+            sessionId: "aaaaaaaaaaaaaaaa",
+            state: "waiting",
+            writerId: "1111111111111111",
+            now: 30_000,
+          }),
+        ).resolves.toBe(false);
+      },
+      timeoutError: () => new Error("The heartbeat lock was already held"),
+    });
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 30_000,
+      }),
+    ).resolves.toEqual({ connected: false, state: "waiting" });
+  }, 30_000);
+
   it("refuses to end a heartbeat that names no writer", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
