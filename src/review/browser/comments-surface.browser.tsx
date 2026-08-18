@@ -178,8 +178,8 @@ export const CommentsSurface = ({
   const queued = queuedGroup.filter((comment) => !headed.has(comment.id));
   // A thread keeps its place among the queued threads on show, whether or not a
   // batch header speaks for the ones around it. Counting the whole queued group
-  // rather than the leftovers is what keeps the number a place in line instead
-  // of an index into whatever this section happens to hold.
+  // rather than the leftovers is what keeps the number a position in that group
+  // instead of an index into whatever this section happens to hold.
   const queuePosition = (comment: ReviewComment): number =>
     queuedGroup.indexOf(comment) + 1;
   // Only stacked batches need containment; one batch has nothing to be told
