@@ -188,36 +188,6 @@ const copyControlLabel = ({
       ? `${label} copied`
       : `Copy ${label}`;
 
-/**
- * Offers a session address the card cannot open as something to take away.
- *
- * The identifier itself is not shown: it is long, it is not for reading, and
- * the reader either needs it in another tool or does not need it at all.
- */
-const CopySessionIdentifier = ({ value }: { readonly value: string }) => {
-  const { copied, failed, copy } = useCopyToClipboard(value);
-  return (
-    <button
-      type="button"
-      className="inline-flex w-fit cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-2xs font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
-      aria-label={copyControlLabel({
-        label: "chat session identifier",
-        copied,
-        failed,
-      })}
-      data-review-agent-session-copy={value}
-      onClick={() => void copy()}
-    >
-      <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
-      {failed
-        ? "Copy failed"
-        : copied
-          ? "Copied"
-          : "Copy chat session identifier"}
-    </button>
-  );
-};
-
 /** A bare copy control, for a value already shown beside it. */
 const CopyIdentifierControl = ({ value }: { readonly value: string }) => {
   const { copied, failed, copy } = useCopyToClipboard(value);
@@ -439,6 +409,15 @@ const CurrentActivityCard = ({
     ...(sessionUrl === undefined ? {} : { sessionUrl }),
     ...(sessionId === undefined ? {} : { sessionId }),
   });
+  // Since and Events describe a connection at rest; the session identifies the
+  // agent whatever it is doing. The working card carries the second without the
+  // first, and every other state carries both.
+  const showsSinceAndEvents =
+    activity.state !== "working" &&
+    connection.sinceAtMs !== undefined &&
+    connection.everConnected;
+  const showsConnectionFacts =
+    showsSinceAndEvents || sessionAffordance.kind === "identifier";
   const requestId = "requestId" in activity ? activity.requestId : undefined;
   const requestKind = "requestId" in activity ? activity.requestKind : "";
   const footerLabel =
@@ -522,64 +501,7 @@ const CurrentActivityCard = ({
         >
           Open the agent's chat
         </a>
-      ) : sessionAffordance.kind === "identifier" ? (
-        /* Whatever was declared, and in every state. The identifier used to be
-           reachable only through the connection details, and those are hidden
-           while the agent works - so the one moment a reviewer most wants to
-           open the agent's own conversation was the moment they could not take
-           its address with them. */
-        <CopySessionIdentifier value={sessionAffordance.value} />
       ) : null}
-      {connection.sinceAtMs === undefined ||
-      !connection.everConnected ||
-      activity.state === "working" ? null : (
-        <dl className="m-0 grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 border-t border-current/20 pt-1.5 text-2xs">
-          <div className="min-w-0">
-            {/* The label says which transition the time belongs to, so the row
-                reads as a sentence about this state rather than as a field
-                whose meaning the reader has to infer from the card above it. */}
-            <dt className="font-semibold">{sinceLabel}</dt>
-            <dd className="m-0 text-ink [overflow-wrap:anywhere]">
-              {formatClockTime(connection.sinceAtMs)}
-              {" ("}
-              {compactDurationLabel({
-                start: connection.sinceAtMs,
-                end: Math.max(nowMs, connection.sinceAtMs),
-              }) ?? "just now"}
-              {")"}
-            </dd>
-          </div>
-          {sessionId === undefined || sessionUrl !== undefined ? null : (
-            /* An opaque handle is a detail, not a headline: it cannot be
-               followed, so it belongs with the other facts a reader consults
-               rather than beside the state they are reading. */
-            <div className="min-w-0">
-              <dt className="font-semibold">Agent session</dt>
-              <dd className="m-0 flex min-w-0 items-center gap-1 text-ink">
-                <span
-                  className="min-w-0 truncate"
-                  data-review-agent-session-id={sessionId}
-                >
-                  {sessionId}
-                </span>
-                {/* The row truncates because the identifier is long and not for
-                    reading; the control hands over the whole of it. */}
-                <CopyIdentifierControl value={sessionId} />
-              </dd>
-            </div>
-          )}
-          <div className="min-w-0">
-            <dt className="font-semibold">Events</dt>
-            <dd className="m-0 grid text-ink [overflow-wrap:anywhere]">
-              <span>
-                {connection.quietPeriods} quiet{" "}
-                {connection.quietPeriods === 1 ? "period" : "periods"}
-              </span>
-              <span>{connection.resumed} resumed</span>
-            </dd>
-          </div>
-        </dl>
-      )}
       {workHeadline === undefined || subjectLabel === undefined ? null : (
         <p className="m-0 text-ink [overflow-wrap:anywhere]">{workHeadline}</p>
       )}
@@ -611,6 +533,66 @@ const CurrentActivityCard = ({
           <p className="m-0 text-muted [overflow-wrap:anywhere]">{body}</p>
         </div>
       )}
+      {/*
+      The facts about the connection, under the card's first rule in every
+      state. A working card carries only the session: how long the agent has
+      been connected and how often the signal has lapsed are questions about a
+      connection at rest, and asking them beside live work reads as doubt about
+      work that is visibly happening.
+      */}
+      {showsConnectionFacts ? (
+        <dl className="m-0 grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 border-t border-current/20 pt-1.5 text-2xs">
+          {showsSinceAndEvents && connection.sinceAtMs !== undefined ? (
+            <div className="min-w-0">
+              {/* The label says which transition the time belongs to, so the
+                  row reads as a sentence about this state rather than as a
+                  field whose meaning the reader has to infer from the card. */}
+              <dt className="font-semibold">{sinceLabel}</dt>
+              <dd className="m-0 text-ink [overflow-wrap:anywhere]">
+                {formatClockTime(connection.sinceAtMs)}
+                {" ("}
+                {compactDurationLabel({
+                  start: connection.sinceAtMs,
+                  end: Math.max(nowMs, connection.sinceAtMs),
+                }) ?? "just now"}
+                {")"}
+              </dd>
+            </div>
+          ) : null}
+          {sessionAffordance.kind === "identifier" ? (
+            /* The one place a session identifier is offered. It cannot be
+               followed, so it belongs with the facts a reader consults rather
+               than beside the state they are reading - and having it here is
+               what lets the card above it carry no copy control at all. */
+            <div className="min-w-0">
+              <dt className="font-semibold">Agent session</dt>
+              <dd className="m-0 flex min-w-0 items-center gap-1 text-ink">
+                <span
+                  className="min-w-0 truncate"
+                  data-review-agent-session-id={sessionAffordance.value}
+                >
+                  {sessionAffordance.value}
+                </span>
+                {/* The row truncates because the identifier is long and not for
+                    reading; the control hands over the whole of it. */}
+                <CopyIdentifierControl value={sessionAffordance.value} />
+              </dd>
+            </div>
+          ) : null}
+          {showsSinceAndEvents ? (
+            <div className="min-w-0">
+              <dt className="font-semibold">Events</dt>
+              <dd className="m-0 grid text-ink [overflow-wrap:anywhere]">
+                <span>
+                  {connection.quietPeriods} quiet{" "}
+                  {connection.quietPeriods === 1 ? "period" : "periods"}
+                </span>
+                <span>{connection.resumed} resumed</span>
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
       {footerLabel === null ? null : (
         <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-1.5 text-2xs">
           <span className="text-muted">{footerLabel}</span>
