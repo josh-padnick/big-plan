@@ -83,6 +83,7 @@ describe("review store placement", () => {
       store.agentPromptPath,
       store.snapshotDirectory,
       store.draftsPath,
+      store.inputsPath,
       store.sentPath,
       store.progressPath,
       store.agentConnectionDirectory,

@@ -19,6 +19,7 @@ import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { deriveDecisionInventory } from "./decision-inventory.js";
 import {
   commentsFromExchange,
   deriveSnapshotDigest,
@@ -64,6 +65,40 @@ import {
   writeSnapshot,
 } from "./store.js";
 
+const runtimeToken = async (target: ReviewRuntime): Promise<string> => {
+  const descriptor: unknown = JSON.parse(
+    await readFile(target.store.sessionPath, "utf8"),
+  );
+  return typeof descriptor === "object" &&
+    descriptor !== null &&
+    "token" in descriptor &&
+    typeof descriptor.token === "string"
+    ? descriptor.token
+    : "";
+};
+
+const callRuntime = ({
+  target,
+  sessionToken,
+  path,
+  method = "GET",
+  body,
+}: {
+  readonly target: ReviewRuntime;
+  readonly sessionToken: string;
+  readonly path: string;
+  readonly method?: "GET" | "POST";
+  readonly body?: unknown;
+}): Promise<Response> =>
+  fetch(`${target.url.replace(/\/$/u, "")}${path}`, {
+    method,
+    headers: {
+      "x-big-plan-review-token": sessionToken,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+
 const PLAN = `# Review runtime plan
 
 The runtime serves this document and nothing else.
@@ -73,6 +108,56 @@ The runtime serves this document and nothing else.
 Today's reality is that feedback does not reach the agent.
 `;
 const PLAN_SNAPSHOT = deriveSnapshotDigest(PLAN);
+
+// The answers routes are about a plan that asks something, so they get their
+// own source. The ids below are the compiler's, spelled out rather than
+// recomputed, because their stability is part of what these tests assert.
+const DECISION_PLAN = `# Review runtime decisions
+
+Choose the release path before implementation begins.
+
+<Decision question="Which release path should we use?">
+
+<Option title="Gradual rollout" recommended summary="Start with one group.">
+<Consideration label="Risk" verdict="Low" tone="good" />
+</Option>
+
+<Option title="Immediate rollout" summary="Release everywhere together.">
+<Consideration label="Risk" verdict="High" tone="bad" />
+</Option>
+
+</Decision>
+
+## Rollback
+
+The rollback runbook stays unchanged.
+`;
+const DECISION_ID = "decision-which-release-path-should-we-use";
+const GRADUAL_OPTION_ID = `${DECISION_ID}-option-gradual-rollout`;
+const IMMEDIATE_OPTION_ID = `${DECISION_ID}-option-immediate-rollout`;
+
+const answersOf = async (
+  response: Response,
+): Promise<{
+  readonly answers: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  readonly revision: number;
+}> => {
+  const value: unknown = await response.json();
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("answers" in value) ||
+    !Array.isArray(value.answers) ||
+    !("revision" in value) ||
+    typeof value.revision !== "number"
+  ) {
+    throw new Error("Answers response did not carry answers and a revision");
+  }
+  return {
+    answers: value.answers as ReadonlyArray<Readonly<Record<string, unknown>>>,
+    revision: value.revision,
+  };
+};
 
 const TINY_PNG = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44,
@@ -487,6 +572,388 @@ describe("review runtime transport", () => {
     expect(policy).toContain("frame-ancestors 'none'");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
+});
+
+describe("review runtime staged decision answers", () => {
+  const stageGradual = (target: ReviewRuntime, sessionToken: string) =>
+    callRuntime({
+      target,
+      sessionToken,
+      path: "/api/inputs",
+      method: "POST",
+      body: {
+        op: "stage",
+        answer: {
+          decisionId: DECISION_ID,
+          optionId: GRADUAL_OPTION_ID,
+          optionTitle: "Gradual rollout",
+          prompt: "Which release path should we use?",
+          premiseSnapshot: deriveSnapshotDigest(DECISION_PLAN),
+        },
+      },
+    });
+
+  const withDecisionRuntime = async (
+    work: (context: {
+      readonly target: ReviewRuntime;
+      readonly sessionToken: string;
+      readonly planPath: string;
+    }) => Promise<void>,
+  ): Promise<void> => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-inputs-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, DECISION_PLAN);
+    const target = await startReviewRuntime({ planPath });
+    try {
+      await work({
+        target,
+        sessionToken: await runtimeToken(target),
+        planPath,
+      });
+    } finally {
+      await target.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  };
+
+  it("should stage, replace, retract, and read back one answer per decision", async () => {
+    await withDecisionRuntime(async ({ target, sessionToken }) => {
+      expect((await stageGradual(target, sessionToken)).status).toBe(200);
+      const replaced = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/inputs",
+        method: "POST",
+        body: {
+          op: "stage",
+          answer: {
+            decisionId: DECISION_ID,
+            optionId: IMMEDIATE_OPTION_ID,
+            optionTitle: "Immediate rollout",
+            prompt: "Which release path should we use?",
+            premiseSnapshot: deriveSnapshotDigest(DECISION_PLAN),
+          },
+        },
+      });
+      expect(replaced.status).toBe(200);
+
+      const staged = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/review-state",
+      });
+      await expect(staged.json()).resolves.toMatchObject({
+        answers: [
+          {
+            decisionId: DECISION_ID,
+            optionId: IMMEDIATE_OPTION_ID,
+            optionTitle: "Immediate rollout",
+          },
+        ],
+      });
+
+      expect(
+        (
+          await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/inputs",
+            method: "POST",
+            body: { op: "retract", decisionId: DECISION_ID },
+          })
+        ).status,
+      ).toBe(200);
+      const retracted = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/review-state",
+      });
+      await expect(retracted.json()).resolves.toMatchObject({ answers: [] });
+    });
+  });
+
+  it("should advance one revision per accepted write and carry it on every response", async () => {
+    await withDecisionRuntime(async ({ target, sessionToken }) => {
+      const initial = await answersOf(
+        await callRuntime({ target, sessionToken, path: "/api/review-state" }),
+      );
+      const staged = await answersOf(await stageGradual(target, sessionToken));
+      const read = await answersOf(
+        await callRuntime({ target, sessionToken, path: "/api/review-state" }),
+      );
+      const retracted = await answersOf(
+        await callRuntime({
+          target,
+          sessionToken,
+          path: "/api/inputs",
+          method: "POST",
+          body: { op: "retract", decisionId: DECISION_ID },
+        }),
+      );
+
+      expect(staged.revision).toBe(initial.revision + 1);
+      expect(read.revision).toBe(staged.revision);
+      expect(retracted.revision).toBe(staged.revision + 1);
+    });
+  });
+
+  it("should refuse ids the compiled plan does not ask for", async () => {
+    await withDecisionRuntime(async ({ target, sessionToken }) => {
+      const unknownDecision = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/inputs",
+        method: "POST",
+        body: {
+          op: "stage",
+          answer: {
+            decisionId: "decision-reworded-release-path",
+            optionId: "decision-reworded-release-path-option-gradual",
+            optionTitle: "Gradual rollout",
+            prompt: "Which release path should we use?",
+            premiseSnapshot: deriveSnapshotDigest(DECISION_PLAN),
+          },
+        },
+      });
+      expect(unknownDecision.status).toBe(400);
+      await expect(unknownDecision.json()).resolves.toMatchObject({
+        error: expect.stringContaining("not a decision in the current plan"),
+      });
+
+      const unknownOption = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/inputs",
+        method: "POST",
+        body: {
+          op: "stage",
+          answer: {
+            decisionId: DECISION_ID,
+            optionId: `${DECISION_ID}-option-no-rollout`,
+            optionTitle: "No rollout",
+            prompt: "Which release path should we use?",
+            premiseSnapshot: deriveSnapshotDigest(DECISION_PLAN),
+          },
+        },
+      });
+      expect(unknownOption.status).toBe(400);
+
+      const unknownRetraction = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/inputs",
+        method: "POST",
+        body: { op: "retract", decisionId: "decision-reworded-release-path" },
+      });
+      expect(unknownRetraction.status).toBe(400);
+    });
+  });
+
+  // Membership, not shape: the compiler mints an id as long as the question it
+  // came from, and re-guessing that shape here once made a long question
+  // unanswerable forever.
+  it("should persist compiled decision ids longer than 300 characters", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-inputs-long-"));
+    const question = `Which ${"release ".repeat(48)}path should we use?`;
+    const longPlan = `# Long decision ids
+
+<Decision question="${question}">
+
+<Option title="Gradual rollout" />
+
+<Option title="Immediate rollout" />
+
+</Decision>
+`;
+    const entry = Array.from(
+      deriveDecisionInventory({
+        markdown: longPlan,
+        fallbackTitle: "Long decision ids",
+      }).values(),
+    )[0];
+    if (entry === undefined) throw new Error("Compiled Decision missing");
+    const optionId = Array.from(entry.optionIds).sort()[0];
+    if (optionId === undefined) throw new Error("Compiled Option missing");
+    expect(entry.decisionId.length).toBeGreaterThan(300);
+    expect(optionId.length).toBeGreaterThan(300);
+
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, longPlan);
+    const target = await startReviewRuntime({ planPath });
+    try {
+      const sessionToken = await runtimeToken(target);
+      const staged = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/inputs",
+        method: "POST",
+        body: {
+          op: "stage",
+          answer: {
+            decisionId: entry.decisionId,
+            optionId,
+            optionTitle: "Gradual rollout",
+            prompt: question,
+            premiseSnapshot: deriveSnapshotDigest(longPlan),
+          },
+        },
+      });
+      expect(staged.status).toBe(200);
+      await expect(
+        (
+          await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/review-state",
+          })
+        ).json(),
+      ).resolves.toMatchObject({
+        answers: [{ decisionId: entry.decisionId, optionId }],
+      });
+
+      expect(
+        (
+          await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/inputs",
+            method: "POST",
+            body: { op: "retract", decisionId: entry.decisionId },
+          })
+        ).status,
+      ).toBe(200);
+    } finally {
+      await target.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should mask an answer whose decision was edited and show it again when the wording returns", async () => {
+    await withDecisionRuntime(async ({ target, sessionToken, planPath }) => {
+      expect((await stageGradual(target, sessionToken)).status).toBe(200);
+
+      await writeFile(
+        planPath,
+        DECISION_PLAN.replace(
+          "Start with one group.",
+          "Start with the beta group.",
+        ),
+      );
+      const masked = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/review-state",
+      });
+      const maskedBody = await masked.clone().json();
+      // The decision is still asked, so the reader who answered it is named a
+      // reason rather than left with a card that looks untouched.
+      expect(maskedBody).toMatchObject({
+        answers: [],
+        supersededDecisionIds: [DECISION_ID],
+      });
+
+      await writeFile(planPath, DECISION_PLAN);
+      const restored = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/review-state",
+      });
+      expect(await restored.clone().json()).toMatchObject({
+        answers: [{ decisionId: DECISION_ID, optionId: GRADUAL_OPTION_ID }],
+        supersededDecisionIds: [],
+      });
+      // Masking retained the record, so nothing was written to bring it back.
+      expect((await answersOf(restored)).revision).toBe(
+        (await answersOf(masked)).revision,
+      );
+    });
+  });
+
+  it("should keep an answer current when an unrelated section changes", async () => {
+    await withDecisionRuntime(async ({ target, sessionToken, planPath }) => {
+      expect((await stageGradual(target, sessionToken)).status).toBe(200);
+
+      await writeFile(
+        planPath,
+        DECISION_PLAN.replace(
+          "The rollback runbook stays unchanged.",
+          "The rollback runbook now names an owner.",
+        ),
+      );
+      await expect(
+        (
+          await callRuntime({
+            target,
+            sessionToken,
+            path: "/api/review-state",
+          })
+        ).json(),
+      ).resolves.toMatchObject({
+        answers: [{ decisionId: DECISION_ID, optionId: GRADUAL_OPTION_ID }],
+      });
+    });
+  });
+
+  it("should report an unreadable answer record instead of serving it as empty", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-inputs-corrupt-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, DECISION_PLAN);
+    const target = await startReviewRuntime({ planPath });
+    // The runtime reports through its one diagnostic sink, so that is where a
+    // total answer loss has to be observable.
+    const reported: Array<string> = [];
+    const reportFailure = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown) => {
+        reported.push(String(chunk));
+        return true;
+      });
+    try {
+      const sessionToken = await runtimeToken(target);
+      expect((await stageGradual(target, sessionToken)).status).toBe(200);
+      await writeFile(target.store.inputsPath, "{ truncated");
+
+      const served = await callRuntime({
+        target,
+        sessionToken,
+        path: "/api/review-state",
+      });
+      await expect(served.json()).resolves.toMatchObject({ answers: [] });
+      expect(reported).toContainEqual(
+        expect.stringContaining("Stored decision answers could not be read"),
+      );
+    } finally {
+      reportFailure.mockRestore();
+      await target.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse answer writes from a replaced read-only session", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "big-plan-inputs-readonly-"),
+    );
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, DECISION_PLAN);
+    const first = await startReviewRuntime({ planPath });
+    const firstToken = await runtimeToken(first);
+    // Custody is refused while the first runtime is live, so replacing it is
+    // the deliberate takeover case.
+    const replacement = await startReviewRuntime({ planPath, takeover: true });
+    try {
+      const response = await callRuntime({
+        target: first,
+        sessionToken: firstToken,
+        path: "/api/inputs",
+        method: "POST",
+        body: { op: "retract", decisionId: DECISION_ID },
+      });
+      expect(response.status).toBe(409);
+    } finally {
+      await Promise.all([first.close(), replacement.close()]);
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

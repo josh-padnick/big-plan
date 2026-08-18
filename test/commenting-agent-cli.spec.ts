@@ -13,7 +13,13 @@ import {
 } from "../src/review/shared/agent-timing.js";
 import { startReviewRuntime } from "../src/review/server.js";
 import { readProgress, writeAgentRequestValue } from "../src/review/store.js";
-import { expect, runAgentCli, test, closeReviewRuntime } from "./fixtures";
+import {
+  agentIdOf,
+  expect,
+  runAgentCli,
+  test,
+  closeReviewRuntime,
+} from "./fixtures";
 
 /** The claim's own response draft path, as pickup hands it to the agent. */
 const responseDraftOf = (stdout: string): string => {
@@ -94,10 +100,7 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
     // Pickup mints the token that proves this process holds the request; the
     // agent hands it back on every later command, as the returned
     // note_command and respond_command do.
-    const agentToken = /agent_token: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
-    if (agentToken === undefined) {
-      throw new Error("The real agent CLI did not return a claim token");
-    }
+    const agentToken = agentIdOf(claim.stdout, "agent_token");
     const exchange = await readAgentExchange({
       store: runtime.store,
       sessionId: runtime.sessionId,
@@ -151,7 +154,7 @@ test("should carry one plan-wide chat through the real agent CLI", async ({
       "--agent",
       agentToken,
     ]);
-    expect(response.stdout).toContain(`responded: ${request.requestId}`);
+    expect(agentIdOf(response.stdout, "responded")).toBe(request.requestId);
 
     await page.reload();
     await page.getByRole("button", { name: /Feedback/u }).click();
@@ -279,10 +282,7 @@ test("should report a quiet working agent as stalled rather than disconnected", 
     await rail.getByRole("button", { name: "Send", exact: true }).click();
 
     const claim = await runAgentCli(["next", planPath, "--wait"]);
-    const agentToken = /agent_token: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
-    if (agentToken === undefined) {
-      throw new Error("The real agent CLI did not return a claim token");
-    }
+    const agentToken = agentIdOf(claim.stdout, "agent_token");
     const exchange = await readAgentExchange({
       store: runtime.store,
       sessionId: runtime.sessionId,
@@ -341,7 +341,7 @@ test("should report a quiet working agent as stalled rather than disconnected", 
       "--agent",
       agentToken,
     ]);
-    expect(response.stdout).toContain(`responded: ${request.requestId}`);
+    expect(agentIdOf(response.stdout, "responded")).toBe(request.requestId);
 
     await page.reload();
     await page.getByRole("button", { name: /Feedback/u }).click();
@@ -433,12 +433,7 @@ test("should warn about a takeover before inviting one while work is held", asyn
     ).toBeVisible();
 
     const firstClaim = await runAgentCli(["next", planPath, "--wait"]);
-    const workingAgent = /agent_token: ([a-f0-9]{16})/u.exec(
-      firstClaim.stdout,
-    )?.[1];
-    if (workingAgent === undefined) {
-      throw new Error("The real agent CLI did not report its claim");
-    }
+    const workingAgent = agentIdOf(firstClaim.stdout, "agent_token");
     const claimed = (
       await readAgentExchange({
         store: runtime.store,
@@ -500,9 +495,7 @@ test("should warn about a takeover before inviting one while work is held", asyn
     // and the first agent's finished answer is refused - the reviewer's message
     // is the thing that would be lost.
     const takeover = await runAgentCli(["next", planPath, "--wait"]);
-    expect(/agent_token: ([a-f0-9]{16})/u.exec(takeover.stdout)?.[1]).not.toBe(
-      workingAgent,
-    );
+    expect(agentIdOf(takeover.stdout, "agent_token")).not.toBe(workingAgent);
     // Each claim drafts into its own stage, so the displaced agent's answer
     // cannot even overwrite the file the takeover will answer from.
     const displacedDraft = responseDraftOf(firstClaim.stdout);
@@ -535,12 +528,7 @@ test("should warn about a takeover before inviting one while work is held", asyn
 
     // The advice returns as soon as nobody is holding work, because then the
     // quiet really is all the evidence there is.
-    const takeoverAgent = /agent_token: ([a-f0-9]{16})/u.exec(
-      takeover.stdout,
-    )?.[1];
-    if (takeoverAgent === undefined) {
-      throw new Error("The takeover did not report its claim");
-    }
+    const takeoverAgent = agentIdOf(takeover.stdout, "agent_token");
     await writeFile(
       takeoverDraft,
       JSON.stringify({

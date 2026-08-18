@@ -113,6 +113,7 @@ import {
 import type { ReviewSessionDescriptor } from "./session-authority.js";
 import {
   createActivityClock,
+  createDecisionAnswers,
   createPlanRenderer,
   createReaderProgress,
   createWriteGate,
@@ -143,6 +144,10 @@ import {
   submitFeedback,
   updateReviewState,
 } from "./routes-review-state.js";
+import {
+  readDecisionAnswerState,
+  stageDecisionAnswer,
+} from "./routes-inputs.js";
 import { readRuntimeSession } from "./routes-session.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
@@ -190,6 +195,12 @@ const DOCUMENT_ROUTE: Route = { method: "GET", path: "/" };
 const API_ROUTES: ReadonlyArray<ApiRoute> = [
   { method: "GET", path: "/api/session", handler: readRuntimeSession },
   { method: "GET", path: "/api/drafts", handler: readReviewState },
+  {
+    method: "GET",
+    path: "/api/review-state",
+    handler: readDecisionAnswerState,
+  },
+  { method: "POST", path: "/api/inputs", handler: stageDecisionAnswer },
   { method: "PUT", path: "/api/drafts", handler: updateReviewState },
   { method: "POST", path: "/api/feedback", handler: submitFeedback },
   { method: "POST", path: "/api/comments-delete", handler: deleteSentComment },
@@ -836,6 +847,21 @@ export const startReviewRuntime = async ({
   });
   const mutations = createMutationRegistry();
 
+  // One diagnostic sink, named before the context so the objects the context
+  // owns can report through the same place the routes do.
+  const reportDiagnostic: ReviewRouteContext["reportDiagnostic"] = ({
+    message,
+    error,
+  }) => {
+    try {
+      process.stderr.write(
+        `${message} for session ${sessionId}:\n${describeRuntimeFailure({ error, secrets: [token] })}\n`,
+      );
+    } catch {
+      // A diagnostic sink failure must not fail the review request.
+    }
+  };
+
   // Every piece of state the routes share is built once, here, and named after
   // what it means. Anything a route may read travels through this record.
   const context: ReviewRouteContext = {
@@ -855,6 +881,11 @@ export const startReviewRuntime = async ({
       initialSnapshot,
       isDiffPreview: diffPreviewSource !== undefined,
     }),
+    decisionAnswers: createDecisionAnswers({
+      store,
+      resolvedPlanPath,
+      reportDiagnostic,
+    }),
     readerProgress: createReaderProgress({
       initialSnapshot,
       observedResponseIds: (await readCommittedRevisions({ store })).map(
@@ -863,15 +894,7 @@ export const startReviewRuntime = async ({
     }),
     writeGate: createWriteGate({ mutations, stallMs: writeStallMs }),
     activityClock: createActivityClock(idleTimeoutMs),
-    reportDiagnostic: ({ message, error }) => {
-      try {
-        process.stderr.write(
-          `${message} for session ${sessionId}:\n${describeRuntimeFailure({ error, secrets: [token] })}\n`,
-        );
-      } catch {
-        // A diagnostic sink failure must not fail the review request.
-      }
-    },
+    reportDiagnostic,
   };
   const { planRenderer } = context;
 

@@ -544,66 +544,242 @@
     ) {
     color: var(--color-muted);
   }
+  /* The field takes the option cards' raised surface rather than the card
+     body's own background. Against the body it read as a bordered hole, and a
+     reader could not see where to type. */
   article .decision-proposal-input {
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--edge-strong-c);
     border-radius: var(--radius-md);
-    background: var(--bg);
+    background: var(--raised-c);
     color: var(--ink-c);
     font: inherit;
     font-size: 0.875rem;
     line-height: 1.45;
     resize: vertical;
   }
+  /* The recorded proposal is prose, not a control, so it reads as the option
+     it became: a title over the reader's own words, on the card body rather
+     than in a field they can no longer type in. */
+  article .decision-proposal-title {
+    color: var(--ink-c);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  article .decision-proposal-title[hidden],
+  article .decision-proposal-record[hidden] {
+    display: none;
+  }
+  article .decision-proposal-record {
+    margin-top: 0.25rem;
+    color: var(--ink-c);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
   article .decision-proposal-input:focus-visible {
     outline: none;
     border-color: var(--color-accent);
     box-shadow: var(--elevation-focus);
   }
-  article .decision-proposal-cancel {
-    padding: 0.25rem 0.75rem;
-    border: 1px solid var(--edge-c);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    background: var(--bg);
-    color: var(--ink-c);
-    font-size: 0.75rem;
-    font-weight: var(--font-weight-semibold);
+  /* The mark's own box is centred in the bar, but the Lucide SVG keeps its
+     24px intrinsic height inside a 16px box, so the glyph hung below its slot
+     and the whole line read as sitting low. Sizing the SVG to its box is what
+     the other icon slots already do. */
+  article .decision-selection-mark svg {
+    width: 100%;
+    height: 100%;
   }
-  article .decision-proposal-cancel:hover {
-    background: var(--surface-c);
+  /* The check's ink sits high in its own viewBox, so a box-centred mark still
+     reads above the line it confirms. */
+  article .decision-selection-mark {
+    position: relative;
+    top: 1px;
   }
-  article .decision-proposal-action {
-    display: inline-flex;
+
+  /* The question above the field is which of two things these words are, so
+     both answers are named and the switch sits between them. Naming the sides
+     is what lets everything else here stay quiet. */
+  article .decision-mode {
+    display: flex;
     align-items: center;
-    min-height: 2.75rem;
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--edge-c);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    background: var(--bg);
-    color: var(--color-accent);
-    font-size: 0.8125rem;
-    font-weight: var(--font-weight-semibold);
+    gap: 0.625rem;
+    margin-bottom: 0.625rem;
   }
-  article .decision-proposal-action[hidden] {
+  article .decision-mode[hidden] {
     display: none;
   }
-  article .decision-proposal-action:hover {
-    background: var(--surface-c);
+  article .decision-mode-side {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
   }
-  article .decision-proposal-action:disabled {
+  /* The live side is the one the reader is in, so it carries the ink and the
+     other recedes. */
+  article
+    .decision-mode:not(:has(.decision-mode-check:checked))
+    [data-decision-mode-side="decision"],
+  article
+    .decision-mode:has(.decision-mode-check:checked)
+    [data-decision-mode-side="comment"] {
+    color: var(--ink-c);
+  }
+
+  article .decision-mode-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    color: var(--ink-c);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  article .decision-mode-track {
+    position: relative;
+    display: inline-flex;
+    width: 2rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+    align-items: center;
+    border: 1px solid var(--edge-strong-c);
+    border-radius: 999px;
+    background: var(--raised-c);
+    transition: background 120ms ease-out;
+  }
+  article .decision-mode-knob {
+    position: absolute;
+    left: 0.1875rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 999px;
+    background: var(--color-muted);
+    transition:
+      left 120ms ease-out,
+      background 120ms ease-out;
+  }
+  article .decision-mode-check:checked + .decision-mode-track {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 18%, var(--raised-c));
+  }
+  article
+    .decision-mode-check:checked
+    + .decision-mode-track
+    .decision-mode-knob {
+    left: calc(100% - 0.9375rem);
+    background: var(--color-accent);
+  }
+  article .decision-mode-check:focus-visible + .decision-mode-track {
+    outline: none;
+    box-shadow: var(--elevation-focus);
+  }
+  article .decision-mode-check:disabled + .decision-mode-track {
     cursor: default;
+    opacity: 0.55;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    article .decision-mode-track,
+    article .decision-mode-knob {
+      transition: none;
+    }
+  }
+
+  /* Comment mode's controls are the review's comment controls, in the review's
+     order: how it will be submitted, then the way out, then the submission. */
+  /* Everything the composer can do stacks flush right under the field it acts
+     on, so the switch that decides what Submit Now means reads as part of that
+     button rather than as a control stranded across the row. */
+  article .decision-proposal-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.375rem;
+    margin-top: 0.5rem;
+  }
+  article .decision-send-row {
+    display: flex;
+    align-items: center;
+  }
+  article .decision-send-row[hidden] {
+    display: none;
+  }
+  article .decision-proposal-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+  }
+  /* The switch names a setting, not an action, so it carries the group's
+     quietest weight; only the submission is emphatic. */
+  article .decision-send-switch {
+    color: var(--color-muted);
+    font-size: var(--text-2xs);
+    font-weight: 400;
+  }
+  article .decision-comment-submit[hidden],
+  article .decision-proposal-actions[hidden] {
+    display: none;
+  }
+  /* Submitting here is making a comment, so the button is the one the comment
+     boxes use - the review's accent-outline submit, at its micro size. Copying
+     those declarations is what the plan-side stylesheet can do; the rail's own
+     button is a React primitive this layer cannot import. */
+  article .decision-comment-submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    background: var(--color-paper);
+    color: var(--color-accent);
+    font-size: var(--text-2xs);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--text-2xs--line-height);
+    transition: filter 150ms ease;
+  }
+  article .decision-comment-submit:hover {
+    box-shadow: var(--elevation-raised);
+    background: var(--color-accent-wash);
+    filter: brightness(0.95);
+  }
+  article .decision-comment-submit:disabled {
+    cursor: default;
+    border-color: var(--edge-c);
+    box-shadow: none;
+    background: var(--surface-c);
     color: var(--color-subtle);
   }
-  article .decision-proposal-action:focus-visible {
-    outline: none;
-    box-shadow: var(--elevation-focus);
+  article .decision-comment-submit:focus-visible {
+    outline: 1px solid var(--color-accent);
+    outline-offset: 2px;
   }
+  @media (prefers-reduced-motion: reduce) {
+    article .decision-comment-submit {
+      transition: none;
+    }
+  }
+
+  /* Leaving the composer is a way out, not a third thing to weigh, so it is a
+     link beside the submission rather than a second button competing with it. */
+  article .decision-proposal-cancel {
+    padding: 0.25rem 0;
+    border: 0;
+    cursor: pointer;
+    background: transparent;
+    color: var(--color-muted);
+    font-size: var(--text-2xs);
+    font-weight: 400;
+    line-height: var(--text-2xs--line-height);
+  }
+  article .decision-proposal-cancel:hover {
+    color: var(--ink-c);
+    text-decoration: underline;
+  }
+
   article .decision-proposal-cancel:focus-visible {
-    outline: none;
-    border-color: var(--color-accent);
-    box-shadow: var(--elevation-focus);
+    outline: 1px solid var(--color-accent);
+    outline-offset: 2px;
   }
   article .decision[data-decision-answered] .decision-proposal-cancel {
     display: none;
@@ -633,7 +809,11 @@
     font-size: 0.8125rem;
     font-weight: var(--font-weight-semibold);
   }
-  article .decision-confirm:disabled {
+  /* Nothing to confirm, or a read-only review that could not record it either
+     way: both read as the same inert control. */
+  article .decision-confirm:disabled,
+  article .decision-change:disabled,
+  article .decision-clear:disabled {
     cursor: default;
     background: var(--surface-c);
     color: var(--color-subtle);
@@ -664,12 +844,43 @@
     background: var(--surface-c);
   }
 
+  /* Clearing is the way out of the change flow, not a competing answer, so it
+     reads as a quiet action beside Confirm rather than a second button. */
+  article .decision-clear {
+    padding: 0.5rem 0.25rem;
+    border: 0;
+    cursor: pointer;
+    background: transparent;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  article .decision-clear:hover {
+    color: var(--color-ink);
+    text-decoration: underline;
+  }
+  article .decision-clear:focus-visible {
+    outline: none;
+    border-radius: 0.375rem;
+    color: var(--color-ink);
+    box-shadow: var(--elevation-focus);
+  }
+
   /* Answering compresses the matrix to the column that won and replaces the
      confirm row with the recorded strip. Which regions are showing is carried
      by the hidden attribute, the one display rule utilities cannot out-rank. */
   article .decision-answer:not([hidden]) {
     display: flex;
     background: var(--decision-pro-bg);
+  }
+  /* Both notices are revealed by the review island rather than by the author,
+     so like the strips above they carry their display here, where the hidden
+     attribute still wins. */
+  article .decision-superseded:not([hidden]) {
+    display: flex;
+  }
+  article .decision-locked-note:not([hidden]) {
+    display: flex;
   }
   article .decision-footer {
     background: color-mix(in srgb, var(--surface-c) 50%, var(--bg));
@@ -698,6 +909,15 @@
     }
     article .decision-matrix {
       min-width: 34rem;
+    }
+    /* Below the reading breakpoint the reader is plausibly using a thumb, so
+       every control the composer offers meets the touch floor. Above it the
+       rail's own buttons release the same minimum, and so do these. */
+    article .decision-comment-submit,
+    article .decision-proposal-cancel,
+    article .decision-clear {
+      min-width: 2.75rem;
+      min-height: 2.75rem;
     }
   }
   @media (width < 36rem) {

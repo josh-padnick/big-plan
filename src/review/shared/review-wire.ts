@@ -28,6 +28,32 @@ export type ReviewSnapshot = {
  */
 export const STALE_REVIEW_STATE_CODE = "stale-review-state";
 
+export type StagedDecisionAnswer = {
+  readonly decisionId: string;
+  readonly optionId: string;
+  readonly optionTitle: string;
+  readonly prompt: string;
+  readonly answeredAt: string;
+  readonly premiseSnapshot: string;
+  // The digest of the decision this answered, stamped by the server from the
+  // compiled plan. An answer is current only while it still matches, so the
+  // reviewer's confirmation can never migrate onto edited content.
+  readonly decisionDigest: string;
+};
+
+export type ReviewState = {
+  readonly answers: ReadonlyArray<StagedDecisionAnswer>;
+  // Decisions the plan still asks that hold an answer to content they no longer
+  // have. The reader gave that answer and deserves to be told it stopped
+  // applying, which a card cannot work out for itself: from the browser's side
+  // a masked answer and an unanswered decision look identical.
+  readonly supersededDecisionIds: ReadonlyArray<string>;
+  // Monotonic across every accepted write to the answers store. The browser
+  // applies a response only when this is newer than the last one it applied,
+  // so an in-flight read can no longer land on top of a completed write.
+  readonly revision: number;
+};
+
 export type AgentOutcome = {
   readonly commentId: string;
   readonly state:
@@ -178,6 +204,8 @@ export type RuntimeSession = {
 
 export type ReviewSnapshotSource = ReviewSnapshot;
 
+export type ReviewStateSource = ReviewState;
+
 export type AgentSnapshotSource = {
   readonly currentSnapshot: string;
   readonly presence: unknown;
@@ -299,6 +327,56 @@ export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
         )
       : [],
     version: typeof value.version === "string" ? value.version : "",
+  };
+};
+
+/** Encodes the durable browser-safe facts gathered during plan review. */
+export const encodeReviewState = (
+  value: ReviewStateSource,
+): ReviewStateSource => value;
+
+/**
+ * Decodes staged answers while dropping malformed transport entries. A body
+ * without a usable revision decodes to -1, which is older than any accepted
+ * write, so an unreadable response can never displace applied state.
+ */
+export const decodeReviewState = (value: unknown): ReviewState => {
+  if (!isReviewWireRecord(value) || !Array.isArray(value.answers)) {
+    return { answers: [], supersededDecisionIds: [], revision: -1 };
+  }
+  return {
+    revision:
+      typeof value.revision === "number" && Number.isFinite(value.revision)
+        ? value.revision
+        : -1,
+    supersededDecisionIds: Array.isArray(value.supersededDecisionIds)
+      ? value.supersededDecisionIds.filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [],
+    answers: value.answers.flatMap(
+      (answer): ReadonlyArray<StagedDecisionAnswer> =>
+        isReviewWireRecord(answer) &&
+        typeof answer.decisionId === "string" &&
+        typeof answer.optionId === "string" &&
+        typeof answer.optionTitle === "string" &&
+        typeof answer.prompt === "string" &&
+        typeof answer.answeredAt === "string" &&
+        typeof answer.premiseSnapshot === "string" &&
+        typeof answer.decisionDigest === "string"
+          ? [
+              {
+                decisionId: answer.decisionId,
+                optionId: answer.optionId,
+                optionTitle: answer.optionTitle,
+                prompt: answer.prompt,
+                answeredAt: answer.answeredAt,
+                premiseSnapshot: answer.premiseSnapshot,
+                decisionDigest: answer.decisionDigest,
+              },
+            ]
+          : [],
+    ),
   };
 };
 

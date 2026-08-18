@@ -29,6 +29,7 @@ Everything on this page is shipped and works today.
 - `big-plan review` serves a loopback session with a per-session API token, comments on slides, components, or selected text, plus plan-wide chat and coding-agent status.
 - Sent feedback stays attached to durable threads while the connected coding agent answers, asks for input, declines, warns, or publishes a validated plan revision.
 - **What changed** compares each request's claim-time baseline with its result, keeps later historical and stale-premise diffs reviewable, preserves structured component presentation, and guides the reviewer through accepting each changed place; comment threads then offer resolution.
+- Confirmed decision answers are saved with the review and stay current only while their decision's content is unchanged; they are readable within the review session rather than delivered to the agent, and a standalone rendered document keeps answers for the reading session only.
 - Review state and feedback packages stay in an ignored, owner-only `.big-plan/` directory beside the plan.
 
 See [Reviewing a plan](/reference/reviewing/) for the workflow, persistence model, causal diff behavior, and trust boundaries.
@@ -60,7 +61,7 @@ See [Reviewing a plan](/reference/reviewing/) for the workflow, persistence mode
 - `HttpEndpoint` components for HTTP contracts with location-grouped parameters, request examples, and status-coded responses.
 - `GraphqlOperation` components for queries, mutations, and subscriptions with literal argument types, one-level input and payload fields, and grouped executable examples with repeatable labeled responses.
 - `GrpcMethod` components for streaming-aware proto signatures, message-typed request and response fields, gRPC status codes, grouped examples, and proto source.
-- `QuickDecision` components for standalone brief questions with recommendations and a reading-session answer flow, without a comparison expander.
+- `QuickDecision` components for standalone brief questions with recommendations and an answer flow, without a comparison expander.
 - `Wireframe` components for true-width product screens with device-honest fixed or growing frames, walkable prototypes, opt-in common layout patterns, and an open vocabulary for custom layouts.
 
 ## Output

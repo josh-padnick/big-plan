@@ -3,6 +3,7 @@
 // mapping every visual choice onto Big Plan's closed design-token vocabulary.
 
 import type {
+  ComponentProps,
   ComponentPropsWithRef,
   FocusEventHandler,
   HTMLAttributes,
@@ -21,11 +22,42 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { Toaster as Sonner, toast } from "sonner";
 import { placeTooltip, type TooltipPosition } from "./tooltip-position.js";
+
+export { toast };
 
 const joinClasses = (
   ...values: ReadonlyArray<string | false | null | undefined>
 ): string => values.filter(Boolean).join(" ");
+
+/** Token-themed shadcn Sonner primitive for transient review notices. */
+export const Toaster = ({
+  toastOptions,
+  ...props
+}: ComponentProps<typeof Sonner>) => (
+  <Sonner
+    closeButton
+    position="bottom-right"
+    toastOptions={{
+      unstyled: true,
+      ...toastOptions,
+      classNames: {
+        toast:
+          "group flex w-full min-w-0 items-start gap-3 rounded-lg bg-raised p-4 text-ink shadow-floating",
+        error: "border-l border-danger",
+        content: "min-w-0 flex-1",
+        title: "text-sm font-semibold text-ink",
+        description: "mt-1 text-sm text-muted",
+        icon: "mt-0.5 shrink-0 text-danger",
+        closeButton:
+          "ml-auto inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted hover:bg-surface hover:text-ink focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent wide:size-6",
+        ...toastOptions?.classNames,
+      },
+    }}
+    {...props}
+  />
+);
 
 type ButtonVariant =
   | "default"

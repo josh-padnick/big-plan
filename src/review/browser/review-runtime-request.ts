@@ -80,6 +80,18 @@ export const reviewRuntimeRefusal = async ({
   });
 };
 
+/**
+ * True when repeating the request cannot change the answer. The runtime
+ * examined this request and rejected it - a decision the plan no longer asks,
+ * a session that no longer holds authority - so a retry loop would reissue a
+ * refusal forever instead of telling the reader what happened. A 5xx is the
+ * runtime failing at a request it accepted, which is worth trying again.
+ */
+export const isTerminalReviewRuntimeRefusal = (error: unknown): boolean => {
+  const status = reviewRuntimeRefusalStatus(error);
+  return status !== undefined && status < 500;
+};
+
 /** Normalizes browser transport failures while preserving application errors. */
 export const normalizeReviewRuntimeRequestError = ({
   error,

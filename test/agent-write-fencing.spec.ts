@@ -18,6 +18,7 @@ import {
 } from "../src/review/store.js";
 import type { ReviewStore } from "../src/review/store.js";
 import {
+  agentIdOf,
   expect,
   runAgentCli,
   runRefusedAgentCli,
@@ -37,14 +38,6 @@ The agent explains what happens when a claim lapses mid-edit.
 
 const HALF_WRITTEN = "Agent A stopped mid-sentence and";
 const AFTER_TAKEOVER = "Agent A kept typing after losing the claim";
-
-const tokenOf = (stdout: string): string => {
-  const token = /agent_token: ([a-f0-9]{16})/u.exec(stdout)?.[1];
-  if (token === undefined) {
-    throw new Error(`The agent CLI returned no claim token:\n${stdout}`);
-  }
-  return token;
-};
 
 const candidateOf = (stdout: string): string => {
   const candidate = /candidate_plan: (\S+)/u.exec(stdout)?.[1];
@@ -89,7 +82,7 @@ test("should keep a lapsed agent's edits out of the plan and its Was/Now", async
 
     // Agent A claims the work and is handed its own draft copy to edit.
     const firstClaim = await runAgentCli(["next", planPath, "--wait"]);
-    const firstToken = tokenOf(firstClaim.stdout);
+    const firstToken = agentIdOf(firstClaim.stdout, "agent_token");
     const firstCandidate = candidateOf(firstClaim.stdout);
     await expect(readFile(firstCandidate, "utf8")).resolves.toBe(
       committedSource,
@@ -121,7 +114,7 @@ test("should keep a lapsed agent's edits out of the plan and its Was/Now", async
 
     // Agent B takes over and starts from the last committed revision.
     const secondClaim = await runAgentCli(["next", planPath, "--wait"]);
-    const secondToken = tokenOf(secondClaim.stdout);
+    const secondToken = agentIdOf(secondClaim.stdout, "agent_token");
     const secondCandidate = candidateOf(secondClaim.stdout);
     expect(secondToken).not.toBe(firstToken);
     expect(secondCandidate).not.toBe(firstCandidate);
@@ -198,7 +191,7 @@ test("should keep a lapsed agent's edits out of the plan and its Was/Now", async
       "--agent",
       secondToken,
     ]);
-    expect(published.stdout).toContain(`responded: ${request.requestId}`);
+    expect(agentIdOf(published.stdout, "responded")).toBe(request.requestId);
     await expect(readFile(planPath, "utf8")).resolves.toBe(revised);
 
     // Was and Now are the committed pair, so neither carries agent A's text.
@@ -298,7 +291,7 @@ test("should settle an interrupted commit before the agent gets more work", asyn
 
     const committedSource = await readFile(planPath, "utf8");
     const claim = await runAgentCli(["next", planPath, "--wait"]);
-    const agentToken = tokenOf(claim.stdout);
+    const agentToken = agentIdOf(claim.stdout, "agent_token");
     const exchange = await readAgentExchange({
       store: runtime.store,
       sessionId: runtime.sessionId,
@@ -394,7 +387,7 @@ test("should stop agent edits when the plan matches neither side of a commit", a
 
     const committedSource = await readFile(planPath, "utf8");
     const claim = await runAgentCli(["next", planPath, "--wait"]);
-    const agentToken = tokenOf(claim.stdout);
+    const agentToken = agentIdOf(claim.stdout, "agent_token");
     const exchange = await readAgentExchange({
       store: runtime.store,
       sessionId: runtime.sessionId,

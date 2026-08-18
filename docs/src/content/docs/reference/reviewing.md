@@ -121,9 +121,35 @@ shadcn/ui primitives. The plan content stays server-rendered HTML: React adds
 controls beside that content, and a live revision swaps in the next
 server-rendered article without client-rendering or gating the plan.
 
+## Decision answers
+
+An open decision card - a `Decision`, a `QuickDecision`, or a `DecisionAnalysis` with `interaction="choose"` - can be answered during a live review.
+A confirmed choice is saved with the review: it survives reload and runtime restarts, so the answer is still there when you come back to the page, and it stays saved until you change or clear it.
+The answer stays inside the review session; Big Plan does not yet deliver it to your agent, so tell the agent your decision through the feedback flow when you want it acted on.
+The card's caption always states what is true right now: saving, saved with this review, or noted for this reading session only.
+If a save fails, the card says the answer is not saved yet and retries automatically; keep the page open until it reports the answer saved.
+
+The review runtime alone decides which answers are current.
+It compiles the plan, accepts only decision and option ids the current plan asks, and records with each answer a digest of that decision's full compiled content.
+An answer is served only while its decision still asks exactly that content, so editing the decision's own question, options, summaries, considerations, or context masks its answer, while an edit elsewhere in the plan leaves it alone.
+A card whose stored answer stopped applying says so on the card itself and asks to be answered again.
+Nothing is deleted: restoring the decision's exact content revives the original answer.
+Choosing **Change** is not a reversible peek: it retracts the saved answer straight away, and the decision counts as unanswered until you confirm again.
+So choose **Change** and confirm a different option to replace an answer, or **Change** and then **Clear answer** to leave the decision deliberately unanswered.
+
+**Suggest another option** opens a composer that asks what your own words are for.
+By default they are the decision: **Confirm choice** records them as the answer, and they then stand as a **New option** until **Change** reopens the field with the text kept.
+Flip it to **Submit as comment** when the agent should act on the words instead: that side uses the review's own comment controls, so **Submit right away** decides whether the comment is sent immediately or staged with the rest of your feedback, and it reaches the agent as **Decision options feedback** with its thread beside the composer.
+**Cancel** leaves the composer from either side, and the comment side needs a live review; a standalone document says so instead of submitting.
+
+A read-only review page - one whose plan a newer review session took custody of - cannot record answers: every answering control is disabled, with a note beside it saying why.
+A confirm made before the page has learned whether it may write is held rather than guessed at: it is saved once the session proves writable, and kept as a reading-session note when the session proves read-only.
+Words recorded as the decision are a reading-session note either way, never a saved answer; submit them as a comment when the agent should act on them.
+In a standalone rendered document, an answer lasts only for the reading session and is not saved with a review.
+
 ## Persistence
 
-Runtime-backed staged comments live under `.big-plan/review/<plan-id>/` beside the plan.
+Runtime-backed staged comments and recorded decision answers live under `.big-plan/review/<plan-id>/` beside the plan.
 The review id comes from the resolved source path, so staged comments survive the plan revision the agent creates in response to feedback.
 Comment text that is typed but not yet staged or sent is kept in a recovery record owned by its browser tab, so reloading or reopening after a crash gives back the tab's staged drafts, open comment composer, and half-written thread replies.
 Each tab keeps exactly one record, written and cleared only by the tab that owns it, and read once when the page loads.

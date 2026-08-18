@@ -160,14 +160,92 @@ test("should compare, answer, and revise a Decision", async ({
   await card
     .locator("[data-decision-proposal-text]")
     .fill("Publish a signed standalone archive.");
+  // One question above the field decides what these words are, and each answer
+  // brings only its own control: the review's ordinary comment controls, or the
+  // same confirm step every other option uses. Nothing bespoke sits between.
+  const modeToggle = card.locator("[data-decision-mode-toggle]");
+  // The switch is what a reader presses; the input behind it is the state.
+  const modeSwitch = card.locator("[data-decision-mode] .decision-mode-switch");
+  const proposalField = card.locator("[data-decision-proposal-text]");
+  const commentActions = card.locator("[data-decision-comment-actions]");
+  // Unchecked is the decision side: answering for yourself is the default, and
+  // checking the switch is what hands the words to the agent instead.
+  await expect(modeToggle).not.toBeChecked();
+  await expect(card.locator("[data-decision-mode]")).toBeVisible();
+  await expect(commentActions).toBeHidden();
+  await expect(card.getByRole("button", { name: "Submit Now" })).toBeHidden();
+  // Cancel is the composer's own exit, so it is reachable in either mode.
+  await expect(card.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(card.locator("[data-decision-confirm]")).toBeVisible();
+  await expect(proposalField).toHaveAttribute(
+    "placeholder",
+    "What did you decide?",
+  );
+  // The question is asked before the typing, not after it.
+  const modeBox = await card.locator("[data-decision-mode]").boundingBox();
+  const fieldBox = await proposalField.boundingBox();
+  expect((modeBox?.y ?? 0) + (modeBox?.height ?? 0)).toBeLessThanOrEqual(
+    fieldBox?.y ?? 0,
+  );
+
   await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
-  await expect(
-    card.getByRole("button", { name: "Add to feedback" }),
-  ).toBeVisible();
-  await expect(card.getByRole("button", { name: "Send now" })).toBeVisible();
-  await expect(
-    card.getByRole("button", { name: "Include with acceptance" }),
-  ).toBeVisible();
+  await expect(card.locator("[data-decision-confirm]")).toHaveText(
+    "Confirm choice",
+  );
+
+  // Checking the switch is comment mode: the review's ordinary comment
+  // controls, and none of the confirm step.
+  await modeSwitch.click();
+  await expect(proposalField).toHaveAttribute(
+    "placeholder",
+    "Tell the agent how this decision should be changed.",
+  );
+  await expect(commentActions).toBeVisible();
+  const submitNow = card.getByRole("button", { name: "Submit Now" });
+  const cancel = card.getByRole("button", { name: "Cancel" });
+  await expect(submitNow).toBeVisible();
+  await expect(cancel).toBeVisible();
+  await expect(card.locator("[data-decision-send-now]")).not.toBeChecked();
+  await expect(card.locator("[data-decision-confirm]")).toBeHidden();
+  // The switch that decides what Submit Now means sits directly above it, and
+  // Cancel is the quiet exit to its left.
+  const switchBox = await commentActions.boundingBox();
+  const submitBox = await submitNow.boundingBox();
+  const cancelBox = await cancel.boundingBox();
+  expect((switchBox?.y ?? 0) + (switchBox?.height ?? 0)).toBeLessThanOrEqual(
+    submitBox?.y ?? 0,
+  );
+  expect(cancelBox?.x ?? 0).toBeLessThan(submitBox?.x ?? 0);
+  // Submitting here makes a comment, so the button wears the comment boxes'
+  // accent-outline submit rather than a neutral one.
+  const accent = await card
+    .locator(".decision-propose-link")
+    .evaluate((node) => getComputedStyle(node).color);
+  await expect(submitNow).toHaveCSS("border-color", accent);
+  await expect(submitNow).toHaveCSS("color", accent);
+  await expect(cancel).not.toHaveCSS("border-color", accent);
+  // One emphatic control in the trio: the setting and the way out are quiet,
+  // and only the submission carries weight.
+  await expect(submitNow).toHaveCSS("font-weight", "600");
+  await expect(cancel).toHaveCSS("font-weight", "400");
+  await expect(commentActions.locator("label")).toHaveCSS("font-weight", "400");
+  // Cancel is subordinate: a link beside the button, not a second button.
+  await expect(cancel).toHaveCSS("border-top-width", "0px");
+  expect(cancelBox?.width ?? 0).toBeLessThan(submitBox?.width ?? 0);
+  // All of it hangs off the field's right edge.
+  const textBox = await proposalField.boundingBox();
+  expect(
+    Math.abs(
+      (submitBox?.x ?? 0) +
+        (submitBox?.width ?? 0) -
+        ((textBox?.x ?? 0) + (textBox?.width ?? 0)),
+    ),
+  ).toBeLessThanOrEqual(1);
+
+  await modeSwitch.click();
+  await expect(card.locator("[data-decision-confirm]")).toBeVisible();
+  await expect(commentActions).toBeHidden();
+
   await card.locator("[data-decision-proposal-cancel]").click();
   await expect(card.locator("[data-decision-proposal]")).toBeHidden();
 
@@ -187,10 +265,97 @@ test("should compare, answer, and revise a Decision", async ({
   await card
     .locator("[data-decision-proposal-text]")
     .fill("Publish through the repository release.");
-  await card.getByRole("button", { name: "Include with acceptance" }).click();
+  await card.getByRole("button", { name: "Confirm choice" }).click();
   await expect(card.locator("[data-decision-answer]")).toContainText(
     "Publish through the repository release.",
   );
+  // A recorded proposal is an option, not an invitation to suggest one: the
+  // link retires and the words stand under their own title, with no field left
+  // to type in.
+  await expect(card.locator(".decision-propose-link")).toBeHidden();
+  await expect(card.locator("[data-decision-proposal-title]")).toHaveText(
+    "New option",
+  );
+  await expect(card.locator("[data-decision-proposal-record]")).toHaveText(
+    "Publish through the repository release.",
+  );
+  await expect(card.locator("[data-decision-proposal-text]")).toBeHidden();
+  // An answer that stands cannot be re-aimed by flipping the mode underneath
+  // it; changing the answer is what reopens that choice - and the field.
+  await expect(card.locator("[data-decision-mode-toggle]")).toBeDisabled();
+  await card.locator("[data-decision-change]").click();
+  await expect(card.locator("[data-decision-mode-toggle]")).toBeEnabled();
+  await expect(card.locator(".decision-propose-link")).toBeVisible();
+  await expect(card.locator("[data-decision-proposal-title]")).toBeHidden();
+  await expect(card.locator("[data-decision-proposal-text]")).toBeVisible();
+  await expect(card.locator("[data-decision-proposal-text]")).toHaveValue(
+    "Publish through the repository release.",
+  );
+});
+
+test("should leave the composer when it was opened without a prior selection", async ({
+  page,
+  decisionViewerUrl,
+}) => {
+  // Cancelling puts the reader back on the option they had before. A reader who
+  // never chose one has nothing to go back to, and the exit still has to work:
+  // the field empties, the composer closes, and nothing ends up selected.
+  await page.goto(decisionViewerUrl);
+  const card = page.locator("[data-decision-selector]").first();
+  const proposal = card.locator("[data-decision-proposal]");
+  const field = card.locator("[data-decision-proposal-text]");
+  const chosen = card.locator("[data-decision-choice]:checked");
+
+  await card.locator(".decision-propose-link").click();
+  await field.fill("Publish a signed standalone archive.");
+  await card.locator("[data-decision-proposal-cancel]").click();
+  await expect(proposal).toBeHidden();
+  await expect(field).toHaveValue("");
+  await expect(chosen).toHaveCount(0);
+  await expect(card.locator("[data-decision-confirm]")).toBeDisabled();
+
+  // Escape is the same exit reached from the keyboard.
+  await card.locator(".decision-propose-link").click();
+  await field.fill("Publish through the repository release.");
+  await field.press("Escape");
+  await expect(proposal).toBeHidden();
+  await expect(field).toHaveValue("");
+  await expect(chosen).toHaveCount(0);
+});
+
+test("should submit a suggestion through the review's own comment controls", async ({
+  page,
+  decisionViewerUrl,
+}) => {
+  // Comment mode is the review's comment submission, not a second one built
+  // into the card: the "submit right away" switch decides staged or sent, and
+  // the rail owns the comment from there.
+  await page.goto(decisionViewerUrl);
+  const card = page.locator("[data-decision-selector]").first();
+  await card.locator(".decision-propose-link").click();
+  await card
+    .locator("[data-decision-proposal-text]")
+    .fill("Publish a signed standalone archive.");
+  await expect(card.locator("[data-decision-selection-summary]")).toHaveText(
+    "You selected your own approach.",
+  );
+  // Comment mode is the switched-on side; the default is answering directly.
+  await card.locator("[data-decision-mode] .decision-mode-switch").click();
+
+  await card.getByRole("button", { name: "Submit Now" }).click();
+  // The comment names what it is feedback about, so the agent reading the rail
+  // knows the words belong to this decision's options.
+  await expect(page.locator("body")).toContainText(
+    "Decision options feedback:",
+  );
+  await expect(page.locator("body")).toContainText(
+    "Publish a signed standalone archive.",
+  );
+  // The comment now holds those words, so the field lets them go.
+  await expect(card.locator("[data-decision-proposal-text]")).toHaveValue("");
+  // Its thread is nominated onto the composer, so the review draws it beside
+  // the field the words came from rather than at the top of the card.
+  await expect(card.locator("[data-review-thread-anchor]")).toHaveCount(1);
 });
 
 test("should keep decision content readable and script-only controls dormant without JavaScript", async ({
@@ -204,6 +369,18 @@ test("should keep decision content readable and script-only controls dormant wit
   await expect(decisionPage.locator("[data-noscript-notice]")).toBeVisible();
   await expect(
     decisionPage.locator("[data-decision-proposal-cancel]"),
+  ).toBeHidden();
+  // Comment mode is the shell's to reveal, so without it the composer offers
+  // no control that cannot act - including the switch that would choose the
+  // mode, which moves without anything following it.
+  await expect(
+    decisionPage.locator("[data-decision-mode]").first(),
+  ).toBeHidden();
+  await expect(
+    decisionPage.locator("[data-decision-comment-actions]").first(),
+  ).toBeHidden();
+  await expect(
+    decisionPage.locator("[data-decision-comment-submit]").first(),
   ).toBeHidden();
   await expect(
     decisionPage.locator("[data-decision-question]").first(),

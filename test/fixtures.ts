@@ -871,7 +871,12 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         message.type() === "error" &&
         !allowedConsoleErrors.some((allowed) => allowed.test(message.text()))
       ) {
-        renderHealthErrors.push(message.text());
+        // A failed resource load logs only a status line, so the offending
+        // URL has to come from the message location to be diagnosable.
+        const url = message.location().url;
+        renderHealthErrors.push(
+          url === "" ? message.text() : `${message.text()} (${url})`,
+        );
       }
     });
     page.on("pageerror", (error) => {
@@ -1004,6 +1009,21 @@ export const runRefusedAgentCli = async (
     );
   }
   return { stdout, stderr };
+};
+
+/**
+ * Reads one hexadecimal identifier - a claim token, a request id, a comment
+ * id - out of an agent CLI's stdout. The CLI prints TOON, which quotes any
+ * scalar that would otherwise read as a number, so a digit-only identifier
+ * arrives as `agent_token: "9983087100926270"`. Accepting those quotes keeps
+ * the encoding from reading as a missing field once every few hundred runs.
+ */
+export const agentIdOf = (stdout: string, field: string): string => {
+  const id = new RegExp(`${field}: "?([a-f0-9]{16})"?`, "u").exec(stdout)?.[1];
+  if (id === undefined) {
+    throw new Error(`The agent CLI printed no ${field}:\n${stdout}`);
+  }
+  return id;
 };
 
 /**

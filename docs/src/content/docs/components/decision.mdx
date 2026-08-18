@@ -23,4 +23,6 @@ description: A compact option-by-option choice with inline considerations.
 A `Consideration` body defines its label: the first body authored for a label becomes the definition that label reveals on hover and keyboard focus.
 A label authored without a body stays plain text.
 
-The reader can choose an option, propose another approach, confirm, and later change the reading-session answer.
+The reader can choose an option, propose another approach, confirm, and later change or clear the answer.
+In a live review a confirmed answer is recorded with the review and survives reload; in a standalone rendered document it lasts only for the reading session.
+[Reviewing a plan](/reference/reviewing/#decision-answers) owns the recorded-answer behavior.

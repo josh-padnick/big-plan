@@ -86,6 +86,7 @@ import {
   decodeAgentSnapshot as parseAgentSnapshot,
   decodeSnapshotDiff as parseSnapshotDiff,
   decodeProgress as parseProgress,
+  decodeReviewState as parseReviewState,
   decodeReviewSnapshot as parseSnapshot,
   decodeRuntimeSession as parseRuntimeSession,
   emptyAgentSnapshot,
@@ -99,6 +100,7 @@ import {
   type ProgressEvent,
   type ReviewSnapshot,
   type RuntimeSession,
+  type StagedDecisionAnswer,
 } from "../shared/review-wire.js";
 import { AgentHealthAlert } from "./agent-connection.browser.js";
 import { AgentSurface } from "./agent-surface.browser.js";
@@ -128,6 +130,7 @@ import {
   displayedStandIn,
   foundElement,
   liveBlock,
+  liveDecisionFigure,
   liveFlowAnchor,
   livePictures,
 } from "./live-target.browser.js";
@@ -153,6 +156,7 @@ import { RESOLVED_THREAD_NEW_WORK_ERROR } from "../shared/resolved-thread-work.j
 import {
   isReviewRuntimeRefusal,
   isReviewRuntimeUnavailable,
+  isTerminalReviewRuntimeRefusal,
   normalizeReviewRuntimeRequestError,
   reviewRuntimeRefusal,
   reviewRuntimeRefusalStatus,
@@ -192,7 +196,9 @@ import {
   Button,
   Card,
   Textarea,
+  Toaster,
   Tooltip,
+  toast,
 } from "./ui.browser.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
@@ -228,6 +234,48 @@ type RuntimeIdentity = {
   readonly token: string;
 };
 
+// The server owns the answer time and the digest of the decision that was
+// answered, so a mutation carries neither.
+type DecisionInputMutation =
+  | {
+      readonly op: "stage";
+      readonly answer: Omit<
+        StagedDecisionAnswer,
+        "answeredAt" | "decisionDigest"
+      >;
+    }
+  | { readonly op: "retract"; readonly decisionId: string };
+
+/**
+ * Whether this page may write to the review record. It starts unknown, because
+ * the session response has not arrived yet, and that window is real: a confirm
+ * made in it is held rather than guessed at, so it is neither posted from a
+ * session that turns out to be read-only nor quietly demoted to a note in a
+ * session that turns out to be writable.
+ */
+type ReviewAuthority = "unknown" | "writable" | "read-only";
+
+type DecisionPersistenceState = "pending" | "saved" | "failed" | "reading";
+
+type PendingDecisionInput = {
+  readonly mutation: DecisionInputMutation;
+  readonly failures: number;
+};
+
+type DecisionAnsweredDetail = {
+  readonly decision: string;
+  readonly question: string;
+  readonly optionId: string;
+  readonly option: string;
+  readonly proposal: string;
+};
+
+const decisionInputId = (mutation: DecisionInputMutation): string =>
+  mutation.op === "stage" ? mutation.answer.decisionId : mutation.decisionId;
+
+const decisionToastId = (decisionId: string): string =>
+  `decision-persistence-${decisionId}`;
+
 type ExternalFeedbackItem = {
   readonly kind?: string;
   readonly anchor?: string;
@@ -248,7 +296,11 @@ type ExternalFeedbackPayload = {
 
 type BigPlanFeedbackWindow = Window & {
   bigPlan?: {
-    feedback?: { readonly add: (payload: ExternalFeedbackPayload) => void };
+    feedback?: {
+      // The id comes back so a component can hold on to the one comment it
+      // raised, rather than raising a second one it cannot tell apart.
+      readonly add: (payload: ExternalFeedbackPayload) => string | null;
+    };
   };
 };
 
@@ -1361,6 +1413,24 @@ const setSelectionHighlights = (
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "Something went wrong.";
 
+const parseDecisionAnsweredDetail = (
+  value: unknown,
+): DecisionAnsweredDetail | null =>
+  isRecord(value) &&
+  typeof value.decision === "string" &&
+  typeof value.question === "string" &&
+  typeof value.optionId === "string" &&
+  typeof value.option === "string" &&
+  typeof value.proposal === "string"
+    ? {
+        decision: value.decision,
+        question: value.question,
+        optionId: value.optionId,
+        option: value.option,
+        proposal: value.proposal,
+      }
+    : null;
+
 // The only place plan DOM is replaced. Swapping the article detaches every
 // node the shell scripts wired at load, so the swap and its announcement stay
 // one ritual: replace the reading surface, then dispatch
@@ -1804,6 +1874,22 @@ const useInlineComposeHost = (
   return host;
 };
 
+// A block-targeted comment normally sits level with the top of its block, which
+// is right for a comment about the block. A component that raised the comment
+// from one control inside itself knows better: it nominates that control, and
+// the thread sits beside the thing the reader was actually looking at. The
+// comment's target is unchanged - this moves where the thread is drawn, not
+// what it points at.
+const threadAnchorElement = (comment: ReviewComment): HTMLElement | null => {
+  const nominated = document.querySelector<HTMLElement>(
+    `[data-review-thread-anchor="${CSS.escape(comment.id)}"]`,
+  );
+  if (nominated !== null && nominated.getClientRects().length > 0) {
+    return nominated;
+  }
+  return targetElement(comment.target);
+};
+
 const useThreadHosts = (
   comments: ReadonlyArray<ReviewComment>,
   isOpen: boolean,
@@ -1825,7 +1911,7 @@ const useThreadHosts = (
       { readonly left: number; readonly right: number; readonly top: number }
     >();
     for (const comment of comments) {
-      const anchor = targetElement(comment.target);
+      const anchor = threadAnchorElement(comment);
       if (anchor === null) continue;
       const container =
         anchor.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
@@ -1873,7 +1959,7 @@ const useThreadHosts = (
       const rightThreadOffsets = new Map<string, number>();
       for (const comment of comments) {
         const host = mounted.get(comment.id);
-        const target = targetElement(comment.target);
+        const target = threadAnchorElement(comment);
         if (host === undefined || target === null) continue;
         const anchor =
           target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
@@ -3905,6 +3991,12 @@ export const ReviewController = () => {
     },
     [runtimeSessionOrder],
   );
+  const [storedAnswers, setStoredAnswers] = useState<
+    ReadonlyArray<StagedDecisionAnswer>
+  >([]);
+  const [supersededDecisionIds, setSupersededDecisionIds] = useState<
+    ReadonlyArray<string>
+  >([]);
   const [pollHealth, setPollHealth] = useState<ReviewPollHealth>(
     INITIAL_REVIEW_POLL_HEALTH,
   );
@@ -4004,6 +4096,12 @@ export const ReviewController = () => {
       runtimeSession?.writesStalledMs,
     ],
   );
+  const reviewAuthority: ReviewAuthority =
+    identity === null || runtimeSession === null
+      ? "unknown"
+      : runtimeSession.authoritative
+        ? "writable"
+        : "read-only";
   const canSendToAgent =
     identity !== null &&
     threadRuntime === "online" &&
@@ -4087,6 +4185,22 @@ export const ReviewController = () => {
     chatBody === "" &&
     replyDrafts.size === 0 &&
     unsavedInputKeys.size === 0;
+  const pendingDecisionInputs = useRef<Map<string, PendingDecisionInput>>(
+    new Map(),
+  );
+  const isFlushingDecisionInputs = useRef(false);
+  const reviewAuthorityRef = useRef<ReviewAuthority>("unknown");
+  // The revision of the newest answers record this page has applied. A response
+  // that is strictly older lost a race with a completed write and is dropped;
+  // an equal one is applied, because the same revision read against an edited
+  // plan legitimately answers with a different set of current answers.
+  const appliedAnswerRevision = useRef(-1);
+  // The decisions this page has told a card to show as answered. A card cannot
+  // work out on its own that an answer stopped applying, and a replaced article
+  // is replayed from the last known record before the fresh one arrives, so the
+  // difference between the two passes is what has to be taken back.
+  const appliedDecisionIds = useRef<ReadonlySet<string>>(new Set());
+  const displayedSnapshotRef = useRef(displayedSnapshot);
   const justSubmittedCommentIds = useRef<ReadonlySet<string>>(new Set());
   const onUnsavedInputChange = useCallback<UnsavedInputChange>(
     (key, hasUnsavedInput) => {
@@ -4386,12 +4500,302 @@ export const ReviewController = () => {
       }),
     [serializeRuntimeWrite],
   );
+  useEffect(() => {
+    displayedSnapshotRef.current = displayedSnapshot;
+  }, [displayedSnapshot]);
   const inlineComposeHost = useInlineComposeHost(compose, isOpen);
   const threadHosts = useThreadHosts(reviewComments, isOpen);
   // An in-place refresh replaces exactly the nodes an effect captured, so
   // every effect below that resolves plan elements, ranges, or listeners once
   // and holds them names this and resolves them again.
   const articleVersion = useArticleVersion();
+  const dispatchDecisionPersistenceState = useCallback(
+    (decisionId: string, state: DecisionPersistenceState): void => {
+      const decision = liveDecisionFigure(decisionId);
+      if ("missing" in decision) return;
+      decision.found.dispatchEvent(
+        new CustomEvent(`bigplan:decision-persistence-${state}`),
+      );
+    },
+    [],
+  );
+  // Every response from the answers store carries the whole current record and
+  // the revision that produced it, so applying one is the only way this page
+  // learns what is stored. A strictly older revision lost a race with a write
+  // that has already been applied and is dropped without comment.
+  const applyAnswersResponse = useCallback((value: unknown): void => {
+    const state = parseReviewState(value);
+    if (state.revision < appliedAnswerRevision.current) return;
+    appliedAnswerRevision.current = state.revision;
+    setStoredAnswers(state.answers);
+    setSupersededDecisionIds(state.supersededDecisionIds);
+  }, []);
+  const flushPendingDecisionInputs = useCallback(async (): Promise<void> => {
+    if (
+      identity === null ||
+      reviewAuthorityRef.current !== "writable" ||
+      isFlushingDecisionInputs.current
+    ) {
+      return;
+    }
+    isFlushingDecisionInputs.current = true;
+    const attemptedMutations = new Map<string, DecisionInputMutation>();
+    try {
+      while (true) {
+        const pending = Array.from(
+          pendingDecisionInputs.current.entries(),
+        ).filter(
+          ([decisionId, entry]) =>
+            attemptedMutations.get(decisionId) !== entry.mutation,
+        );
+        if (pending.length === 0) break;
+        for (const [decisionId, entry] of pending) {
+          if (pendingDecisionInputs.current.get(decisionId) !== entry) {
+            continue;
+          }
+          attemptedMutations.set(decisionId, entry.mutation);
+          try {
+            const record = await serializeRuntimeWrite(() =>
+              requestJson({
+                path: "/api/inputs",
+                identity,
+                method: "POST",
+                body: entry.mutation,
+              }),
+            );
+            applyAnswersResponse(record);
+            if (pendingDecisionInputs.current.get(decisionId) !== entry) {
+              continue;
+            }
+            pendingDecisionInputs.current.delete(decisionId);
+            toast.dismiss(decisionToastId(decisionId));
+            dispatchDecisionPersistenceState(decisionId, "saved");
+          } catch (error: unknown) {
+            if (pendingDecisionInputs.current.get(decisionId) !== entry) {
+              continue;
+            }
+            // The runtime looked at this mutation and refused it, so the
+            // reader is owed its reason rather than a retry loop that will
+            // collect the same refusal for as long as the page is open.
+            if (isTerminalReviewRuntimeRefusal(error)) {
+              pendingDecisionInputs.current.delete(decisionId);
+              dispatchDecisionPersistenceState(decisionId, "failed");
+              toast.error("Decision answer not saved", {
+                id: decisionToastId(decisionId),
+                description:
+                  error instanceof Error
+                    ? error.message
+                    : "The review runtime refused this answer.",
+                duration: Infinity,
+              });
+              continue;
+            }
+            const failed = { ...entry, failures: entry.failures + 1 };
+            pendingDecisionInputs.current.set(decisionId, failed);
+            if (failed.failures !== 2) continue;
+            dispatchDecisionPersistenceState(decisionId, "failed");
+            toast.error("Decision answer not saved", {
+              id: decisionToastId(decisionId),
+              description:
+                "Big Plan will keep retrying. Keep this review open until the decision card says the answer is saved.",
+              duration: Infinity,
+            });
+          }
+        }
+      }
+    } finally {
+      isFlushingDecisionInputs.current = false;
+    }
+  }, [
+    applyAnswersResponse,
+    dispatchDecisionPersistenceState,
+    identity,
+    serializeRuntimeWrite,
+  ]);
+  const queueDecisionInput = useCallback(
+    (mutation: DecisionInputMutation): void => {
+      const decisionId = decisionInputId(mutation);
+      // A reading session records nothing, so the card says so and the queue
+      // never grows an entry that could not be sent.
+      if (reviewAuthorityRef.current === "read-only") {
+        dispatchDecisionPersistenceState(decisionId, "reading");
+        return;
+      }
+      // The reader asked for this card to stop showing an answer, and the card
+      // has already done it. Forgetting that this page applied one keeps the
+      // record's own emptiness from being replayed as a second reset, which
+      // would drop the reader out of the change flow they just entered.
+      if (mutation.op === "retract") {
+        const remaining = new Set(appliedDecisionIds.current);
+        remaining.delete(decisionId);
+        appliedDecisionIds.current = remaining;
+      }
+      pendingDecisionInputs.current.set(decisionId, {
+        mutation,
+        failures: 0,
+      });
+      toast.dismiss(decisionToastId(decisionId));
+      dispatchDecisionPersistenceState(decisionId, "pending");
+      void flushPendingDecisionInputs();
+    },
+    [dispatchDecisionPersistenceState, flushPendingDecisionInputs],
+  );
+  // Authority arrives after the first paint, and what happens to a confirm made
+  // before it does is this effect's whole subject: flush it once the session is
+  // known writable, or convert it to a reading-session answer once the session
+  // is known read-only. Doing neither is what made the product's own promise -
+  // confirming a decision persists it - untrue for the bootstrap window.
+  // A read-only review can record nothing, so the cards stop offering to. The
+  // state lives on the root because the shell owns what a card may do, and a
+  // card wired after an article replacement has to be able to read it rather
+  // than wait to be told again.
+  useEffect(() => {
+    rootElement.toggleAttribute(
+      "data-review-read-only",
+      reviewAuthority === "read-only",
+    );
+    document.dispatchEvent(new CustomEvent("bigplan:review-authority"));
+  }, [articleVersion, reviewAuthority]);
+  useEffect(() => {
+    reviewAuthorityRef.current = reviewAuthority;
+    if (reviewAuthority === "unknown") return;
+    if (reviewAuthority === "writable") {
+      void flushPendingDecisionInputs();
+      return;
+    }
+    for (const [decisionId] of Array.from(pendingDecisionInputs.current)) {
+      pendingDecisionInputs.current.delete(decisionId);
+      toast.dismiss(decisionToastId(decisionId));
+      dispatchDecisionPersistenceState(decisionId, "reading");
+    }
+  }, [
+    dispatchDecisionPersistenceState,
+    flushPendingDecisionInputs,
+    reviewAuthority,
+  ]);
+
+  useEffect(() => {
+    if (identity === null) return;
+    const answered = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail = parseDecisionAnsweredDetail(event.detail);
+      if (detail === null || detail.proposal.trim() !== "") return;
+      const decision = liveDecisionFigure(detail.decision);
+      if ("missing" in decision) return;
+      if (
+        !(event.target instanceof Element) ||
+        event.target.closest("[data-decision]") !== decision.found
+      ) {
+        return;
+      }
+      const option = decision.found.querySelector<HTMLInputElement>(
+        `#${CSS.escape(detail.optionId)}[data-decision-choice]`,
+      );
+      if (option === null) return;
+      queueDecisionInput({
+        op: "stage",
+        answer: {
+          decisionId: detail.decision,
+          optionId: detail.optionId,
+          optionTitle: detail.option,
+          prompt: detail.question,
+          premiseSnapshot: displayedSnapshotRef.current,
+        },
+      });
+    };
+    const retracted = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const decisionId = isRecord(event.detail)
+        ? event.detail.decision
+        : undefined;
+      if (typeof decisionId !== "string") return;
+      const decision = liveDecisionFigure(decisionId);
+      if (
+        "missing" in decision ||
+        !(event.target instanceof Element) ||
+        event.target.closest("[data-decision]") !== decision.found
+      ) {
+        return;
+      }
+      queueDecisionInput({ op: "retract", decisionId });
+    };
+    document.addEventListener("bigplan:decision-answered", answered);
+    document.addEventListener("bigplan:decision-retracted", retracted);
+    return () => {
+      document.removeEventListener("bigplan:decision-answered", answered);
+      document.removeEventListener("bigplan:decision-retracted", retracted);
+    };
+  }, [identity, queueDecisionInput]);
+
+  // The server decides which stored answers the plan still asks for, so reading
+  // the record is the whole of this page's obligation. A failed read leaves the
+  // applied revision alone, so the next read - the next article replacement, or
+  // a reload - applies normally; there is no reconciliation to owe or retry.
+  useEffect(() => {
+    if (identity === null) return;
+    void requestJson({ path: "/api/review-state", identity })
+      .then(applyAnswersResponse)
+      .catch(() => undefined);
+  }, [applyAnswersResponse, articleVersion, identity]);
+
+  // Replays the current record onto the cards. It runs again after an article
+  // replacement because the swap hands back freshly rendered, unanswered cards.
+  // A pending mutation overlays the record it has not reached yet, so the
+  // reader's most recent gesture is what they keep seeing.
+  useEffect(() => {
+    const answers = new Map(
+      storedAnswers.map((answer) => [answer.decisionId, answer.optionId]),
+    );
+    for (const [decisionId, pending] of pendingDecisionInputs.current) {
+      if (pending.mutation.op === "stage") {
+        answers.set(decisionId, pending.mutation.answer.optionId);
+      } else {
+        answers.delete(decisionId);
+      }
+    }
+    const applied = new Set<string>();
+    for (const [decisionId, optionId] of answers) {
+      const decision = liveDecisionFigure(decisionId);
+      if ("missing" in decision) continue;
+      const option = decision.found.querySelector<HTMLInputElement>(
+        `#${CSS.escape(optionId)}[data-decision-choice]`,
+      );
+      if (option === null) continue;
+      applied.add(decisionId);
+      decision.found.dispatchEvent(
+        new CustomEvent("bigplan:decision-apply", { detail: { optionId } }),
+      );
+    }
+    for (const decisionId of appliedDecisionIds.current) {
+      if (applied.has(decisionId)) continue;
+      const decision = liveDecisionFigure(decisionId);
+      if ("missing" in decision) continue;
+      decision.found.dispatchEvent(new CustomEvent("bigplan:decision-reset"));
+    }
+    appliedDecisionIds.current = applied;
+    for (const [decisionId, pending] of pendingDecisionInputs.current) {
+      dispatchDecisionPersistenceState(
+        decisionId,
+        pending.failures >= 2 ? "failed" : "pending",
+      );
+    }
+    // A decision whose stored answer stopped applying looks unanswered, so the
+    // card is told why. A pending mutation is the reader answering it right
+    // now, which resolves the notice without it ever being shown.
+    for (const decisionId of supersededDecisionIds) {
+      if (pendingDecisionInputs.current.has(decisionId)) continue;
+      const decision = liveDecisionFigure(decisionId);
+      if ("missing" in decision) continue;
+      decision.found.dispatchEvent(
+        new CustomEvent("bigplan:decision-superseded"),
+      );
+    }
+  }, [
+    articleVersion,
+    dispatchDecisionPersistenceState,
+    storedAnswers,
+    supersededDecisionIds,
+  ]);
   const componentBatchNotes = useComponentBatchNotes(
     isOpen && tab === "comments",
   );
@@ -5072,6 +5476,7 @@ export const ReviewController = () => {
         }
       } finally {
         pending = false;
+        void flushPendingDecisionInputs();
       }
     };
     void refresh();
@@ -5086,6 +5491,7 @@ export const ReviewController = () => {
   }, [
     acceptAgentSnapshot,
     acceptRuntimeSession,
+    flushPendingDecisionInputs,
     identity,
     runtimeSessionOrder,
   ]);
@@ -5363,7 +5769,7 @@ export const ReviewController = () => {
     const feedbackWindow = window as BigPlanFeedbackWindow;
     const previous = feedbackWindow.bigPlan?.feedback;
     const api = {
-      add: (payload: ExternalFeedbackPayload): void => {
+      add: (payload: ExternalFeedbackPayload): string => {
         const source =
           payload.source === "flow-diagram" && payload.anchor !== undefined
             ? // A diagram element that no longer resolves still deserves its
@@ -5381,7 +5787,7 @@ export const ReviewController = () => {
         const subject =
           payload.source === "flow-diagram"
             ? "Diagram feedback"
-            : "Suggested decision option";
+            : "Decision options feedback";
         const lines = payload.items.map((item) => {
           if (item.kind === "edit-text") {
             return `- Change ${item.field ?? "text"}: “${item.before ?? ""}” → “${item.after ?? ""}”`;
@@ -5407,6 +5813,7 @@ export const ReviewController = () => {
             : "Component feedback added to the review batch.",
         );
         if (payload.submit === "now") void sendComments([comment]);
+        return comment.id;
       },
     };
     feedbackWindow.bigPlan = {
@@ -6034,6 +6441,7 @@ export const ReviewController = () => {
 
   return (
     <>
+      <Toaster />
       {serverGone ? (
         <ServerGoneBanner
           canRefresh={canRefreshReview}
