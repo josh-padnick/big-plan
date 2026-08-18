@@ -41,8 +41,32 @@ describe("decodeAgentModelIdentity", () => {
     ).toEqual({ name: "grok-4.6" });
   });
 
-  it("should refuse a declaration with no model", () => {
-    expect(decodeAgentModelIdentity({ effort: "high" })).toBeUndefined();
+  it("should report a declaration that names only the client", () => {
+    expect(decodeAgentModelIdentity({ client: "grok-cli 0.2.99" })).toEqual({
+      client: "grok-cli 0.2.99",
+    });
+  });
+
+  it("should report a declaration that names only the session", () => {
+    expect(
+      decodeAgentModelIdentity({ sessionUrl: "https://claude.ai/code/abc" }),
+    ).toEqual({ sessionUrl: "https://claude.ai/code/abc" });
+    expect(decodeAgentModelIdentity({ sessionId: "01H9" })).toEqual({
+      sessionId: "01H9",
+    });
+  });
+
+  it("should drop a field that fails its own check without losing the rest", () => {
+    expect(
+      decodeAgentModelIdentity({
+        name: "x".repeat(81),
+        client: "codex 0.9",
+      }),
+    ).toEqual({ client: "codex 0.9" });
+  });
+
+  it("should refuse a declaration where nothing survives", () => {
+    expect(decodeAgentModelIdentity({})).toBeUndefined();
     expect(decodeAgentModelIdentity({ name: "   " })).toBeUndefined();
     expect(decodeAgentModelIdentity({ name: "x".repeat(81) })).toBeUndefined();
   });

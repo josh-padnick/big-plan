@@ -3534,8 +3534,14 @@ test("should restore and submit staged comments through the local review runtime
   });
   const settingsAction = page.getByRole("button", { name: "Open settings" });
   await expect(agentStatus).toBeVisible();
+  // The control draws exactly one state mark, and with no agent connected it is
+  // not the working one. Asserting the mark exists first keeps the second
+  // assertion from passing because nothing was drawn at all.
+  await expect(agentStatus.locator("[data-review-agent-status]")).toHaveCount(
+    1,
+  );
   await expect(
-    agentStatus.locator(".review-agent-active-indicator--working"),
+    agentStatus.locator('[data-review-agent-status="working"]'),
   ).toHaveCount(0);
   await expect(feedbackAction).toBeVisible();
   await expect(settingsAction).toBeVisible();
@@ -3952,7 +3958,7 @@ test("should restore and submit staged comments through the local review runtime
   await expect(selectedTitle).toHaveCSS("text-decoration-line", "none");
   await rail
     .getByRole("button", {
-      name: /view Agent tab$/u,
+      name: /open Agent Status$/u,
     })
     .click();
   await expect(agentStatusTrigger(page)).toHaveAttribute(
@@ -4138,10 +4144,25 @@ test("should restore and submit staged comments through the local review runtime
   expect(commentedBlockId ?? 0).toBeGreaterThanOrEqual(0);
   expect(commentedBlockId ?? 0).toBeLessThan(viewportHeight / 2);
 
+  // Opening the request is a request to see the reviewer's own feedback, so the
+  // sidebar claims its slot for the feedback body. Setting the tab alone left
+  // agent diagnosis on screen and the thread the reader asked for invisible.
+  await expect(agentSidebar(page)).toHaveCount(0);
+  await expect(rail).toBeVisible();
+  await expect(rail.getByRole("tab", { name: "Comments" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(
+    rail
+      .locator("[data-review-comment-id]")
+      .filter({ hasText: "Clarify the failure boundary." }),
+  ).toBeVisible();
+
   // Re-pressing the pressed control closes its window; it never hands the slot
   // to the other body.
-  await agentStatusTrigger(page).click();
-  await expect(agentSidebar(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  await expect(rail).toHaveCount(0);
   await writeAgentHeartbeat({
     store,
     sessionId: session.sessionId,

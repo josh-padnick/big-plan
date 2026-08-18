@@ -178,9 +178,8 @@ export const deriveAgentHealth = ({
   if (activity.state === "working") {
     return { indicator: "working", label: "Agent working" };
   }
-  if (activity.state === "waiting") {
-    return { indicator: "healthy", label: "Agent connected" };
-  }
+  // Waiting and idle both read as connected: a queued request is the agent
+  // being available, not the agent being at fault.
   return { indicator: "healthy", label: "Agent connected" };
 };
 
@@ -214,7 +213,7 @@ const stalledHint =
 // a claim is this old. Past the recovery horizon the reviewer needs the route
 // forward and the cost of taking it, not another reassurance (BIG-147).
 const abandonedHint =
-  "The agent has reported nothing for far longer than a turn takes. Connect a coding agent from the Agent tab to pick this up; doing so takes the work over, so the original agent's answer will no longer be accepted.";
+  "The agent has reported nothing for far longer than a turn takes. Connect a coding agent from Agent Status to pick this up; doing so takes the work over, so anything the original agent has in flight is dropped rather than delivered.";
 
 // The two reasons a connection edge can carry, and the rule that picks one.
 // A disconnect Big Plan inferred from silence and one the agent's own loop

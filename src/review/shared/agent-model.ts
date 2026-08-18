@@ -1,9 +1,11 @@
 // The connector's own description of itself, as it declared it.
 //
-// Every field is optional except the model, every one is stated by the agent
-// rather than inferred by Big Plan, and an absent field is reported as absent
-// rather than filled in. The type stays deliberately dumb: it holds strings a
-// connector said, and the catalog decides how any of them are shown.
+// Every field is optional and independent of the others, every one is stated by
+// the agent rather than inferred by Big Plan, and an absent field is reported as
+// absent rather than filled in. A connector that can name its client but not its
+// model is still reporting something true, so the declaration stands on any one
+// field. The type stays deliberately dumb: it holds strings a connector said,
+// and the catalog decides how any of them are shown.
 //
 // It rides the slot the wire already calls `model` on presence and on a claim.
 // The slot is narrower than its contents now, but these fields are one
@@ -15,7 +17,7 @@ export type AgentModelIdentity = {
    * The model, as the provider's own canonical API id where the agent knows it.
    * Never composed here: what arrives is what is stored.
    */
-  readonly name: string;
+  readonly name?: string;
   /**
    * How hard the connector was told to think, when it reports it. Free text
    * rather than an enum: the levels are the connector's vocabulary, not ours,
@@ -78,29 +80,32 @@ const readSessionUrl = (value: object): string | undefined => {
     : undefined;
 };
 
+/**
+ * Reads a declaration field by field, and reports it when any field survives.
+ *
+ * The four fields are independent, so one that fails its own check drops on its
+ * own rather than taking the declaration with it: a connector that names its
+ * client and its session but cannot name its model has still told the reviewer
+ * who is there. A declaration where nothing survives is absent, and absence is
+ * reported as absence.
+ */
 export const decodeAgentModelIdentity = (
   value: unknown,
 ): AgentModelIdentity | undefined => {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    !("name" in value) ||
-    typeof value.name !== "string"
-  ) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return undefined;
   }
-  const name = withoutTerminalFormatting(value.name).trim();
-  if (name === "" || name.length > 80) return undefined;
+  const name = readText(value, "name", 80);
   const effort = readText(value, "effort", 24);
   const client = readText(value, "client", 80);
   const sessionUrl = readSessionUrl(value);
   const sessionId = readText(value, "sessionId", 120);
-  return {
-    name,
+  const identity = {
+    ...(name === undefined ? {} : { name }),
     ...(effort === undefined ? {} : { effort }),
     ...(client === undefined ? {} : { client }),
     ...(sessionUrl === undefined ? {} : { sessionUrl }),
     ...(sessionId === undefined ? {} : { sessionId }),
   };
+  return Object.keys(identity).length === 0 ? undefined : identity;
 };

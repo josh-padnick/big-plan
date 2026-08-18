@@ -225,15 +225,28 @@ Taking a message back discards the stage its claim was drafting, and a returning
 A response that finds the plan changed underneath it is refused rather than applied, so the agent takes the work again from the current plan.
 If the process dies mid-publish, the next `agent` command and the next `big-plan review` settle the interrupted commit before serving anything: the answer completes if the swap won, the request stays open if it did not, and a plan matching neither revision stops agent edits with a conflict naming both digests instead of overwriting the file.
 
-Set the `BIG_PLAN_AGENT_MODEL` environment variable before running `agent
-next` or `agent note` to report which model is connected, for example `Grok
-4.6`, and `BIG_PLAN_AGENT_EFFORT` to report how hard it was told to think, for
-example `high`.
-Use a non-empty model name of at most 80 characters, and an effort of at most 24.
-Neither is guessed on the connector's behalf: unset them and the reviewer is
-told the model was not reported rather than shown a name Big Plan invented.
-`agent next` stores the reported name with the durable per-pickup claim, and `agent note` preserves or refreshes that claim identity.
-The reviewer's browser reads the model from the pickup it is describing, for as long as that pickup still explains the plan's quiet, so a waiting agent's heartbeat cannot relabel another agent's request.
+Export any of these environment variables before running `agent next` or `agent
+note` to report who is connected. They carry the four facts **Agent Status**
+shows, with a session declared either as a link or as an id:
+
+| Variable                     | What it declares                                           | Limit       |
+| ---------------------------- | ---------------------------------------------------------- | ----------- |
+| `BIG_PLAN_AGENT_MODEL`       | Your API's own canonical model id, for example `grok-4.6`. | 80 chars    |
+| `BIG_PLAN_AGENT_EFFORT`      | How hard the model was told to think, for example `high`.  | 24 chars    |
+| `BIG_PLAN_AGENT_CLIENT`      | Which tool is connected, for example `grok-cli 0.2.99`.    | 80 chars    |
+| `BIG_PLAN_AGENT_SESSION_URL` | An `http` or `https` link to the agent's own conversation. | 2,048 chars |
+| `BIG_PLAN_AGENT_SESSION`     | That conversation's id, when it has no link.               | 120 chars   |
+
+All are optional and independent: declare only the ones you can answer, and the
+reviewer is shown exactly those.
+None is guessed on the connector's behalf, and none is rewritten - an id Big
+Plan does not recognize is shown exactly as declared rather than re-cased.
+Where nothing is declared the reviewer is shown no identity at all rather than a
+note about its absence.
+A value that exceeds its limit, is empty, or fails its own check is dropped on
+its own; the rest of the declaration still stands.
+`agent next` stores the declaration with the durable per-pickup claim, and `agent note` preserves or refreshes that claim identity.
+The reviewer's browser reads the declaration from the pickup it is describing, for as long as that pickup still explains the plan's quiet, so a waiting agent's heartbeat cannot relabel another agent's request.
 
 A `changed` outcome is accepted only when the result snapshot differs and every
 named target belongs to the computed snapshot diff. Other outcomes are

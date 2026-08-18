@@ -410,17 +410,13 @@ const nextWork = async ({
   readonly sessionId?: string;
   readonly agentToken?: string;
 }): Promise<Record<string, unknown>> => {
-  const model = decodeAgentModelIdentity(
-    modelName === undefined
-      ? undefined
-      : {
-          name: modelName,
-          ...(modelEffort === undefined ? {} : { effort: modelEffort }),
-          ...(modelClient === undefined ? {} : { client: modelClient }),
-          ...(sessionUrl === undefined ? {} : { sessionUrl }),
-          ...(sessionId === undefined ? {} : { sessionId }),
-        },
-  );
+  const model = decodeAgentModelIdentity({
+    ...(modelName === undefined ? {} : { name: modelName }),
+    ...(modelEffort === undefined ? {} : { effort: modelEffort }),
+    ...(modelClient === undefined ? {} : { client: modelClient }),
+    ...(sessionUrl === undefined ? {} : { sessionUrl }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+  });
   let session: Awaited<ReturnType<typeof readPlanSession>>;
   try {
     session = await readPlanSession(planPath);
@@ -966,17 +962,13 @@ const note = async ({
   readonly sessionId?: string;
   readonly agentToken: string;
 }): Promise<Record<string, unknown>> => {
-  const model = decodeAgentModelIdentity(
-    modelName === undefined
-      ? undefined
-      : {
-          name: modelName,
-          ...(modelEffort === undefined ? {} : { effort: modelEffort }),
-          ...(modelClient === undefined ? {} : { client: modelClient }),
-          ...(sessionUrl === undefined ? {} : { sessionUrl }),
-          ...(sessionId === undefined ? {} : { sessionId }),
-        },
-  );
+  const model = decodeAgentModelIdentity({
+    ...(modelName === undefined ? {} : { name: modelName }),
+    ...(modelEffort === undefined ? {} : { effort: modelEffort }),
+    ...(modelClient === undefined ? {} : { client: modelClient }),
+    ...(sessionUrl === undefined ? {} : { sessionUrl }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+  });
   const message = detail.trim();
   if (message === "" || message.length > 160) {
     return fail("Progress must be between 1 and 160 characters");
@@ -1043,6 +1035,10 @@ const note = async ({
     sessionId: session.sessionId,
     state: "working",
     requestId: renewed.requestId,
+    // The presence record is replaced whole, so a heartbeat that omits the
+    // declaration erases it. Identity outlives the request it was declared on,
+    // and a note is not a reason for the card to stop naming the agent.
+    ...(model === undefined ? {} : { model }),
   }).catch(() => undefined);
   return { noted: message, requestId: renewed.requestId };
 };

@@ -2932,6 +2932,111 @@ describe("agent work loop lifecycle", () => {
     }
   });
 
+  it("should keep the declared identity in presence across a progress note", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-note-id-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer this question.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "dddddddddddddddf",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "What should we prioritize?",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        executablePath,
+        shouldWait: false,
+        modelName: "Grok 4.6",
+      });
+      if (typeof pickup.agent_token !== "string") {
+        throw new Error("Pickup did not return its committed token");
+      }
+      await runAgentWorkLoopAction({
+        kind: "note",
+        planPath,
+        detail: "Still reading the plan",
+        modelName: "Grok 4.6",
+        agentToken: pickup.agent_token,
+      });
+      await expect(
+        reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toMatchObject({ model: { name: "Grok 4.6" } });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should report an identity that declares no model", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-client-"));
+    const planPath = join(directory, "plan.mdx");
+    const source = "# Plan\n\nAnswer this question.\n";
+    await writeFile(planPath, source);
+    const review = await startReviewRuntime({ planPath });
+    const request = messageAgentRequest({
+      kind: "chat",
+      requestId: "ddddddddddddddde",
+      sessionId: review.sessionId,
+      planId: review.planId,
+      premiseSnapshot: deriveSnapshotDigest(source),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      body: "What should we prioritize?",
+    });
+    await writeAgentRequest({ store: review.store, request });
+    try {
+      await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        executablePath,
+        shouldWait: false,
+        modelClient: "grok-cli 0.2.99",
+        sessionUrl: "https://grok.com/c/abc",
+      });
+      await expect(
+        readAgentExchange({
+          store: review.store,
+          sessionId: review.sessionId,
+          planId: review.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [
+          expect.objectContaining({
+            requestId: request.requestId,
+            claimedModel: {
+              client: "grok-cli 0.2.99",
+              sessionUrl: "https://grok.com/c/abc",
+            },
+          }),
+        ],
+      });
+      await expect(
+        reviewStore.readAgentPresence({
+          store: review.store,
+          sessionId: review.sessionId,
+        }),
+      ).resolves.toMatchObject({
+        model: {
+          client: "grok-cli 0.2.99",
+          sessionUrl: "https://grok.com/c/abc",
+        },
+      });
+    } finally {
+      await review.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should validate a progress note before reading session state", async () => {
     await expect(
       runAgentWorkLoopAction({

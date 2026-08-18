@@ -1,6 +1,6 @@
 // Owns the Agent Status mark and the viewer-chrome control that opens the
-// agent sidebar. Both live here because the chrome control and the sidebar's
-// own heading must show the identical mark for the identical state.
+// agent sidebar. The mark lives beside the control it marks, so the one place
+// a state is drawn is the one place a state is named.
 
 import type { LucideIcon } from "../../icons/lucide-icon.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
@@ -69,7 +69,7 @@ const INDICATOR_PRESENTATION: Record<
 };
 
 /** Draws one status mark; the caller owns its size through the surrounding text. */
-export const AgentStatusGlyph = ({
+const AgentStatusGlyph = ({
   indicator,
 }: {
   readonly indicator: AgentHealthIndicator;

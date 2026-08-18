@@ -171,7 +171,6 @@ test("accepts a palette that restates the comment surface", async () => {
   --grey-150: #eeeeee;
   --grey-950: #121212;
   --comment-header-c: light-dark(var(--grey-150), var(--grey-925));
-  --agent-active-ring-c: light-dark(var(--grey-150), var(--grey-925));
 }
 `,
   });

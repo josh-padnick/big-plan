@@ -300,7 +300,7 @@ const STATUS_TONES = {
 /**
  * The past-horizon reading, which the vocabulary marks by tone rather than by a
  * stage of its own: a claim quiet past the recovery horizon has stopped
- * explaining anything, so its copy sends the reviewer to the Agent tab and the
+ * explaining anything, so its copy sends the reviewer to Agent Status and the
  * surfaces here have to carry that route and read differently from an ordinary
  * quiet turn (BIG-147).
  */

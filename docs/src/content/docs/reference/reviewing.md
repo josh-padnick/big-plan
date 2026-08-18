@@ -87,8 +87,11 @@ It prints the session, plan path, in-flight and stalled writes, and current grow
    the visible primary action; `Escape` cancels.
 3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
    **Chat** tab asks questions about the plan as a whole, **Inputs** lists what
-   the review is still waiting for, and **Agent** shows
-   the coding-agent connection and current work for a live review session.
+   the review is still waiting for, and **Agent Status** - its own control beside
+   **Feedback** - shows the coding-agent connection and current work for a live
+   review session.
+   The two controls share the sidebar and toggle independently: choosing one
+   swaps the sidebar's body to it, and choosing it again closes the sidebar.
    A review-session outage is reported separately and does not label the agent
    as offline.
 4. Edit or delete an individual staged comment, or choose **Send all comments
@@ -208,22 +211,22 @@ That in-thread block adds the line **Queued, _N_ ahead** above the headline when
 Canceling the active request releases the plan immediately, so the next queued request advances without waiting for the canceled claim's lease to lapse.
 Once an agent picks the request up the thread says **Working**, and it stays picked up from then on.
 A turn can run longer than the agent reports progress for, because `big-plan agent next` hands the work over and its own process exits, so nothing is running on that agent's behalf between two progress notes.
-After 75 seconds of that quiet the thread reads **No progress for *N*m** and the **Agent** tab reads **Agent may be stalled**, naming how long the agent has been silent and suggesting you check its terminal.
+After 75 seconds of that quiet the thread reads **No progress for *N*m** and **Agent Status** reads **Agent may be stalled**, naming how long the agent has been silent and suggesting you check its terminal.
 That is a report about the silence and not about the connection: the work is still picked up, the answer is still accepted when it arrives, and a message you send meanwhile is queued behind that turn rather than reported as blocked.
 Big Plan cannot tell a slow agent from a stopped one, because neither produces a signal, so the stalled reading covers both and resolves itself as soon as the agent speaks again.
 
-When the coding agent that started the session exits, its waiting connection ends with it rather than outliving it: within a few seconds the **Agent** tab reads **Agent session ended**, the status card names when the session ended instead of guessing at a threshold, and the connection log records a **Session ended** row.
+When the coding agent that started the session exits, its waiting connection ends with it rather than outliving it: within a few seconds **Agent Status** reads **Agent session ended**, the status card names when the session ended instead of guessing at a threshold, and the connection log records a **Session ended** row.
 A session that disappears without the connection noticing - a machine losing power, or something killing the whole process tree at once - still reads as disconnected after the same 75 seconds of silence as before.
 Either way a message you send once the agent is gone reads **Blocked - no agent connected** and sends itself when an agent reconnects, rather than being picked up by a session that can no longer answer.
 
-The **Agent** tab offers **Reconnect your agent**, holding the prompt and the connector command that start a coding-agent session.
-An agent going quiet never hides that section, because it is the only place those two live and losing your route back is the last thing a silence should cost you; only a read-only session or a review runtime you cannot reach hides it.
-While a request is picked up that section instead reads **Connect an agent and take over this work** and says plainly that the agent may still be working and may finish on its own, and that connecting a session takes the work over so its answer will no longer be accepted - because [the agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) serializes pickup and only the current holder may answer.
+**Agent Status** offers **Reconnect your agent**, holding the one prompt that starts a coding-agent session; a session that has never had an agent reads **Connect your agent** instead.
+An agent going quiet never hides that section, because it is the only place that prompt lives and losing your route back is the last thing a silence should cost you; only a read-only session or a review runtime you cannot reach hides it.
+While a request is picked up that section instead reads **Connect a new agent** and says plainly that the agent may still be working on it, and that the agent connected now would stop being able to answer, so anything it has in flight is dropped rather than delivered - because [the agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) serializes pickup and only the current holder may answer.
 The taken-over agent's unfinished edits stay in its own copy and never reach your plan, so the new agent starts from the last published revision.
 Your comments are safe whichever you choose.
 
 The stalled reading is bounded, because a pickup cannot account for silence indefinitely.
-After 30 minutes without a single report Big Plan stops treating the pickup as an explanation: the **Agent** tab gives way to the ordinary connection reading, the thread reads **No longer reporting**, drops its promise to resolve itself, leaves the **Working** group and offers **Show setup instructions →**, a message you send now reads **Blocked - no agent connected**, and the recovery section returns to its plain wording.
+After 30 minutes without a single report Big Plan stops treating the pickup as an explanation: **Agent Status** gives way to the ordinary connection reading, the thread reads **No longer reporting**, drops its promise to resolve itself, leaves the **Working** group and offers **Show setup instructions →**, a message you send now reads **Blocked - no agent connected**, and the recovery section returns to its plain wording.
 Past that point, and only while no agent is connected, the pickup also stops holding your comment: the claim is treated as abandoned, and **Delete comment the agent left?** returns with a confirmation that says the agent stopped reporting and its claim expired.
 Both halves of that proof are required, because a quiet lease alone is what an ordinary turn looks like: a connected agent, or a silence still inside the 30 minutes, keeps the comment held exactly as before.
 Deleting or editing what an abandoned claim was holding releases the claim, so an agent that comes back afterwards is refused rather than allowed to answer a message you have already changed.
@@ -232,8 +235,9 @@ A warning leaves the plan unchanged, shows its short one-line summary directly u
 A changed result updates the plan in place without discarding staged comments, open threads, or scroll position.
 The [agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) owns why pickup is serialized and what must change before concurrent plan editing can return.
 
-A connected agent may declare four things about itself, each optional and each
-read from the environment the coding-agent session was launched in:
+A connected agent may declare four things about itself, each optional,
+independent of the others, and read from the environment the coding-agent
+session was launched in:
 
 | Variable                     | What it declares                                                                                            |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------- |

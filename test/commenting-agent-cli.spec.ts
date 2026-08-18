@@ -359,7 +359,7 @@ test("should report a quiet working agent as stalled rather than disconnected", 
   }
 });
 
-// BIG-147. The Agent tab's recovery section is always on screen, so its copy is
+// BIG-147. Agent Status's recovery section is always on screen, so its copy is
 // the only thing between a reviewer and an adr/0002 takeover of an agent that is
 // still working. This drives the harm itself through the real CLI: the takeover
 // displaces the working agent, whose finished answer is then refused.

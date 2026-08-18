@@ -1,4 +1,4 @@
-// Renders the legacy agent-health surface from truthful runtime facts. The
+// Renders the Agent Status sidebar's body from truthful runtime facts. The
 // review kernel owns polling and navigation; this module owns only the visual
 // projection and local disclosure/copy interactions.
 
@@ -13,7 +13,6 @@ import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
 import { LIGHTBULB_ICON } from "../../icons/lucide/lightbulb.js";
-import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import {
   agentClientDisplayName,
   agentModelDisplayName,
@@ -61,9 +60,6 @@ const ModelIcon = ({ modelName }: { readonly modelName: string }) => {
   );
 };
 
-// Keep human-readable elapsed time independent from the slower network poll.
-// This component exists only while the Agent tab is mounted, so the local
-// tick cannot make the rest of the review workspace rerender every second.
 // The comment glyph that heads the subject block; it names what the block is
 // about, so it travels with the label rather than being set at each call.
 const SubjectMark = () => (
@@ -75,6 +71,9 @@ const SubjectMark = () => (
   </span>
 );
 
+// Keep human-readable elapsed time independent from the slower network poll.
+// This runs only while the Agent Status body is mounted, so the local tick
+// cannot make the rest of the review workspace rerender every second.
 const useSecondClock = (): number => {
   const [nowMs, setNowMs] = useState(Date.now);
   useEffect(() => {
@@ -83,26 +82,6 @@ const useSecondClock = (): number => {
   }, []);
   return nowMs;
 };
-
-export const AgentHealthAlert = ({
-  label,
-  tone,
-  onOpen,
-}: {
-  readonly label: string;
-  readonly tone: "warning" | "danger";
-  readonly onOpen: () => void;
-}) => (
-  <button
-    type="button"
-    className={`inline-flex min-h-11 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-1 py-1 text-xs font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent wide:min-h-8 [&>svg]:size-4 ${tone === "warning" ? "text-warning" : "text-danger"}`}
-    aria-label={`${label} — open agent connection status`}
-    onClick={onOpen}
-  >
-    <Icon icon={TRIANGLE_ALERT_ICON} />
-    {label}
-  </button>
-);
 
 const ReadOnlySessionCard = ({
   replacementUrl,
@@ -1037,7 +1016,7 @@ export const AgentConnectionPanel = ({
     activity.state !== "offline" &&
     activity.state !== "disconnected";
   return (
-    <section className="min-w-0" aria-labelledby="agent-connection-heading">
+    <section className="min-w-0">
       {agentStatusIsAvailable ? (
         isReadOnly ? (
           <ReadOnlySessionCard replacementUrl={replacementUrl} />

@@ -61,8 +61,7 @@ const SYNTAX_TOKEN_PATTERN = /^syntax-[a-z]+-(?:c|bg)$/;
 // palette rather than ramp steps, so a guest palette has to restate them or the
 // comment card keeps the product's warm greys inside a themed document.
 // src/render/global.css states which step each one takes.
-const COMMENT_SURFACE_TOKEN_PATTERN =
-  /^(?:comment-[a-z]+-c|agent-active-ring-c)$/;
+const COMMENT_SURFACE_TOKEN_PATTERN = /^comment-[a-z]+-c$/;
 
 // WCAG AA for body text. Every pairing below is text on a ground, so the large
 // text allowance never applies: a plan is read at reading size.

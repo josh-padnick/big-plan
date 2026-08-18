@@ -4852,6 +4852,27 @@ export const ReviewController = () => {
     setSidebarView("agent");
     setIsOpen(true);
   }, []);
+  /*
+  One slot holds either body, so choosing a tab is never enough on its own: a
+  path that means "show the reviewer their feedback" has to claim the slot for
+  feedback as well, or the tab changes behind agent diagnosis and the thread the
+  reader was sent to never appears.
+
+  Two entry points because the two intents differ. Selecting the body is what a
+  path does when it decides which feedback the reader would see next; opening it
+  is what a path does when it is showing them something now.
+  */
+  const selectFeedbackBody = useCallback((next: FeedbackTab) => {
+    setSidebarView("feedback");
+    setTab(next);
+  }, []);
+  const openFeedbackSidebar = useCallback(
+    (next: FeedbackTab) => {
+      selectFeedbackBody(next);
+      setIsOpen(true);
+    },
+    [selectFeedbackBody],
+  );
   // Each control owns its own view. Pressing the one that is already pressed
   // closes the sidebar; it never hands the slot to the other body, which is
   // what made Agent Status look like it was opening Feedback.
@@ -5666,8 +5687,7 @@ export const ReviewController = () => {
         return;
       }
       if (detachedComposer !== null) {
-        setIsOpen(true);
-        setTab("comments");
+        openFeedbackSidebar("comments");
         return;
       }
       if (
@@ -5694,6 +5714,7 @@ export const ReviewController = () => {
       detachedComposer,
       displayedSnapshot,
       openAgentSidebar,
+      openFeedbackSidebar,
       runtimeSession?.authoritative,
     ],
   );
@@ -5893,8 +5914,7 @@ export const ReviewController = () => {
           target: block === null ? { type: "document" } : targetForBlock(block),
         };
         stageReviewComment(comment);
-        setIsOpen(true);
-        setTab("comments");
+        openFeedbackSidebar("comments");
         setStatus(
           payload.submit === "now"
             ? "Submitting component feedback."
@@ -5916,7 +5936,13 @@ export const ReviewController = () => {
       };
       if (previous === undefined) delete feedbackWindow.bigPlan.feedback;
     };
-  }, [displayedSnapshot, isHydrated, sendComments, stageReviewComment]);
+  }, [
+    displayedSnapshot,
+    isHydrated,
+    openFeedbackSidebar,
+    sendComments,
+    stageReviewComment,
+  ]);
 
   const saveComment = (body: string, submitRightAway: boolean) => {
     if (compose === null) return;
@@ -5930,7 +5956,7 @@ export const ReviewController = () => {
     stageReviewComment(comment);
     setCompose(null);
     setComposeBody("");
-    setTab("comments");
+    selectFeedbackBody("comments");
     setStatus("Comment staged locally.");
     if (submitRightAway) void sendComments([comment]);
   };
@@ -6478,7 +6504,7 @@ export const ReviewController = () => {
   };
   const viewAgentRequest = (requestId: string, kind: string) => {
     if (kind === "chat") {
-      setTab("chat");
+      openFeedbackSidebar("chat");
       return;
     }
     const request = agent.requests.find(
@@ -6501,7 +6527,7 @@ export const ReviewController = () => {
         open: true,
       }),
     );
-    setTab("comments");
+    openFeedbackSidebar("comments");
     // Bring the commented block to the top of the reading column rather than
     // wherever the least scrolling would leave it. "Nearest" parks a block that
     // is below the fold at the very bottom edge, which reads as the page having
@@ -7235,7 +7261,7 @@ export const ReviewController = () => {
                     <button
                       type="button"
                       className="m-0 inline-flex min-w-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-left text-xs font-semibold text-ink hover:underline hover:underline-offset-[0.16em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      aria-label={`${currentAgentActivity.headline} — view Agent tab`}
+                      aria-label={`${currentAgentActivity.headline} - open ${AGENT_STATUS_LABEL}`}
                       onClick={openAgentSidebar}
                     >
                       {currentAgentActivity.tone === "danger" ? (
