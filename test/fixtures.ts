@@ -888,7 +888,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 });
 
 export { expect };
-export type { Page };
+export type { Locator, Page };
 
 /**
  * Ends a journey's own review runtime.

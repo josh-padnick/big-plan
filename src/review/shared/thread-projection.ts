@@ -5,11 +5,15 @@
 import {
   agentHoldsClaimedWork,
   deriveAgentStatus,
-  requestWasClaimed,
   selectPendingAgentRequest,
   type AgentStatus,
 } from "./agent-status.js";
-import { claimSignalAtMs, type ClaimedRequest } from "./agent-claim.js";
+import {
+  claimIsAbandoned,
+  claimSignalAtMs,
+  requestWasClaimed,
+  type ClaimedRequest,
+} from "./agent-claim.js";
 import {
   requestIsTerminal,
   type TerminalAgentRequest,
@@ -19,7 +23,7 @@ import type { ReviewComment } from "./comment.js";
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
 import { requestIsOutstanding } from "./request-lifecycle.js";
-import { agentOwnsRequest } from "./request-ownership.js";
+import { agentStillOwnsRequest } from "./request-ownership.js";
 
 export type ThreadRequest = CancelableRequest &
   ClaimedRequest &
@@ -92,6 +96,12 @@ export type ProjectedThreadExchange<
   readonly canReviseMessage: boolean;
   /** Whether the reviewer may still remove this waiting message. */
   readonly canDeleteMessage: boolean;
+  /**
+   * Whether this message is editable and removable again only because the
+   * claim on it was proven abandoned. It is the reason the reviewer is owed
+   * whenever an affordance a pickup had taken away comes back (BIG-120).
+   */
+  readonly claimAbandoned: boolean;
 };
 
 export type CommentThreadProjection<
@@ -107,6 +117,8 @@ export type CommentThreadProjection<
   readonly latestCanceled: boolean;
   readonly canDeleteQueued: boolean;
   readonly canDeleteCanceled: boolean;
+  /** Whether an abandoned claim is why this comment is deletable again. */
+  readonly deleteUnlockedByAbandonedClaim: boolean;
   readonly group: ThreadGroup;
 };
 
@@ -177,15 +189,19 @@ export const canReviseQueuedMessage = ({
   request,
   response,
   canceled,
+  agentConnected,
+  nowMs,
 }: {
   readonly request: ThreadRequest;
   readonly response: ThreadResponse | undefined;
   readonly canceled: boolean;
+  readonly agentConnected: boolean;
+  readonly nowMs: number;
 }): boolean =>
   request.kind !== "feedback" &&
   !canceled &&
   response === undefined &&
-  !agentOwnsRequest(request);
+  !agentStillOwnsRequest({ request, agentConnected, nowMs });
 
 /**
  * Mirrors the mailbox guard on removing a message the agent never started. A
@@ -195,13 +211,17 @@ export const canReviseQueuedMessage = ({
 export const canDeleteQueuedMessage = ({
   request,
   response,
+  agentConnected,
+  nowMs,
 }: {
   readonly request: ThreadRequest;
   readonly response: ThreadResponse | undefined;
+  readonly agentConnected: boolean;
+  readonly nowMs: number;
 }): boolean =>
   request.kind !== "feedback" &&
   response === undefined &&
-  !agentOwnsRequest(request);
+  !agentStillOwnsRequest({ request, agentConnected, nowMs });
 
 /**
  * Counts the unanswered work an agent delivers before one request. Requests
@@ -417,8 +437,20 @@ export const projectCommentThread = <
           request,
           response,
           canceled,
+          agentConnected: presence.connected,
+          nowMs,
         }),
-        canDeleteMessage: canDeleteQueuedMessage({ request, response }),
+        canDeleteMessage: canDeleteQueuedMessage({
+          request,
+          response,
+          agentConnected: presence.connected,
+          nowMs,
+        }),
+        claimAbandoned: claimIsAbandoned({
+          request,
+          agentConnected: presence.connected,
+          nowMs,
+        }),
       };
     });
   const latestExchange = exchanges.at(-1);
@@ -447,6 +479,17 @@ export const projectCommentThread = <
                 latestStatus.tone === "warning")
             ? "working"
             : "queued";
+  const unheld = (exchange: ProjectedThreadExchange<Request, Response>) =>
+    exchange.response === undefined &&
+    !agentStillOwnsRequest({
+      request: exchange.request,
+      agentConnected: presence.connected,
+      nowMs,
+    });
+  const canDeleteQueued =
+    group === "queued" && latestPending && exchanges.every(unheld);
+  const canDeleteCanceled =
+    (latestExchange?.canceled ?? false) && exchanges.every(unheld);
   return {
     comment,
     exchanges,
@@ -455,21 +498,13 @@ export const projectCommentThread = <
     ...(latestStatus === undefined ? {} : { latestStatus }),
     latestPending,
     latestCanceled: latestExchange?.canceled ?? false,
-    canDeleteQueued:
-      group === "queued" &&
-      latestPending &&
-      exchanges.every(
-        (exchange) =>
-          exchange.response === undefined &&
-          exchange.request.claimedAt === undefined,
-      ),
-    canDeleteCanceled:
-      (latestExchange?.canceled ?? false) &&
-      exchanges.every(
-        (exchange) =>
-          exchange.response === undefined &&
-          !agentOwnsRequest(exchange.request),
-      ),
+    canDeleteQueued,
+    canDeleteCanceled,
+    // Only a claim this thread actually carries can be the reason, so a
+    // comment that was always deletable never explains itself.
+    deleteUnlockedByAbandonedClaim:
+      (canDeleteQueued || canDeleteCanceled) &&
+      exchanges.some((exchange) => exchange.claimAbandoned),
     group,
   };
 };

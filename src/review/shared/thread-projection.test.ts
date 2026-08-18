@@ -251,6 +251,106 @@ describe("thread projection", () => {
     ).toMatchObject({ canReviseMessage: false, canDeleteMessage: false });
   });
 
+  it("should return a message to the reviewer once its claim is proven abandoned", () => {
+    const abandoned = request({
+      requestId: "cccccccccccccccc",
+      kind: "reply",
+      commentId: comment.id,
+      commentIds: undefined,
+      createdAt: "2026-08-10T19:03:00Z",
+      ...liveClaim(NOW - AGENT_RECOVERY_HORIZON_MS - 1),
+    });
+    const base = {
+      comment,
+      requests: [abandoned],
+      responses: [],
+      progressEvents: [],
+      runtime: "online" as const,
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set<string>(),
+    };
+    expect(
+      projectCommentThread({
+        ...base,
+        presence: { ...presence, connected: false },
+      }).latestExchange,
+    ).toMatchObject({
+      canReviseMessage: true,
+      canDeleteMessage: true,
+      claimAbandoned: true,
+    });
+    // An attached agent is the other half of the proof. Without it the same
+    // silence may be the holder's own turn, so the message stays held.
+    expect(
+      projectCommentThread({ ...base, presence }).latestExchange,
+    ).toMatchObject({
+      canReviseMessage: false,
+      canDeleteMessage: false,
+      claimAbandoned: false,
+    });
+    // A lapsed lease inside the recovery horizon is the ordinary quiet turn.
+    expect(
+      projectCommentThread({
+        ...base,
+        requests: [
+          request({
+            ...abandoned,
+            ...liveClaim(NOW - AGENT_CLAIM_LEASE_MS * 2),
+          }),
+        ],
+        presence: { ...presence, connected: false },
+      }).latestExchange,
+    ).toMatchObject({
+      canReviseMessage: false,
+      canDeleteMessage: false,
+      claimAbandoned: false,
+    });
+  });
+
+  it("should say why a comment held by an abandoned claim is deletable again", () => {
+    const base = {
+      comment,
+      responses: [],
+      progressEvents: [],
+      runtime: "online" as const,
+      nowMs: NOW,
+      cancelPendingRequestIds: new Set<string>(),
+    };
+    expect(
+      projectCommentThread({
+        ...base,
+        requests: [request(liveClaim(NOW - AGENT_RECOVERY_HORIZON_MS - 1))],
+        presence: { ...presence, connected: false },
+      }),
+    ).toMatchObject({
+      group: "queued",
+      canDeleteQueued: true,
+      deleteUnlockedByAbandonedClaim: true,
+    });
+    // A comment nobody ever picked up was always deletable, so it has nothing
+    // to explain.
+    expect(
+      projectCommentThread({
+        ...base,
+        requests: [request()],
+        presence: { ...presence, connected: false },
+      }),
+    ).toMatchObject({
+      canDeleteQueued: true,
+      deleteUnlockedByAbandonedClaim: false,
+    });
+    expect(
+      projectCommentThread({
+        ...base,
+        requests: [request(liveClaim())],
+        presence,
+      }),
+    ).toMatchObject({
+      canDeleteQueued: false,
+      deleteUnlockedByAbandonedClaim: false,
+    });
+  });
+
   it("should keep a canceled message deletable but no longer editable", () => {
     const canceledReply = request({
       requestId: "cccccccccccccccc",

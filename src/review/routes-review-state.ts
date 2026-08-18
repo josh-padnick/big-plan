@@ -34,6 +34,7 @@ import {
 import {
   appendProgressEvent,
   assertCommentsAreUnresolved,
+  assertRequestsMayBeTakenBack,
   assertResolvableComment,
   cancelAgentRequest,
   ensureAgentRequest,
@@ -43,10 +44,12 @@ import {
 import {
   REVERT_SOURCE_MOVED_REASON,
   revertPlanSource,
+  settleInterruptedCommitsFor,
 } from "./staged-plan-mutation.js";
 import {
   anchorReviewStore,
   freezeRequestAttachments,
+  readAgentPresence,
   readFeedbackSubmissionValue,
   readResolvedCommentIds,
   readSnapshot,
@@ -61,7 +64,7 @@ import {
   MAX_IMAGES_PER_MESSAGE,
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
-import { agentOwnsRequest } from "./shared/request-ownership.js";
+import { agentStillOwnsRequest } from "./shared/request-ownership.js";
 import { reviewStateVersion } from "./review-state-version.js";
 import {
   encodeReviewSnapshot,
@@ -685,12 +688,29 @@ export const deleteSentComment = async (
   if (!sent.some((comment) => comment.id === commentId)) {
     return refusal({ status: 404, reason: "No such sent comment" });
   }
-  const exchange = await readAgentCommentHistory({
-    store,
-    sessionId,
-    planId,
-    commentId,
-  });
+  const commentHistory = () =>
+    readAgentCommentHistory({ store, sessionId, planId, commentId });
+  // An interrupted commit is settled before anything below decides anything,
+  // so the journal guards refuse only an answer that really is published or
+  // one rename away from it, never one an abandoned commit left in its own
+  // stage - which would relock exactly the comment an abandoned claim hands
+  // back (BIG-120). Settling can stamp a request terminal, so every decision
+  // that follows is made from a read taken after it.
+  const initialExchange = await commentHistory();
+  let settled: boolean;
+  try {
+    settled = await settleInterruptedCommitsFor({
+      store,
+      planPath: resolvedPlanPath,
+      requestIds: initialExchange.requests.map(
+        (candidate) => candidate.requestId,
+      ),
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
+  }
+  const exchange = settled ? await commentHistory() : initialExchange;
   const answeredRequestIds = new Set(
     exchange.responses.flatMap((candidate) =>
       candidate.kind !== "chat" &&
@@ -730,7 +750,23 @@ export const deleteSentComment = async (
         "Only a queued, canceled, or reverted comment can be deleted from the review",
     });
   }
-  if (answeredRequestIds.size === 0 && commentRequests.some(agentOwnsRequest)) {
+  // Pickup locks the comment only while the claim on it still means something.
+  // A claim proven abandoned - nothing attached, and quiet past the recovery
+  // horizon - releases the comment back to the reviewer, on the same rule the
+  // browser used to decide whether to offer delete at all (BIG-120).
+  const agentConnected = (await readAgentPresence({ store, sessionId }))
+    .connected;
+  const deletionNowMs = Date.now();
+  if (
+    answeredRequestIds.size === 0 &&
+    commentRequests.some((candidate) =>
+      agentStillOwnsRequest({
+        request: candidate,
+        agentConnected,
+        nowMs: deletionNowMs,
+      }),
+    )
+  ) {
     return refusal({
       status: 409,
       reason: "The agent has already picked up this comment",
@@ -757,22 +793,44 @@ export const deleteSentComment = async (
       validate: validateResolvedCommentIds,
     })
   ).includes(commentId);
-  for (const pending of answeredRequestIds.size === 0 ? pendingRequests : []) {
-    if (pending.canceledAt !== undefined) continue;
-    if (pending.kind === "feedback") {
-      await removeCommentFromQueuedFeedbackRequest({
-        store,
-        requestId: pending.requestId,
-        commentId,
-        now,
-      });
-    } else {
-      await cancelAgentRequest({
-        store,
-        requestId: pending.requestId,
-        now,
-      });
+  const takenBack = answeredRequestIds.size === 0 ? pendingRequests : [];
+  // Every request that carries this comment is proved take-backable before any
+  // of them is written, so a refusal partway through cannot leave the earlier
+  // ones withdrawn for a deletion that never happened.
+  //
+  // The catch around the loop stays, because the proof is not a lock: the
+  // request locks are taken one at a time, so an agent claiming between the
+  // proof and the write can still refuse here. That removes the deterministic
+  // case this route's own settle step caused, not cross-process racing. Either
+  // way the refusal is the reviewer's answer rather than a runtime failure, so
+  // the comment stays and the conflict is reported.
+  try {
+    await assertRequestsMayBeTakenBack({
+      store,
+      requestIds: takenBack.map((pending) => pending.requestId),
+      agentConnected,
+    });
+    for (const pending of takenBack) {
+      if (pending.canceledAt !== undefined) continue;
+      if (pending.kind === "feedback") {
+        await removeCommentFromQueuedFeedbackRequest({
+          store,
+          requestId: pending.requestId,
+          commentId,
+          now,
+          agentConnected,
+        });
+      } else {
+        await cancelAgentRequest({
+          store,
+          requestId: pending.requestId,
+          now,
+        });
+      }
     }
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
   }
   // The resolved-id read-modify-write shares `.resolved.lock` with request
   // creation and the drafts write, so a concurrent resolve cannot be dropped by

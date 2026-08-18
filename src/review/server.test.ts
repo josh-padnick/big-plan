@@ -36,7 +36,11 @@ import {
   commitRequestTerminal,
   withResolvedCommentLock,
 } from "./request-mailbox.js";
-import { agentMutationJournalPath, writeStoreJson } from "./store.js";
+import {
+  agentMutationJournalPath,
+  writeAgentResponseValue,
+  writeStoreJson,
+} from "./store.js";
 import {
   prepareReviewImageAssets,
   publishPreparedPlanAssets,
@@ -52,6 +56,7 @@ import {
 } from "./session-authority.js";
 import type { ReviewComment } from "./shared/comment.js";
 import { validateResolvedCommentIds } from "./shared/comment.js";
+import { AGENT_RECOVERY_HORIZON_MS } from "./shared/agent-timing.js";
 import { MAX_IMAGE_BYTES } from "./shared/review-image.js";
 import { REVIEW_POLL_INTERVAL_MS } from "./shared/review-polling.js";
 import {
@@ -3415,6 +3420,524 @@ describe("review runtime resolve invariant", () => {
     }
   });
 
+  it("should keep a comment the agent is holding out of the reviewer's hands", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-live-claim-",
+    );
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      await claimAgentRequest({
+        store: isolated.store,
+        activeSessionId: isolated.sessionId,
+        requestId: await queuedRequestId(isolated),
+        claimedBy: isolated.sessionId,
+        baselineSnapshot: PLAN_SNAPSHOT,
+        now: new Date().toISOString(),
+      });
+
+      const refused = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: {
+          commentId,
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toMatchObject({
+        error: "The agent has already picked up this comment",
+      });
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({
+        sent: [expect.objectContaining({ id: commentId })],
+      });
+    } finally {
+      await close();
+    }
+  });
+
+  it("should delete a comment whose claim was proven abandoned", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-abandoned-claim-",
+    );
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      // Nothing has ever heartbeated on this runtime, so presence reports no
+      // agent attached; the claim below is the whole of the reviewer's proof.
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      await claimAgentRequest({
+        store: isolated.store,
+        activeSessionId: isolated.sessionId,
+        requestId: await queuedRequestId(isolated),
+        claimedBy: isolated.sessionId,
+        baselineSnapshot: PLAN_SNAPSHOT,
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+
+      const deleted = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: {
+          commentId,
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+
+      expect(deleted.status).toBe(200);
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({ sent: [] });
+      await expect(
+        readAgentExchange({
+          store: isolated.store,
+          sessionId: isolated.sessionId,
+          planId: isolated.planId,
+        }),
+      ).resolves.toMatchObject({
+        requests: [expect.objectContaining({ canceledAt: expect.any(String) })],
+      });
+    } finally {
+      await close();
+    }
+  });
+
+  it("should delete a comment through a journal an abandoned commit left behind", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-stranded-journal-",
+    );
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      const requestId = await queuedRequestId(isolated);
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      const claimed = await claimAgentRequest({
+        store: isolated.store,
+        activeSessionId: isolated.sessionId,
+        requestId,
+        claimedBy: isolated.sessionId,
+        baselineSnapshot: PLAN_SNAPSHOT,
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+      // The commit wrote its journal and then the agent died. The plan never
+      // moved, so nothing this journal describes was published, and no later
+      // agent run is coming to settle it.
+      const neverLanded = `${PLAN}\nA revision that never landed.\n`;
+      await writeStoreJson({
+        path: agentMutationJournalPath({ store: isolated.store, requestId }),
+        value: {
+          version: 1,
+          requestId,
+          generation: 1,
+          claimedBy: isolated.sessionId,
+          baseSnapshot: PLAN_SNAPSHOT,
+          resultSnapshot: deriveSnapshotDigest(neverLanded),
+          answeredAt: "2026-08-17T12:00:05.000Z",
+          response: validateAgentResponseDraft({
+            value: {
+              requestId,
+              outcomes: [
+                {
+                  commentId,
+                  state: "answered",
+                  message: "The status quo section already says this.",
+                },
+              ],
+            },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set<string>(),
+            currentSnapshot: deriveSnapshotDigest(neverLanded),
+            now: "2026-08-17T12:00:05.000Z",
+          }),
+        },
+      });
+
+      const deleted = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: {
+          commentId,
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+
+      // Without settling that journal first the guard would refuse this
+      // forever, relocking the one comment abandonment is proven for.
+      expect(deleted.status).toBe(200);
+      await expect(
+        readdir(isolated.store.agentMutationJournalDirectory),
+      ).resolves.toEqual([]);
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({ sent: [] });
+    } finally {
+      await close();
+    }
+  });
+
+  it("should refuse a comment delete once the settle finds the answer published", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-settled-answer-",
+    );
+    const other = {
+      id: "b8b8b8b8",
+      body: "Keep this one in the batch.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" as const },
+    };
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment, other],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      const requestId = await queuedRequestId(isolated);
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      const claimed = await claimAgentRequest({
+        store: isolated.store,
+        activeSessionId: isolated.sessionId,
+        requestId,
+        claimedBy: isolated.sessionId,
+        baselineSnapshot: PLAN_SNAPSHOT,
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+      // The commit's rename won and then the agent died before writing its
+      // terminal records, so no response exists for the route to see.
+      const published = `${PLAN}\nThe published revision.\n`;
+      await writeStoreJson({
+        path: agentMutationJournalPath({ store: isolated.store, requestId }),
+        value: {
+          version: 1,
+          requestId,
+          generation: 1,
+          claimedBy: isolated.sessionId,
+          baseSnapshot: PLAN_SNAPSHOT,
+          resultSnapshot: deriveSnapshotDigest(published),
+          answeredAt: "2026-08-17T12:00:05.000Z",
+          response: validateAgentResponseDraft({
+            value: {
+              requestId,
+              outcomes: [comment, other].map((entry) => ({
+                commentId: entry.id,
+                state: "answered",
+                message: "The status quo section already says this.",
+              })),
+            },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set<string>(),
+            currentSnapshot: deriveSnapshotDigest(published),
+            now: "2026-08-17T12:00:05.000Z",
+          }),
+        },
+      });
+      await writeFile(isolated.planPath, published);
+
+      const refused = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: {
+          commentId,
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+
+      // Every decision is made from a read taken after the settle, so the
+      // route answers on the answer it now has rather than on the queued
+      // state it read a moment earlier.
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toMatchObject({
+        error:
+          "Only a queued, canceled, or reverted comment can be deleted from the review",
+      });
+      // Stripping the claim would make the published answer unreadable for
+      // good while the plan still carries its revision.
+      const history = await readAgentCommentHistory({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+        commentId,
+      });
+      expect(history.requests[0]).toMatchObject({
+        claimedBy: isolated.sessionId,
+        answeredAt: expect.any(String),
+      });
+      expect(history.responses).toHaveLength(1);
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({
+        sent: expect.arrayContaining([
+          expect.objectContaining({ id: commentId }),
+        ]),
+      });
+    } finally {
+      await close();
+    }
+  });
+
+  it("should leave every request untouched when one of them refuses the delete", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-partial-",
+    );
+    const replyRequestId = "9d9d9d9d9d9d9d9d";
+    try {
+      // An earlier reply on the same thread, still queued and never claimed.
+      await writeAgentRequest({
+        store: isolated.store,
+        request: messageAgentRequest({
+          kind: "reply",
+          requestId: replyRequestId,
+          sessionId: isolated.sessionId,
+          planId: isolated.planId,
+          premiseSnapshot: PLAN_SNAPSHOT,
+          createdAt: "2026-08-17T12:00:00.000Z",
+          body: "Please look at this again.",
+          commentId,
+        }),
+      });
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      const requestId = await queuedRequestId(isolated);
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      const claimed = await claimAgentRequest({
+        store: isolated.store,
+        activeSessionId: isolated.sessionId,
+        requestId,
+        claimedBy: isolated.sessionId,
+        baselineSnapshot: PLAN_SNAPSHOT,
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+      await commitRequestTerminal({
+        store: isolated.store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId,
+            outcomes: [
+              {
+                commentId,
+                state: "answered",
+                message: "The status quo section already says this.",
+              },
+            ],
+          },
+          request: claimed,
+          commentsById: new Map(),
+          changedBlocks: new Set<string>(),
+          currentSnapshot: PLAN_SNAPSHOT,
+          now: "2026-08-17T12:00:05.000Z",
+        }),
+        claimedBy: isolated.sessionId,
+        now: "2026-08-17T12:00:05.000Z",
+      });
+      // Written by a build this one no longer understands, so every reader
+      // drops it and the thread reads as unanswered while the mailbox still
+      // knows the batch is terminal. The reply sorts first, so a loop that
+      // wrote as it went would withdraw it before reaching the refusal.
+      await writeAgentResponseValue({
+        store: isolated.store,
+        requestId,
+        value: { version: 99, requestId },
+      });
+
+      const refused = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: {
+          commentId,
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toMatchObject({
+        error: "The agent has already answered this request",
+      });
+      // The reviewer never asked to withdraw the reply, so a retry once the
+      // state resolves is still open to them.
+      const exchange = await readAgentExchange({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+      });
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === replyRequestId,
+        )?.canceledAt,
+      ).toBeUndefined();
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({
+        sent: expect.arrayContaining([
+          expect.objectContaining({ id: commentId }),
+        ]),
+      });
+    } finally {
+      await close();
+    }
+  });
+
+  it("should answer a mailbox refusal during a comment delete as a conflict", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-mailbox-refusal-",
+    );
+    const replyRequestId = "7c7c7c7c7c7c7c7c";
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/agent-cancel",
+            method: "POST",
+            body: { requestId: await queuedRequestId(isolated) },
+          })
+        ).status,
+      ).toBe(200);
+      // A follow-up on the same thread, answered by an agent whose claim has
+      // since been proven abandoned.
+      await writeAgentRequest({
+        store: isolated.store,
+        request: messageAgentRequest({
+          kind: "reply",
+          requestId: replyRequestId,
+          sessionId: isolated.sessionId,
+          planId: isolated.planId,
+          premiseSnapshot: PLAN_SNAPSHOT,
+          createdAt: "2026-08-17T12:00:00.000Z",
+          body: "Please look at this again.",
+          commentId,
+        }),
+      });
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      const claimed = await claimAgentRequest({
+        store: isolated.store,
+        activeSessionId: isolated.sessionId,
+        requestId: replyRequestId,
+        claimedBy: isolated.sessionId,
+        baselineSnapshot: PLAN_SNAPSHOT,
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+      await commitRequestTerminal({
+        store: isolated.store,
+        response: validateAgentResponseDraft({
+          value: {
+            requestId: replyRequestId,
+            outcomes: [
+              {
+                commentId,
+                state: "answered",
+                message: "The status quo section already says this.",
+              },
+            ],
+          },
+          request: claimed,
+          commentsById: new Map([[commentId, comment]]),
+          changedBlocks: new Set<string>(),
+          currentSnapshot: PLAN_SNAPSHOT,
+          now: "2026-08-17T12:00:05.000Z",
+        }),
+        claimedBy: isolated.sessionId,
+        now: "2026-08-17T12:00:05.000Z",
+      });
+      // The stored answer was written by a build this one no longer
+      // understands, so every reader drops it and the thread reads as
+      // unanswered - while the mailbox still knows the request is terminal.
+      await writeAgentResponseValue({
+        store: isolated.store,
+        requestId: replyRequestId,
+        value: { version: 99, requestId: replyRequestId },
+      });
+
+      const refused = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: {
+          commentId,
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+
+      // The mailbox refusing is the reviewer's answer, not a runtime failure.
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toMatchObject({
+        error: "The agent has already answered this request",
+      });
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({
+        sent: [expect.objectContaining({ id: commentId })],
+      });
+    } finally {
+      await close();
+    }
+  });
+
   it("should delete a resolved comment under the shared lock", async () => {
     const { isolated, isolatedCall, close } = await isolatedRuntime(
       "big-plan-delete-resolved-lock-",
@@ -4596,21 +5119,25 @@ describe("review runtime queued messages", () => {
 
 /**
  * The commit writes its journal before the rename, so a crash can leave one
- * behind for work that never published. The reviewer's cancel is exactly the
- * control someone reaches for then, so it settles that journal before it
- * decides.
+ * behind for work that never published. Every reviewer control that takes a
+ * message back is what someone reaches for then, so each settles that journal
+ * before it decides - otherwise a journal nothing is left alive to settle
+ * would lock the message for good.
  */
-describe("review runtime cancel versus an interrupted commit", () => {
+describe("review runtime reviewer controls versus an interrupted commit", () => {
   const strandedJournal = async ({
     runtime: live,
     requestId,
     planPath,
     published,
+    claimAtMs,
   }: {
     readonly runtime: ReviewRuntime;
     readonly requestId: string;
     readonly planPath: string;
     readonly published: string;
+    /** When the claim last signalled; past the horizon it reads as abandoned. */
+    readonly claimAtMs?: number;
   }): Promise<void> => {
     const source = await readFile(planPath, "utf8");
     const request = messageAgentRequest({
@@ -4635,6 +5162,7 @@ describe("review runtime cancel versus an interrupted commit", () => {
       claimedBy: live.sessionId,
       baselineSnapshot: deriveSnapshotDigest(source),
       now: "2026-08-17T12:00:01.000Z",
+      ...(claimAtMs === undefined ? {} : { clock: () => claimAtMs }),
     });
     await writeStoreJson({
       path: agentMutationJournalPath({ store: live.store, requestId }),
@@ -4673,8 +5201,8 @@ describe("review runtime cancel versus an interrupted commit", () => {
       typeof descriptor.token === "string"
         ? descriptor.token
         : "";
-    const cancel = (requestId: string) =>
-      fetch(`${live.url.replace(/\/$/u, "")}/api/agent-cancel`, {
+    const post = (path: string, body: unknown) =>
+      fetch(`${live.url.replace(/\/$/u, "")}${path}`, {
         method: "POST",
         headers: {
           "x-big-plan-review-token": liveToken,
@@ -4682,13 +5210,15 @@ describe("review runtime cancel versus an interrupted commit", () => {
           origin: live.url.replace(/\/$/u, ""),
           "content-type": "application/json",
         },
-        body: JSON.stringify({ requestId }),
+        body: JSON.stringify(body),
       });
+    const cancel = (requestId: string) =>
+      post("/api/agent-cancel", { requestId });
     const close = async () => {
       await live.close();
       await rm(directory, { recursive: true, force: true });
     };
-    return { live, planPath, cancel, close };
+    return { live, planPath, cancel, post, close };
   };
 
   it("should cancel through a journal whose rename never ran", async () => {
@@ -4715,6 +5245,84 @@ describe("review runtime cancel versus an interrupted commit", () => {
         exchange.requests.find((candidate) => candidate.requestId === requestId)
           ?.canceledAt,
       ).toBeDefined();
+      await expect(
+        readdir(live.store.agentMutationJournalDirectory),
+      ).resolves.toEqual([]);
+      await expect(readFile(planPath, "utf8")).resolves.toBe(PLAN);
+    } finally {
+      await close();
+    }
+  });
+
+  it("should delete an abandoned message through a journal whose rename never ran", async () => {
+    const { live, planPath, post, close } = await runtimeFor(
+      "big-plan-delete-stranded-",
+    );
+    const requestId = "efefefefefefefef";
+    try {
+      await strandedJournal({
+        runtime: live,
+        requestId,
+        planPath,
+        published: `${PLAN}\nA revision that never landed.\n`,
+        claimAtMs: Date.now() - AGENT_RECOVERY_HORIZON_MS - 1,
+      });
+
+      expect(
+        (await post("/api/agent-request-delete", { requestId })).status,
+      ).toBe(200);
+      const exchange = await readAgentExchange({
+        store: live.store,
+        sessionId: live.sessionId,
+        planId: live.planId,
+      });
+      expect(
+        exchange.requests.some(
+          (candidate) => candidate.requestId === requestId,
+        ),
+      ).toBe(false);
+      await expect(
+        readdir(live.store.agentMutationJournalDirectory),
+      ).resolves.toEqual([]);
+      await expect(readFile(planPath, "utf8")).resolves.toBe(PLAN);
+    } finally {
+      await close();
+    }
+  });
+
+  it("should revise an abandoned message through a journal whose rename never ran", async () => {
+    const { live, planPath, post, close } = await runtimeFor(
+      "big-plan-revise-stranded-",
+    );
+    const requestId = "0a0a0a0a0a0a0a0a";
+    try {
+      await strandedJournal({
+        runtime: live,
+        requestId,
+        planPath,
+        published: `${PLAN}\nA revision that never landed.\n`,
+        claimAtMs: Date.now() - AGENT_RECOVERY_HORIZON_MS - 1,
+      });
+
+      expect(
+        (
+          await post("/api/agent-requests", {
+            kind: "chat",
+            requestId,
+            body: "Ask something else instead.",
+          })
+        ).status,
+      ).toBe(200);
+      const exchange = await readAgentExchange({
+        store: live.store,
+        sessionId: live.sessionId,
+        planId: live.planId,
+      });
+      expect(
+        exchange.requests.find(
+          (candidate) => candidate.requestId === requestId,
+        ),
+      ).toMatchObject({ body: "Ask something else instead." });
       await expect(
         readdir(live.store.agentMutationJournalDirectory),
       ).resolves.toEqual([]);

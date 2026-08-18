@@ -24,7 +24,7 @@ import {
   deduplicateReviewImageReferences,
   extractReviewImageReferences,
 } from "./shared/review-image.js";
-import { agentOwnsRequest } from "./shared/request-ownership.js";
+import { agentStillOwnsRequest } from "./shared/request-ownership.js";
 import { validateResolvedCommentIds } from "./shared/comment.js";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
@@ -34,6 +34,7 @@ import {
   compactProgressLog,
   deleteAgentRequestValue,
   hasPreparedMutationJournal,
+  highestAgentMutationStageGeneration,
   nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
@@ -266,17 +267,188 @@ const readCurrentRequest = async ({
   return request;
 };
 
+/**
+ * Drops the claim from a request the reviewer has taken back.
+ *
+ * An edit that left the claim in place would sit underneath it: the previous
+ * agent still holds the token, and answering is guarded by ownership rather
+ * than by lease freshness, so a late return could publish over the message the
+ * reviewer replaced. Removing the claim refuses that answer through the rule
+ * that already guards delivery, and returns the request to the queue for
+ * whichever agent connects next (BIG-120).
+ *
+ * A claim's fields are stored and validated as one unit, so a field added to a
+ * claim later and forgotten here fails validation loudly rather than surviving
+ * the release.
+ */
+const withoutClaim = (request: AgentRequest): Record<string, unknown> => {
+  const released: Record<string, unknown> = { ...request };
+  delete released.baselineSnapshot;
+  delete released.claimedAt;
+  delete released.claimedBy;
+  delete released.claimedModel;
+  delete released.claimExpiresAtMs;
+  delete released.claimGeneration;
+  return released;
+};
+
+/**
+ * The submission a request was created from, with everything a lifecycle adds
+ * to it removed, so a resend can be compared against what is already stored.
+ *
+ * The claim's own fields are dropped through `withoutClaim`, because a claim
+ * field added later and forgotten here would silently change this comparison
+ * rather than fail.
+ */
 const requestCreation = (request: AgentRequest): string => {
-  const created: Record<string, unknown> = { ...request };
-  delete created.baselineSnapshot;
-  delete created.claimedAt;
-  delete created.claimedBy;
-  delete created.claimedModel;
-  delete created.claimExpiresAtMs;
-  delete created.claimGeneration;
+  const created = withoutClaim(request);
   delete created.answeredAt;
   delete created.canceledAt;
   return JSON.stringify(created);
+};
+
+/**
+ * Refuses to take a request back from a commit that has already won.
+ *
+ * Same reasoning as the cancel guard, and the same lock: a journal on disk
+ * under this lock means the answer has published or is one rename from
+ * publishing, and recovery finishes it by restoring the claim it names. Editing
+ * or deleting the request underneath that would leave the plan carrying a
+ * revision no record can explain.
+ */
+const assertNotPublishing = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<void> => {
+  if (!(await hasPreparedMutationJournal({ store, requestId }))) return;
+  throw new AgentExchangeRejected(
+    "The agent's answer for this request is already publishing, so it can no longer be changed",
+  );
+};
+
+/**
+ * Refuses every state in which taking one comment out of a feedback request
+ * would race the agent or contradict a settled answer.
+ *
+ * A canceled request is not refused: the removal answers with the stored
+ * request rather than treating a repeat as a conflict. Answers with the batch
+ * it proved, so a caller cannot narrow the kind a second way.
+ */
+const assertCommentIsRemovable = async ({
+  store,
+  request,
+  agentConnected,
+  nowMs,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+  /** Whether the presence lease reports an agent attached right now. */
+  readonly agentConnected: boolean;
+  readonly nowMs: number;
+}): Promise<AgentFeedbackRequest> => {
+  if (request.kind !== "feedback") {
+    throw new AgentExchangeRejected(
+      "Only a feedback request can remove a queued comment",
+    );
+  }
+  if (agentStillOwnsRequest({ request, agentConnected, nowMs })) {
+    throw new AgentExchangeRejected(
+      "The agent has already picked up this feedback request",
+    );
+  }
+  if (request.claimedAt !== undefined) {
+    await assertNotPublishing({ store, requestId: request.requestId });
+  }
+  // A settled answer keeps its claim, because the stored response is only
+  // readable while the request it answers still names the claim that published
+  // it. Reached whenever an answer was stamped after the route read the
+  // exchange - by recovery settling an interrupted commit, or by a stored
+  // response this build cannot read.
+  if (request.answeredAt !== undefined) {
+    throw new AgentExchangeRejected(
+      "The agent has already answered this request",
+    );
+  }
+  return request;
+};
+
+/**
+ * Refuses every state in which withdrawing one request would contradict work
+ * that already reached the plan. A canceled request is not refused: cancel is
+ * idempotent.
+ */
+const assertRequestIsWithdrawable = async ({
+  store,
+  request,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+}): Promise<void> => {
+  if (request.canceledAt !== undefined) return;
+  if (request.answeredAt !== undefined) {
+    throw new AgentExchangeRejected(
+      "The agent has already answered this request",
+    );
+  }
+  // The commit writes its journal under this same request lock, so a journal
+  // on disk here means the answer has published or is one rename from
+  // publishing. Withdrawing it would leave the plan carrying a revision every
+  // record calls canceled.
+  if (
+    await hasPreparedMutationJournal({ store, requestId: request.requestId })
+  ) {
+    throw new AgentExchangeRejected(
+      "The agent's answer for this request is already publishing, so it can no longer be canceled",
+    );
+  }
+};
+
+/**
+ * Drops the mutation stages a request can no longer publish from. The claim's
+ * own fields go through `withoutClaim`; this is only the stages.
+ *
+ * They go for the reason a cancel drops them: neither a released generation nor
+ * a terminal request can ever reach the plan - the commit boundary refuses a
+ * generation its request no longer names, and a settled request refuses every
+ * answer - so the private plan candidate would otherwise sit in the store for
+ * the life of the plan.
+ */
+const dropUnpublishableStages = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<void> => {
+  await removeAgentMutationStages({ store, requestId });
+};
+
+/** Narrates a release, so the activity log never drops a claim in silence. */
+const announceClaimRelease = async ({
+  store,
+  request,
+  atMs,
+}: {
+  readonly store: ReviewStore;
+  readonly request: AgentRequest;
+  readonly atMs: number;
+}): Promise<void> => {
+  await appendProgressEvent({
+    store,
+    event: {
+      sessionId: request.sessionId,
+      requestId: request.requestId,
+      atMs,
+      stepCode: "claim-released",
+      step: "Claim released after the agent stopped reporting",
+      state: "done",
+      detail:
+        "The reviewer changed this message once the claim on it was abandoned, so the previous agent session can no longer answer it",
+    },
+  }).catch(() => undefined);
 };
 
 export const ensureAgentRequest = async ({
@@ -441,6 +613,26 @@ export const claimAgentRequest = async ({
           // A takeover is a new claim, so it raises the generation. The
           // displaced holder keeps writing to a stage whose generation the
           // commit boundary no longer accepts.
+          //
+          // The stages on disk are read too, because a release drops the
+          // claim's generation with the rest of it: reading the request alone
+          // would hand generation 1 back after a release, and a returning
+          // agent that recreated its old stage would resume the candidate it
+          // drafted for the message the reviewer has since replaced. What this
+          // read buys is bounded: a stage present when it runs can never be
+          // resumed, because this claim outranks it. A stage recreated at the
+          // same generation after the read still can, which needs a second
+          // live process holding the same agent token and nothing published in
+          // between; ruling that out needs a durable record of released
+          // generations, which this deliberately does not add.
+          const claimGeneration =
+            Math.max(
+              request.claimGeneration ?? 0,
+              await highestAgentMutationStageGeneration({
+                store: lockedStore,
+                requestId,
+              }),
+            ) + 1;
           const claimed = validateAgentRequest({
             ...request,
             baselineSnapshot,
@@ -448,7 +640,7 @@ export const claimAgentRequest = async ({
             claimedBy,
             claimedModel: model,
             claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
-            claimGeneration: (request.claimGeneration ?? 0) + 1,
+            claimGeneration,
           });
           await writeAgentRequestValue({
             store: lockedStore,
@@ -501,21 +693,8 @@ export const cancelAgentRequest = async ({
         store: lockedStore,
         requestId,
       });
+      await assertRequestIsWithdrawable({ store: lockedStore, request });
       if (request.canceledAt !== undefined) return request;
-      if (request.answeredAt !== undefined) {
-        throw new AgentExchangeRejected(
-          "The agent has already answered this request",
-        );
-      }
-      // The commit writes its journal under this same request lock, so a
-      // journal on disk here means the answer has published or is one rename
-      // from publishing. Withdrawing it would leave the plan carrying a
-      // revision every record calls canceled.
-      if (await hasPreparedMutationJournal({ store: lockedStore, requestId })) {
-        throw new AgentExchangeRejected(
-          "The agent's answer for this request is already publishing, so it can no longer be canceled",
-        );
-      }
       const canceled = validateAgentRequest({ ...request, canceledAt: now });
       await writeAgentRequestValue({
         store: lockedStore,
@@ -596,8 +775,12 @@ export const commitRequestTerminal = async ({
         request.claimedAt === undefined ||
         request.baselineSnapshot === undefined
       ) {
+        // Also where a late return lands after abandonment: a claim proven
+        // abandoned is released when the reviewer edits the message it was
+        // holding, so the answer would be to a message that no longer exists
+        // in that form (BIG-120).
         throw new AgentExchangeRejected(
-          "The request must be claimed before it can be answered",
+          "The request must be claimed before it can be answered. A claim released after it was abandoned cannot answer it either; run `big-plan agent next` to pick up current work.",
         );
       }
       // Answered first: a replay of a settled request is better reported as
@@ -741,11 +924,15 @@ const readQueuedMessage = async ({
   requestId,
   verb,
   allowCanceled,
+  agentConnected,
+  nowMs,
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
   readonly verb: string;
   readonly allowCanceled: boolean;
+  readonly agentConnected: boolean;
+  readonly nowMs: number;
 }): Promise<AgentReplyRequest | AgentChatRequest> => {
   const request = await readCurrentRequest({ store, requestId });
   if (request.kind === "feedback") {
@@ -756,8 +943,14 @@ const readQueuedMessage = async ({
   if (!allowCanceled && request.canceledAt !== undefined) {
     throw new AgentExchangeRejected("The request was canceled by the reviewer");
   }
-  if (agentOwnsRequest(request)) {
+  if (agentStillOwnsRequest({ request, agentConnected, nowMs })) {
     throw new AgentExchangeRejected(AGENT_STARTED);
+  }
+  // Reached with a claim only when that claim is proven abandoned, which is
+  // exactly when the commit boundary has to be asked whether it got there
+  // first.
+  if (request.claimedAt !== undefined) {
+    await assertNotPublishing({ store, requestId });
   }
   if (request.answeredAt !== undefined) {
     throw new AgentExchangeRejected(
@@ -776,12 +969,18 @@ export const reviseQueuedRequest = async ({
   store,
   requestId,
   body,
+  agentConnected,
+  clock = Date.now,
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
   readonly body: string;
-}): Promise<AgentReplyRequest | AgentChatRequest> =>
-  withRequestLock({
+  /** Whether the presence lease reports an agent attached right now. */
+  readonly agentConnected: boolean;
+  readonly clock?: Clock;
+}): Promise<AgentReplyRequest | AgentChatRequest> => {
+  const nowMs = readClock(clock);
+  const { revised, released } = await withRequestLock({
     store,
     requestId,
     change: async (lockedStore) => {
@@ -790,6 +989,8 @@ export const reviseQueuedRequest = async ({
         requestId,
         verb: "revised",
         allowCanceled: false,
+        agentConnected,
+        nowMs,
       });
       const frozen = new Map(
         request.attachmentManifest.map((attachment) => [
@@ -808,7 +1009,11 @@ export const reviseQueuedRequest = async ({
         }
         return { ...attachment, alt: reference.alt };
       });
-      const revised = validateAgentRequest({ ...request, body, attachments });
+      const revised = validateAgentRequest({
+        ...withoutClaim(request),
+        body,
+        attachments,
+      });
       if (revised.kind === "feedback") {
         throw new AgentExchangeRejected(
           "Revising this message changed the request kind",
@@ -819,9 +1024,19 @@ export const reviseQueuedRequest = async ({
         requestId,
         value: revised,
       });
-      return revised;
+      const released = request.claimedAt !== undefined;
+      if (released)
+        await dropUnpublishableStages({ store: lockedStore, requestId });
+      return { revised, released };
     },
   });
+  // Announced outside the request lock, in the order `claimAgentRequest`
+  // established for the takeover this mirrors.
+  if (released) {
+    await announceClaimRelease({ store, request: revised, atMs: nowMs });
+  }
+  return revised;
+};
 
 /**
  * Removes one waiting message outright. Cancel and delete are distinct: cancel
@@ -831,27 +1046,40 @@ export const reviseQueuedRequest = async ({
 export const deleteQueuedRequest = async ({
   store,
   requestId,
+  agentConnected,
+  clock = Date.now,
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
-}): Promise<AgentRequestDeletionResult> =>
-  withRequestLock({
+  /** Whether the presence lease reports an agent attached right now. */
+  readonly agentConnected: boolean;
+  readonly clock?: Clock;
+}): Promise<AgentRequestDeletionResult> => {
+  const nowMs = readClock(clock);
+  return withRequestLock({
     store,
     requestId,
     change: async (lockedStore) => {
-      await readQueuedMessage({
+      const request = await readQueuedMessage({
         store: lockedStore,
         requestId,
         verb: "deleted",
         allowCanceled: true,
+        agentConnected,
+        nowMs,
       });
+      if (request.claimedAt !== undefined) {
+        await dropUnpublishableStages({ store: lockedStore, requestId });
+      }
       return deleteAgentRequestValue({ store: lockedStore, requestId });
     },
   });
+};
 
 /**
- * Removes one comment before an agent claims its feedback request. A request
- * that no longer carries the comment has already had it removed, so the
+ * Removes one comment from a feedback request no agent is holding - because
+ * none has claimed it, or because the claim on it is proven abandoned. A
+ * request that no longer carries the comment has already had it removed, so the
  * removal answers with the stored request rather than refusing a repeat.
  */
 export const removeCommentFromQueuedFeedbackRequest = async ({
@@ -859,39 +1087,46 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
   requestId,
   commentId,
   now,
+  agentConnected,
+  clock = Date.now,
 }: {
   readonly store: ReviewStore;
   readonly requestId: string;
   readonly commentId: string;
   readonly now: string;
-}): Promise<AgentFeedbackRequest> =>
-  withRequestLock({
+  /** Whether the presence lease reports an agent attached right now. */
+  readonly agentConnected: boolean;
+  readonly clock?: Clock;
+}): Promise<AgentFeedbackRequest> => {
+  const nowMs = readClock(clock);
+  const { updated, released } = await withRequestLock({
     store,
     requestId,
     change: async (lockedStore) => {
-      const request = await readCurrentRequest({
+      const request = await assertCommentIsRemovable({
         store: lockedStore,
-        requestId,
+        request: await readCurrentRequest({ store: lockedStore, requestId }),
+        agentConnected,
+        nowMs,
       });
-      if (request.kind !== "feedback") {
-        throw new AgentExchangeRejected(
-          "Only a feedback request can remove a queued comment",
-        );
+      if (request.canceledAt !== undefined) {
+        return { updated: request, released: false };
       }
-      if (agentOwnsRequest(request)) {
-        throw new AgentExchangeRejected(
-          "The agent has already picked up this feedback request",
-        );
-      }
-      if (request.canceledAt !== undefined) return request;
       const comments = request.comments.filter(
         (comment) => comment.id !== commentId,
       );
-      if (comments.length === request.comments.length) return request;
+      if (comments.length === request.comments.length) {
+        return { updated: request, released: false };
+      }
+      // A batch the reviewer has taken a comment out of is no longer the batch
+      // the abandoned claim froze, so the claim goes with it. A batch emptied
+      // outright is terminal instead, and a terminal request already refuses
+      // every answer, so its claim is left as the record of what happened.
+      const emptied = comments.length === 0;
       const updated = validateAgentRequest(
-        comments.length === 0
+        emptied
           ? { ...request, canceledAt: now }
-          : { ...request, comments },
+          : { ...withoutClaim(request), comments },
       );
       if (updated.kind !== "feedback") {
         throw new AgentExchangeRejected(
@@ -903,9 +1138,64 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
         requestId,
         value: updated,
       });
-      return updated;
+      // Keeping the claim and keeping its plan candidate are separate
+      // decisions. The claim survives an emptied batch as the record of what
+      // happened; the candidate does not survive either outcome, because
+      // neither a released generation nor a canceled request can publish it.
+      const released = request.claimedAt !== undefined && !emptied;
+      if (released || emptied) {
+        await dropUnpublishableStages({ store: lockedStore, requestId });
+      }
+      return { updated, released };
     },
   });
+  if (released) {
+    await announceClaimRelease({ store, request: updated, atMs: nowMs });
+  }
+  return updated;
+};
+
+/**
+ * Proves the reviewer can take back every request that carries one comment
+ * before any of them is written.
+ *
+ * Taking a comment out of the review touches one request at a time, each under
+ * its own lock, so a refusal partway through would leave the earlier requests
+ * withdrawn for a deletion that never happened - a message the reviewer never
+ * asked to withdraw. Reading the same refusals first turns that into one
+ * conflict the reviewer can retry once the state resolves.
+ *
+ * It is a proof, not a lock: the refusals are re-proved where each write
+ * happens, and this only removes the case where the caller's own settle step
+ * made one of them certain.
+ */
+export const assertRequestsMayBeTakenBack = async ({
+  store,
+  requestIds,
+  agentConnected,
+  clock = Date.now,
+}: {
+  readonly store: ReviewStore;
+  readonly requestIds: ReadonlyArray<string>;
+  /** Whether the presence lease reports an agent attached right now. */
+  readonly agentConnected: boolean;
+  readonly clock?: Clock;
+}): Promise<void> => {
+  const nowMs = readClock(clock);
+  for (const requestId of requestIds) {
+    const request = await readCurrentRequest({ store, requestId });
+    if (request.kind === "feedback") {
+      await assertCommentIsRemovable({
+        store,
+        request,
+        agentConnected,
+        nowMs,
+      });
+      continue;
+    }
+    await assertRequestIsWithdrawable({ store, request });
+  }
+};
 
 /**
  * Refuses a resolve that would contradict outstanding work. Resolution and an

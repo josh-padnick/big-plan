@@ -23,7 +23,13 @@ import {
   writeAgentRequest,
 } from "./agent-exchange.js";
 import { readCommittedRevisions } from "./change-set-commit.js";
-import { cancelAgentRequest, claimAgentRequest } from "./request-mailbox.js";
+import {
+  cancelAgentRequest,
+  claimAgentRequest,
+  deleteQueuedRequest,
+  reviseQueuedRequest,
+} from "./request-mailbox.js";
+import { AGENT_RECOVERY_HORIZON_MS } from "./shared/agent-timing.js";
 import {
   assertNoExternalSourceConflict,
   commitStagedPlanMutation,
@@ -671,6 +677,167 @@ describe("interrupted plan commit recovery", () => {
         planId,
       });
       expect(exchange.requests[0]?.canceledAt).toBeUndefined();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse to take back a request the reviewer may no longer hold", async () => {
+    const { directory, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      // Abandoned by every test the reviewer's side applies: quiet past the
+      // recovery horizon, and nothing attached.
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      const claimed = await claimAgentRequest({
+        store,
+        activeSessionId: SESSION,
+        requestId: REQUEST,
+        claimedBy: AGENT_A,
+        baselineSnapshot: deriveSnapshotDigest(BASE),
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+      await prepareJournal({
+        store,
+        request: claimed,
+        resultSnapshot: deriveSnapshotDigest(RESULT),
+      });
+
+      // The unlock stops at the same boundary a cancel does: this answer has
+      // published or is one rename from it, and recovery will settle it.
+      await expect(
+        deleteQueuedRequest({
+          store,
+          requestId: REQUEST,
+          agentConnected: false,
+        }),
+      ).rejects.toThrow(/already publishing/u);
+      await expect(
+        reviseQueuedRequest({
+          store,
+          requestId: REQUEST,
+          body: "Never mind, publish nothing.",
+          agentConnected: false,
+        }),
+      ).rejects.toThrow(/already publishing/u);
+      const exchange = await readAgentExchange({
+        store,
+        sessionId: SESSION,
+        planId,
+      });
+      expect(exchange.requests[0]).toMatchObject({
+        claimedBy: AGENT_A,
+        body: "Publish the revision.",
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should drop an abandoned claim's candidate when the reviewer takes the message back", async () => {
+    const { directory, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      const claimed = await claimAgentRequest({
+        store,
+        activeSessionId: SESSION,
+        requestId: REQUEST,
+        claimedBy: AGENT_A,
+        baselineSnapshot: deriveSnapshotDigest(BASE),
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+      const stage = await stageFor({
+        store,
+        claimedBy: AGENT_A,
+        generation: requestClaimGeneration(claimed),
+      });
+      await writeFile(stage.candidatePath, RESULT, "utf8");
+
+      const revised = await reviseQueuedRequest({
+        store,
+        requestId: REQUEST,
+        body: "Publish the other revision instead.",
+        agentConnected: false,
+      });
+
+      expect(revised.claimedBy).toBeUndefined();
+      // A released generation can never publish, so its private candidate goes
+      // with the claim rather than outliving the review.
+      await expect(
+        readMutationStage({ store, requestId: REQUEST, claimedBy: AGENT_A }),
+      ).rejects.toThrow(StagedPlanMutationRejected);
+      const exchange = await readAgentExchange({
+        store,
+        sessionId: SESSION,
+        planId,
+      });
+      expect(exchange.requests[0]).toMatchObject({
+        body: "Publish the other revision instead.",
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should never reissue a generation a released claim already used", async () => {
+    const { directory, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      const first = await claimAgentRequest({
+        store,
+        activeSessionId: SESSION,
+        requestId: REQUEST,
+        claimedBy: AGENT_A,
+        baselineSnapshot: deriveSnapshotDigest(BASE),
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+      const stage = await stageFor({
+        store,
+        claimedBy: AGENT_A,
+        generation: requestClaimGeneration(first),
+      });
+      await writeFile(stage.candidatePath, RESULT, "utf8");
+
+      // The reviewer takes the abandoned message back, which drops the claim
+      // and the stages the released generation owned.
+      await reviseQueuedRequest({
+        store,
+        requestId: REQUEST,
+        body: "Publish the other revision instead.",
+        agentConnected: false,
+      });
+
+      // The agent was unreachable rather than dead. It comes back still
+      // believing it holds the generation it was given, and recreates that
+      // stage from the base it froze - which nothing has moved, because
+      // nothing published.
+      const recreated = await stageFor({
+        store,
+        claimedBy: AGENT_A,
+        generation: requestClaimGeneration(first),
+      });
+      await writeFile(recreated.candidatePath, RESULT, "utf8");
+
+      const reclaimed = await claim({ store, claimedBy: AGENT_A });
+      expect(requestClaimGeneration(reclaimed)).toBeGreaterThan(
+        requestClaimGeneration(first),
+      );
+      const reopened = await stageFor({
+        store,
+        claimedBy: AGENT_A,
+        generation: requestClaimGeneration(reclaimed),
+      });
+      // A reissued number would let this resume the candidate drafted for the
+      // message the reviewer replaced. The new claim starts from the committed
+      // source instead.
+      await expect(readFile(reopened.candidatePath, "utf8")).resolves.toBe(
+        BASE,
+      );
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

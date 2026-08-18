@@ -5,8 +5,10 @@
 import { progressStepCodeIsAgentOwned } from "./progress-code.js";
 import type { ProgressStepCode } from "./progress-code.js";
 import {
+  claimExplainsQuiet,
   claimIsLive,
   claimSignalAtMs,
+  requestWasClaimed,
   type ClaimedRequest,
 } from "./agent-claim.js";
 import {
@@ -291,49 +293,6 @@ const disconnectedSupporting = ({
   return quietFor === null
     ? `Reconnect the coding agent to continue.${takeover} All comments are safe.`
     : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue.${takeover} All comments are safe.`;
-};
-
-/**
- * True once an agent has picked a request up, lease still live or not. Pickup
- * is what the reviewer is told about, and a lapsed lease does not undo it:
- * `agent next` hands the work over and its process exits, so between two
- * progress notes nothing is left to renew the claim (BIG-147).
- */
-export const requestWasClaimed = (request: ClaimedRequest): boolean =>
-  request.claimedBy !== undefined && claimSignalAtMs(request) !== undefined;
-
-/**
- * How long a claim has gone without a signal, measured from the claim's own
- * last narration. Never from the lease: a quiet turn's lease is lapsed by
- * definition, so a lease test would answer "no" exactly when the question
- * matters (BIG-147).
- */
-const claimQuietForMs = ({
-  request,
-  nowMs,
-}: {
-  readonly request: ClaimedRequest;
-  readonly nowMs: number;
-}): number | undefined => {
-  const signalAtMs = claimSignalAtMs(request);
-  return signalAtMs === undefined ? undefined : Math.max(0, nowMs - signalAtMs);
-};
-
-/**
- * True while this claim still accounts for an agent's silence. Pickup explains
- * quiet only within the recovery horizon; past it the claim has stopped saying
- * anything about why nothing is being reported.
- */
-const claimExplainsQuiet = ({
-  request,
-  nowMs,
-}: {
-  readonly request: ClaimedRequest;
-  readonly nowMs: number;
-}): boolean => {
-  if (!requestWasClaimed(request)) return false;
-  const quietFor = claimQuietForMs({ request, nowMs });
-  return quietFor !== undefined && quietFor <= AGENT_RECOVERY_HORIZON_MS;
 };
 
 /** What the plan's open claims say about why nothing is being reported. */
