@@ -51,17 +51,26 @@ const asFencedQuote = (quote: string): string => {
   return `${fence}text\n${quote}\n${fence}`;
 };
 
+// A heading is one line, so anything going into one is flattened to one line
+// first. Live requests take label, section, and kind from the block map, but a
+// restored stored comment carries its own, and a newline there would open a
+// second ATX heading that reads as though the runtime wrote it - the one thing
+// this module's structure promises a note cannot do.
+const asOneLine = (value: string): string =>
+  value.replaceAll(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, " ").trim();
+
 /** How one comment's target reads in the brief. */
 export const describeTarget = (comment: ReviewComment): string => {
   const { target } = comment;
   if (target.type === "document") {
     return "Whole plan";
   }
+  const label = asOneLine(target.label);
   const location =
     target.section === undefined
-      ? target.label
-      : `${target.section} / ${target.label}`;
-  const kind = target.kind.replaceAll("-", " ");
+      ? label
+      : `${asOneLine(target.section)} / ${label}`;
+  const kind = asOneLine(target.kind.replaceAll("-", " "));
   if (target.type === "lines") {
     const range =
       target.start === target.end
@@ -90,7 +99,7 @@ const commentSection = ({
   const address =
     comment.target.type === "document"
       ? "Target: the plan as a whole"
-      : `Target: \`${comment.target.blockId}\` (${comment.target.kind})`;
+      : `Target: \`${asOneLine(comment.target.blockId)}\` (${asOneLine(comment.target.kind)})`;
   // An excerpt says so in its own label. The block and offsets above still
   // address the whole highlight, so an agent that needs the rest reads it from
   // the plan rather than assuming the fence held all of it.

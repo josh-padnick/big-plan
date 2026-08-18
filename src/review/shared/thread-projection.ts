@@ -553,6 +553,17 @@ export const projectCommentThreads = <
     ]),
   );
 
+/** True when the left timestamp names an earlier instant than the right one. */
+const isBefore = (left: string, right: string): boolean => {
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  // An unparseable timestamp has no place in an ordering, so it falls back to
+  // the string comparison rather than silently sorting as NaN.
+  return Number.isNaN(leftMs) || Number.isNaN(rightMs)
+    ? left < right
+    : leftMs < rightMs;
+};
+
 export const projectConversationHistory = ({
   request,
   requests,
@@ -565,7 +576,10 @@ export const projectConversationHistory = ({
   if (request.kind === "feedback") return [];
   const history: Array<Readonly<Record<string, unknown>>> = [];
   for (const candidate of requests) {
-    if (candidate.createdAt >= request.createdAt) continue;
+    // Compared as instants, not as strings: an ISO timestamp has more than one
+    // spelling, and "2026-08-10T18:00:00Z" sorts after
+    // "2026-08-10T18:00:00.000Z" lexically while naming the same moment.
+    if (!isBefore(candidate.createdAt, request.createdAt)) continue;
     const response = responses.find(
       (entry) => entry.requestId === candidate.requestId,
     );

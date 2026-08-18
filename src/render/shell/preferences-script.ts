@@ -185,7 +185,11 @@ export const PREFERENCES_SCRIPT = `<script>
     isolatedElements = [];
   };
 
-  const setOpen = (nextOpen, returnFocus = false) => {
+  // Whether the focus returning to the open button should show a ring is
+  // decided by how the sheet was *closed*, not by how it was opened. A pointer
+  // opens the sheet and Escape or the close button's Enter closes it; the
+  // keyboard reader who did that has to see where focus landed.
+  const setOpen = (nextOpen, returnFocus = false, closedByKeyboard = false) => {
     open = nextOpen;
     backdrop.hidden = !open;
     openButton.setAttribute("aria-expanded", open ? "true" : "false");
@@ -198,9 +202,11 @@ export const PREFERENCES_SCRIPT = `<script>
     } else {
       restoreIsolation();
       if (returnFocus) {
-        openButton.focus({ focusVisible: openedByKeyboard });
-        if (!openedByKeyboard)
-          openButton.setAttribute("data-preferences-focus-quiet", "");
+        const showRing = openedByKeyboard || closedByKeyboard;
+        openButton.focus({ focusVisible: showRing });
+        if (showRing)
+          openButton.removeAttribute("data-preferences-focus-quiet");
+        else openButton.setAttribute("data-preferences-focus-quiet", "");
       }
     }
   };
@@ -231,7 +237,8 @@ export const PREFERENCES_SCRIPT = `<script>
   });
   closeButton.addEventListener("click", (event) => {
     event.preventDefault();
-    setOpen(false, true);
+    // A keyboard activation of a button reports no pointer coordinates.
+    setOpen(false, true, event.detail === 0);
   });
   backdrop.addEventListener("click", (event) => {
     if (event.target === backdrop) setOpen(false, true);
@@ -289,7 +296,7 @@ export const PREFERENCES_SCRIPT = `<script>
     if (event.key === "Escape") {
       event.preventDefault();
       event.bigPlanEscapeHandled = true;
-      setOpen(false, true);
+      setOpen(false, true, true);
       return;
     }
     if (event.key !== "Tab") return;
