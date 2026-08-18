@@ -103,7 +103,10 @@ import {
 import { AgentHealthAlert } from "./agent-connection.browser.js";
 import { AgentSurface } from "./agent-surface.browser.js";
 import { ChatSurface } from "./chat-surface.browser.js";
-import { CommentsSurface } from "./comments-surface.browser.js";
+import {
+  batchSectionTone,
+  CommentsSurface,
+} from "./comments-surface.browser.js";
 import {
   AgentChangeDigest,
   MessageTurn,
@@ -6351,14 +6354,14 @@ export const ReviewController = () => {
                         count: activeBatchCommentIds.length,
                         label: statusForRequest(activeBatchRequest, "thread")
                           .label,
-                        // Derived from the reading it labels, so a warning or
-                        // danger status never heads its cards in the active
-                        // treatment. Only the working stage is positive.
-                        tone:
-                          statusForRequest(activeBatchRequest, "thread")
-                            .tone === "positive"
-                            ? ("working" as const)
-                            : ("queued" as const),
+                        tone: batchSectionTone({
+                          status: statusForRequest(
+                            activeBatchRequest,
+                            "thread",
+                          ),
+                          workingCount: (sentByGroup.get("working") ?? [])
+                            .length,
+                        }),
                         content: (
                           <Card
                             className="m-0 w-full max-w-none border border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-ink)] shadow-none"

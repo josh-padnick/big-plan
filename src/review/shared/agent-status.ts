@@ -353,9 +353,11 @@ type OpenClaimedRequest = ClaimedRequest &
  * to the lease, and bounded by the recovery horizon so a claim nothing ever
  * reaps cannot explain silence forever.
  *
- * An explanation may inform the activity reading and withhold advice premised
- * on nobody being there. It is never evidence that an agent is attached, and it
- * must not reach any connection surface (BIG-147).
+ * An explanation may inform the activity reading, hold a later message in the
+ * queue rather than calling it blocked, and put the takeover warning on advice
+ * that would otherwise read as a bare invitation to reconnect. It is never
+ * evidence that an agent is attached, and it must not reach any connection
+ * surface (BIG-147).
  */
 export const heldWorkQuiet = ({
   requests,

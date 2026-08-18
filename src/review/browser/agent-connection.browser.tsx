@@ -578,10 +578,12 @@ export const AgentConnectionPanel = ({
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
   /**
-   * What held work says about the quiet. While it explains the quiet it
-   * withholds advice premised on nobody being there; once it has gone stale the
-   * advice returns, naming the takeover it now costs. It never decides what the
-   * cards below report, which stays presence alone (BIG-147).
+   * What held work says about the quiet. It chooses this section's copy and
+   * nothing else: while it explains the quiet the section names the takeover
+   * that connecting a session would cost, and once it has gone stale the copy
+   * becomes the plain recovery instruction. It never decides whether the
+   * section renders, and never decides what the cards above report, which stays
+   * presence alone (BIG-147).
    */
   readonly heldWork: HeldWorkQuiet;
   readonly heartbeatAt: number;
