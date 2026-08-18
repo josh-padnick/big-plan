@@ -24,6 +24,7 @@ type TargetBlockIdentity = {
   readonly section?: string;
   readonly slideText?: string;
   readonly isSlideTextExcerpt?: boolean;
+  readonly slideSubHeadings?: ReadonlyArray<string>;
 };
 
 /** Where one comment points. */
@@ -70,6 +71,8 @@ export type BlockMapEntry = {
   readonly section?: string;
   /** This slide's own content, on the heading that names the slide scope. */
   readonly slideText?: string;
+  /** The sub-slides a grouped slide continues into, named in reading order. */
+  readonly slideSubHeadings?: ReadonlyArray<string>;
 };
 
 export class CommentRejected extends Error {
@@ -95,6 +98,12 @@ export const QUOTE_LIMIT = BODY_LIMIT;
 // the content to prevent. It is still a bound, and a slide beyond it says so
 // through isSlideTextExcerpt rather than trailing off silently.
 export const SLIDE_TEXT_LIMIT = 8000;
+// A grouped slide names its sub-slides instead of repeating their bodies, so
+// the list costs a brief a heading each. It is bounded like any other target
+// text: enough entries for a real section, and a per-entry length matching the
+// label bound the same target already carries.
+export const SLIDE_SUB_HEADING_LIMIT = 50;
+export const SLIDE_SUB_HEADING_TEXT_LIMIT = 300;
 const ID_LIMIT = 64;
 const COMMENT_LIMIT = 200;
 const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
@@ -132,18 +141,38 @@ const boundSlideText = (
       }
     : { slideText, isSlideTextExcerpt: false };
 
+/**
+ * Bounds the sub-slide names carried with a grouped slide's target, dropping
+ * empty entries so the brief never names a slide with nothing.
+ */
+const boundSlideSubHeadings = (
+  headings: ReadonlyArray<string>,
+): ReadonlyArray<string> =>
+  headings
+    .filter((heading) => heading.trim() !== "")
+    .slice(0, SLIDE_SUB_HEADING_LIMIT)
+    .map((heading) => heading.slice(0, SLIDE_SUB_HEADING_TEXT_LIMIT));
+
 // The slide scope a block carries, if it is a slide's own heading. The renderer
 // decides this - never the request - so a caller cannot claim slide reach for a
 // block that has none.
 const slideScopeOf = (
   block: BlockMapEntry,
-): Pick<TargetBlockIdentity, "kind" | "slideText" | "isSlideTextExcerpt"> => {
+): Pick<
+  TargetBlockIdentity,
+  "kind" | "slideText" | "isSlideTextExcerpt" | "slideSubHeadings"
+> => {
   if (block.slideText === undefined || block.slideText === "") {
     return { kind: block.kind };
   }
+  const slideSubHeadings = boundSlideSubHeadings(block.slideSubHeadings ?? []);
   // The heading names the whole slide, so the target's kind is what the block
   // addresses rather than the tag it happens to be rendered as.
-  return { kind: "slide", ...boundSlideText(block.slideText) };
+  return {
+    kind: "slide",
+    ...boundSlideText(block.slideText),
+    ...(slideSubHeadings.length === 0 ? {} : { slideSubHeadings }),
+  };
 };
 
 const asRecord = ({
@@ -344,6 +373,26 @@ const asTargetText = ({
   return result;
 };
 
+// Stored state is as untrusted as a request, so the sub-slide names come back
+// through the same bounds they were minted under.
+const asSlideSubHeadings = (value: unknown): ReadonlyArray<string> => {
+  if (!Array.isArray(value)) {
+    throw new CommentRejected('"slideSubHeadings" must be a list');
+  }
+  if (value.length > SLIDE_SUB_HEADING_LIMIT) {
+    throw new CommentRejected(
+      `"slideSubHeadings" holds more than ${SLIDE_SUB_HEADING_LIMIT} entries`,
+    );
+  }
+  return value.map((heading) =>
+    asTargetText({
+      value: heading,
+      field: "slideSubHeadings",
+      limit: SLIDE_SUB_HEADING_TEXT_LIMIT,
+    }),
+  );
+};
+
 /** Validates the immutable target metadata recorded with a stored comment. */
 const validateStoredTarget = (value: unknown): CommentTarget => {
   const target = asRecord({ value, field: "target" });
@@ -382,6 +431,11 @@ const validateStoredTarget = (value: unknown): CommentTarget => {
             limit: SLIDE_TEXT_LIMIT,
           }),
           isSlideTextExcerpt: target.isSlideTextExcerpt === true,
+          ...(target.slideSubHeadings === undefined
+            ? {}
+            : {
+                slideSubHeadings: asSlideSubHeadings(target.slideSubHeadings),
+              }),
         }),
   };
   if (target.type === "block") return { type: "block", ...identity };

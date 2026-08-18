@@ -27,7 +27,10 @@ import {
 } from "./runtime-watchdog.js";
 import type { MutationRegistry } from "./runtime-watchdog.js";
 import { reviewStateVersion } from "./review-state-version.js";
-import { encodeReviewSnapshot } from "./shared/review-wire.js";
+import {
+  encodeAgentRequests,
+  encodeReviewSnapshot,
+} from "./shared/review-wire.js";
 
 /**
  * A response a route decided on. The runtime owns how it reaches the socket,
@@ -230,6 +233,7 @@ export const createPlanRenderer = ({
       store,
       validate: validateResolvedCommentIds,
     });
+    const agent = await readAgentExchange({ store, sessionId, planId });
     return JSON.stringify({
       ...encodeReviewSnapshot({
         drafts,
@@ -237,7 +241,7 @@ export const createPlanRenderer = ({
         resolvedCommentIds,
         version: reviewStateVersion({ drafts, resolvedCommentIds }),
       }),
-      agent: await readAgentExchange({ store, sessionId, planId }),
+      agent: { ...agent, requests: encodeAgentRequests(agent.requests) },
       currentSnapshot: deriveSnapshotDigest(markdown),
       diffPreview: isDiffPreview,
     });

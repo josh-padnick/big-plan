@@ -239,10 +239,34 @@ const withoutSlideCopy = (comment: ReviewComment): ReviewComment => {
   const {
     slideText: _slideText,
     isSlideTextExcerpt: _excerpt,
+    slideSubHeadings: _subHeadings,
     ...target
   } = comment.target;
   return { ...comment, target };
 };
+
+/**
+ * Strips the same slide copy from the comments a pending request carries.
+ *
+ * A request holds the comments that produced it, so the copy would otherwise
+ * reach the browser here too - on every poll rather than once at load - and the
+ * browser projection keeps only the comment ids. The agent reads the exchange
+ * from the store, never through this encoder, so what it is handed is untouched.
+ */
+export const encodeAgentRequests = (
+  requests: ReadonlyArray<unknown>,
+): ReadonlyArray<unknown> =>
+  requests.map((request) => {
+    if (!isReviewWireRecord(request) || !Array.isArray(request.comments)) {
+      return request;
+    }
+    return {
+      ...request,
+      comments: request.comments.map((comment) =>
+        isReviewCommentValue(comment) ? withoutSlideCopy(comment) : comment,
+      ),
+    };
+  });
 
 /** Encodes the server-owned comment snapshot for transport. */
 export const encodeReviewSnapshot = (
@@ -292,7 +316,10 @@ export const emptyAgentSnapshot = (): AgentSnapshot => ({
 /** Encodes the runtime-owned exchange in the shape consumed by the browser. */
 export const encodeAgentSnapshot = (
   value: AgentSnapshotSource,
-): AgentSnapshotSource => value;
+): AgentSnapshotSource => ({
+  ...value,
+  requests: encodeAgentRequests(value.requests),
+});
 
 /** Decodes the agent exchange while preserving only browser-safe facts. */
 export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {

@@ -47,6 +47,17 @@ const BLOCKS: ReadonlyMap<string, BlockMapEntry> = new Map([
       slideText: "Status quo\n\nToday's reality\n\nWhat changes next",
     },
   ],
+  [
+    "section/http-endpoints/heading-1",
+    {
+      id: "section/http-endpoints/heading-1",
+      kind: "heading",
+      label: "HTTP endpoints",
+      section: "HTTP endpoints",
+      slideText: "HTTP endpoints",
+      slideSubHeadings: ["The queueing endpoint", "The status endpoint"],
+    },
+  ],
 ]);
 
 const NOW = "2026-07-31T00:00:00.000Z";
@@ -276,6 +287,30 @@ describe("validateComments target resolution", () => {
     );
     expect(comment?.target).not.toHaveProperty("slideText");
     expect(comment?.target).toMatchObject({ kind: "paragraph" });
+  });
+
+  it("should carry the sub-slides a grouped slide continues into", () => {
+    const [comment] = validate(
+      commentOn({ type: "block", blockId: "section/http-endpoints/heading-1" }),
+    );
+    expect(comment?.target).toMatchObject({
+      kind: "slide",
+      slideText: "HTTP endpoints",
+      slideSubHeadings: ["The queueing endpoint", "The status endpoint"],
+    });
+  });
+
+  it("should refuse a caller's own claim of sub-slide reach", () => {
+    // The renderer alone decides how far a slide reaches; a request naming
+    // sub-slides would otherwise send the agent off to edit unrelated sections.
+    const [comment] = validate(
+      commentOn({
+        type: "block",
+        blockId: "section/status-quo/heading-1",
+        slideSubHeadings: ["A section nobody pointed at"],
+      }),
+    );
+    expect(comment?.target).not.toHaveProperty("slideSubHeadings");
   });
 
   it("should refuse a caller's own claim of slide reach", () => {

@@ -507,6 +507,52 @@ describe("agent exchange filesystem", () => {
     });
   });
 
+  // The agent reads its work from the store, so the slide a slide comment
+  // addresses has to survive the round trip. Losing it here hands the agent the
+  // slide's heading and nothing else, which is the whole defect this carries.
+  it("should hand the agent back the slide a slide comment addresses", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-slide-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, before);
+    const store = reviewStoreFor({ planPath, planId });
+    await prepareStore(store);
+    const slideComment: ReviewComment = {
+      ...comment,
+      body: "rewrite this in Spanish",
+      target: {
+        type: "block",
+        blockId: "section/http-endpoints/heading-1",
+        kind: "slide",
+        label: "HTTP endpoints",
+        section: "HTTP endpoints",
+        slideText: "HTTP endpoints\n\nEvery job arrives here.",
+        isSlideTextExcerpt: false,
+        slideSubHeadings: ["The queueing endpoint", "The status endpoint"],
+      },
+    };
+    await writeAgentRequest({
+      store,
+      request: feedbackAgentRequest({
+        feedback: buildFeedbackPackage({
+          sessionId,
+          packageId,
+          planId,
+          planPath: "/tmp/plan.mdx",
+          createdAt: "2026-08-02T12:00:00.000Z",
+          comments: [slideComment],
+        }),
+        premiseSnapshot: deriveSnapshotDigest(before),
+      }),
+    });
+
+    const exchange = await readAgentExchange({ store, sessionId, planId });
+    expect(exchange.requests[0]?.comments[0]?.target).toMatchObject({
+      kind: "slide",
+      slideText: "HTTP endpoints\n\nEvery job arrives here.",
+      slideSubHeadings: ["The queueing endpoint", "The status endpoint"],
+    });
+  });
+
   it("should accept a warning without inventing a changed snapshot", () => {
     const claimed = {
       ...request,

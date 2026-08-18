@@ -187,6 +187,7 @@ describe("agent brief slide scope", () => {
     slide: Partial<{
       readonly slideText: string;
       readonly isSlideTextExcerpt: boolean;
+      readonly slideSubHeadings: ReadonlyArray<string>;
     }> = {},
   ): ReviewComment => ({
     ...NOTE,
@@ -226,6 +227,32 @@ describe("agent brief slide scope", () => {
     expect(brief.indexOf("Highlighted plan text")).toBeLessThan(
       brief.indexOf("addresses that whole slide"),
     );
+  });
+
+  it("should name the sub-slides a grouped slide continues into", () => {
+    const brief = briefFor([
+      slideNote({
+        slideText: "HTTP endpoints",
+        slideSubHeadings: ["The queueing endpoint", "The status endpoint"],
+      }),
+    ]);
+    expect(brief).toContain('"The queueing endpoint"');
+    expect(brief).toContain('"The status endpoint"');
+  });
+
+  // A group's own text stops at its first sub-slide, so calling the fence the
+  // slide's content would under-apply the note exactly as the bare heading did.
+  it("should send a grouped slide's agent to the plan source for the rest", () => {
+    const brief = briefFor([
+      slideNote({
+        slideText: "HTTP endpoints",
+        slideSubHeadings: ["The queueing endpoint"],
+      }),
+    ]);
+    expect(brief).toContain(
+      "whose content is in the plan source rather than below",
+    );
+    expect(brief).not.toContain("The slide's content as the reviewer read it");
   });
 
   it("should admit a truncated slide instead of trailing off silently", () => {

@@ -149,6 +149,79 @@ describe("block identity slide scope", () => {
   });
 });
 
+// A grouped slide's own text stops at its first sub-slide, so its heading has
+// to name what the slide continues into. Without that a comment on the group
+// reaches the agent as the group's title and nothing else.
+describe("block identity grouped slide reach", () => {
+  const slideTextOf = ({
+    blocks,
+    id,
+  }: {
+    readonly blocks: ReadonlyArray<BlockDescriptor>;
+    readonly id: string;
+  }): string | undefined => blocks.find((block) => block.id === id)?.slideText;
+
+  const subHeadingsOf = ({
+    blocks,
+    id,
+  }: {
+    readonly blocks: ReadonlyArray<BlockDescriptor>;
+    readonly id: string;
+  }): ReadonlyArray<string> | undefined =>
+    blocks.find((block) => block.id === id)?.slideSubHeadings;
+
+  it("should name the sub-slides a group with no content of its own continues into", () => {
+    const { blocks } = compile(
+      "## HTTP endpoints\n\n### The queueing endpoint\n\nAccepts a job.\n\n### The status endpoint\n\nReports one.\n",
+    );
+    expect(
+      slideTextOf({ blocks, id: "section/http-endpoints/heading-1" }),
+    ).toBe("HTTP endpoints");
+    expect(
+      subHeadingsOf({ blocks, id: "section/http-endpoints/heading-1" }),
+    ).toEqual(["The queueing endpoint", "The status endpoint"]);
+  });
+
+  it("should keep a group's own intro while still naming its sub-slides", () => {
+    const { blocks } = compile("## Design\n\nIntro.\n\n### Pipeline\n\nHow.\n");
+    expect(slideTextOf({ blocks, id: "section/design/heading-1" })).toBe(
+      "Design\n\nIntro.",
+    );
+    expect(subHeadingsOf({ blocks, id: "section/design/heading-1" })).toEqual([
+      "Pipeline",
+    ]);
+  });
+
+  it("should shed the deck's generated numbering from every name it records", () => {
+    const { html, blocks } = compile(
+      "## HTTP endpoints\n\n### The queueing endpoint\n\nAccepts a job.\n",
+    );
+    expect(html).toContain("1.1 / The queueing endpoint");
+    expect(
+      subHeadingsOf({ blocks, id: "section/http-endpoints/heading-1" }),
+    ).toEqual(["The queueing endpoint"]);
+  });
+
+  it("should leave a slide that owns no sub-slides without a list at all", () => {
+    const { blocks } = compile("## Sequencing\n\nAgree the order.\n");
+    expect(
+      subHeadingsOf({ blocks, id: "section/sequencing/heading-1" }),
+    ).toBeUndefined();
+  });
+
+  it("should name only the sub-slides a group owns directly", () => {
+    const { blocks } = compile(
+      "## Design\n\n### Pipeline\n\nHow.\n\n## Costs\n\n### Tiers\n\nWhat.\n",
+    );
+    expect(subHeadingsOf({ blocks, id: "section/design/heading-1" })).toEqual([
+      "Pipeline",
+    ]);
+    expect(
+      subHeadingsOf({ blocks, id: "section/pipeline/heading-1" }),
+    ).toBeUndefined();
+  });
+});
+
 describe("block identity kinds and labels", () => {
   it("should name a component by its own heading when it has one", () => {
     const { blocks } = compile(DECISION_FIXTURE);
