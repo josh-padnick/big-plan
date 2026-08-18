@@ -108,11 +108,11 @@ export type CommentsSurfaceBatch = {
   /**
    * How many of this batch's comments the sidebar is showing, which is not
    * always the length of the list below. A header heads only the threads still
-   * waiting on its batch, so one that has since been answered is counted here
-   * and rendered in its outcome's section instead. A lone batch narrows
-   * further to the sidebar's working group, which holds its threads once an
-   * agent picks the batch up and nothing while the batch is still waiting in
-   * the queued group.
+   * waiting on its batch, so one whose latest exchange has settled is still
+   * counted here and renders in the lifecycle section for its own state. A
+   * lone batch narrows further to the sidebar's working group, which holds its
+   * threads once an agent picks the batch up and nothing while the batch is
+   * still waiting in the queued group.
    */
   readonly count: number;
   readonly content: ReactNode;

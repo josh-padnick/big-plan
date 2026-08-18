@@ -77,7 +77,7 @@ describe("batch section tone", () => {
 });
 
 const renderCount = (html: string, id: string): number =>
-  html.split(`>${id}<`).length - 1;
+  html.split(`>${id}`).length - 1;
 
 const comment = (id: string): ReviewComment => ({
   id,
