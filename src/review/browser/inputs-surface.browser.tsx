@@ -16,6 +16,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
+import { OCTAGON_ALERT_ICON } from "../../icons/lucide/octagon-alert.js";
+import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
 import {
   emptyReviewInputContract,
@@ -33,7 +35,7 @@ import {
   runtimeIdentity,
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
-import { Badge } from "./ui.browser.js";
+import { Badge, Button } from "./ui.browser.js";
 import { useArticleVersion } from "./use-article-version.browser.js";
 
 const INPUT_CONTRACT_PATH = "/api/input-contract";
@@ -73,30 +75,46 @@ export const watchReviewInputContract = (read: () => void): (() => void) => {
 };
 
 /**
+ * How the last read of the contract went.
+ *
+ * A read that failed is its own reading rather than a longer wait, because the
+ * three say different things to the reviewer: still reading, nothing is asked
+ * of you, and nobody could say. Collapsing the last into the first leaves the
+ * panel claiming work is in progress when none is.
+ */
+type ContractReadStanding = "reading" | "read" | "unavailable";
+
+/**
  * Keeps the panel's copy of the contract equal to the runtime's.
  *
  * The contract is derived from a record that carries its own write count, so a
  * response counts as newer only when that count has not gone backwards. That is
  * the same guard the record gives its own reader.
+ *
+ * A read that fails once a contract is already shown leaves it shown: the
+ * reviewer is better served by the list the runtime last gave than by losing it
+ * to a failure that the next applied record will clear anyway.
  */
 const useReviewInputContract = (): {
   readonly contract: ReviewInputContract;
-  readonly hasLoaded: boolean;
+  readonly standing: ContractReadStanding;
+  readonly readAgain: () => void;
 } => {
   const articleVersion = useArticleVersion();
   const [identity] = useState<RuntimeIdentity | null>(runtimeIdentity);
   const [contract, setContract] = useState<ReviewInputContract>(
     emptyReviewInputContract,
   );
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [standing, setStanding] = useState<ContractReadStanding>("reading");
   const applied = useRef(-1);
+  const reader = useRef<() => void>(() => undefined);
 
   const apply = useCallback((value: unknown): void => {
     const next = decodeReviewInputContract(value);
     if (next.revision < applied.current) return;
     applied.current = next.revision;
     setContract(next);
-    setHasLoaded(true);
+    setStanding("read");
   }, []);
 
   useEffect(() => {
@@ -107,8 +125,15 @@ const useReviewInputContract = (): {
         .then((value) => {
           if (!cancelled) apply(value);
         })
-        .catch(() => undefined);
+        .catch(() => {
+          if (!cancelled) {
+            setStanding((current) =>
+              current === "read" ? current : "unavailable",
+            );
+          }
+        });
     };
+    reader.current = read;
     const stopWatching = watchReviewInputContract(read);
     return () => {
       cancelled = true;
@@ -116,7 +141,12 @@ const useReviewInputContract = (): {
     };
   }, [apply, articleVersion, identity]);
 
-  return { contract, hasLoaded };
+  const readAgain = useCallback((): void => {
+    setStanding((current) => (current === "read" ? current : "reading"));
+    reader.current();
+  }, []);
+
+  return { contract, standing, readAgain };
 };
 
 // A decision the reader can be sent to is worth sending them to, so the whole
@@ -163,9 +193,56 @@ const InputRow = ({ input }: { readonly input: ReviewInput }) => (
   </li>
 );
 
+/**
+ * Says that nobody could answer what the review is waiting for, and offers the
+ * reviewer the one thing that can change that.
+ *
+ * The retry matters more here than on most surfaces: without it the panel's
+ * only other way back is applying an answered decision, which is the very
+ * thing this panel exists to help the reviewer find.
+ *
+ * BIG-157's error taxonomy will formalize how a failed review read presents
+ * itself; this is the minimal honest state until it does, not the final shape.
+ */
+const ContractUnavailable = ({
+  onReadAgain,
+}: {
+  readonly onReadAgain: () => void;
+}) => (
+  <div
+    className="min-w-0 rounded-md border border-edge bg-surface p-3 text-xs text-muted"
+    data-review-input-unavailable=""
+  >
+    <p className="m-0 flex items-center gap-1.5 font-medium [&_svg]:size-4 [&_svg]:shrink-0">
+      <Icon icon={OCTAGON_ALERT_ICON} />
+      {"Could not read what this review needs"}
+    </p>
+    <p className="m-0 mt-1 text-2xs leading-normal text-subtle">
+      {
+        "The review runtime did not answer. Nothing you recorded is lost; this list is derived, so it comes back as soon as the runtime does."
+      }
+    </p>
+    <Button
+      className="mt-2"
+      variant="outline"
+      size="compact"
+      onClick={onReadAgain}
+    >
+      <span className="inline-flex size-3" aria-hidden="true">
+        <Icon icon={ROTATE_CCW_ICON} />
+      </span>
+      {"Try again"}
+    </Button>
+  </div>
+);
+
 /** Renders the review's input contract as the reviewer's outstanding work. */
 export const InputsSurface = () => {
-  const { contract, hasLoaded } = useReviewInputContract();
+  const {
+    contract,
+    standing: readStanding,
+    readAgain,
+  } = useReviewInputContract();
   const standing = useMemo(
     () => reviewInputStanding(contract.inputs),
     [contract.inputs],
@@ -185,9 +262,11 @@ export const InputsSurface = () => {
           className="m-0 mt-1.5 text-sm text-ink"
           data-review-input-standing=""
         >
-          {standing.total === 0
-            ? "Nothing yet"
-            : `${standing.answered} of ${standing.total} answered`}
+          {standing.total > 0
+            ? `${standing.answered} of ${standing.total} answered`
+            : readStanding === "unavailable"
+              ? "Not known"
+              : "Nothing yet"}
         </p>
         {standing.criticalOpen > 0 ? (
           <p className="m-0 mt-1 text-xs font-medium text-[var(--callout-warning-c)]">
@@ -204,18 +283,20 @@ export const InputsSurface = () => {
           </p>
         ) : null}
       </section>
-      {contract.inputs.length === 0 ? (
-        <p className="m-0 text-sm text-muted">
-          {hasLoaded
-            ? "This plan asks nothing of you yet. Decisions the plan raises appear here as the review goes on."
-            : "Reading what this review expects…"}
-        </p>
-      ) : (
+      {contract.inputs.length > 0 ? (
         <ul className="m-0 grid list-none gap-2 p-0">
           {contract.inputs.map((input) => (
             <InputRow key={input.inputId} input={input} />
           ))}
         </ul>
+      ) : readStanding === "unavailable" ? (
+        <ContractUnavailable onReadAgain={readAgain} />
+      ) : (
+        <p className="m-0 text-sm text-muted">
+          {readStanding === "read"
+            ? "This plan asks nothing of you yet. Decisions the plan raises appear here as the review goes on."
+            : "Reading what this review expects…"}
+        </p>
       )}
     </div>
   );
