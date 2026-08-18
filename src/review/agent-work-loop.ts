@@ -44,7 +44,7 @@ import {
   ReviewStorePathRejected,
 } from "./store.js";
 import type { ReviewStore } from "./store.js";
-import { spawnerIsGone } from "./agent-spawner.js";
+import { SPAWNER_PPID, spawnerIsGone } from "./agent-spawner.js";
 import { diffSnapshots } from "./snapshot-diff.js";
 import {
   liveReviewSessionForPlan,
@@ -429,9 +429,7 @@ const nextWork = async ({
   const claimedBy = agentToken ?? randomId(8);
   const resumingClaim = agentToken !== undefined;
   // What this loop's presence is worth is exactly what this loop's life is
-  // worth. Recorded before the first heartbeat, so every signal this process
-  // sends is one it has just re-earned.
-  const spawnerPpid = process.ppid;
+  // worth, so every signal it sends is one it has just re-earned.
   const writerId = randomId(8);
   // Runs on every wait iteration and once directly before claiming, so a loop
   // whose coding agent is gone can neither keep vouching for it nor take work
@@ -439,7 +437,9 @@ const nextWork = async ({
   // inferred silence into an observed end; a loop killed outright never
   // reaches it and stays on the unchanged aging path.
   const endWhenSpawnerIsGone = async (): Promise<void> => {
-    if (!spawnerIsGone({ recordedPpid: spawnerPpid, livePpid: process.ppid })) {
+    if (
+      !spawnerIsGone({ recordedPpid: SPAWNER_PPID, livePpid: process.ppid })
+    ) {
       return;
     }
     await writeAgentHeartbeatEnded({

@@ -7,6 +7,18 @@
 // so change detection works on every platform and nothing here names pid 1.
 // A loop started detached on purpose never sees a change, and so keeps waiting.
 
+/**
+ * The parent this process was started by, sampled as early as the module graph
+ * allows.
+ *
+ * Timing is the whole reason this is a module constant rather than a call at
+ * the top of the loop: everything between process start and the first sample
+ * is a window in which a spawner can die unnoticed, because a parent already
+ * gone by then leaves nothing left to change. Reading it during import is the
+ * earliest this module can be asked, and it costs nothing to hold.
+ */
+export const SPAWNER_PPID = process.ppid;
+
 /** True once the process that started this one has exited. */
 export const spawnerIsGone = ({
   recordedPpid,
