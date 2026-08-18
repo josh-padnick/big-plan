@@ -387,9 +387,9 @@ its own mid-dark colour and would be far too light to serve as the dark hunk
 band that shares `--grey-925`.
 
 The comment-surface roles are the second exception. The product palette buys the
-thread band and the working ring as approved local colours rather than ramp
-steps, so a guest palette has to restate them or the commenting chrome stays
-warm paper inside a slate document. --comment-header-c takes --grey-925, the step
+thread band as approved local colours rather than ramp steps, so a guest palette
+has to restate them or the commenting chrome stays warm paper inside a slate
+document. --comment-header-c takes --grey-925, the step
 that sits between the page and the comment toolbar in every palette;
 --comment-body-c and --comment-toolbar-c read the header and follow on their own.
 

@@ -20,10 +20,10 @@ export const AGENT_STATUS_LABEL = "Agent Status";
 /** Closing the sidebar has to put focus back here, from wherever it closed. */
 export const AGENT_STATUS_TRIGGER_ID = "review-agent-trigger";
 
-// Shape carries the state alongside colour: a filled dot for healthy, the same
-// dot fading for working, a padlock for a session that has gone read-only, the
-// hazard triangle for an agent that is gone, and a question mark for a state
-// the review session cannot observe.
+// Shape carries the state alongside colour: a filled dot for healthy, the
+// product's rotating working mark for working, a padlock for a session that
+// has gone read-only, the hazard triangle for an agent that is gone, and a
+// question mark for a state the review session cannot observe.
 //
 // A padlock rather than a second triangle for read-only: the hazard mark now
 // belongs to the offline state, and two triangles apart only by colour would

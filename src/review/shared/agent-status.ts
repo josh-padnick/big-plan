@@ -113,15 +113,16 @@ export type CurrentAgentActivity =
       readonly supporting: "The agent is connected and waiting for feedback.";
     };
 
-/** Maps current activity to the one exceptional label shown in viewer chrome. */
 /**
  * The states the Agent Status control can be in. Each owns a distinct glyph
  * shape as well as a colour, so a reader who cannot separate green from amber
  * from red still reads the state from the mark alone.
  *
- * `working` is the one state that shares a shape with another, because it is a
- * live connection that happens to be busy rather than a different kind of
- * health. It separates itself by motion instead: the same green dot, fading.
+ * `working` is the closest pair, because it is a live connection that happens
+ * to be busy rather than a different kind of health: it keeps the connected
+ * state's colour and separates itself by shape and motion, drawing the
+ * product's one working mark - a rotating ring - where the connected state
+ * fills a disc.
  */
 export type AgentHealthIndicator =
   "healthy" | "working" | "warning" | "error" | "unavailable";
