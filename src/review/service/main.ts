@@ -9,7 +9,12 @@
 // it exits when it is told to, or when the login session it belongs to ends.
 
 import { access } from "node:fs/promises";
-import { ensureServiceToken, readServiceToken } from "./lifecycle.js";
+import {
+  clearServiceRuntimeRecord,
+  ensureServiceToken,
+  readServiceToken,
+  writeServiceRuntimeRecord,
+} from "./lifecycle.js";
 import { servicePort } from "./paths.js";
 import { pruneMissingPlans } from "./registry.js";
 import { startService } from "./server.js";
@@ -37,13 +42,30 @@ export const runService = async (): Promise<void> => {
     port,
   });
 
+  await writeServiceRuntimeRecord({
+    pid: process.pid,
+    port: runtime.port,
+    startedAt: new Date(runtime.startedAtMs).toISOString(),
+    // The login item sets this to "login-item" when it starts the process;
+    // until that ships, every start is on demand.
+    managedBy:
+      process.env["BIG_PLAN_SERVICE_MANAGED_BY"] === "login-item"
+        ? "login-item"
+        : "on-demand",
+  });
+
   // The only thing that expires. An entry whose plan file is gone can never
   // explain anything useful again; everything else is kept, because losing an
-  // entry turns a good link back into a connection error.
+  // entry turns a good link back into a connection error. Start is the only
+  // moment this runs: a branch switch can hide a plan file for a minute, and
+  // pruning on a timer would turn that into a link-killing race.
   await pruneMissingPlans({ exists: planFileExists });
 
   const stop = (): void => {
-    void runtime.close().finally(() => process.exit(0));
+    void runtime
+      .close()
+      .then(clearServiceRuntimeRecord)
+      .finally(() => process.exit(0));
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);

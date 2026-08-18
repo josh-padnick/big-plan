@@ -58,7 +58,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 **Problem set.** The browser, the loopback server, and the agent stay connected and honest about liveness, and no message is ever lost, double-processed, or run inside a resolved thread.
 
-**Code anchors.** `src/review/server.ts`, `src/review/review-route-context.ts`, `src/review/routes-*.ts`, `src/review/runtime-watchdog.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, `src/review/staged-plan-mutation.ts`, `src/review/agent-work-loop.ts`, `src/review/agent-exchange.ts`, `src/review/review-state-version.ts`, `src/review/browser/review-poll-health.ts`, `src/review/browser/review-write-availability.ts`, `src/review/browser/review-runtime-request.ts`, `src/review/browser/review-recovery-merge.ts`, `src/review/browser/review-recovery-storage.browser.ts`, `src/review/shared/agent-status.ts`, `src/cli/review/command.ts`, `src/cli/agent/`.
+**Code anchors.** `src/review/server.ts`, `src/review/review-route-context.ts`, `src/review/routes-*.ts`, `src/review/runtime-watchdog.ts`, `src/review/session-authority.ts`, `src/review/request-mailbox.ts`, `src/review/staged-plan-mutation.ts`, `src/review/agent-work-loop.ts`, `src/review/agent-exchange.ts`, `src/review/review-state-version.ts`, `src/review/service/`, `src/review/state-directory.ts`, `src/review/browser/review-poll-health.ts`, `src/review/browser/review-write-availability.ts`, `src/review/browser/review-runtime-request.ts`, `src/review/browser/review-recovery-merge.ts`, `src/review/browser/review-recovery-storage.browser.ts`, `src/review/shared/agent-status.ts`, `src/cli/review/command.ts`, `src/cli/service/`, `src/cli/agent/`.
 
 **Boundary rules.**
 
@@ -72,6 +72,10 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   Any authenticated request from an open page counts as activity, so a page being read keeps its own session alive rather than only writes counting.
   The CLI requires a nonzero `--idle-timeout` to be at least 1 minute, while `--idle-timeout 0` disables expiry entirely; the agent work loop exits when the session heartbeat it follows dies.
   Symptoms that look unrelated (an agent disconnecting, a preview expiring) can share this one cause.
+- The review-link service under `src/review/service/` is a reader of this subsystem's truth, never a second copy of it.
+  Its registry records where a plan lives and nothing about whether a session runs; every live-or-ended answer flows through `session-authority.ts` at request time.
+  A liveness field anywhere under `~/.big-plan/service/` would be a second definition that drifts, so the registry schema rejects one.
+  It never writes inside a `.big-plan/review/` directory, and it never starts a session: only an explicit `big-plan` command does that.
 - Whether an agent is attached and whether it has narrated lately are two questions, and one signal cannot answer both.
   `big-plan agent next` hands the work over and its process exits, so between two progress notes nothing is running on that agent's behalf and no heartbeat or claim lease renews.
   Silence inside a turn is therefore evidence of silence alone, and the two questions are answered on separate surfaces.

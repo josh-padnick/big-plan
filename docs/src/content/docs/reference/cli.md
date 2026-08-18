@@ -16,6 +16,7 @@ big-plan validate <input.mdx>
 big-plan render <input.mdx> [output.html]
 big-plan compile <input.mdx> [output.json]
 big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
+big-plan service status|start|stop|restart
 big-plan agent <input.mdx>
 big-plan agent next <input.mdx> [--wait] [--agent <token>]
 big-plan agent note <input.mdx> "<progress>" --agent <token>
@@ -28,6 +29,7 @@ big-plan update [--check]
 For the plan-file commands `<input.mdx>` is required.
 `validate` accepts no output argument.
 The output argument is optional for `render` and `compile`.
+`service` takes one action and no plan file; with no action it reports status.
 `update` is the optional `axi-sdk-js` built-in rather than a Big Plan product command.
 
 The equivalent package runner forms are:
@@ -40,6 +42,7 @@ npx big-plan validate <input.mdx>
 npx big-plan render <input.mdx> [output.html]
 npx big-plan compile <input.mdx> [output.json]
 npx big-plan review <input.mdx> [--diff-preview] [--idle-timeout <minutes>] [--takeover]
+npx big-plan service status
 npx big-plan agent <input.mdx>
 npx big-plan agent next <input.mdx> --wait [--agent <token>]
 npx big-plan agent note <input.mdx> "<progress>" --agent <token>
@@ -165,6 +168,13 @@ resolved plan path, session id, and feedback directory, then keeps running until
 `Ctrl+C` or the configured idle timeout. It owns the local session token,
 heartbeat, durable review state, and source snapshots.
 
+It also returns `link`, the plan's stable address on the review-link service,
+whenever that service is reachable. `review` is the ephemeral address this run
+happens to hold; `link` is the same for every run of the same plan file and
+keeps answering after the session ends, so it is the one worth saving or
+sharing. When the service cannot run, `link` is absent and `help` says why; the
+command is otherwise unchanged, so nothing that reads `review` is affected.
+
 It always reports `custody`, because only one runtime may hold a plan at a time,
 and that value says whether this command took it:
 
@@ -259,6 +269,45 @@ premise, claim-time baseline, and result snapshots rather than DOM mutation.
 The temporary development-only `review --diff-preview` flag seeds a synthetic
 gallery answer through that same pipeline and marks the browser with a visible
 preview banner.
+
+### `big-plan service`
+
+The review-link service is one small loopback process on a fixed port that
+answers saved review links, so a link keeps working after the review session
+behind it ends. It holds no review state: it reads the plan's own session files
+at the moment of the click, then redirects to the live session or serves a page
+explaining how that session ended.
+
+Nothing needs installing. Any command that prints a review link starts the
+service when nothing is answering, and it stops when you tell it to or when your
+login session ends.
+
+- `service status` reports `running`, `stopped`, or `unavailable`, plus the
+  port, the version, the process id, the start time, how many plans it answers
+  for, and how it is managed.
+- `service start` starts it now, exactly as a link-printing command would.
+- `service stop` stops it; the next `big-plan` command that prints a link starts
+  it again. Saved links do not open in between.
+- `service restart` stops and starts it.
+
+The service listens on `127.0.0.1` only and never makes an outbound request.
+
+The port is fixed at `8790` because saved links point at it. Big Plan never
+moves to a different port on its own: when something else already holds the
+port, every command says so, names the process holding it where the platform can
+report one, and keeps working with the session's direct address. Set
+`BIG_PLAN_PORT` to choose a different port, remembering that links saved at the
+old one stop resolving.
+
+State lives under `~/.big-plan/service/`, owner-only, and honours
+`BIG_PLAN_STATE_DIR`: one small identity record per plan, the token that
+authorizes stopping, and an advisory record of the running process. No file
+there records whether a session is alive; that answer only ever comes from the
+plan's own heartbeat.
+
+A service left running from an older install is replaced automatically: the
+version it reports is compared with the running CLI, and a mismatch stops and
+respawns it before a link is printed.
 
 `guidance` returns the guidance Markdown itself rather than a structured result.
 `skill` with no arguments returns the skill Markdown the same way.

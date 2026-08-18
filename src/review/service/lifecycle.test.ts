@@ -14,6 +14,7 @@ import {
   readServiceToken,
 } from "./lifecycle.js";
 import { servicePaths } from "./paths.js";
+import { foreignPortMessage } from "./port-occupier.js";
 
 let stateDirectory: string;
 let previousStateDirectory: string | undefined;
@@ -134,5 +135,24 @@ describe("the service token", () => {
     await ensureServiceToken();
     await writeFile(servicePaths().tokenPath, "\n", "utf8");
     expect(await readServiceToken()).toBe(undefined);
+  });
+});
+
+describe("the message when the port is not ours", () => {
+  it("should name the occupier and the override, and promise no port hunting", () => {
+    const message = foreignPortMessage({
+      port: 8790,
+      occupier: "nginx (process 501)",
+    });
+    expect(message).toContain("8790");
+    expect(message).toContain("nginx (process 501)");
+    expect(message).toContain("BIG_PLAN_PORT");
+    expect(message).toContain("never moves to a different port");
+  });
+
+  it("should stay useful when the occupier cannot be identified", () => {
+    const message = foreignPortMessage({ port: 8790, occupier: undefined });
+    expect(message).toContain("8790");
+    expect(message).toContain("BIG_PLAN_PORT");
   });
 });

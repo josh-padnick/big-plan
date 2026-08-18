@@ -1,13 +1,13 @@
-// Publishing one plan's stable address: remember where the plan lives, and
-// hand back the link when something is there to answer for it.
+// Publishing one plan's stable address: remember where the plan lives, make
+// sure something is there to answer for it, and hand back the link to print.
 //
 // This is the whole contract between a link-printing command and the service,
 // and it is deliberately failure-tolerant. A command that could not reach the
 // service still succeeds and still prints the session's direct address, which
 // is exactly today's behaviour and never worse.
 
-import { probeService } from "./lifecycle.js";
-import { servicePlanUrl, servicePort } from "./paths.js";
+import { ensureServiceRunning } from "./lifecycle.js";
+import { servicePlanUrl } from "./paths.js";
 import { rememberPlan } from "./registry.js";
 
 export type StableReviewLink =
@@ -23,9 +23,9 @@ export const publishStableReviewLink = async ({
   readonly planPath: string;
 }): Promise<StableReviewLink> => {
   try {
-    // Registration is unconditional and comes first, so a plan stays
-    // explainable even when nothing is answering for it yet: the moment a
-    // service does start, every previously registered link works.
+    // Registered before the service is asked to run, so a service that starts
+    // slowly still finds the entry, and a service that never starts still
+    // leaves the plan explainable on the next command.
     await rememberPlan({ planId, planPath });
   } catch (error: unknown) {
     return {
@@ -33,13 +33,9 @@ export const publishStableReviewLink = async ({
       reason: `This plan could not be registered for a stable link: ${String(error)}`,
     };
   }
-  const port = servicePort();
-  const probe = await probeService({ port });
-  if (probe.kind !== "running") {
-    return {
-      kind: "unavailable",
-      reason: `No Big Plan service is answering on port ${port}, so this review has no stable link yet.`,
-    };
+  const availability = await ensureServiceRunning();
+  if (availability.kind === "unavailable") {
+    return { kind: "unavailable", reason: availability.reason };
   }
   return { kind: "published", url: servicePlanUrl({ planId }) };
 };
