@@ -125,7 +125,7 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
             for, so it is asked above the field rather than under it. Both
             sides are named, which is why nothing else here has to explain the
             difference. */}
-        <div className="decision-mode" data-decision-mode="">
+        <div className="decision-mode" hidden data-decision-mode="">
           <span
             className="decision-mode-side"
             data-decision-mode-side="decision"

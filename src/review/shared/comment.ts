@@ -90,7 +90,7 @@ export class CommentRejected extends Error {
 // the bound may never gate the affordance: a selection longer than this is
 // stored as a marked excerpt of the same range, never refused. The bound
 // matches BODY_LIMIT because a quote and a comment body cost a brief the same.
-const BODY_LIMIT = 4000;
+export const BODY_LIMIT = 4000;
 export const QUOTE_LIMIT = BODY_LIMIT;
 // A slide's content is the unit of work a slide comment asks about, so it gets
 // its own, larger bound: a highlight is a fragment the agent can look up in the

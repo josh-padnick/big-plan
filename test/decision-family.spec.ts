@@ -371,7 +371,11 @@ test("should keep decision content readable and script-only controls dormant wit
     decisionPage.locator("[data-decision-proposal-cancel]"),
   ).toBeHidden();
   // Comment mode is the shell's to reveal, so without it the composer offers
-  // no control that cannot act.
+  // no control that cannot act - including the switch that would choose the
+  // mode, which moves without anything following it.
+  await expect(
+    decisionPage.locator("[data-decision-mode]").first(),
+  ).toBeHidden();
   await expect(
     decisionPage.locator("[data-decision-comment-actions]").first(),
   ).toBeHidden();

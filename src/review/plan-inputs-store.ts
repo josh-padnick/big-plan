@@ -11,6 +11,7 @@
 // increases on every accepted write and travels on every response.
 
 import type { DecisionInventory } from "./decision-inventory.js";
+import { BODY_LIMIT } from "./shared/comment.js";
 import type { StagedDecisionAnswer } from "./shared/review-wire.js";
 
 const DIGEST = /^[a-f0-9]{16}$/u;
@@ -45,6 +46,12 @@ const record = ({
   return value as Readonly<Record<string, unknown>>;
 };
 
+// Every stored field passes through here, so the bound lives here rather than
+// at the two fields that happen to be free text today: an id is pinned by the
+// inventory, but a title or a question is whatever the browser sends, and one
+// write may not fill the disk or produce a record no reader can use. The bound
+// is the comment store's, because a recorded answer and a comment body cost a
+// reader the same.
 const text = ({
   value,
   field,
@@ -55,7 +62,13 @@ const text = ({
   if (typeof value !== "string" || value.trim() === "") {
     throw new PlanInputsRejected(`"${field}" must be non-empty text`);
   }
-  return value.trim();
+  const trimmed = value.trim();
+  if (trimmed.length > BODY_LIMIT) {
+    throw new PlanInputsRejected(
+      `"${field}" is longer than ${BODY_LIMIT} characters`,
+    );
+  }
+  return trimmed;
 };
 
 const digest = ({

@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { DecisionInventory } from "./decision-inventory.js";
+import { BODY_LIMIT } from "./shared/comment.js";
 import {
   applyStagedInputMutation,
   currentAnswers,
@@ -122,6 +123,54 @@ describe("staged decision inputs", () => {
         inventory: inventoryOf({ decisionId, optionIds: [optionId] }),
       }),
     ).toMatchObject({ answer: { decisionId, optionId } });
+  });
+
+  it("should refuse stored answer text past the bound", () => {
+    const overlong = "x".repeat(BODY_LIMIT + 1);
+
+    expect(() =>
+      validateStagedInputMutation({
+        value: {
+          op: "stage",
+          answer: { ...FIRST_ANSWER, optionTitle: overlong },
+        },
+        now: "2026-08-13T17:04:00.000Z",
+        inventory: INVENTORY,
+      }),
+    ).toThrow(`"optionTitle" is longer than ${BODY_LIMIT} characters`);
+
+    expect(() =>
+      validateStagedInputMutation({
+        value: { op: "stage", answer: { ...FIRST_ANSWER, prompt: overlong } },
+        now: "2026-08-13T17:04:00.000Z",
+        inventory: INVENTORY,
+      }),
+    ).toThrow(`"prompt" is longer than ${BODY_LIMIT} characters`);
+
+    // The bound belongs to the record, not to one route into it, so a file
+    // already holding an unbounded answer is refused on the way back in too.
+    expect(() =>
+      validateStagedInputs({
+        version: 1,
+        revision: 1,
+        answers: [{ ...STORED_ANSWER, prompt: overlong }],
+      }),
+    ).toThrow(`"prompt" is longer than ${BODY_LIMIT} characters`);
+  });
+
+  it("should accept stored answer text at the bound", () => {
+    const atLimit = "x".repeat(BODY_LIMIT);
+
+    expect(
+      validateStagedInputMutation({
+        value: {
+          op: "stage",
+          answer: { ...FIRST_ANSWER, optionTitle: atLimit, prompt: atLimit },
+        },
+        now: "2026-08-13T17:04:00.000Z",
+        inventory: INVENTORY,
+      }),
+    ).toMatchObject({ answer: { optionTitle: atLimit, prompt: atLimit } });
   });
 
   it("should stamp the answered decision's digest from the inventory", () => {

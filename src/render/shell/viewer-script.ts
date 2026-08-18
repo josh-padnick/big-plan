@@ -2909,7 +2909,6 @@ const wireDecisions = () => {
     });
     if (proposalCancel !== null) {
       proposalCancel.removeAttribute("hidden");
-      proposalCancel.setAttribute("data-shown", "");
       proposalCancel.addEventListener("click", () => {
         const proposalChoice = choices.find(proposes) || null;
         if (proposalChoice !== null) proposalChoice.checked = false;
