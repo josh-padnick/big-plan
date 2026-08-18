@@ -204,8 +204,9 @@ export default tseslint.config(
           "**/plan-id.js",
           "**/render-document.js",
           "**/serialize-html.js",
+          "**/service-page.js",
         ],
-        mayImport: ["markdown", "shell", "page"],
+        mayImport: ["escapeHtml", "icons", "markdown", "shell", "page"],
       },
       // Browser-safe review models. These modules must stay usable by both the
       // browser island and the local review runtime.
@@ -240,18 +241,7 @@ export default tseslint.config(
           "src/review/shared/**/*.tsx",
         ],
         imports: ["**/review/**"],
-        // escapeHtml is granted because the service writes its own small
-        // pages - the ended-review explanation and the identity page - which
-        // interpolate a plan path and a stop reason read from disk. Plan
-        // content still never reaches this layer as HTML.
-        mayImport: [
-          "composer",
-          "escapeHtml",
-          "icons",
-          "model",
-          "planLint",
-          "reviewShared",
-        ],
+        mayImport: ["composer", "icons", "model", "planLint", "reviewShared"],
       },
       cli: {
         files: ["src/cli/**/*.ts"],

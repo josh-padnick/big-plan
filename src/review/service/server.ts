@@ -15,16 +15,16 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { answerForPlan } from "./plan-status.js";
 import {
-  confirmStopPage,
-  endedReviewPage,
-  identityPage,
-  interruptedReviewPage,
-  neverStartedReviewPage,
-  serviceStoppedPage,
-  unknownPlanPage,
-} from "./pages.js";
+  renderPlanEndedPage,
+  renderPlanInterruptedPage,
+  renderPlanNeverStartedPage,
+  renderPlanUnknownPage,
+  renderServiceStopConfirmPage,
+  renderServiceStoppedPage,
+  renderServiceWelcomePage,
+} from "../../render/service-page.js";
+import { answerForPlan, listServicePlanRows } from "./plan-status.js";
 import { servicePort } from "./paths.js";
 import { isServicePlanId } from "./registry.js";
 
@@ -77,13 +77,15 @@ const sendHtml = ({
   response.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
-    // The pages are self-contained; nothing they need comes from anywhere
-    // else, so the policy that says so is free to be this strict. form-action
-    // is named explicitly because it does not fall back to default-src, and
-    // the stop flow is a form: this is what stops a page from being tricked
-    // into posting it somewhere else.
+    // The pages are self-contained: every byte they need is inline or a data:
+    // URI, so nothing here may reach the network. data: is allowed for images
+    // and fonts because the shared shell embeds the Big Plan logo, the
+    // favicons, and the typeface that way; without it the product's own chrome
+    // is blocked on its own page. form-action is named explicitly because it
+    // does not fall back to default-src, and the stop flow is a form: this is
+    // what stops a page from being tricked into posting it somewhere else.
     "content-security-policy":
-      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'",
+      "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
   });
@@ -219,7 +221,11 @@ export const startService = async ({
       sendHtml({
         response,
         status: 200,
-        html: identityPage({ port: boundPort, startedAtMs }),
+        html: renderServiceWelcomePage({
+          port: boundPort,
+          startedAtMs,
+          plans: await listServicePlanRows(),
+        }),
       });
       return;
     }
@@ -245,7 +251,7 @@ export const startService = async ({
           sendHtml({
             response,
             status: 200,
-            html: endedReviewPage({
+            html: renderPlanEndedPage({
               planPath: answer.planPath,
               reason: answer.reason,
               atMs: answer.atMs,
@@ -256,7 +262,7 @@ export const startService = async ({
           sendHtml({
             response,
             status: 200,
-            html: interruptedReviewPage({
+            html: renderPlanInterruptedPage({
               planPath: answer.planPath,
               lastSeenAtMs: answer.lastSeenAtMs,
             }),
@@ -266,11 +272,11 @@ export const startService = async ({
           sendHtml({
             response,
             status: 200,
-            html: neverStartedReviewPage({ planPath: answer.planPath }),
+            html: renderPlanNeverStartedPage({ planPath: answer.planPath }),
           });
           return;
         case "unknown":
-          sendHtml({ response, status: 404, html: unknownPlanPage() });
+          sendHtml({ response, status: 404, html: renderPlanUnknownPage() });
           return;
       }
     }
@@ -281,7 +287,12 @@ export const startService = async ({
       sendHtml({
         response,
         status: 200,
-        html: confirmStopPage({ nonce: pageNonce }),
+        html: renderServiceStopConfirmPage({
+          port: boundPort,
+          startedAtMs,
+          plans: await listServicePlanRows(),
+          nonce: pageNonce,
+        }),
       });
       return;
     }
@@ -336,7 +347,7 @@ export const startService = async ({
       // The dying process serves the last page itself; after this the address
       // stops answering, which is the honest end state.
       if (byNonce) {
-        sendHtml({ response, status: 200, html: serviceStoppedPage() });
+        sendHtml({ response, status: 200, html: renderServiceStoppedPage() });
       } else {
         sendJson({ response, status: 200, value: { stopping: true } });
       }

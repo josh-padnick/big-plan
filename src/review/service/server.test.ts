@@ -202,16 +202,15 @@ describe("the service listener", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain("Stop the service?");
-    expect(html).toContain(
-      "Nothing is listening on this address after you stop.",
-    );
+    expect(html).toContain("Plans on this machine stop opening.");
+    expect(html).toContain('role="alertdialog"');
     expect(html).toContain('name="nonce"');
     // The service is still running: reaching the confirm page changes nothing.
     expect((await get("/healthz")).status).toBe(200);
   });
 
   it("should let a page this process served stop it, without the owner token", async () => {
-    const nonce = /name="nonce" value="([^"]+)"/u.exec(
+    const nonce = /name="nonce" type="hidden" value="([^"]+)"/u.exec(
       await (await get("/stop")).text(),
     )?.[1];
     expect(nonce).toBeDefined();
@@ -242,7 +241,7 @@ describe("the service listener", () => {
     // Regression: this page sets Referrer-Policy: no-referrer, so Chrome sends
     // its own same-origin form navigation with Origin: null. Refusing that
     // refused the service's own stop button, and only a real browser showed it.
-    const nonce = /name="nonce" value="([^"]+)"/u.exec(
+    const nonce = /name="nonce" type="hidden" value="([^"]+)"/u.exec(
       await (await get("/stop")).text(),
     )?.[1];
     const response = await get("/stop", {
@@ -261,7 +260,7 @@ describe("the service listener", () => {
   it("should still refuse an absent origin claim that came from another site", async () => {
     // A sandboxed cross-site frame also sends Origin: null, so Sec-Fetch-Site
     // is what has to carry the refusal once null is admitted.
-    const nonce = /name="nonce" value="([^"]+)"/u.exec(
+    const nonce = /name="nonce" type="hidden" value="([^"]+)"/u.exec(
       await (await get("/stop")).text(),
     )?.[1];
     const response = await get("/stop", {
@@ -286,7 +285,7 @@ describe("the service listener", () => {
   it("should refuse a nonce replayed from another site", async () => {
     // The nonce proves the page came from this process, not that the request
     // did, so the origin and site checks stay unconditional in front of it.
-    const nonce = /name="nonce" value="([^"]+)"/u.exec(
+    const nonce = /name="nonce" type="hidden" value="([^"]+)"/u.exec(
       await (await get("/stop")).text(),
     )?.[1];
     const response = await get("/stop", {
@@ -306,9 +305,14 @@ describe("the service listener", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(response.headers.get("content-security-policy")).toContain(
-      "default-src 'none'",
-    );
+    const policy = response.headers.get("content-security-policy");
+    expect(policy).toContain("default-src 'none'");
+    // The shell embeds the logo, favicons, and typeface as data: URIs, so the
+    // product's own chrome must not be blocked on the product's own page - and
+    // nothing beyond data: is ever allowed, so no byte comes from the network.
+    expect(policy).toContain("img-src data:");
+    expect(policy).toContain("font-src data:");
+    expect(policy).not.toContain("http");
   });
 
   it("should refuse a stop that carries no credential", async () => {
