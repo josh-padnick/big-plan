@@ -176,10 +176,12 @@ export const CommentsSurface = ({
   const working = unheaded("working");
   const queuedGroup = model.groups.get("queued") ?? [];
   const queued = queuedGroup.filter((comment) => !headed.has(comment.id));
-  // A batch header owns its own queued threads and renders above this group, so
-  // the remainder keeps counting from where those threads left off. Restarting
-  // at one would number the back of the queue as its front.
-  const queuedOffset = queuedGroup.length - queued.length;
+  // A thread keeps the place in line it was sent into, whether or not a batch
+  // header speaks for the threads around it. Counting the whole queued group
+  // rather than the leftovers is what keeps the number a queue position instead
+  // of an index into whatever this section happens to hold.
+  const queuePosition = (comment: ReviewComment): number =>
+    queuedGroup.indexOf(comment) + 1;
   // Only stacked batches need containment; one batch has nothing to be told
   // apart from, so the sidebar keeps the layout it has always had.
   const grouped = model.batches.length > 1;
@@ -292,13 +294,13 @@ export const CommentsSurface = ({
               first={first()}
             >
               <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
-                {queued.map((comment, index) => (
+                {queued.map((comment) => (
                   <li key={comment.id}>
                     {model.renderSent(
                       comment,
                       false,
                       true,
-                      queuedOffset + index + 1,
+                      queuePosition(comment),
                     )}
                   </li>
                 ))}

@@ -131,10 +131,11 @@ const surface = ({
     }),
   );
 
-// BIG-162 follow-up. Batch headers took their own threads out of the Queued
-// group, so numbering what was left from one described the back of the queue as
-// its front: a comment sent behind a queued two-comment batch read "#1" beside
-// its own "Queued, 2 ahead".
+// BIG-162 follow-up. Batch headers take their own threads out of the Queued
+// group, so the leftovers have to be numbered by where they sit in the whole
+// queue: counting them from one puts the back of the line at its front, and
+// counting every headed thread as ahead of them does the reverse for a comment
+// sent before a batch that is still waiting.
 describe("queued card numbering", () => {
   it("should count past the queued threads a batch header owns", () => {
     const worked = [comment("w1"), comment("w2")];
@@ -158,6 +159,30 @@ describe("queued card numbering", () => {
 
     expect(html).toContain("c3#3");
     expect(html).not.toContain("c3#1");
+  });
+
+  it("should keep a thread sent ahead of a queued batch at the front of the line", () => {
+    const worked = [comment("w1"), comment("w2")];
+    const alone = comment("c1");
+    const behind = [comment("q2"), comment("q3")];
+
+    const html = surface({
+      groups: new Map([
+        ["working", worked],
+        ["queued", [alone, ...behind]],
+      ]),
+      batches: [
+        {
+          ...batch("1111111111111111", worked),
+          tone: "working",
+          label: "Working",
+        },
+        batch("2222222222222222", behind),
+      ],
+    });
+
+    expect(html).toContain("c1#1");
+    expect(html).not.toContain("c1#3");
   });
 
   it("should number a queue no batch header speaks for from one", () => {
