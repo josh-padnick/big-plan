@@ -3611,6 +3611,112 @@ describe("review runtime resolve invariant", () => {
     }
   });
 
+  it("should refuse a comment delete once the settle finds the answer published", async () => {
+    const { isolated, isolatedCall, close } = await isolatedRuntime(
+      "big-plan-delete-settled-answer-",
+    );
+    const other = {
+      id: "b8b8b8b8",
+      body: "Keep this one in the batch.",
+      premiseSnapshot: PLAN_SNAPSHOT,
+      target: { type: "document" as const },
+    };
+    try {
+      expect(
+        (
+          await isolatedCall({
+            path: "/api/feedback",
+            method: "POST",
+            body: {
+              comments: [comment, other],
+              version: await isolatedReviewStateVersion(isolatedCall),
+            },
+          })
+        ).status,
+      ).toBe(200);
+      const requestId = await queuedRequestId(isolated);
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      const claimed = await claimAgentRequest({
+        store: isolated.store,
+        activeSessionId: isolated.sessionId,
+        requestId,
+        claimedBy: isolated.sessionId,
+        baselineSnapshot: PLAN_SNAPSHOT,
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+      // The commit's rename won and then the agent died before writing its
+      // terminal records, so no response exists for the route to see.
+      const published = `${PLAN}\nThe published revision.\n`;
+      await writeStoreJson({
+        path: agentMutationJournalPath({ store: isolated.store, requestId }),
+        value: {
+          version: 1,
+          requestId,
+          generation: 1,
+          claimedBy: isolated.sessionId,
+          baseSnapshot: PLAN_SNAPSHOT,
+          resultSnapshot: deriveSnapshotDigest(published),
+          answeredAt: "2026-08-17T12:00:05.000Z",
+          response: validateAgentResponseDraft({
+            value: {
+              requestId,
+              outcomes: [comment, other].map((entry) => ({
+                commentId: entry.id,
+                state: "answered",
+                message: "The status quo section already says this.",
+              })),
+            },
+            request: claimed,
+            commentsById: new Map(),
+            changedBlocks: new Set<string>(),
+            currentSnapshot: deriveSnapshotDigest(published),
+            now: "2026-08-17T12:00:05.000Z",
+          }),
+        },
+      });
+      await writeFile(isolated.planPath, published);
+
+      const refused = await isolatedCall({
+        path: "/api/comments-delete",
+        method: "POST",
+        body: {
+          commentId,
+          version: await isolatedReviewStateVersion(isolatedCall),
+        },
+      });
+
+      // The route decided the comment was unanswered before the settle
+      // stamped the answer, so the mailbox is the one that has to refuse.
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toMatchObject({
+        error: "The agent has already answered this request",
+      });
+      // Stripping the claim would make the published answer unreadable for
+      // good while the plan still carries its revision.
+      const history = await readAgentCommentHistory({
+        store: isolated.store,
+        sessionId: isolated.sessionId,
+        planId: isolated.planId,
+        commentId,
+      });
+      expect(history.requests[0]).toMatchObject({
+        claimedBy: isolated.sessionId,
+        answeredAt: expect.any(String),
+      });
+      expect(history.responses).toHaveLength(1);
+      await expect(
+        (await isolatedCall({ path: "/api/drafts" })).json(),
+      ).resolves.toMatchObject({
+        sent: expect.arrayContaining([
+          expect.objectContaining({ id: commentId }),
+        ]),
+      });
+    } finally {
+      await close();
+    }
+  });
+
   it("should answer a mailbox refusal during a comment delete as a conflict", async () => {
     const { isolated, isolatedCall, close } = await isolatedRuntime(
       "big-plan-delete-mailbox-refusal-",

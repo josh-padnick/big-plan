@@ -47,6 +47,11 @@ import {
 } from "./request-mailbox.js";
 import { RESOLVED_THREAD_NEW_WORK_ERROR } from "./shared/resolved-thread-work.js";
 import {
+  openMutationStage,
+  readMutationStage,
+  StagedPlanMutationRejected,
+} from "./staged-plan-mutation.js";
+import {
   prepareStore,
   readAgentConnectionEvents,
   readProgress,
@@ -1944,6 +1949,132 @@ describe("request mailbox", () => {
 
     expect(updated.comments.map((comment) => comment.id)).toEqual([kept.id]);
     expect(updated.claimedBy).toBeUndefined();
+  });
+
+  it("should drop the plan candidate of a batch the reviewer emptied", async () => {
+    const { store } = await preparedReview();
+    const only = reviewComment({
+      id: "6666666666666666",
+      body: "Take this one back.",
+    });
+    const request = requestWith([only]);
+    await writeAgentRequest({ store, request });
+    const abandonedAtMs = Date.parse("2026-08-10T12:00:01.000Z");
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: new Date(abandonedAtMs).toISOString(),
+      clock: () => abandonedAtMs,
+    });
+    await openMutationStage({
+      store,
+      requestId: request.requestId,
+      generation: claimed.claimGeneration ?? 1,
+      claimedBy: agentA,
+      baseSnapshot: snapshot,
+      baseSource: "# Plan\n",
+      now: new Date(abandonedAtMs).toISOString(),
+    });
+
+    const updated = await removeCommentFromQueuedFeedbackRequest({
+      store,
+      requestId: request.requestId,
+      commentId: only.id,
+      now: "2026-08-10T12:40:00.000Z",
+      agentConnected: false,
+      clock: () => abandonedAtMs + AGENT_RECOVERY_HORIZON_MS + 1,
+    });
+
+    // The batch is terminal and keeps its claim as the record of what
+    // happened, but a request that can never publish keeps no candidate.
+    expect(updated.canceledAt).toBe("2026-08-10T12:40:00.000Z");
+    expect(updated.claimedBy).toBe(agentA);
+    await expect(
+      readMutationStage({
+        store,
+        requestId: request.requestId,
+        claimedBy: agentA,
+      }),
+    ).rejects.toThrow(StagedPlanMutationRejected);
+  });
+
+  it("should refuse to take a comment out of a batch the agent answered", async () => {
+    const { store } = await preparedReview();
+    const kept = reviewComment({
+      id: "7777777777777777",
+      body: "Keep this one.",
+    });
+    const removed = reviewComment({
+      id: "8888888888888888",
+      body: "Take this one back.",
+    });
+    const request = requestWith([kept, removed]);
+    await writeAgentRequest({ store, request });
+    const abandonedAtMs = Date.parse("2026-08-10T12:00:01.000Z");
+    const claimed = await claimAgentRequest({
+      store,
+      activeSessionId: sessionId,
+      requestId: request.requestId,
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      now: new Date(abandonedAtMs).toISOString(),
+      clock: () => abandonedAtMs,
+    });
+    // The answer settled after the reviewer's route read the exchange, which
+    // is what recovery does to a commit whose rename won.
+    await commitRequestTerminal({
+      store,
+      response: validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: [kept, removed].map((comment) => ({
+            commentId: comment.id,
+            state: "answered",
+            message: "The plan already says this.",
+          })),
+        },
+        request: claimed,
+        commentsById: new Map(),
+        changedBlocks: new Set<string>(),
+        currentSnapshot: snapshot,
+        now: "2026-08-10T12:30:00.000Z",
+      }),
+      claimedBy: agentA,
+      now: "2026-08-10T12:30:00.000Z",
+    });
+
+    await expect(
+      removeCommentFromQueuedFeedbackRequest({
+        store,
+        requestId: request.requestId,
+        commentId: removed.id,
+        now: "2026-08-10T12:40:00.000Z",
+        agentConnected: false,
+        clock: () => abandonedAtMs + AGENT_RECOVERY_HORIZON_MS + 1,
+      }),
+    ).rejects.toThrow("The agent has already answered this request");
+
+    // Stripping the claim would leave the published answer unreadable for
+    // good, so the request has to keep it.
+    const history = await readAgentCommentHistory({
+      store,
+      sessionId,
+      planId,
+      commentId: removed.id,
+    });
+    expect(history.requests[0]).toMatchObject({
+      claimedBy: agentA,
+      baselineSnapshot: snapshot,
+      comments: [{ id: kept.id }, { id: removed.id }],
+    });
+    expect(history.responses).toHaveLength(1);
+    const events = await readProgress({ store, sessionId });
+    expect(events.some((event) => event.stepCode === "claim-released")).toBe(
+      false,
+    );
   });
 
   it("should allocate unique progress sequences when writers overlap", async () => {

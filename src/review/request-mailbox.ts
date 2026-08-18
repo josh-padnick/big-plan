@@ -330,15 +330,16 @@ const assertNotPublishing = async ({
 };
 
 /**
- * Drops the mutation stages a released claim leaves behind. The claim's own
- * fields go through `withoutClaim`; this is only the stages.
+ * Drops the mutation stages a request can no longer publish from. The claim's
+ * own fields go through `withoutClaim`; this is only the stages.
  *
- * They go for the reason a cancel drops them: a released generation can never
- * publish - the commit boundary refuses a generation its request no longer
- * names - so its private plan candidate would otherwise sit in the store for
+ * They go for the reason a cancel drops them: neither a released generation nor
+ * a terminal request can ever reach the plan - the commit boundary refuses a
+ * generation its request no longer names, and a settled request refuses every
+ * answer - so the private plan candidate would otherwise sit in the store for
  * the life of the plan.
  */
-const dropReleasedStages = async ({
+const dropUnpublishableStages = async ({
   store,
   requestId,
 }: {
@@ -956,7 +957,8 @@ export const reviseQueuedRequest = async ({
         value: revised,
       });
       const released = request.claimedAt !== undefined;
-      if (released) await dropReleasedStages({ store: lockedStore, requestId });
+      if (released)
+        await dropUnpublishableStages({ store: lockedStore, requestId });
       return { revised, released };
     },
   });
@@ -999,7 +1001,7 @@ export const deleteQueuedRequest = async ({
         nowMs,
       });
       if (request.claimedAt !== undefined) {
-        await dropReleasedStages({ store: lockedStore, requestId });
+        await dropUnpublishableStages({ store: lockedStore, requestId });
       }
       return deleteAgentRequestValue({ store: lockedStore, requestId });
     },
@@ -1050,6 +1052,16 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
       if (request.claimedAt !== undefined) {
         await assertNotPublishing({ store: lockedStore, requestId });
       }
+      // A settled answer keeps its claim, because the stored response is only
+      // readable while the request it answers still names the claim that
+      // published it. Reached here whenever an answer was stamped after the
+      // route read the exchange - by recovery settling an interrupted commit,
+      // or by a stored response this build cannot read.
+      if (request.answeredAt !== undefined) {
+        throw new AgentExchangeRejected(
+          "The agent has already answered this request",
+        );
+      }
       if (request.canceledAt !== undefined) {
         return { updated: request, released: false };
       }
@@ -1063,8 +1075,9 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
       // the abandoned claim froze, so the claim goes with it. A batch emptied
       // outright is terminal instead, and a terminal request already refuses
       // every answer, so its claim is left as the record of what happened.
+      const emptied = comments.length === 0;
       const updated = validateAgentRequest(
-        comments.length === 0
+        emptied
           ? { ...request, canceledAt: now }
           : { ...withoutClaim(request), comments },
       );
@@ -1078,8 +1091,14 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
         requestId,
         value: updated,
       });
-      const released = request.claimedAt !== undefined && comments.length > 0;
-      if (released) await dropReleasedStages({ store: lockedStore, requestId });
+      // Keeping the claim and keeping its plan candidate are separate
+      // decisions. The claim survives an emptied batch as the record of what
+      // happened; the candidate does not survive either outcome, because
+      // neither a released generation nor a canceled request can publish it.
+      const released = request.claimedAt !== undefined && !emptied;
+      if (released || emptied) {
+        await dropUnpublishableStages({ store: lockedStore, requestId });
+      }
       return { updated, released };
     },
   });
