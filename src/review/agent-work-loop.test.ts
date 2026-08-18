@@ -1428,6 +1428,7 @@ describe("agent work loop lifecycle", () => {
                   claimedAt: now,
                   claimedBy: "eeeeeeeeeeeeeeee",
                   claimExpiresAtMs: Date.now() + AGENT_CLAIM_LEASE_MS,
+                  claimGeneration: 1,
                   answeredAt: now,
                 },
         });
@@ -2073,7 +2074,7 @@ describe("agent work loop lifecycle", () => {
             requestId: request.requestId,
             stepCode: "request-reclaimed",
             detail: expect.stringContaining(
-              "partial plan edits may interleave with this takeover",
+              "stay in its own claim stage",
             ),
           }),
         ]),
@@ -2109,34 +2110,45 @@ describe("agent work loop lifecycle", () => {
       body: "Please include the capture in the plan.",
     });
     await writeAgentRequest({ store: review.store, request });
-    await claimAgentRequest({
-      store: review.store,
-      activeSessionId: review.sessionId,
-      requestId: request.requestId,
-      claimedBy: review.sessionId,
-      baselineSnapshot: deriveSnapshotDigest(source),
-      now: new Date().toISOString(),
-    });
-    await writeFile(
-      planPath,
-      `${source}\n![Capture](review-image:${descriptor.id})\n`,
-    );
-    const responsePath = join(directory, "response.json");
-    await writeFile(
-      responsePath,
-      JSON.stringify({
-        requestId: request.requestId,
-        message: "The capture is now part of the plan.",
-      }),
-    );
     try {
+      const pickup = await runAgentWorkLoopAction({
+        kind: "next",
+        planPath,
+        shouldWait: false,
+        executablePath,
+      });
+      if (
+        typeof pickup.candidate_plan !== "string" ||
+        typeof pickup.response_file !== "string" ||
+        typeof pickup.agent_token !== "string"
+      ) {
+        throw new Error("Pickup did not return a candidate to edit");
+      }
+      // The reference goes into the agent's own candidate; the assets and the
+      // plan both change only when the response publishes.
+      await writeFile(
+        pickup.candidate_plan,
+        `${source}\n![Capture](review-image:${descriptor.id})\n`,
+      );
+      await writeFile(
+        pickup.response_file,
+        JSON.stringify({
+          requestId: request.requestId,
+          message: "The capture is now part of the plan.",
+        }),
+      );
+      await expect(
+        readFile(
+          join(directory, "assets", `review-image-${descriptor.id}.png`),
+        ),
+      ).rejects.toThrow();
       await expect(
         runAgentWorkLoopAction({
           kind: "respond",
           planPath,
-          responsePath,
+          responsePath: pickup.response_file,
           executablePath,
-          agentToken: review.sessionId,
+          agentToken: pickup.agent_token,
         }),
       ).resolves.toMatchObject({ responded: request.requestId });
       await expect(readFile(planPath, "utf8")).resolves.toContain(

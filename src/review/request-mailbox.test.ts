@@ -686,7 +686,7 @@ describe("request mailbox", () => {
       reviewComment({ id: "4444444444444444", body: "The first agent died." }),
     ]);
     await writeAgentRequest({ store, request });
-    await claimAgentRequest({
+    const displaced = await claimAgentRequest({
       store,
       activeSessionId: sessionId,
       requestId: request.requestId,
@@ -714,12 +714,16 @@ describe("request mailbox", () => {
       claimedModel: { name: "Claude Sonnet 5" },
       claimedAt: "2026-08-10T12:01:20.000Z",
     });
+    // A takeover is a new claim, so it outranks the one it displaced.
+    expect(takenOver.claimGeneration).toBe(
+      (displaced.claimGeneration ?? 0) + 1,
+    );
     const events = await readProgress({ store, sessionId });
     expect(events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           stepCode: "request-reclaimed",
-          detail: expect.stringContaining("partial plan edits may interleave"),
+          detail: expect.stringContaining("stay in its own claim stage"),
         }),
       ]),
     );
@@ -956,6 +960,7 @@ describe("request mailbox", () => {
           claimedBy: agentB,
           claimedAt: new Date(startedAt + 76_000).toISOString(),
           claimExpiresAtMs: startedAt + 76_000 + AGENT_CLAIM_LEASE_MS,
+          claimGeneration: (claimed.claimGeneration ?? 1) + 1,
         },
       });
       await releaseLock();
@@ -1198,32 +1203,28 @@ describe("request mailbox", () => {
     });
     const request = requestWith([comment]);
     await writeAgentRequest({ store, request });
-    const response = validateAgentResponseDraft({
-      value: {
-        requestId: request.requestId,
-        outcomes: [
-          {
-            commentId: comment.id,
-            state: "declined",
-            message: "No plan revision is needed.",
-          },
-        ],
-      },
-      request,
-      commentsById: new Map([[comment.id, comment]]),
-      changedBlocks: new Set(),
-      currentSnapshot: snapshot,
-      now: "2026-08-10T12:00:02.000Z",
-    });
 
-    await expect(
-      commitRequestTerminal({
-        store,
-        response,
-        claimedBy: agentA,
-        now: "2026-08-10T12:00:02.500Z",
+    // An answer belongs to one claim generation, so an unclaimed request has
+    // nothing for it to answer for and the draft cannot be built at all.
+    expect(() =>
+      validateAgentResponseDraft({
+        value: {
+          requestId: request.requestId,
+          outcomes: [
+            {
+              commentId: comment.id,
+              state: "declined",
+              message: "No plan revision is needed.",
+            },
+          ],
+        },
+        request,
+        commentsById: new Map([[comment.id, comment]]),
+        changedBlocks: new Set(),
+        currentSnapshot: snapshot,
+        now: "2026-08-10T12:00:02.000Z",
       }),
-    ).rejects.toThrow(/must be claimed/);
+    ).toThrow(/must be claimed/);
   });
 
   it("should replace a malformed stored response after claim", async () => {

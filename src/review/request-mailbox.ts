@@ -9,6 +9,7 @@ import {
   outstandingAgentRequests,
   readAgentCommentHistory,
   readValidatedAgentRequests,
+  requestBaselineSnapshot,
   requestBlocksPlanPickup,
   validateAgentRequest,
 } from "./agent-exchange.js";
@@ -41,6 +42,11 @@ import {
   writeAgentRequestValue,
   writeAgentResponseValue,
 } from "./store.js";
+import {
+  changeSetIdsFor,
+  recordCommittedRevision,
+} from "./change-set-commit.js";
+import type { CommittedPlanRevision } from "./change-set-commit.js";
 import {
   claimIsHeldByAnother,
   claimLeaseExpiryMs,
@@ -219,7 +225,7 @@ const responseMatchesRequest = ({
   value !== null &&
   !Array.isArray(value) &&
   "version" in value &&
-  value.version === 2 &&
+  value.version === 3 &&
   "requestId" in value &&
   value.requestId === request.requestId &&
   "sessionId" in value &&
@@ -255,6 +261,7 @@ const requestCreation = (request: AgentRequest): string => {
   delete created.claimedBy;
   delete created.claimedModel;
   delete created.claimExpiresAtMs;
+  delete created.claimGeneration;
   delete created.answeredAt;
   delete created.canceledAt;
   return JSON.stringify(created);
@@ -318,9 +325,13 @@ export const ensureAgentRequest = async ({
  *
  * The claim is an ownership lease, not just a baseline freeze. The plan claim
  * lock permits one live request claim across the plan, and the request lock
- * decides renewal, contention, and takeover for the selected request. A
- * lapsed lease during a long edit can still interleave plan writes until write
- * fencing exists.
+ * decides renewal, contention, and takeover for the selected request.
+ *
+ * Every claim also carries a generation. A renewal keeps it and a takeover
+ * raises it, so the number says which claim a stage belongs to. A lapsed lease
+ * during a long edit can no longer interleave plan writes: the displaced agent
+ * still owns its own stage, and its generation is refused at the one commit
+ * boundary that reaches the plan source.
  */
 export const claimAgentRequest = async ({
   store,
@@ -384,6 +395,9 @@ export const claimAgentRequest = async ({
             const renewed = validateAgentRequest({
               ...request,
               claimedModel: model ?? request.claimedModel,
+              // Renewal is the same claim continuing, so the generation - and
+              // with it the agent's stage and its unfinished edits - stays.
+              claimGeneration: request.claimGeneration ?? 1,
               claimExpiresAtMs: Math.max(
                 request.claimExpiresAtMs ?? 0,
                 claimLeaseExpiryMs(nowMs),
@@ -412,8 +426,9 @@ export const claimAgentRequest = async ({
               "Another agent session is working on this plan",
             );
           }
-          // The new durable claim fences claims and answers, not plan writes
-          // the lapsed holder may already have started before write fencing.
+          // A takeover is a new claim, so it raises the generation. The
+          // displaced holder keeps writing to a stage whose generation the
+          // commit boundary no longer accepts.
           const claimed = validateAgentRequest({
             ...request,
             baselineSnapshot,
@@ -421,6 +436,7 @@ export const claimAgentRequest = async ({
             claimedBy,
             claimedModel: model,
             claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
+            claimGeneration: (request.claimGeneration ?? 0) + 1,
           });
           await writeAgentRequestValue({
             store: lockedStore,
@@ -448,7 +464,7 @@ export const claimAgentRequest = async ({
         step: "Restarting with a new agent session",
         state: "live",
         detail:
-          "The previous agent stopped responding; its partial plan edits may interleave with this takeover until write fencing exists",
+          "The previous agent stopped responding; its unpublished edits stay in its own claim stage and cannot reach this plan",
       },
     }).catch(() => undefined);
   }
@@ -489,16 +505,53 @@ export const cancelAgentRequest = async ({
     },
   });
 
-/** Answers one request and marks it terminal as a single commit. */
+/** Describes one committed revision to the Change Engine's change sets. */
+const committedRevisionOf = ({
+  request,
+  response,
+  at,
+}: {
+  readonly request: AgentRequest;
+  readonly response: AgentResponse;
+  readonly at: string;
+}): CommittedPlanRevision => ({
+  requestId: response.requestId,
+  changeSetIds: changeSetIdsFor(response),
+  baseSnapshot: requestBaselineSnapshot(request),
+  resultSnapshot: response.resultSnapshot,
+  provenance: response.kind,
+  committedAt: at,
+});
+
+export class AgentClaimGenerationStale extends AgentExchangeRejected {
+  constructor() {
+    super(
+      "Another agent now holds the claim on this request; this claim generation can no longer publish",
+    );
+    this.name = "AgentClaimGenerationStale";
+  }
+}
+
+/**
+ * Answers one request and marks it terminal as a single commit.
+ *
+ * `publish` is the plan-source swap, and it runs here because this is where
+ * ownership has just been re-proved and the request file cannot move under it.
+ * Everything the publisher needs to abandon the attempt without a trace it does
+ * before returning; everything after it is bookkeeping recovery can finish.
+ */
 export const commitRequestTerminal = async ({
   store,
   response,
   claimedBy,
+  publish,
   now,
 }: {
   readonly store: ReviewStore;
   readonly response: AgentResponse;
   readonly claimedBy: string;
+  /** Publishes the source revision while the request cannot change. */
+  readonly publish?: () => Promise<void>;
   readonly now: string;
 }): Promise<AgentRequest> =>
   withRequestLock({
@@ -529,17 +582,22 @@ export const commitRequestTerminal = async ({
           "The agent has already answered this request",
         );
       }
-      // Only the recorded holder may answer. Without this the lease would guard
-      // pickup but not delivery, and a session that lost its claim could still
-      // overwrite the holder's work at the last step.
-      //
-      // Ownership, not lease freshness, is the test. A lease lapses on the
-      // normal path: `agent next` hands the work over and exits, so nothing
-      // renews the claim between progress notes, and a turn longer than the
-      // window would otherwise have its finished answer refused - losing the
-      // reviewer's message, which is the one failure adr/0002 exists to prevent
-      // (BIG-147). A displaced holder is still refused, because a takeover
-      // rewrites `claimedBy`, and a settled request is refused above.
+      // Only a live claim may answer, and the answer names the generation it
+      // was drafted for. Every takeover raises that number, so a superseded
+      // claim stops here whether or not it still recognises the token it holds
+      // - which is the case the ownership test alone cannot see, because an
+      // agent that reclaimed the same request keeps its own token across the
+      // generation it lost.
+      if (request.claimGeneration !== response.claimGeneration) {
+        throw new AgentClaimGenerationStale();
+      }
+      // Ownership is tested too, and it is ownership rather than lease
+      // freshness. A lease lapses on the normal path: `agent next` hands the
+      // work over and exits, so nothing renews the claim between progress
+      // notes, and a turn longer than the window would otherwise have its
+      // finished answer refused - losing the reviewer's message, which is the
+      // one failure adr/0002 exists to prevent (BIG-147). A settled request is
+      // refused above.
       if (request.claimedBy !== claimedBy) {
         throw new AgentExchangeRejected(
           "Another agent now holds the claim on this request",
@@ -550,6 +608,7 @@ export const commitRequestTerminal = async ({
           "The agent response does not match its request",
         );
       }
+      await publish?.();
       const answered = validateAgentRequest({
         ...request,
         answeredAt: now,
@@ -559,6 +618,57 @@ export const commitRequestTerminal = async ({
         requestId: response.requestId,
         value: response,
       });
+      // The Change Engine learns about a revision here and nowhere else, so a
+      // change set can only ever describe work that crossed this boundary.
+      await recordCommittedRevision({
+        store: lockedStore,
+        revision: committedRevisionOf({ request, response, at: now }),
+      });
+      await writeAgentRequestValue({
+        store: lockedStore,
+        requestId: response.requestId,
+        value: answered,
+      });
+      return answered;
+    },
+  });
+
+/**
+ * Finishes a commit whose journal already proves the source swap won.
+ *
+ * Recovery reaches this with the plan file carrying the result revision, so
+ * refusing an already-answered request would strand the reviewer's message
+ * rather than protect it. Writing what is already written is the correct
+ * answer here, and it is the only place that is true.
+ */
+export const completeRequestTerminal = async ({
+  store,
+  response,
+  now,
+}: {
+  readonly store: ReviewStore;
+  readonly response: AgentResponse;
+  readonly now: string;
+}): Promise<AgentRequest> =>
+  withRequestLock({
+    store,
+    requestId: response.requestId,
+    change: async (lockedStore) => {
+      const request = await readCurrentRequest({
+        store: lockedStore,
+        requestId: response.requestId,
+      });
+      await writeAgentResponseValue({
+        store: lockedStore,
+        requestId: response.requestId,
+        value: response,
+      });
+      await recordCommittedRevision({
+        store: lockedStore,
+        revision: committedRevisionOf({ request, response, at: now }),
+      });
+      if (request.answeredAt !== undefined) return request;
+      const answered = validateAgentRequest({ ...request, answeredAt: now });
       await writeAgentRequestValue({
         store: lockedStore,
         requestId: response.requestId,

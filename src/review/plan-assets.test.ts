@@ -2,7 +2,10 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { materializeReviewImages } from "./plan-assets.js";
+import {
+  prepareReviewImageAssets,
+  publishPreparedPlanAssets,
+} from "./plan-assets.js";
 import {
   deriveReviewPlanId,
   prepareStore,
@@ -16,7 +19,7 @@ const TINY_PNG = Uint8Array.from([
 ]);
 
 describe("plan image assets", () => {
-  it("materializes reviewer references into relative source assets", async () => {
+  it("prepares reviewer references without touching the repository", async () => {
     const directory = await mkdtemp(join(tmpdir(), "big-plan-plan-assets-"));
     const planPath = join(directory, "plan.mdx");
     await writeFile(planPath, "# Plan\n");
@@ -32,16 +35,25 @@ describe("plan image assets", () => {
     });
     try {
       const source = `# Plan\n\n![Capture](review-image:${descriptor.id})\n`;
-      await expect(
-        materializeReviewImages({ markdown: source, planPath, store }),
-      ).resolves.toBe(
+      const assetPath = join(
+        directory,
+        "assets",
+        `review-image-${descriptor.id}.png`,
+      );
+      const prepared = await prepareReviewImageAssets({
+        markdown: source,
+        planPath,
+        store,
+      });
+      expect(prepared.source).toBe(
         `# Plan\n\n![Capture](./assets/review-image-${descriptor.id}.png)\n`,
       );
-      await expect(
-        readFile(
-          join(directory, "assets", `review-image-${descriptor.id}.png`),
-        ),
-      ).resolves.toEqual(Buffer.from(TINY_PNG));
+      // Preparation runs before the commit takes its lock, so nothing it does
+      // may reach the plan's repository yet.
+      await expect(readFile(assetPath)).rejects.toThrow();
+
+      await publishPreparedPlanAssets(prepared.assets);
+      await expect(readFile(assetPath)).resolves.toEqual(Buffer.from(TINY_PNG));
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

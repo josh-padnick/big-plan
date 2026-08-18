@@ -97,7 +97,9 @@ export type ReviewStore = {
   readonly feedbackSubmissionDirectory: string;
   readonly agentRequestDirectory: string;
   readonly agentResponseDirectory: string;
-  readonly agentDraftDirectory: string;
+  readonly committedRevisionDirectory: string;
+  readonly agentMutationDirectory: string;
+  readonly agentMutationJournalDirectory: string;
   readonly agentPromptPath: string;
   readonly snapshotDirectory: string;
   readonly draftsPath: string;
@@ -456,9 +458,17 @@ export const reviewStoreFor = ({
       base: agentDirectory,
       leaf: "responses",
     }),
-    agentDraftDirectory: inside({
+    committedRevisionDirectory: inside({
+      base: reviewDirectory,
+      leaf: "committed-revisions",
+    }),
+    agentMutationDirectory: inside({
       base: agentDirectory,
-      leaf: "drafts",
+      leaf: "mutations",
+    }),
+    agentMutationJournalDirectory: inside({
+      base: agentDirectory,
+      leaf: "mutation-journal",
     }),
     agentPromptPath: inside({
       base: agentDirectory,
@@ -555,7 +565,15 @@ export const prepareStore = async (store: ReviewStore): Promise<void> => {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
-  await mkdir(store.agentDraftDirectory, {
+  await mkdir(store.committedRevisionDirectory, {
+    recursive: true,
+    mode: DIRECTORY_MODE,
+  });
+  await mkdir(store.agentMutationDirectory, {
+    recursive: true,
+    mode: DIRECTORY_MODE,
+  });
+  await mkdir(store.agentMutationJournalDirectory, {
     recursive: true,
     mode: DIRECTORY_MODE,
   });
@@ -581,7 +599,7 @@ export const prepareStore = async (store: ReviewStore): Promise<void> => {
   await chmod(ignorePath, FILE_MODE);
 };
 
-const readJson = async (path: string): Promise<unknown> => {
+export const readStoreJson = async (path: string): Promise<unknown> => {
   try {
     return JSON.parse(await readFile(path, "utf8"));
   } catch {
@@ -731,7 +749,7 @@ export const publishReviewImage = async ({
       bytes,
       { mode: FILE_MODE },
     );
-    await writeJson({
+    await writeStoreJson({
       path: inside({ base: temporary, leaf: "metadata.json" }),
       value: descriptor,
     });
@@ -1125,7 +1143,12 @@ const writeFileAtomically = async ({
   }
 };
 
-const writeJson = async ({
+/**
+ * Replaces one JSON file without ever showing a partial one. Exported because
+ * the atomic file primitives are this module's to own, and the staged plan
+ * mutation writes its manifest and journal through them.
+ */
+export const writeStoreJson = async ({
   path,
   value,
 }: {
@@ -1145,7 +1168,7 @@ export const readComments = async ({
   readonly path: string;
   readonly validate: (value: unknown) => ReadonlyArray<ReviewComment>;
 }): Promise<ReadonlyArray<ReviewComment>> => {
-  const stored = await readJson(path);
+  const stored = await readStoreJson(path);
   if (stored === undefined) {
     return [];
   }
@@ -1166,7 +1189,7 @@ export const writeComments = async ({
   readonly path: string;
   readonly comments: ReadonlyArray<ReviewComment>;
 }): Promise<void> => {
-  await writeJson({ path, value: comments });
+  await writeStoreJson({ path, value: comments });
 };
 
 const snapshotPath = ({
@@ -1230,7 +1253,7 @@ export const readResolvedCommentIds = async ({
   readonly store: ReviewStore;
   readonly validate: (value: unknown) => ReadonlyArray<string>;
 }): Promise<ReadonlyArray<string>> => {
-  const value = await readJson(store.resolvedPath);
+  const value = await readStoreJson(store.resolvedPath);
   try {
     return validate(value);
   } catch {
@@ -1246,7 +1269,7 @@ export const writeResolvedCommentIds = async ({
   readonly store: ReviewStore;
   readonly ids: ReadonlyArray<string>;
 }): Promise<void> => {
-  await writeJson({ path: store.resolvedPath, value: ids });
+  await writeStoreJson({ path: store.resolvedPath, value: ids });
 };
 
 /**
@@ -1272,7 +1295,7 @@ export const writeFeedbackPackage = async ({
     base: store.feedbackDirectory,
     leaf: `${name}.md`,
   });
-  await writeJson({ path: jsonPath, value: feedback });
+  await writeStoreJson({ path: jsonPath, value: feedback });
   await writeFile(briefPath, brief, { mode: FILE_MODE });
   await chmod(briefPath, FILE_MODE);
   return { jsonPath, briefPath };
@@ -1301,7 +1324,7 @@ export const readFeedbackSubmissionValue = async ({
   readonly store: ReviewStore;
   readonly submissionId: string;
 }): Promise<unknown> =>
-  readJson(feedbackSubmissionPath({ store, submissionId }));
+  readStoreJson(feedbackSubmissionPath({ store, submissionId }));
 
 export const writeFeedbackSubmissionValue = async ({
   store,
@@ -1312,7 +1335,7 @@ export const writeFeedbackSubmissionValue = async ({
   readonly submissionId: string;
   readonly value: unknown;
 }): Promise<void> => {
-  await writeJson({
+  await writeStoreJson({
     path: feedbackSubmissionPath({ store, submissionId }),
     value,
   });
@@ -1339,7 +1362,7 @@ const readJsonDirectory = async (
   const names = await publishedJsonFileNames(directory);
   const values: Array<unknown> = [];
   for (const name of names) {
-    const value = await readJson(inside({ base: directory, leaf: name }));
+    const value = await readStoreJson(inside({ base: directory, leaf: name }));
     if (value !== undefined) {
       values.push(value);
     }
@@ -1414,7 +1437,7 @@ export const appendAgentConnectionEvent = async ({
   readonly event: AgentConnectionEvent;
 }): Promise<void> => {
   const eventId = event.eventId ?? randomId();
-  await writeJson({
+  await writeStoreJson({
     path: inside({
       base: store.agentConnectionDirectory,
       leaf: `${eventId}.json`,
@@ -1437,7 +1460,7 @@ export const readAgentRequestValue = async ({
   readonly store: ReviewStore;
   readonly requestId: string;
 }): Promise<unknown> =>
-  readJson(exchangePath({ directory: store.agentRequestDirectory, requestId }));
+  readStoreJson(exchangePath({ directory: store.agentRequestDirectory, requestId }));
 
 /**
  * Which requests have a response on disk, from the directory listing alone.
@@ -1460,7 +1483,7 @@ export const readAgentResponseValuesFor = async ({
 }): Promise<ReadonlyArray<unknown>> => {
   const values: Array<unknown> = [];
   for (const requestId of requestIds) {
-    const value = await readJson(
+    const value = await readStoreJson(
       exchangePath({ directory: store.agentResponseDirectory, requestId }),
     );
     if (value !== undefined) values.push(value);
@@ -1476,7 +1499,7 @@ export const readAgentResponseValue = async ({
   readonly store: ReviewStore;
   readonly requestId: string;
 }): Promise<unknown> =>
-  readJson(
+  readStoreJson(
     exchangePath({ directory: store.agentResponseDirectory, requestId }),
   );
 
@@ -1490,7 +1513,7 @@ export const writeAgentRequestValue = async ({
   readonly requestId: string;
   readonly value: unknown;
 }): Promise<void> => {
-  await writeJson({
+  await writeStoreJson({
     path: exchangePath({
       directory: store.agentRequestDirectory,
       requestId,
@@ -1550,7 +1573,7 @@ export const writeAgentResponseValue = async ({
   readonly requestId: string;
   readonly value: unknown;
 }): Promise<void> => {
-  await writeJson({
+  await writeStoreJson({
     path: exchangePath({
       directory: store.agentResponseDirectory,
       requestId,
@@ -1558,15 +1581,6 @@ export const writeAgentResponseValue = async ({
     value,
   });
 };
-
-/** Gives an agent a safe ignored path for authoring one response draft. */
-export const agentResponseDraftPath = ({
-  store,
-  requestId,
-}: {
-  readonly store: ReviewStore;
-  readonly requestId: string;
-}): string => exchangePath({ directory: store.agentDraftDirectory, requestId });
 
 /** Writes the ready-to-paste session contract at a stable ignored path. */
 export const writeAgentPrompt = async ({
@@ -1583,7 +1597,7 @@ export const writeAgentPrompt = async ({
 /** Reads the untrusted current session value for the authority module. */
 export const readSessionDescriptorValue = async (
   store: ReviewStore,
-): Promise<unknown> => readJson(store.sessionPath);
+): Promise<unknown> => readStoreJson(store.sessionPath);
 
 /** A random identifier for one package or session. */
 export const randomId = (bytes = 8): string =>
@@ -2019,13 +2033,13 @@ export const writeSessionDescriptorValue = async ({
   readonly store: ReviewStore;
   readonly value: unknown;
 }): Promise<void> => {
-  await writeJson({ path: store.sessionPath, value });
+  await writeStoreJson({ path: store.sessionPath, value });
 };
 
 /** Reads the untrusted session heartbeat for the authority module. */
 export const readSessionHeartbeatValue = async (
   store: ReviewStore,
-): Promise<unknown> => readJson(store.heartbeatPath);
+): Promise<unknown> => readStoreJson(store.heartbeatPath);
 
 /** Writes one checked session heartbeat for the authority module. */
 export const writeSessionHeartbeatValue = async ({
@@ -2035,7 +2049,7 @@ export const writeSessionHeartbeatValue = async ({
   readonly store: ReviewStore;
   readonly value: unknown;
 }): Promise<void> => {
-  await writeJson({ path: store.heartbeatPath, value });
+  await writeStoreJson({ path: store.heartbeatPath, value });
 };
 
 export type AgentPresence = {
@@ -2059,7 +2073,7 @@ export const writeAgentHeartbeat = async ({
   readonly requestId?: string;
   readonly now?: number;
 }): Promise<void> => {
-  await writeJson({
+  await writeStoreJson({
     path: store.agentHeartbeatPath,
     value: {
       sessionId,
@@ -2082,7 +2096,7 @@ export const readAgentPresence = async ({
   readonly now?: number;
   readonly maximumAgeMs?: number;
 }): Promise<AgentPresence> => {
-  const value = await readJson(store.agentHeartbeatPath);
+  const value = await readStoreJson(store.agentHeartbeatPath);
   if (
     typeof value !== "object" ||
     value === null ||

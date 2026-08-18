@@ -9,7 +9,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startReviewRuntime } from "../src/review/server.js";
-import { expect, runAgentCli, stageComment, test } from "./fixtures";
+import {
+  expect,
+  runAgentCli,
+  stageComment,
+  test,
+  closeReviewRuntime,
+} from "./fixtures";
 
 // A small real photograph: baseline JPEG with the EXIF and Photoshop segments
 // a camera or an editor leaves behind, so the fixture is the file kind an
@@ -100,7 +106,7 @@ test("should render a photograph stored beside the plan", async ({ page }) => {
       }
     }
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -133,10 +139,14 @@ test("should render a photograph a real agent adds during the review", async ({
     const commentId = /- id: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
     // Pickup mints the token proving this process holds the request.
     const agentToken = /agent_token: ([a-f0-9]{16})/u.exec(claim.stdout)?.[1];
+    // The agent edits its own candidate; Big Plan writes the plan when the
+    // answer publishes.
+    const candidatePath = /candidate_plan: (\S+)/u.exec(claim.stdout)?.[1];
     if (
       requestId === undefined ||
       commentId === undefined ||
-      agentToken === undefined
+      agentToken === undefined ||
+      candidatePath === undefined
     ) {
       throw new Error(`The claim named no work: ${claim.stdout}`);
     }
@@ -148,7 +158,7 @@ test("should render a photograph a real agent adds during the review", async ({
         PHOTOGRAPH_BYTES,
       );
       await writeFile(
-        planPath,
+        candidatePath,
         PLAN_WITHOUT_PHOTOGRAPH.replace(
           "The written note leaves the cable route open to interpretation.",
           "![The network cabinet before the work](./assets/cabinet.jpg)\n\nThe photograph settles the question of the existing cable route.",
@@ -191,7 +201,7 @@ test("should render a photograph a real agent adds during the review", async ({
       )
       .toBeGreaterThan(0);
   } finally {
-    await runtime.close();
+    await closeReviewRuntime({ page, runtime });
     await rm(directory, { recursive: true, force: true });
   }
 });

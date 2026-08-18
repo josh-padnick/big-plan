@@ -70,6 +70,16 @@ const request = feedbackAgentRequest({
   premiseSnapshot: deriveSnapshotDigest(before),
 });
 
+// A response answers a claim, so drafting one needs the claim it answers for.
+const claimedRequest = validateAgentRequest({
+  ...request,
+  baselineSnapshot: deriveSnapshotDigest(before),
+  claimedAt: "2026-08-02T12:00:30.000Z",
+  claimedBy: "cccc0000cccc0000",
+  claimExpiresAtMs: 1_775_000_000_000,
+  claimGeneration: 1,
+});
+
 const snapshot = (): AgentExchangeSnapshot => ({
   requests: [request],
   responses: [],
@@ -80,7 +90,7 @@ describe("agent exchange response contract", () => {
     expect(() =>
       validateAgentResponseDraft({
         value: { requestId: packageId, outcomes: [] },
-        request,
+        request: claimedRequest,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set([blockId]),
         currentSnapshot: deriveSnapshotDigest(after),
@@ -103,7 +113,7 @@ describe("agent exchange response contract", () => {
             },
           ],
         },
-        request,
+        request: claimedRequest,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set([blockId]),
         currentSnapshot: deriveSnapshotDigest(before),
@@ -126,7 +136,7 @@ describe("agent exchange response contract", () => {
             },
           ],
         },
-        request,
+        request: claimedRequest,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set([blockId]),
         currentSnapshot: deriveSnapshotDigest(after),
@@ -160,7 +170,7 @@ describe("agent exchange response contract", () => {
             },
           ],
         },
-        request,
+        request: claimedRequest,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set([blockId]),
         currentSnapshot: deriveSnapshotDigest(after),
@@ -184,7 +194,7 @@ describe("agent exchange response contract", () => {
             },
           ],
         },
-        request,
+        request: claimedRequest,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set([blockId, secondBlock]),
         currentSnapshot: deriveSnapshotDigest(after),
@@ -216,6 +226,7 @@ describe("agent exchange response contract", () => {
               claimedAt: "2026-08-02T12:00:30.000Z",
               claimedBy: agentSessionId,
               claimExpiresAtMs: 1_775_000_000_000,
+              claimGeneration: 1,
               answeredAt: "2026-08-02T12:01:00.000Z",
             },
             reply,
@@ -261,6 +272,7 @@ describe("agent exchange response contract", () => {
       claimedAt: new Date(nowMs).toISOString(),
       claimedBy: "bbbb0000bbbb0000",
       claimExpiresAtMs: nowMs + AGENT_CLAIM_LEASE_MS,
+      claimGeneration: 1,
     });
     const exchange = { requests: [active, request], responses: [] };
 
@@ -362,7 +374,7 @@ describe("agent exchange response contract", () => {
             },
           ],
         },
-        request,
+        request: claimedRequest,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set(),
         currentSnapshot: request.premiseSnapshot,
@@ -385,7 +397,7 @@ describe("agent exchange response contract", () => {
             },
           ],
         },
-        request,
+        request: claimedRequest,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set(),
         currentSnapshot: request.premiseSnapshot,
@@ -408,7 +420,7 @@ describe("agent exchange response contract", () => {
             },
           ],
         },
-        request,
+        request: claimedRequest,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set(),
         currentSnapshot: request.premiseSnapshot,
@@ -554,11 +566,6 @@ describe("agent exchange filesystem", () => {
   });
 
   it("should accept a warning without inventing a changed snapshot", () => {
-    const claimed = {
-      ...request,
-      claimedAt: "2026-08-02T12:00:30.000Z",
-      baselineSnapshot: request.premiseSnapshot,
-    };
     expect(
       validateAgentResponseDraft({
         value: {
@@ -573,7 +580,7 @@ describe("agent exchange filesystem", () => {
             },
           ],
         },
-        request: claimed,
+        request: claimedRequest,
         commentsById: new Map([[commentId, comment]]),
         changedBlocks: new Set(),
         currentSnapshot: request.premiseSnapshot,
@@ -714,6 +721,7 @@ describe("agent exchange filesystem", () => {
       claimedAt: new Date(nowMs - 1_000).toISOString(),
       claimedBy: agentSessionId,
       claimExpiresAtMs: nowMs + AGENT_CLAIM_LEASE_MS,
+      claimGeneration: 1,
       canceledAt: new Date(nowMs - 500).toISOString(),
     });
     const queued = messageAgentRequest({

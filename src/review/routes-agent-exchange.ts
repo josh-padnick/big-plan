@@ -38,6 +38,7 @@ import {
   MAX_IMAGES_PER_MESSAGE,
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
+import { readCommittedRevisions } from "./change-set-commit.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
 
 const appendProgressBestEffort = async ({
@@ -57,16 +58,21 @@ const appendProgressBestEffort = async ({
 };
 
 /**
- * Reading the exchange is also how the runtime learns that a response arrived,
+ * Reading the exchange is also how the runtime learns that a revision landed,
  * so it advances reader progress before answering.
+ *
+ * The committed revision log is what moves the reader, not the response file.
+ * A revision is recorded only inside the terminal commit, after the source
+ * swap, so the snapshot the reader is sent is always one the plan file really
+ * reached.
  */
 export const readAgentSnapshot = async (
   context: ReviewRouteContext,
 ): Promise<ReviewRouteResponse> => {
   const { store, sessionId, planId, readerProgress } = context;
   const exchange = await readAgentExchange({ store, sessionId, planId });
-  for (const agentResponse of exchange.responses) {
-    readerProgress.observe(agentResponse);
+  for (const revision of await readCommittedRevisions({ store })) {
+    readerProgress.observe(revision);
   }
   const presence = await readAgentPresence({ store, sessionId });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });

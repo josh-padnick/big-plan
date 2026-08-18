@@ -35,7 +35,10 @@ import {
   commitRequestTerminal,
   withResolvedCommentLock,
 } from "./request-mailbox.js";
-import { materializeReviewImages } from "./plan-assets.js";
+import {
+  prepareReviewImageAssets,
+  publishPreparedPlanAssets,
+} from "./plan-assets.js";
 import {
   DEFAULT_REVIEW_IDLE_TIMEOUT_MS,
   startReviewRuntime,
@@ -597,12 +600,13 @@ describe("review runtime images", () => {
         bytes: TINY_PNG,
         alt: "Capture",
       });
-      const source = await materializeReviewImages({
+      const prepared = await prepareReviewImageAssets({
         markdown: `# Plan\n\n![Capture](review-image:${descriptor.id})\n`,
         planPath,
         store: review.store,
       });
-      await writeFile(planPath, source);
+      await publishPreparedPlanAssets(prepared.assets);
+      await writeFile(planPath, prepared.source);
       const asset = await fetch(
         `${review.url}assets/review-image-${descriptor.id}.png`,
       );

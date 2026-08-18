@@ -178,6 +178,7 @@ const answeredChat = async ({
     claimedAt: createdAt,
     claimedBy: SESSION,
     claimExpiresAtMs: createdAtMs + AGENT_CLAIM_LEASE_MS,
+    claimGeneration: 1,
     answeredAt: new Date(answeredAtMs).toISOString(),
   };
   await writeAgentResponseValue({
