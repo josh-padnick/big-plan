@@ -9,6 +9,7 @@ The workflow is intentionally light:
 - **Feature branches.** Branch off `main` and open a pull request back into `main`.
 - **Small PRs.** Keep pull requests small and reviewable; prefer several self-contained increments over one large change.
 - **Checks.** Run `bun run lint`, `bun run build`, `bun run test`, and `bun run test:e2e` before opening a pull request; CI enforces the same checks on branches pushed to this repository.
+- **Merge gates.** A pull request merges only once its review is triaged and its validation is attested, both stated in comments that CI checks. See [Merge gates](#merge-gates).
 - **License.** Big Plan is [MIT](LICENSE) licensed; contributions are accepted under the same license.
 
 ## Do not overwrite merged work
@@ -66,6 +67,93 @@ When you see the warning:
 
 **A human adjudicates every warning.** The captain decided on 2026-08-17 that firstmate reviews each one and determines whether an overwrite is really happening; no agent acts on it automatically.
 Silence is therefore not a promise that no work was lost. It only means the branch stayed under the thresholds.
+
+## Merge gates
+
+Two required status checks decide whether a pull request may merge.
+They exist because PR #163 merged with seven reviewer findings that nobody had answered, and no check noticed.
+Both gates are statements a machine can verify, so the protocol cannot be forgotten rather than merely agreed to.
+
+| Check                    | Passes when                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `review-triage`          | Exactly one accepted third-party review exists, every inline finding it raised has a written reply, and a sign-off names the current head. |
+| `validation-attestation` | The pull request states that the `no-mistakes` pipeline passed on the current head, or that it was deliberately skipped and why.           |
+
+`.github/workflows/merge-gates.yml` runs the gates and `scripts/merge-gates/gates.mjs` decides them.
+A failing gate prints exactly what is missing and the next action to take, so read the check before asking anyone.
+
+### The comment formats
+
+Post each marker as a plain line in a comment on the pull request conversation.
+A line inside a code fence or a blockquote does not count, so that documentation and quoted replies cannot satisfy a gate by accident.
+Any account may write any of them: a human, firstmate, or the lane's own agent.
+
+```text
+review-triage: complete <head-sha>
+no-mistakes: passed run <run-id> head <head-sha>
+no-mistakes: overridden - <reason>
+```
+
+The sha may be a short one of seven or more hex digits, and it must name the pull request's current head.
+
+### When to sign off
+
+Sign off last, after every finding has a reply and after the final push.
+
+1. Get one review.
+   Any of CodeRabbit, Greptile, or Devin counts; the gate does not care which, so BIG-143's credit-based picker can choose freely.
+   Exactly one, because one review per pull request is the budget, and a second review means one of the two was never triaged.
+2. Answer every inline finding.
+   Reply in the thread saying what you did: the commit that fixes it, or the reason you decline it.
+   Resolving a thread without a reply does not count, and the reviewer replying to itself does not count.
+   The written response is the record a later reader needs.
+3. Run `no-mistakes` and post its attestation.
+4. Post the `review-triage: complete <head-sha>` sign-off.
+
+Any push moves the head and invalidates both the sign-off and the pipeline attestation, including a push that only fixes lint.
+That is deliberate: the reviewer's findings were raised against code that no longer exists.
+Re-triage, then re-post both markers naming the new head.
+
+Draft pull requests are judged too, and a red gate on a draft mid-flow is expected.
+The gate binds at merge, through branch protection.
+
+### When no reviewer is available
+
+When reviewer credits are gone, run the adversarial review yourself and attest to it.
+The attestation stands in for the bot review, so it carries what a bot review carries: the commit it read, who read it, and what it found with each finding's disposition.
+
+```text
+adversarial-review: complete <head-sha> by <agent>
+findings: <n>
+1. <finding> - resolved: fixed|declined|deferred - <how, or why not>
+2. <finding> - resolved: fixed|declined|deferred - <how, or why not>
+```
+
+The sha must be a commit on this pull request, and the number of findings declared must not exceed the number of disposition lines.
+Post at most one accepted review per pull request: an attestation posted while a bot has already reviewed fails the gate, and deleting the surplus comment clears it.
+
+### The override rule
+
+`no-mistakes: overridden - <reason>` is the sanctioned path for work the pipeline genuinely does not apply to.
+It passes the gate and says so loudly: the check's title reads `OVERRIDDEN`, and its body names the reason and the account that declared it.
+The reason has to be one a reader can weigh; a shrug is rejected.
+
+An override with no sha stays in force for the rest of the pull request.
+Add a trailing `head <sha>` to scope it to one commit instead, and a later push then requires a fresh statement.
+
+### Re-running a gate
+
+A gate re-runs by itself whenever the pull request changes: a push, a review, an inline comment, or a conversation comment, including an edited or deleted one.
+Writing the missing comment is therefore enough to turn a gate green; no push is needed.
+
+Comment triggers always run the workflow file on `main`, so a pull request whose branch predates a change to the gate is judged by main's copy of it.
+To judge a pull request by hand, run the workflow from the Actions tab with the pull request number, or run it locally:
+
+```sh
+GH_TOKEN=$(gh auth token) bun run check:merge-gates <pr-number> --repo=josh-padnick/big-plan --dry-run
+```
+
+`--dry-run` prints the verdicts without publishing the check runs.
 
 ## Styling changes
 

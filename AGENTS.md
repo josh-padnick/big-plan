@@ -300,6 +300,7 @@ The root README owns generation commands; CI detects drift.
 ## Contribution guardrails
 
 Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the normal branch, commit, pull-request, and verification workflow.
+Two CI gates decide whether a pull request may merge, and both are satisfied by structured comments rather than by pushing: see [Merge gates](CONTRIBUTING.md#merge-gates) for the exact formats and when to post them.
 Before editing, inspect the working tree and preserve changes you did not create.
 Keep each change scoped to its approved purpose, and never repair unrelated work as a side effect.
 
