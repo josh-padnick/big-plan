@@ -2653,7 +2653,25 @@ test("should expire a held connected snapshot when the reviewer returns", async 
   // The card no longer measures the silence; it names the state and leaves
   // "since" to say when the agent was last here.
   await expect(agentSidebar(page)).toContainText("The agent has disconnected.");
-  await expect(agentSidebar(page)).toContainText("Since");
+  // The label names the transition its time belongs to, so the row reads as a
+  // statement about this state rather than as a field to interpret.
+  await expect(agentSidebar(page)).toContainText("Disconnected since");
+  // Elapsed time is a parenthetical of the timestamp, not a second value.
+  await expect(
+    agentSidebar(page)
+      .locator("dd")
+      .filter({ hasText: /\(.+\)/u })
+      .first(),
+  ).toBeVisible();
+  // Losing the agent is the moment the recovery instruction is wanted, so the
+  // section opens itself rather than waiting to be found. It stays a
+  // collapsible: closing it holds while the agent is still gone.
+  const recovery = agentSidebar(page).locator(
+    "details[data-review-agent-recovery]",
+  );
+  await expect(recovery).toHaveAttribute("open", "");
+  await recovery.locator("summary").click();
+  await expect(recovery).not.toHaveAttribute("open", "");
 });
 
 test("should show the active claim's model despite a competing heartbeat", async ({

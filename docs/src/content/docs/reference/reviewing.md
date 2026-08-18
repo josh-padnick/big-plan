@@ -248,6 +248,9 @@ EleutherAI's GPT-J neither borrows the OpenAI logo nor stands behind a generic
 one.
 Leave both unset and the card reads `Model not reported` rather than showing
 nothing, so an empty identity is never mistaken for one that failed to load.
+The reconnect prompt the review hands the reviewer asks the agent to export
+both variables itself before connecting, because the agent is the only party
+that knows which model is running it; Big Plan never infers one.
 
 ## Diff and anchor truth
 

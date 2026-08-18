@@ -119,7 +119,7 @@ const ReadOnlySessionCard = ({
       <strong className="min-w-0 flex-1 text-sm text-ink">
         This review was replaced
       </strong>
-      <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-bold uppercase tracking-caps">
+      <span className="rounded-full bg-[color-mix(in_srgb,currentColor_10%,transparent)] px-2 py-0.5 text-2xs font-semibold">
         Read only
       </span>
     </div>
@@ -326,6 +326,14 @@ const CurrentActivityCard = ({
         : undefined;
   // Whether there is an agent for an identity to belong to. A session with none
   // has nothing to report and no gap to explain.
+  // "Since" alone made the reader carry the card's state down to the row and
+  // apply it themselves. The label states it.
+  const sinceLabel =
+    activity.state === "disconnected"
+      ? "Disconnected since"
+      : activity.state === "offline"
+        ? "Unreachable since"
+        : "Connected since";
   const identityIsKnowable =
     activity.state !== "disconnected" &&
     activity.state !== "never-connected" &&
@@ -418,22 +426,22 @@ const CurrentActivityCard = ({
       activity.state === "working" ? null : (
         <dl className="m-0 grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 border-t border-current/20 pt-1.5 text-2xs">
           <div className="min-w-0">
-            <dt className="font-bold uppercase tracking-caps opacity-80">
-              Since
-            </dt>
+            {/* The label says which transition the time belongs to, so the row
+                reads as a sentence about this state rather than as a field
+                whose meaning the reader has to infer from the card above it. */}
+            <dt className="font-semibold">{sinceLabel}</dt>
             <dd className="m-0 text-ink [overflow-wrap:anywhere]">
               {formatClockTime(connection.sinceAtMs)}
-              {" · "}
+              {" ("}
               {compactDurationLabel({
                 start: connection.sinceAtMs,
                 end: Math.max(nowMs, connection.sinceAtMs),
               }) ?? "just now"}
+              {")"}
             </dd>
           </div>
           <div className="min-w-0">
-            <dt className="font-bold uppercase tracking-caps opacity-80">
-              Events
-            </dt>
+            <dt className="font-semibold">Events</dt>
             <dd className="m-0 grid text-ink [overflow-wrap:anywhere]">
               <span>
                 {connection.quietPeriods} quiet{" "}
@@ -672,7 +680,7 @@ const ConnectionLog = ({
           </span>
         </span>
         <span
-          className="rounded-full border border-edge px-1.5 py-px text-2xs font-bold leading-[1.2] uppercase tracking-caps text-muted"
+          className="rounded-full border border-edge px-1.5 py-px text-2xs font-semibold leading-[1.2] text-muted"
           aria-label={`${ordered.length} event${ordered.length === 1 ? "" : "s"}`}
         >
           {ordered.length}
@@ -724,7 +732,7 @@ const ConnectionLog = ({
           </dl>
           {Array.from(groups).map(([date, rows]) => (
             <section key={date} className="mt-2 [&+section]:mt-3">
-              <h3 className="mt-0 mb-1 border-b border-edge pb-1 text-2xs font-bold uppercase tracking-caps text-muted">
+              <h3 className="mt-0 mb-1 border-b border-edge pb-1 text-2xs font-semibold text-muted">
                 {date}
               </h3>
               <ol className="m-0 grid list-none gap-1.5 p-0">
@@ -849,6 +857,21 @@ export const AgentConnectionPanel = ({
   readonly onViewRequest: (requestId: string, kind: string) => void;
 }) => {
   const currentNowMs = useSecondClock();
+  /*
+  The recovery section opens itself the moment the agent goes, and stays open
+  or closed as the reader leaves it after that. It is controlled rather than
+  given an initial `open`, because this card re-renders every second and an
+  uncontrolled attribute would be re-asserted on the next tick, reopening a
+  section the reader had just closed. The effect fires on the transition into
+  disconnected rather than on every render, so closing it stays closed while
+  the agent is still gone.
+  */
+  const agentIsGone =
+    activity.state === "disconnected" || activity.state === "offline";
+  const [recoveryIsOpen, setRecoveryIsOpen] = useState(agentIsGone);
+  useEffect(() => {
+    if (agentIsGone) setRecoveryIsOpen(true);
+  }, [agentIsGone]);
   const connection = summarizeAgentConnection({ events: connectionLog });
   // The activity already answers "has an agent ever been here", and answers it
   // on more evidence than the log alone: a claim counts even when the log lost
@@ -892,6 +915,8 @@ export const AgentConnectionPanel = ({
       {isReadOnly || !agentStatusIsAvailable ? null : (
         <details
           className="group mt-3 rounded-md border border-edge text-xs text-muted"
+          open={recoveryIsOpen}
+          onToggle={(event) => setRecoveryIsOpen(event.currentTarget.open)}
           data-review-agent-recovery={
             heldWork === "explained" ? "takeover" : "plain"
           }

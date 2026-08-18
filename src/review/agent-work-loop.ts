@@ -375,6 +375,10 @@ Reviewer image references included in a changed candidate are materialized into 
       "Run codex or claude in the plan repository to start a real coding-agent session",
       "Alternatively paste agent_prompt into an already-open coding-agent session",
       "Keep that session running so browser replies return to the same conversation loop",
+      // Asked here as well as in the recovery prompt, because an agent reaching
+      // this output has connected some other way and would otherwise never be
+      // told that the reviewer cannot see which model it is.
+      "Export BIG_PLAN_AGENT_MODEL with your own model name, and BIG_PLAN_AGENT_EFFORT with your reasoning effort, so the reviewer sees which agent is connected",
     ],
   };
 };
