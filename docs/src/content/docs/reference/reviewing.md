@@ -243,9 +243,9 @@ A session that disappears without the connection noticing - a machine losing pow
 Either way a message you send once the agent is gone reads **Blocked - no agent connected** and sends itself when an agent reconnects, rather than being picked up by a session that can no longer answer.
 
 Sending several comments at once makes one feedback package, and the sidebar heads that package with what the package itself is doing.
-One open package keeps one heading above the sent threads.
+One open package keeps one heading, and its threads stay under the **Queued** heading until an agent picks the package up - which is where they sit as soon as you send them, and for as long as no agent is connected.
 Send a second package while the first is still being worked, and each package heads its own threads: the package being worked keeps the spinner, the package behind it reads **Queued, _N_ ahead** under an hourglass, and neither heading speaks for the other's threads.
-A thread its package heads reports its wait through that heading instead of repeating it inside the card, and it leaves the **Queued** heading to the threads no package speaks for - each of which keeps its position among the queued threads currently shown.
+A thread its package heads reports its wait through that heading instead of repeating it inside the card, and every thread still under the **Queued** heading keeps its position among the queued threads currently shown.
 
 **Agent Status** offers **Reconnect your agent**, holding the one prompt that starts a coding-agent session; a session that has never had an agent reads **Connect your agent** instead.
 An agent going quiet never hides that section, because it is the only place that prompt lives and losing your route back is the last thing a silence should cost you; only a read-only session or a review runtime you cannot reach hides it.
