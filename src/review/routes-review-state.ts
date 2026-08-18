@@ -387,7 +387,10 @@ export const submitFeedback = async (
     operation: "A feedback submission",
   });
   if (versionRefusal !== undefined) return versionRefusal;
-  const comments = await planRenderer.validateUpdates(payload.comments);
+  // Read the existing comments through the anchored store, not the one the
+  // renderer was built with, so a symlinked review directory cannot redirect
+  // them outside the chain this route just anchored.
+  const comments = await planRenderer.validateUpdates(payload.comments, store);
   if (comments.length === 0) {
     return refusal({ status: 400, reason: "Nothing to send" });
   }

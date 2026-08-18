@@ -141,6 +141,7 @@ export type PlanRenderer = {
   ) => Promise<ReadonlyArray<ReviewComment>>;
   readonly validateUpdates: (
     value: unknown,
+    readStore?: ReviewStore,
   ) => Promise<ReadonlyArray<ReviewComment>>;
 };
 
@@ -255,15 +256,24 @@ export const createPlanRenderer = ({
   ): Promise<ReadonlyArray<ReviewComment>> =>
     readComments({ path, validate: validateStored });
 
+  /**
+   * Validates one batch of reviewer comments against what is already stored.
+   *
+   * The store is a parameter rather than the captured one because a route
+   * anchors the store per request: reading the existing comments through the
+   * store this renderer was built with would take those reads outside the
+   * anchored chain a symlinked review directory is checked against.
+   */
   const validateUpdates = async (
     value: unknown,
+    readStore: ReviewStore = store,
   ): Promise<ReadonlyArray<ReviewComment>> =>
     validateCommentUpdates({
       value,
       blocks,
       existing: [
-        ...(await readStoredComments(store.draftsPath)),
-        ...(await readStoredComments(store.sentPath)),
+        ...(await readStoredComments(readStore.draftsPath)),
+        ...(await readStoredComments(readStore.sentPath)),
       ],
       now: new Date().toISOString(),
     });
