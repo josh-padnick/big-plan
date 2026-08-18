@@ -173,6 +173,9 @@ test("should compare, answer, and revise a Decision", async ({
   await expect(modeToggle).not.toBeChecked();
   await expect(card.locator("[data-decision-mode]")).toBeVisible();
   await expect(commentActions).toBeHidden();
+  await expect(card.getByRole("button", { name: "Submit Now" })).toBeHidden();
+  // Cancel is the composer's own exit, so it is reachable in either mode.
+  await expect(card.getByRole("button", { name: "Cancel" })).toBeVisible();
   await expect(card.locator("[data-decision-confirm]")).toBeVisible();
   await expect(proposalField).toHaveAttribute(
     "placeholder",
@@ -198,10 +201,30 @@ test("should compare, answer, and revise a Decision", async ({
     "Tell the agent how this decision should be changed.",
   );
   await expect(commentActions).toBeVisible();
-  await expect(card.getByRole("button", { name: "Submit Now" })).toBeVisible();
-  await expect(card.getByRole("button", { name: "Cancel" })).toBeVisible();
+  const submitNow = card.getByRole("button", { name: "Submit Now" });
+  const cancel = card.getByRole("button", { name: "Cancel" });
+  await expect(submitNow).toBeVisible();
+  await expect(cancel).toBeVisible();
   await expect(card.locator("[data-decision-send-now]")).not.toBeChecked();
   await expect(card.locator("[data-decision-confirm]")).toBeHidden();
+  // The switch that decides what Submit Now means sits directly above it, and
+  // Cancel is the quiet exit to its left.
+  const switchBox = await commentActions.boundingBox();
+  const submitBox = await submitNow.boundingBox();
+  const cancelBox = await cancel.boundingBox();
+  expect((switchBox?.y ?? 0) + (switchBox?.height ?? 0)).toBeLessThanOrEqual(
+    submitBox?.y ?? 0,
+  );
+  expect(cancelBox?.x ?? 0).toBeLessThan(submitBox?.x ?? 0);
+  // All of it hangs off the field's right edge.
+  const textBox = await proposalField.boundingBox();
+  expect(
+    Math.abs(
+      (submitBox?.x ?? 0) +
+        (submitBox?.width ?? 0) -
+        ((textBox?.x ?? 0) + (textBox?.width ?? 0)),
+    ),
+  ).toBeLessThanOrEqual(1);
 
   await modeSwitch.click();
   await expect(card.locator("[data-decision-confirm]")).toBeVisible();

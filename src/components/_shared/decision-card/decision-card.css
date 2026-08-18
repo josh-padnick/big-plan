@@ -686,26 +686,34 @@
 
   /* Comment mode's controls are the review's comment controls, in the review's
      order: how it will be submitted, then the way out, then the submission. */
+  /* Everything the composer can do stacks flush right under the field it acts
+     on, so the switch that decides what Submit Now means reads as part of that
+     button rather than as a control stranded across the row. */
   article .decision-proposal-actions {
     display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.75rem;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
     margin-top: 0.625rem;
   }
-  article .decision-comment-actions {
+  article .decision-send-row {
     display: flex;
-    flex: 1;
     align-items: center;
-    justify-content: flex-end;
-    gap: 0.75rem;
   }
-  article .decision-comment-actions[hidden] {
+  article .decision-send-row[hidden] {
     display: none;
   }
+  article .decision-proposal-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
   article .decision-send-switch {
-    margin-right: auto;
     color: var(--color-muted);
+  }
+  article .decision-comment-submit[hidden],
+  article .decision-proposal-actions[hidden] {
+    display: none;
   }
   article .decision-comment-submit {
     display: inline-flex;

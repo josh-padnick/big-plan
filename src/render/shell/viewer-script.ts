@@ -2536,6 +2536,7 @@ const wireDecisions = () => {
     // them, sending them and showing them, and a second copy of that here was
     // what made this card feel like its own little application.
     const commentActions = own("[data-decision-comment-actions]");
+    const proposalActions = own(".decision-proposal-actions");
     const commentSubmit = own("[data-decision-comment-submit]");
     const sendNow = own("[data-decision-send-now]");
     const modeRow = own("[data-decision-mode]");
@@ -2813,6 +2814,7 @@ const wireDecisions = () => {
       for (const note of lockedNotes) note.hidden = !locked;
       if (commentActions !== null) commentActions.hidden = decisionMode;
       if (commentSubmit !== null) {
+        commentSubmit.hidden = decisionMode;
         commentSubmit.disabled = locked || proposalValue() === "";
       }
       if (sendNow !== null) sendNow.disabled = locked;
@@ -2948,6 +2950,7 @@ const wireDecisions = () => {
         if (recorded) proposalRecord.textContent = proposalValue();
       }
       if (proposalText !== null) proposalText.hidden = recorded;
+      if (proposalActions !== null) proposalActions.hidden = recorded;
       // Answering with a column drops the ones the reader turned down, so the
       // record reads as one option against the criteria, not a live matrix.
       for (const cell of cells) {

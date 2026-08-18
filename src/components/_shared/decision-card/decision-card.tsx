@@ -189,15 +189,14 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
           data-decision-placeholder={DECISION_PLACEHOLDER}
         />
         {/* Comment mode is the review's own comment composer, so its controls
-            are that composer's controls, in that composer's order. The shell
-            reveals them; nothing here is specific to a decision. */}
-        {/* Leaving the composer is not one mode's business, so Cancel sits
-            outside the comment controls and stays reachable in both. */}
+            are that composer's controls. Everything the composer can do stacks
+            flush right under the field it acts on, and the switch that decides
+            what Submit Now means sits directly above that button rather than
+            across the row from it. Leaving the composer is not one mode's
+            business, so Cancel sits outside the comment controls and stays
+            reachable in both. */}
         <div className="decision-proposal-actions">
-          <div
-            className="decision-comment-actions"
-            data-decision-comment-actions=""
-          >
+          <div className="decision-send-row" data-decision-comment-actions="">
             <label className="decision-mode-switch decision-send-switch">
               <input
                 className="decision-mode-check sr-only"
@@ -209,6 +208,16 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
               </span>
               <span>{"Submit right away"}</span>
             </label>
+          </div>
+          <div className="decision-proposal-buttons">
+            <button
+              className="decision-proposal-cancel"
+              type="button"
+              hidden
+              data-decision-proposal-cancel=""
+            >
+              {"Cancel"}
+            </button>
             <button
               className="decision-comment-submit"
               type="button"
@@ -217,14 +226,6 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
               {"Submit Now"}
             </button>
           </div>
-          <button
-            className="decision-proposal-cancel"
-            type="button"
-            hidden
-            data-decision-proposal-cancel=""
-          >
-            {"Cancel"}
-          </button>
         </div>
       </div>
     </div>
