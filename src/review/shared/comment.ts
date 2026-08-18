@@ -106,6 +106,21 @@ export const SLIDE_SUB_HEADING_LIMIT = 50;
 export const SLIDE_SUB_HEADING_TEXT_LIMIT = 300;
 const ID_LIMIT = 64;
 const COMMENT_LIMIT = 200;
+// A selection can cover several pictures, but not an unbounded number: every
+// entry costs a `resolveBlock` walk, and this list arrives from the browser
+// like every other bounded field in this validator.
+const IMAGE_BLOCK_ID_LIMIT = 20;
+
+const boundedImageBlockIds = (
+  value: ReadonlyArray<unknown>,
+): ReadonlyArray<unknown> => {
+  if (value.length > IMAGE_BLOCK_ID_LIMIT) {
+    throw new CommentRejected(
+      `"imageBlockIds" cannot name more than ${IMAGE_BLOCK_ID_LIMIT} images`,
+    );
+  }
+  return value;
+};
 const BLOCK_ID = /^[a-z0-9][a-z0-9/_.-]{0,299}$/;
 
 /** What a producer stores for a highlight, once bounded. */
@@ -319,7 +334,7 @@ const validateTarget = ({
         : undefined;
     const imageBlockIds =
       type === "selection" && Array.isArray(target.imageBlockIds)
-        ? target.imageBlockIds.map((value, index) => {
+        ? boundedImageBlockIds(target.imageBlockIds).map((value, index) => {
             const image = resolveBlock({
               value,
               blocks,
@@ -447,7 +462,7 @@ const validateStoredTarget = (value: unknown): CommentTarget => {
       : undefined;
   const imageBlockIds =
     target.type === "selection" && Array.isArray(target.imageBlockIds)
-      ? target.imageBlockIds.map((value, index) => {
+      ? boundedImageBlockIds(target.imageBlockIds).map((value, index) => {
           if (typeof value !== "string" || !BLOCK_ID.test(value)) {
             throw new CommentRejected(
               `"imageBlockIds[${index}]" must name a valid block`,

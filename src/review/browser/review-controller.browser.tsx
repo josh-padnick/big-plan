@@ -6811,7 +6811,8 @@ export const ReviewController = () => {
           <Tooltip label="Comment on image" placement="below" asChild>
             <button
               type="button"
-              className="review-image-comment review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-comment-rest hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
+              className="review-block-button group inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-comment-rest hover:text-ink focus-visible:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:text-ink [&>svg]:size-3.5"
+              data-review-image-comment=""
               aria-label={`Comment on ${block.dataset.blockLabel ?? "this image"}`}
               aria-pressed={
                 compose?.target.type === "block" &&

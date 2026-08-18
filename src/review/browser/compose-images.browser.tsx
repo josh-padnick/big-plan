@@ -21,7 +21,7 @@ import {
   reviewWriteRefusal,
   type ReviewWriteAvailability,
 } from "./review-write-availability.js";
-import { Textarea } from "./ui.browser.js";
+import { Button, Textarea } from "./ui.browser.js";
 
 // Uploading is the one image action that still needs the live session: it
 // writes into the plan's review store, so it carries the session token the
@@ -65,13 +65,21 @@ export const ComposeImages = ({
   readonly id?: string;
 }) => {
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState(0);
   const [error, setError] = useState("");
   useEffect(() => {
     if (autoFocus) textarea.current?.focus();
   }, [autoFocus]);
   const references = extractReviewImageReferences(body);
-  const upload = async (file: File, caret: number, altOverride?: string) => {
+  // Returns where the caret should sit for the next upload in the chain. A
+  // batch that reused one offset spliced each reference in front of the last,
+  // so a paste or drop of several images landed them in reverse order.
+  const upload = async (
+    file: File,
+    caret: number,
+    altOverride?: string,
+  ): Promise<number> => {
     // Nothing typed is touched: only the digest reference this would have
     // inserted is withheld, so the composer keeps exactly what it had.
     const refusal = reviewWriteRefusal({
@@ -80,16 +88,16 @@ export const ComposeImages = ({
     });
     if (refusal !== undefined) {
       setError(refusal);
-      return;
+      return caret;
     }
-    if (identity === null) return;
+    if (identity === null) return caret;
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
       setError("Use PNG, JPEG, or WebP images.");
-      return;
+      return caret;
     }
     if (file.size > MAX_IMAGE_BYTES) {
       setError("Each image must be 10 MiB or smaller.");
-      return;
+      return caret;
     }
     setPending((value) => value + 1);
     try {
@@ -110,16 +118,22 @@ export const ComposeImages = ({
         );
       }
       const current = textarea.current?.value ?? body;
+      const reference = buildReviewImageReference({
+        alt: value.alt,
+        id: value.id,
+      });
       onBodyChange(
-        `${current.slice(0, caret)}${buildReviewImageReference({ alt: value.alt, id: value.id })}${current.slice(caret)}`,
+        `${current.slice(0, caret)}${reference}${current.slice(caret)}`,
       );
       setError("");
+      return caret + reference.length;
     } catch (uploadError: unknown) {
       setError(
         uploadError instanceof Error
           ? uploadError.message
           : "Image upload failed",
       );
+      return caret;
     } finally {
       setPending((value) => value - 1);
     }
@@ -133,8 +147,8 @@ export const ComposeImages = ({
     }
     const caret = textarea.current?.selectionStart ?? body.length;
     void files.reduce(
-      (chain, file) => chain.then(() => upload(file, caret, altOverride)),
-      Promise.resolve(),
+      (chain, file) => chain.then((next) => upload(file, next, altOverride)),
+      Promise.resolve(caret),
     );
   };
   const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -176,9 +190,34 @@ export const ComposeImages = ({
           ))}
         </div>
       ) : null}
-      <p className="mt-1 mb-0 text-2xs text-muted">
-        Markdown and images supported
-      </p>
+      {/* Paste and drop cover the common capture, but neither is available to
+          a reader working from the keyboard or from a file they already have
+          on disk, so the picker is the third way in rather than a fourth
+          convenience. */}
+      <input
+        ref={picker}
+        className="hidden"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        multiple
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          event.target.value = "";
+          if (files.length > 0) capture(files);
+        }}
+      />
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => picker.current?.click()}
+        >
+          Choose image
+        </Button>
+        <p className="m-0 text-2xs text-muted">Markdown and images supported</p>
+      </div>
       <div className="mt-1 flex items-center gap-2">
         {pending > 0 ? (
           <span className="text-2xs text-muted">Uploading…</span>

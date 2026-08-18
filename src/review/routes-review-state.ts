@@ -463,6 +463,7 @@ export const submitFeedback = async (
         store,
         requestId: submissionId,
         references: imageReferences,
+        totalByteLimit: MAX_MESSAGE_IMAGE_BYTES,
       });
     } catch (error: unknown) {
       return refusal({
@@ -471,17 +472,6 @@ export const submitFeedback = async (
           error instanceof Error
             ? error.message
             : "An image could not be attached",
-      });
-    }
-    if (
-      attachments.reduce(
-        (total, attachment) => total + attachment.byteLength,
-        0,
-      ) > MAX_MESSAGE_IMAGE_BYTES
-    ) {
-      return refusal({
-        status: 400,
-        reason: "Images in one message exceed the 20 MiB limit",
       });
     }
     const source = await readFile(resolvedPlanPath, "utf8");

@@ -20,6 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import {
   extractReviewImageReferences,
+  reviewImageReferencePattern,
   sniffReviewImage,
   type ReviewImageId,
 } from "./shared/review-image.js";
@@ -27,8 +28,7 @@ import { readReviewImage } from "./store.js";
 import type { ReviewStore } from "./store.js";
 
 const PLAN_ASSET_DIRECTORY = "assets";
-const REVIEW_IMAGE_REFERENCE =
-  /!\[([^\]\n]*)\]\(review-image:([a-f0-9]{64})\)/gu;
+
 const DIRECTORY_MODE = 0o755;
 const FILE_MODE = 0o644;
 
@@ -141,7 +141,7 @@ export const prepareReviewImageAssets = async ({
   }
   return {
     source: markdown.replace(
-      REVIEW_IMAGE_REFERENCE,
+      reviewImageReferencePattern(),
       (whole, alt: string, id: string) => {
         const path = replacements.get(id);
         return path === undefined ? whole : `![${alt}](${path})`;
