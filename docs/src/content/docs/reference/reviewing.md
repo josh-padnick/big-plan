@@ -150,7 +150,7 @@ In a standalone rendered document, an answer lasts only for the reading session 
 
 ## What the review is waiting for
 
-A live review's **Inputs** tab lists everything the review expects from you before the plan can be approved: every open decision the plan asks, and every change set an agent published.
+A live review's **Inputs** tab lists everything the review is waiting on: every open decision the plan asks, and every change set an agent published.
 Each row says where that input stands - answered, not answered, or stale - and a decision the plan's author marked `critical` says so beside its state.
 A decision row scrolls the plan to its card.
 

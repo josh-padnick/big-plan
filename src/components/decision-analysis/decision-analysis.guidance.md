@@ -4,7 +4,7 @@ Use `DecisionAnalysis` when the reviewer must audit a recommendation across expl
 
 Every `Criterion` and `Score` needs a one-sentence body. The dashed title or value reveals that definition. Include exactly one `Reversibility`; `Details` is optional.
 
-Add `critical` when the plan should not be approved until the reviewer answers this question. It is accepted only with `state="proposed"` and `interaction="choose"`, because a settled or audited analysis asks the reviewer for nothing. Mark only the questions whose answer would change what gets built; a plan where everything is critical says nothing.
+Add `critical` when the reviewer must settle this question before work begins. It is accepted only with `state="proposed"` and `interaction="choose"`, because a settled or audited analysis asks the reviewer for nothing. `big-plan guidance` owns when to mark one.
 
 ```mdx
 <DecisionAnalysis
