@@ -7092,6 +7092,9 @@ export const ReviewController = () => {
                 modelName:
                   claimedRequest?.claimedModel?.name ??
                   agent.presence.model?.name,
+                modelEffort:
+                  claimedRequest?.claimedModel?.effort ??
+                  agent.presence.model?.effort,
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 runtimeSession,

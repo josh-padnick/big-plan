@@ -86,6 +86,7 @@ export type AgentWorkLoopAction =
       readonly executablePath: string;
       readonly shouldWait: boolean;
       readonly modelName?: string;
+      readonly modelEffort?: string;
       readonly agentToken?: string;
     }
   | {
@@ -101,6 +102,7 @@ export type AgentWorkLoopAction =
       readonly detail: string;
       readonly agentToken: string;
       readonly modelName?: string;
+      readonly modelEffort?: string;
     };
 
 export type AgentWorkLoopErrorCode = "invalid-input" | "validation-error";
@@ -382,16 +384,23 @@ const nextWork = async ({
   shouldWait,
   executablePath,
   modelName,
+  modelEffort,
   agentToken,
 }: {
   readonly planPath: string;
   readonly shouldWait: boolean;
   readonly executablePath: string;
   readonly modelName?: string;
+  readonly modelEffort?: string;
   readonly agentToken?: string;
 }): Promise<Record<string, unknown>> => {
   const model = decodeAgentModelIdentity(
-    modelName === undefined ? undefined : { name: modelName },
+    modelName === undefined
+      ? undefined
+      : {
+          name: modelName,
+          ...(modelEffort === undefined ? {} : { effort: modelEffort }),
+        },
   );
   let session: Awaited<ReturnType<typeof readPlanSession>>;
   try {
@@ -923,15 +932,22 @@ const note = async ({
   planPath,
   detail,
   modelName,
+  modelEffort,
   agentToken,
 }: {
   readonly planPath: string;
   readonly detail: string;
   readonly modelName?: string;
+  readonly modelEffort?: string;
   readonly agentToken: string;
 }): Promise<Record<string, unknown>> => {
   const model = decodeAgentModelIdentity(
-    modelName === undefined ? undefined : { name: modelName },
+    modelName === undefined
+      ? undefined
+      : {
+          name: modelName,
+          ...(modelEffort === undefined ? {} : { effort: modelEffort }),
+        },
   );
   const message = detail.trim();
   if (message === "" || message.length > 160) {

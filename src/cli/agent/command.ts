@@ -40,6 +40,14 @@ const connectorModelName = (): string | undefined => {
   return trimmed === undefined || trimmed === "" ? undefined : trimmed;
 };
 
+// The connector's own report of how hard it was told to think, e.g. "high".
+// Read the same way and on the same terms as the name: shown only when the
+// launching environment stated it.
+const connectorModelEffort = (): string | undefined => {
+  const trimmed = process.env["BIG_PLAN_AGENT_EFFORT"]?.trim();
+  return trimmed === undefined || trimmed === "" ? undefined : trimmed;
+};
+
 /**
  * Lifts `--agent <token>` out of the positional arguments.
  *
@@ -87,6 +95,7 @@ const parseAction = (
     (args.length === 2 || (args.length === 3 && args[2] === "--wait"))
   ) {
     const modelName = connectorModelName();
+    const modelEffort = connectorModelEffort();
     return {
       kind: "next",
       planPath: args[1] ?? "",
@@ -94,6 +103,7 @@ const parseAction = (
       executablePath: executablePath(),
       ...(agentToken === undefined ? {} : { agentToken }),
       ...(modelName === undefined ? {} : { modelName }),
+      ...(modelEffort === undefined ? {} : { modelEffort }),
     };
   }
   if (args[0] === "respond" && args.length === 3 && agentToken !== undefined) {
@@ -107,12 +117,14 @@ const parseAction = (
   }
   if (args[0] === "note" && args.length === 3 && agentToken !== undefined) {
     const modelName = connectorModelName();
+    const modelEffort = connectorModelEffort();
     return {
       kind: "note",
       planPath: args[1] ?? "",
       detail: args[2] ?? "",
       agentToken,
       ...(modelName === undefined ? {} : { modelName }),
+      ...(modelEffort === undefined ? {} : { modelEffort }),
     };
   }
   return invalidArguments();

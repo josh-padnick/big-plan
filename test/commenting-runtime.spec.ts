@@ -3975,7 +3975,7 @@ test("should restore and submit staged comments through the local review runtime
   expect(await readFade()).toMatchObject({
     dots: 9,
     animationName: "agent-sweep",
-    animationDuration: "1.6s",
+    animationDuration: "1.3s",
     animationIterationCount: "infinite",
     animationTimingFunction: "ease-in-out",
     // Eight offsets around the ring; the centre shares the first one's zero
@@ -3999,7 +3999,7 @@ test("should restore and submit staged comments through the local review runtime
         ],
       };
     }),
-  ).toEqual({ radii: ["3"], boxes: ["200x200"] });
+  ).toEqual({ radii: ["3.7"], boxes: ["247x247"] });
   // It must never outgrow the plain connected dot it replaces.
   expect(
     await workingMark.evaluate((mark) => {

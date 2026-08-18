@@ -381,10 +381,9 @@ test("should warn about a takeover before inviting one while work is held", asyn
   const plainRecovery = page.getByText("Reconnect your agent", {
     exact: true,
   });
-  const takeoverRecovery = page.getByText(
-    "Connect an agent and take over this work",
-    { exact: true },
-  );
+  const takeoverRecovery = page.getByText("Connect a new agent", {
+    exact: true,
+  });
   // The agent surface has its own control in viewer chrome now; it is no longer
   // a tab inside the feedback sidebar.
   const openAgentTab = async () => {
@@ -466,9 +465,9 @@ test("should warn about a takeover before inviting one while work is held", asyn
     );
     await takeoverRecovery.click();
     await expect(recoveryPanel).toContainText("may still be working on it");
-    await expect(recoveryPanel).toContainText(
-      "its answer will no longer be accepted",
-    );
+    // The consequence has to be stated, and stated as the mailbox behaves: a
+    // displaced holder's response is refused, so its work is dropped.
+    await expect(recoveryPanel).toContainText("dropped rather than delivered");
 
     await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS - 60_000);
     await openAgentTab();

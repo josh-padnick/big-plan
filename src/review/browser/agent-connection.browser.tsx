@@ -6,8 +6,8 @@ import { useEffect, useState } from "react";
 import type { BrandIcon } from "../../icons/brand-icon.js";
 import { CLAUDE_ICON } from "../../icons/brands/claude.js";
 import { GROK_ICON } from "../../icons/brands/grok.js";
+import { MISTRAL_ICON } from "../../icons/brands/mistral.js";
 import { OPENAI_ICON } from "../../icons/brands/openai.js";
-import { BOT_ICON } from "../../icons/lucide/bot.js";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CHEVRON_RIGHT_ICON } from "../../icons/lucide/chevron-right.js";
 import { COPY_ICON } from "../../icons/lucide/copy.js";
@@ -42,14 +42,19 @@ const VENDOR_ICONS: Record<AgentModelVendor, BrandIcon> = {
   openai: OPENAI_ICON,
   claude: CLAUDE_ICON,
   grok: GROK_ICON,
+  mistral: MISTRAL_ICON,
 };
 
-/** Picks the reported model's own mark, or a generic mark when unrecognized. */
+/**
+ * Draws the reported model's own mark, or nothing at all.
+ *
+ * A model the catalog has no faithful mark for shows its name alone. The
+ * generic robot that used to stand in was a placeholder in the literal sense:
+ * it occupied the space a mark would occupy while identifying nobody.
+ */
 const ModelIcon = ({ modelName }: { readonly modelName: string }) => {
   const vendor = agentModelVendor(modelName);
-  return vendor === undefined ? (
-    <Icon icon={BOT_ICON} />
-  ) : (
+  return vendor === undefined ? null : (
     <BrandIconView icon={VENDOR_ICONS[vendor]} />
   );
 };
@@ -178,12 +183,31 @@ const CopyBlock = ({
     <pre className="m-0 min-w-0 overflow-x-auto rounded-md border border-edge bg-surface p-3 font-mono text-3xs whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
       <button
         type="button"
-        className="float-right mb-1 ml-2 inline-flex cursor-pointer items-center gap-1 rounded-sm border border-edge bg-surface px-1.5 py-1 font-sans text-2xs text-muted select-none hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
+        className="float-right mb-1 ml-2 inline-flex cursor-pointer items-center justify-center gap-1 rounded-sm border border-edge bg-surface px-1.5 py-1 font-sans text-2xs text-muted select-none hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&>svg]:size-3"
         aria-label={buttonLabel}
         onClick={() => void copy()}
       >
         <Icon icon={copied ? CHECK_ICON : COPY_ICON} />
-        {failed ? "Copy failed" : copied ? "Copied" : "Copy"}
+        {/*
+        The label changes under the reader's cursor, and the control is floated
+        into the payload, so a label that grows reflows the text it sits in -
+        the line breaks move at the moment of a successful copy, which reads as
+        the page reacting badly to being used. The widest label is rendered
+        once, invisibly and unclickably, to hold the width; the visible label is
+        stacked on top of it. Reserving the width in the layout is what makes
+        this stable across fonts rather than a guess in pixels.
+        */}
+        <span className="grid">
+          <span
+            className="invisible col-start-1 row-start-1"
+            aria-hidden="true"
+          >
+            Copy failed
+          </span>
+          <span className="col-start-1 row-start-1">
+            {failed ? "Copy failed" : copied ? "Copied" : "Copy"}
+          </span>
+        </span>
       </button>
       <code>{value}</code>
     </pre>
@@ -261,6 +285,7 @@ const CurrentActivityCard = ({
   activity,
   status,
   modelName,
+  modelEffort,
   connection,
   nowMs,
   onViewRequest,
@@ -268,6 +293,7 @@ const CurrentActivityCard = ({
   readonly activity: CurrentAgentActivity;
   readonly status: AgentHealth;
   readonly modelName?: string;
+  readonly modelEffort?: string;
   readonly connection: ReturnType<typeof summarizeAgentConnection>;
   readonly nowMs: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
@@ -321,9 +347,19 @@ const CurrentActivityCard = ({
         <span
           className="inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-full border border-current/20 bg-[color-mix(in_srgb,currentColor_8%,transparent)] px-2 py-0.5 text-2xs font-semibold text-ink [&>svg]:size-3"
           data-review-agent-model={modelName}
+          {...(modelEffort === undefined
+            ? {}
+            : { "data-review-agent-effort": modelEffort })}
         >
           <ModelIcon modelName={modelName} />
           <span className="truncate">{modelName}</span>
+          {/* Effort is the connector's own word, so it is shown as a quieter
+              qualifier of the name rather than as a second fact beside it. */}
+          {modelEffort === undefined ? null : (
+            <span className="shrink-0 font-normal text-muted">
+              {modelEffort}
+            </span>
+          )}
         </span>
       )}
       {workHeadline === undefined || subjectLabel === undefined ? null : (
@@ -754,6 +790,7 @@ export const AgentConnectionPanel = ({
   heartbeatAt,
   endedAtMs,
   modelName,
+  modelEffort,
   connectionLog,
   recoveryPrompt,
   isReadOnly,
@@ -765,6 +802,7 @@ export const AgentConnectionPanel = ({
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
   readonly modelName?: string;
+  readonly modelEffort?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   /**
    * What held work says about the quiet. It chooses this section's copy and
@@ -808,6 +846,7 @@ export const AgentConnectionPanel = ({
             activity={activity}
             status={status}
             modelName={modelName}
+            modelEffort={modelEffort}
             connection={connection}
             nowMs={currentNowMs}
             onViewRequest={onViewRequest}
@@ -835,24 +874,33 @@ export const AgentConnectionPanel = ({
               <Icon icon={CHEVRON_RIGHT_ICON} />
             </span>
             {heldWork === "explained"
-              ? "Connect an agent and take over this work"
+              ? "Connect a new agent"
               : neverConnected
                 ? "Connect your agent"
                 : "Reconnect your agent"}
           </summary>
           <div className="grid gap-2 border-t border-edge px-3 py-3">
             {heldWork === "explained" ? (
+              /*
+              The consequence is stated as the code behaves, not as it would be
+              kinder to say. A quiet agent keeps its answer - a lapsed lease is
+              not a rejection (BIG-147) - but a DISPLACED one does not: taking
+              the claim rewrites its holder, and the mailbox refuses a response
+              from an agent that no longer holds it. Softening this to "its
+              answer still arrives" would be the product lying about itself in
+              the one place a reader is deciding whether to act.
+              */
               <p className="m-0">
-                An agent picked this work up and may still be working on it, and
-                it may finish on its own. Connecting a session below takes the
-                work over, so whatever that agent was doing is discarded and its
-                answer will no longer be accepted. Your comments are safe either
-                way.
+                An agent is already connected to this session and may still be
+                working on it. If you wish, you can replace that agent with a
+                different one. The agent connected now would stop being able to
+                answer, so anything it has in flight is dropped rather than
+                delivered. All comments are safe.
               </p>
             ) : null}
             <p className="m-0">
               {heldWork === "explained"
-                ? "To take over anyway, paste this exact prompt into your coding agent:"
+                ? "To connect a new agent anyway, paste this exact prompt into your coding agent:"
                 : neverConnected
                   ? "To connect this running review, paste this exact prompt into your coding agent:"
                   : "To reconnect this running review, paste this exact prompt into your coding agent:"}

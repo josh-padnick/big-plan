@@ -21,6 +21,7 @@ export type AgentSurfaceModel = {
   readonly status: AgentHealth;
   readonly presenceState: ReviewAgentProjection["state"];
   readonly connected: boolean;
+  readonly modelEffort?: string;
   /** What held work says about the quiet. Never an attachment claim. */
   readonly heldWork: HeldWorkQuiet;
   readonly heartbeatAt: number;
@@ -52,6 +53,7 @@ export const AgentSurface = ({
       heartbeatAt={model.heartbeatAt}
       endedAtMs={model.endedAtMs}
       modelName={model.modelName}
+      modelEffort={model.modelEffort}
       connectionLog={model.connectionLog}
       recoveryPrompt={model.recoveryPrompt}
       replacementUrl={

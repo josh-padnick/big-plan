@@ -42,9 +42,9 @@ palette in inert exports.
   0%,
   55%,
   100% {
-    opacity: 0.28;
+    opacity: 0.16;
   }
-  22% {
+  20% {
     opacity: 1;
   }
 }
@@ -842,7 +842,7 @@ are declared, so a role or a scale step is the only thing a utility can name.
     for a fifth of every cycle, and the grid has to read as a whole thing being
     scanned rather than as parts appearing and going.
   */
-  --animate-agent-sweep: agent-sweep 1.6s ease-in-out infinite;
+  --animate-agent-sweep: agent-sweep 1.3s ease-in-out infinite;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

@@ -50,19 +50,21 @@ const OUTLINED_MARK = "[&>svg]:size-3.5";
 // other status glyphs, which are all SVG.
 //
 // Geometry is stated in the icon system's own 24-unit box so it sits beside
-// those glyphs unconverted: centres nine units apart, radius three, which is
-// exactly the grid the CSS version drew.
+// those glyphs unconverted: centres nine units apart, and a radius that leaves
+// the dots almost touching. The captain chose this weight against a lighter one
+// - heavier dots, a deeper drop between lit and unlit, and a quicker cycle read
+// as more insistent without moving differently.
 const SWEEP_CENTRES = [3, 12, 21] as const;
 const SWEEP_DELAYS = [
   "[animation-delay:0ms]",
-  "[animation-delay:200ms]",
-  "[animation-delay:400ms]",
-  "[animation-delay:1400ms]",
+  "[animation-delay:163ms]",
+  "[animation-delay:325ms]",
+  "[animation-delay:1138ms]",
   null,
-  "[animation-delay:600ms]",
-  "[animation-delay:1200ms]",
-  "[animation-delay:1000ms]",
-  "[animation-delay:800ms]",
+  "[animation-delay:488ms]",
+  "[animation-delay:975ms]",
+  "[animation-delay:813ms]",
+  "[animation-delay:650ms]",
 ] as const;
 
 const AgentWorkingMark = () => (
@@ -76,11 +78,11 @@ const AgentWorkingMark = () => (
         key={index}
         cx={SWEEP_CENTRES[index % 3]}
         cy={SWEEP_CENTRES[Math.floor(index / 3)]}
-        r={3}
+        r={3.7}
         className={
           delay === null
             ? "opacity-75"
-            : `opacity-30 animate-agent-sweep motion-reduce:animate-none motion-reduce:opacity-75 ${delay}`
+            : `opacity-15 animate-agent-sweep motion-reduce:animate-none motion-reduce:opacity-75 ${delay}`
         }
       />
     ))}
