@@ -160,67 +160,48 @@ test("should compare, answer, and revise a Decision", async ({
   await card
     .locator("[data-decision-proposal-text]")
     .fill("Publish a signed standalone archive.");
-  // Everything that acts on the reader's words sits in one row under the field
-  // that holds them, and the same two actions serve both modes. What the toggle
-  // changes is what the words then mean, which is what the prompt and the note
-  // under the toggle say.
+  // One question above the field decides what these words are, and each answer
+  // brings only its own control: the review's ordinary comment controls, or the
+  // same confirm step every other option uses. Nothing bespoke sits between.
   const modeToggle = card.locator("[data-decision-mode-toggle]");
+  // The switch is what a reader presses; the input behind it is the state.
+  const modeSwitch = card.locator("[data-decision-mode] .decision-mode-switch");
   const proposalField = card.locator("[data-decision-proposal-text]");
-  const proposalNote = card.locator("[data-decision-proposal-note]");
+  const commentActions = card.locator("[data-decision-comment-actions]");
   await expect(modeToggle).not.toBeChecked();
-  await expect(card.getByRole("button", { name: "Add comment" })).toBeVisible();
-  await expect(card.getByRole("button", { name: "Submit now" })).toBeVisible();
+  await expect(card.locator("[data-decision-mode]")).toBeVisible();
+  await expect(commentActions).toBeVisible();
+  await expect(card.getByRole("button", { name: "Submit Now" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(card.locator("[data-decision-send-now]")).not.toBeChecked();
   await expect(card.locator("[data-decision-confirm]")).toBeHidden();
   await expect(proposalField).toHaveAttribute(
     "placeholder",
     "Tell the agent how this decision should be changed.",
   );
-  await expect(proposalNote).toHaveText(
-    "The agent will update the decision title, description, and/or available options.",
-  );
-  // Proximity is the point: the actions belong to the field, not to the bottom
-  // of the card, so a gap large enough to read as "somewhere else" is a bug.
+  // The question is asked before the typing, not after it.
+  const modeBox = await card.locator("[data-decision-mode]").boundingBox();
   const fieldBox = await proposalField.boundingBox();
-  const actionsBox = await card
-    .locator(".decision-composer-actions")
-    .boundingBox();
-  expect(
-    (actionsBox?.y ?? 0) - ((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)),
-  ).toBeLessThan(16);
+  expect((modeBox?.y ?? 0) + (modeBox?.height ?? 0)).toBeLessThanOrEqual(
+    fieldBox?.y ?? 0,
+  );
 
-  await modeToggle.check();
+  await modeSwitch.click();
   await expect(proposalField).toHaveAttribute(
     "placeholder",
     "What did you decide?",
   );
-  await expect(proposalNote).toHaveText(
-    "The agent will treat your response as your final decision here.",
-  );
-  // Decision mode keeps the confirm action in view but out of reach until the
-  // words have been captured as a comment on this decision.
+  // Decision mode carries no comment machinery at all - just the confirm step.
+  await expect(commentActions).toBeHidden();
   await expect(card.locator("[data-decision-confirm]")).toBeVisible();
-  await expect(card.locator("[data-decision-confirm]")).toBeDisabled();
+  await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
   await expect(card.locator("[data-decision-confirm]")).toHaveText(
     "Confirm choice",
   );
 
-  await card.getByRole("button", { name: "Add comment" }).click();
-  // One suggestion carries one comment, so the action that would raise a second
-  // gives way to the way back to the first. The field empties because that
-  // comment now holds the words, beside the field they came from.
-  await expect(proposalField).toHaveValue("");
-  await expect(
-    card.getByRole("button", { name: "Captured as a comment." }),
-  ).toBeVisible();
-  await expect(card.getByRole("button", { name: "Add comment" })).toBeHidden();
-  await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
-
-  await modeToggle.uncheck();
+  await modeSwitch.click();
   await expect(card.locator("[data-decision-confirm]")).toBeHidden();
-  await expect(proposalField).toHaveAttribute(
-    "placeholder",
-    "Tell the agent how this decision should be changed.",
-  );
+  await expect(commentActions).toBeVisible();
 
   await card.locator("[data-decision-proposal-cancel]").click();
   await expect(card.locator("[data-decision-proposal]")).toBeHidden();
@@ -241,11 +222,8 @@ test("should compare, answer, and revise a Decision", async ({
   await card
     .locator("[data-decision-proposal-text]")
     .fill("Publish through the repository release.");
-  await card.locator("[data-decision-mode-toggle]").check();
-  await card.getByRole("button", { name: "Add comment" }).click();
+  await card.locator("[data-decision-mode] .decision-mode-switch").click();
   await card.getByRole("button", { name: "Confirm choice" }).click();
-  // The field was emptied by the capture, so this proves the answer records
-  // the captured words rather than whatever the field happens to hold.
   await expect(card.locator("[data-decision-answer]")).toContainText(
     "Publish through the repository release.",
   );
@@ -256,13 +234,13 @@ test("should compare, answer, and revise a Decision", async ({
   await expect(card.locator("[data-decision-mode-toggle]")).toBeEnabled();
 });
 
-test("should raise one comment per suggestion and lead back to it", async ({
+test("should submit a suggestion through the review's own comment controls", async ({
   page,
   decisionViewerUrl,
 }) => {
-  // A second press must never quietly produce a second comment for the same
-  // suggestion. The reader asking again is asking where their words went, so
-  // the answer is the comment they already made.
+  // Comment mode is the review's comment submission, not a second one built
+  // into the card: the "submit right away" switch decides staged or sent, and
+  // the rail owns the comment from there.
   await page.goto(decisionViewerUrl);
   const card = page.locator("[data-decision-selector]").first();
   await card.locator(".decision-propose-link").click();
@@ -273,19 +251,12 @@ test("should raise one comment per suggestion and lead back to it", async ({
     "You selected your own approach.",
   );
 
-  await card.getByRole("button", { name: "Add comment" }).click();
-  const captured = card.getByRole("button", { name: "Captured as a comment." });
-  await expect(captured).toBeVisible();
-  await expect(card.getByRole("button", { name: "Add comment" })).toBeHidden();
-
-  // The comment's thread is nominated onto the composer, so it is drawn beside
+  await card.getByRole("button", { name: "Submit Now" }).click();
+  // The comment now holds those words, so the field lets them go.
+  await expect(card.locator("[data-decision-proposal-text]")).toHaveValue("");
+  // Its thread is nominated onto the composer, so the review draws it beside
   // the field the words came from rather than at the top of the card.
   await expect(card.locator("[data-review-thread-anchor]")).toHaveCount(1);
-
-  const staged = page.locator("[data-review-thread-for]");
-  const stagedCount = await staged.count();
-  await captured.click();
-  await expect(staged).toHaveCount(stagedCount);
 });
 
 test("should keep decision content readable and script-only controls dormant without JavaScript", async ({

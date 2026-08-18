@@ -2501,7 +2501,6 @@ const wireDecisions = () => {
     const question = own("[data-decision-question]");
     const proposalText = own("[data-decision-proposal-text]");
     const modeToggle = own("[data-decision-mode-toggle]");
-    const proposalNote = own("[data-decision-proposal-note]");
     // Both wordings are authored onto the elements that show them, so the
     // shell picks between them rather than holding a second copy of the copy.
     const wordFor = (node, mode, attribute) =>
@@ -2528,55 +2527,16 @@ const wireDecisions = () => {
       choice.hasAttribute("data-decision-proposal-choice");
     const proposalValue = () =>
       proposalText === null ? "" : proposalText.value.trim();
-    // Everything that acts on the reader's words sits in one row directly under
-    // the field holding them: the mode on the left, what to do with them on the
-    // right. Spreading these across the card left the reader hunting for the
-    // action that belonged to what they had just typed.
-    const composerActions = document.createElement("div");
-    composerActions.className = "decision-composer-actions";
-    const composerSubmits = document.createElement("div");
-    composerSubmits.className = "decision-composer-submits";
-    const composerAdd = document.createElement("button");
-    composerAdd.type = "button";
-    composerAdd.className = "decision-composer-action";
-    composerAdd.textContent = "Add comment";
-    const composerNow = document.createElement("button");
-    composerNow.type = "button";
-    composerNow.className =
-      "decision-composer-action decision-composer-action-primary";
-    composerNow.textContent = "Submit now";
-    // One suggestion carries one comment. Once it exists, the actions that
-    // would make a second are replaced by the way back to the first.
-    const composerCaptured = document.createElement("button");
-    composerCaptured.type = "button";
-    composerCaptured.className = "decision-composer-captured";
-    composerCaptured.textContent = "Captured as a comment.";
-    composerCaptured.hidden = true;
-    composerSubmits.append(composerAdd, composerCaptured, composerNow);
-    // The left of the row is the mode and, directly under it, the note saying
-    // what that mode will do with the words. The note moved here from under the
-    // field so the sentence and the switch it describes read as one statement.
-    const composerMode = document.createElement("div");
-    composerMode.className = "decision-composer-mode";
-    if (proposalCancel !== null && proposalCancel.parentNode !== null) {
-      proposalCancel.parentNode.insertBefore(composerActions, proposalCancel);
-      composerSubmits.append(proposalCancel);
-      composerActions.append(composerMode, composerSubmits);
-      const modeRow =
-        modeToggle === null ? null : modeToggle.closest("[data-decision-mode]");
-      if (modeRow !== null) composerMode.append(modeRow);
-      if (proposalNote !== null) composerMode.append(proposalNote);
-    }
-    // The words the reader already captured as a comment, and the comment that
-    // now holds them. Decision mode empties the field on capture, so this is
-    // what the confirm step then records.
-    let capturedProposal = "";
-    let capturedCommentId = null;
-    let capturedSent = false;
-    const answerText = () =>
-      capturedProposal === "" ? proposalValue() : capturedProposal;
-    let previousOptionChoice =
-      choices.find((choice) => choice.checked && !proposes(choice)) || null;
+    // Comment mode is the review's own comment composer, so the shell only has
+    // to reveal the controls the plan already carries. Nothing here tracks a
+    // comment after it is made: the review rail owns staged comments, editing
+    // them, sending them and showing them, and a second copy of that here was
+    // what made this card feel like its own little application.
+    const commentActions = own("[data-decision-comment-actions]");
+    const commentSubmit = own("[data-decision-comment-submit]");
+    const sendNow = own("[data-decision-send-now]");
+    const modeRow = own("[data-decision-mode]");
+
     // True while the reader is changing an answer they already gave. Only then
     // is there an answer to clear, which is why the exit is offered here and
     // not to a reader who has merely selected something for the first time.
@@ -2836,39 +2796,28 @@ const wireDecisions = () => {
         proposing && modeToggle !== null && modeToggle.checked;
       const answered = decision.hasAttribute("data-decision-answered");
       confirm.textContent = "Confirm choice";
-      // Decision mode keeps the confirm action in view while it is still out of
-      // reach, so the reader can see where their words are heading before they
-      // have committed them. It waits on the capture rather than on the field,
-      // because in that mode the comment is what gets confirmed.
+      // The two modes have one control each. Comment mode uses the review's own
+      // composer controls; decision mode uses the same confirm step every other
+      // option uses. Neither borrows the other's chrome.
       confirm.hidden = proposing && !decisionMode;
       confirm.disabled =
-        locked ||
-        choice === null ||
-        (proposing && (decisionMode ? capturedProposal : proposalValue()) === "");
+        locked || choice === null || (proposing && proposalValue() === "");
       change.disabled = locked;
       for (const candidate of choices) candidate.disabled = locked;
       if (proposalText !== null) proposalText.disabled = locked;
       for (const note of lockedNotes) note.hidden = !locked;
-      // One suggestion carries one comment. Once it exists, the action that
-      // would raise a second gives way to the way back to the first, and
-      // sending stops meaning "make and send" - it sends the one that is
-      // already there. Once that has been sent there is nothing left to do
-      // with it, so the captured state stands alone.
-      const captured = capturedCommentId !== null;
-      composerAdd.hidden = captured;
-      composerNow.hidden = captured && capturedSent;
-      composerCaptured.hidden = !captured;
-      composerAdd.disabled = locked || proposalValue() === "";
-      composerNow.disabled =
-        locked || (captured ? false : proposalValue() === "");
+      if (commentActions !== null) commentActions.hidden = decisionMode;
+      if (commentSubmit !== null) {
+        commentSubmit.disabled = locked || proposalValue() === "";
+      }
+      if (sendNow !== null) sendNow.disabled = locked;
+      if (modeRow !== null) modeRow.hidden = answered;
       // A recorded answer is not something the reader can re-aim by flipping
       // the mode underneath it. Changing the answer is what reopens the choice.
       if (modeToggle !== null) modeToggle.disabled = locked || answered;
-      // The prompt and its note ask the question the live mode will answer.
+      // The prompt asks the question the live mode will answer.
       const placeholder = wordFor(proposalText, decisionMode, "placeholder");
       if (placeholder !== null) proposalText.placeholder = placeholder;
-      const note = wordFor(proposalNote, decisionMode, "note");
-      if (note !== null) proposalNote.textContent = note;
       if (clear !== null) {
         clear.hidden = !changingAnswer;
         clear.disabled = locked;
@@ -2906,16 +2855,13 @@ const wireDecisions = () => {
       if (proposes(event.target) && proposalText !== null) proposalText.focus();
     });
     if (proposalText !== null) proposalText.addEventListener("input", sync);
-    // Both modes hand the words to the same place: a comment on this decision,
-    // rendered beside the field they came from. The mode decides what the words
-    // then mean - a change request, or the answer of record - not where they go.
-    // The field empties on capture because that comment is now the visible
-    // record of them, standing right next to where they were typed.
-    const handOffProposal = (submit) => {
+    // Submitting a comment is the review's ordinary comment submission: the
+    // "Submit right away" switch decides whether it is staged or sent, exactly
+    // as it does everywhere else, and the rail takes it from there. The field
+    // empties because the comment now holds those words.
+    const submitComment = () => {
       const words = proposalValue();
-      // The field is empty once a capture has taken it, so emptiness only
-      // blocks the route that would raise a new comment.
-      if (words === "" && capturedCommentId === null) return;
+      if (words === "") return;
       const target = window.bigPlan?.feedback;
       if (typeof target?.add !== "function") {
         const line = "Open this document in a live review to submit feedback.";
@@ -2923,42 +2869,23 @@ const wireDecisions = () => {
         else if (summary !== null) summary.textContent = line;
         return;
       }
-      // A suggestion that already has a comment never gets a second one. Asking
-      // again shows the reader the one they made, which answers the question
-      // they were really asking: where did my words go.
-      if (capturedCommentId !== null) {
-        if (submit === "now") {
-          capturedSent = true;
-          target.send?.(capturedCommentId);
-        } else {
-          target.reveal?.(capturedCommentId);
-        }
-        sync();
-        return;
-      }
       const raised = target.add({
         source: "decision",
         anchor: decision.id,
-        submit,
+        submit: sendNow !== null && sendNow.checked ? "now" : "batch",
         items: [{ kind: "comment", body: "Suggest another option: " + words }],
       });
-      capturedProposal = words;
-      capturedCommentId = typeof raised === "string" ? raised : null;
-      capturedSent = submit === "now";
       if (proposalText !== null) proposalText.value = "";
-      // The thread for this comment belongs beside the field the words came
-      // from, not at the top of the card, so the composer nominates itself.
-      if (capturedCommentId !== null && propose !== null) {
-        propose.setAttribute("data-review-thread-anchor", capturedCommentId);
+      // The comment's thread belongs beside the field the words came from
+      // rather than at the top of the card, so the composer nominates itself.
+      if (typeof raised === "string" && propose !== null) {
+        propose.setAttribute("data-review-thread-anchor", raised);
       }
       sync();
     };
-    composerAdd.addEventListener("click", () => handOffProposal("batch"));
-    composerNow.addEventListener("click", () => handOffProposal("now"));
-    composerCaptured.addEventListener("click", () => {
-      if (capturedCommentId === null) return;
-      window.bigPlan?.feedback?.reveal?.(capturedCommentId);
-    });
+    if (commentSubmit !== null) {
+      commentSubmit.addEventListener("click", submitComment);
+    }
     decision.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || event.bigPlanEscapeHandled === true) return;
       const choice = picked();
@@ -2975,16 +2902,6 @@ const wireDecisions = () => {
         if (proposalChoice !== null) proposalChoice.checked = false;
         if (previousOptionChoice !== null) previousOptionChoice.checked = true;
         if (proposalText !== null) proposalText.value = "";
-        // Cancelling abandons the whole composed proposal, including anything
-        // already captured, so the next one starts from nothing. The comment
-        // itself stays: the reader made it deliberately, and the rail is where
-        // they delete it.
-        capturedProposal = "";
-        if (capturedCommentId !== null && propose !== null) {
-          propose.removeAttribute("data-review-thread-anchor");
-        }
-        capturedCommentId = null;
-        capturedSent = false;
         if (modeToggle !== null) modeToggle.checked = false;
         sync();
         if (proposalChoice !== null) {
@@ -3088,7 +3005,7 @@ const wireDecisions = () => {
       }
       if (answerTitle !== null) {
         answerTitle.textContent =
-          ": " + (proposing ? answerText() : choice.value);
+          ": " + (proposing ? proposalValue() : choice.value);
       }
       if (proposalText !== null) proposalText.readOnly = proposing;
       decision.setAttribute("data-decision-answered", "");
@@ -3108,7 +3025,7 @@ const wireDecisions = () => {
         question: question === null ? "" : question.textContent,
         optionId: choice.id,
         option: choice.value,
-        proposal: proposing ? answerText() : "",
+        proposal: proposing ? proposalValue() : "",
       };
       window.bigPlanDecisionAnswers = window.bigPlanDecisionAnswers || [];
       window.bigPlanDecisionAnswers.push(record);

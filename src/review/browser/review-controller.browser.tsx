@@ -300,10 +300,6 @@ type BigPlanFeedbackWindow = Window & {
       // The id comes back so a component can hold on to the one comment it
       // raised, rather than raising a second one it cannot tell apart.
       readonly add: (payload: ExternalFeedbackPayload) => string | null;
-      // Shows the reader a comment they already made, which is what a
-      // component should do instead of quietly making another.
-      readonly reveal: (commentId: string) => void;
-      readonly send: (commentId: string) => void;
     };
   };
 };
@@ -5819,33 +5815,6 @@ export const ReviewController = () => {
         if (payload.submit === "now") void sendComments([comment]);
         return comment.id;
       },
-      reveal: (commentId: string): void => {
-        setIsOpen(true);
-        setTab("comments");
-        // The thread beside the plan is where the connection to the element is
-        // visible, so that is what gets shown and pulsed. The rail copy is
-        // opened either way for a reader whose window is too narrow for it.
-        const host = document.querySelector<HTMLElement>(
-          `[data-review-thread-for="${CSS.escape(commentId)}"]`,
-        );
-        if (host === null) return;
-        host.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        host.setAttribute("data-review-thread-flash", "");
-        window.setTimeout(
-          () => host.removeAttribute("data-review-thread-flash"),
-          1200,
-        );
-      },
-      send: (commentId: string): void => {
-        const existing = reviewComments.find(
-          (candidate) => candidate.id === commentId,
-        );
-        if (existing === undefined) return;
-        setIsOpen(true);
-        setTab("comments");
-        setStatus("Submitting component feedback.");
-        void sendComments([existing]);
-      },
     };
     feedbackWindow.bigPlan = {
       ...(feedbackWindow.bigPlan ?? {}),
@@ -5859,13 +5828,7 @@ export const ReviewController = () => {
       };
       if (previous === undefined) delete feedbackWindow.bigPlan.feedback;
     };
-  }, [
-    displayedSnapshot,
-    isHydrated,
-    reviewComments,
-    sendComments,
-    stageReviewComment,
-  ]);
+  }, [displayedSnapshot, isHydrated, sendComments, stageReviewComment]);
 
   const saveComment = (body: string, submitRightAway: boolean) => {
     if (compose === null) return;

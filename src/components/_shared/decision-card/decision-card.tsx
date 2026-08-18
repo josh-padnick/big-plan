@@ -19,7 +19,6 @@ import {
   type DecisionCardTone,
 } from "../../_model/decision-card.js";
 import { CHECK_ICON } from "../../../icons/lucide/check.js";
-import { INFO_ICON } from "../../../icons/lucide/info.js";
 import { PLUS_ICON } from "../../../icons/lucide/plus.js";
 import { TRIANGLE_ALERT_ICON } from "../../../icons/lucide/triangle-alert.js";
 import { type MatrixToneParity } from "../comparison-matrix/comparison-matrix.js";
@@ -87,21 +86,11 @@ const RationalePanel = ({
   </div>
 );
 
-// The hint answers the one question the toggle raises: what happens to these
-// words. It is the tooltip and the accessible name, so a pointer and a screen
-// reader are told the same thing.
-const MODE_HINT =
-  'By setting this to "make this my decision," we will save this as your official decision. Alternatively, you can submit feedback to the agent to update this decision box and make a decision then.';
-
-// Each mode asks its own question. Feedback is the authored state, so a
-// script-free reader gets the wording that matches the buttons they can reach.
+// The prompt names the mode it belongs to. The comment wording is authored, so
+// a script-free reader gets the one matching the controls they can reach.
 const FEEDBACK_PLACEHOLDER =
   "Tell the agent how this decision should be changed.";
-const FEEDBACK_NOTE =
-  "The agent will update the decision title, description, and/or available options.";
 const DECISION_PLACEHOLDER = "What did you decide?";
-const DECISION_NOTE =
-  "The agent will treat your response as your final decision here.";
 
 // The escape hatch, demoted to a quiet link so it never competes with the
 // real options. Its radio still belongs to the group, so proposing clears
@@ -132,15 +121,47 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
           disabled. The shell enhances that reachable authored state with
           cancellation, confirmation, and answer recording. */}
       <div className="decision-proposal mt-3" data-decision-proposal="">
+        {/* The one question to settle before typing is what these words are
+            for, so it is asked above the field rather than under it. Both
+            sides are named, which is why nothing else here has to explain the
+            difference. */}
+        <div className="decision-mode" data-decision-mode="">
+          <span
+            className="decision-mode-side"
+            data-decision-mode-side="comment"
+          >
+            {"Submit as comment"}
+          </span>
+          {/* The label wraps its input, which is the whole association; adding
+              htmlFor as well makes a pointer activation fire twice and cancel
+              itself out. */}
+          <label className="decision-mode-switch">
+            <input
+              className="decision-mode-check sr-only"
+              type="checkbox"
+              id={modeId}
+              data-decision-mode-toggle=""
+            />
+            <span className="decision-mode-track" aria-hidden="true">
+              <span className="decision-mode-knob" />
+            </span>
+            <span className="sr-only">{"Submit as the decision"}</span>
+          </label>
+          <span
+            className="decision-mode-side"
+            data-decision-mode-side="decision"
+            aria-hidden="true"
+          >
+            {"Submit as the decision"}
+          </span>
+        </div>
         <label className="sr-only" htmlFor={textId}>
           {"Proposed approach"}
         </label>
-        {/* The prompt and the note under it name whichever mode is live, so
-            the reader is asked the question their words will actually answer
-            rather than one phrasing covering both. Both wordings ship as data
-            on the elements that show them: the authored state is the feedback
-            mode, which is what a script-free reader gets, and the shell swaps
-            in the decision wording without owning a second copy of the text. */}
+        {/* The prompt names whichever mode is live, so the reader is asked the
+            question their words will actually answer. Both wordings ship as
+            data on the field: the authored state is the comment mode, which is
+            what a script-free reader gets. */}
         <textarea
           className="decision-proposal-input block w-full"
           id={textId}
@@ -150,50 +171,40 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
           data-feedback-placeholder={FEEDBACK_PLACEHOLDER}
           data-decision-placeholder={DECISION_PLACEHOLDER}
         />
-        <p
-          className="mt-1.5 mb-0 text-xs text-muted"
-          data-decision-proposal-note=""
-          data-feedback-note={FEEDBACK_NOTE}
-          data-decision-note={DECISION_NOTE}
+        {/* Comment mode is the review's own comment composer, so its controls
+            are that composer's controls, in that composer's order. The shell
+            reveals them; nothing here is specific to a decision. */}
+        <div
+          className="decision-comment-actions"
+          data-decision-comment-actions=""
         >
-          {FEEDBACK_NOTE}
-        </p>
-        {/* The composer has exactly two outcomes, and reading them off three
-            buttons made the reader infer the difference. The toggle states it
-            instead: off, these words go to the agent as feedback; on, they are
-            the answer of record. It is authored markup rather than script-made
-            chrome so the two modes exist in the reachable document, and the
-            shell only has to show the buttons the chosen mode owns. */}
-        <div className="decision-mode mt-2.5" data-decision-mode="">
-          <label className="decision-mode-label" htmlFor={modeId}>
+          <label className="decision-mode-switch decision-send-switch">
             <input
-              className="decision-mode-check"
+              className="decision-mode-check sr-only"
               type="checkbox"
-              id={modeId}
-              data-decision-mode-toggle=""
+              data-decision-send-now=""
             />
-            <span>{"Make this my decision"}</span>
+            <span className="decision-mode-track" aria-hidden="true">
+              <span className="decision-mode-knob" />
+            </span>
+            <span>{"Submit right away"}</span>
           </label>
-          <span
-            className="decision-mode-hint"
-            data-tooltip={MODE_HINT}
-            data-tooltip-wrap=""
-            data-tooltip-immediate=""
-            tabIndex={0}
-            role="note"
-            aria-label={MODE_HINT}
+          <button
+            className="decision-proposal-cancel"
+            type="button"
+            hidden
+            data-decision-proposal-cancel=""
           >
-            {lucideIconToReact({ icon: INFO_ICON, hidden: false })}
-          </span>
+            {"Cancel"}
+          </button>
+          <button
+            className="decision-comment-submit"
+            type="button"
+            data-decision-comment-submit=""
+          >
+            {"Submit Now"}
+          </button>
         </div>
-        <button
-          className="decision-proposal-cancel data-[shown]:inline-flex mt-2"
-          type="button"
-          hidden
-          data-decision-proposal-cancel=""
-        >
-          {"Cancel"}
-        </button>
       </div>
     </div>
   );

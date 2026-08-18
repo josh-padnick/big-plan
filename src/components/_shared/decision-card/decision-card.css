@@ -578,206 +578,148 @@
     top: 1px;
   }
 
-  /* The mode switch sits between the reader's words and the actions those
-     words feed, because that is where the question "what happens to this"
-     arises. The hint rides beside the label rather than under it: the row is
-     one statement, and a second line would read as a third mode. */
+  /* The question above the field is which of two things these words are, so
+     both answers are named and the switch sits between them. Naming the sides
+     is what lets everything else here stay quiet. */
   article .decision-mode {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.625rem;
+    margin-bottom: 0.625rem;
   }
-  article .decision-mode-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-height: 2.75rem;
-    cursor: pointer;
-    color: var(--ink-c);
-    font-size: 0.8125rem;
-    font-weight: 600;
-  }
-  /* Centring the box against the line box leaves it reading high, because the
-     line box reserves descender space the label's own glyphs mostly do not
-     use. This drops it onto the text's optical centre. */
-  article .decision-mode-check {
-    position: relative;
-    top: 1px;
-    width: 1rem;
-    height: 1rem;
-    margin: 0;
-    accent-color: var(--color-accent);
-    cursor: pointer;
-  }
-  article .decision-mode-label:has(:focus-visible) {
-    outline: none;
-    border-radius: 0.125rem;
-    box-shadow: var(--elevation-focus);
-  }
-  article .decision-mode-hint {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1rem;
-    height: 1rem;
-    color: var(--color-muted);
-  }
-  article .decision-mode-hint svg {
-    width: 100%;
-    height: 100%;
-  }
-  /* Hover darkens the glyph enough to confirm it is the thing under the
-     pointer, and stops short of full ink so a hint never reads as heavier than
-     the label it explains. */
-  article .decision-mode-hint:hover,
-  article .decision-mode-hint:focus-visible {
-    color: color-mix(in srgb, var(--ink-c) 55%, var(--color-muted));
-  }
-  article .decision-mode-hint:focus-visible {
-    outline: none;
-    border-radius: 0.125rem;
-    box-shadow: var(--elevation-focus);
-  }
-  article .decision-mode-check:disabled,
-  article .decision-mode-label:has(:disabled) {
-    cursor: default;
-    color: var(--color-subtle);
-  }
-
-  /* Decision mode's actions belong to the field whose words they carry, so
-     they sit at its trailing edge the way a composer's own actions do. */
-  /* One row, directly under the field: what mode you are in on the left, what
-     to do with what you typed on the right. Proximity is the whole point, so
-     nothing from this group is allowed to drift down the card. */
-  article .decision-composer-actions {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-top: 0.5rem;
-  }
-  article .decision-composer-mode {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-  }
-  article .decision-composer-submits {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-left: auto;
-    padding-top: 0.375rem;
-  }
-  article .decision-composer-submits[hidden] {
+  article .decision-mode[hidden] {
     display: none;
   }
-  /* Sized as comment actions, not as the decision's own confirm: these move a
-     note around, they do not settle the question. */
-  article .decision-composer-action {
+  article .decision-mode-side {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  /* The live side is the one the reader is in, so it carries the ink and the
+     other recedes. */
+  article
+    .decision-mode:not(:has(.decision-mode-check:checked))
+    [data-decision-mode-side="comment"],
+  article
+    .decision-mode:has(.decision-mode-check:checked)
+    [data-decision-mode-side="decision"] {
+    color: var(--ink-c);
+  }
+
+  article .decision-mode-switch {
     display: inline-flex;
     align-items: center;
-    padding: 0.3125rem 0.75rem;
+    gap: 0.5rem;
+    cursor: pointer;
+    color: var(--ink-c);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  article .decision-mode-track {
+    position: relative;
+    display: inline-flex;
+    width: 2rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+    align-items: center;
+    border: 1px solid var(--edge-strong-c);
+    border-radius: 999px;
+    background: var(--raised-c);
+    transition: background 120ms ease-out;
+  }
+  article .decision-mode-knob {
+    position: absolute;
+    left: 0.1875rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 999px;
+    background: var(--color-muted);
+    transition:
+      left 120ms ease-out,
+      background 120ms ease-out;
+  }
+  article .decision-mode-check:checked + .decision-mode-track {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 18%, var(--raised-c));
+  }
+  article
+    .decision-mode-check:checked
+    + .decision-mode-track
+    .decision-mode-knob {
+    left: calc(100% - 0.9375rem);
+    background: var(--color-accent);
+  }
+  article .decision-mode-check:focus-visible + .decision-mode-track {
+    outline: none;
+    box-shadow: var(--elevation-focus);
+  }
+  article .decision-mode-check:disabled + .decision-mode-track {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    article .decision-mode-track,
+    article .decision-mode-knob {
+      transition: none;
+    }
+  }
+
+  /* Comment mode's controls are the review's comment controls, in the review's
+     order: how it will be submitted, then the way out, then the submission. */
+  article .decision-comment-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 0.625rem;
+  }
+  article .decision-comment-actions[hidden] {
+    display: none;
+  }
+  article .decision-send-switch {
+    margin-right: auto;
+    color: var(--color-muted);
+  }
+  article .decision-comment-submit {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.875rem;
     border: 1px solid var(--edge-c);
     border-radius: var(--radius-md);
     cursor: pointer;
-    background: var(--raised-c);
+    background: var(--surface-c);
     color: var(--ink-c);
     font-size: 0.75rem;
     font-weight: var(--font-weight-semibold);
   }
-  article .decision-composer-action[hidden] {
-    display: none;
+  article .decision-comment-submit:hover {
+    background: var(--raised-c);
   }
-  article .decision-composer-action:hover {
-    background: var(--surface-c);
-  }
-  article .decision-composer-action-primary {
-    border-color: transparent;
-    background: var(--color-accent);
-    color: var(--paper-c, var(--bg));
-  }
-  article .decision-composer-action-primary:hover {
-    background: color-mix(in srgb, var(--color-accent) 88%, var(--ink-c));
-  }
-  article .decision-composer-action:disabled {
+  article .decision-comment-submit:disabled {
     cursor: default;
-    border-color: var(--edge-c);
-    background: var(--surface-c);
     color: var(--color-subtle);
   }
-  article .decision-composer-action:focus-visible {
+  article .decision-comment-submit:focus-visible {
     outline: none;
     box-shadow: var(--elevation-focus);
   }
 
-  /* The suggestion already has its comment. This is not another action, it is
-     the way back to that comment, so it reads as a link. */
-  article .decision-composer-captured {
-    padding: 0;
-    border: 0;
-    cursor: pointer;
-    background: none;
-    color: var(--color-accent);
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
-  }
-  article .decision-composer-captured[hidden] {
-    display: none;
-  }
-  article .decision-composer-captured:hover {
-    color: color-mix(in srgb, var(--color-accent) 80%, var(--ink-c));
-  }
-  article .decision-composer-captured:focus-visible {
-    outline: none;
-    border-radius: 0.125rem;
-    box-shadow: var(--elevation-focus);
-  }
-
-  /* Leaving the composer is a way out, not a third thing to weigh against the
-     two actions beside it, so it carries no button weight. */
+  /* Leaving the composer is a way out, not a third thing to weigh. */
   article .decision-proposal-cancel {
-    padding: 0;
-    border: 0;
-    cursor: pointer;
-    background: none;
-    color: var(--color-muted);
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-  article .decision-proposal-cancel:hover {
-    color: var(--ink-c);
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
-  }
-  article .decision-proposal-action {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.75rem;
-    padding: 0.5rem 1rem;
+    padding: 0.375rem 0.875rem;
     border: 1px solid var(--edge-c);
     border-radius: var(--radius-md);
     cursor: pointer;
     background: var(--bg);
-    color: var(--color-accent);
-    font-size: 0.8125rem;
+    color: var(--ink-c);
+    font-size: 0.75rem;
     font-weight: var(--font-weight-semibold);
   }
-  article .decision-proposal-action[hidden] {
-    display: none;
-  }
-  article .decision-proposal-action:hover {
+  article .decision-proposal-cancel:hover {
     background: var(--surface-c);
   }
-  article .decision-proposal-action:disabled {
-    cursor: default;
-    color: var(--color-subtle);
-  }
-  article .decision-proposal-action:focus-visible {
-    outline: none;
-    box-shadow: var(--elevation-focus);
-  }
+
   article .decision-proposal-cancel:focus-visible {
     outline: none;
     border-color: var(--color-accent);

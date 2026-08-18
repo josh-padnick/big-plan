@@ -260,27 +260,4 @@ here; all values use the document theme's closed token vocabulary.
       transition: none;
     }
   }
-  /* A comment the reader was sent back to. The pulse says "this one" without
-     moving anything, because the thread is already where they were looking. */
-  [data-review-thread-flash] {
-    animation: review-thread-flash 1.2s ease-out;
-  }
-
-  @keyframes review-thread-flash {
-    0%,
-    100% {
-      box-shadow: none;
-    }
-    15%,
-    60% {
-      box-shadow: 0 0 0 3px var(--color-accent);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    [data-review-thread-flash] {
-      animation: none;
-      box-shadow: 0 0 0 3px var(--color-accent);
-    }
-  }
 }
