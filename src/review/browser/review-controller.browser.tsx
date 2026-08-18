@@ -7249,15 +7249,19 @@ export const ReviewController = () => {
                       ) : null}
                       {currentAgentActivity.headline}
                     </button>
-                    <Badge tone="secondary" size="compact">
-                      {currentAgentActivity.state === "never-connected"
-                        ? "No agent"
-                        : currentAgentActivity.state === "disconnected"
+                    {/* A session that has never had an agent needs no badge
+                        saying so: the line beside it already says none has
+                        connected, and a badge repeating it turns the ordinary
+                        starting condition into something that looks flagged. */}
+                    {currentAgentActivity.state === "never-connected" ? null : (
+                      <Badge tone="secondary" size="compact">
+                        {currentAgentActivity.state === "disconnected"
                           ? "Offline"
                           : currentAgentActivity.state === "stalled"
                             ? "Warning"
                             : currentAgentActivity.state}
-                    </Badge>
+                      </Badge>
+                    )}
                   </div>
                   <p className="mt-1 mb-0 text-xs text-support">
                     {currentAgentActivity.state === "working"
