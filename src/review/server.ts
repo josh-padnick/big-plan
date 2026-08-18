@@ -1290,7 +1290,15 @@ export const startReviewRuntime = async ({
     reason = "The review session was stopped.",
     sessionAlreadyStopped = false,
   ): Promise<void> => {
-    shutdown ??= teardown(reason, sessionAlreadyStopped);
+    shutdown ??= teardown(reason, sessionAlreadyStopped).catch(
+      (error: unknown) => {
+        // A failed teardown must not latch. The port may still be held, so a
+        // later close is allowed to try again rather than inheriting a
+        // rejection from an attempt it did not make.
+        shutdown = undefined;
+        throw error;
+      },
+    );
     return shutdown;
   };
   if (idleTimeoutMs > 0) {
