@@ -2,7 +2,7 @@
 // review kernel owns polling and navigation; this module owns only the visual
 // projection and local disclosure/copy interactions.
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { BrandIcon } from "../../icons/brand-icon.js";
 import { CLAUDE_ICON } from "../../icons/brands/claude.js";
 import { GROK_ICON } from "../../icons/brands/grok.js";
@@ -401,17 +401,24 @@ const CurrentActivityCard = ({
         >
           {modelName === undefined ? null : <ModelIcon modelName={modelName} />}
           {identitySegments.map((segment, index) => (
-            <span
-              key={segment.key}
-              className={
-                segment.key === "effort"
-                  ? "shrink-0 font-normal text-muted"
-                  : "min-w-0 truncate"
-              }
-            >
-              {index === 0 ? "" : "· "}
-              {segment.text}
-            </span>
+            <Fragment key={segment.key}>
+              {index === 0 ? null : (
+                /* The separator carries its own even spacing rather than
+                   inheriting the row's gap on one side only. */
+                <span aria-hidden="true" className="shrink-0 opacity-50">
+                  ·
+                </span>
+              )}
+              <span
+                className={
+                  segment.key === "effort"
+                    ? "shrink-0 font-normal text-muted"
+                    : "min-w-0 truncate"
+                }
+              >
+                {segment.text}
+              </span>
+            </Fragment>
           ))}
         </span>
       )}
