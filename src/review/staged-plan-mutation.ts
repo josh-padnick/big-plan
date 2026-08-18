@@ -26,6 +26,7 @@ import type { AgentRequest, AgentResponse } from "./agent-exchange.js";
 import {
   commitRequestTerminal,
   completeRequestTerminal,
+  RequestLockContended,
 } from "./request-mailbox.js";
 import {
   publishPreparedPlanAssets,
@@ -367,13 +368,7 @@ type MutationJournal = {
   readonly response: AgentResponse;
 };
 
-const unreadableJournal = (path: string): StagedPlanMutationRejected =>
-  new StagedPlanMutationRejected(
-    "unavailable",
-    `A prepared plan mutation journal is unreadable: ${path}. It was written by a build this one no longer understands, or it has been damaged, so the interrupted commit it describes cannot be settled. Delete that file to abandon the interrupted commit, then start \`big-plan review\` again.`,
-  );
-
-const validateJournal = (value: unknown, path: string): MutationJournal => {
+const validateJournal = (value: unknown): MutationJournal => {
   if (
     !isRecord(value) ||
     value.version !== JOURNAL_VERSION ||
@@ -390,7 +385,7 @@ const validateJournal = (value: unknown, path: string): MutationJournal => {
     typeof value.answeredAt !== "string" ||
     Number.isNaN(Date.parse(value.answeredAt))
   ) {
-    throw unreadableJournal(path);
+    throw new Error("A prepared plan mutation journal is not a usable record");
   }
   let response: AgentResponse;
   try {
@@ -398,7 +393,9 @@ const validateJournal = (value: unknown, path: string): MutationJournal => {
     // re-checked on the way out of the file as strictly as on the way in.
     response = validateAgentResponse(value.response);
   } catch {
-    throw unreadableJournal(path);
+    throw new Error(
+      "A prepared plan mutation journal carries no usable answer",
+    );
   }
   return {
     version: JOURNAL_VERSION,
@@ -424,39 +421,53 @@ export type MutationRecovery =
       readonly currentSnapshot: string;
     };
 
-const readJournals = async (
-  store: ReviewStore,
-): Promise<ReadonlyArray<MutationJournal>> => {
+type JournalScan = {
+  readonly journals: ReadonlyArray<MutationJournal>;
+  readonly unreadable: ReadonlyArray<string>;
+};
+
+/**
+ * Reads every prepared journal, keeping the ones it can settle apart from the
+ * ones it cannot.
+ *
+ * A damaged file is collected rather than thrown on, because a commit whose
+ * outcome this build cannot determine must be reported - but only after the
+ * intact journals have been settled, so one damaged file cannot strand a
+ * commit whose rename already won.
+ */
+const readJournals = async (store: ReviewStore): Promise<JournalScan> => {
   let names: ReadonlyArray<string>;
   try {
     names = await readdir(store.agentMutationJournalDirectory);
   } catch {
-    return [];
+    return { journals: [], unreadable: [] };
   }
   const journals: Array<MutationJournal> = [];
-  for (const name of names.filter((entry) => JOURNAL_FILE.test(entry))) {
+  const unreadable: Array<string> = [];
+  for (const name of names.filter((entry) => JOURNAL_FILE.test(entry)).sort()) {
     const path = join(store.agentMutationJournalDirectory, name);
     let value: unknown;
     try {
       value = JSON.parse(await readFile(path, "utf8"));
     } catch (error: unknown) {
       // A journal that vanished between the listing and the read has nothing
-      // left to settle. Anything else - unparseable, truncated, unreadable -
-      // is a commit whose outcome this build cannot determine, and skipping it
-      // silently is what would leave the plan and its records disagreeing
-      // forever with nobody told.
-      if (
+      // left to settle; anything else is a commit of unknown outcome.
+      if (!(
         error instanceof Error &&
         "code" in error &&
         error.code === "ENOENT"
-      ) {
-        continue;
+      )) {
+        unreadable.push(path);
       }
-      throw unreadableJournal(path);
+      continue;
     }
-    journals.push(validateJournal(value, path));
+    try {
+      journals.push(validateJournal(value));
+    } catch {
+      unreadable.push(path);
+    }
   }
-  return journals;
+  return { journals, unreadable };
 };
 
 /**
@@ -467,6 +478,19 @@ const readJournals = async (
 export const REVERT_SOURCE_MOVED_REASON =
   "The plan changed after this response, so reverting it would overwrite newer work";
 
+/**
+ * Whether settling failed for a reason another attempt clears. A contended
+ * lock, or a resource momentarily unavailable, wrote nothing and needs no
+ * remedy beyond running the command again - and it must never be answered with
+ * the delete instruction, because deleting a journal whose rename already won
+ * is what would leave the plan and its records disagreeing for good.
+ */
+const settlementIsRetryable = (error: unknown): boolean =>
+  error instanceof RequestLockContended ||
+  (error instanceof Error &&
+    "code" in error &&
+    (error.code === "EAGAIN" || error.code === "EBUSY"));
+
 const unsettleableJournal = ({
   path,
   requestId,
@@ -475,10 +499,22 @@ const unsettleableJournal = ({
   readonly path: string;
   readonly requestId: string;
   readonly error: unknown;
-}): StagedPlanMutationRejected =>
+}): StagedPlanMutationRejected => {
+  const reason = error instanceof Error ? error.message : String(error);
+  return new StagedPlanMutationRejected(
+    "unavailable",
+    settlementIsRetryable(error)
+      ? `The interrupted commit for request ${requestId} published its revision but its records could not be finished yet: ${reason}. Nothing was lost; run the command again.`
+      : `The interrupted commit for request ${requestId} published its revision but its records could not be finished: ${reason}. Try again first, and only if it keeps failing delete ${path} to abandon the interrupted commit, then start \`big-plan review\` again.`,
+  );
+};
+
+const unreadableJournals = (
+  paths: ReadonlyArray<string>,
+): StagedPlanMutationRejected =>
   new StagedPlanMutationRejected(
     "unavailable",
-    `The interrupted commit for request ${requestId} published its revision but its records could not be finished: ${error instanceof Error ? error.message : String(error)}. Delete ${path} to abandon the interrupted commit, then start \`big-plan review\` again.`,
+    `Prepared plan mutation journals are unreadable: ${paths.join(", ")}. Each was written by a build this one no longer understands, or has been damaged, so the interrupted commit it describes cannot be settled. Every readable journal was settled first, and anything still unsettled stays blocked until these files are gone. Delete them to abandon those interrupted commits, then start \`big-plan review\` again.`,
   );
 
 const externalSourceConflict = (
@@ -511,7 +547,7 @@ export const recoverStagedPlanMutations = async ({
   withPlanMutationLock({
     store,
     change: async (lockedStore) => {
-      const journals = await readJournals(lockedStore);
+      const { journals, unreadable } = await readJournals(lockedStore);
       const recoveries: Array<MutationRecovery> = [];
       for (const journal of journals) {
         const source = await readFile(planPath, "utf8");
@@ -521,6 +557,11 @@ export const recoverStagedPlanMutations = async ({
             await completeRequestTerminal({
               store: lockedStore,
               response: journal.response,
+              claim: {
+                baselineSnapshot: journal.baseSnapshot,
+                claimedBy: journal.claimedBy,
+                claimGeneration: journal.generation,
+              },
               now: journal.answeredAt,
             });
             await finalizeCommittedMutation({
@@ -570,6 +611,7 @@ export const recoverStagedPlanMutations = async ({
           currentSnapshot,
         });
       }
+      if (unreadable.length > 0) throw unreadableJournals(unreadable);
       return recoveries;
     },
   });

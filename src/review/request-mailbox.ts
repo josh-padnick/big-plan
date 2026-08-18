@@ -117,6 +117,19 @@ const readClock = (clock: Clock): number => {
 };
 
 /** Runs one request change while the request file is locked. */
+/**
+ * The request lock stayed held for the whole waiting budget, so this attempt
+ * never ran and nothing was written. It is named rather than described because
+ * a caller deciding what to tell an operator has to tell "try again" apart from
+ * a failure no retry can clear.
+ */
+export class RequestLockContended extends AgentExchangeRejected {
+  constructor() {
+    super("Another process is changing this request. Try again.");
+    this.name = "RequestLockContended";
+  }
+}
+
 const withRequestLock = async <TResult>({
   store,
   requestId,
@@ -154,10 +167,7 @@ const withRequestLock = async <TResult>({
   return withReviewStoreLock({
     lockPath: join(lockedStore.agentRequestDirectory, `.${requestId}.lock`),
     change: () => change(lockedStore),
-    timeoutError: () =>
-      new AgentExchangeRejected(
-        "Another process is changing this request. Try again.",
-      ),
+    timeoutError: () => new RequestLockContended(),
     invalidLockError: () =>
       new AgentExchangeRejected("The request mailbox is unavailable"),
   });
@@ -656,11 +666,14 @@ export const commitRequestTerminal = async ({
  * rather than protect it. Writing what is already written is the correct
  * answer here, and it is the only place that is true.
  *
- * The rename is this design's linearization point, so a cancel recorded after
+ * The rename is this design's linearization point, so anything recorded after
  * it arrived too late by the model's own definition: the plan already carries
- * the published revision, and every record has to converge on that. The
- * withdrawal is therefore dropped as the answer is stamped, rather than left
- * to contradict it.
+ * the published revision, and every record has to converge on that. A cancel
+ * is therefore dropped as the answer is stamped, and the claim the settled
+ * request names is restored to the one that published rather than to a
+ * takeover that came after. Without that, the stored answer would describe a
+ * generation its own request no longer names, and every reader would discard
+ * it as mismatched - an answered thread with no answer in it.
  *
  * Nothing durable is written until the settled request is in hand, so an
  * attempt that cannot settle leaves no response and no change-set revision for
@@ -669,10 +682,16 @@ export const commitRequestTerminal = async ({
 export const completeRequestTerminal = async ({
   store,
   response,
+  claim,
   now,
 }: {
   readonly store: ReviewStore;
   readonly response: AgentResponse;
+  readonly claim: {
+    readonly baselineSnapshot: string;
+    readonly claimedBy: string;
+    readonly claimGeneration: number;
+  };
   readonly now: string;
 }): Promise<AgentRequest> =>
   withRequestLock({
@@ -686,6 +705,9 @@ export const completeRequestTerminal = async ({
       if (request.answeredAt !== undefined) return request;
       const answered = validateAgentRequest({
         ...request,
+        baselineSnapshot: claim.baselineSnapshot,
+        claimedBy: claim.claimedBy,
+        claimGeneration: claim.claimGeneration,
         canceledAt: undefined,
         answeredAt: now,
       });
@@ -696,7 +718,7 @@ export const completeRequestTerminal = async ({
       });
       await recordCommittedRevision({
         store: lockedStore,
-        revision: committedRevisionOf({ request, response, at: now }),
+        revision: committedRevisionOf({ request: answered, response, at: now }),
       });
       await writeAgentRequestValue({
         store: lockedStore,

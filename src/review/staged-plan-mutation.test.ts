@@ -38,6 +38,7 @@ import {
   deriveReviewPlanId,
   prepareStore,
   reviewStoreFor,
+  withReviewStoreLock,
   writeAgentRequestValue,
   writeSnapshot,
   writeStoreJson,
@@ -586,7 +587,7 @@ describe("interrupted plan commit recovery", () => {
       );
       expect(refusal).toBeInstanceOf(StagedPlanMutationRejected);
       expect((refusal as Error).message).toContain(path);
-      expect((refusal as Error).message).toMatch(/[Dd]elete that file/u);
+      expect((refusal as Error).message).toMatch(/[Dd]elete them/u);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -675,6 +676,156 @@ describe("interrupted plan commit recovery", () => {
     }
   });
 
+  it("should settle an answer onto the claim that published it", async () => {
+    const { directory, planPath, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const first = await claim({ store, claimedBy: AGENT_A });
+      const resultSnapshot = deriveSnapshotDigest(RESULT);
+      await prepareJournal({ store, request: first, resultSnapshot });
+      // The rename won, then the process died before the response file existed.
+      await writeFile(planPath, RESULT, "utf8");
+      await writeSnapshot({ store, snapshot: resultSnapshot, source: RESULT });
+      // A's lease lapses and B takes the request over, raising the generation.
+      const second = await claimAgentRequest({
+        store,
+        activeSessionId: SESSION,
+        requestId: REQUEST,
+        claimedBy: AGENT_B,
+        baselineSnapshot: resultSnapshot,
+        now: new Date().toISOString(),
+        clock: () => Date.now() + 10 * 60 * 1_000,
+      });
+      expect(requestClaimGeneration(second)).toBe(
+        requestClaimGeneration(first) + 1,
+      );
+
+      await expect(
+        recoverStagedPlanMutations({ store, planPath }),
+      ).resolves.toMatchObject([{ outcome: "completed", requestId: REQUEST }]);
+
+      // A takeover recorded after the rename arrived too late, so the settled
+      // request names the claim that published and its answer stays readable
+      // rather than being discarded as a generation mismatch.
+      const exchange = await readAgentExchange({
+        store,
+        sessionId: SESSION,
+        planId,
+      });
+      expect(exchange.requests[0]?.answeredAt).toBe("2026-08-17T12:00:05.000Z");
+      expect(exchange.requests[0]?.claimedBy).toBe(AGENT_A);
+      expect(requestClaimGeneration(exchange.requests[0])).toBe(
+        requestClaimGeneration(first),
+      );
+      expect(exchange.responses).toHaveLength(1);
+      expect(exchange.responses[0]?.resultSnapshot).toBe(resultSnapshot);
+      await expect(readFile(planPath, "utf8")).resolves.toBe(RESULT);
+      await expect(readCommittedRevisions({ store })).resolves.toMatchObject([
+        {
+          requestId: REQUEST,
+          baseSnapshot: deriveSnapshotDigest(BASE),
+          resultSnapshot,
+        },
+      ]);
+      await expect(
+        readdir(store.agentMutationJournalDirectory),
+      ).resolves.toEqual([]);
+
+      await expect(
+        recoverStagedPlanMutations({ store, planPath }),
+      ).resolves.toEqual([]);
+      expect(
+        (await readAgentExchange({ store, sessionId: SESSION, planId }))
+          .responses,
+      ).toHaveLength(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should settle every readable journal before reporting a damaged one", async () => {
+    const { directory, planPath, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const claimed = await claim({ store, claimedBy: AGENT_A });
+      const resultSnapshot = deriveSnapshotDigest(RESULT);
+      await prepareJournal({ store, request: claimed, resultSnapshot });
+      await writeFile(planPath, RESULT, "utf8");
+      const damaged = join(
+        store.agentMutationJournalDirectory,
+        "dddd4444dddd4444.json",
+      );
+      await writeFile(damaged, "{ truncated", "utf8");
+
+      const refusal = await recoverStagedPlanMutations({
+        store,
+        planPath,
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(refusal).toBeInstanceOf(StagedPlanMutationRejected);
+      expect((refusal as Error).message).toContain(damaged);
+
+      // The intact commit's rename already won, so one damaged file must not
+      // keep its records from ever being finished.
+      const exchange = await readAgentExchange({
+        store,
+        sessionId: SESSION,
+        planId,
+      });
+      expect(exchange.requests[0]?.answeredAt).toBeDefined();
+      expect(exchange.responses).toHaveLength(1);
+      await expect(readCommittedRevisions({ store })).resolves.toHaveLength(1);
+      await expect(
+        readdir(store.agentMutationJournalDirectory),
+      ).resolves.toEqual(["dddd4444dddd4444.json"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("should tell an operator to retry rather than delete a contended journal", async () => {
+    const { directory, planPath, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const claimed = await claim({ store, claimedBy: AGENT_A });
+      const resultSnapshot = deriveSnapshotDigest(RESULT);
+      await prepareJournal({ store, request: claimed, resultSnapshot });
+      await writeFile(planPath, RESULT, "utf8");
+
+      // Another process holds the request lock for the whole waiting budget.
+      // Nothing was written, so the remedy is another attempt - never deleting
+      // a journal whose rename already won.
+      const refusal = await withReviewStoreLock({
+        lockPath: join(store.agentRequestDirectory, `.${REQUEST}.lock`),
+        change: () =>
+          recoverStagedPlanMutations({ store, planPath }).then(
+            () => undefined,
+            (error: unknown) => error,
+          ),
+        timeoutError: () => new Error("The test could not hold the lock"),
+      });
+      expect(refusal).toBeInstanceOf(StagedPlanMutationRejected);
+      expect((refusal as Error).message).toMatch(/run the command again/u);
+      expect((refusal as Error).message).not.toMatch(/[Dd]elete/u);
+
+      // Nothing was settled and nothing was destroyed, so the retry works.
+      await expect(
+        readdir(store.agentMutationJournalDirectory),
+      ).resolves.toEqual([`${REQUEST}.json`]);
+      await expect(
+        recoverStagedPlanMutations({ store, planPath }),
+      ).resolves.toMatchObject([{ outcome: "completed" }]);
+      expect(
+        (await readAgentExchange({ store, sessionId: SESSION, planId }))
+          .responses,
+      ).toHaveLength(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should report a journal it cannot read at all", async () => {
     const { directory, planPath, store } = await preparedPlan();
     try {
@@ -693,7 +844,7 @@ describe("interrupted plan commit recovery", () => {
       );
       expect(refusal).toBeInstanceOf(StagedPlanMutationRejected);
       expect((refusal as Error).message).toContain(path);
-      expect((refusal as Error).message).toMatch(/[Dd]elete that file/u);
+      expect((refusal as Error).message).toMatch(/[Dd]elete them/u);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
