@@ -31,6 +31,19 @@ export type AgentModelIdentity = {
   readonly sessionId?: string;
 };
 
+/*
+Strips terminal formatting from a declared value.
+
+A connector reads these from an environment a terminal wrote, and a terminal
+writes colour: `claude-opus-5\u001b[1m` arrives as a model name and renders as
+`claude-opus-5[1m]`, which is not a name any vendor writes. Removing escape
+sequences is not the same as rewriting what was declared - the card still never
+re-cases or expands an id - it is refusing bytes that were never text.
+*/
+const withoutTerminalFormatting = (value: string): string =>
+  // eslint-disable-next-line no-control-regex -- the point is the control bytes
+  value.replace(/\u001b\[[0-9;]*[a-zA-Z]|[\u0000-\u001f\u007f]/gu, "");
+
 const readText = (
   value: object,
   key: string,
@@ -39,7 +52,7 @@ const readText = (
   if (!(key in value)) return undefined;
   const raw = (value as Record<string, unknown>)[key];
   if (typeof raw !== "string") return undefined;
-  const trimmed = raw.trim();
+  const trimmed = withoutTerminalFormatting(raw).trim();
   return trimmed === "" || trimmed.length > limit ? undefined : trimmed;
 };
 
@@ -77,7 +90,7 @@ export const decodeAgentModelIdentity = (
   ) {
     return undefined;
   }
-  const name = value.name.trim();
+  const name = withoutTerminalFormatting(value.name).trim();
   if (name === "" || name.length > 80) return undefined;
   const effort = readText(value, "effort", 24);
   const client = readText(value, "client", 80);

@@ -4005,6 +4005,11 @@ test("should restore and submit staged comments through the local review runtime
     sessionId: session.sessionId,
     state: "working",
     requestId: request.requestId,
+    model: {
+      name: "claude-opus-5",
+      client: "claude-code 2.1.217",
+      sessionId: "e08e45b4-4e2e-412a-9f3c-1a2b3c4d5e6f",
+    },
     now: Date.now() - 10_000,
   });
   await appendProgressEvent({
@@ -4098,6 +4103,17 @@ test("should restore and submit staged comments through the local review runtime
   );
   await expect(activeWork).toContainText("Agent working");
   await expect(activeWork).toContainText("Reviewing the shared feedback batch");
+  // The working card carries the session and nothing else about the
+  // connection: the request, then the identifier, then when it last spoke.
+  expect(
+    await activeWork.evaluate((card) =>
+      [...card.children].map((child) => child.tagName),
+    ),
+  ).toEqual(["DIV", "SPAN", "P", "DIV", "DL", "DIV"]);
+  await expect(activeWork.locator("dt")).toHaveText(["Agent session"]);
+  await expect(
+    activeWork.getByRole("button", { name: /^Copy agent session identifier/u }),
+  ).toBeVisible();
 
   // Clicking the request brings its block to the top of the reading column.
   // "Nearest" used to park a block below the fold at the very bottom edge,
