@@ -1,0 +1,132 @@
+# Merge gates: the two required checks from BIG-164. One says a third-party
+# review was triaged to completion on this exact head; the other says the
+# no-mistakes pipeline passed on it, or that skipping it was a deliberate,
+# attributable decision. CONTRIBUTING.md owns the protocol and the comment
+# formats; scripts/merge-gates/gates.mjs owns the rules.
+#
+# Branch protection must require these two check names, which the workflow
+# publishes through the Checks API rather than as job conclusions:
+#
+#     review-triage
+#     validation-attestation
+#
+# The gate updates only check runs its own app created; a run of the same name
+# from another installed app belongs to that app, and patching it is refused.
+#
+# The comment triggers are the point of this design. Triage completes by
+# writing, not by pushing, so a gate has to be able to go green on a comment
+# alone. A workflow started by issue_comment runs against the default branch, so
+# its own job conclusion never lands on the pull request's checks - but a check
+# run it creates against the pull request's head sha does. Every trigger below
+# therefore runs the same evaluation and republishes the same two named checks.
+#
+# Measured on 2026-08-18 while building this: pull_request and
+# pull_request_review_comment run the branch's copy of this file, and
+# issue_comment runs main's copy and nothing else. So a change to the gate
+# governs conversation comments only once it merges, which is why
+# workflow_dispatch exists.
+#
+# It shares CI's self-hosted runner because this account has no GitHub-hosted
+# minutes. The job only reads the API, so it is seconds long and needs nothing
+# from the local machine, but it does queue behind whatever that runner is
+# already building. Move it to a hosted runner if gate latency starts to matter.
+#
+# That runner is why fork pull requests matter here. ci.yml states the policy
+# this workflow has to keep: trusted contributors only on the self-hosted
+# runner, because external contributions must never execute workflows on the
+# local machine.
+#
+# What enforces that property is a repository setting, not this file. "Fork
+# pull request workflows from outside collaborators" is off, so a fork pull
+# request cannot run any workflow in this private repository. Re-verify it with
+#
+#     gh api repos/josh-padnick/big-plan/actions/permissions/fork-pr-workflows-private-repos
+#
+# which read run_workflows_from_fork_pull_requests: false on 2026-08-18.
+#
+# The same-repository condition on the job below is a second belt, not the
+# boundary. pull_request, pull_request_review, and pull_request_review_comment
+# all run the workflow definition from the pull request's own ref, so a fork
+# supplies this very file and could delete that condition; nothing written here
+# can stop it. The condition is worth keeping - it costs nothing and it states
+# the intent - but it must not be read as the thing that holds the property.
+# issue_comment and workflow_dispatch run the default branch's copy and read
+# the pull request over the API, so they execute nothing a fork wrote.
+#
+# Standing condition: if that repository setting is ever enabled, this gate
+# must move to pull_request_target or lose its pull_request,
+# pull_request_review, and pull_request_review_comment triggers, because the
+# job condition alone will not hold.
+#
+# The consequence, deliberately in the safe direction: a fork pull request gets
+# no gate report from its own pushes, so its two required checks never report
+# and the merge stays blocked. A maintainer who wants to judge one runs this
+# workflow from the Actions tab with the pull request number.
+name: Merge gates
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  issue_comment:
+    types: [created, edited, deleted]
+  # The manual re-check. Also the way to evaluate a pull request whose branch
+  # predates this workflow, since comment events always run the default
+  # branch's copy of it.
+  workflow_dispatch:
+    inputs:
+      pull-request:
+        description: Pull request number to judge
+        required: true
+
+# One judgment per pull request at a time. A burst of comments should settle on
+# the newest state, not race to publish an older one.
+concurrency:
+  group: merge-gates-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull-request }}
+  cancel-in-progress: true
+
+jobs:
+  judge:
+    # Second belt against running fork-authored code on the self-hosted runner:
+    # the events that run the pull request's own ref are allowed only for a
+    # pull request whose head lives in this repository. The header explains why
+    # this cannot be the boundary and names the repository setting that is.
+    # issue_comment is allowed because it runs the default branch, and only for
+    # a comment on a pull request - plain issues fire it too, and they have no
+    # head to gate. workflow_dispatch is the maintainer path, including for a
+    # fork pull request.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request) ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: self-hosted
+    # The gate is one API-reading script. Anything longer than this is wedged,
+    # and it is holding a runner every other lane's build needs.
+    timeout-minutes: 10
+    permissions:
+      # An explicit block sets every scope it omits to none, so the checkout of
+      # this private repository needs its read stated here.
+      contents: read
+      # Publishing the two named check runs.
+      checks: write
+      # Reading the pull request, its reviews, and its inline threads.
+      pull-requests: read
+      # Reading the pull request conversation, where every marker comment lives.
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The gate runs no git command after this, and the workspace on a
+          # self-hosted runner outlives the job, so the token must not stay
+          # behind in .git/config.
+          persist-credentials: false
+      # No toolchain step: the gate is one Node script with no dependencies, and
+      # the runner already has Node for the merge guard.
+      - name: Judge the merge gates
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_GATES_PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pull-request }}
+        run: node scripts/merge-gates/check.mjs
