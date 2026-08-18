@@ -403,6 +403,47 @@ describe("thread projection", () => {
     expect(status.detail).toContain("Check the agent terminal");
   });
 
+  // BIG-147. An abandoned claim used to sit under a "Working" heading promising
+  // to resolve itself forever, beside a message that correctly said no agent
+  // was connected. Past the horizon the pickup stops explaining anything, so
+  // this surface has to stop promising a resumption nothing will deliver.
+  it("should drop the resume promise once its own claim goes stale", () => {
+    const statusAfter = (quietForMs: number) =>
+      statusForOneRequest({
+        request: request(liveClaim(NOW - quietForMs)),
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        surface: "thread",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      });
+    const held = statusAfter(AGENT_RECOVERY_HORIZON_MS);
+    expect(held).toMatchObject({ stage: "stalled", tone: "warning" });
+    expect(held.detail).toContain("updates by itself once the agent resumes");
+
+    const stale = statusAfter(AGENT_RECOVERY_HORIZON_MS + 60_000);
+    expect(stale).toMatchObject({ stage: "stalled", tone: "danger" });
+    expect(stale.detail).not.toContain("updates by itself");
+    expect(stale.detail).toContain("takes the work over");
+  });
+
+  it("should stop grouping an abandoned request as working", () => {
+    const grouped = (quietForMs: number) =>
+      projectCommentThread({
+        comment,
+        requests: [request(liveClaim(NOW - quietForMs))],
+        responses: [],
+        progressEvents: [],
+        presence,
+        runtime: "online",
+        nowMs: NOW,
+        cancelPendingRequestIds: new Set(),
+      }).group;
+    expect(grouped(AGENT_RECOVERY_HORIZON_MS)).toBe("working");
+    expect(grouped(AGENT_RECOVERY_HORIZON_MS + 60_000)).toBe("queued");
+  });
+
   // BIG-147. Nothing renews the plan-wide heartbeat while a turn runs, so a
   // second message sent during one used to read "Blocked - no agent connected"
   // while the Agent tab correctly said an agent was holding work. That told the

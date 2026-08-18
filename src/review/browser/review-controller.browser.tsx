@@ -47,7 +47,7 @@ import {
   deriveCurrentAgentActivity,
   heldWorkQuiet,
   projectAgentConnectionState,
-  selectActiveAgentRequest,
+  selectClaimedAgentRequest,
   type AgentStatus,
 } from "../shared/agent-status.js";
 import type { CommentTarget, ReviewComment } from "../shared/comment.js";
@@ -5728,7 +5728,11 @@ export const ReviewController = () => {
   };
 
   const effectivePresence = { ...agent.presence, connected: agentConnected };
-  const activeRequest = selectActiveAgentRequest({
+  // The same request the activity card describes, so the card's header and its
+  // model badge cannot disagree. A live-lease selection would drop the badge at
+  // exactly the moment the card turns stalled and the reviewer starts asking
+  // which agent is holding the work (BIG-147).
+  const claimedRequest = selectClaimedAgentRequest({
     requests: agent.requests,
     cancelPendingRequestIds,
     now: agentProjectionNowMs,
@@ -6220,8 +6224,16 @@ export const ReviewController = () => {
               ) : (
                 <AgentHealthAlert
                   label={agentHealthLabel}
+                  // The activity's own tone decides this, so a quiet turn does
+                  // not raise a danger-red alarm about an agent that is
+                  // working. Warning and danger must stay distinguishable by
+                  // their labels - "Agent not responding" against "Agent
+                  // disconnected" - and never by colour alone, so a later
+                  // change must not give the warning variant the danger glyph
+                  // to make the two look consistent.
                   tone={
-                    runtimeSession?.authoritative === false
+                    runtimeSession?.authoritative === false ||
+                    currentAgentActivity.tone === "warning"
                       ? "warning"
                       : "danger"
                   }
@@ -6592,7 +6604,7 @@ export const ReviewController = () => {
                 connected: agentConnected,
                 heldWork: agentHeldWork,
                 heartbeatAt: agent.presence.updatedAtMs ?? 0,
-                modelName: activeRequest?.claimedModel?.name,
+                modelName: claimedRequest?.claimedModel?.name,
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 agentCommand: agent.agentCommand,

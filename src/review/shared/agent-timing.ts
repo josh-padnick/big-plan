@@ -17,5 +17,9 @@ export const AGENT_STALL_WINDOW_LABEL = "75 seconds";
 // are told the consequences of - and the takeover-aware wording on the
 // recovery disclosure is what keeps that trade honest, because this horizon is
 // itself an inference from silence (BIG-147).
+//
+// This multiplier is the only place the value lives. No runtime string states
+// it, so nothing can interpolate it; the reader-facing statement of the figure
+// is one sentence in docs/src/content/docs/reference/reviewing.md, under
+// "Connect the coding agent", and it has to be edited alongside this line.
 export const AGENT_RECOVERY_HORIZON_MS = AGENT_STALL_MS * 24;
-export const AGENT_RECOVERY_HORIZON_LABEL = "30 minutes";

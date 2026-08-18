@@ -648,45 +648,45 @@ export const AgentConnectionPanel = ({
       )}
       <AnotherViewTip />
       {/*
-       * While held work explains the quiet this is withheld: under adr/0002 a
-       * reconnect invites a second agent to take the plan from the one still
-       * editing it, so offering it beside a stalled card would be advice that
-       * loses the working agent's answer. Once the claim has gone stale the
-       * reviewer needs this route back more than the claim is worth, and the
-       * wording names the takeover so the choice is theirs (BIG-147).
+       * Always on screen: this is the only place the recovery prompt and the
+       * connector command are rendered, and every "connect an agent" link in
+       * the review routes here. Nothing about held work, the recovery horizon,
+       * or presence may gate whether it appears.
+       *
+       * All of the safety therefore lives in the copy. While a claim still
+       * explains the quiet, an agent may genuinely be mid-turn, and under
+       * adr/0002 connecting a session takes that claim over and discards what
+       * the first agent was doing - so the reviewer is told that before they
+       * copy anything, rather than nudged into it (BIG-147).
        */}
-      {isReadOnly ||
-      isConnected ||
-      heldWork === "explained" ||
-      !agentStatusIsAvailable ? null : (
+      {isReadOnly ? null : (
         <details
           className="group mt-3 rounded-md border border-edge text-xs text-muted"
           data-review-agent-recovery={
-            heldWork === "stale" ? "takeover" : "open"
+            heldWork === "explained" ? "takeover" : "plain"
           }
         >
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="inline-flex transition-transform group-open:rotate-90 [&>svg]:size-3.5">
               <Icon icon={CHEVRON_RIGHT_ICON} />
             </span>
-            {heldWork === "stale"
+            {heldWork === "explained"
               ? "Connect an agent and take over this work"
-              : "Re-connect your session"}
+              : "Reconnect your agent"}
           </summary>
           <div className="grid gap-2 border-t border-edge px-3 py-3">
-            {heldWork === "stale" ? (
+            {heldWork === "explained" ? (
               <p className="m-0">
-                An agent picked this work up and has reported nothing since. It
-                may still be running and finish on its own, and Big Plan cannot
-                tell that apart from an agent that stopped. Connecting a session
-                below takes the work over, so whatever the first agent was doing
-                is discarded and its answer will no longer be accepted. Your
-                comments are safe either way.
+                An agent picked this work up and may still be working on it, and
+                it may finish on its own. Connecting a session below takes the
+                work over, so whatever that agent was doing is discarded and its
+                answer will no longer be accepted. Your comments are safe either
+                way.
               </p>
             ) : null}
             <p className="m-0">
-              {heldWork === "stale"
-                ? "To take over, paste this exact prompt into your coding agent:"
+              {heldWork === "explained"
+                ? "To take over anyway, paste this exact prompt into your coding agent:"
                 : "To reconnect this running review, paste this exact prompt into your coding agent:"}
             </p>
             <CopyBlock

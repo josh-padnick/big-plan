@@ -356,12 +356,11 @@ test("should report a quiet working agent as stalled rather than disconnected", 
   }
 });
 
-// BIG-147. The Agent tab used to offer a pasteable "reconnect" prompt during
-// exactly the quiet turn the stalled copy was written to avoid. Under adr/0002
-// following that prompt invites a second agent to take the plan from the one
-// still editing it, so this drives the harm itself through the real CLI: the
-// takeover displaces the working agent, whose finished answer is then refused.
-test("should not invite a reconnect while an agent is holding work", async ({
+// BIG-147. The Agent tab's recovery section is always on screen, so its copy is
+// the only thing between a reviewer and an adr/0002 takeover of an agent that is
+// still working. This drives the harm itself through the real CLI: the takeover
+// displaces the working agent, whose finished answer is then refused.
+test("should warn about a takeover before inviting one while work is held", async ({
   page,
 }) => {
   const directory = await mkdtemp(join(tmpdir(), "big-plan-agent-held-"));
@@ -372,10 +371,14 @@ test("should not invite a reconnect while an agent is holding work", async ({
     "utf8",
   );
   const runtime = await startReviewRuntime({ planPath });
-  const reconnectDisclosure = page.getByText("Re-connect your session", {
+  // The recovery section is never hidden - it holds the only recovery prompt
+  // and connector command in the review - so these assert which copy it is
+  // wearing, not whether it exists.
+  const recoveryPanel = page.locator("[data-review-agent-recovery]");
+  const plainRecovery = page.getByText("Reconnect your agent", {
     exact: true,
   });
-  const takeoverDisclosure = page.getByText(
+  const takeoverRecovery = page.getByText(
     "Connect an agent and take over this work",
     { exact: true },
   );
@@ -454,41 +457,45 @@ test("should not invite a reconnect while an agent is holding work", async ({
     await expect(
       rail.locator("[data-review-current-activity]"),
     ).toHaveAttribute("data-review-current-activity", "stalled");
-    await expect(reconnectDisclosure).toHaveCount(0);
-    await expect(takeoverDisclosure).toHaveCount(0);
-
-    // Matrix case 4. Nothing reaps a claim, so past the recovery horizon the
-    // pickup stops explaining the quiet and the reviewer gets their only route
-    // back - named for the takeover it now costs rather than as a bare
-    // invitation to reconnect.
-    await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS - 60_000);
-    await openAgentTab();
-    await expect(takeoverDisclosure).toHaveCount(0);
-
-    await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS + 60_000);
-    await openAgentTab();
-    await expect(reconnectDisclosure).toHaveCount(0);
-    await expect(takeoverDisclosure).toBeVisible();
-    const takeoverPanel = rail.locator("[data-review-agent-recovery]");
-    await expect(takeoverPanel).toHaveAttribute(
+    // The claim explains the quiet, so the section is present but warns before
+    // the reviewer copies anything.
+    await expect(takeoverRecovery).toBeVisible();
+    await expect(plainRecovery).toHaveCount(0);
+    await expect(recoveryPanel).toHaveAttribute(
       "data-review-agent-recovery",
       "takeover",
     );
-    await takeoverDisclosure.click();
-    await expect(takeoverPanel).toContainText("may still be running");
-    await expect(takeoverPanel).toContainText(
+    await takeoverRecovery.click();
+    await expect(recoveryPanel).toContainText("may still be working on it");
+    await expect(recoveryPanel).toContainText(
       "its answer will no longer be accepted",
+    );
+
+    await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS - 60_000);
+    await openAgentTab();
+    await expect(takeoverRecovery).toBeVisible();
+
+    // Matrix case 4. Nothing reaps a claim, so past the recovery horizon the
+    // pickup stops explaining the quiet: the card falls out of stalled and the
+    // section drops the takeover warning for the plain recovery instruction.
+    await goQuiet(requestId, AGENT_RECOVERY_HORIZON_MS + 60_000);
+    await openAgentTab();
+    await expect(takeoverRecovery).toHaveCount(0);
+    await expect(plainRecovery).toBeVisible();
+    await expect(recoveryPanel).toHaveAttribute(
+      "data-review-agent-recovery",
+      "plain",
     );
     await expect(
       rail.locator("[data-review-current-activity]"),
     ).not.toHaveAttribute("data-review-current-activity", "stalled");
 
-    // Back inside the horizon the pickup explains the quiet again, so every
-    // piece of that advice goes away.
+    // Back inside the horizon the pickup explains the quiet again, so the
+    // warning returns.
     await goQuiet(requestId);
     await openAgentTab();
-    await expect(takeoverDisclosure).toHaveCount(0);
-    await expect(reconnectDisclosure).toHaveCount(0);
+    await expect(takeoverRecovery).toBeVisible();
+    await expect(plainRecovery).toHaveCount(0);
 
     // What following that prompt does. A second agent takes the lapsed claim,
     // and the first agent's finished answer is refused - the reviewer's message
@@ -544,7 +551,8 @@ test("should not invite a reconnect while an agent is holding work", async ({
     await rm(runtime.store.agentHeartbeatPath, { force: true });
 
     await openAgentTab();
-    await expect(reconnectDisclosure).toBeVisible();
+    await expect(plainRecovery).toBeVisible();
+    await expect(takeoverRecovery).toHaveCount(0);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

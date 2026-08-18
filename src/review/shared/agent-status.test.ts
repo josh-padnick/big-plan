@@ -600,6 +600,31 @@ describe("claimed work attribution", () => {
     );
   });
 
+  // BIG-147. In this state a claim genuinely is still open and the recovery
+  // section directly below the card names what connecting a session costs, so
+  // the card must not end on a bare invitation to reconnect.
+  it("should name the takeover when a stale claim is still open", () => {
+    const supporting = (requests: ReadonlyArray<AgentActivityRequest>) => {
+      const activity = deriveCurrentAgentActivity({
+        requests,
+        cancelPendingRequestIds: new Set<string>(),
+        progressEvents: [],
+        agentConnected: false,
+        runtimeOffline: false,
+        now: NOW,
+        heartbeatAt: NOW - AGENT_STALL_MS - 1,
+      });
+      expect(activity).toMatchObject({ state: "disconnected" });
+      return "supporting" in activity ? activity.supporting : "";
+    };
+    expect(
+      supporting([
+        claimedAt("1111111111111111", AGENT_RECOVERY_HORIZON_MS + 1),
+      ]),
+    ).toContain("takes that work over");
+    expect(supporting([])).not.toContain("takes that work over");
+  });
+
   it("should stop claiming a stall once every claim passes the horizon", () => {
     const activity = deriveCurrentAgentActivity({
       requests: [claimedAt("1111111111111111", AGENT_RECOVERY_HORIZON_MS + 1)],

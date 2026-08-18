@@ -27,7 +27,6 @@ import { compactDurationLabel } from "./time-label.js";
 // decide whether an agent is attached, because no signal renews while a turn
 // runs (BIG-147).
 export {
-  AGENT_RECOVERY_HORIZON_LABEL,
   AGENT_RECOVERY_HORIZON_MS,
   AGENT_STALL_MS,
   AGENT_STALL_WINDOW_LABEL,
@@ -152,6 +151,12 @@ const meaningfulWork = (
 const stalledHint =
   "Check the agent terminal - it may be waiting for your approval, out of usage or rate-limited, or stopped. This updates by itself once the agent resumes.";
 
+// The stalled hint promises a self-resolving wait, which nothing will keep once
+// a claim is this old. Past the recovery horizon the reviewer needs the route
+// forward and the cost of taking it, not another reassurance (BIG-147).
+const abandonedHint =
+  "The agent has reported nothing for far longer than a turn takes. Connect a coding agent from the Agent tab to pick this up; doing so takes the work over, so the original agent's answer will no longer be accepted.";
+
 /** Expires a browser-held presence snapshot at the same lease as the store. */
 export const agentPresenceIsFresh = ({
   connected,
@@ -259,21 +264,33 @@ const stalledSupporting = ({
     : `The agent picked this up and has reported nothing for ${quietFor}. ${stalledHint}`;
 };
 
-/** Explains a lost lease without claiming why the external agent stopped. */
+/**
+ * Explains a lost lease without claiming why the external agent stopped.
+ *
+ * When a claim is still open this reading is only reached past the recovery
+ * horizon, so the reviewer is one click from a recovery prompt that would take
+ * that claim over. The card has to tell the same story as the prompt below it
+ * rather than end on a bare invitation to reconnect (BIG-147).
+ */
 const disconnectedSupporting = ({
   heartbeatAt,
   now,
+  claimStillOpen,
 }: {
   readonly heartbeatAt: number;
   readonly now: number;
+  readonly claimStillOpen: boolean;
 }): string => {
   const quietFor = compactDurationLabel({
     start: heartbeatAt,
     end: Math.max(now, heartbeatAt),
   });
+  const takeover = claimStillOpen
+    ? " An agent still holds work here, so connecting a session takes that work over and its answer will no longer be accepted."
+    : "";
   return quietFor === null
-    ? "Reconnect the coding agent to continue. All comments are safe."
-    : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue. All comments are safe.`;
+    ? `Reconnect the coding agent to continue.${takeover} All comments are safe.`
+    : `No agent signal for ${quietFor} (disconnect threshold: ${AGENT_STALL_WINDOW_LABEL}); the session may have ended or gone idle. Reconnect to continue.${takeover} All comments are safe.`;
 };
 
 /**
@@ -549,7 +566,12 @@ export const deriveCurrentAgentActivity = ({
       state: "disconnected",
       tone: "danger",
       headline: "The agent is disconnected",
-      supporting: disconnectedSupporting({ heartbeatAt, now }),
+      supporting: disconnectedSupporting({
+        heartbeatAt,
+        now,
+        claimStillOpen:
+          heldWorkQuiet({ requests, cancelPendingRequestIds, now }) === "stale",
+      }),
     };
   }
   if (request === undefined) {
@@ -690,17 +712,22 @@ export const deriveAgentStatus = (input: AgentStatusInput): AgentStatus => {
       ? null
       : Math.max(0, input.nowMs - input.lastAgentSignalAtMs);
   if (quietFor === null || quietFor > AGENT_STALL_MS) {
+    // Past the recovery horizon the pickup has stopped explaining the quiet
+    // everywhere else, so this surface drops the promise that it resolves
+    // itself. Measured from the claim's own last signal, never from the lease,
+    // which a quiet turn has by definition already let lapse (BIG-147).
+    const abandoned = quietFor !== null && quietFor > AGENT_RECOVERY_HORIZON_MS;
     return {
       stage: "stalled",
-      label: "Working",
+      label: abandoned ? "No longer reporting" : "Working",
       headline:
         quietFor === null
           ? "No progress reported yet"
           : `No progress for ${Math.max(1, Math.round(quietFor / 60_000))}m`,
       // No claim about the session itself: the same silence that reaches this
       // branch is the only evidence there is either way (BIG-147).
-      detail: stalledHint,
-      tone: "warning",
+      detail: abandoned ? abandonedHint : stalledHint,
+      tone: abandoned ? "danger" : "warning",
     };
   }
   return {

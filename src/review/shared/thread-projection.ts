@@ -443,7 +443,8 @@ export const projectCommentThread = <
             requestIsTerminal(latestExchange.request)
           ? "ready"
           : latestStatus?.stage === "working" ||
-              latestStatus?.stage === "stalled"
+              (latestStatus?.stage === "stalled" &&
+                latestStatus.tone === "warning")
             ? "working"
             : "queued";
   return {
