@@ -14,6 +14,13 @@ import {
 } from "./agent-model.js";
 import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
+import {
+  emptyReviewInputContract,
+  type ReviewInput,
+  type ReviewInputContract,
+  type ReviewInputKind,
+  type ReviewInputState,
+} from "./input-contract.js";
 
 export type ReviewSnapshot = {
   readonly drafts: ReadonlyArray<ReviewComment>;
@@ -382,6 +389,65 @@ export const decodeChangeDispositions = (
               },
             ]
           : [],
+    ),
+  };
+};
+
+/** Encodes the review's derived input contract for transport. */
+export const encodeReviewInputContract = (
+  value: ReviewInputContract,
+): ReviewInputContract => value;
+
+const INPUT_KINDS: ReadonlySet<string> = new Set<ReviewInputKind>([
+  "decision",
+  "change-set",
+]);
+const INPUT_STATES: ReadonlySet<string> = new Set<ReviewInputState>([
+  "answered",
+  "unanswered",
+  "stale",
+]);
+
+/**
+ * Decodes the input contract while dropping malformed transport entries. Both
+ * revisions decode to -1 when unusable, which is older than any accepted write
+ * to either record, so a body this build cannot read can never displace a
+ * contract the page already applied.
+ */
+export const decodeReviewInputContract = (
+  value: unknown,
+): ReviewInputContract => {
+  if (!isReviewWireRecord(value) || !Array.isArray(value.inputs)) {
+    return emptyReviewInputContract();
+  }
+  const revision = (candidate: unknown): number =>
+    typeof candidate === "number" && Number.isFinite(candidate)
+      ? candidate
+      : -1;
+  return {
+    answersRevision: revision(value.answersRevision),
+    dispositionsRevision: revision(value.dispositionsRevision),
+    inputs: value.inputs.flatMap((input): ReadonlyArray<ReviewInput> =>
+      isReviewWireRecord(input) &&
+      typeof input.inputId === "string" &&
+      typeof input.kind === "string" &&
+      INPUT_KINDS.has(input.kind) &&
+      typeof input.label === "string" &&
+      typeof input.isCritical === "boolean" &&
+      typeof input.state === "string" &&
+      INPUT_STATES.has(input.state) &&
+      typeof input.detail === "string"
+        ? [
+            {
+              inputId: input.inputId,
+              kind: input.kind as ReviewInputKind,
+              label: input.label,
+              isCritical: input.isCritical,
+              state: input.state as ReviewInputState,
+              detail: input.detail,
+            },
+          ]
+        : [],
     ),
   };
 };

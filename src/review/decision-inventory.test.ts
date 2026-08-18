@@ -37,6 +37,28 @@ const onlyEntry = (markdown: string) => {
 };
 
 describe("compiled decision inventory", () => {
+  it("should carry the question and the author's criticality judgment", () => {
+    const critical = PLAN.replace(
+      '<Decision question="Which release path should we use?">',
+      '<Decision critical question="Which release path should we use?">',
+    );
+
+    expect(onlyEntry(PLAN).question).toBe("Which release path should we use?");
+    expect(onlyEntry(PLAN).isCritical).toBe(false);
+    expect(onlyEntry(critical).isCritical).toBe(true);
+  });
+
+  it("should leave the digest alone when only criticality changes", () => {
+    const critical = PLAN.replace(
+      '<Decision question="Which release path should we use?">',
+      '<Decision critical question="Which release path should we use?">',
+    );
+
+    expect(onlyEntry(critical).decisionDigest).toBe(
+      onlyEntry(PLAN).decisionDigest,
+    );
+  });
+
   it("should name each decision and the options it offers", () => {
     const inventory = inventoryOf(PLAN);
 

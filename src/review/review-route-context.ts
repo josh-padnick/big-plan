@@ -22,6 +22,7 @@ import {
   readChangeDispositions,
   readComments,
   readResolvedCommentIds,
+  readSnapshot,
   readStagedInputs,
   writeChangeDispositions,
   writeStagedInputs,
@@ -35,6 +36,10 @@ import { validateStagedInputs } from "./plan-inputs-store.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
 import { validateChangeDispositions } from "./change-dispositions-store.js";
 import type { StoredChangeDispositions } from "./change-dispositions-store.js";
+import { readCommittedChangeSets } from "./change-set-commit.js";
+import type { ChangeSetInput } from "./input-contract.js";
+import { buildSnapshotDiff } from "./snapshot-diff.js";
+import { reviewerMessageLabel } from "./shared/reviewer-markdown.js";
 import {
   MUTATION_STALL_MS,
   ReviewWriteStalled,
@@ -193,6 +198,16 @@ export type ChangeDispositions = {
   readonly write: (dispositions: StoredChangeDispositions) => Promise<void>;
 };
 
+/**
+ * The change sets an agent published, described as inputs a review is waiting
+ * on. This is the change-set half of the input contract's inventory, and it
+ * sits beside the decision inventory for the same reason: the runtime holds
+ * the committed revision log, so it is the only party that can enumerate them.
+ */
+export type PlanChangeSets = {
+  readonly list: () => Promise<ReadonlyArray<ChangeSetInput>>;
+};
+
 /** The review's one lifetime policy and its current activity. */
 export type ActivityClock = {
   readonly idleTimeoutMs: number;
@@ -212,6 +227,7 @@ export type ReviewRouteContext = {
   readonly planRenderer: PlanRenderer;
   readonly decisionAnswers: DecisionAnswers;
   readonly changeDispositions: ChangeDispositions;
+  readonly planChangeSets: PlanChangeSets;
   readonly readerProgress: ReaderProgress;
   readonly writeGate: WriteGate;
   readonly activityClock: ActivityClock;
@@ -525,5 +541,100 @@ export const createActivityClock = (idleTimeoutMs: number): ActivityClock => {
     idleForMs: () => Date.now() - lastActivityAt,
     expiresAtMs: () =>
       idleTimeoutMs > 0 ? lastActivityAt + idleTimeoutMs : undefined,
+  };
+};
+
+/**
+ * Owns the enumeration of published change sets and the places inside each one.
+ *
+ * The places are memoized by the change set's address rather than by its id,
+ * because that address is content-pinned: one pair of snapshot digests always
+ * describes the same set of changes, and a later revision arrives as its own
+ * address rather than mutating this one. Recomputing it would mean rendering
+ * two whole documents on every read of the contract, which the reviewer's
+ * browser asks for on every poll.
+ */
+export const createPlanChangeSets = ({
+  store,
+  resolvedPlanPath,
+  planRenderer,
+}: {
+  readonly store: ReviewStore;
+  readonly resolvedPlanPath: string;
+  readonly planRenderer: PlanRenderer;
+}): PlanChangeSets => {
+  const places = new Map<string, ReadonlyArray<string>>();
+  const placeIdsFor = async ({
+    from,
+    to,
+  }: {
+    readonly from: string;
+    readonly to: string;
+  }): Promise<ReadonlyArray<string>> => {
+    const address = `${from}:${to}`;
+    const memoized = places.get(address);
+    if (memoized !== undefined) return memoized;
+    const fallbackTitle = basename(resolvedPlanPath, extname(resolvedPlanPath));
+    let placeIds: ReadonlyArray<string>;
+    try {
+      const [beforeSource, afterSource] = await Promise.all([
+        readSnapshot({ store, snapshot: from }),
+        readSnapshot({ store, snapshot: to }),
+      ]);
+      placeIds = buildSnapshotDiff({
+        from,
+        to,
+        before: renderDocument({
+          markdown: beforeSource,
+          fallbackTitle,
+          identity: {},
+        }).blocks,
+        after: renderDocument({
+          markdown: afterSource,
+          fallbackTitle,
+          identity: {},
+        }).blocks,
+      }).places.map((place) => place.placeId);
+    } catch {
+      // A snapshot this review no longer holds leaves a change set with
+      // nothing to review. It stays in the contract, because a reviewer who
+      // was shown it is owed its absence rather than its disappearance.
+      placeIds = [];
+    }
+    places.set(address, placeIds);
+    return placeIds;
+  };
+  // A thread's change set is addressed by the comment that started it, so the
+  // comment is where its name comes from. A plan-wide question owns no thread
+  // and is named for what it is.
+  const labelFor = async (changeSetId: string): Promise<string> => {
+    const comments = [
+      ...(await planRenderer.readStoredComments(store.sentPath)),
+      ...(await planRenderer.readStoredComments(store.draftsPath)),
+    ];
+    const comment = comments.find((entry) => entry.id === changeSetId);
+    return comment === undefined
+      ? "Plan-wide question"
+      : reviewerMessageLabel(comment.body);
+  };
+  return {
+    list: async () => {
+      const changeSets = await readCommittedChangeSets({ store });
+      return Promise.all(
+        changeSets.map(async (changeSet) => ({
+          changeSetId: changeSet.changeSetId,
+          label:
+            changeSet.provenance === "chat"
+              ? "Plan-wide question"
+              : await labelFor(changeSet.changeSetId),
+          from: changeSet.baseSnapshot,
+          to: changeSet.resultSnapshot,
+          placeIds: await placeIdsFor({
+            from: changeSet.baseSnapshot,
+            to: changeSet.resultSnapshot,
+          }),
+        })),
+      );
+    },
   };
 };
