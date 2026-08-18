@@ -137,9 +137,14 @@ Nothing is deleted: restoring the decision's exact content revives the original 
 Choosing **Change** is not a reversible peek: it retracts the saved answer straight away, and the decision counts as unanswered until you confirm again.
 So choose **Change** and confirm a different option to replace an answer, or **Change** and then **Clear answer** to leave the decision deliberately unanswered.
 
+**Suggest another option** opens a composer that asks what your own words are for.
+By default they are the decision: **Confirm choice** records them as the answer, and they then stand as a **New option** until **Change** reopens the field with the text kept.
+Flip it to **Submit as comment** when the agent should act on the words instead: that side uses the review's own comment controls, so **Submit right away** decides whether the comment is sent immediately or staged with the rest of your feedback, and it reaches the agent as **Decision options feedback** with its thread beside the composer.
+**Cancel** leaves the composer from either side, and the comment side needs a live review; a standalone document says so instead of submitting.
+
 A read-only review page - one whose plan a newer review session took custody of - cannot record answers: every answering control is disabled, with a note beside it saying why.
 A confirm made before the page has learned whether it may write is held rather than guessed at: it is saved once the session proves writable, and kept as a reading-session note when the session proves read-only.
-A proposed alternative approach is a reading-session note either way; send it to the agent through the feedback flow.
+Words recorded as the decision are a reading-session note either way, never a saved answer; submit them as a comment when the agent should act on them.
 In a standalone rendered document, an answer lasts only for the reading session and is not saved with a review.
 
 ## Persistence
