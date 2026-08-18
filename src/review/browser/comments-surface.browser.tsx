@@ -138,6 +138,11 @@ export type CommentsSurfaceModel = {
   readonly canResolveAll: boolean;
   readonly renderDraft: (comment: ReviewComment, compact: boolean) => ReactNode;
   readonly renderResolvedDraft: (comment: ReviewComment) => ReactNode;
+  /**
+   * Renders one sent thread. queuePosition is that thread's place in the
+   * sidebar's queue of waiting threads, counting the ones a batch header owns,
+   * so it is not the card's index in the list it renders into.
+   */
   readonly renderSent: (
     comment: ReviewComment,
     resolved: boolean,
@@ -169,7 +174,12 @@ export const CommentsSurface = ({
       (comment) => !headed.has(comment.id),
     );
   const working = unheaded("working");
-  const queued = unheaded("queued");
+  const queuedGroup = model.groups.get("queued") ?? [];
+  const queued = queuedGroup.filter((comment) => !headed.has(comment.id));
+  // A batch header owns its own queued threads and renders above this group, so
+  // the remainder keeps counting from where those threads left off. Restarting
+  // at one would number the back of the queue as its front.
+  const queuedOffset = queuedGroup.length - queued.length;
   // Only stacked batches need containment; one batch has nothing to be told
   // apart from, so the sidebar keeps the layout it has always had.
   const grouped = model.batches.length > 1;
@@ -284,7 +294,12 @@ export const CommentsSurface = ({
               <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
                 {queued.map((comment, index) => (
                   <li key={comment.id}>
-                    {model.renderSent(comment, false, true, index + 1)}
+                    {model.renderSent(
+                      comment,
+                      false,
+                      true,
+                      queuedOffset + index + 1,
+                    )}
                   </li>
                 ))}
               </ol>

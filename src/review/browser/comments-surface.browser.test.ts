@@ -1,6 +1,15 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { batchSectionTone } from "./comments-surface.browser.js";
+import {
+  batchSectionTone,
+  CommentsSurface,
+  type CommentsSurfaceBatch,
+  type CommentsSurfaceModel,
+} from "./comments-surface.browser.js";
 import type { AgentStatus } from "../shared/agent-status.js";
+import type { ReviewComment } from "../shared/comment.js";
+import type { ThreadGroup } from "../shared/thread-projection.js";
 
 const status = (overrides: Partial<AgentStatus> = {}): AgentStatus => ({
   stage: "working",
@@ -64,5 +73,99 @@ describe("batch section tone", () => {
         }),
       }),
     ).toBe("queued");
+  });
+});
+
+const comment = (id: string): ReviewComment => ({
+  id,
+  body: `note ${id}`,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  premiseSnapshot: "snapshot",
+  target: { type: "document" },
+});
+
+const batch = (
+  requestId: string,
+  comments: ReadonlyArray<ReviewComment>,
+): CommentsSurfaceBatch => ({
+  requestId,
+  count: comments.length,
+  comments,
+  content: null,
+  label: "Queued, 1 ahead",
+  tone: "queued",
+});
+
+const surface = ({
+  groups,
+  batches,
+}: {
+  readonly groups: ReadonlyMap<ThreadGroup, ReadonlyArray<ReviewComment>>;
+  readonly batches: ReadonlyArray<CommentsSurfaceBatch>;
+}): string =>
+  renderToStaticMarkup(
+    createElement(CommentsSurface, {
+      model: {
+        query: "",
+        onQueryChange: () => undefined,
+        drafts: [],
+        sentCount: [...groups.values()].flat().length,
+        hasRuntime: true,
+        hasComponentBatchNotes: false,
+        groups,
+        batches,
+        resolved: [],
+        resolvedDrafts: [],
+        canResolveAll: false,
+        renderDraft: () => null,
+        renderResolvedDraft: () => null,
+        renderSent: (sent, _resolved, _compact, queuePosition) =>
+          createElement(
+            "span",
+            null,
+            `${sent.id}${queuePosition === undefined ? "" : `#${queuePosition}`}`,
+          ),
+        onResolveAll: () => undefined,
+        onDeleteAll: () => undefined,
+      } satisfies CommentsSurfaceModel,
+    }),
+  );
+
+// BIG-162 follow-up. Batch headers took their own threads out of the Queued
+// group, so numbering what was left from one described the back of the queue as
+// its front: a comment sent behind a queued two-comment batch read "#1" beside
+// its own "Queued, 2 ahead".
+describe("queued card numbering", () => {
+  it("should count past the queued threads a batch header owns", () => {
+    const worked = [comment("w1"), comment("w2")];
+    const behind = [comment("q1"), comment("q2")];
+    const alone = comment("c3");
+
+    const html = surface({
+      groups: new Map([
+        ["working", worked],
+        ["queued", [...behind, alone]],
+      ]),
+      batches: [
+        {
+          ...batch("1111111111111111", worked),
+          tone: "working",
+          label: "Working",
+        },
+        batch("2222222222222222", behind),
+      ],
+    });
+
+    expect(html).toContain("c3#3");
+    expect(html).not.toContain("c3#1");
+  });
+
+  it("should number a queue no batch header speaks for from one", () => {
+    expect(
+      surface({
+        groups: new Map([["queued", [comment("c1"), comment("c2")]]]),
+        batches: [],
+      }),
+    ).toContain("c1#1");
   });
 });
