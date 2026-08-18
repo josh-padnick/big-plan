@@ -12,8 +12,13 @@ import {
 } from "../src/review/store.js";
 import { AGENT_CLAIM_LEASE_MS } from "../src/review/shared/agent-claim.js";
 import { AGENT_RECOVERY_HORIZON_MS } from "../src/review/shared/agent-timing.js";
-import type { Locator } from "@playwright/test";
-import { expect, stageComment, test, type Page } from "./fixtures";
+import {
+  expect,
+  stageComment,
+  test,
+  type Locator,
+  type Page,
+} from "./fixtures";
 
 const agentSessionId = "bbbb1111bbbb1111";
 const COMMENT_BODY = "Name the recovery owner for the retry boundary.";
