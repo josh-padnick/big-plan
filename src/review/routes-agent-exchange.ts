@@ -39,7 +39,7 @@ import {
   MAX_MESSAGE_IMAGE_BYTES,
 } from "./shared/review-image.js";
 import { readCommittedRevisionsToObserve } from "./change-set-commit.js";
-import { recoverStagedPlanMutations } from "./staged-plan-mutation.js";
+import { settleInterruptedCommitsFor } from "./staged-plan-mutation.js";
 import { encodeAgentSnapshot, encodeProgress } from "./shared/review-wire.js";
 
 const appendProgressBestEffort = async ({
@@ -168,6 +168,20 @@ export const sendAgentRequest = async (
         status: 409,
         reason: "A revision cannot change the kind of a message",
       });
+    }
+    // An interrupted commit is settled before the mailbox is touched, so the
+    // journal guard refuses only an answer that really is published or one rename
+    // away from it, never one an abandoned commit left in its own stage - which
+    // would relock exactly the request an abandoned claim hands back (BIG-120).
+    try {
+      await settleInterruptedCommitsFor({
+        store,
+        planPath: resolvedPlanPath,
+        requestIds: [requestId],
+      });
+    } catch (error: unknown) {
+      if (!(error instanceof AgentExchangeRejected)) throw error;
+      return refusal({ status: 409, reason: error.message });
     }
     let revised;
     try {
@@ -301,7 +315,7 @@ export const deleteQueuedAgentRequest = async (
   context: ReviewRouteContext,
   { body }: ReviewRouteRequest,
 ): Promise<ReviewRouteResponse> => {
-  const { store, planId, sessionId } = context;
+  const { store, planId, sessionId, resolvedPlanPath } = context;
   const payload = payloadOf(body);
   const requestId = payload.requestId;
   if (typeof requestId !== "string") {
@@ -312,6 +326,20 @@ export const deleteQueuedAgentRequest = async (
     !exchange.requests.some((candidate) => candidate.requestId === requestId)
   ) {
     return refusal({ status: 404, reason: "No such agent request" });
+  }
+  // An interrupted commit is settled before the mailbox is touched, so the
+  // journal guard refuses only an answer that really is published or one rename
+  // away from it, never one an abandoned commit left in its own stage - which
+  // would relock exactly the request an abandoned claim hands back (BIG-120).
+  try {
+    await settleInterruptedCommitsFor({
+      store,
+      planPath: resolvedPlanPath,
+      requestIds: [requestId],
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
   }
   let deletion: AgentRequestDeletionResult;
   try {
@@ -363,7 +391,11 @@ export const cancelPendingAgentRequest = async (
   // refuses only an answer that really is published or one rename away from
   // it, rather than one that never left the agent's stage.
   try {
-    await recoverStagedPlanMutations({ store, planPath: resolvedPlanPath });
+    await settleInterruptedCommitsFor({
+      store,
+      planPath: resolvedPlanPath,
+      requestIds: [requestId],
+    });
   } catch (error: unknown) {
     if (!(error instanceof AgentExchangeRejected)) throw error;
     return refusal({ status: 409, reason: error.message });

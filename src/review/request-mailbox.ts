@@ -34,6 +34,7 @@ import {
   compactProgressLog,
   deleteAgentRequestValue,
   hasPreparedMutationJournal,
+  highestAgentMutationStageGeneration,
   nextProgressSequence,
   readAgentConnectionEvents,
   readAgentRequestValue,
@@ -266,19 +267,6 @@ const readCurrentRequest = async ({
   return request;
 };
 
-const requestCreation = (request: AgentRequest): string => {
-  const created: Record<string, unknown> = { ...request };
-  delete created.baselineSnapshot;
-  delete created.claimedAt;
-  delete created.claimedBy;
-  delete created.claimedModel;
-  delete created.claimExpiresAtMs;
-  delete created.claimGeneration;
-  delete created.answeredAt;
-  delete created.canceledAt;
-  return JSON.stringify(created);
-};
-
 /**
  * Drops the claim from a request the reviewer has taken back.
  *
@@ -305,6 +293,21 @@ const withoutClaim = (request: AgentRequest): Record<string, unknown> => {
 };
 
 /**
+ * The submission a request was created from, with everything a lifecycle adds
+ * to it removed, so a resend can be compared against what is already stored.
+ *
+ * The claim's own fields are dropped through `withoutClaim`, because a claim
+ * field added later and forgotten here would silently change this comparison
+ * rather than fail.
+ */
+const requestCreation = (request: AgentRequest): string => {
+  const created = withoutClaim(request);
+  delete created.answeredAt;
+  delete created.canceledAt;
+  return JSON.stringify(created);
+};
+
+/**
  * Refuses to take a request back from a commit that has already won.
  *
  * Same reasoning as the cancel guard, and the same lock: a journal on disk
@@ -327,14 +330,15 @@ const assertNotPublishing = async ({
 };
 
 /**
- * Takes one request's claim back for the reviewer.
+ * Drops the mutation stages a released claim leaves behind. The claim's own
+ * fields go through `withoutClaim`; this is only the stages.
  *
- * The stages go with the claim, for the reason a cancel drops them: a released
- * generation can never publish - the commit boundary refuses a generation its
- * request no longer names - so its private plan candidate would otherwise sit
- * in the store for the life of the plan.
+ * They go for the reason a cancel drops them: a released generation can never
+ * publish - the commit boundary refuses a generation its request no longer
+ * names - so its private plan candidate would otherwise sit in the store for
+ * the life of the plan.
  */
-const releaseClaim = async ({
+const dropReleasedStages = async ({
   store,
   requestId,
 }: {
@@ -531,6 +535,22 @@ export const claimAgentRequest = async ({
           // A takeover is a new claim, so it raises the generation. The
           // displaced holder keeps writing to a stage whose generation the
           // commit boundary no longer accepts.
+          //
+          // The stages on disk are read too, because a release drops the
+          // claim's generation with the rest of it: reading the request alone
+          // would hand generation 1 back after a release, and a returning
+          // agent that recreated its old stage would resume the candidate it
+          // drafted for the message the reviewer has since replaced. The read
+          // happens under this request lock, so a stage recreated afterwards
+          // belongs to a generation this claim already outranks.
+          const claimGeneration =
+            Math.max(
+              request.claimGeneration ?? 0,
+              await highestAgentMutationStageGeneration({
+                store: lockedStore,
+                requestId,
+              }),
+            ) + 1;
           const claimed = validateAgentRequest({
             ...request,
             baselineSnapshot,
@@ -538,7 +558,7 @@ export const claimAgentRequest = async ({
             claimedBy,
             claimedModel: model,
             claimExpiresAtMs: claimLeaseExpiryMs(nowMs),
-            claimGeneration: (request.claimGeneration ?? 0) + 1,
+            claimGeneration,
           });
           await writeAgentRequestValue({
             store: lockedStore,
@@ -936,7 +956,7 @@ export const reviseQueuedRequest = async ({
         value: revised,
       });
       const released = request.claimedAt !== undefined;
-      if (released) await releaseClaim({ store: lockedStore, requestId });
+      if (released) await dropReleasedStages({ store: lockedStore, requestId });
       return { revised, released };
     },
   });
@@ -979,7 +999,7 @@ export const deleteQueuedRequest = async ({
         nowMs,
       });
       if (request.claimedAt !== undefined) {
-        await releaseClaim({ store: lockedStore, requestId });
+        await dropReleasedStages({ store: lockedStore, requestId });
       }
       return deleteAgentRequestValue({ store: lockedStore, requestId });
     },
@@ -1059,7 +1079,7 @@ export const removeCommentFromQueuedFeedbackRequest = async ({
         value: updated,
       });
       const released = request.claimedAt !== undefined && comments.length > 0;
-      if (released) await releaseClaim({ store: lockedStore, requestId });
+      if (released) await dropReleasedStages({ store: lockedStore, requestId });
       return { updated, released };
     },
   });

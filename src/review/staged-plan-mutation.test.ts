@@ -782,6 +782,67 @@ describe("interrupted plan commit recovery", () => {
     }
   });
 
+  it("should never reissue a generation a released claim already used", async () => {
+    const { directory, store, planId } = await preparedPlan();
+    try {
+      await writeAgentRequest({ store, request: chatRequest(planId) });
+      const abandonedAtMs = Date.now() - AGENT_RECOVERY_HORIZON_MS - 1;
+      const first = await claimAgentRequest({
+        store,
+        activeSessionId: SESSION,
+        requestId: REQUEST,
+        claimedBy: AGENT_A,
+        baselineSnapshot: deriveSnapshotDigest(BASE),
+        now: new Date(abandonedAtMs).toISOString(),
+        clock: () => abandonedAtMs,
+      });
+      const stage = await stageFor({
+        store,
+        claimedBy: AGENT_A,
+        generation: requestClaimGeneration(first),
+      });
+      await writeFile(stage.candidatePath, RESULT, "utf8");
+
+      // The reviewer takes the abandoned message back, which drops the claim
+      // and the stages the released generation owned.
+      await reviseQueuedRequest({
+        store,
+        requestId: REQUEST,
+        body: "Publish the other revision instead.",
+        agentConnected: false,
+      });
+
+      // The agent was unreachable rather than dead. It comes back still
+      // believing it holds the generation it was given, and recreates that
+      // stage from the base it froze - which nothing has moved, because
+      // nothing published.
+      const recreated = await stageFor({
+        store,
+        claimedBy: AGENT_A,
+        generation: requestClaimGeneration(first),
+      });
+      await writeFile(recreated.candidatePath, RESULT, "utf8");
+
+      const reclaimed = await claim({ store, claimedBy: AGENT_A });
+      expect(requestClaimGeneration(reclaimed)).toBeGreaterThan(
+        requestClaimGeneration(first),
+      );
+      const reopened = await stageFor({
+        store,
+        claimedBy: AGENT_A,
+        generation: requestClaimGeneration(reclaimed),
+      });
+      // A reissued number would let this resume the candidate drafted for the
+      // message the reviewer replaced. The new claim starts from the committed
+      // source instead.
+      await expect(readFile(reopened.candidatePath, "utf8")).resolves.toBe(
+        BASE,
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("should settle an answer onto the claim that published it", async () => {
     const { directory, planPath, store, planId } = await preparedPlan();
     try {

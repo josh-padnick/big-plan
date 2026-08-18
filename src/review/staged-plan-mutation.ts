@@ -36,6 +36,7 @@ import {
 import {
   agentMutationJournalPath,
   anchorReviewStore,
+  hasPreparedMutationJournal,
   readStoreJson,
   removeAgentMutationStages,
   ReviewStorePathRejected,
@@ -624,6 +625,42 @@ export const assertNoExternalSourceConflict = (
     (recovery) => recovery.outcome === "conflict",
   );
   if (conflict !== undefined) throw externalSourceConflict(conflict);
+};
+
+/**
+ * Settles an interrupted commit before a reviewer control decides what a
+ * request's journal means.
+ *
+ * A journal on disk makes the mailbox refuse an edit, a delete, or a cancel,
+ * because an answer that got that far has published or is one rename from it.
+ * That refusal is only honest once recovery has had its say: a journal an
+ * abandoned commit left behind is rolled back here, and refusing on it instead
+ * would lock the message for good in the one case abandonment is most certain
+ * (BIG-120).
+ *
+ * Nothing is settled unless one of the named requests actually has a journal.
+ * Recovery takes the plan-mutation lock and resolves the whole store, so a
+ * control with nothing to settle would otherwise start refusing on conditions
+ * that have no bearing on the request it is about to change.
+ */
+export const settleInterruptedCommitsFor = async ({
+  store,
+  planPath,
+  requestIds,
+}: {
+  readonly store: ReviewStore;
+  readonly planPath: string;
+  readonly requestIds: ReadonlyArray<string>;
+}): Promise<void> => {
+  for (const requestId of requestIds) {
+    // An id no request could carry names no journal, and this runs before the
+    // route has resolved the id it was handed, so it answers rather than
+    // throwing over what is really a "no such request".
+    if (!REQUEST_ID.test(requestId)) continue;
+    if (!(await hasPreparedMutationJournal({ store, requestId }))) continue;
+    await recoverStagedPlanMutations({ store, planPath });
+    return;
+  }
 };
 
 /**

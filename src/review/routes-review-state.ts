@@ -43,6 +43,7 @@ import {
 import {
   REVERT_SOURCE_MOVED_REASON,
   revertPlanSource,
+  settleInterruptedCommitsFor,
 } from "./staged-plan-mutation.js";
 import {
   anchorReviewStore,
@@ -774,23 +775,44 @@ export const deleteSentComment = async (
       validate: validateResolvedCommentIds,
     })
   ).includes(commentId);
-  for (const pending of answeredRequestIds.size === 0 ? pendingRequests : []) {
-    if (pending.canceledAt !== undefined) continue;
-    if (pending.kind === "feedback") {
-      await removeCommentFromQueuedFeedbackRequest({
-        store,
-        requestId: pending.requestId,
-        commentId,
-        now,
-        agentConnected,
-      });
-    } else {
-      await cancelAgentRequest({
-        store,
-        requestId: pending.requestId,
-        now,
-      });
+  // An interrupted commit is settled first, so the journal guard below refuses
+  // only an answer that really is published or one rename away from it, never
+  // one an abandoned commit left in its own stage - which would relock exactly
+  // the comment an abandoned claim hands back (BIG-120).
+  //
+  // The mailbox then re-proves ownership under each request's own lock, so a
+  // claim taken between the check above and this loop refuses here. That
+  // refusal is the reviewer's answer, not a runtime failure, so it leaves the
+  // comment in place and reports the conflict.
+  try {
+    await settleInterruptedCommitsFor({
+      store,
+      planPath: resolvedPlanPath,
+      requestIds: pendingRequests.map((pending) => pending.requestId),
+    });
+    for (const pending of answeredRequestIds.size === 0
+      ? pendingRequests
+      : []) {
+      if (pending.canceledAt !== undefined) continue;
+      if (pending.kind === "feedback") {
+        await removeCommentFromQueuedFeedbackRequest({
+          store,
+          requestId: pending.requestId,
+          commentId,
+          now,
+          agentConnected,
+        });
+      } else {
+        await cancelAgentRequest({
+          store,
+          requestId: pending.requestId,
+          now,
+        });
+      }
     }
+  } catch (error: unknown) {
+    if (!(error instanceof AgentExchangeRejected)) throw error;
+    return refusal({ status: 409, reason: error.message });
   }
   // The resolved-id read-modify-write shares `.resolved.lock` with request
   // creation and the drafts write, so a concurrent resolve cannot be dropped by

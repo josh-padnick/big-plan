@@ -1674,6 +1674,37 @@ export const hasPreparedMutationJournal = async ({
   );
 
 /**
+ * The highest claim generation this request has a stage directory for, or 0
+ * when it has none.
+ *
+ * A claim generation names a stage, so a number handed out twice would let a
+ * new claim resume a stage an earlier one left behind. What is on disk is the
+ * only record of a generation that survived its claim's release, so a new
+ * claim is seeded above this rather than above the request alone.
+ */
+export const highestAgentMutationStageGeneration = async ({
+  store,
+  requestId,
+}: {
+  readonly store: ReviewStore;
+  readonly requestId: string;
+}): Promise<number> => {
+  if (!/^[a-f0-9]{16}$/.test(requestId)) {
+    throw new Error(
+      "An agent exchange request id must be 16 hexadecimal characters",
+    );
+  }
+  const names = await readdir(
+    inside({ base: store.agentMutationDirectory, leaf: requestId }),
+  ).catch(() => []);
+  return names.reduce(
+    (highest, name) =>
+      /^[0-9]{1,9}$/.test(name) ? Math.max(highest, Number(name)) : highest,
+    0,
+  );
+};
+
+/**
  * Removes every claim stage one request owns, with the private plan candidate
  * each of them holds. A request that can no longer produce an answer - it
  * committed, or the reviewer withdrew it - keeps none of them.
