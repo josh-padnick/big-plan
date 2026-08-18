@@ -14,8 +14,8 @@
 // turn a gate green with no push, and it is why the names in CHECK_NAMES are the
 // exact strings branch protection has to require.
 //
-// Inline threads come from GraphQL because REST cannot say whether a reviewer
-// minimized a comment, and a withdrawn finding must not gate a merge.
+// Inline threads come from GraphQL because REST cannot say whether a comment
+// was minimized, and gates.mjs refuses to let a hidden reply resolve a finding.
 
 const API = process.env.GITHUB_API_URL ?? "https://api.github.com";
 

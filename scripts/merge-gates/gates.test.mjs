@@ -131,7 +131,10 @@ test("resolving a thread without replying is not a response", () => {
   assert.match(report(verdict), /Ticking GitHub's resolve/);
 });
 
-test("a finding the reviewer withdrew does not gate", () => {
+test("hiding a finding does not withdraw it", () => {
+  // Anyone with write access can minimize any comment, the author's own agent
+  // included, and GitHub does not record who did. A hidden finding therefore
+  // still needs the written reply every other finding needs.
   const verdict = evaluateReviewTriage(
     snapshot({
       issueComments: [signOff],
@@ -139,7 +142,21 @@ test("a finding the reviewer withdrew does not gate", () => {
       reviewThreads: [thread([{ ...finding(), isMinimized: true }])],
     }),
   );
-  assert.equal(verdict.conclusion, "success");
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /Reviewer findings are unresolved/);
+  assert.match(report(verdict), /1 finding\(s\) are unresolved/);
+});
+
+test("hiding the reply does not resolve the finding either", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+      reviewThreads: [thread([finding(), { ...reply(), isMinimized: true }])],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(report(verdict), /unresolved: 1/);
 });
 
 test("a push invalidates the sign-off until it is written again", () => {
@@ -321,8 +338,28 @@ test("an override scoped to an older head does not carry to this one", () => {
 });
 
 test("a draft pull request still gets judged, with the mid-flow red explained", () => {
-  const verdict = evaluateValidationAttestation(snapshot({ isDraft: true }));
+  const draft = snapshot({ isDraft: true });
+  const verdict = evaluateValidationAttestation(draft);
   assert.equal(verdict.conclusion, "failure");
+  assert.match(
+    formatVerdict(verdict, draft),
+    /This pull request is a draft\. A red gate is expected here mid-flow/,
+  );
+
+  const ready = snapshot();
+  assert.doesNotMatch(
+    formatVerdict(evaluateValidationAttestation(ready), ready),
+    /is a draft/,
+  );
+
+  const passing = snapshot({
+    isDraft: true,
+    issueComments: [comment(`no-mistakes: passed run 918a82 head ${HEAD}`)],
+  });
+  assert.doesNotMatch(
+    formatVerdict(evaluateValidationAttestation(passing), passing),
+    /is a draft/,
+  );
 });
 
 test("pasting a failure report back does not satisfy the gate that printed it", () => {
@@ -415,6 +452,50 @@ test("unresolved threads from other authors are reported under an attestation to
   assert.match(report(verdict), /by a-human/);
 });
 
+test("a marker hidden in an HTML comment satisfies nothing", () => {
+  // Shaped like a real reviewer comment: visible prose, then a hidden
+  // bookkeeping block that quotes context from an earlier comment. A human
+  // reading the pull request sees no sign-off and no attestation here.
+  const bookkeeping = [
+    "Looks good to me.",
+    "",
+    "<!-- coderabbitai-context",
+    `review-triage: complete ${HEAD}`,
+    `no-mistakes: passed run 918a82 head ${HEAD}`,
+    "-->",
+    "",
+    `<!-- adversarial-review: complete ${HEAD} by claude-opus-5 -->`,
+    "<!-- findings: 0 -->",
+  ].join("\n");
+  const hidden = {
+    issueComments: [comment(bookkeeping)],
+    reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+    reviewThreads: [thread([finding(), reply()])],
+  };
+  const triage = evaluateReviewTriage(snapshot(hidden));
+  assert.equal(triage.conclusion, "failure");
+  assert.match(triage.title, /Sign-off missing/);
+  assert.equal(
+    evaluateValidationAttestation(snapshot(hidden)).conclusion,
+    "failure",
+  );
+
+  // The same lines, posted where a reader can see them, do satisfy the gates.
+  const visible = {
+    ...hidden,
+    issueComments: [
+      comment(
+        `Looks good to me.\n\nreview-triage: complete ${HEAD}\nno-mistakes: passed run 918a82 head ${HEAD}`,
+      ),
+    ],
+  };
+  assert.equal(evaluateReviewTriage(snapshot(visible)).conclusion, "success");
+  assert.equal(
+    evaluateValidationAttestation(snapshot(visible)).conclusion,
+    "success",
+  );
+});
+
 test("shaNames accepts an unambiguous prefix and rejects a wrong one", () => {
   assert.equal(shaNames(HEAD.slice(0, 7), HEAD), true);
   assert.equal(shaNames(HEAD.toUpperCase(), HEAD), true);
@@ -430,4 +511,23 @@ test("assertedLines drops fenced, quoted, and indented text", () => {
     ),
     ["keep", "keep2"],
   );
+});
+
+test("assertedLines keeps only what a reader can see of an HTML comment", () => {
+  assert.deepEqual(assertedLines("before <!-- hidden --> after"), [
+    "before  after",
+  ]);
+  assert.deepEqual(
+    assertedLines("keep\n<!--\nhidden\nstill hidden\n-->\nkeep2"),
+    ["keep", "", "", "", "", "keep2"],
+  );
+  assert.deepEqual(assertedLines("<!-- a --> mid <!-- b --> end"), [
+    " mid  end",
+  ]);
+  // An unclosed span hides the rest of the comment, which fails closed.
+  assert.deepEqual(assertedLines("keep\n<!-- open\nreview-triage: complete"), [
+    "keep",
+    "",
+    "",
+  ]);
 });

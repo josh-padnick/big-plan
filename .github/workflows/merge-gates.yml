@@ -30,6 +30,21 @@
 # minutes. The job only reads the API, so it is seconds long and needs nothing
 # from the local machine, but it does queue behind whatever that runner is
 # already building. Move it to a hosted runner if gate latency starts to matter.
+#
+# That runner is why the job is guarded by a same-repository condition. ci.yml
+# states the policy this workflow has to keep: trusted contributors only on the
+# self-hosted runner, because external contributions must never execute
+# workflows on the local machine. pull_request, pull_request_review, and
+# pull_request_review_comment all run the pull request's own ref, so on a fork
+# pull request they would check out and run fork-authored code here; the guard
+# skips them. issue_comment and workflow_dispatch run the default branch's copy
+# and read the pull request over the API, so they execute nothing the fork
+# wrote and may judge a fork pull request safely.
+#
+# The consequence, deliberately in the safe direction: a fork pull request gets
+# no gate report from its own pushes, so its two required checks never report
+# and the merge stays blocked. A maintainer who wants to judge one runs this
+# workflow from the Actions tab with the pull request number.
 name: Merge gates
 
 on:
@@ -58,8 +73,16 @@ concurrency:
 
 jobs:
   judge:
-    # issue_comment also fires for plain issues, which have no head to gate.
-    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    # Never run fork-authored code on the self-hosted runner: the events that
+    # run the pull request's own ref are allowed only for a pull request whose
+    # head lives in this repository. issue_comment is allowed because it runs
+    # the default branch, and only for a comment on a pull request - plain
+    # issues fire it too, and they have no head to gate. workflow_dispatch is
+    # the maintainer path, including for a fork pull request.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request) ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: self-hosted
     # The gate is one API-reading script. Anything longer than this is wedged,
     # and it is holding a runner every other lane's build needs.

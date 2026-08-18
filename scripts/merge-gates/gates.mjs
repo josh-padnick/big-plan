@@ -79,6 +79,9 @@ export const MARKERS = {
   validationOverride: "no-mistakes: overridden - <reason>",
 };
 
+/** One marker with the real head sha filled in, for a report a reader copies. */
+const withHead = (marker, headSha) => marker.replace("<head-sha>", headSha);
+
 /** Names of the two check runs. Branch protection requires these exact strings. */
 export const CHECK_NAMES = {
   reviewTriage: "review-triage",
@@ -113,30 +116,78 @@ export const shaNames = (authored, commit) => {
 };
 
 /**
+ * Removes the `<!-- ... -->` spans from one line, given whether an earlier line
+ * left a span open, and reports whether this line leaves one open. A span may
+ * open and close on one line, several times, or run across many lines.
+ */
+const withoutHiddenSpans = (line, wasHidden) => {
+  let visible = "";
+  let rest = line;
+  let hidden = wasHidden;
+  while (rest !== "") {
+    if (hidden) {
+      const close = rest.indexOf("-->");
+      if (close === -1) {
+        return { visible, hidden: true };
+      }
+      rest = rest.slice(close + 3);
+      hidden = false;
+      continue;
+    }
+    const open = rest.indexOf("<!--");
+    if (open === -1) {
+      return { visible: visible + rest, hidden: false };
+    }
+    visible += rest.slice(0, open);
+    rest = rest.slice(open + 4);
+    hidden = true;
+  }
+  return { visible, hidden };
+};
+
+/**
  * Strips the parts of a comment that quote rather than assert: fenced code
- * blocks, blockquoted lines, and indented code blocks. Documentation of a
- * marker, a reply quoting an earlier comment, and an agent pasting an example
- * must not satisfy a gate, so only a plain top-level line counts as a statement
- * the author is making.
+ * blocks, blockquoted lines, indented code blocks, and HTML comments.
+ * Documentation of a marker, a reply quoting an earlier comment, and an agent
+ * pasting an example must not satisfy a gate, so only a plain top-level line
+ * counts as a statement the author is making.
  *
- * The indent rule is load-bearing rather than tidy. These gates print the
- * markers to post indented by four spaces, with the real head sha already
- * filled in, so an agent that pasted a failure report back as a comment would
- * otherwise satisfy the very gate that printed it.
+ * Two of these rules are load-bearing rather than tidy.
+ *
+ * The indent rule: these gates print the markers to post indented by four
+ * spaces, with the real head sha already filled in, so an agent that pasted a
+ * failure report back as a comment would otherwise satisfy the very gate that
+ * printed it.
+ *
+ * The HTML-comment rule: a marker inside `<!-- ... -->` turns a gate green
+ * while a human reading the pull request sees nothing at all, which is a
+ * stronger form of not asserting than an indent is. It is also reached without
+ * malice, because reviewer bots wrap their bookkeeping - including quoted
+ * context from earlier comments - in exactly those spans.
  */
 export const assertedLines = (body) => {
   const lines = (body ?? "").split(/\r?\n/);
+  const fence = /^\s*(```|~~~)/;
   const asserted = [];
   let fenced = false;
+  let hidden = false;
   for (const line of lines) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
+    if (fenced) {
+      if (fence.test(line)) {
+        fenced = false;
+      }
       continue;
     }
-    if (fenced || /^\s*>/.test(line) || /^(\s{4,}|\t)/.test(line)) {
+    const span = withoutHiddenSpans(line, hidden);
+    hidden = span.hidden;
+    if (fence.test(span.visible)) {
+      fenced = true;
       continue;
     }
-    asserted.push(line);
+    if (/^\s*>/.test(span.visible) || /^(\s{4,}|\t)/.test(span.visible)) {
+      continue;
+    }
+    asserted.push(span.visible);
   }
   return asserted;
 };
@@ -184,16 +235,19 @@ const wrote = (logins, login) =>
   logins.some((alias) => lower(alias) === lower(login));
 
 /**
- * True when a thread is one this reviewer opened and still stands behind.
- * A minimized root is a finding the reviewer withdrew, so it does not gate.
+ * How this gate reads GitHub's minimized flag, which is the one place hiding a
+ * comment could otherwise change a verdict. Anyone with write access may hide
+ * any comment, the author's own agent included, and the API does not say who
+ * did it - so hiding is never taken as the reviewer withdrawing anything.
+ *
+ * A minimized root still gates: a finding the reviewer really did withdraw
+ * costs one honest reply saying so, and the reply is the record.
+ * A minimized reply does not resolve: a hidden disposition is not a written
+ * one, which is the same reason GitHub's resolve checkbox does not count.
  */
-const isLiveReviewerThread = (thread, reviewerLogins) => {
+const isReviewerThread = (thread, reviewerLogins) => {
   const root = thread.comments[0];
-  return (
-    root !== undefined &&
-    wrote(reviewerLogins, root.author) &&
-    root.isMinimized !== true
-  );
+  return root !== undefined && wrote(reviewerLogins, root.author);
 };
 
 /**
@@ -297,7 +351,7 @@ export const identifyReviews = (snapshot) => {
       continue;
     }
     if (
-      isLiveReviewerThread(thread, bot.logins) &&
+      isReviewerThread(thread, bot.logins) &&
       !isResolved(thread, bot.logins)
     ) {
       byBot.set(bot.id, bot);
@@ -331,7 +385,7 @@ export const identifyReviews = (snapshot) => {
  */
 export const triageThreads = (snapshot, reviewerLogins) => {
   const own = snapshot.reviewThreads.filter((thread) =>
-    isLiveReviewerThread(thread, reviewerLogins),
+    isReviewerThread(thread, reviewerLogins),
   );
   const resolved = [];
   const unresolved = [];
@@ -344,7 +398,6 @@ export const triageThreads = (snapshot, reviewerLogins) => {
     return (
       root !== undefined &&
       !wrote(reviewerLogins, root.author) &&
-      root.isMinimized !== true &&
       !isResolved(thread, [root.author])
     );
   });
@@ -528,7 +581,7 @@ export const evaluateReviewTriage = (snapshot) => {
     "Next action: once every finding has a response, post this as a plain line in a",
     "new comment on the pull request (not inside a code fence, not quoted):",
     "",
-    `    review-triage: complete ${snapshot.headSha}`,
+    `    ${withHead(MARKERS.signOff, snapshot.headSha)}`,
     "",
     "Any later push moves the head and invalidates the sign-off, so sign off last.",
   ];
@@ -654,7 +707,7 @@ export const evaluateValidationAttestation = (snapshot) => {
       "Next action: run the pipeline, then post its result as a plain line in a new",
       "comment on the pull request:",
       "",
-      `    no-mistakes: passed run <run-id> head ${snapshot.headSha}`,
+      `    ${withHead(MARKERS.validationPassed, snapshot.headSha)}`,
       "",
       "If the pipeline legitimately does not apply to this pull request, say so",
       "instead, with a reason a reader can weigh:",

@@ -85,7 +85,8 @@ A failing gate prints exactly what is missing and the next action to take, so re
 ### The comment formats
 
 Post each marker as a plain line in a comment on the pull request conversation.
-A line inside a code fence, a blockquote, or an indented code block does not count, so that documentation, quoted replies, and a pasted failure report cannot satisfy a gate by accident.
+A line inside a code fence, a blockquote, an indented code block, or an HTML comment does not count, so that documentation, quoted replies, a pasted failure report, and a bot's hidden bookkeeping cannot satisfy a gate by accident.
+Only text a human reading the pull request can see counts as a statement you are making.
 Any account may write any of them: a human, firstmate, or the lane's own agent.
 
 ```text
@@ -108,7 +109,8 @@ Sign off last, after every finding has a reply and after the final push.
    Reply in the thread saying what you did: the commit that fixes it, or the reason you decline it.
    A thread is resolved, in this gate's sense, once a comment by somebody other than the reviewer exists in it.
    That is this repository's meaning of the word, not GitHub's: ticking GitHub's resolve checkbox resolves nothing here, and the reviewer replying to itself resolves nothing either.
-   The written reply is the record a later reader needs.
+   Hiding a comment changes nothing either - a hidden finding still gates, and a hidden reply does not resolve it - because anyone with write access can hide anything and GitHub does not record who did.
+   The written reply is the record a later reader needs, so a finding you believe the reviewer withdrew still costs one reply saying so.
 3. Run `no-mistakes` and post its attestation.
 4. Post the `review-triage: complete <head-sha>` sign-off.
 
@@ -149,6 +151,11 @@ Add a trailing `head <sha>` to scope it to one commit instead, and a later push 
 
 A gate re-runs by itself whenever the pull request changes: a push, a review, an inline comment, or a conversation comment, including an edited or deleted one.
 Writing the missing comment is therefore enough to turn a gate green; no push is needed.
+
+One exception: a pull request from a fork.
+The events that carry a push, a review, or an inline comment run the pull request's own copy of the gate, and running fork-authored code on the self-hosted runner is what the policy at the top of `.github/workflows/ci.yml` forbids, so the job skips them.
+A fork pull request therefore gets no gate report from its own pushes, its two required checks never report, and the merge stays blocked - the safe direction.
+A maintainer judges one deliberately by running the Merge gates workflow from the Actions tab with the pull request number.
 
 A conversation comment runs the workflow file from `main`, not from the pull request's branch, so a change to the gate itself only governs conversation comments once it merges.
 Pushes, reviews, and inline review comments run the branch's own copy.
