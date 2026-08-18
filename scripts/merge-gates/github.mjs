@@ -16,6 +16,9 @@
 //
 // Inline threads come from GraphQL because REST cannot say whether a comment
 // was minimized, and gates.mjs refuses to let a hidden reply resolve a finding.
+//
+// Reads retry a transient failure a bounded number of times; publishing never
+// does. See the retry policy below for why the two differ.
 
 const API = process.env.GITHUB_API_URL ?? "https://api.github.com";
 
@@ -32,30 +35,85 @@ const token = () => {
   return value;
 };
 
-/** One REST call, with the failure text the API actually returned. */
-const rest = async (path, init = {}) => {
-  const response = await fetch(
-    path.startsWith("http") ? path : `${API}${path}`,
-    {
-      ...init,
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${token()}`,
-        "x-github-api-version": "2022-11-28",
-        ...(init.body === undefined
-          ? {}
-          : { "content-type": "application/json" }),
-        ...init.headers,
+/**
+ * Failures worth trying again, and how long to wait.
+ *
+ * Failing closed is right, but it is expensive here: one flaky response turns
+ * both required checks red on a pull request that satisfies them, and nothing
+ * republishes a verdict until somebody pushes, comments, or dispatches the
+ * workflow by hand. A bounded retry removes the commonest way that happens.
+ *
+ * Only a read is retried. A repeated check-run POST would publish duplicate
+ * verdicts, so a mutation gets exactly one attempt. A 403 is retried only when
+ * the body names the secondary rate limit, because every other 403 is a
+ * permissions answer that will not change however many times it is asked.
+ */
+const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+const RETRY_ATTEMPTS = 2;
+const RETRY_DELAYS_MS = [500, 2000];
+const RETRY_AFTER_CAP_MS = 10000;
+
+const isTransient = (status, text) =>
+  TRANSIENT_STATUSES.has(status) ||
+  (status === 403 && /secondary rate limit/i.test(text));
+
+/** GitHub states how long to wait on a rate limit; otherwise back off. */
+const retryDelay = (attempt, retryAfter) => {
+  const stated =
+    retryAfter === null || retryAfter === undefined || retryAfter.trim() === ""
+      ? null
+      : Number(retryAfter);
+  if (stated !== null && Number.isFinite(stated) && stated >= 0) {
+    return Math.min(stated * 1000, RETRY_AFTER_CAP_MS);
+  }
+  return RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+};
+
+const sleep = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+/**
+ * One REST call, with the failure text the API actually returned.
+ *
+ * A GET retries a transient failure; anything that writes does not, and a
+ * caller whose write is really a read - the GraphQL query - says so explicitly.
+ */
+const rest = async (
+  path,
+  init = {},
+  retries = (init.method ?? "GET") === "GET" ? RETRY_ATTEMPTS : 0,
+) => {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(
+      path.startsWith("http") ? path : `${API}${path}`,
+      {
+        ...init,
+        headers: {
+          accept: "application/vnd.github+json",
+          authorization: `Bearer ${token()}`,
+          "x-github-api-version": "2022-11-28",
+          ...(init.body === undefined
+            ? {}
+            : { "content-type": "application/json" }),
+          ...init.headers,
+        },
       },
-    },
-  );
-  const text = await response.text();
-  if (!response.ok) {
+    );
+    const text = await response.text();
+    if (response.ok) {
+      return text === "" ? null : JSON.parse(text);
+    }
+    if (attempt < retries && isTransient(response.status, text)) {
+      await sleep(retryDelay(attempt, response.headers.get("retry-after")));
+      continue;
+    }
+    const tried = attempt === 0 ? "" : ` after ${attempt + 1} attempts`;
     throw new GitHubFailure(
-      `${init.method ?? "GET"} ${path} returned ${response.status}: ${text.slice(0, 400)}`,
+      `${init.method ?? "GET"} ${path} returned ${response.status}${tried}: ${text.slice(0, 400)}`,
     );
   }
-  return text === "" ? null : JSON.parse(text);
 };
 
 // Every paging bound below fails closed rather than returning what it has. A
@@ -81,12 +139,20 @@ const restAll = async (path) => {
   );
 };
 
-/** One GraphQL call. GraphQL reports errors with HTTP 200, so check the body. */
+/**
+ * One GraphQL call. GraphQL reports errors with HTTP 200, so check the body.
+ * The query only reads, so it retries a transient failure the way a GET does,
+ * even though it travels as a POST.
+ */
 const graphql = async (query, variables) => {
-  const body = await rest("/graphql", {
-    method: "POST",
-    body: JSON.stringify({ query, variables }),
-  });
+  const body = await rest(
+    "/graphql",
+    {
+      method: "POST",
+      body: JSON.stringify({ query, variables }),
+    },
+    RETRY_ATTEMPTS,
+  );
   if (body.errors) {
     throw new GitHubFailure(
       `GraphQL: ${body.errors.map((one) => one.message).join("; ")}`,

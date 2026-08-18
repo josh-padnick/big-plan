@@ -496,6 +496,44 @@ test("a marker hidden in an HTML comment satisfies nothing", () => {
   );
 });
 
+test("a fence GitHub still considers open keeps suppressing markers", () => {
+  // CommonMark closes a fence only on the same marker, at least as long, with
+  // nothing after it but spaces. A line that fails that leaves the fence open,
+  // so GitHub renders everything below it as code and the gate must agree.
+  const triaged = {
+    reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+    reviewThreads: [thread([finding(), reply()])],
+  };
+  const trailingText = evaluateReviewTriage(
+    snapshot({
+      ...triaged,
+      issueComments: [
+        comment(`\`\`\`\ncode\n\`\`\` (end)\nreview-triage: complete ${HEAD}`),
+      ],
+    }),
+  );
+  assert.equal(trailingText.conclusion, "failure");
+  assert.match(trailingText.title, /Sign-off missing/);
+
+  const mismatchedMarker = evaluateReviewTriage(
+    snapshot({
+      ...triaged,
+      issueComments: [
+        comment(`\`\`\`\ncode\n~~~\nreview-triage: complete ${HEAD}`),
+      ],
+    }),
+  );
+  assert.equal(mismatchedMarker.conclusion, "failure");
+  assert.match(mismatchedMarker.title, /Sign-off missing/);
+
+  // A shorter run does not close a longer fence either.
+  assert.deepEqual(assertedLines("````\ncode\n```\nkeep out"), []);
+  // The valid closes still work, including a longer run and a tilde fence.
+  assert.deepEqual(assertedLines("```\ncode\n```\nkeep"), ["keep"]);
+  assert.deepEqual(assertedLines("~~~\ncode\n~~~~\nkeep"), ["keep"]);
+  assert.deepEqual(assertedLines("```js\ncode\n```  \nkeep"), ["keep"]);
+});
+
 test("an HTML comment cannot un-quote or un-indent the line it closes on", () => {
   // A span that closes at the start of a line must not eat that line's
   // blockquote marker or its indentation: the line is still quoted or still

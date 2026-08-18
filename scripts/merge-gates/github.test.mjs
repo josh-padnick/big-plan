@@ -10,9 +10,15 @@ import { test } from "node:test";
 
 process.env.GITHUB_TOKEN = "test-token";
 
-const { publishCheckRun } = await import("./github.mjs");
+const { publishCheckRun, GitHubFailure } = await import("./github.mjs");
 
-/** Runs `body` with fetch stubbed, and hands it the calls that were made. */
+/**
+ * Runs `body` with fetch stubbed, and hands it the calls that were made.
+ *
+ * `respond` may return a payload, or `{ status, payload, headers }` to answer
+ * with a failure. `calls` records every attempt, so a test can prove a request
+ * was retried, or that it was not.
+ */
 const withStubbedApi = async (respond, body) => {
   const original = globalThis.fetch;
   const calls = [];
@@ -23,10 +29,23 @@ const withStubbedApi = async (respond, body) => {
       body: init.body === undefined ? null : JSON.parse(init.body),
     };
     calls.push(call);
-    return new Response(JSON.stringify(respond(call)), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    const answer = respond(call, calls.length);
+    const failure =
+      answer !== null &&
+      typeof answer === "object" &&
+      typeof answer.status === "number";
+    return new Response(
+      typeof answer === "string"
+        ? answer
+        : JSON.stringify(failure ? (answer.payload ?? {}) : answer),
+      {
+        status: failure ? answer.status : 200,
+        headers: {
+          "content-type": "application/json",
+          ...(failure ? (answer.headers ?? {}) : {}),
+        },
+      },
+    );
   };
   try {
     await body(calls);
@@ -102,6 +121,102 @@ test("the first verdict on a commit creates the check run", async () => {
       assert.equal(written[0].method, "POST");
       assert.equal(written[0].body.name, "review-triage");
       assert.equal(written[0].body.head_sha.startsWith("abc1234"), true);
+    },
+  );
+});
+
+test("a transient failure on a read is retried rather than failing the gate", async () => {
+  await withStubbedApi(
+    (call, attempt) => {
+      if (call.method !== "GET") {
+        return { id: 1 };
+      }
+      return attempt === 1
+        ? {
+            status: 502,
+            payload: { message: "Bad gateway" },
+            headers: { "retry-after": "0" },
+          }
+        : listing();
+    },
+    async (calls) => {
+      await publish();
+      const reads = calls.filter((call) => call.method === "GET");
+      assert.equal(reads.length, 2);
+      assert.equal(calls.at(-1).method, "POST");
+    },
+  );
+});
+
+test("exhausted retries fail closed and name the status", async () => {
+  await withStubbedApi(
+    () => ({
+      status: 503,
+      payload: { message: "Service unavailable" },
+      headers: { "retry-after": "0" },
+    }),
+    async (calls) => {
+      await assert.rejects(publish(), (error) => {
+        assert.equal(error instanceof GitHubFailure, true);
+        assert.match(error.message, /returned 503 after 3 attempts/);
+        return true;
+      });
+      assert.equal(calls.length, 3);
+    },
+  );
+});
+
+test("a permissions refusal is answered at once, not retried", async () => {
+  await withStubbedApi(
+    () => ({
+      status: 403,
+      payload: { message: "Resource not accessible by integration" },
+    }),
+    async (calls) => {
+      await assert.rejects(publish(), (error) => {
+        assert.match(error.message, /returned 403/);
+        assert.doesNotMatch(error.message, /attempts/);
+        return true;
+      });
+      assert.equal(calls.length, 1);
+    },
+  );
+});
+
+test("the secondary rate limit is transient even though it answers 403", async () => {
+  await withStubbedApi(
+    (call, attempt) => {
+      if (call.method !== "GET") {
+        return { id: 1 };
+      }
+      return attempt === 1
+        ? {
+            status: 403,
+            payload: { message: "You have exceeded a secondary rate limit" },
+            headers: { "retry-after": "0" },
+          }
+        : listing();
+    },
+    async (calls) => {
+      await publish();
+      assert.equal(calls.filter((call) => call.method === "GET").length, 2);
+    },
+  );
+});
+
+test("publishing a verdict is never retried, so no gate is published twice", async () => {
+  await withStubbedApi(
+    (call) =>
+      call.method === "GET"
+        ? listing()
+        : {
+            status: 502,
+            payload: { message: "Bad gateway" },
+            headers: { "retry-after": "0" },
+          },
+    async (calls) => {
+      await assert.rejects(publish(), /returned 502/);
+      assert.equal(calls.filter((call) => call.method === "POST").length, 1);
     },
   );
 });
