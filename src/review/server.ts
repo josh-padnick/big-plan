@@ -99,7 +99,7 @@ import {
   reviewRestartCommand,
 } from "./shared/agent-command.js";
 import { AGENT_CLAIM_LEASE_MS } from "./shared/agent-claim.js";
-import { AGENT_STALL_WINDOW_LABEL } from "./shared/agent-timing.js";
+import { agentDisconnectReason } from "./shared/agent-status.js";
 import {
   activateReviewSession,
   liveReviewCustody,
@@ -1163,14 +1163,16 @@ export const startReviewRuntime = async ({
         // not about whether anyone is still attached, so it never reaches this
         // edge. The reason states the signal that stopped rather than a verdict
         // about the agent, because nothing renews the heartbeat while a turn
-        // runs and this edge fires on every long turn (BIG-147).
+        // runs and this edge fires on every long turn (BIG-147) - unless the
+        // loop reported its own end, which is the one case where the store
+        // holds a fact rather than an inference.
         const presence = await readAgentPresence({ store, sessionId });
         await recordAgentConnectionState({
           store,
           sessionId,
           connected: presence.connected,
           at: new Date().toISOString(),
-          disconnectReason: `No agent signal within ${AGENT_STALL_WINDOW_LABEL}`,
+          disconnectReason: agentDisconnectReason(presence),
         });
       })
       .catch((error: unknown) => {

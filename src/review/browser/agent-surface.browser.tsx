@@ -19,6 +19,8 @@ export type AgentSurfaceModel = {
   /** What held work says about the quiet. Never an attachment claim. */
   readonly heldWork: HeldWorkQuiet;
   readonly heartbeatAt: number;
+  /** When the agent's own loop reported the session ending, if it did. */
+  readonly endedAtMs?: number;
   readonly modelName?: string;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   readonly recoveryPrompt: string;
@@ -46,6 +48,7 @@ export const AgentSurface = ({
       connected={model.connected}
       heldWork={model.heldWork}
       heartbeatAt={model.heartbeatAt}
+      endedAtMs={model.endedAtMs}
       modelName={model.modelName}
       connectionLog={model.connectionLog}
       recoveryPrompt={model.recoveryPrompt}

@@ -100,6 +100,8 @@ export type AgentPresence = {
   readonly state: "waiting" | "working";
   readonly requestId?: string;
   readonly updatedAtMs?: number;
+  /** When the agent's own loop reported the session ending, if it did. */
+  readonly endedAtMs?: number;
 };
 
 export type BrowserConnectionEvent = {
@@ -620,6 +622,9 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           : {}),
         ...(typeof value.presence.updatedAtMs === "number"
           ? { updatedAtMs: value.presence.updatedAtMs }
+          : {}),
+        ...(typeof value.presence.endedAtMs === "number"
+          ? { endedAtMs: value.presence.endedAtMs }
           : {}),
       }
     : { connected: false, state: "waiting" as const };
