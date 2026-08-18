@@ -767,6 +767,9 @@ describe("review store agent presence", () => {
             state: "waiting",
             writerId: "1111111111111111",
             now: 30_000,
+            // A lock this write will never win, waited for as briefly as
+            // losing it can be observed.
+            lockAttempts: 3,
           }),
         ).resolves.toBe(false);
       },
@@ -779,7 +782,92 @@ describe("review store agent presence", () => {
         now: 30_000,
       }),
     ).resolves.toEqual({ connected: false, state: "waiting" });
-  }, 30_000);
+  });
+
+  it("keeps the writer a heartbeat names when a write claims no identity", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "1111111111111111",
+      now: 40_000,
+    });
+    // A second agent process reporting its progress mints no identity of its
+    // own, and must not take the waiting loop's away.
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "working",
+      requestId: "bbbbbbbbbbbbbbbb",
+      now: 40_100,
+    });
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "1111111111111111",
+        now: 40_200,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 40_300,
+      }),
+    ).resolves.toEqual({
+      connected: false,
+      state: "waiting",
+      updatedAtMs: 40_200,
+      endedAtMs: 40_200,
+    });
+  });
+
+  it("hands the heartbeat to a writer that claims it", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "1111111111111111",
+      now: 50_000,
+    });
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "working",
+      requestId: "bbbbbbbbbbbbbbbb",
+      now: 50_100,
+    });
+    await writeAgentHeartbeat({
+      store,
+      sessionId: "aaaaaaaaaaaaaaaa",
+      state: "waiting",
+      writerId: "2222222222222222",
+      now: 50_200,
+    });
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "1111111111111111",
+        now: 50_300,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      writeAgentHeartbeatEnded({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        writerId: "2222222222222222",
+        now: 50_400,
+      }),
+    ).resolves.toBe(true);
+  });
 
   it("refuses to end a heartbeat that names no writer", async () => {
     const { planPath } = await temporaryPlan();

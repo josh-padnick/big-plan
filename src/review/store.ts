@@ -834,6 +834,11 @@ export const freezeRequestAttachments = async ({
   }
 };
 
+/**
+ * How many times a caller retries a lock another process holds before giving
+ * up. Every retry waits `LOCK_WAIT_MS`, so this is what bounds how long a
+ * caller is willing to wait for the lock.
+ */
 const LOCK_ATTEMPTS = 200;
 const LOCK_WAIT_MS = 10;
 const LOCK_OWNER_FILE = "owner.json";
@@ -1066,20 +1071,30 @@ const withContendedLock = ({
   return error;
 };
 
-/** Runs one store change while other processes wait for the same resource. */
+/**
+ * Runs one store change while other processes wait for the same resource.
+ *
+ * `lockAttempts` bounds how long this call is willing to wait for a lock
+ * someone else holds, in retries of `LOCK_WAIT_MS` each. It is worth naming
+ * because the answer belongs to the caller: a write whose failure is survivable
+ * can decide the wait is not worth what it costs, while every ordinary caller
+ * keeps the store-wide budget.
+ */
 export const withReviewStoreLock = async <TResult>({
   lockPath,
   change,
   timeoutError,
   invalidLockError = () => new Error("The review store lock is unavailable"),
+  lockAttempts = LOCK_ATTEMPTS,
 }: {
   readonly lockPath: string;
   readonly change: () => Promise<TResult>;
   readonly timeoutError: () => Error;
   readonly invalidLockError?: () => Error;
+  readonly lockAttempts?: number;
 }): Promise<TResult> => {
   const startedAtMs = Date.now();
-  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < lockAttempts; attempt += 1) {
     const owner = await acquireStoreLock(lockPath, invalidLockError);
     if (owner === undefined) {
       await waitForLock();
@@ -2297,15 +2312,18 @@ class AgentHeartbeatLockContended extends Error {
 const withAgentHeartbeatLock = async ({
   store,
   change,
+  lockAttempts,
 }: {
   readonly store: ReviewStore;
   readonly change: () => Promise<boolean>;
+  readonly lockAttempts?: number;
 }): Promise<boolean> => {
   try {
     return await withReviewStoreLock({
       lockPath: store.agentHeartbeatLockPath,
       change,
       timeoutError: () => new AgentHeartbeatLockContended(),
+      lockAttempts,
     });
   } catch (error: unknown) {
     if (error instanceof AgentHeartbeatLockContended) return false;
@@ -2313,14 +2331,37 @@ const withAgentHeartbeatLock = async ({
   }
 };
 
+/** The writer the stored heartbeat currently names, if it names one. */
+const storedHeartbeatWriterId = async (
+  store: ReviewStore,
+): Promise<string | undefined> => {
+  const value = await readStoreJson(store.agentHeartbeatPath);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("writerId" in value) ||
+    typeof value.writerId !== "string"
+  ) {
+    return undefined;
+  }
+  return value.writerId;
+};
+
 /**
  * Refreshes the coding-agent liveness signal with its observable state.
  *
  * `writerId` identifies the invocation doing the writing, because the session
  * id is shared by every agent process attached to this review and so cannot
- * tell two of them apart. A loop that intends to record its own end has to
- * pass one, or `writeAgentHeartbeatEnded` has no way to prove the heartbeat it
- * would overwrite is still its own.
+ * tell two of them apart. Passing one claims the signal for this invocation.
+ * Omitting one keeps whichever writer the heartbeat already names, so a
+ * process that only reports progress cannot take the connection loop's
+ * identity away from it and leave a session with no one able to report its
+ * end. Reading that name is part of the write and not a step before it: a
+ * newer loop may claim the signal at any moment, and the two would otherwise
+ * race the same way the end marker's guard already refuses to.
+ *
+ * `lockAttempts` bounds the wait for the heartbeat lock.
  *
  * Returns whether the signal was refreshed. Contention is reported rather than
  * raised because this runs every half second inside the connection loop's own
@@ -2334,6 +2375,7 @@ export const writeAgentHeartbeat = async ({
   requestId,
   writerId,
   now = Date.now(),
+  lockAttempts,
 }: {
   readonly store: ReviewStore;
   readonly sessionId: string;
@@ -2341,17 +2383,20 @@ export const writeAgentHeartbeat = async ({
   readonly requestId?: string;
   readonly writerId?: string;
   readonly now?: number;
+  readonly lockAttempts?: number;
 }): Promise<boolean> =>
   withAgentHeartbeatLock({
     store,
+    lockAttempts,
     change: async () => {
+      const writer = writerId ?? (await storedHeartbeatWriterId(store));
       await writeStoreJson({
         path: store.agentHeartbeatPath,
         value: {
           sessionId,
           state,
           ...(requestId === undefined ? {} : { requestId }),
-          ...(writerId === undefined ? {} : { writerId }),
+          ...(writer === undefined ? {} : { writerId: writer }),
           updatedAtMs: now,
         },
       });
