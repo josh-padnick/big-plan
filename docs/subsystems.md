@@ -8,7 +8,7 @@ Start with the root [agent guide](../AGENTS.md) for product orientation and repo
 
 Big Plan's product work is organized into seven subsystems.
 The partition is grounded in the codebase's actual module boundaries, not in issue-tracker categories.
-New work should state which subsystem it belongs to before it starts; when a change spans two subsystems, say so explicitly rather than leaving it implicit.
+The [agent guide](../AGENTS.md#subsystems) owns the workflow rule about naming a subsystem before starting work; this document owns which subsystems there are and where each one ends.
 
 ## Why the partition falls where it does
 
