@@ -1694,9 +1694,17 @@ export const highestAgentMutationStageGeneration = async ({
       "An agent exchange request id must be 16 hexadecimal characters",
     );
   }
+  // Only a missing directory means this request has no stage. Every other read
+  // failure hides generations that do exist, and answering 0 for one of those
+  // hands back a generation whose stage is still on disk - the reuse this
+  // function exists to prevent. A takeover that cannot read the stages fails
+  // loudly instead of fencing on a number it could not check.
   const names = await readdir(
     inside({ base: store.agentMutationDirectory, leaf: requestId }),
-  ).catch(() => []);
+  ).catch((error: unknown) => {
+    if (hasCode(error, "ENOENT")) return [];
+    throw error;
+  });
   return names.reduce(
     (highest, name) =>
       /^[0-9]{1,9}$/.test(name) ? Math.max(highest, Number(name)) : highest,

@@ -34,6 +34,7 @@ import {
   writeSessionHeartbeatValue,
   withReviewStoreLock,
   freezeRequestAttachments,
+  highestAgentMutationStageGeneration,
   publishReviewImage,
   readReviewImage,
 } from "./store.js";
@@ -128,6 +129,50 @@ describe("review store placement", () => {
       await rm(store.reviewDirectory, { force: true });
       await rename(outsideDirectory, store.reviewDirectory);
     }
+  });
+});
+
+describe("agent mutation stage generations", () => {
+  const requestId = "cccc3333cccc3333";
+
+  it("should read no stage generation for a request that has none", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+
+    await expect(
+      highestAgentMutationStageGeneration({ store, requestId }),
+    ).resolves.toBe(0);
+  });
+
+  it("should read the highest generation on disk, ignoring other names", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    const stages = join(store.agentMutationDirectory, requestId);
+    await mkdir(join(stages, "1"), { recursive: true });
+    await mkdir(join(stages, "7"), { recursive: true });
+    await mkdir(join(stages, "notageneration"), { recursive: true });
+
+    await expect(
+      highestAgentMutationStageGeneration({ store, requestId }),
+    ).resolves.toBe(7);
+  });
+
+  it("should refuse to read stages it cannot list rather than answer none", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    // Anything but a missing directory hides generations that exist, and
+    // answering 0 would hand a new claim a generation whose stage is still
+    // there. A file standing where the stage directory belongs is the
+    // deterministic form of that failure.
+    await mkdir(store.agentMutationDirectory, { recursive: true });
+    await writeFile(join(store.agentMutationDirectory, requestId), "");
+
+    await expect(
+      highestAgentMutationStageGeneration({ store, requestId }),
+    ).rejects.toMatchObject({ code: "ENOTDIR" });
   });
 });
 
