@@ -42,8 +42,8 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 - The thread is the change set's container, not the other way round.
   A change set's provenance (reviewer comment, plan-wide chat, or an unsolicited agent-pushed revision) is an attribute of the change set, not a hard-coded assumption that every change is born from a conversation.
   An inbound push is a new message kind through `src/review/agent-exchange.ts` and rides the same claim-and-atomic-terminal delivery protocol as any other exchange; it does not invent its own delivery path.
-- Diff mode is a component contract, not an engine-owned rendering choice: see [Captain amendments](#captain-amendments).
-- The engine keeps sole ownership of detection, alignment, baseline policy, and attribution; components own only honest presentation of the pair.
+- A component never computes a diff. The engine keeps sole ownership of detection, alignment, baseline policy, and attribution, and hands a component the before-and-after pair it found.
+- What a component owns is how that pair is shown: whether it has a diff mode at all, and what that mode looks like, is the component's contract rather than an engine-owned rendering choice. See [Captain amendments](#captain-amendments).
 - A change set describes committed revisions only.
   `src/review/change-set-commit.ts` is the seam: a revision is recorded inside the terminal commit and nowhere else, the reader's current snapshot advances from that log rather than from response files, and folding the log keeps a thread's baseline and provenance stable across every later reply.
   When the full aggregate lands it implements that contract without adopting claim stages as domain state.
