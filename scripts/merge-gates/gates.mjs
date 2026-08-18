@@ -103,9 +103,15 @@ export const shaNames = (authored, commit) => {
 
 /**
  * Strips the parts of a comment that quote rather than assert: fenced code
- * blocks and blockquoted lines. Documentation of a marker, a reply quoting an
- * earlier comment, and an agent pasting an example must not satisfy a gate, so
- * only a plain top-level line counts as a statement the author is making.
+ * blocks, blockquoted lines, and indented code blocks. Documentation of a
+ * marker, a reply quoting an earlier comment, and an agent pasting an example
+ * must not satisfy a gate, so only a plain top-level line counts as a statement
+ * the author is making.
+ *
+ * The indent rule is load-bearing rather than tidy. These gates print the
+ * markers to post indented by four spaces, with the real head sha already
+ * filled in, so an agent that pasted a failure report back as a comment would
+ * otherwise satisfy the very gate that printed it.
  */
 export const assertedLines = (body) => {
   const lines = (body ?? "").split(/\r?\n/);
@@ -116,7 +122,7 @@ export const assertedLines = (body) => {
       fenced = !fenced;
       continue;
     }
-    if (fenced || /^\s*>/.test(line)) {
+    if (fenced || /^\s*>/.test(line) || /^(\s{4,}|\t)/.test(line)) {
       continue;
     }
     asserted.push(line);
@@ -143,6 +149,18 @@ const VALIDATION_PASSED =
 const VALIDATION_OVERRIDE =
   /^\s*no-mistakes:\s*overridden\s*[-–—]\s*(\S.*?)\s*$/i;
 const OVERRIDE_HEAD = /\s+head\s+([0-9a-f]{7,40})\s*$/i;
+
+/**
+ * Review states that count as a review having happened. A dismissed review has
+ * been taken back, and the two-review failure tells a reader to dismiss the
+ * surplus one, so counting it would make that instruction a lie. A pending
+ * review has not been submitted at all.
+ */
+const COUNTED_REVIEW_STATES = new Set([
+  "APPROVED",
+  "CHANGES_REQUESTED",
+  "COMMENTED",
+]);
 
 /** Resolves a login to the accepted reviewer it belongs to, or null. */
 const botFor = (login) =>
@@ -211,6 +229,9 @@ export const collectAttestations = (snapshot) => {
 export const identifyReviews = (snapshot) => {
   const byBot = new Map();
   for (const review of snapshot.reviews) {
+    if (!COUNTED_REVIEW_STATES.has((review.state ?? "").toUpperCase())) {
+      continue;
+    }
     const bot = botFor(review.author);
     if (bot !== null) {
       byBot.set(bot.id, bot);

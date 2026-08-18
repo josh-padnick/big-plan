@@ -12,6 +12,7 @@ import {
   assertedLines,
   evaluateReviewTriage,
   evaluateValidationAttestation,
+  formatVerdict,
   shaNames,
 } from "./gates.mjs";
 
@@ -309,6 +310,39 @@ test("a draft pull request still gets judged, with the mid-flow red explained", 
   assert.equal(verdict.conclusion, "failure");
 });
 
+test("pasting a failure report back does not satisfy the gate that printed it", () => {
+  // The reports indent the markers to post by four spaces, with the real head
+  // sha already filled in. Pasting one back as a comment must change nothing.
+  const triaged = {
+    reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+    reviewThreads: [thread([finding(), reply()])],
+  };
+  const printed = [
+    formatVerdict(evaluateReviewTriage(snapshot(triaged)), snapshot(triaged)),
+    formatVerdict(evaluateValidationAttestation(snapshot()), snapshot()),
+  ].join("\n\n");
+  const pasted = { issueComments: [comment(printed)] };
+  assert.equal(
+    evaluateReviewTriage(snapshot({ ...triaged, ...pasted })).conclusion,
+    "failure",
+  );
+  assert.equal(
+    evaluateValidationAttestation(snapshot(pasted)).conclusion,
+    "failure",
+  );
+});
+
+test("a dismissed review is not a review", () => {
+  const verdict = evaluateReviewTriage(
+    snapshot({
+      issueComments: [signOff],
+      reviews: [{ author: "coderabbitai[bot]", state: "DISMISSED", body: "" }],
+    }),
+  );
+  assert.equal(verdict.conclusion, "failure");
+  assert.match(verdict.title, /No accepted review/);
+});
+
 test("shaNames accepts an unambiguous prefix and rejects a wrong one", () => {
   assert.equal(shaNames(HEAD.slice(0, 7), HEAD), true);
   assert.equal(shaNames(HEAD.toUpperCase(), HEAD), true);
@@ -317,9 +351,11 @@ test("shaNames accepts an unambiguous prefix and rejects a wrong one", () => {
   assert.equal(shaNames("not-a-sha", HEAD), false);
 });
 
-test("assertedLines drops fenced and quoted text", () => {
-  assert.deepEqual(assertedLines("keep\n```\nfenced\n```\n> quoted\nkeep2"), [
-    "keep",
-    "keep2",
-  ]);
+test("assertedLines drops fenced, quoted, and indented text", () => {
+  assert.deepEqual(
+    assertedLines(
+      "keep\n```\nfenced\n```\n> quoted\n    indented\n\ttabbed\nkeep2",
+    ),
+    ["keep", "keep2"],
+  );
 });

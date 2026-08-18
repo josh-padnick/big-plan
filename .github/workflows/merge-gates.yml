@@ -73,6 +73,11 @@ jobs:
       issues: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The gate runs no git command after this, and the workspace on a
+          # self-hosted runner outlives the job, so the token must not stay
+          # behind in .git/config.
+          persist-credentials: false
       # No toolchain step: the gate is one Node script with no dependencies, and
       # the runner already has Node for the merge guard.
       - name: Judge the merge gates

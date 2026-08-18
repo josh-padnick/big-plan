@@ -58,10 +58,17 @@ const rest = async (path, init = {}) => {
   return text === "" ? null : JSON.parse(text);
 };
 
+// Every paging bound below fails closed rather than returning what it has. A
+// truncated snapshot loses comments, commits, or replies, and each loss points
+// the same way: an unanswered finding or an absent attestation that the gate
+// then cannot see. A gate that passes on partial data is worse than one that
+// refuses to judge.
+const PAGE_LIMIT = 20;
+
 /** Walks every page of a REST list endpoint. */
 const restAll = async (path) => {
   const items = [];
-  for (let page = 1; page <= 20; page += 1) {
+  for (let page = 1; page <= PAGE_LIMIT; page += 1) {
     const separator = path.includes("?") ? "&" : "?";
     const batch = await rest(`${path}${separator}per_page=100&page=${page}`);
     items.push(...batch);
@@ -69,7 +76,9 @@ const restAll = async (path) => {
       return items;
     }
   }
-  return items;
+  throw new GitHubFailure(
+    `${path} has more than ${PAGE_LIMIT * 100} entries, so the gate would judge a truncated pull request`,
+  );
 };
 
 /** One GraphQL call. GraphQL reports errors with HTTP 200, so check the body. */
@@ -99,6 +108,7 @@ const THREADS_QUERY = `
             line
             originalLine
             comments(first: 100) {
+              pageInfo { hasNextPage }
               nodes { url body isMinimized author { login } }
             }
           }
@@ -112,10 +122,15 @@ const THREADS_QUERY = `
 const fetchReviewThreads = async (owner, name, number) => {
   const threads = [];
   let cursor = null;
-  for (let page = 0; page < 20; page += 1) {
+  for (let page = 0; page < PAGE_LIMIT; page += 1) {
     const data = await graphql(THREADS_QUERY, { owner, name, number, cursor });
     const connection = data.repository.pullRequest.reviewThreads;
     for (const node of connection.nodes) {
+      if (node.comments.pageInfo.hasNextPage) {
+        throw new GitHubFailure(
+          `the thread on ${node.path} has more than 100 comments, so the gate cannot see whether it was answered`,
+        );
+      }
       threads.push({
         isResolved: node.isResolved,
         isOutdated: node.isOutdated,
@@ -135,7 +150,9 @@ const fetchReviewThreads = async (owner, name, number) => {
     }
     cursor = connection.pageInfo.endCursor;
   }
-  return threads;
+  throw new GitHubFailure(
+    `pull request ${number} has more than ${PAGE_LIMIT * 100} review threads, so the gate would judge a truncated review`,
+  );
 };
 
 /**

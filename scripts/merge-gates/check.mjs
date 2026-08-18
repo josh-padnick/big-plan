@@ -51,11 +51,15 @@ const runUrl = () => {
 const main = async () => {
   const argv = process.argv.slice(2);
   const dryRun = argv.includes("--dry-run");
-  const { owner, repo } = resolveRepository(argv);
-  const number = resolveNumber(argv);
 
+  // Resolved inside the try so a bad argument reports the same stated reason as
+  // any other failure, rather than escaping as an unhandled rejection.
   let headSha = null;
+  let owner = null;
+  let repo = null;
   try {
+    ({ owner, repo } = resolveRepository(argv));
+    const number = resolveNumber(argv);
     const snapshot = await fetchSnapshot({ owner, repo, number });
     headSha = snapshot.headSha;
     const verdicts = evaluateMergeGates(snapshot);

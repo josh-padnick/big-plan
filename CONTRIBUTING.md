@@ -85,7 +85,7 @@ A failing gate prints exactly what is missing and the next action to take, so re
 ### The comment formats
 
 Post each marker as a plain line in a comment on the pull request conversation.
-A line inside a code fence or a blockquote does not count, so that documentation and quoted replies cannot satisfy a gate by accident.
+A line inside a code fence, a blockquote, or an indented code block does not count, so that documentation, quoted replies, and a pasted failure report cannot satisfy a gate by accident.
 Any account may write any of them: a human, firstmate, or the lane's own agent.
 
 ```text
