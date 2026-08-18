@@ -496,6 +496,92 @@ test("a marker hidden in an HTML comment satisfies nothing", () => {
   );
 });
 
+// Every shape GitHub renders as quoted, as code, or as nothing, crossed
+// against the others. `assertedLines` is one boundary with several rules that
+// have repeatedly broken where they meet, so they are tested where they meet:
+// each body below carries a sign-off naming the real head, and none of them may
+// sign off a pull request that is triaged in every other respect.
+const SUPPRESSED_BODIES = (head) => [
+  ["a blockquote", `> review-triage: complete ${head}`],
+  [
+    "a lazy continuation of a blockquote",
+    `> Are we done?\nreview-triage: complete ${head}`,
+  ],
+  [
+    "a lazy continuation two lines below the quote",
+    `> Are we done?\nyes, once CI is green\nreview-triage: complete ${head}`,
+  ],
+  ["an indented code block", `    review-triage: complete ${head}`],
+  ["a fenced code block", `\`\`\`\nreview-triage: complete ${head}\n\`\`\``],
+  [
+    "a fence whose close carries trailing text",
+    `\`\`\`\ncode\n\`\`\` (end)\nreview-triage: complete ${head}`,
+  ],
+  [
+    "a fence a different marker cannot close",
+    `\`\`\`\ncode\n~~~\nreview-triage: complete ${head}`,
+  ],
+  [
+    "a fence a shorter run cannot close",
+    `\`\`\`\`\ncode\n\`\`\`\nreview-triage: complete ${head}`,
+  ],
+  ["a single-line HTML comment", `<!-- review-triage: complete ${head} -->`],
+  [
+    "a multi-line HTML comment",
+    `Looks good.\n\n<!--\nreview-triage: complete ${head}\n-->`,
+  ],
+  [
+    "an HTML comment opened mid-line",
+    `> Are we done?\ntext <!--\nquoted metadata\n--> review-triage: complete ${head}`,
+  ],
+  [
+    "an HTML comment opened mid-line inside a quote",
+    `> Are we done? <!--\n> quoted context\n--> review-triage: complete ${head}`,
+  ],
+  [
+    "an HTML comment that closes at the start of a quoted line",
+    `> <!--\n> quoted metadata\n> --> review-triage: complete ${head}`,
+  ],
+  [
+    "an HTML comment that closes at the start of an indented line",
+    `<!-- note\n    --> review-triage: complete ${head}`,
+  ],
+  [
+    "a fenced block inside a lazily continued quote",
+    `> Are we done?\n\`\`\`\nreview-triage: complete ${head}\n\`\`\``,
+  ],
+  [
+    "an indented block under a lazily continued quote",
+    `> Are we done?\n\n    review-triage: complete ${head}`,
+  ],
+];
+
+test("no shape GitHub renders as quoted, code, or nothing can sign off", () => {
+  const triaged = {
+    reviews: [{ author: "coderabbitai[bot]", state: "COMMENTED", body: "" }],
+    reviewThreads: [thread([finding(), reply()])],
+  };
+  for (const [shape, body] of SUPPRESSED_BODIES(HEAD)) {
+    const verdict = evaluateReviewTriage(
+      snapshot({ ...triaged, issueComments: [comment(body)] }),
+    );
+    assert.equal(verdict.conclusion, "failure", `${shape} signed off`);
+    assert.match(verdict.title, /Sign-off missing/, shape);
+  }
+
+  // The same pull request goes green the moment the marker is posted where a
+  // reader can see it, so none of the above passes for want of triage.
+  const plain = evaluateReviewTriage(
+    snapshot({
+      ...triaged,
+      issueComments: [
+        comment(`Looks good.\n\nreview-triage: complete ${HEAD}`),
+      ],
+    }),
+  );
+  assert.equal(plain.conclusion, "success");
+});
+
 test("a marker Markdown pulls into the quote above it asserts nothing", () => {
   // CommonMark continues a blockquote lazily: a plain line directly under a
   // quoted one belongs to that quote, and GitHub renders it inside the quote
@@ -632,9 +718,12 @@ test("assertedLines keeps only what a reader can see of an HTML comment", () => 
     assertedLines("keep\n<!--\nhidden\nstill hidden\n-->\nkeep2"),
     ["keep", "keep2"],
   );
-  assert.deepEqual(assertedLines("<!-- a --> mid <!-- b --> end"), [
-    " mid  end",
+  assert.deepEqual(assertedLines("note <!-- a --> mid <!-- b --> end"), [
+    "note  mid  end",
   ]);
+  // A line that starts with the comment is an HTML block, not a paragraph
+  // carrying a hidden span, so none of it asserts.
+  assert.deepEqual(assertedLines("<!-- a --> mid <!-- b --> end"), []);
   // An unclosed span hides the rest of the comment, which fails closed.
   assert.deepEqual(assertedLines("keep\n<!-- open\nreview-triage: complete"), [
     "keep",

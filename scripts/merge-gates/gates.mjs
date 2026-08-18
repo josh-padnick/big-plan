@@ -146,13 +146,91 @@ const withoutHiddenSpans = (line, wasHidden) => {
 };
 
 /**
- * Strips the parts of a comment that quote rather than assert: fenced code
- * blocks, blockquoted lines, indented code blocks, and HTML comments.
- * Documentation of a marker, a reply quoting an earlier comment, and an agent
- * pasting an example must not satisfy a gate, so only a plain top-level line
- * counts as a statement the author is making.
+ * Decides, from the RAW lines alone, which lines of a comment are the author
+ * asserting something and which are Markdown quoting it.
  *
- * Two of these rules are load-bearing rather than tidy.
+ * Raw alone is the point. Every rule here reads the line as it was typed,
+ * because Markdown reads a line's block context from the prefix it actually
+ * starts with, and nothing in this pass knows that HTML comments exist.
+ *
+ * The rules, all as CommonMark and therefore GitHub apply them:
+ *
+ *   - A blank line ends the paragraph above it.
+ *   - A blockquote line quotes, and continues LAZILY: a plain line directly
+ *     under a quoted one belongs to that quote and renders inside the quote
+ *     box, until a blank line, an HTML block, or a fence ends the paragraph.
+ *   - An HTML block opens on a line that starts with `<!--` and runs through
+ *     the line carrying `-->`. It interrupts a paragraph, so it also ends a
+ *     lazy quote.
+ *   - An indented line is an indented code block. It cannot interrupt a
+ *     paragraph, so it leaves a lazy quote running.
+ *   - A fence opens on ``` or ~~~ and closes only on the same marker
+ *     character, at least as long, with nothing after it but spaces. Anything
+ *     less leaves the fence open and every later line suppressed.
+ */
+const assertingLines = (lines) => {
+  const opensFence = /^\s*(`{3,}|~{3,})/;
+  const closesFence = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
+  const opensHtmlBlock = /^ {0,3}<!--/;
+  const isQuoted = /^\s*>/;
+  const isIndented = /^(\s{4,}|\t)/;
+  const asserting = lines.map(() => false);
+  let fence = null;
+  let inHtmlBlock = false;
+  let quoting = false;
+  lines.forEach((line, index) => {
+    if (fence !== null) {
+      const close = closesFence.exec(line);
+      if (
+        close !== null &&
+        close[1][0] === fence.marker &&
+        close[1].length >= fence.length
+      ) {
+        fence = null;
+      }
+      return;
+    }
+    if (inHtmlBlock) {
+      inHtmlBlock = !line.includes("-->");
+      return;
+    }
+    if (line.trim() === "") {
+      quoting = false;
+      return;
+    }
+    if (isQuoted.test(line)) {
+      quoting = true;
+      return;
+    }
+    if (opensHtmlBlock.test(line)) {
+      quoting = false;
+      inHtmlBlock = !line.includes("-->");
+      return;
+    }
+    if (isIndented.test(line)) {
+      return;
+    }
+    const open = opensFence.exec(line);
+    if (open !== null) {
+      quoting = false;
+      fence = { marker: open[1][0], length: open[1].length };
+      return;
+    }
+    if (quoting) {
+      return;
+    }
+    asserting[index] = true;
+  });
+  return asserting;
+};
+
+/**
+ * The lines of a comment that assert something: what the author wrote at the
+ * top level, with anything Markdown quotes and anything a reader cannot see
+ * removed. Documentation of a marker, a reply quoting an earlier comment, and
+ * an agent pasting an example must not satisfy a gate.
+ *
+ * Two of these suppressions are load-bearing rather than tidy.
  *
  * The indent rule: these gates print the markers to post indented by four
  * spaces, with the real head sha already filled in, so an agent that pasted a
@@ -165,86 +243,38 @@ const withoutHiddenSpans = (line, wasHidden) => {
  * malice, because reviewer bots wrap their bookkeeping - including quoted
  * context from earlier comments - in exactly those spans.
  *
- * Which text each rule reads is the contract here, and getting it backwards
- * fails open rather than loudly.
- *
- * Blockquote and indent are properties of the RAW line, because Markdown reads
- * a line's block context from the prefix it actually starts with. A span that
- * closes at the start of a line would otherwise eat that line's `>` or its
- * indentation and promote quoted text to an assertion, so both rules consult
- * the raw line first; they also consult what survives the span, which can only
- * suppress more, never assert more.
- *
- * A fence is a property of what SURVIVES, because a ``` sitting inside a
- * comment span is not a fence at all, and reading the raw line there would
- * suppress everything after a fence that only appears to open.
- *
- * A closing fence follows CommonMark, which is what GitHub renders: the same
- * marker character as the fence that opened, at least as long, and nothing
- * after it but spaces. Anything less leaves the fence open and every later
- * line suppressed.
- *
- * A blockquote continues LAZILY, again as CommonMark and GitHub do: a plain
- * line following a quoted one, with no blank line between them, is part of
- * that quote and renders inside the quote box, so it asserts nothing. The
- * quote runs until a blank line, a fence, or a line that renders as nothing
- * ends the paragraph.
+ * THE ORDERING IS THE CONTRACT. Block structure is decided first, over the raw
+ * lines only; comment spans are then removed from the lines that survived, as
+ * content suppression that never feeds back into a block decision. Every hole
+ * found in this boundary so far - five of them - came from a block-structure
+ * rule reading text something else had already processed: a span closing at
+ * the start of a line ate that line's `>` or its indent, and later a line
+ * hidden by a span opened mid-line read as blank and ended a quote Markdown
+ * was still continuing. A rule that reads `visible` to decide structure is the
+ * bug, however local it looks.
  *
  * This function is the whole boundary between what a comment quotes and what
- * it asserts, and four separate holes have been found in it. Every rule here
- * therefore errs one way: when this function and GitHub's renderer disagree,
- * this function must be the one treating MORE text as quoted, because the
- * reader trusts what GitHub renders and a gate may only be stricter than that.
- * Where a case is genuinely ambiguous, suppress rather than assert. A change
- * to any rule below needs a test proving the new shape cannot promote
- * rendered-as-code or rendered-as-quoted text into an assertion.
+ * it asserts. Every rule errs one way: when this function and GitHub's
+ * renderer disagree, this function must be the one treating MORE text as
+ * quoted, because the reader trusts what GitHub renders and a gate may only be
+ * stricter than that. Where a construct is ambiguous, suppress rather than
+ * assert - over-suppression costs an author a blank line and a re-post, while
+ * under-suppression passes a gate on text no human can see. A change here
+ * needs a test proving the new shape cannot promote text GitHub renders as
+ * quoted, as code, or as nothing into an assertion.
  */
 export const assertedLines = (body) => {
   const lines = (body ?? "").split(/\r?\n/);
-  const opensFence = /^\s*(`{3,}|~{3,})/;
-  const closesFence = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
-  const isQuoted = (text) => /^\s*>/.test(text);
-  const isIndented = (text) => /^(\s{4,}|\t)/.test(text);
+  const asserting = assertingLines(lines);
   const asserted = [];
-  let fence = null;
   let hidden = false;
-  let quoting = false;
-  for (const line of lines) {
-    if (fence !== null) {
-      const close = closesFence.exec(line);
-      if (
-        close !== null &&
-        close[1][0] === fence.marker &&
-        close[1].length >= fence.length
-      ) {
-        fence = null;
-      }
-      continue;
-    }
+  lines.forEach((line, index) => {
     const span = withoutHiddenSpans(line, hidden);
     hidden = span.hidden;
-    if (span.visible.trim() === "") {
-      quoting = false;
-      continue;
+    if (asserting[index] && span.visible.trim() !== "") {
+      asserted.push(span.visible);
     }
-    if (isQuoted(line) || isQuoted(span.visible)) {
-      quoting = true;
-      continue;
-    }
-    if (isIndented(line) || isIndented(span.visible)) {
-      continue;
-    }
-    const open = opensFence.exec(span.visible);
-    if (open !== null) {
-      quoting = false;
-      fence = { marker: open[1][0], length: open[1].length };
-      continue;
-    }
-    if (quoting) {
-      continue;
-    }
-    asserted.push(span.visible);
-  }
+  });
   return asserted;
 };
 
