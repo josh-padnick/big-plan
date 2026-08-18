@@ -89,3 +89,20 @@ export const requestJson = async ({
     window.clearTimeout(timeout);
   }
 };
+
+/**
+ * Announces that this page has applied a newer copy of a record the review's
+ * input contract is derived from.
+ *
+ * The contract is a join over the answers and disposition records, so a surface
+ * that showed it on a clock of its own would be more current than the surfaces
+ * those records drive - and the two would disagree about the same review for as
+ * long as the clocks were apart. Deriving it from what this page has already
+ * applied is what keeps every surface on one revision of the truth.
+ */
+export const REVIEW_RECORD_APPLIED_EVENT = "bigplan:review-record-applied";
+
+/** Announces one applied record, for surfaces derived from more than one. */
+export const announceAppliedReviewRecord = (): void => {
+  document.dispatchEvent(new CustomEvent(REVIEW_RECORD_APPLIED_EVENT));
+};

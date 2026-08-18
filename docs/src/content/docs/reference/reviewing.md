@@ -86,7 +86,8 @@ It prints the session, plan path, in-flight and stalled writes, and current grow
    away** to stage it with **Add Comment** instead. `Cmd/Ctrl+Enter` performs
    the visible primary action; `Escape` cancels.
 3. Open **Feedback** to inspect staged comments in the **Comments** tab. The
-   **Chat** tab asks questions about the plan as a whole, while **Agent** shows
+   **Chat** tab asks questions about the plan as a whole, **Inputs** lists what
+   the review is still waiting for, and **Agent** shows
    the coding-agent connection and current work for a live review session.
    A review-session outage is reported separately and does not label the agent
    as offline.
@@ -146,6 +147,19 @@ A read-only review page - one whose plan a newer review session took custody of 
 A confirm made before the page has learned whether it may write is held rather than guessed at: it is saved once the session proves writable, and kept as a reading-session note when the session proves read-only.
 Words recorded as the decision are a reading-session note either way, never a saved answer; submit them as a comment when the agent should act on them.
 In a standalone rendered document, an answer lasts only for the reading session and is not saved with a review.
+
+## What the review is waiting for
+
+A live review's **Inputs** tab lists everything the review expects from you before the plan can be approved: every open decision the plan asks, and every change set an agent published.
+Each row says where that input stands - answered, not answered, or stale - and a decision the plan's author marked `critical` says so beside its state.
+A decision row scrolls the plan to its card.
+
+The list is the runtime's answer rather than the page's, so two browsers reading the same review read the same list, and a reload cannot invent a different one.
+**Stale** is its own state rather than a kind of unanswered: you answered, and the plan moved underneath the answer.
+A decision goes stale under exactly the edits that mask its answer on the card, and restoring the wording it answered makes it answered again.
+A change set goes stale when a later revision reopened changes you had already accepted, because an acceptance names the revision it closed and never migrates onto content you did not see.
+
+A standalone rendered document has no Inputs tab: the contract is derived by the review runtime, and a document opened without one has nothing to derive it from.
 
 ## Persistence
 

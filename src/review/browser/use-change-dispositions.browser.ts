@@ -20,6 +20,7 @@ import {
 } from "../shared/change-disposition.js";
 import { decodeChangeDispositions } from "../shared/review-wire.js";
 import {
+  announceAppliedReviewRecord,
   isReadOnlyReview,
   requestJson,
   runtimeIdentity,
@@ -131,6 +132,7 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
     if (state.revision < appliedRevision.current) return;
     appliedRevision.current = state.revision;
     setStored(state);
+    announceAppliedReviewRecord();
   }, []);
 
   const flush = useCallback(async (): Promise<void> => {
