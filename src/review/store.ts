@@ -2295,12 +2295,7 @@ export type AgentPresence = {
   readonly endedAtMs?: number;
 };
 
-/**
- * The heartbeat lock stayed held for the whole waiting budget, so this write
- * never ran. Both heartbeat writers answer it by reporting the write they did
- * not make: the liveness signal repeats, and neither of its writers may end
- * the session it is describing just because it lost a race for the file.
- */
+/** The heartbeat lock stayed held for the whole waiting budget. */
 class AgentHeartbeatLockContended extends Error {
   constructor() {
     super("Another process is writing the agent heartbeat");
@@ -2308,7 +2303,19 @@ class AgentHeartbeatLockContended extends Error {
   }
 }
 
-/** Runs one agent heartbeat write, reporting contention instead of raising it. */
+/**
+ * Runs one agent heartbeat write, reporting a lock it never took instead of
+ * raising it.
+ *
+ * The two failures are not the same fact and are not answered the same way.
+ * Never reaching the write - a lock held to the end of the budget, a lock path
+ * something else has taken over, a filesystem that would not hand one out - says
+ * nothing about the agent, and the write repeats in half a second, so both
+ * heartbeat writers report it and let the next one answer it; neither may end a
+ * session it still vouches for over a race it lost. A write that ran and failed
+ * is a different claim, and it keeps being raised exactly as it was before
+ * there was a lock to lose.
+ */
 const withAgentHeartbeatLock = async ({
   store,
   change,
@@ -2318,16 +2325,20 @@ const withAgentHeartbeatLock = async ({
   readonly change: () => Promise<boolean>;
   readonly lockAttempts?: number;
 }): Promise<boolean> => {
+  let wrote = false;
   try {
     return await withReviewStoreLock({
       lockPath: store.agentHeartbeatLockPath,
-      change,
+      change: () => {
+        wrote = true;
+        return change();
+      },
       timeoutError: () => new AgentHeartbeatLockContended(),
       lockAttempts,
     });
   } catch (error: unknown) {
-    if (error instanceof AgentHeartbeatLockContended) return false;
-    throw error;
+    if (wrote) throw error;
+    return false;
   }
 };
 

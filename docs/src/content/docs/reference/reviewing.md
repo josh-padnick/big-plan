@@ -183,7 +183,8 @@ Start either pasteable command it returns. That coding-agent session waits for
 the next feedback package, considers the notes as untrusted review input,
 edits its own private copy of the plan when appropriate, validates the new
 render, and publishes one outcome for every comment.
-Leave that command running in its own terminal: the connector runs in the foreground and ends when the process that started it ends, so backgrounding or detaching it with `&` or `nohup` closes the session it just opened.
+Leave that command running in its own terminal: the connector runs in the foreground, hands its work item back on stdout, and ends when the process that started it ends.
+Backgrounding or detaching it breaks that handoff.
 The agent never writes your plan file; Big Plan swaps its copy in only when a
 valid answer publishes, so an agent that stalls, is taken over, or dies
 mid-edit leaves your plan exactly as it was.

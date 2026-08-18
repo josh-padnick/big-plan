@@ -784,6 +784,52 @@ describe("review store agent presence", () => {
     ).resolves.toEqual({ connected: false, state: "waiting" });
   });
 
+  it("reports a heartbeat lock it could not take at all", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    // Something else owns the lock path, so no waiting can win it. Losing a
+    // lock is not evidence about the agent, and the loop that awaits this
+    // write every half second must survive being told so.
+    await writeFile(store.agentHeartbeatLockPath, "not a lock");
+    await expect(
+      writeAgentHeartbeat({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "waiting",
+        writerId: "1111111111111111",
+        now: 60_000,
+        lockAttempts: 3,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      readAgentPresence({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        now: 60_000,
+      }),
+    ).resolves.toEqual({ connected: false, state: "waiting" });
+  });
+
+  it("raises a heartbeat write that ran and failed", async () => {
+    const { planPath } = await temporaryPlan();
+    const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
+    await prepareStore(store);
+    // The heartbeat cannot be replaced by a file, so the guarded write itself
+    // fails once it holds the lock.
+    await mkdir(store.agentHeartbeatPath);
+    await expect(
+      writeAgentHeartbeat({
+        store,
+        sessionId: "aaaaaaaaaaaaaaaa",
+        state: "waiting",
+        writerId: "1111111111111111",
+        now: 60_000,
+        lockAttempts: 3,
+      }),
+    ).rejects.toThrow();
+  });
+
   it("keeps the writer a heartbeat names when a write claims no identity", async () => {
     const { planPath } = await temporaryPlan();
     const store = reviewStoreFor({ planPath, planId: "0123456789abcdef" });
