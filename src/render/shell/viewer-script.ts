@@ -2510,7 +2510,10 @@ const wireDecisions = () => {
             "data-" + (mode ? "decision" : "feedback") + "-" + attribute,
           );
     const proposalCancel = own("[data-decision-proposal-cancel]");
+    const proposalTitle = own("[data-decision-proposal-title]");
+    const proposalRecord = own("[data-decision-proposal-record]");
     const propose = own("[data-option-proposal]");
+    const proposeLink = own(".decision-propose-link");
     const choices = ownAll("[data-decision-choice]");
     const panels = ownAll("[data-rationale-panel]");
     const cells = ownAll("[data-decision-column]");
@@ -2792,8 +2795,10 @@ const wireDecisions = () => {
       // owns: feedback hands the words to the agent, a decision records them
       // as the answer. Outside the composer there is nothing to hand off, so
       // confirming is the only action and the toggle is out of the way.
+      // Unchecked is the decision side, so the toggle's default is the reader
+      // answering for themselves; checking it hands the words to the agent.
       const decisionMode =
-        proposing && modeToggle !== null && modeToggle.checked;
+        proposing && (modeToggle === null || !modeToggle.checked);
       const answered = decision.hasAttribute("data-decision-answered");
       confirm.textContent = "Confirm choice";
       // The two modes have one control each. Comment mode uses the review's own
@@ -2932,6 +2937,17 @@ const wireDecisions = () => {
       // The propose block carries the recorded proposal, so it survives a
       // proposal answer and only retires when a column won.
       if (propose !== null) propose.hidden = answered && !proposing;
+      // A recorded proposal is an option now, not an invitation to suggest
+      // one, so the link retires and the words stand under their own title.
+      // Change is the one way back to the field.
+      const recorded = answered && proposing;
+      if (proposeLink !== null) proposeLink.hidden = recorded;
+      if (proposalTitle !== null) proposalTitle.hidden = !recorded;
+      if (proposalRecord !== null) {
+        proposalRecord.hidden = !recorded;
+        if (recorded) proposalRecord.textContent = proposalValue();
+      }
+      if (proposalText !== null) proposalText.hidden = recorded;
       // Answering with a column drops the ones the reader turned down, so the
       // record reads as one option against the criteria, not a live matrix.
       for (const cell of cells) {

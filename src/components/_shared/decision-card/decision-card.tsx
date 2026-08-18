@@ -86,8 +86,8 @@ const RationalePanel = ({
   </div>
 );
 
-// The prompt names the mode it belongs to. The comment wording is authored, so
-// a script-free reader gets the one matching the controls they can reach.
+// The prompt names the mode it belongs to. The decision wording is authored,
+// because unchecked is the decision side.
 const FEEDBACK_PLACEHOLDER =
   "Tell the agent how this decision should be changed.";
 const DECISION_PLACEHOLDER = "What did you decide?";
@@ -128,13 +128,15 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
         <div className="decision-mode" data-decision-mode="">
           <span
             className="decision-mode-side"
-            data-decision-mode-side="comment"
+            data-decision-mode-side="decision"
           >
-            {"Submit as comment"}
+            {"Submit as the decision"}
           </span>
           {/* The label wraps its input, which is the whole association; adding
               htmlFor as well makes a pointer activation fire twice and cancel
-              itself out. */}
+              itself out. Unchecked is the decision side: a reader who opened
+              this to answer for themselves is the common case, so it is the
+              side already selected. */}
           <label className="decision-mode-switch">
             <input
               className="decision-mode-check sr-only"
@@ -145,28 +147,43 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
             <span className="decision-mode-track" aria-hidden="true">
               <span className="decision-mode-knob" />
             </span>
-            <span className="sr-only">{"Submit as the decision"}</span>
+            <span className="sr-only">{"Submit as comment"}</span>
           </label>
           <span
             className="decision-mode-side"
-            data-decision-mode-side="decision"
+            data-decision-mode-side="comment"
             aria-hidden="true"
           >
-            {"Submit as the decision"}
+            {"Submit as comment"}
           </span>
         </div>
+        {/* Once the proposal is the recorded answer there is nothing left to
+            type, so the field gives way to the words themselves under the
+            title they now carry. Change is what reopens it. */}
+        <p
+          className="decision-proposal-title"
+          data-decision-proposal-title=""
+          hidden
+        >
+          {"New option"}
+        </p>
+        <p
+          className="decision-proposal-record"
+          data-decision-proposal-record=""
+          hidden
+        />
         <label className="sr-only" htmlFor={textId}>
           {"Proposed approach"}
         </label>
         {/* The prompt names whichever mode is live, so the reader is asked the
             question their words will actually answer. Both wordings ship as
-            data on the field: the authored state is the comment mode, which is
-            what a script-free reader gets. */}
+            data on the field; the authored state is the decision mode, which
+            is the toggle's default side. */}
         <textarea
           className="decision-proposal-input block w-full"
           id={textId}
           rows={3}
-          placeholder={FEEDBACK_PLACEHOLDER}
+          placeholder={DECISION_PLACEHOLDER}
           data-decision-proposal-text=""
           data-feedback-placeholder={FEEDBACK_PLACEHOLDER}
           data-decision-placeholder={DECISION_PLACEHOLDER}
@@ -174,21 +191,32 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
         {/* Comment mode is the review's own comment composer, so its controls
             are that composer's controls, in that composer's order. The shell
             reveals them; nothing here is specific to a decision. */}
-        <div
-          className="decision-comment-actions"
-          data-decision-comment-actions=""
-        >
-          <label className="decision-mode-switch decision-send-switch">
-            <input
-              className="decision-mode-check sr-only"
-              type="checkbox"
-              data-decision-send-now=""
-            />
-            <span className="decision-mode-track" aria-hidden="true">
-              <span className="decision-mode-knob" />
-            </span>
-            <span>{"Submit right away"}</span>
-          </label>
+        {/* Leaving the composer is not one mode's business, so Cancel sits
+            outside the comment controls and stays reachable in both. */}
+        <div className="decision-proposal-actions">
+          <div
+            className="decision-comment-actions"
+            data-decision-comment-actions=""
+          >
+            <label className="decision-mode-switch decision-send-switch">
+              <input
+                className="decision-mode-check sr-only"
+                type="checkbox"
+                data-decision-send-now=""
+              />
+              <span className="decision-mode-track" aria-hidden="true">
+                <span className="decision-mode-knob" />
+              </span>
+              <span>{"Submit right away"}</span>
+            </label>
+            <button
+              className="decision-comment-submit"
+              type="button"
+              data-decision-comment-submit=""
+            >
+              {"Submit Now"}
+            </button>
+          </div>
           <button
             className="decision-proposal-cancel"
             type="button"
@@ -196,13 +224,6 @@ const ProposeLink = ({ model }: { readonly model: CompiledDecisionCard }) => {
             data-decision-proposal-cancel=""
           >
             {"Cancel"}
-          </button>
-          <button
-            className="decision-comment-submit"
-            type="button"
-            data-decision-comment-submit=""
-          >
-            {"Submit Now"}
           </button>
         </div>
       </div>

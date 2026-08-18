@@ -168,16 +168,15 @@ test("should compare, answer, and revise a Decision", async ({
   const modeSwitch = card.locator("[data-decision-mode] .decision-mode-switch");
   const proposalField = card.locator("[data-decision-proposal-text]");
   const commentActions = card.locator("[data-decision-comment-actions]");
+  // Unchecked is the decision side: answering for yourself is the default, and
+  // checking the switch is what hands the words to the agent instead.
   await expect(modeToggle).not.toBeChecked();
   await expect(card.locator("[data-decision-mode]")).toBeVisible();
-  await expect(commentActions).toBeVisible();
-  await expect(card.getByRole("button", { name: "Submit Now" })).toBeVisible();
-  await expect(card.getByRole("button", { name: "Cancel" })).toBeVisible();
-  await expect(card.locator("[data-decision-send-now]")).not.toBeChecked();
-  await expect(card.locator("[data-decision-confirm]")).toBeHidden();
+  await expect(commentActions).toBeHidden();
+  await expect(card.locator("[data-decision-confirm]")).toBeVisible();
   await expect(proposalField).toHaveAttribute(
     "placeholder",
-    "Tell the agent how this decision should be changed.",
+    "What did you decide?",
   );
   // The question is asked before the typing, not after it.
   const modeBox = await card.locator("[data-decision-mode]").boundingBox();
@@ -186,22 +185,27 @@ test("should compare, answer, and revise a Decision", async ({
     fieldBox?.y ?? 0,
   );
 
-  await modeSwitch.click();
-  await expect(proposalField).toHaveAttribute(
-    "placeholder",
-    "What did you decide?",
-  );
-  // Decision mode carries no comment machinery at all - just the confirm step.
-  await expect(commentActions).toBeHidden();
-  await expect(card.locator("[data-decision-confirm]")).toBeVisible();
   await expect(card.locator("[data-decision-confirm]")).toBeEnabled();
   await expect(card.locator("[data-decision-confirm]")).toHaveText(
     "Confirm choice",
   );
 
+  // Checking the switch is comment mode: the review's ordinary comment
+  // controls, and none of the confirm step.
   await modeSwitch.click();
-  await expect(card.locator("[data-decision-confirm]")).toBeHidden();
+  await expect(proposalField).toHaveAttribute(
+    "placeholder",
+    "Tell the agent how this decision should be changed.",
+  );
   await expect(commentActions).toBeVisible();
+  await expect(card.getByRole("button", { name: "Submit Now" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(card.locator("[data-decision-send-now]")).not.toBeChecked();
+  await expect(card.locator("[data-decision-confirm]")).toBeHidden();
+
+  await modeSwitch.click();
+  await expect(card.locator("[data-decision-confirm]")).toBeVisible();
+  await expect(commentActions).toBeHidden();
 
   await card.locator("[data-decision-proposal-cancel]").click();
   await expect(card.locator("[data-decision-proposal]")).toBeHidden();
@@ -222,16 +226,32 @@ test("should compare, answer, and revise a Decision", async ({
   await card
     .locator("[data-decision-proposal-text]")
     .fill("Publish through the repository release.");
-  await card.locator("[data-decision-mode] .decision-mode-switch").click();
   await card.getByRole("button", { name: "Confirm choice" }).click();
   await expect(card.locator("[data-decision-answer]")).toContainText(
     "Publish through the repository release.",
   );
+  // A recorded proposal is an option, not an invitation to suggest one: the
+  // link retires and the words stand under their own title, with no field left
+  // to type in.
+  await expect(card.locator(".decision-propose-link")).toBeHidden();
+  await expect(card.locator("[data-decision-proposal-title]")).toHaveText(
+    "New option",
+  );
+  await expect(card.locator("[data-decision-proposal-record]")).toHaveText(
+    "Publish through the repository release.",
+  );
+  await expect(card.locator("[data-decision-proposal-text]")).toBeHidden();
   // An answer that stands cannot be re-aimed by flipping the mode underneath
-  // it; changing the answer is what reopens that choice.
+  // it; changing the answer is what reopens that choice - and the field.
   await expect(card.locator("[data-decision-mode-toggle]")).toBeDisabled();
   await card.locator("[data-decision-change]").click();
   await expect(card.locator("[data-decision-mode-toggle]")).toBeEnabled();
+  await expect(card.locator(".decision-propose-link")).toBeVisible();
+  await expect(card.locator("[data-decision-proposal-title]")).toBeHidden();
+  await expect(card.locator("[data-decision-proposal-text]")).toBeVisible();
+  await expect(card.locator("[data-decision-proposal-text]")).toHaveValue(
+    "Publish through the repository release.",
+  );
 });
 
 test("should submit a suggestion through the review's own comment controls", async ({
@@ -250,6 +270,8 @@ test("should submit a suggestion through the review's own comment controls", asy
   await expect(card.locator("[data-decision-selection-summary]")).toHaveText(
     "You selected your own approach.",
   );
+  // Comment mode is the switched-on side; the default is answering directly.
+  await card.locator("[data-decision-mode] .decision-mode-switch").click();
 
   await card.getByRole("button", { name: "Submit Now" }).click();
   // The comment now holds those words, so the field lets them go.

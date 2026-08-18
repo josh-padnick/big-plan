@@ -558,6 +558,25 @@
     line-height: 1.45;
     resize: vertical;
   }
+  /* The recorded proposal is prose, not a control, so it reads as the option
+     it became: a title over the reader's own words, on the card body rather
+     than in a field they can no longer type in. */
+  article .decision-proposal-title {
+    color: var(--ink-c);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  article .decision-proposal-title[hidden],
+  article .decision-proposal-record[hidden] {
+    display: none;
+  }
+  article .decision-proposal-record {
+    margin-top: 0.25rem;
+    color: var(--ink-c);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
   article .decision-proposal-input:focus-visible {
     outline: none;
     border-color: var(--color-accent);
@@ -599,10 +618,10 @@
      other recedes. */
   article
     .decision-mode:not(:has(.decision-mode-check:checked))
-    [data-decision-mode-side="comment"],
+    [data-decision-mode-side="decision"],
   article
     .decision-mode:has(.decision-mode-check:checked)
-    [data-decision-mode-side="decision"] {
+    [data-decision-mode-side="comment"] {
     color: var(--ink-c);
   }
 
@@ -667,12 +686,19 @@
 
   /* Comment mode's controls are the review's comment controls, in the review's
      order: how it will be submitted, then the way out, then the submission. */
-  article .decision-comment-actions {
+  article .decision-proposal-actions {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 0.75rem;
     margin-top: 0.625rem;
+  }
+  article .decision-comment-actions {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
   }
   article .decision-comment-actions[hidden] {
     display: none;
