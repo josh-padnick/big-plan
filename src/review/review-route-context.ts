@@ -317,6 +317,11 @@ export const createPlanRenderer = ({
   return { renderPlan, readStoredComments, validateUpdates };
 };
 
+// How many times a read that raced a write is taken again before it answers
+// anyway. A repeat needs another write to land during it, and writes are
+// serialized, so the bound is a stop rather than a policy.
+const CONCURRENT_WRITE_REREADS = 3;
+
 /**
  * Owns the compiled decision inventory and every read and write of the answer
  * record.
@@ -346,6 +351,7 @@ export const createDecisionAnswers = ({
   let inventory: DecisionInventory = new Map();
   let reportedUnreadable = false;
   let revisionFloor = 0;
+  let writes = 0;
   return {
     inventory: async () => {
       const markdown = await readFile(resolvedPlanPath, "utf8");
@@ -360,27 +366,39 @@ export const createDecisionAnswers = ({
       return inventory;
     },
     read: async () => {
-      const { inputs, unreadable } = await readStagedInputs({
-        store,
-        validate: validateStagedInputs,
-      });
-      if (unreadable !== undefined && !reportedUnreadable) {
-        reportedUnreadable = true;
-        reportDiagnostic({
-          message:
-            "Stored decision answers could not be read and were treated as empty",
-          error: new Error(unreadable),
+      // A read is not serialized with a write, so one that started before a
+      // write finished can come back with the older body. Raising that body to
+      // the floor would label superseded answers as current, which is the one
+      // thing the floor exists to prevent, so the read is taken again instead.
+      // Writes are serialized by the write gate, so a repeat needs a fresh one.
+      for (let attempt = 0; ; attempt += 1) {
+        const startedAfter = writes;
+        const { inputs, unreadable } = await readStagedInputs({
+          store,
+          validate: validateStagedInputs,
         });
+        if (unreadable !== undefined && !reportedUnreadable) {
+          reportedUnreadable = true;
+          reportDiagnostic({
+            message:
+              "Stored decision answers could not be read and were treated as empty",
+            error: new Error(unreadable),
+          });
+        }
+        if (writes !== startedAfter && attempt < CONCURRENT_WRITE_REREADS) {
+          continue;
+        }
+        if (inputs.revision < revisionFloor) {
+          return { ...inputs, revision: revisionFloor };
+        }
+        revisionFloor = inputs.revision;
+        return inputs;
       }
-      if (inputs.revision < revisionFloor) {
-        return { ...inputs, revision: revisionFloor };
-      }
-      revisionFloor = inputs.revision;
-      return inputs;
     },
     write: async (inputs) => {
       await writeStagedInputs({ store, inputs });
       revisionFloor = Math.max(revisionFloor, inputs.revision);
+      writes += 1;
     },
   };
 };
@@ -400,21 +418,31 @@ export const createChangeDispositions = ({
   readonly store: ReviewStore;
 }): ChangeDispositions => {
   let revisionFloor = 0;
+  let writes = 0;
   return {
     read: async () => {
-      const dispositions = await readChangeDispositions({
-        store,
-        validate: validateChangeDispositions,
-      });
-      if (dispositions.revision < revisionFloor) {
-        return { ...dispositions, revision: revisionFloor };
+      // Re-read for the reason the answers store does: a read that raced a
+      // write must not be relabelled as the revision that overtook it.
+      for (let attempt = 0; ; attempt += 1) {
+        const startedAfter = writes;
+        const dispositions = await readChangeDispositions({
+          store,
+          validate: validateChangeDispositions,
+        });
+        if (writes !== startedAfter && attempt < CONCURRENT_WRITE_REREADS) {
+          continue;
+        }
+        if (dispositions.revision < revisionFloor) {
+          return { ...dispositions, revision: revisionFloor };
+        }
+        revisionFloor = dispositions.revision;
+        return dispositions;
       }
-      revisionFloor = dispositions.revision;
-      return dispositions;
     },
     write: async (dispositions) => {
       await writeChangeDispositions({ store, dispositions });
       revisionFloor = Math.max(revisionFloor, dispositions.revision);
+      writes += 1;
     },
   };
 };
