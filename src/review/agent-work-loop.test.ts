@@ -2073,9 +2073,7 @@ describe("agent work loop lifecycle", () => {
           expect.objectContaining({
             requestId: request.requestId,
             stepCode: "request-reclaimed",
-            detail: expect.stringContaining(
-              "stay in its own claim stage",
-            ),
+            detail: expect.stringContaining("stay in its own claim stage"),
           }),
         ]),
       );

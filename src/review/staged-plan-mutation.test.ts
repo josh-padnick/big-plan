@@ -186,8 +186,9 @@ describe("staged plan mutation", () => {
         }),
       ).rejects.toThrow(/can no longer publish/u);
       await expect(readFile(planPath, "utf8")).resolves.toBe(BASE);
-      await expect(readAgentExchange({ store, sessionId: SESSION, planId }))
-        .resolves.toMatchObject({ responses: [] });
+      await expect(
+        readAgentExchange({ store, sessionId: SESSION, planId }),
+      ).resolves.toMatchObject({ responses: [] });
       await expect(readCommittedRevisions({ store })).resolves.toEqual([]);
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -226,8 +227,9 @@ describe("staged plan mutation", () => {
         }),
       ).rejects.toThrow(/changed while this claim was working/u);
       await expect(readFile(planPath, "utf8")).resolves.toBe(moved);
-      await expect(readAgentExchange({ store, sessionId: SESSION, planId }))
-        .resolves.toMatchObject({ responses: [] });
+      await expect(
+        readAgentExchange({ store, sessionId: SESSION, planId }),
+      ).resolves.toMatchObject({ responses: [] });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -255,7 +257,10 @@ describe("staged plan mutation", () => {
         resultSnapshot,
         resultSource: RESULT,
         assets: [],
-        response: answerFor({ request: claimed, currentSnapshot: resultSnapshot }),
+        response: answerFor({
+          request: claimed,
+          currentSnapshot: resultSnapshot,
+        }),
         now: new Date().toISOString(),
       });
       await expect(readFile(planPath, "utf8")).resolves.toBe(RESULT);
@@ -322,7 +327,9 @@ describe("interrupted plan commit recovery", () => {
 
       await expect(
         recoverStagedPlanMutations({ store, planPath }),
-      ).resolves.toMatchObject([{ outcome: "rolled-back", requestId: REQUEST }]);
+      ).resolves.toMatchObject([
+        { outcome: "rolled-back", requestId: REQUEST },
+      ]);
       await expect(readFile(planPath, "utf8")).resolves.toBe(BASE);
       const exchange = await readAgentExchange({
         store,

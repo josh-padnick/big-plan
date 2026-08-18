@@ -187,15 +187,23 @@ a model provider itself. The launched coding-agent session uses:
 
 - `agent next <input.mdx> --wait [--agent <token>]` to receive the oldest pending feedback,
   thread reply, or plan-wide chat question, its prior conversation, a validated
-  response template, and the exact publish command;
+  response template, the private candidate to edit, and the exact publish command;
 - `agent note <input.mdx> "<progress>" --agent <token>` to keep the reviewer
   informed as each meaningful work step begins; and
 - `agent respond <input.mdx> <response.json> --agent <token>` to publish one
-  complete answer after the current MDX has rendered and passed lint.
+  complete answer, and the candidate it was written against, after that
+  candidate has rendered and passed lint.
 
 `agent next` mints the `--agent` token when it hands out a request, and returns
 it as `agent_token` together with ready-to-run `note_command` and
 `respond_command` strings.
+It also returns `candidate_plan`: this claim's own copy of the plan, and the
+only file the agent edits.
+The plan path itself stays read-only identity, so relative asset paths and
+repository context still resolve against it, and Big Plan writes it only when a
+response publishes.
+Resuming with `--agent <token>` returns the same candidate, with the edits the
+previous process left in it.
 The returned `note_command` includes the progress text `"Working on the request"`, so running it unchanged records that update and renews the claim.
 For later meaningful steps, use `agent note <input.mdx> "<progress>" --agent <token>` with a short, specific progress line.
 If the agent process restarts while that request remains open, pass the returned token back with `agent next <input.mdx> --agent <token>` to resume the same pickup.
@@ -206,8 +214,13 @@ work.
 Only one request on a plan may hold a live claim, so a second agent waits rather than editing the plan in parallel.
 Without `--wait`, `agent next` reports that no work is available while another claim is live.
 With `--wait`, it continues once the holder answers or its lease lapses.
-This serialization prevents ordinary concurrent unfenced plan writers; a lapsed lease during a long edit can still interleave plan writes until write fencing exists.
-When a lapsed lease is taken over, the reviewer is warned that the previous agent's partial plan edits may be present.
+A lapsed lease no longer risks the plan.
+Every claim carries a generation that a takeover raises, the displaced agent keeps writing only to its own candidate, and `agent respond` refuses a generation that no longer holds the claim.
+A takeover therefore starts from the last published revision, and the reviewer is told the previous agent's unpublished edits stayed in its own stage.
+
+`agent respond` publishes under one plan-mutation lock: it re-proves the claim, requires the plan to still carry the revision the candidate started from, and swaps the candidate in with one atomic rename.
+A response that finds the plan changed underneath it is refused rather than applied, so the agent takes the work again from the current plan.
+If the process dies mid-publish, the next `agent` command and the next `big-plan review` settle the interrupted commit before serving anything: the answer completes if the swap won, the request stays open if it did not, and a plan matching neither revision stops agent edits with a conflict naming both digests instead of overwriting the file.
 
 Set the `BIG_PLAN_AGENT_MODEL` environment variable before running `agent
 next` or `agent note` to report which model is connected, for example `Grok

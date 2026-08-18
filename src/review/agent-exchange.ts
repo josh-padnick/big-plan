@@ -202,11 +202,7 @@ const epochMilliseconds = (value: unknown, field: string): number => {
 };
 
 const claimGenerationNumber = (value: unknown): number => {
-  if (
-    typeof value !== "number" ||
-    !Number.isSafeInteger(value) ||
-    value < 1
-  ) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
     throw new AgentExchangeRejected(
       '"claimGeneration" must be a positive whole number',
     );

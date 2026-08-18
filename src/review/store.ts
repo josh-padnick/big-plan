@@ -1460,7 +1460,9 @@ export const readAgentRequestValue = async ({
   readonly store: ReviewStore;
   readonly requestId: string;
 }): Promise<unknown> =>
-  readStoreJson(exchangePath({ directory: store.agentRequestDirectory, requestId }));
+  readStoreJson(
+    exchangePath({ directory: store.agentRequestDirectory, requestId }),
+  );
 
 /**
  * Which requests have a response on disk, from the directory listing alone.

@@ -130,7 +130,10 @@ const validateRevision = (value: unknown): CommittedPlanRevision => {
       "A committed revision needs a known provenance",
     );
   }
-  if (typeof committedAt !== "string" || Number.isNaN(Date.parse(committedAt))) {
+  if (
+    typeof committedAt !== "string" ||
+    Number.isNaN(Date.parse(committedAt))
+  ) {
     throw new CommittedRevisionRejected(
       "A committed revision needs an ISO commit time",
     );

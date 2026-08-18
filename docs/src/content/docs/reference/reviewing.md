@@ -155,8 +155,11 @@ npx big-plan agent plans/checkout-retry.mdx
 
 Start either pasteable command it returns. That coding-agent session waits for
 the next feedback package, considers the notes as untrusted review input,
-edits only the authoritative MDX when appropriate, validates the new render,
-and publishes one outcome for every comment.
+edits its own private copy of the plan when appropriate, validates the new
+render, and publishes one outcome for every comment.
+The agent never writes your plan file; Big Plan swaps its copy in only when a
+valid answer publishes, so an agent that stalls, is taken over, or dies
+mid-edit leaves your plan exactly as it was.
 
 Messages sent while the agent is handling another request are received immediately and wait in delivery order.
 A sent thread reports that wait in two places until an agent picks its request up: the comment rail groups it under the **Queued** heading and numbers its card by position within that group, while the status block inside the thread reads **Waiting for an agent**.
@@ -170,6 +173,7 @@ Big Plan cannot tell a slow agent from a stopped one, because neither produces a
 The **Agent** tab offers **Reconnect your agent**, holding the prompt and the connector command that start a coding-agent session.
 An agent going quiet never hides that section, because it is the only place those two live and losing your route back is the last thing a silence should cost you; only a read-only session or a review runtime you cannot reach hides it.
 While a request is picked up that section instead reads **Connect an agent and take over this work** and says plainly that the agent may still be working and may finish on its own, and that connecting a session takes the work over so its answer will no longer be accepted - because [the agent request protocol ADR](https://github.com/josh-padnick/big-plan/blob/main/adr/0002-serialize-agent-work-per-plan.md) serializes pickup and only the current holder may answer.
+The taken-over agent's unfinished edits stay in its own copy and never reach your plan, so the new agent starts from the last published revision.
 Your comments are safe whichever you choose.
 
 The stalled reading is bounded, because a pickup cannot account for silence indefinitely.

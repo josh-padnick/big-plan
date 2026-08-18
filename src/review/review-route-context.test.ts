@@ -3,7 +3,7 @@
 // first sighting of an agent response and never again, and the write gate
 // gives up on one mutation rather than on the whole session (BIG-44).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createReaderProgress,
   createWriteGate,
@@ -142,7 +142,12 @@ describe("createWriteGate", () => {
       })
       .catch(() => undefined);
 
-    expect(gate.stalledForMs()).toBeGreaterThanOrEqual(20);
+    // The give-up timer can fire a fraction before the wall clock has passed
+    // the same bound, and the stall reading is taken from the clock. Poll for
+    // the reading rather than assert on that tie.
+    await vi.waitFor(() => {
+      expect(gate.stalledForMs()).toBeGreaterThanOrEqual(20);
+    });
   });
 
   it("reports no stall for a mutation that is merely still running", async () => {

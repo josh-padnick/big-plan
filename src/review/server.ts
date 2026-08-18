@@ -857,9 +857,9 @@ export const startReviewRuntime = async ({
     }),
     readerProgress: createReaderProgress({
       initialSnapshot,
-      observedResponseIds: (
-        await readCommittedRevisions({ store })
-      ).map((revision) => revision.requestId),
+      observedResponseIds: (await readCommittedRevisions({ store })).map(
+        (revision) => revision.requestId,
+      ),
     }),
     writeGate: createWriteGate({ mutations, stallMs: writeStallMs }),
     activityClock: createActivityClock(idleTimeoutMs),

@@ -530,9 +530,12 @@ export const recoverStagedPlanMutations = async ({
           continue;
         }
         if (currentSnapshot === journal.baseSnapshot) {
-          await rm(journalPath({ store: lockedStore, requestId: journal.requestId }), {
-            force: true,
-          });
+          await rm(
+            journalPath({ store: lockedStore, requestId: journal.requestId }),
+            {
+              force: true,
+            },
+          );
           recoveries.push({
             outcome: "rolled-back",
             requestId: journal.requestId,
