@@ -1,12 +1,12 @@
 // Covers the answers reader's own rule: a response older than the one this
 // page already applied is dropped rather than shown.
 //
-// It is the losing half of a race that cannot be reproduced through the panel,
+// It is the losing half of a race a browser journey cannot cheaply provoke,
 // because two overlapping reads of one record settling out of order is a
 // timing accident rather than a reviewer's gesture. That the reader announces
 // what it applies, and that the Inputs panel acts on the announcement, is
-// proven where it happens - over the mounted island in
-// inputs-surface.browser.test.ts.
+// proven where a reviewer would see it fail - over the live runtime in
+// test/input-contract.spec.ts.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyAnswersRecord } from "./answers-record.browser.js";

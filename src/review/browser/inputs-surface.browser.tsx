@@ -24,6 +24,7 @@ import {
   reviewInputStanding,
   type ReviewInput,
   type ReviewInputContract,
+  type ReviewInputStanding,
   type ReviewInputState,
 } from "../shared/input-contract.js";
 import { decodeReviewInputContract } from "../shared/review-wire.js";
@@ -69,7 +70,7 @@ const STATE_ICONS: Readonly<Record<ReviewInputState, typeof CHECK_ICON>> = {
  * panel that stopped hearing those moments keeps showing a review the decision
  * cards have already moved past, and nothing throws.
  */
-export const watchReviewInputContract = (read: () => void): (() => void) => {
+const watchReviewInputContract = (read: () => void): (() => void) => {
   read();
   return onAppliedReviewRecord(read);
 };
@@ -82,7 +83,42 @@ export const watchReviewInputContract = (read: () => void): (() => void) => {
  * of you, and nobody could say. Collapsing the last into the first leaves the
  * panel claiming work is in progress when none is.
  */
-type ContractReadStanding = "reading" | "read" | "unavailable";
+export type ContractReadStanding = "reading" | "read" | "unavailable";
+
+/** What the panel tells the reviewer, in the summary line and below it. */
+export type InputsPanelReading = {
+  readonly summary: string;
+  readonly body: "inputs" | "nothing" | "unavailable" | "reading";
+};
+
+/**
+ * Decides what the panel says, both at once.
+ *
+ * The two are decided together because they are one statement to the reviewer
+ * and were twice found disagreeing: a summary reporting a conclusion over a
+ * body still saying it was reading. Neither half may be chosen without the
+ * other, so neither half is chosen where it is rendered.
+ */
+export const inputsPanelReading = ({
+  standing,
+  readStanding,
+}: {
+  readonly standing: ReviewInputStanding;
+  readonly readStanding: ContractReadStanding;
+}): InputsPanelReading => {
+  if (standing.total > 0) {
+    return {
+      summary: `${standing.answered} of ${standing.total} answered`,
+      body: "inputs",
+    };
+  }
+  if (readStanding === "unavailable") {
+    return { summary: "Not known", body: "unavailable" };
+  }
+  return readStanding === "read"
+    ? { summary: "Nothing yet", body: "nothing" }
+    : { summary: "Reading…", body: "reading" };
+};
 
 /**
  * Keeps the panel's copy of the contract equal to the runtime's.
@@ -111,6 +147,10 @@ const useReviewInputContract = (): {
 
   const apply = useCallback((value: unknown): void => {
     const next = decodeReviewInputContract(value);
+    if (next === undefined) {
+      setStanding((current) => (current === "read" ? current : "unavailable"));
+      return;
+    }
     if (next.revision < applied.current) return;
     applied.current = next.revision;
     setContract(next);
@@ -247,6 +287,10 @@ export const InputsSurface = () => {
     () => reviewInputStanding(contract.inputs),
     [contract.inputs],
   );
+  const reading = useMemo(
+    () => inputsPanelReading({ standing, readStanding }),
+    [standing, readStanding],
+  );
   return (
     <div
       id="review-panel-inputs"
@@ -262,11 +306,7 @@ export const InputsSurface = () => {
           className="m-0 mt-1.5 text-sm text-ink"
           data-review-input-standing=""
         >
-          {standing.total > 0
-            ? `${standing.answered} of ${standing.total} answered`
-            : readStanding === "unavailable"
-              ? "Not known"
-              : "Nothing yet"}
+          {reading.summary}
         </p>
         {standing.criticalOpen > 0 ? (
           <p className="m-0 mt-1 text-xs font-medium text-[var(--callout-warning-c)]">
@@ -283,17 +323,17 @@ export const InputsSurface = () => {
           </p>
         ) : null}
       </section>
-      {contract.inputs.length > 0 ? (
+      {reading.body === "inputs" ? (
         <ul className="m-0 grid list-none gap-2 p-0">
           {contract.inputs.map((input) => (
             <InputRow key={input.inputId} input={input} />
           ))}
         </ul>
-      ) : readStanding === "unavailable" ? (
+      ) : reading.body === "unavailable" ? (
         <ContractUnavailable onReadAgain={readAgain} />
       ) : (
         <p className="m-0 text-sm text-muted">
-          {readStanding === "read"
+          {reading.body === "nothing"
             ? "This plan asks nothing of you yet. Decisions the plan raises appear here as the review goes on."
             : "Reading what this review expects…"}
         </p>

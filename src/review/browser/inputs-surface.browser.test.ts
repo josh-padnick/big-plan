@@ -1,222 +1,66 @@
-// @vitest-environment happy-dom
+// Proves the Inputs panel never states more than it knows.
 //
-// Proves the Inputs panel as the reviewer meets it: what it shows for a
-// contract the runtime answered, what it shows when nobody answered, and that
-// it catches up when this page applies a newer answers record.
-//
-// The last of those is why this test mounts the review island rather than
-// calling the panel's own helpers. The chain it protects runs through two
-// modules that never reference each other - the controller applies the answers
-// record, the panel hears that it did - and every link is silent when it
-// breaks: the panel simply keeps showing a review the decision cards have
-// already moved past. So the controller and the panel are mounted together and
-// driven through the runtime responses they really read.
+// Three situations reach this panel - still reading, read and nothing asked,
+// and nobody could say - and each has to read as its own thing in both places
+// the panel speaks. The failure to guard against is not a crash: it is a
+// summary line asserting a conclusion over a body that is still waiting for
+// one, which every reader takes at face value.
 
-import { act, createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { DiffTourProvider } from "./diff-tour.browser.js";
-import { InputsSurface } from "./inputs-surface.browser.js";
-import { ReviewController } from "./review-controller.browser.js";
+import { describe, expect, it } from "vitest";
+import { inputsPanelReading } from "./inputs-surface.browser.js";
+import {
+  reviewInputStanding,
+  type ReviewInput,
+} from "../shared/input-contract.js";
 
-const DECISION_ID = "quick-decision-do-we-ship-behind-a-flag";
+const NOTHING = reviewInputStanding([]);
 
-const contractResponse = ({
-  revision,
-  state,
-  detail,
-}: {
-  readonly revision: number;
-  readonly state: string;
-  readonly detail: string;
-}) => ({
-  revision,
-  inputs: [
+const oneOpenDecision = (): ReturnType<typeof reviewInputStanding> =>
+  reviewInputStanding([
     {
-      inputId: DECISION_ID,
+      inputId: "quick-decision-do-we-ship-behind-a-flag",
       label: "Do we ship behind a flag?",
       isCritical: true,
-      state,
-      detail,
-    },
-  ],
-});
+      state: "unanswered",
+      detail: "No answer recorded",
+    } satisfies ReviewInput,
+  ]);
 
-const answersResponse = (revision: number) => ({
-  revision,
-  supersededDecisionIds: [],
-  answers: [
-    {
-      decisionId: DECISION_ID,
-      optionId: `${DECISION_ID}-option-yes`,
-      optionTitle: "Yes",
-      prompt: "Do we ship behind a flag?",
-      answeredAt: "2026-08-18T00:00:00.000Z",
-      premiseSnapshot: "0123456789abcdef",
-      decisionDigest: "fedcba9876543210",
-    },
-  ],
-});
-
-let mounted: Root | null = null;
-
-afterEach(async () => {
-  if (mounted !== null) {
-    const root = mounted;
-    mounted = null;
-    await act(async () => {
-      root.unmount();
-    });
-  }
-  vi.unstubAllGlobals();
-  document.body.innerHTML = "";
-});
-
-/**
- * A served review page: the runtime identity the document carries, and a
- * runtime that answers the paths this page asks for.
- */
-const servedPage = (answer: (path: string) => unknown): void => {
-  (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
-  const root = document.documentElement;
-  root.setAttribute("data-plan-id", "plan-one");
-  root.setAttribute("data-review-session", "session-one");
-  root.setAttribute("data-review-token", "token-one");
-  vi.stubGlobal("fetch", (path: string) => {
-    const value = answer(String(path));
-    return value === undefined
-      ? Promise.reject(new Error("The review runtime did not answer"))
-      : Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve(value),
-        });
-  });
-};
-
-/** Mounts a tree the way the review island does, and settles its first reads. */
-const show = async (
-  tree: ReturnType<typeof createElement>,
-): Promise<Element> => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  mounted = root;
-  await act(async () => {
-    root.render(tree);
-  });
-  for (let settle = 0; settle < 5; settle += 1) {
-    await act(async () => {
-      await Promise.resolve();
-    });
-  }
-  return container;
-};
-
-const panelText = (container: Element): string =>
-  container.querySelector("#review-panel-inputs")?.textContent ?? "";
-
-describe("the Inputs panel", () => {
-  it("should show every input the runtime says the review is waiting for", async () => {
-    servedPage((path) =>
-      path === "/api/input-contract"
-        ? contractResponse({
-            revision: 0,
-            state: "unanswered",
-            detail: "No answer recorded",
-          })
-        : {},
-    );
-
-    const container = await show(createElement(InputsSurface));
-
-    expect(panelText(container)).toContain("Do we ship behind a flag?");
-    expect(panelText(container)).toContain("Not answered");
-    expect(panelText(container)).toContain("1 critical input is still open");
+describe("what the Inputs panel says", () => {
+  it("should say it is still reading in both places at once", () => {
     expect(
-      container.querySelector(`[data-review-input="${DECISION_ID}"]`),
-    ).not.toBeNull();
+      inputsPanelReading({ standing: NOTHING, readStanding: "reading" }),
+    ).toEqual({ summary: "Reading…", body: "reading" });
   });
 
-  // The panel and the decision cards are driven by the same record, so the
-  // page applying a newer copy of it is exactly when the panel is out of date.
-  it("should catch up when this page applies a newer answers record", async () => {
-    let contractReads = 0;
-    servedPage((path) => {
-      if (path === "/api/review-state") return answersResponse(0);
-      if (path !== "/api/input-contract") return {};
-      contractReads += 1;
-      return contractReads === 1
-        ? contractResponse({
-            revision: 0,
-            state: "unanswered",
-            detail: "No answer recorded",
-          })
-        : contractResponse({
-            revision: 1,
-            state: "answered",
-            detail: "Answered: Yes",
-          });
-    });
-
-    const container = await show(
-      createElement(
-        DiffTourProvider,
-        null,
-        createElement(ReviewController),
-        createElement(InputsSurface),
-      ),
-    );
-
-    expect(panelText(container)).toContain("Answered: Yes");
-    expect(panelText(container)).toContain("1 of 1 answered");
-    expect(panelText(container)).not.toContain("Not answered");
+  it("should call a read plan with no inputs empty rather than unread", () => {
+    expect(
+      inputsPanelReading({ standing: NOTHING, readStanding: "read" }),
+    ).toEqual({ summary: "Nothing yet", body: "nothing" });
   });
 
-  it("should say nobody answered rather than claim it is still reading", async () => {
-    servedPage((path) => (path === "/api/input-contract" ? undefined : {}));
-
-    const container = await show(createElement(InputsSurface));
-
-    expect(panelText(container)).toContain(
-      "Could not read what this review needs",
-    );
-    expect(panelText(container)).not.toContain("Reading what this review");
-    expect(panelText(container)).not.toContain("This plan asks nothing of you");
-    expect(panelText(container)).not.toContain("Nothing yet");
+  it("should refuse to say a review needs nothing when nobody could say", () => {
+    expect(
+      inputsPanelReading({ standing: NOTHING, readStanding: "unavailable" }),
+    ).toEqual({ summary: "Not known", body: "unavailable" });
   });
 
-  it("should read again when the reviewer asks it to", async () => {
-    let answered = false;
-    servedPage((path) => {
-      if (path !== "/api/input-contract") return {};
-      if (!answered) {
-        answered = true;
-        return undefined;
-      }
-      return contractResponse({
-        revision: 0,
-        state: "unanswered",
-        detail: "No answer recorded",
-      });
-    });
-
-    const container = await show(createElement(InputsSurface));
-    const retry = container.querySelector<HTMLButtonElement>(
-      "[data-review-input-unavailable] button",
+  it("should give the three readings three different summaries", () => {
+    const summaries = (["reading", "read", "unavailable"] as const).map(
+      (readStanding) =>
+        inputsPanelReading({ standing: NOTHING, readStanding }).summary,
     );
-    expect(retry).not.toBeNull();
 
-    await act(async () => {
-      retry?.click();
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
+    expect(new Set(summaries).size).toBe(summaries.length);
+  });
 
-    expect(panelText(container)).toContain("Do we ship behind a flag?");
-    expect(panelText(container)).not.toContain(
-      "Could not read what this review needs",
-    );
+  // A contract the reviewer can already see outranks how the last read went:
+  // a failed refetch must not take the list away or stop counting it.
+  it("should keep counting the inputs it holds however the last read went", () => {
+    for (const readStanding of ["reading", "read", "unavailable"] as const) {
+      expect(
+        inputsPanelReading({ standing: oneOpenDecision(), readStanding }),
+      ).toEqual({ summary: "0 of 1 answered", body: "inputs" });
+    }
   });
 });

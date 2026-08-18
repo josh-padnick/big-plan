@@ -15,7 +15,6 @@ import {
 import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
 import {
-  emptyReviewInputContract,
   type ReviewInput,
   type ReviewInputContract,
   type ReviewInputState,
@@ -415,19 +414,25 @@ const INPUT_STATES: ReadonlySet<string> = new Set<ReviewInputState>([
 ]);
 
 /**
- * Decodes the input contract while dropping malformed transport entries. The
- * revision decodes to -1 when unusable, which is older than any accepted write
- * to the record it came from, so a body this build cannot read can never
- * displace a contract the page already applied.
+ * Decodes the input contract, or says it could not.
+ *
+ * A body this build cannot read is reported as unreadable rather than as an
+ * empty contract, because the two mean opposite things to a reader: one says
+ * nobody could answer what the review needs, the other says the review needs
+ * nothing. A revision it cannot order on is unreadable for the same reason -
+ * the guard that drops older responses cannot hold a body it cannot place, and
+ * the first read would otherwise slip past it and present as a definite answer.
  */
 export const decodeReviewInputContract = (
   value: unknown,
-): ReviewInputContract => {
+): ReviewInputContract | undefined => {
   if (!isReviewWireRecord(value) || !Array.isArray(value.inputs)) {
-    return emptyReviewInputContract();
+    return undefined;
   }
+  const revision = storedRevision(value.revision);
+  if (revision < 0) return undefined;
   return {
-    revision: storedRevision(value.revision),
+    revision,
     inputs: value.inputs.flatMap((input): ReadonlyArray<ReviewInput> =>
       isReviewWireRecord(input) &&
       typeof input.inputId === "string" &&

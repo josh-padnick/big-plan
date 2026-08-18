@@ -621,10 +621,27 @@ describe("review wire contract", () => {
         decodeChangeDispositions({ accepted: [], revision }).revision,
       ).toBe(-1);
       expect(decodeReviewState({ answers: [], revision }).revision).toBe(-1);
-      expect(decodeReviewInputContract({ inputs: [], revision }).revision).toBe(
-        -1,
-      );
+      // The contract has no place to put an unorderable revision: it is the
+      // one record whose reader starts at -1, so a body carrying one would
+      // slip past the guard on the first read and present as a definite
+      // answer about the plan. It is reported unreadable instead.
+      expect(
+        decodeReviewInputContract({ inputs: [], revision }),
+      ).toBeUndefined();
     }
+  });
+
+  // "Nobody could read this" and "the review needs nothing" are opposite
+  // statements to a reader, so the decoder never turns the first into the
+  // second.
+  it("should report a contract body it cannot read rather than an empty one", () => {
+    for (const body of [null, "contract", 7, {}, { inputs: "none" }]) {
+      expect(decodeReviewInputContract(body)).toBeUndefined();
+    }
+    expect(decodeReviewInputContract({ inputs: [], revision: 0 })).toEqual({
+      inputs: [],
+      revision: 0,
+    });
   });
 
   // Zero earns its own case: it is the first write every store makes, and a
@@ -637,9 +654,9 @@ describe("review wire contract", () => {
       expect(decodeReviewState({ answers: [], revision }).revision).toBe(
         revision,
       );
-      expect(decodeReviewInputContract({ inputs: [], revision }).revision).toBe(
-        revision,
-      );
+      expect(
+        decodeReviewInputContract({ inputs: [], revision })?.revision,
+      ).toBe(revision);
     }
   });
 });
