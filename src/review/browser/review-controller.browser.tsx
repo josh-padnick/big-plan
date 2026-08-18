@@ -80,7 +80,7 @@ import {
   projectRequestStatus,
   queuedRequestsAhead,
   requestCommentIds,
-  selectActiveFeedbackBatch,
+  selectOpenFeedbackBatches,
   type CommentThreadProjection,
   type RequestDelivery,
   type ThreadGroup,
@@ -116,6 +116,7 @@ import { InputsSurface } from "./inputs-surface.browser.js";
 import {
   batchSectionTone,
   CommentsSurface,
+  type CommentsSurfaceBatch,
 } from "./comments-surface.browser.js";
 import {
   AgentChangeDigest,
@@ -6600,16 +6601,76 @@ export const ReviewController = () => {
       });
     });
   };
-  const activeBatchRequest = selectActiveFeedbackBatch({
+  const openBatches = selectOpenFeedbackBatches({
     requests: agent.requests,
     cancelPendingRequestIds,
   });
-  const activeBatchCommentIds =
-    activeBatchRequest === undefined
-      ? []
-      : requestCommentIds(activeBatchRequest).filter((commentId) =>
-          visibleUnresolvedSent.some((comment) => comment.id === commentId),
-        );
+  const batchCommentIds = (request: AgentRequest): ReadonlyArray<string> =>
+    requestCommentIds(request).filter((commentId) =>
+      visibleUnresolvedSent.some((comment) => comment.id === commentId),
+    );
+  /** Heads one batch with what that batch alone is doing. */
+  const batchSection = ({
+    request,
+    count,
+    comments,
+  }: {
+    readonly request: AgentRequest;
+    readonly count: number;
+    readonly comments: ReadonlyArray<ReviewComment>;
+  }): CommentsSurfaceBatch => {
+    const status = statusForRequest(request, "thread");
+    return {
+      requestId: request.requestId,
+      count,
+      comments,
+      label: status.label,
+      tone: batchSectionTone({ status }),
+      content: (
+        <Card
+          className="m-0 w-full max-w-none border border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-ink)] shadow-none"
+          density="dense"
+          elevation="none"
+        >
+          <RequestStatusStrip
+            status={status}
+            activity={activityForRequest(request)}
+            surface="thread"
+            commentCount={count}
+            onShowAgent={openAgentSidebar}
+            onCancelRequest={() => void cancelRequest(request.requestId)}
+          />
+        </Card>
+      ),
+    };
+  };
+  const openBatchThreads = openBatches.flatMap((request) => {
+    const commentIds = batchCommentIds(request);
+    return commentIds.length === 0 ? [] : [{ request, commentIds }];
+  });
+  // More than one open batch is where a single header stops being able to tell
+  // the truth: the threads under it belong to whichever batch is running, not
+  // to the batch the header names, so each batch heads its own threads
+  // (BIG-162). One batch has nothing to be confused with, so it keeps the
+  // sidebar's existing shape - the whole working group beneath the one header.
+  const batchSections: ReadonlyArray<CommentsSurfaceBatch> =
+    openBatchThreads.map(({ request, commentIds }) =>
+      batchSection({
+        request,
+        count: commentIds.length,
+        comments:
+          openBatchThreads.length > 1
+            ? visibleUnresolvedSent.filter((comment) =>
+                commentIds.includes(comment.id),
+              )
+            : (sentByGroup.get("working") ?? []),
+      }),
+    );
+  // A card whose batch carries a status strip above it does not repeat that
+  // status on the card itself.
+  const headedBatchCommentIds = new Set(
+    openBatchThreads.flatMap(({ commentIds }) => commentIds),
+  );
 
   return (
     <>
@@ -6904,42 +6965,7 @@ export const ReviewController = () => {
                 hasRuntime: identity !== null,
                 hasComponentBatchNotes: componentBatchNotes,
                 groups: sentByGroup,
-                workingBatch:
-                  activeBatchRequest === undefined ||
-                  activeBatchCommentIds.length === 0
-                    ? undefined
-                    : {
-                        count: activeBatchCommentIds.length,
-                        label: statusForRequest(activeBatchRequest, "thread")
-                          .label,
-                        tone: batchSectionTone({
-                          status: statusForRequest(
-                            activeBatchRequest,
-                            "thread",
-                          ),
-                        }),
-                        content: (
-                          <Card
-                            className="m-0 w-full max-w-none border border-[var(--callout-note-c)] bg-[var(--callout-note-bg)] text-[var(--callout-note-ink)] shadow-none"
-                            density="dense"
-                            elevation="none"
-                          >
-                            <RequestStatusStrip
-                              status={statusForRequest(
-                                activeBatchRequest,
-                                "thread",
-                              )}
-                              activity={activityForRequest(activeBatchRequest)}
-                              surface="thread"
-                              commentCount={activeBatchCommentIds.length}
-                              onShowAgent={openAgentSidebar}
-                              onCancelRequest={() =>
-                                void cancelRequest(activeBatchRequest.requestId)
-                              }
-                            />
-                          </Card>
-                        ),
-                      },
+                batches: batchSections,
                 resolved: resolvedSent,
                 resolvedDrafts: visibleResolvedDrafts,
                 canResolveAll: visibleUnresolvedSent.some(
@@ -7096,7 +7122,7 @@ export const ReviewController = () => {
                       writeAvailability={writeAvailability}
                       compact={compact}
                       queuePosition={queuePosition}
-                      suppressPendingStatus={activeBatchCommentIds.includes(
+                      suppressPendingStatus={headedBatchCommentIds.has(
                         comment.id,
                       )}
                     />

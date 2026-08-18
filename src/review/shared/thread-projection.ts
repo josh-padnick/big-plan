@@ -148,15 +148,19 @@ export const projectRequestDelivery = ({
 }): RequestDelivery =>
   requestIsTerminal(request) || requestWasClaimed(request) ? "Sent" : "Queued";
 
-/** Selects the newest open multi-comment feedback batch. */
-export const selectActiveFeedbackBatch = <Request extends ThreadRequest>({
+/**
+ * Every open multi-comment feedback batch, in the order the agent will take
+ * them. Requests arrive in delivery order, so the list order is the queue
+ * order, and a surface that heads each batch separately can rely on it.
+ */
+export const selectOpenFeedbackBatches = <Request extends ThreadRequest>({
   requests,
   cancelPendingRequestIds,
 }: {
   readonly requests: ReadonlyArray<Request>;
   readonly cancelPendingRequestIds: ReadonlySet<string>;
-}): Request | undefined =>
-  [...requests].reverse().find(
+}): ReadonlyArray<Request> =>
+  requests.filter(
     (request) =>
       request.kind === "feedback" &&
       requestCommentIds(request).length > 1 &&

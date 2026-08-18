@@ -2939,21 +2939,26 @@ test("should not keep an answered feedback batch active without its response", a
   ).toHaveCount(0);
 });
 
-// BIG-158. The header speaks for the active batch, so it may not borrow the
-// rail's working group: while an earlier batch runs, that group is populated by
-// work this batch has nothing to do with, and reading it dressed a batch nobody
-// had picked up in the spinner beside its own "Queued, 1 ahead" label.
-test("should keep a queued batch header out of the working treatment while an earlier batch runs", async ({
+// BIG-158 and BIG-162. A batch header speaks for one batch, so it may not
+// borrow the sidebar's working group: while an earlier batch runs, that group
+// holds work this batch has nothing to do with. Reading it dressed a batch
+// nobody had picked up in the spinner beside its own "Queued, 1 ahead" label,
+// and even once every element told the truth the composition still put one
+// batch's working threads under another batch's queued header. Once more than
+// one batch is open, each batch heads its own threads.
+test("should head each open batch with its own state and its own threads", async ({
   page,
   reviewRuntimeUrl,
 }) => {
   await page.goto(reviewRuntimeUrl);
-  const rail = page.getByRole("complementary", { name: "Feedback" });
-  // The batch section is the only one carrying its request's status strip.
-  const batchSection = rail
-    .locator("section[data-review-thread-group]")
-    .filter({ has: page.getByRole("button", { name: "Cancel request" }) });
-  const batchSpinner = batchSection.locator("h3 span.animate-spin");
+  const sidebar = page.getByRole("complementary", { name: "Feedback" });
+  const sections = sidebar.locator("section[data-review-thread-group]");
+  const batchGroup = (request: AgentFeedbackRequest) =>
+    sidebar.locator(`section[data-review-batch="${request.requestId}"]`);
+  const threadsIn = (request: AgentFeedbackRequest) =>
+    batchGroup(request).locator("[data-review-comment-id]");
+  const spinnerIn = (request: AgentFeedbackRequest) =>
+    batchGroup(request).locator("h3 span.animate-spin");
 
   const sendBatch = async (first: string, second: string): Promise<void> => {
     await stageComment(page, first);
@@ -2964,7 +2969,7 @@ test("should keep a queued batch header out of the working treatment while an ea
         response.url().endsWith("/api/feedback") &&
         response.request().method() === "POST",
     );
-    await rail
+    await sidebar
       .getByRole("button", { name: "Send all comments to agent" })
       .click();
     expect((await submitted).ok()).toBe(true);
@@ -2981,7 +2986,7 @@ test("should keep a queued batch header out of the working treatment while an ea
     planId: session.planId,
   });
   const source = await readFile(session.plan, "utf8");
-  const pickUp = async (
+  const findBatch = async (
     batchCommentBody: string,
   ): Promise<AgentFeedbackRequest> => {
     const exchange = await readAgentExchange({
@@ -2999,6 +3004,11 @@ test("should keep a queued batch header out of the working treatment while an ea
     if (request === undefined || request.kind !== "feedback") {
       throw new Error(`The batch journey never sent "${batchCommentBody}"`);
     }
+    return request;
+  };
+  const pickUp = async (
+    request: AgentFeedbackRequest,
+  ): Promise<AgentFeedbackRequest> => {
     const claimed = await claimAgentRequest({
       store,
       activeSessionId: session.sessionId,
@@ -3020,7 +3030,7 @@ test("should keep a queued batch header out of the working treatment while an ea
         requestId: claimed.requestId,
         atMs: Date.now(),
         stepCode: "agent-note",
-        step: `Reviewing the ${batchCommentBody} feedback`,
+        step: "Reviewing the feedback batch",
         state: "live",
       },
     });
@@ -3030,41 +3040,85 @@ test("should keep a queued batch header out of the working treatment while an ea
     return claimed;
   };
 
-  const firstBatch = await pickUp("first batch");
-  await expect(batchSection).toHaveAttribute(
-    "data-review-thread-group",
-    "working",
-  );
-  await expect(batchSpinner).toHaveCount(1);
+  const firstBatch = await pickUp(await findBatch("first batch"));
 
-  await rail.getByRole("button", { name: "Close feedback" }).click();
+  await test.step("one batch keeps the sidebar's single section", async () => {
+    await expect(batchGroup(firstBatch)).toHaveAttribute(
+      "data-review-thread-group",
+      "working",
+    );
+    await expect(spinnerIn(firstBatch)).toHaveCount(1);
+    // Nothing to tell it apart from, so a lone batch earns no extra header:
+    // its section is the only one in the sidebar.
+    await expect(sections).toHaveCount(1);
+  });
+
+  await sidebar.getByRole("button", { name: "Close feedback" }).click();
   await sendBatch(
     "Clarify the retry boundary in the second batch.",
     "Name the recovery owner in the second batch.",
   );
+  const secondBatch = await findBatch("second batch");
 
-  // The second batch now heads the section while the first batch's threads fill
-  // the working group. Its own label says it is waiting, and the treatment has
-  // to say the same thing.
-  await expect(batchSection).toContainText("Queued, 1 ahead");
-  await expect(batchSection).toHaveAttribute(
-    "data-review-thread-group",
-    "queued",
-  );
-  await expect(batchSpinner).toHaveCount(0);
+  await test.step("two batches each head their own threads", async () => {
+    await expect(sections).toHaveCount(2);
 
-  // Only pickup earns the spinner back. An agent takes one batch at a time, so
-  // the first has to finish before the second can start.
-  await writeAgentRequest({
-    store,
-    request: { ...firstBatch, answeredAt: new Date().toISOString() },
+    // The running batch keeps the working treatment, and keeps its threads.
+    await expect(batchGroup(firstBatch)).toHaveAttribute(
+      "data-review-thread-group",
+      "working",
+    );
+    await expect(spinnerIn(firstBatch)).toHaveCount(1);
+    await expect(threadsIn(firstBatch)).toHaveCount(2);
+
+    // The waiting batch says it is waiting, and the threads under that label
+    // are its own. The first batch's working threads used to sit here.
+    await expect(batchGroup(secondBatch)).toContainText("Queued, 1 ahead");
+    await expect(batchGroup(secondBatch)).toHaveAttribute(
+      "data-review-thread-group",
+      "queued",
+    );
+    await expect(spinnerIn(secondBatch)).toHaveCount(0);
+    await expect(threadsIn(secondBatch)).toHaveCount(2);
+
+    for (const comment of firstBatch.comments) {
+      await expect(
+        batchGroup(firstBatch).locator(
+          `[data-review-comment-id="${comment.id}"]`,
+        ),
+      ).toHaveCount(1);
+      await expect(
+        batchGroup(secondBatch).locator(
+          `[data-review-comment-id="${comment.id}"]`,
+        ),
+      ).toHaveCount(0);
+    }
+    for (const comment of secondBatch.comments) {
+      await expect(
+        batchGroup(secondBatch).locator(
+          `[data-review-comment-id="${comment.id}"]`,
+        ),
+      ).toHaveCount(1);
+    }
   });
-  await pickUp("second batch");
-  await expect(batchSection).toHaveAttribute(
-    "data-review-thread-group",
-    "working",
-  );
-  await expect(batchSpinner).toHaveCount(1);
+
+  await test.step("pickup moves the treatment to the next batch", async () => {
+    // Only pickup earns the spinner. An agent takes one batch at a time, so
+    // the first has to finish before the second can start.
+    await writeAgentRequest({
+      store,
+      request: { ...firstBatch, answeredAt: new Date().toISOString() },
+    });
+    await pickUp(secondBatch);
+    await expect(batchGroup(secondBatch)).toHaveAttribute(
+      "data-review-thread-group",
+      "working",
+    );
+    await expect(spinnerIn(secondBatch)).toHaveCount(1);
+    // The answered batch leaves the queue, so one batch is open again and the
+    // sidebar is back to a single batch section beside the answered threads.
+    await expect(batchGroup(firstBatch)).toHaveCount(0);
+  });
 });
 
 test("should pause a nonstandard request behind an explicit warning", async ({

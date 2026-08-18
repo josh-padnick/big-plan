@@ -10,7 +10,7 @@ import {
   projectRequestStatus,
   queuedRequestsAhead,
   requestCommentIds,
-  selectActiveFeedbackBatch,
+  selectOpenFeedbackBatches,
   type ThreadRequest,
   type ThreadResponse,
 } from "./thread-projection.js";
@@ -654,27 +654,47 @@ describe("thread projection", () => {
     ).toMatchObject({ stage: "working", label: "Agent working" });
   });
 
-  it("should exclude terminal feedback from the active batch", () => {
-    const pending = request({
+  it("should list every open batch in delivery order when several are waiting", () => {
+    const working = request({
+      requestId: "1111111111111111",
+      commentIds: [comment.id, "cccccccccccccccc"],
+      ...liveClaim(),
+    });
+    const queued = request({
+      requestId: "2222222222222222",
+      commentIds: ["dddddddddddddddd", "eeeeeeeeeeeeeeee"],
+    });
+    const requests = [working, queued];
+    expect(
+      selectOpenFeedbackBatches({
+        requests,
+        cancelPendingRequestIds: new Set(),
+      }),
+    ).toEqual([working, queued]);
+  });
+
+  it("should exclude answered, canceled, and single-comment work from the open batches", () => {
+    const open = request({
+      requestId: "1111111111111111",
       commentIds: [comment.id, "cccccccccccccccc"],
     });
     const answered = request({
-      commentIds: [comment.id, "cccccccccccccccc"],
+      requestId: "2222222222222222",
+      commentIds: ["dddddddddddddddd", "eeeeeeeeeeeeeeee"],
       ...liveClaim(),
       answeredAt: "2026-08-10T20:00:01Z",
     });
+    const canceled = request({
+      requestId: "3333333333333333",
+      commentIds: ["ffffffffffffffff", "0000000000000000"],
+    });
+    const single = request({ requestId: "4444444444444444" });
     expect(
-      selectActiveFeedbackBatch({
-        requests: [pending],
-        cancelPendingRequestIds: new Set(),
+      selectOpenFeedbackBatches({
+        requests: [open, answered, canceled, single],
+        cancelPendingRequestIds: new Set([canceled.requestId]),
       }),
-    ).toBe(pending);
-    expect(
-      selectActiveFeedbackBatch({
-        requests: [answered],
-        cancelPendingRequestIds: new Set(),
-      }),
-    ).toBeUndefined();
+    ).toEqual([open]);
   });
 
   it.each(["thread", "chat"] as const)(

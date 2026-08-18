@@ -229,7 +229,7 @@ valid answer publishes, so an agent that stalls, is taken over, or dies
 mid-edit leaves your plan exactly as it was.
 
 Messages sent while the agent is handling another request are received immediately and wait in delivery order.
-A sent thread reports that wait in two places until an agent picks its request up: the comment sidebar groups it under the **Queued** heading and numbers its card by position within that group, while the status block inside the thread reads **Waiting for an agent**.
+A sent thread reports that wait in two places until an agent picks its request up: the comments sidebar groups it under the **Queued** heading and numbers its card by position within that group, while the status block inside the thread reads **Waiting for an agent**.
 That in-thread block adds the line **Queued, _N_ ahead** above the headline when earlier unanswered work exists, then reaches the agent when every earlier request is answered or canceled.
 Canceling the active request releases the plan immediately, so the next queued request advances without waiting for the canceled claim's lease to lapse.
 Once an agent picks the request up the thread says **Working**, and it stays picked up from then on.
@@ -241,6 +241,10 @@ Big Plan cannot tell a slow agent from a stopped one, because neither produces a
 When the coding agent that started the session exits, its waiting connection ends with it rather than outliving it: within a few seconds **Agent Status** reads **Agent session ended**, the status card names when the session ended instead of guessing at a threshold, and the connection log records a **Session ended** row.
 A session that disappears without the connection noticing - a machine losing power, or something killing the whole process tree at once - still reads as disconnected after the same 75 seconds of silence as before.
 Either way a message you send once the agent is gone reads **Blocked - no agent connected** and sends itself when an agent reconnects, rather than being picked up by a session that can no longer answer.
+
+Sending several comments at once makes one feedback package, and the sidebar heads that package with what the package itself is doing.
+One open package keeps one heading above the sent threads.
+Send a second package while the first is still being worked, and each package heads its own threads: the package being worked keeps the spinner, the package behind it reads **Queued, _N_ ahead** under an hourglass, and neither heading speaks for the other's threads.
 
 **Agent Status** offers **Reconnect your agent**, holding the one prompt that starts a coding-agent session; a session that has never had an agent reads **Connect your agent** instead.
 An agent going quiet never hides that section, because it is the only place that prompt lives and losing your route back is the last thing a silence should cost you; only a read-only session or a review runtime you cannot reach hides it.
