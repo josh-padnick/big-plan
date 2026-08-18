@@ -66,12 +66,16 @@ export const ComposeImages = ({
 }) => {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
-  // The body a chained upload splices into. `onBodyChange` schedules a
-  // controlled-state update, so the next upload in a batch can run before the
-  // textarea or the `body` prop carries the reference the previous one
-  // inserted - and would then splice an advanced caret into stale text,
-  // overwriting that reference. This ref is what each upload actually edits.
+  // What the previous upload in a batch produced, and the reference it added.
+  //
+  // `onBodyChange` schedules a controlled-state update, so the next upload can
+  // run before the textarea carries that reference - and would then splice an
+  // advanced caret into stale text, overwriting it. But the reader may also be
+  // typing while the batch uploads, and that belongs in the composer too. So
+  // the live value is preferred whenever it has caught up, and these are the
+  // fallback for exactly the window where it has not.
   const chainedBody = useRef(body);
+  const chainedReference = useRef("");
   const [pending, setPending] = useState(0);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -123,13 +127,20 @@ export const ComposeImages = ({
           "error" in value && value.error ? value.error : "Image upload failed",
         );
       }
-      const current = chainedBody.current;
+      const live = textarea.current?.value;
+      const current =
+        live !== undefined &&
+        (chainedReference.current === "" ||
+          live.includes(chainedReference.current))
+          ? live
+          : chainedBody.current;
       const reference = buildReviewImageReference({
         alt: value.alt,
         id: value.id,
       });
       const next = `${current.slice(0, caret)}${reference}${current.slice(caret)}`;
       chainedBody.current = next;
+      chainedReference.current = reference;
       onBodyChange(next);
       setError("");
       return caret + reference.length;
@@ -154,6 +165,7 @@ export const ComposeImages = ({
     // The chain starts from what is on screen now; every upload after the
     // first continues from what the one before it produced.
     chainedBody.current = textarea.current?.value ?? body;
+    chainedReference.current = "";
     const caret =
       textarea.current?.selectionStart ?? chainedBody.current.length;
     void files.reduce(
