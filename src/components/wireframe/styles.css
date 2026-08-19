@@ -736,6 +736,11 @@ marks and a plan diff never jitters.
     mask-repeat: repeat-x;
     mask-position: bottom left;
   }
+  /* A quiet control drawn as one mark has no words for that line to sit
+     under, so the link stroke becomes a rule beneath a glyph. */
+  .wireframe-button[data-wireframe-icon-only]::before {
+    content: none;
+  }
   .wireframe-button[data-wireframe-emphasis="destructive"] {
     border-color: var(--callout-danger-c);
     color: var(--callout-danger-c);
@@ -1295,7 +1300,7 @@ marks and a plan diff never jitters.
       [data-wireframe-device="tablet-portrait"]
     )
     .wireframe-top-bar
-    > :last-child:not(.wireframe-brand) {
+    > :last-child:not(.wireframe-brand):not(.wireframe-top-bar-leading) {
     margin-left: auto;
   }
   .wireframe-artboard:is(
@@ -1652,31 +1657,47 @@ marks and a plan diff never jitters.
   }
   .wireframe-artboard[data-wireframe-device="phone"]
     .wireframe-top-bar
-    > :last-child:not(.wireframe-brand) {
+    > :last-child:not(.wireframe-brand):not(.wireframe-top-bar-leading) {
     margin-left: auto;
   }
   /* A bar with a navigable leading action is a push/dismiss header:
-     back or cancel on the left, title centered, overflow on the right. */
+     back or cancel on the left, title centered, overflow on the right. The
+     leading control sits in the bar's leading slot, so that slot is what says
+     the bar is this kind of header. The three slots share the bar's width
+     equally, because a title centered in what the controls left over is not
+     centered in the bar the reader sees. */
   .wireframe-artboard[data-wireframe-device="phone"]
-    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
+    .wireframe-top-bar:has(
+      > .wireframe-top-bar-leading .wireframe-button[data-wireframe-navigate]
+    )
+    > .wireframe-top-bar-leading {
+    order: 1;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .wireframe-artboard[data-wireframe-device="phone"]
+    .wireframe-top-bar:has(
+      > .wireframe-top-bar-leading .wireframe-button[data-wireframe-navigate]
+    )
     > .wireframe-brand {
     order: 2;
-    flex: 1;
+    flex: 1 1 0;
     min-width: 0;
     text-align: center;
   }
+  /* The trailing slot's automatic left margin is what pushes controls to the
+     right end of an ordinary bar; here the centered title already owns that
+     space, and leaving the margin in would carry the title off centre. */
   .wireframe-artboard[data-wireframe-device="phone"]
-    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
-    > .wireframe-button[data-wireframe-navigate] {
-    order: 1;
-    margin-left: 0;
-  }
-  .wireframe-artboard[data-wireframe-device="phone"]
-    .wireframe-top-bar:has(> .wireframe-button[data-wireframe-navigate])
-    > :last-child:not(.wireframe-brand):not(
-      .wireframe-button[data-wireframe-navigate]
-    ) {
+    .wireframe-top-bar:has(
+      > .wireframe-top-bar-leading .wireframe-button[data-wireframe-navigate]
+    )
+    > .wireframe-top-bar-actions {
     order: 3;
+    flex: 1 1 0;
+    justify-content: flex-end;
+    min-width: 0;
+    margin-left: 0;
   }
   .wireframe-artboard[data-wireframe-device="phone"] .wireframe-brand {
     font-size: 1.125rem;

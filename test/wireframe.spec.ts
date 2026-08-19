@@ -813,11 +813,17 @@ test("should hold the touch floor and the leading control on a phone bar", async
   const screen = page.locator('[data-wireframe-screen="m-ticket"]');
 
   await test.step("an icon-only control stays reachable by a finger", async () => {
-    const box = await boxOf(
-      screen.locator("[data-wireframe-icon-only]").first(),
-    );
+    const control = screen.locator("[data-wireframe-icon-only]").first();
+    const box = await boxOf(control);
     expect(box.width).toBeGreaterThanOrEqual(44);
     expect(box.height).toBeGreaterThanOrEqual(44);
+    // The quiet emphasis draws a link stroke under its words; a control with
+    // no words must not draw a rule under its mark instead.
+    expect(
+      await control.evaluate(
+        (node) => getComputedStyle(node, "::before").content,
+      ),
+    ).toBe("none");
   });
 
   await test.step("the back control is drawn before the title, as a phone puts it", async () => {
@@ -829,5 +835,25 @@ test("should hold the touch floor and the leading control on a phone bar", async
     ]);
     expect(leading.x + leading.width).toBeLessThanOrEqual(title.x);
     expect(title.x + title.width).toBeLessThanOrEqual(actions.x);
+  });
+
+  // A push header centres its title in the bar, not in whatever the controls
+  // left over. Measuring the painted text rather than its box is what makes
+  // this fail when the slot sizing or the alignment goes, which is how this
+  // pattern was lost silently once already.
+  await test.step("the title is centred in the bar the reader sees", async () => {
+    const bar = screen.locator(".wireframe-top-bar");
+    const barBox = await boxOf(bar);
+    const titleCentre = await bar
+      .locator(".wireframe-brand")
+      .evaluate((node) => {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const painted = range.getBoundingClientRect();
+        return painted.left + painted.width / 2;
+      });
+    expect(
+      Math.abs(titleCentre - (barBox.x + barBox.width / 2)),
+    ).toBeLessThanOrEqual(barBox.width * 0.02);
   });
 });
