@@ -6315,6 +6315,40 @@ export const ReviewController = () => {
     }
   };
 
+  /**
+   * Tells the agent to disconnect, and frees the review for the next one.
+   *
+   * The reviewer has already confirmed by the time this runs; the dialog owns
+   * that choice and this owns only the request. The snapshot is re-read straight
+   * afterwards so the control's pending state comes from the runtime's answer
+   * rather than from a local guess about it (BIG-190).
+   */
+  const disconnectAgent = async () => {
+    const refusal = reviewWriteRefusal({
+      path: "disconnect-agent",
+      availability: writeAvailability,
+    });
+    if (refusal !== undefined) {
+      setStatus(refusal);
+      return;
+    }
+    if (identity === null) return;
+    try {
+      await requestJson({
+        path: "/api/agent-disconnect",
+        identity,
+        method: "POST",
+        body: {},
+      });
+      acceptAgentSnapshot(
+        parseAgentSnapshot(await requestJson({ path: "/api/agent", identity })),
+      );
+      setStatus("The agent was told to disconnect from this review.");
+    } catch (error) {
+      setStatus(errorMessage(error));
+    }
+  };
+
   const effectivePresence = { ...agent.presence, connected: agentConnected };
   // The same request the activity card describes, so the card's header and its
   // model badge cannot disagree. A live-lease selection would drop the badge at
@@ -7247,7 +7281,14 @@ export const ReviewController = () => {
                 connectionLog: agentConnection.events,
                 recoveryPrompt: agent.recoveryPrompt,
                 runtimeSession,
+                ...(agent.presence.disconnectRequestedAtMs === undefined
+                  ? {}
+                  : {
+                      disconnectRequestedAtMs:
+                        agent.presence.disconnectRequestedAtMs,
+                    }),
                 onViewRequest: viewAgentRequest,
+                onDisconnect: () => void disconnectAgent(),
               }}
             />
           ) : null}

@@ -126,6 +126,7 @@ export type ReviewWritePath =
   | "delete-comment"
   | "revert-changes"
   | "cancel-request"
+  | "disconnect-agent"
   | "attach-image";
 
 /**
@@ -140,6 +141,7 @@ const PATH_OUTCOMES = {
   "delete-comment": "The comment was not deleted.",
   "revert-changes": "The agent's changes were left in place.",
   "cancel-request": "The request is still with the agent.",
+  "disconnect-agent": "The agent is still connected.",
   "attach-image": "The image was not attached.",
 } as const satisfies Readonly<Record<ReviewWritePath, string>>;
 

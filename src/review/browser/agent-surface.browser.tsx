@@ -30,7 +30,10 @@ export type AgentSurfaceModel = {
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
   readonly recoveryPrompt: string;
   readonly runtimeSession: RuntimeSession | null;
+  /** When the reviewer disconnected the attached agent, if they already have. */
+  readonly disconnectRequestedAtMs?: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
+  readonly onDisconnect: () => void;
 };
 
 export const AgentSurface = ({
@@ -61,7 +64,11 @@ export const AgentSurface = ({
           : null
       }
       isReadOnly={model.runtimeSession?.authoritative === false}
+      {...(model.disconnectRequestedAtMs === undefined
+        ? {}
+        : { disconnectRequestedAtMs: model.disconnectRequestedAtMs })}
       onViewRequest={model.onViewRequest}
+      onDisconnect={model.onDisconnect}
     />
   </div>
 );

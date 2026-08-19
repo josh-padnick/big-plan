@@ -22,8 +22,11 @@ import {
 import { agentSessionAffordance } from "../shared/agent-session-link.js";
 import {
   AGENT_SESSION_ENDED_REASON,
+  agentActivityIsAttached,
+  agentDisconnectDropsWork,
   agentHasEverConnected,
 } from "../shared/agent-status.js";
+import { AGENT_DISCONNECTED_REASON } from "../shared/agent-disconnect.js";
 import type {
   AgentHealth,
   AgentHealthIndicator,
@@ -36,8 +39,15 @@ import {
   relativeSignalLabel,
 } from "../shared/time-label.js";
 import { BrandIconView, Icon } from "./icon.browser.js";
+import { INFO_ICON } from "../../icons/lucide/info.js";
 import type { ReviewAgentProjection } from "./review-poll-health.js";
-import { Badge, WorkingMark } from "./ui.browser.js";
+import {
+  AlertDialog,
+  Badge,
+  Button,
+  Tooltip,
+  WorkingMark,
+} from "./ui.browser.js";
 
 const VENDOR_ICONS: Record<AgentModelVendor, BrandIcon> = {
   openai: OPENAI_ICON,
@@ -321,6 +331,89 @@ export const summarizeAgentConnection = ({
   };
 };
 
+/*
+The consequence of disconnecting, on demand rather than in the card.
+
+It is a real trade and the reviewer deserves to know it, but it is the same
+sentence every time and printing it beside the control would make a card about
+the agent's work mostly about a button. A quiet mark answers it when asked, and
+the confirmation states the part that depends on what the agent is doing right
+now (BIG-184's pattern).
+*/
+const DISCONNECT_HELP =
+  "Tells the agent to end its session so a different agent can attach. Work in flight is dropped; your comments stay.";
+
+/** Explains, on hover or keyboard focus, what disconnecting costs. */
+const DisconnectHelp = () => (
+  <Tooltip label={DISCONNECT_HELP} placement="above" asChild>
+    <button
+      type="button"
+      /* The mark takes its colour from the card it sits on rather than from
+         the grey ramp: a tinted ground gets its own steps, never grey. */
+      className="inline-flex size-5 flex-none cursor-help items-center justify-center rounded-full border-0 bg-transparent p-0 leading-none opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&>svg]:size-3.5"
+      aria-label="About disconnecting the agent"
+    >
+      <Icon icon={INFO_ICON} />
+    </button>
+  </Tooltip>
+);
+
+/**
+ * Takes the agent off the review, once the reviewer has confirmed it.
+ *
+ * One dialog and no more. The two cases differ by a sentence - whether an
+ * answer is dropped - and asking twice, or asking again after the answer was
+ * already stated, would make the cheap case feel dangerous and teach the
+ * reviewer to click through the expensive one (BIG-190).
+ */
+const DisconnectAgentControl = ({
+  dropsWork,
+  isPending,
+  onDisconnect,
+}: {
+  /** Whether the agent is holding an answer this would drop. */
+  readonly dropsWork: boolean;
+  /** Whether the reviewer has already asked and the agent has not yet gone. */
+  readonly isPending: boolean;
+  readonly onDisconnect: () => void;
+}) => {
+  const [isConfirming, setIsConfirming] = useState(false);
+  return (
+    <span className="ml-auto inline-flex shrink-0 items-center gap-1">
+      <DisconnectHelp />
+      <Button
+        variant="toned"
+        size="micro"
+        disabled={isPending}
+        data-review-agent-disconnect=""
+        onClick={() => setIsConfirming(true)}
+      >
+        {isPending ? "Disconnecting…" : "Disconnect agent"}
+      </Button>
+      <AlertDialog
+        open={isConfirming}
+        title="Disconnect this agent?"
+        description={
+          dropsWork
+            ? "The agent is answering right now. Disconnecting tells it to stop, and the answer it has in flight is dropped rather than delivered. Your comments and questions stay where they are, and the next agent you connect picks them up."
+            : "The agent is told to end its session, and the review is free for a different agent to connect. Your comments and questions stay where they are."
+        }
+        actionLabel="Disconnect agent"
+        /* Drama in proportion to the cost. Dropping an answer the agent is
+           composing is destructive and is dressed as such; taking a quiet agent
+           off the review destroys nothing, and painting that red would teach
+           the reviewer to click through the red that matters. */
+        tone={dropsWork ? "destructive" : "neutral"}
+        onCancel={() => setIsConfirming(false)}
+        onAction={() => {
+          setIsConfirming(false);
+          onDisconnect();
+        }}
+      />
+    </span>
+  );
+};
+
 const CurrentActivityCard = ({
   activity,
   status,
@@ -331,7 +424,9 @@ const CurrentActivityCard = ({
   sessionId,
   connection,
   nowMs,
+  disconnectRequestedAtMs,
   onViewRequest,
+  onDisconnect,
 }: {
   readonly activity: CurrentAgentActivity;
   readonly status: AgentHealth;
@@ -342,7 +437,10 @@ const CurrentActivityCard = ({
   readonly sessionId?: string;
   readonly connection: ReturnType<typeof summarizeAgentConnection>;
   readonly nowMs: number;
+  /** When the reviewer disconnected this agent, if they already have. */
+  readonly disconnectRequestedAtMs?: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
+  readonly onDisconnect: () => void;
 }) => {
   const body =
     activity.state === "working" ? activity.latestStep : activity.supporting;
@@ -413,6 +511,10 @@ const CurrentActivityCard = ({
     showsSinceAndEvents || sessionAffordance.kind === "identifier";
   const requestId = "requestId" in activity ? activity.requestId : undefined;
   const requestKind = "requestId" in activity ? activity.requestKind : "";
+  // Offered wherever there is an agent to disconnect, and nowhere else. A
+  // control on a card that already says nobody is attached would invite the
+  // reviewer to act on a session that has no other end to it.
+  const canDisconnect = agentActivityIsAttached(activity);
   const footerLabel =
     "updatedAtMs" in activity
       ? `Updated ${relativeSignalLabel({ now: nowMs, at: activity.updatedAtMs })}`
@@ -595,9 +697,22 @@ const CurrentActivityCard = ({
           ) : null}
         </dl>
       ) : null}
-      {footerLabel === null ? null : (
-        <div className="flex min-w-0 items-center gap-2 border-t border-current/20 pt-1.5 text-2xs">
-          <span className="text-muted">{footerLabel}</span>
+      {/* The control sits with the card's other standing facts rather than
+          beside the state it would change: the reader comes here to learn how
+          the agent is doing, and an action in that line reads as the thing to
+          do about it. */}
+      {footerLabel === null && !canDisconnect ? null : (
+        <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-current/20 pt-1.5 text-2xs">
+          {footerLabel === null ? null : (
+            <span className="min-w-0 text-muted">{footerLabel}</span>
+          )}
+          {canDisconnect ? (
+            <DisconnectAgentControl
+              dropsWork={agentDisconnectDropsWork(activity)}
+              isPending={disconnectRequestedAtMs !== undefined}
+              onDisconnect={onDisconnect}
+            />
+          ) : null}
         </div>
       )}
     </article>
@@ -669,11 +784,14 @@ export type ConnectionLogRowReading = {
 export const connectionLogRowReading = ({
   connected,
   ended,
+  reason,
   nextConnected,
   knownSession,
 }: {
   readonly connected: boolean;
   readonly ended: boolean;
+  /** The stored reason, which decides whether the row still needs to state it. */
+  readonly reason?: string;
   readonly nextConnected: boolean | undefined;
   readonly knownSession: boolean;
 }): ConnectionLogRowReading => {
@@ -686,7 +804,10 @@ export const connectionLogRowReading = ({
     };
   }
   const label = ended ? "Session ended" : "No signal";
-  const showReason = !ended;
+  // An end states what happened, so its reason usually repeats the label back.
+  // A disconnect is the exception worth keeping: "Session ended" does not say
+  // the reviewer ended it, and that is the fact the row is for.
+  const showReason = !ended || reason === AGENT_DISCONNECTED_REASON;
   if (nextConnected === true) {
     return {
       label,
@@ -730,10 +851,20 @@ export const connectionMarkerClassName = ({
         : "border-muted bg-paper"
   }`;
 
-/** True when this edge carries the loop's own report that its session ended. */
+/**
+ * True when this edge carries a reported end rather than an inferred gap.
+ *
+ * Two things count, and both for the same reason: the loop's own report that
+ * its session ended, and the reviewer's own decision to disconnect it. Neither
+ * is a silence anybody had to interpret, which is the whole distinction this
+ * predicate exists to draw (BIG-156).
+ */
 export const connectionEventEnded = (
   event: Pick<BrowserConnectionEvent, "connected" | "reason">,
-): boolean => !event.connected && event.reason === AGENT_SESSION_ENDED_REASON;
+): boolean =>
+  !event.connected &&
+  (event.reason === AGENT_SESSION_ENDED_REASON ||
+    event.reason === AGENT_DISCONNECTED_REASON);
 
 /*
 The log is the history and nothing else. State, since, last signal, and the
@@ -808,6 +939,9 @@ const ConnectionLog = ({
                   const reading = connectionLogRowReading({
                     connected: event.connected,
                     ended,
+                    ...(event.reason === undefined
+                      ? {}
+                      : { reason: event.reason }),
                     nextConnected: next?.connected,
                     knownSession,
                   });
@@ -870,7 +1004,15 @@ const ConnectionLog = ({
                       </span>
                       {event.reason === undefined ||
                       !reading.showReason ? null : (
-                        <span className="col-start-3 col-end-5 text-2xs text-warning">
+                        <span
+                          /* A disconnect the reviewer performed is a normal
+                             outcome, not a hazard, so it is set in the log's own
+                             quiet voice rather than in the amber the inferred
+                             gaps use. */
+                          className={`col-start-3 col-end-5 text-2xs ${
+                            ended ? "text-muted" : "text-warning"
+                          }`}
+                        >
                           {event.reason}
                         </span>
                       )}
@@ -900,7 +1042,9 @@ export const AgentConnectionPanel = ({
   recoveryPrompt,
   isReadOnly,
   replacementUrl,
+  disconnectRequestedAtMs,
   onViewRequest,
+  onDisconnect,
 }: {
   readonly activity: CurrentAgentActivity;
   readonly status: AgentHealth;
@@ -923,7 +1067,10 @@ export const AgentConnectionPanel = ({
   readonly recoveryPrompt: string;
   readonly isReadOnly: boolean;
   readonly replacementUrl: string | null;
+  /** When the reviewer disconnected the attached agent, if they already have. */
+  readonly disconnectRequestedAtMs?: number;
   readonly onViewRequest: (requestId: string, kind: string) => void;
+  readonly onDisconnect: () => void;
 }) => {
   const currentNowMs = useSecondClock();
   /*
@@ -969,7 +1116,11 @@ export const AgentConnectionPanel = ({
             sessionId={sessionId}
             connection={connection}
             nowMs={currentNowMs}
+            {...(disconnectRequestedAtMs === undefined
+              ? {}
+              : { disconnectRequestedAtMs })}
             onViewRequest={onViewRequest}
+            onDisconnect={onDisconnect}
           />
         )
       ) : presenceState === "loading" ? (
