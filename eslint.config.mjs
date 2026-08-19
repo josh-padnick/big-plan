@@ -198,17 +198,24 @@ export default tseslint.config(
           "src/render/page.ts",
           "src/render/escape-html.ts",
           "src/render/preferences*.ts",
+          "src/render/service-page*.ts",
         ],
         imports: [
           "**/compile-plan-model.js",
           "**/plan-id.js",
           "**/render-document.js",
           "**/serialize-html.js",
-          "**/service-page.js",
         ],
-        // The model layer is granted for the shared figure-control vocabulary:
-        // the service pages draw the product's own copy control rather than a
-        // second one that would drift from it.
+        mayImport: ["markdown", "shell", "page"],
+      },
+      // The pages the service serves in its own right. They are the one
+      // renderer surface built from the product's recipes without a plan
+      // behind them, so they compose escaped prose, the icon catalog, and the
+      // shared figure-control vocabulary directly. That grant stays on this
+      // file rather than widening what every composer file may reach.
+      servicePage: {
+        files: ["src/render/service-page*.ts"],
+        imports: ["**/service-page.js"],
         mayImport: [
           "escapeHtml",
           "icons",
@@ -251,7 +258,14 @@ export default tseslint.config(
           "src/review/shared/**/*.tsx",
         ],
         imports: ["**/review/**"],
-        mayImport: ["composer", "icons", "model", "planLint", "reviewShared"],
+        mayImport: [
+          "composer",
+          "icons",
+          "model",
+          "planLint",
+          "reviewShared",
+          "servicePage",
+        ],
       },
       cli: {
         files: ["src/cli/**/*.ts"],
@@ -270,7 +284,7 @@ export default tseslint.config(
       ["ui"],
       ["components"],
       ["markdown", "shell"],
-      ["composer", "reviewShared"],
+      ["composer", "servicePage", "reviewShared"],
       ["review", "reviewBrowser"],
       ["cli"],
     ];

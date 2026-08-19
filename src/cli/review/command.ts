@@ -123,8 +123,16 @@ export const reviewCommand = async (
     // break something, so report the address already serving this plan and
     // leave that session, its open page, and its connected agent untouched.
     if (error instanceof ReviewCustodyHeld) {
+      // The reader is being handed an address belonging to a session they do
+      // not control, which is the address most likely to be gone by the time
+      // they use it, so this is the branch that most needs the durable one.
+      const heldLink = await publishStableReviewLink({
+        planId: error.live.planId,
+        planPath: error.live.plan,
+      });
       return {
         review: error.live.url,
+        ...(heldLink.kind === "published" ? { link: heldLink.url } : {}),
         plan: error.live.plan,
         session: error.live.sessionId,
         custody: "held",
@@ -132,6 +140,11 @@ export const reviewCommand = async (
           ...warnings,
           `A live review runtime already serves this plan at ${error.live.url} (session ${error.live.sessionId}, process ${error.live.pid})`,
           `Open ${error.live.url} in your browser to review and comment`,
+          ...(heldLink.kind === "published"
+            ? [
+                `${heldLink.url} keeps working after this session ends: it opens the review while one is running, and explains what happened when none is`,
+              ]
+            : [heldLink.reason]),
           "No second runtime started, so that session's open page and connected agent keep working",
           `Run \`big-plan review ${quoteShellArgument(error.live.plan)} --takeover\` only to replace it; the live session keeps listening but loses write custody, so its open page and connected agent go read-only until each moves to the new address`,
         ],

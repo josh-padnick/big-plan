@@ -25,6 +25,7 @@ import {
   renderServiceWelcomePage,
 } from "../../render/service-page.js";
 import { answerForPlan } from "./plan-status.js";
+import { readFormNonce } from "./stop-form.js";
 import { servicePort } from "./paths.js";
 import { isServicePlanId } from "./registry.js";
 
@@ -37,7 +38,6 @@ const PLAN_ROUTE = /^\/plan\/([a-z0-9]+)\/?$/;
 // own: minted per boot, kept in memory, never written to disk, and embedded
 // only in pages this very process served. It dies with the process, which is
 // exactly the lifetime a page-scoped credential should have.
-const MAX_FORM_BYTES = 4 * 1024;
 
 // How long the service waits for a browser to follow the stop redirect before
 // shutting down anyway. Long enough for a slow page load, short enough that an
@@ -128,38 +128,6 @@ const refuse = ({
   response.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
   response.end(`${reason}\n`);
 };
-
-// A stop form is a handful of bytes; anything larger is not one, and reading
-// it would only give an unauthenticated caller a way to occupy memory.
-const readFormNonce = async (
-  request: IncomingMessage,
-): Promise<string | undefined> =>
-  new Promise((settle) => {
-    let body = "";
-    let overflowed = false;
-    request.on("data", (chunk: Buffer) => {
-      if (overflowed) return;
-      body += chunk.toString("utf8");
-      if (body.length > MAX_FORM_BYTES) {
-        overflowed = true;
-        body = "";
-      }
-    });
-    request.on("end", () => {
-      settle(
-        overflowed
-          ? undefined
-          : (new URLSearchParams(body).get("nonce") ?? undefined),
-      );
-    });
-    request.on("error", () => settle(undefined));
-    // A client that opens the post, sends no complete body, and then aborts -
-    // or is destroyed by the server's own request timeout - emits neither
-    // `end` nor necessarily `error`. Without this the promise never settles
-    // and the awaiting handler holds the request and response for the life of
-    // the process. Settling twice is harmless; never settling is not.
-    request.on("close", () => settle(undefined));
-  });
 
 const constantTimeEquals = (supplied: string, expected: string): boolean => {
   const a = Buffer.from(supplied);
@@ -358,6 +326,11 @@ export const startService = async ({
       // Either credential authorizes a stop, and one of them is required:
       // the owner token for the CLI and the runtime relay, the page nonce for
       // a page this process served. A request carrying neither is refused.
+      //
+      // The body is claimed before the token is read, not after: a request
+      // that aborts during that read has already announced it, and listeners
+      // attached afterwards would wait for an event that has been and gone.
+      const formNonce = readFormNonce(request);
       const supplied = request.headers[TOKEN_HEADER];
       const expected = await readToken();
       const byToken =
@@ -365,8 +338,7 @@ export const startService = async ({
         typeof supplied === "string" &&
         constantTimeEquals(supplied, expected);
       const byNonce =
-        !byToken &&
-        constantTimeEquals((await readFormNonce(request)) ?? "", pageNonce);
+        !byToken && constantTimeEquals((await formNonce) ?? "", pageNonce);
       if (!byToken && !byNonce) {
         refuse({
           response,

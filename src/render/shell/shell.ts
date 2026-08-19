@@ -360,6 +360,10 @@ ${feedback ? renderCommentDraftControl() : ""}
 ${renderPreferencesControl()}
 </div>`;
 
+// What it names - plan content, sorting, collapse, maximize, comments - is
+// true of a plan document and of nothing else, so a standalone page does not
+// carry it: there is no plan there to describe.
+//
 // Browsers do not execute script inside noscript, so this dismissal is a
 // native checkbox rather than a dead button. It can hide the warning for the
 // current document without weakening the content floor. A cross-load
@@ -482,7 +486,7 @@ ${renderHeaderActions({ feedback: !standalone })}
 </div>
   </header>
   ${hasToc ? renderMobileToc({ nav, overviewId }) : ""}
-${renderNoScriptNotice()}
+${standalone ? "" : renderNoScriptNotice()}
 <div class="${hasToc ? LAYOUT_WITH_TOC : LAYOUT_WITHOUT_TOC}" data-reading-layout="${hasToc ? "with-toc" : "without-toc"}">
 ${hasToc ? renderDesktopToc({ nav, overviewId }) : ""}
 <main class="min-w-0" id="${overviewId}">
