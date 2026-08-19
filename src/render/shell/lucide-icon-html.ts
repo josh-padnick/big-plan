@@ -18,9 +18,13 @@ import {
 export const lucideIconToHtml = ({
   icon,
   className,
+  hidden = false,
 }: {
   readonly icon: LucideIcon;
   readonly className: string;
+  // A control that swaps one glyph for another ships both and hides the
+  // resting one, exactly as the HAST edge does for the same controls.
+  readonly hidden?: boolean;
 }): string => {
   const children = icon.node
     .map(
@@ -30,5 +34,5 @@ export const lucideIconToHtml = ({
           .join(" ")} />`,
     )
     .join("");
-  return `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${icon.strokeWidth ?? DEFAULT_LUCIDE_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-lucide="${icon.name}">${children}</svg>`;
+  return `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${icon.strokeWidth ?? DEFAULT_LUCIDE_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-lucide="${icon.name}"${hidden ? " hidden" : ""}>${children}</svg>`;
 };

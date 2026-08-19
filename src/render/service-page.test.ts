@@ -48,6 +48,27 @@ describe("the service's pages", () => {
     expect(html).toContain('class="callout-title text-sm leading-5">Tip<');
   });
 
+  it("should say what stopping does before the control is clicked", () => {
+    // The consequence belongs beside the button, not only behind it.
+    const html = welcome();
+    expect(html).toContain(
+      "Stopping means Big Plans on this machine will no longer be accessible through the web browser.",
+    );
+  });
+
+  it("should copy a command with the product's own control", () => {
+    // The hover-revealed icon control from the figure-control vocabulary, so
+    // the viewer script wires it exactly as it wires a fenced block in a plan.
+    const html = renderServiceStoppedPage();
+    expect(html).toContain("data-copy-code");
+    expect(html).toContain('class="code-figure');
+    expect(html).toContain('data-lucide="copy"');
+    expect(html).toContain('data-lucide="check"');
+    // The bespoke green button is gone.
+    expect(html).not.toContain("Copy this command");
+    expect(html).not.toContain("data-copy=");
+  });
+
   it("should ask before stopping with the review UI's alert dialog", () => {
     const html = renderServiceStopConfirmPage({
       port: 8790,
@@ -82,6 +103,17 @@ describe("the service's pages", () => {
     expect(confirm).toContain('value="nonce-value"');
   });
 
+  it("should not seize focus when the alert opens", () => {
+    // An uninvited focus ring reads as an error state. Tabbing still works,
+    // because :focus-visible paints only what the keyboard asked for.
+    const html = renderServiceStopConfirmPage({
+      port: 8790,
+      startedAtMs: atMs,
+      nonce: "n",
+    });
+    expect(html).not.toContain("autofocus");
+  });
+
   it("should say what stopping means without listing consequences twice", () => {
     const html = renderServiceStopConfirmPage({
       port: 8790,
@@ -105,11 +137,16 @@ describe("the service's pages", () => {
     const html = renderServiceStoppedPage();
     expect(html).toContain("The service is stopped.");
     expect(html).toContain("Reviewing agent plans is kind of a big deal.");
-    expect(html).toContain("Start it again to open plans on this machine.");
+    expect(html).toContain(
+      "Run this in a terminal to open plans again on this machine:",
+    );
     expect(html).toContain("big-plan service start");
-    // The page says out loud that it cannot be reloaded, because by the time
-    // anyone tries the process that served it is gone.
-    expect(html).toContain("Reloading it will show a browser connection error");
+    // A warning, not a tip: reloading this page fails, and that reads as a
+    // caution rather than as advice.
+    expect(html).toContain('data-callout="warning"');
+    expect(html).toContain(
+      "<strong>Reloading this page will show a browser connection error</strong> because nothing is listening on this address any more.",
+    );
     // No start control, because nothing is listening to receive one.
     expect(html).not.toContain('action="/start"');
     expect(html).not.toContain('href="/start"');

@@ -236,7 +236,9 @@ describe("the service listener", () => {
     expect(landed.status).toBe(200);
     const html = await landed.text();
     expect(html).toContain("The service is stopped.");
-    expect(html).toContain("Reloading it will show a browser connection error");
+    expect(html).toContain(
+      "Reloading this page will show a browser connection error",
+    );
     await expect(get("/healthz")).rejects.toThrow();
   });
 

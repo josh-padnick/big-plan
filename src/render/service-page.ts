@@ -13,10 +13,19 @@
 //
 // The content floor matches a plan document's: every page reads and every flow
 // completes with scripts disabled. Stopping is a link to a confirmation and a
-// form post, never a scripted button.
+// form post, never a scripted button, and these pages add no script of their
+// own: copying is wired by the shell's viewer script exactly as it is for a
+// fenced block in a plan.
 
 import { escapeHtml } from "./escape-html.js";
+import {
+  copyLabel,
+  FIGURE_CONTROL_BUTTON_CLASSES,
+} from "../components/_model/figure-controls/figure-controls.js";
+import { CHECK_ICON } from "../icons/lucide/check.js";
+import { COPY_ICON } from "../icons/lucide/copy.js";
 import { LIGHTBULB_ICON } from "../icons/lucide/lightbulb.js";
+import { TRIANGLE_ALERT_ICON } from "../icons/lucide/triangle-alert.js";
 import { renderPage } from "./page.js";
 import { lucideIconToHtml } from "./shell/lucide-icon-html.js";
 import { renderShell } from "./shell/shell.js";
@@ -72,16 +81,6 @@ const button = ({
 // The Callout component's markup, so a tip on a service page is the same tip a
 // plan author writes. The palette comes from the [data-callout] rules the
 // stylesheet already carries.
-const tip = ({ bodyHtml }: { readonly bodyHtml: string }): string =>
-  // The palette is assigned on the element rather than inherited from an
-  // `article` ancestor rule, so a tip is a tip wherever it is drawn - inside
-  // the reading column or inside a dialog over it. Every value is a design
-  // token; nothing here picks a colour.
-  `<aside class="callout mb-6 max-w-[var(--measure)] rounded-r-md border-l-4 px-4 py-3" data-callout="tip" style="--callout-accent: var(--callout-tip-c); --callout-bg: var(--callout-tip-bg); --callout-ink: var(--callout-tip-ink); background: var(--callout-bg); border-color: var(--edge-c); border-left-color: var(--callout-accent);">
-<header class="callout-header mb-2 flex items-center gap-2 font-semibold text-[var(--callout-accent)] [&_svg]:size-4 [&_svg]:shrink-0">${lucideIconToHtml({ icon: LIGHTBULB_ICON, className: "size-4" })}<span class="callout-title text-sm leading-5">Tip</span></header>
-<div class="callout-body text-[var(--callout-ink)] [&>:last-child]:mb-0">${bodyHtml}</div>
-</aside>`;
-
 // Authored prose is what the stylesheet styles: the markdown pipeline stamps
 // this attribute on every element it emits, and prose.css keys its whole type
 // and list scale off it. Hand-written content on these pages carries it for
@@ -89,27 +88,30 @@ const tip = ({ bodyHtml }: { readonly bodyHtml: string }): string =>
 // a browser default.
 const PROSE = ' data-authored-prose=""';
 
-// Copying is a convenience over text already on the page, so it never gates
-// anything and quietly does nothing where the clipboard is unavailable.
-const COPY_SCRIPT = `<script>
-// Focus the alert's safe action once the shell has finished setting itself up.
-// The markup carries autofocus too, but the review island initializes after
-// parse and does not preserve it, so this is what actually lands a keyboard
-// user inside the dialog. Purely an enhancement: the flow completes without
-// it, because every control is a link or a submit button.
-window.addEventListener("load", function () {
-  var safe = document.querySelector("[role=alertdialog] [autofocus]");
-  if (safe) safe.focus();
-});
-document.querySelectorAll("[data-copy]").forEach(function (control) {
-  control.addEventListener("click", function () {
-    if (!navigator.clipboard) return;
-    navigator.clipboard.writeText(control.getAttribute("data-copy") || "").then(function () {
-      control.textContent = "Copied";
-    });
-  });
-});
-</script>`;
+const callout = ({
+  type,
+  bodyHtml,
+}: {
+  readonly type: "tip" | "warning";
+  readonly bodyHtml: string;
+}): string => {
+  const icon = type === "tip" ? LIGHTBULB_ICON : TRIANGLE_ALERT_ICON;
+  const title = type === "tip" ? "Tip" : "Warning";
+  // The palette is assigned on the element rather than inherited from an
+  // `article` ancestor rule, so a callout is itself wherever it is drawn -
+  // inside the reading column or inside a dialog over it. Every value is a
+  // design token; nothing here picks a colour.
+  return `<aside class="callout my-6 max-w-[var(--measure)] rounded-r-md border-l-4 px-4 py-3" data-callout="${type}" style="--callout-accent: var(--callout-${type}-c); --callout-bg: var(--callout-${type}-bg); --callout-ink: var(--callout-${type}-ink); background: var(--callout-bg); border-color: var(--edge-c); border-left-color: var(--callout-accent);">
+<header class="callout-header mb-2 flex items-center gap-2 font-semibold text-[var(--callout-accent)] [&_svg]:size-4 [&_svg]:shrink-0">${lucideIconToHtml({ icon, className: "size-4" })}<span class="callout-title text-sm leading-5">${title}</span></header>
+<div class="callout-body text-[var(--callout-ink)] [&>:last-child]:mb-0">${bodyHtml}</div>
+</aside>`;
+};
+
+const tip = ({ bodyHtml }: { readonly bodyHtml: string }): string =>
+  callout({ type: "tip", bodyHtml });
+
+const warning = ({ bodyHtml }: { readonly bodyHtml: string }): string =>
+  callout({ type: "warning", bodyHtml });
 
 const servicePage = ({
   title,
@@ -129,12 +131,15 @@ const servicePage = ({
     title,
     contentIds: [],
     contentHtml: `${contentHtml}${overlayHtml}`,
+    chrome: "standalone",
   });
   return renderPage({
     title,
     styles: shell.styles,
     bodyClassName: shell.bodyClassName,
-    bodyHtml: `${shell.html}${COPY_SCRIPT}`,
+    bodyHtml: shell.html,
+    // Tells the review island this page carries no plan, so it does not boot.
+    rootAttributes: { "data-standalone": "" },
   });
 };
 
@@ -149,9 +154,18 @@ const clockTime = (atMs: number): string =>
       })
     : "an unknown time";
 
-const commandBlock = ({ command }: { readonly command: string }): string =>
-  `<pre${PROSE}><code${PROSE}>${escapeHtml(command)}</code></pre>
-<p${PROSE}>${button({ label: "Copy this command", variant: "default", copy: command })}</p>`;
+const commandBlock = ({ command }: { readonly command: string }): string => {
+  const label = copyLabel("code");
+  // The same figure the markdown pipeline builds around a fenced block, so the
+  // control is the product's own: hover-revealed, icon-only, and wired by the
+  // shell's viewer script through data-copy-code rather than by a script here.
+  return `<figure class="code-figure group/code-figure relative max-w-[var(--measure)] mb-6 [&>pre]:mb-0" data-maximizable="code">
+<div class="figure-control-bar absolute top-[0.3rem] right-[0.4rem] z-[1] flex flex-row items-center justify-end gap-1 p-0 opacity-0 motion-safe:transition-opacity motion-safe:duration-150 group-hover/code-figure:opacity-100 group-focus-within/code-figure:opacity-100">
+<button class="${FIGURE_CONTROL_BUTTON_CLASSES}" type="button" aria-label="${label}" data-tooltip="${label}" data-tooltip-delay="1s" data-copy-code hidden>${lucideIconToHtml({ icon: COPY_ICON, className: "size-4" })}${lucideIconToHtml({ icon: CHECK_ICON, className: "size-4", hidden: true })}</button>
+</div>
+<pre${PROSE} data-figure-body><code${PROSE}>${escapeHtml(command)}</code></pre>
+</figure>`;
+};
 
 const restartBlock = ({ planPath }: { readonly planPath: string }): string =>
   `<h2${PROSE}>Start it again</h2>
@@ -249,6 +263,7 @@ const welcomeContent = ({
 <p${PROSE}>Hosted at 127.0.0.1:${port}. Plans on this machine are available here.</p>
 <p${PROSE}>Running since ${escapeHtml(clockTime(startedAtMs))}.</p>
 <p${PROSE}>${button({ label: "Stop the service", variant: "destructive", href: "/stop" })}</p>
+<p${PROSE}>Stopping means Big Plans on this machine will no longer be accessible through the web browser.</p>
 </section>
 ${tip({ bodyHtml: `<p${PROSE}>Any <code${PROSE}>big-plan</code> command starts this service when it needs one, so you never have to start it by hand.</p>` })}`;
 
@@ -295,7 +310,7 @@ export const renderServiceStopConfirmPage = ({
 ${tip({ bodyHtml: `<p${PROSE}>Stopping the service here is the same as running <code${PROSE}>big-plan service stop</code> in a terminal.</p>` })}
 </div>
 <div class="mt-6 flex justify-end gap-2">
-${button({ label: "Keep it running", variant: "outline", href: "/", autofocus: true })}
+${button({ label: "Keep it running", variant: "outline", href: "/" })}
 <form method="post" action="/stop">
 <input name="nonce" type="hidden" value="${escapeHtml(nonce)}">
 ${button({ label: "Stop the service", variant: "destructive", submit: true })}
@@ -316,7 +331,7 @@ export const renderServiceStoppedPage = (): string =>
     title: "The service is stopped",
     contentHtml: `<h1${PROSE}>The service is stopped.</h1>
 <p${PROSE}>Reviewing agent plans is kind of a big deal.</p>
-<p${PROSE}>Start it again to open plans on this machine.</p>
+<p${PROSE}>Run this in a terminal to open plans again on this machine:</p>
 ${commandBlock({ command: "big-plan service start" })}
-${tip({ bodyHtml: `<p${PROSE}>This is the last page the service serves. Reloading it will show a browser connection error, because nothing is listening on this address any more.</p>` })}`,
+${warning({ bodyHtml: `<p${PROSE}><strong>Reloading this page will show a browser connection error</strong> because nothing is listening on this address any more.</p>` })}`,
   });

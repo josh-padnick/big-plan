@@ -206,7 +206,17 @@ export default tseslint.config(
           "**/serialize-html.js",
           "**/service-page.js",
         ],
-        mayImport: ["escapeHtml", "icons", "markdown", "shell", "page"],
+        // The model layer is granted for the shared figure-control vocabulary:
+        // the service pages draw the product's own copy control rather than a
+        // second one that would drift from it.
+        mayImport: [
+          "escapeHtml",
+          "icons",
+          "markdown",
+          "model",
+          "shell",
+          "page",
+        ],
       },
       // Browser-safe review models. These modules must stay usable by both the
       // browser island and the local review runtime.
