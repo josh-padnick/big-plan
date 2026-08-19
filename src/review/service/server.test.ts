@@ -144,6 +144,19 @@ describe("the service listener", () => {
     expect(response.headers.get("location")).toBe("http://127.0.0.1:41922/");
   });
 
+  it("should never forward a saved link off this machine", async () => {
+    await rememberPlan({ planId, planPath });
+    await activateSession("http://plans.evil.example.com/");
+    await writeSessionHeartbeatValue({
+      store,
+      value: { sessionId, running: true, updatedAtMs: Date.now() },
+    });
+    const response = await get(`/plan/${planId}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBe(null);
+    expect(await response.text()).toContain("No review has run for this plan.");
+  });
+
   it("should explain an ending instead of refusing the connection", async () => {
     await rememberPlan({ planId, planPath });
     await activateSession("http://127.0.0.1:41922/");

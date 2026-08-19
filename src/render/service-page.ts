@@ -52,15 +52,11 @@ const button = ({
   variant,
   href,
   submit = false,
-  copy,
-  autofocus = false,
 }: {
   readonly label: string;
   readonly variant: "default" | "outline" | "destructive";
   readonly href?: string;
   readonly submit?: boolean;
-  readonly copy?: string;
-  readonly autofocus?: boolean;
 }): string => {
   const recipe =
     variant === "default"
@@ -69,13 +65,10 @@ const button = ({
         ? BUTTON_OUTLINE
         : BUTTON_DESTRUCTIVE;
   const className = `${BUTTON_BASE} ${recipe}`;
-  const focus = autofocus ? " autofocus" : "";
   if (href !== undefined) {
-    return `<a class="${className}" href="${escapeHtml(href)}"${focus}>${escapeHtml(label)}</a>`;
+    return `<a class="${className}" href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
   }
-  const copyAttribute =
-    copy === undefined ? "" : ` data-copy="${escapeHtml(copy)}"`;
-  return `<button class="${className}" type="${submit ? "submit" : "button"}"${copyAttribute}>${escapeHtml(label)}</button>`;
+  return `<button class="${className}" type="${submit ? "submit" : "button"}">${escapeHtml(label)}</button>`;
 };
 
 // The Callout component's markup, so a tip on a service page is the same tip a

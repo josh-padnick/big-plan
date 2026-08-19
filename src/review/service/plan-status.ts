@@ -12,6 +12,22 @@ import {
 import { reviewStoreFor } from "../store.js";
 import { readServiceRegistryEntry } from "./registry.js";
 
+// The one rule about where a saved link may be sent. This service exists to be
+// the stable address a link points at, so the only address it will forward a
+// browser to is a loopback one on this machine: a descriptor naming anywhere
+// else is answered with a page rather than followed.
+const isLoopbackHttpUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "http:" &&
+      (url.hostname === "127.0.0.1" || url.hostname === "localhost")
+    );
+  } catch {
+    return false;
+  }
+};
+
 export type ServicePlanAnswer =
   /** A session is answering right now; the link should go to its address. */
   | { readonly kind: "live"; readonly planPath: string; readonly url: string }
@@ -65,7 +81,11 @@ export const answerForPlan = async ({
   });
   switch (outcome.kind) {
     case "running":
-      return { kind: "live", planPath: entry.planPath, url: descriptor.url };
+      // Fails closed: an unreachable-by-policy address is answered the same way
+      // a plan with no session is, which tells the visitor how to start one.
+      return isLoopbackHttpUrl(descriptor.url)
+        ? { kind: "live", planPath: entry.planPath, url: descriptor.url }
+        : { kind: "never-started", planPath: entry.planPath };
     case "ended":
       return {
         kind: "ended",

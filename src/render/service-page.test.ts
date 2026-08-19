@@ -123,7 +123,6 @@ describe("the service's pages", () => {
     expect(html).toContain('data-lucide="check"');
     // The bespoke green button is gone.
     expect(html).not.toContain("Copy this command");
-    expect(html).not.toContain("data-copy=");
   });
 
   it("should ask before stopping with the review UI's alert dialog", () => {
@@ -158,17 +157,6 @@ describe("the service's pages", () => {
     expect(confirm).toContain('method="post"');
     expect(confirm).toContain('action="/stop"');
     expect(confirm).toContain('value="nonce-value"');
-  });
-
-  it("should not seize focus when the alert opens", () => {
-    // An uninvited focus ring reads as an error state. Tabbing still works,
-    // because :focus-visible paints only what the keyboard asked for.
-    const html = renderServiceStopConfirmPage({
-      port: 8790,
-      startedAtMs: atMs,
-      nonce: "n",
-    });
-    expect(html).not.toContain("autofocus");
   });
 
   it("should say what stopping means without listing consequences twice", () => {

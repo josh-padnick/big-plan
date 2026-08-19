@@ -86,6 +86,21 @@ describe("the answer a saved link gets", () => {
     });
   });
 
+  it("should refuse to point a saved link anywhere but this machine", async () => {
+    // A poisoned descriptor must not turn the one stable address on this
+    // machine into a redirector to somewhere else, so a live session claiming
+    // a non-loopback address is answered as if no review were running.
+    await activate({ url: "http://plans.evil.example.com/" });
+    await writeSessionHeartbeatValue({
+      store,
+      value: { sessionId, running: true, updatedAtMs: nowMs },
+    });
+    expect(await answerForPlan({ planId, now: nowMs })).toEqual({
+      kind: "never-started",
+      planPath,
+    });
+  });
+
   it("should quote the recorded reason when a session stopped on purpose", async () => {
     await activate();
     await writeSessionHeartbeatValue({

@@ -317,13 +317,19 @@ export const ensureServiceRunning = async ({
  *
  * The three cases are kept apart because a caller reports them to a person,
  * and collapsing them would let a stop that did not happen be announced as one
- * that did. `refused` carries the sentence explaining why the port is still
- * serving saved links.
+ * that did. `refused` carries the sentence explaining why, and says whether
+ * our own service is the thing still holding the port: a stop that could not
+ * be delivered leaves it serving saved links, while a port held by a stranger
+ * means Big Plan is serving nothing there at all.
  */
 export type ServiceStop =
   | { readonly kind: "absent" }
   | { readonly kind: "stopped" }
-  | { readonly kind: "refused"; readonly reason: string };
+  | {
+      readonly kind: "refused";
+      readonly reason: string;
+      readonly stillServing: boolean;
+    };
 
 /** Asks a running service to exit, reporting what actually happened. */
 export const stopService = async ({
@@ -336,6 +342,7 @@ export const stopService = async ({
   if (probe.kind === "foreign") {
     return {
       kind: "refused",
+      stillServing: false,
       reason: foreignPortMessage({
         port,
         occupier: await describePortOccupier({ port }),
@@ -351,6 +358,7 @@ export const stopService = async ({
   } catch (error: unknown) {
     return {
       kind: "refused",
+      stillServing: true,
       reason: `The Big Plan service on port ${port} could not be stopped because its token is unavailable: ${String(error)}`,
     };
   }
@@ -363,12 +371,14 @@ export const stopService = async ({
     if (!response.ok) {
       return {
         kind: "refused",
+        stillServing: true,
         reason: `The Big Plan service on port ${port} refused the stop request with HTTP ${response.status}.`,
       };
     }
   } catch (error: unknown) {
     return {
       kind: "refused",
+      stillServing: true,
       reason: `The Big Plan service on port ${port} could not be asked to stop: ${String(error)}`,
     };
   }
@@ -383,6 +393,7 @@ export const stopService = async ({
   }
   return {
     kind: "refused",
+    stillServing: true,
     reason: `The Big Plan service on port ${port} accepted the stop request but is still listening.`,
   };
 };

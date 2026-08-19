@@ -107,17 +107,25 @@ const reportStart = async (): Promise<Record<string, unknown>> => {
 // A stop that did not happen must never be reported as one that did: the
 // whole point of the command is that nobody is stuck with a background process
 // they cannot stop, and a false "stopped" is worse than a loud refusal.
-const refuseStop = (reason: string): never => {
+const refuseStop = ({
+  reason,
+  stillServing,
+}: {
+  readonly reason: string;
+  readonly stillServing: boolean;
+}): never => {
   throw new AxiError(reason, "INTERNAL_ERROR", [
     reason,
-    "The service is still serving saved review links on this port",
+    ...(stillServing
+      ? ["The service is still serving saved review links on this port"]
+      : []),
   ]);
 };
 
 const reportStop = async (): Promise<Record<string, unknown>> => {
   const port = servicePort();
   const outcome = await stopService({ port });
-  if (outcome.kind === "refused") return refuseStop(outcome.reason);
+  if (outcome.kind === "refused") return refuseStop(outcome);
   return {
     service: "stopped",
     port,
@@ -146,7 +154,7 @@ export const serviceCommand = async (
       return reportStop();
     case "restart": {
       const stopped = await stopService();
-      if (stopped.kind === "refused") return refuseStop(stopped.reason);
+      if (stopped.kind === "refused") return refuseStop(stopped);
       return reportStart();
     }
     default:
