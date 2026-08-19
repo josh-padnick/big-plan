@@ -146,13 +146,19 @@ const servicePage = ({
 // A clock time is what a person recognises in "the review stopped at 2:41 AM".
 // The date is left off because every case this renders is recent by
 // construction: a link clicked after a session ended.
-const clockTime = (atMs: number): string =>
-  Number.isFinite(atMs)
-    ? new Date(atMs).toLocaleTimeString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "an unknown time";
+const clockTime = (atMs: number): string => {
+  if (!Number.isFinite(atMs)) return "an unknown time";
+  const spoken = new Date(atMs).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  // "6:15 PM" is how a formatter writes it; "6:15pm" is how a person does.
+  // A 24-hour locale has no meridiem to fix, so it passes through untouched.
+  return spoken.replace(
+    /\s*([AP])\.?M\.?$/iu,
+    (_match, half: string) => `${half.toLowerCase()}m`,
+  );
+};
 
 const commandBlock = ({ command }: { readonly command: string }): string => {
   const label = copyLabel("code");
@@ -250,6 +256,9 @@ export const renderPlanUnknownPage = (): string =>
 ${commandBlock({ command: "big-plan review <your-plan.mdx>" })}`,
   });
 
+// The address is set in the monospace token rather than as <code>, because
+// inline code in this product carries a chip and an address is not a command
+// you would run. The tip below keeps its chip for `big-plan`, which is one.
 const welcomeContent = ({
   port,
   startedAtMs,
@@ -260,12 +269,11 @@ const welcomeContent = ({
 <p${PROSE}>Reviewing agent plans is kind of a big deal.</p>
 <section class="${CARD}">
 <h2 class="plan-slide-title m-0 border-b-0 pb-0 text-2xl">Big Plan service</h2>
-<p${PROSE}>Hosted at 127.0.0.1:${port}. Plans on this machine are available here.</p>
-<p${PROSE}>Running since ${escapeHtml(clockTime(startedAtMs))}.</p>
+<p${PROSE}>Hosted at <span class="font-mono">127.0.0.1:${port}</span>. Running since ${escapeHtml(clockTime(startedAtMs))}.</p>
 <p${PROSE}>${button({ label: "Stop the service", variant: "destructive", href: "/stop" })}</p>
-<p${PROSE}>Stopping means Big Plans on this machine will no longer be accessible through the web browser.</p>
+<p${PROSE}><em${PROSE}>Stopping means Big Plans on this machine will no longer be accessible through the web browser.</em></p>
 </section>
-${tip({ bodyHtml: `<p${PROSE}>Any <code${PROSE}>big-plan</code> command starts this service when it needs one, so you never have to start it by hand.</p>` })}`;
+${tip({ bodyHtml: `<p${PROSE}>Managing the Big Plan service is for advanced users only. Any <code${PROSE}>big-plan</code> command will automatically start this service when it needs to.</p>` })}`;
 
 /** The page at `/`: what this process is, to someone who found the port. */
 export const renderServiceWelcomePage = ({

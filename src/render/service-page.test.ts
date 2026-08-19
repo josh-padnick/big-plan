@@ -49,10 +49,42 @@ describe("the service's pages", () => {
   });
 
   it("should say what stopping does before the control is clicked", () => {
-    // The consequence belongs beside the button, not only behind it.
+    // The consequence belongs beside the button, not only behind it, and it
+    // reads as an aside to the control rather than as another instruction.
     const html = welcome();
     expect(html).toContain(
-      "Stopping means Big Plans on this machine will no longer be accessible through the web browser.",
+      '<em data-authored-prose="">Stopping means Big Plans on this machine will no longer be accessible through the web browser.</em>',
+    );
+  });
+
+  it("should state where it lives and how long it has run in one line", () => {
+    const html = welcome();
+    expect(html).toContain(
+      'Hosted at <span class="font-mono">127.0.0.1:8790</span>. Running since',
+    );
+    // An address is monospace, not a code chip: the chip belongs to commands.
+    expect(html).not.toContain('<code data-authored-prose="">127.0.0.1');
+    // The old second sentence and its separate line are gone.
+    expect(html).not.toContain("Plans on this machine are available here.");
+  });
+
+  it("should write a time the way a person says it", () => {
+    // "6:15 PM" is how a formatter writes it; "6:15pm" is how a person does.
+    const html = renderServiceWelcomePage({
+      port: 8790,
+      startedAtMs: Date.parse("2026-08-18T18:15:00"),
+    });
+    expect(html).toMatch(/Running since \d+:\d{2}(am|pm)\./u);
+    expect(html).not.toMatch(/\d\s(AM|PM)/u);
+  });
+
+  it("should name who the service page is for", () => {
+    const html = welcome();
+    expect(html).toContain(
+      "Managing the Big Plan service is for advanced users only.",
+    );
+    expect(html).toContain(
+      "will automatically start this service when it needs to.",
     );
   });
 
@@ -156,9 +188,6 @@ describe("the service's pages", () => {
     // Ruled a paid upgrade: the free service answers an address it is given
     // and never becomes a directory of someone's work.
     const html = welcome();
-    // The card still says plans are reachable here, which is the ratified
-    // wireframe's line; what is gone is any enumeration of them.
-    expect(html).toContain("Plans on this machine are available here.");
     expect(html).not.toContain(
       '<h2 data-authored-prose="">Plans on this machine</h2>',
     );

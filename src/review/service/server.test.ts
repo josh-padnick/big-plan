@@ -193,7 +193,9 @@ describe("the service listener", () => {
     const html = await (await get("/")).text();
     expect(html).toContain("Welcome to Big Plan.");
     expect(html).toContain("Big Plan service");
-    expect(html).toContain(`Hosted at 127.0.0.1:${runtime.port}.`);
+    expect(html).toContain(
+      `Hosted at <span class="font-mono">127.0.0.1:${runtime.port}</span>.`,
+    );
     expect(html).toContain('href="/stop"');
   });
 
