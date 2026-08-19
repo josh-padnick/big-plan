@@ -235,6 +235,11 @@ A takeover therefore starts from the last published revision, and the reviewer i
 A claim also ends when the reviewer takes the message back: once an agent has reported nothing for far longer than a turn takes and no agent is connected, that claim counts as abandoned and the message becomes editable and deletable again.
 Taking a message back discards the stage its claim was drafting, and a returning agent's `agent respond` is refused rather than published, so pick up current work with `agent next`.
 
+The reviewer can also take an agent off a review from **Agent Status**, and every `agent` command answers that at its next run.
+`agent next` reports it as an ordinary end - `ended` and `disconnected` with the reason, and a zero exit - after marking the session ended so the reviewer's connection log records a reported end rather than a silence.
+`agent note` and `agent respond` refuse with the `AGENT_DISCONNECTED` code and a nonzero exit, so a harness stops rather than retrying a command that can never succeed again.
+The answer the disconnected session was drafting is dropped; the reviewer's message goes back in the queue for whichever agent connects next.
+
 `agent respond` publishes under one plan-mutation lock: it re-proves the claim, requires the plan to still carry the revision the candidate started from, and swaps the candidate in with one atomic rename.
 A response that finds the plan changed underneath it is refused rather than applied, so the agent takes the work again from the current plan.
 If the process dies mid-publish, the next `agent` command and the next `big-plan review` settle the interrupted commit before serving anything: the answer completes if the swap won, the request stays open if it did not, and a plan matching neither revision stops agent edits with a conflict naming both digests instead of overwriting the file.
