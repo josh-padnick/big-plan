@@ -28,6 +28,7 @@ npx big-plan validate <file.mdx>
 npx big-plan render <file.mdx> [output.html]
 npx big-plan compile <file.mdx> [output.json]
 npx big-plan review <file.mdx>
+npx big-plan service status
 npx big-plan agent <file.mdx>
 ```
 
