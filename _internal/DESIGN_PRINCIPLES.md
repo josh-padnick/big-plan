@@ -33,6 +33,25 @@ Every stock Tailwind colour, size, and tracking step is dropped, so a utility ca
 Spacing cannot close the same way, because Tailwind derives every numeric spacing utility from one base unit, so `scripts/design-system/check.mjs` closes spacing, radius, and elevation instead.
 That check owns the exact allowed steps; the tables below say what each step is for.
 
+## One utility per property per variant scope
+
+A class list names each CSS property at most once within any one variant scope.
+
+Two utilities of the same variant scope - base against base, or `hover:` against `hover:` - do not resolve in the order they are written.
+They carry equal specificity, so the generated stylesheet's own emission order decides, and it emits an arbitrary-value utility before a named one.
+A base `bg-paper` therefore beats a base `bg-[var(--diff-add-c)]` written after it, whatever the author intended.
+Write the property once per scope, inside the branch that chooses its value, and never as a base a later class of the same scope is expected to override.
+
+Utilities in different variant scopes are not this hazard.
+A variant compiles to a selector carrying an extra pseudo-class or attribute, so it outranks a bare base utility on specificity and wins regardless of emission order.
+`bg-transparent hover:bg-surface` is correct and stays correct.
+
+The same care applies to a variant that reaches into children.
+`[&>*]:` cannot know what kinds of children a container will grow, so a geometric utility applied through it - a size, a height, a width - eventually lands on a child that is not text and silently deforms it.
+Name the children it is for, or exclude the ones it is not.
+
+Both halves of this rule are here because both have failed silently in this product, and neither is visible in a diff (BIG-176).
+
 ## Spacing
 
 One scale, base 16px, nonlinear.

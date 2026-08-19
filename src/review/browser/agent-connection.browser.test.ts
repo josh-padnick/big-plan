@@ -1,13 +1,13 @@
 // Covers the connection log's pure readings, which decide what the reviewer is
-// told a silence means.
+// told a silence means, and the marker paint rule that keeps a timeline dot
+// round and filled.
 
 import { describe, expect, it } from "vitest";
 import {
   connectionEventEnded,
   connectionLogRowReading,
-  connectionLogState,
-  connectionLogTally,
-  connectionLogTallyLabel,
+  connectionMarkerClassName,
+  summarizeAgentConnection,
 } from "./agent-connection.browser.js";
 import { AGENT_SESSION_ENDED_REASON } from "../shared/agent-status.js";
 
@@ -116,77 +116,103 @@ describe("connectionLogRowReading", () => {
   });
 });
 
-const quietEdge = {
-  connected: false,
-  reason: "No agent signal within 75 seconds",
-};
-const endedEdge = { connected: false, reason: AGENT_SESSION_ENDED_REASON };
-const connectedEdge = { connected: true };
-
-describe("connectionLogState", () => {
-  it("answers with the same word as the card above it", () => {
-    expect(connectionLogState({ connected: false, ended: true })).toBe(
-      "SESSION ENDED",
-    );
-    expect(connectionLogState({ connected: false, ended: false })).toBe(
-      "NO SIGNAL",
-    );
-    expect(connectionLogState({ connected: true, ended: false })).toBe(
-      "CONNECTED",
-    );
+describe("summarizeAgentConnection", () => {
+  const at = (minute: number) =>
+    `2026-08-19T10:${String(minute).padStart(2, "0")}:00.000Z`;
+  const quietEdge = (minute: number) => ({
+    connected: false,
+    at: at(minute),
+    reason: "No agent signal within 75 seconds",
   });
-});
+  const endedEdge = (minute: number) => ({
+    connected: false,
+    at: at(minute),
+    reason: AGENT_SESSION_ENDED_REASON,
+  });
+  const connectedEdge = (minute: number) => ({
+    connected: true,
+    at: at(minute),
+  });
 
-describe("connectionLogTally", () => {
   it("counts a reported end apart from an inferred gap", () => {
     expect(
-      connectionLogTally([
-        connectedEdge,
-        quietEdge,
-        connectedEdge,
-        endedEdge,
-        connectedEdge,
-      ]),
-    ).toEqual({ quietPeriods: 1, sessionsEnded: 1, resumed: 2 });
+      summarizeAgentConnection({
+        events: [
+          connectedEdge(1),
+          quietEdge(2),
+          connectedEdge(3),
+          endedEdge(4),
+          connectedEdge(5),
+        ],
+      }),
+    ).toMatchObject({ quietPeriods: 1, sessionsEnded: 1, resumed: 2 });
   });
 
   it("counts nothing for a session that has only ever been connected", () => {
-    expect(connectionLogTally([connectedEdge])).toEqual({
-      quietPeriods: 0,
-      sessionsEnded: 0,
-      resumed: 0,
-    });
+    expect(
+      summarizeAgentConnection({ events: [connectedEdge(1)] }),
+    ).toMatchObject({ quietPeriods: 0, sessionsEnded: 0, resumed: 0 });
   });
 
   it("does not count a first signal as a resumption", () => {
     // The store's opening edge can be a disconnect, and the connect that
     // follows it is the session starting rather than recovering (BIG-147).
-    expect(connectionLogTally([quietEdge, connectedEdge])).toEqual({
-      quietPeriods: 0,
-      sessionsEnded: 0,
-      resumed: 0,
-    });
+    expect(
+      summarizeAgentConnection({ events: [quietEdge(1), connectedEdge(2)] }),
+    ).toMatchObject({ quietPeriods: 0, sessionsEnded: 0, resumed: 0 });
   });
 });
 
-describe("connectionLogTallyLabel", () => {
-  it("stays out of the way until a session has actually ended", () => {
-    expect(
-      connectionLogTallyLabel({
-        quietPeriods: 2,
-        sessionsEnded: 0,
-        resumed: 1,
-      }),
-    ).toBe("2 quiet periods · 1 resumed");
+describe("connectionMarkerClassName", () => {
+  const states = [
+    { name: "connected", input: { connected: true, isLatest: false } },
+    {
+      name: "the latest quiet entry",
+      input: { connected: false, isLatest: true },
+    },
+    {
+      name: "a settled quiet entry",
+      input: { connected: false, isLatest: false },
+    },
+  ];
+
+  it.each(states)("names exactly one background for $name", ({ input }) => {
+    // Two background utilities in one class list are decided by the order the
+    // generated stylesheet emits them, not by the order they are written, so a
+    // second one is never an override - it is a coin flip. Carrying `bg-paper`
+    // in the base is what made every connected marker render hollow (BIG-176).
+    const backgrounds = connectionMarkerClassName(input)
+      .split(" ")
+      .filter((utility) => utility.startsWith("bg-"));
+    expect(backgrounds).toHaveLength(1);
   });
 
-  it("names ended sessions once there are some", () => {
+  it.each(states)("draws a circle for $name", ({ input }) => {
+    // A marker is round because width and height agree and the radius is a
+    // pill. Nothing here may set a height on its own.
+    const utilities = connectionMarkerClassName(input).split(" ");
+    expect(utilities).toContain("size-[6px]");
+    expect(utilities).toContain("rounded-full");
     expect(
-      connectionLogTallyLabel({
-        quietPeriods: 1,
-        sessionsEnded: 1,
-        resumed: 2,
-      }),
-    ).toBe("1 quiet period · 1 ended session · 2 resumed");
+      utilities.filter((utility) => /^(min-)?h-/.test(utility)),
+    ).toHaveLength(0);
+  });
+
+  it("fills a connected entry with the colour it outlines", () => {
+    const utilities = connectionMarkerClassName({
+      connected: true,
+      isLatest: false,
+    }).split(" ");
+    expect(utilities).toContain("bg-[var(--diff-add-c)]");
+    expect(utilities).toContain("border-[var(--diff-add-c)]");
+  });
+
+  it("leaves a settled quiet entry hollow against the page ground", () => {
+    const utilities = connectionMarkerClassName({
+      connected: false,
+      isLatest: false,
+    }).split(" ");
+    expect(utilities).toContain("bg-paper");
+    expect(utilities).toContain("border-muted");
   });
 });

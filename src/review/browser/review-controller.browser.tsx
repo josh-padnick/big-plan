@@ -7208,11 +7208,6 @@ export const ReviewController = () => {
                 status: agentHealth,
                 presenceState: agentProjection.state,
                 heldWork: agentHeldWork,
-                connected: agentConnected,
-                heartbeatAt: agent.presence.updatedAtMs ?? 0,
-                ...(agentEndedAtMs === undefined
-                  ? {}
-                  : { endedAtMs: agentEndedAtMs }),
                 modelName: displayedAgentIdentity?.name,
                 modelEffort: displayedAgentIdentity?.effort,
                 modelClient: displayedAgentIdentity?.client,
