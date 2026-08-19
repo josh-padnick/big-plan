@@ -484,10 +484,14 @@ export default tseslint.config(
     // the track (`grid-cols-[minmax(0,1fr)]`) is the one-word answer, and it
     // is fenced here because the failure is silent: the markup is valid, the
     // cascade is clean, and only a reader at a narrow width ever sees it.
-    // Server-rendered class strings in `.ts` are fenced alongside the React
-    // views, because the rule is about the layout a string asks for rather
-    // than about which renderer emits it.
-    files: ["src/**/*.ts", "src/**/*.tsx"],
+    //
+    // Scoped to the review browser because that is where the premise holds:
+    // the sidebar is a fixed-width column and every list in it is one column,
+    // so the track is always the container's to set. A plan component is a
+    // different regime - `decision-card.css` gives `.decision-rows` a
+    // responsive `repeat(auto-fit, ...)` track, and a utility here would
+    // outrank it and collapse the option cards into a stack.
+    files: ["src/review/browser/**/*.ts", "src/review/browser/**/*.tsx"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -495,7 +499,7 @@ export default tseslint.config(
           selector:
             "Literal[value=/^(?!.*grid-cols-)(?=.*(?:^|[ ])list-none(?:[ ]|$))(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/], TemplateElement[value.raw=/^(?!.*grid-cols-)(?=.*(?:^|[ ])list-none(?:[ ]|$))(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/]",
           message:
-            "A grid list must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows its container.",
+            "A grid list in the review sidebar must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows the panel.",
         },
       ],
     },
