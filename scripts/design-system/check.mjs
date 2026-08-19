@@ -579,6 +579,13 @@ export const checkDesignSystem = async ({
     const lines = (await readFile(module, "utf8")).split("\n");
     let markerReach = 0;
     lines.forEach((line, index) => {
+      for (const rule of PAIR_RULES) {
+        if (rule.parts.every((part) => part.test(line))) {
+          failures.push(
+            `${relative(resolve(sourceRoot, ".."), module)}:${index + 1}: ${rule.name}; ${rule.advice}`,
+          );
+        }
+      }
       const trimmed = line.trim();
       const isComment =
         trimmed === "" || trimmed.startsWith("//") || trimmed.startsWith("*");
@@ -591,13 +598,6 @@ export const checkDesignSystem = async ({
           markerReach -= 1;
         }
         return;
-      }
-      for (const rule of PAIR_RULES) {
-        if (rule.parts.every((part) => part.test(line))) {
-          failures.push(
-            `${relative(resolve(sourceRoot, ".."), module)}:${index + 1}: ${rule.name}; ${rule.advice}`,
-          );
-        }
       }
       for (const rule of RULES) {
         rule.pattern.lastIndex = 0;
