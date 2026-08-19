@@ -36,6 +36,33 @@ describe("lintPlan wireframe-envelope-fit", () => {
     ]);
   });
 
+  it("should count columns a Group holds, since a Group is not one itself", () => {
+    const markdown = wireframe(
+      [
+        '<Screen id="s" name="Triage" device="desktop">',
+        "<Row>",
+        "<Group>",
+        '<Panel title="Queue"><List><ListItem label="One" /></List></Panel>',
+        '<Panel title="Conversation"><Text text="Body" /></Panel>',
+        "</Group>",
+        "<Group>",
+        '<Panel title="Notes"><Text text="Body" /></Panel>',
+        '<Rail><Text text="Properties" /></Rail>',
+        "</Group>",
+        "</Row>",
+        "</Screen>",
+      ].join("\n"),
+    );
+
+    expect(
+      lintPlan({ markdown })
+        .filter(({ ruleId }) => ruleId === "wireframe-envelope-fit")
+        .map(({ message }) => message),
+    ).toEqual([
+      "This Row lays out 4 columns on a desktop screen, which the desktop envelope cannot hold at a readable width; the figure never widens, so give the screen 3 columns or fewer and move the rest to another screen, a Rail, or progressive disclosure",
+    ]);
+  });
+
   it("should report side-by-side columns on a phone screen", () => {
     const markdown = wireframe(
       [
@@ -77,6 +104,17 @@ describe("lintPlan wireframe-envelope-fit", () => {
         '<Button label="Approve plan" emphasis="primary" />',
         '<Badge label="Ready" tone="success" />',
         '<Badge label="Two open" tone="warning" />',
+        "</Row>",
+        "</Screen>",
+      ].join("\n"),
+    ],
+    [
+      "a toolbar of Groups, which hold controls rather than columns",
+      [
+        '<Screen id="s" name="Plans" device="desktop">',
+        '<Row justify="between">',
+        '<Group><Heading text="Plans" /></Group>',
+        '<Group><Button label="Settings" icon="settings" iconOnly /><Button label="New plan" icon="add" /></Group>',
         "</Row>",
         "</Screen>",
       ].join("\n"),
