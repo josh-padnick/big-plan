@@ -23,7 +23,11 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Toaster as Sonner, toast } from "sonner";
-import { placeTooltip, type TooltipPosition } from "./tooltip-position.js";
+import {
+  placeTooltip,
+  resolveRemMeasure,
+  type TooltipPosition,
+} from "./tooltip-position.js";
 
 export { toast };
 
@@ -315,21 +319,29 @@ type TooltipProps = {
 // return to, or the reader re-finds the start of every line.
 // Each variant states its widest measure twice on purpose, once as the static
 // Tailwind class the stylesheet can discover and once as the number the
-// positioner clamps against; the two must stay equal, so they sit together.
+// positioner clamps against; both are the same rem measure, so they sit
+// together and stay equal.
 const TOOLTIP_VARIANTS: Record<
   TooltipVariant,
-  { readonly className: string; readonly maxWidth: number }
+  { readonly className: string; readonly maxWidthRem: number }
 > = {
   label: {
     className:
       "max-w-[min(11rem,calc(100vw_-_2rem))] text-center font-semibold",
-    maxWidth: 11 * 16,
+    maxWidthRem: 11,
   },
   explanation: {
     className: "max-w-[min(17rem,calc(100vw_-_2rem))] text-left font-normal",
-    maxWidth: 17 * 16,
+    maxWidthRem: 17,
   },
 };
+
+/** Reads the variant's authored measure back at the reader's own root size. */
+const tooltipMaxWidth = (variant: TooltipVariant) =>
+  resolveRemMeasure(
+    TOOLTIP_VARIANTS[variant].maxWidthRem,
+    getComputedStyle(document.documentElement).fontSize,
+  );
 
 /** A portal tooltip with a deliberate default pause before secondary help. */
 export const Tooltip = ({
@@ -376,7 +388,7 @@ export const Tooltip = ({
         anchor: rect,
         viewport: { width: window.innerWidth, height: window.innerHeight },
         preferredPlacement: placement,
-        maxWidth: TOOLTIP_VARIANTS[variant].maxWidth,
+        maxWidth: tooltipMaxWidth(variant),
       }),
     );
   };
