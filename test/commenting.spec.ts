@@ -748,6 +748,119 @@ test("should show a sub-slide ordinal once in its comment toolbar", async ({
   await expect(target).toHaveText("2.1.1 · The worker");
 });
 
+/*
+BIG-188. A thread's placement was derived from the anchor's rect without ever
+checking that the anchor had been laid out. An anchor inside a collapsed slide
+still answers getBoundingClientRect() with an all-zero rect, so the thread was
+positioned against the document origin and clamped into the page's left margin
+- the opposite side of the screen from the sidebar and the content it belongs
+to. Toggling the sidebar is what re-measured, so the same thread was correct
+before the toggle and wrong after it.
+
+The assertion is therefore which side the thread is on, not which direction it
+lies from its anchor: the earlier overlap check passed while the card sat in
+the left margin, because a card at x=24 is still left of the slide's right
+edge. Both sidebar states and both anchor states are pinned, because the bug
+needed one of each to appear.
+*/
+test("should keep a comment thread on the right whether the sidebar is open or closed", async ({
+  page,
+  deckViewerUrl,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(deckViewerUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  const subSlide = page.locator('[data-collapsible="subslide"]').first();
+  await subSlide.getByRole("button", { name: "Comment on slide" }).click();
+  const composer = page.getByRole("dialog", { name: /Comment on/u });
+  await composer
+    .getByLabel("Add a comment")
+    .fill("This thread belongs on the right.");
+  await composer.getByRole("switch", { name: "Submit right away" }).click();
+  await composer.getByRole("button", { name: "Add Comment" }).click();
+
+  const threadHost = page.locator("[data-review-thread-side]");
+  await expect(threadHost).toHaveCount(1);
+  const feedbackControl = page.getByRole("button", { name: /Feedback/u });
+  const sidebar = page.getByRole("complementary", { name: "Feedback" });
+
+  const placement = async () =>
+    threadHost.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        hidden: node.hidden,
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        viewportWidth: document.documentElement.clientWidth,
+      };
+    });
+  /*
+  The whole condition is polled, not a proxy for it. A host is appended before
+  the frame that positions it and before a sidebar transition settles, so a
+  single read can catch it at x=0 or at the position it is leaving. Reporting
+  the side as a word keeps a real wrong-side placement failing with the
+  coordinate that proves it rather than with a timeout.
+  */
+  const side = async () => {
+    const { hidden, left, right, viewportWidth } = await placement();
+    if (hidden) return "hidden";
+    if (right > viewportWidth) return `past the page edge at ${right}`;
+    return left > viewportWidth / 2 ? "right" : `left, at ${left}`;
+  };
+  const expectOnTheRight = async () => {
+    await expect.poll(side).toBe("right");
+  };
+
+  await expectOnTheRight();
+  await feedbackControl.click();
+  await expect(sidebar).toBeVisible();
+  await expectOnTheRight();
+  await expect
+    .poll(async () => {
+      const sidebarLeft = await sidebar.evaluate(
+        (node) => node.getBoundingClientRect().left,
+      );
+      return (await placement()).right <= sidebarLeft;
+    })
+    .toBe(true);
+  await feedbackControl.click();
+  await expect(sidebar).not.toBeVisible();
+  await expectOnTheRight();
+
+  // Collapsing every section removes the anchor from layout, which is the
+  // state that produced the reported screenshot once the sidebar was toggled.
+  await page.getByRole("button", { name: "Collapse all sections" }).click();
+  const collapsedRow = page.locator(".plan-part-group").nth(1);
+  await expect(collapsedRow).toBeVisible();
+  await expectOnTheRight();
+  await feedbackControl.click();
+  await expect(sidebar).toBeVisible();
+  await expectOnTheRight();
+  await feedbackControl.click();
+  await expect(sidebar).not.toBeVisible();
+  await expectOnTheRight();
+
+  // A thread whose anchor is collapsed away belongs beside the row that now
+  // stands in for it, so the reviewer can still see what it is attached to.
+  await expect
+    .poll(async () => {
+      const band = await collapsedRow.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          top: rect.top + window.scrollY,
+          bottom: rect.bottom + window.scrollY,
+        };
+      });
+      const threadTop = await threadHost.evaluate(
+        (node) => node.getBoundingClientRect().top + window.scrollY,
+      );
+      return threadTop >= band.top && threadTop <= band.bottom;
+    })
+    .toBe(true);
+});
+
 test("should minimize an expanded long comment from the feedback toolbar", async ({
   page,
   deckViewerUrl,

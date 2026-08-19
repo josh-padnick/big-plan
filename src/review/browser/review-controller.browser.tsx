@@ -62,7 +62,8 @@ import {
 } from "../shared/reviewer-markdown.js";
 import { REVIEW_POLL_INTERVAL_MS } from "../shared/review-polling.js";
 import { reconcilePendingCancellations } from "../shared/cancel-pending.js";
-import { stackThreadPositions } from "../shared/thread-layout.js";
+import { stackThreadPositions, threadLeft } from "../shared/thread-layout.js";
+import { isRendered, measureThreadAnchor } from "./thread-anchor.browser.js";
 import {
   clearThreadOpenOverlay,
   isThreadOpen,
@@ -1945,6 +1946,14 @@ const threadAnchorElement = (comment: ReviewComment): HTMLElement | null => {
   return targetElement(comment.target);
 };
 
+// A thread hangs off the card its target sits in, not off the target itself,
+// so one comment on a paragraph and another on the slide around it line up in
+// the same column.
+const threadAnchorContainer = (target: HTMLElement): HTMLElement =>
+  target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
+  target.parentElement ??
+  target;
+
 const useThreadHosts = (
   comments: ReadonlyArray<ReviewComment>,
   isOpen: boolean,
@@ -1961,28 +1970,31 @@ const useThreadHosts = (
     }
     const mounted = new Map<string, HTMLDivElement>();
     const targetOffsets = new Map<string, number>();
-    const anchorPositions = new Map<
-      string,
-      { readonly left: number; readonly right: number; readonly top: number }
-    >();
     for (const comment of comments) {
       const anchor = threadAnchorElement(comment);
       if (anchor === null) continue;
-      const container =
-        anchor.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
-        anchor.parentElement ??
-        anchor;
-      targetOffsets.set(
-        comment.id,
-        anchor.getBoundingClientRect().top -
-          container.getBoundingClientRect().top,
-      );
-      const containerRect = container.getBoundingClientRect();
-      anchorPositions.set(comment.id, {
-        left: containerRect.left + window.scrollX,
-        right: containerRect.right + window.scrollX,
-        top: containerRect.top + window.scrollY,
-      });
+      const container = threadAnchorContainer(anchor);
+      /*
+      Where the target sat inside its card when the reader commented, which is
+      deliberately remembered rather than re-measured on every positioning
+      pass. A lens re-renders the block in place, and re-measuring would move
+      the thread off the words it is attached to; holding the distance is what
+      keeps it still. The anchor rect is the opposite case and is never
+      remembered: it describes the whole page's layout, which a collapse or a
+      reflow invalidates.
+
+      The distance only exists when both boxes were laid out. Recording it from
+      an anchor that is not on screen - one inside a collapsed slide, say -
+      stores the difference between two all-zero rects, which reads back as a
+      real measurement of zero.
+      */
+      if (isRendered(anchor) && isRendered(container)) {
+        targetOffsets.set(
+          comment.id,
+          anchor.getBoundingClientRect().top -
+            container.getBoundingClientRect().top,
+        );
+      }
       const host = document.createElement("div");
       host.dataset.reviewThreadFor = comment.id;
       host.dataset.reviewThreadSide = "";
@@ -1992,7 +2004,9 @@ const useThreadHosts = (
     const position = () => {
       const viewportWidth = document.documentElement.clientWidth;
       const edge = 24;
-      const feedbackRailWidth = isOpen ? Math.min(22 * 16, viewportWidth) : 0;
+      const feedbackSidebarWidth = isOpen
+        ? Math.min(22 * 16, viewportWidth)
+        : 0;
       const threadTopInset = 12;
       const threadWidth = 17 * 16;
       const diffThreadGap = 12;
@@ -2016,39 +2030,38 @@ const useThreadHosts = (
         const host = mounted.get(comment.id);
         const target = threadAnchorElement(comment);
         if (host === undefined || target === null) continue;
-        const anchor =
-          target.closest<HTMLElement>("[data-slide], [data-quick-summary]") ??
-          target.parentElement ??
-          target;
-        const liveAnchorRect = anchor.getBoundingClientRect();
-        const cachedAnchor = anchorPositions.get(comment.id);
-        const anchorIsHidden = anchor.getClientRects().length === 0;
-        const anchorRect =
-          anchorIsHidden && cachedAnchor !== undefined
-            ? {
-                left: cachedAnchor.left - window.scrollX,
-                right: cachedAnchor.right - window.scrollX,
-                top: cachedAnchor.top - window.scrollY,
-              }
-            : liveAnchorRect;
-        if (!anchorIsHidden) {
-          anchorPositions.set(comment.id, {
-            left: liveAnchorRect.left + window.scrollX,
-            right: liveAnchorRect.right + window.scrollX,
-            top: liveAnchorRect.top + window.scrollY,
-          });
+        const container = threadAnchorContainer(target);
+        const anchor = measureThreadAnchor(container, {
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
+        });
+        if ("missing" in anchor) {
+          // Nothing on the page to sit beside. Drawing the card anyway would
+          // mean inventing coordinates, and the invented ones land in the left
+          // margin, which is the one place a thread must never appear.
+          host.hidden = true;
+          continue;
         }
+        host.hidden = false;
+        const anchorRect = anchor.measured;
         const cardHeight = Math.max(
           1,
           host.firstElementChild?.getBoundingClientRect().height ?? 1,
         );
-        const isSlideAnchor = anchor.matches(
+        const isSlideAnchor = anchor.element.matches(
           "[data-slide], [data-quick-summary]",
         );
+        // The offset places the thread level with the target inside the card,
+        // so it only applies when the card itself is what got measured. A
+        // collapsed anchor is represented by an ancestor row instead, and that
+        // row's top is the whole answer.
+        const targetOffset =
+          anchor.element === container
+            ? (targetOffsets.get(comment.id) ?? 0)
+            : 0;
         const desiredTop =
           anchorRect.top +
-          (targetOffsets.get(comment.id) ?? 0) +
-          window.scrollY +
+          targetOffset +
           (isSlideAnchor ? slideCommentControlClearance : threadTopInset);
         positionItems.push({
           id: comment.id,
@@ -2069,21 +2082,15 @@ const useThreadHosts = (
         const anchorRect = anchorRects.get(id);
         if (host === undefined || anchorRect === undefined) continue;
         host.style.top = `${top}px`;
-        const minimumLeft = edge + window.scrollX;
-        const maximumLeft =
-          window.scrollX +
-          viewportWidth -
-          feedbackRailWidth -
-          threadWidth -
-          edge;
-        const right =
-          anchorRect.right +
-          window.scrollX +
-          (rightThreadOffsets.get(id) ?? diffThreadGap);
-        host.style.left = `${Math.max(
-          minimumLeft,
-          Math.min(right, maximumLeft),
-        )}px`;
+        host.style.left = `${threadLeft({
+          anchorRight: anchorRect.right,
+          anchorOffset: rightThreadOffsets.get(id) ?? diffThreadGap,
+          threadWidth,
+          viewportWidth,
+          sidebarWidth: feedbackSidebarWidth,
+          scrollX: window.scrollX,
+          pageMargin: edge,
+        })}px`;
       }
     };
     const frame = requestAnimationFrame(position);
