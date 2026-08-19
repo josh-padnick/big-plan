@@ -4046,8 +4046,17 @@ test("should restore and submit staged comments through the local review runtime
   own state names. Both halves have failed silently here - a minimum line box
   meant for the row's text stretched the circle into a pill, and a `bg-paper`
   ground carried in the base class list outranked each state's fill, so the
-  markers rendered as empty vertical ovals (BIG-176). Geometry and paint are
-  pinned together because either alone still reads as a defect.
+  markers rendered as empty vertical ovals (BIG-176).
+
+  What each layer proves is not the same thing. This block proves the geometry:
+  no entry in this session has ever connected, so the connected fill - the half
+  the ground actually defeated - is proven where a connected row exists, at the
+  second connection-log site in this test. The unit test on
+  connectionMarkerClassName proves the authoring rule, that a state names
+  exactly one background utility, and it can prove nothing more: a specificity
+  or emission-order loss is invisible in a class list and appears only once the
+  cascade resolves, so the browser-layer assertion on a connected row is the
+  only one that covers it.
   */
   const markers = await agentRail
     .locator("[data-review-connection-marker]")
@@ -4432,6 +4441,31 @@ test("should restore and submit staged comments through the local review runtime
     .getByText("Connection log", { exact: true })
     .locator("xpath=ancestor::summary")
     .click();
+  /*
+  An agent has connected here, so this is where the connected marker's fill can
+  be read off the cascade. A connected entry is filled with the colour it
+  outlines; carrying a `bg-paper` ground in the marker's base class list beat
+  that fill on emission order and showed the page through the dot instead
+  (BIG-176). The count is asserted first because a scenario that happened to
+  render no connected row would pass this loop while proving nothing.
+  */
+  const connectedMarkers = await agentSidebar(page)
+    .locator(
+      "[data-review-connection-event='connected'] [data-review-connection-marker]",
+    )
+    .evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const style = getComputedStyle(node);
+        return {
+          background: style.backgroundColor,
+          borderColor: style.borderColor,
+        };
+      }),
+    );
+  expect(connectedMarkers.length).toBeGreaterThan(0);
+  for (const marker of connectedMarkers) {
+    expect(marker.background).toBe(marker.borderColor);
+  }
   // Closing a sidebar from its own control hands focus back to the toolbar
   // control that opened it. Without that the aside unmounts and focus falls to
   // the document body, so a keyboard reader tabs from the top of the plan to
