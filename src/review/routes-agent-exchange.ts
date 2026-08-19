@@ -32,7 +32,11 @@ import {
   randomId,
   readAgentConnectionEvents,
   readAgentDisconnectRequestFor,
+  declineAgentPrimacy,
+  detachAgentFromRoster,
+  grantAgentPrimacy,
   readAgentPresence,
+  readAgentRoster,
   readProgress,
   writeAgentDisconnectRequest,
   writeSnapshot,
@@ -110,6 +114,7 @@ export const readAgentSnapshot = async (
     ...(presence.writerId === undefined ? {} : { writerId: presence.writerId }),
   });
   const connectionLog = await readAgentConnectionEvents({ store, sessionId });
+  const agents = await readAgentRoster({ store, sessionId });
   return jsonResponse({
     status: 200,
     value: encodeAgentSnapshot({
@@ -124,6 +129,7 @@ export const readAgentSnapshot = async (
           ? {}
           : { disconnectRequestedAtMs: disconnect.requestedAtMs }),
       },
+      agents,
       connectionLog,
       plan: context.resolvedPlanPath,
       agentCommand: context.agentCommand,
@@ -648,4 +654,67 @@ export const cancelPendingAgentRequest = async (
     failureMessage: `Review progress update failed after canceling request ${requestId}`,
   });
   return jsonResponse({ status: 200, value: { request: canceled } });
+};
+
+/**
+ * Applies the reviewer's answer about which agent speaks for this plan.
+ *
+ * The three answers are one route because they are one decision with three
+ * outcomes, and because they share every precondition: a live session, a named
+ * agent, and a roster whose invariant must hold across the write. Splitting
+ * them would duplicate those checks and let the three drift apart.
+ *
+ * Nothing here stops a process. Disconnecting removes the registration, and the
+ * agent is told at its next command; Big Plan cannot kill a process on the
+ * reviewer's machine, and a button implying otherwise would promise what the
+ * product cannot deliver.
+ */
+export const answerAgentPrimacy = async (
+  context: ReviewRouteContext,
+  { body }: ReviewRouteRequest,
+): Promise<ReviewRouteResponse> => {
+  const { store, sessionId } = context;
+  const payload = payloadOf(body);
+  const writerId = payload.writerId;
+  const answer = payload.answer;
+  if (typeof writerId !== "string" || writerId === "") {
+    return refusal({ status: 400, reason: "An answer must name an agent" });
+  }
+  if (
+    answer !== "primary" &&
+    answer !== "observer" &&
+    answer !== "disconnect"
+  ) {
+    return refusal({
+      status: 400,
+      reason: 'An answer must be "primary", "observer", or "disconnect"',
+    });
+  }
+  const attached = await readAgentRoster({ store, sessionId });
+  if (!attached.some((agent) => agent.writerId === writerId)) {
+    return refusal({ status: 404, reason: "That agent is not attached" });
+  }
+  const agents =
+    answer === "primary"
+      ? await grantAgentPrimacy({ store, sessionId, writerId })
+      : answer === "observer"
+        ? await declineAgentPrimacy({ store, sessionId, writerId })
+        : await detachAgentFromRoster({ store, sessionId, writerId });
+  await appendProgressBestEffort({
+    context,
+    event: {
+      sessionId,
+      atMs: Date.now(),
+      stepCode: "agent-primacy-answered",
+      step:
+        answer === "primary"
+          ? "Made this agent the primary"
+          : answer === "observer"
+            ? "Kept this agent as an observer"
+            : "Disconnected this agent",
+      state: "done",
+    },
+    failureMessage: "Could not record the agent primacy answer",
+  });
+  return jsonResponse({ status: 200, value: { agents } });
 };

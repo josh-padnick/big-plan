@@ -12,6 +12,7 @@ import {
   decodeAgentModelIdentity,
   type AgentModelIdentity,
 } from "./agent-model.js";
+import type { AttachedAgent } from "./agent-primacy.js";
 import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
 import {
@@ -131,6 +132,8 @@ export type BrowserConnectionEvent = {
 export type AgentSnapshot = {
   readonly currentSnapshot: string;
   readonly presence: AgentPresence;
+  /** Every agent attached to this review, primary first-come order. */
+  readonly agents: ReadonlyArray<AttachedAgent>;
   readonly requests: ReadonlyArray<AgentRequest>;
   readonly responses: ReadonlyArray<AgentResponse>;
   readonly connectionLog: ReadonlyArray<BrowserConnectionEvent>;
@@ -236,6 +239,7 @@ export type ChangeDispositionStateSource = ChangeDispositionState;
 export type AgentSnapshotSource = {
   readonly currentSnapshot: string;
   readonly presence: unknown;
+  readonly agents: ReadonlyArray<unknown>;
   readonly requests: ReadonlyArray<unknown>;
   readonly responses: ReadonlyArray<unknown>;
   readonly connectionLog: ReadonlyArray<unknown>;
@@ -519,6 +523,7 @@ export const decodeReviewState = (value: unknown): ReviewState => {
 export const emptyAgentSnapshot = (): AgentSnapshot => ({
   currentSnapshot: "",
   presence: { connected: false, state: "waiting" },
+  agents: [],
   requests: [],
   responses: [],
   connectionLog: [],
@@ -740,10 +745,47 @@ export const decodeAgentSnapshot = (value: unknown): AgentSnapshot => {
           : {}),
       }
     : { connected: false, state: "waiting" as const };
+  /*
+  An agent whose record does not decode disappears rather than taking the
+  roster with it: a reviewer must still see the agents that are fine. The role
+  is required, because a record that cannot say whether it owns the plan is
+  exactly the ambiguity this surface exists to remove.
+  */
+  const agents = Array.isArray(value.agents)
+    ? value.agents.flatMap((agent): ReadonlyArray<AttachedAgent> => {
+        if (
+          !isReviewWireRecord(agent) ||
+          typeof agent.writerId !== "string" ||
+          agent.writerId === "" ||
+          (agent.role !== "primary" && agent.role !== "observer") ||
+          typeof agent.attachedAtMs !== "number" ||
+          !Number.isFinite(agent.attachedAtMs) ||
+          typeof agent.signalAtMs !== "number" ||
+          !Number.isFinite(agent.signalAtMs)
+        ) {
+          return [];
+        }
+        const model = decodeAgentModelIdentity(agent.model);
+        return [
+          {
+            writerId: agent.writerId,
+            role: agent.role,
+            attachedAtMs: agent.attachedAtMs,
+            signalAtMs: agent.signalAtMs,
+            ...(typeof agent.requestedPrimacyAtMs === "number" &&
+            Number.isFinite(agent.requestedPrimacyAtMs)
+              ? { requestedPrimacyAtMs: agent.requestedPrimacyAtMs }
+              : {}),
+            ...(model === undefined ? {} : { model }),
+          },
+        ];
+      })
+    : [];
   return {
     currentSnapshot:
       typeof value.currentSnapshot === "string" ? value.currentSnapshot : "",
     presence,
+    agents,
     requests,
     responses,
     connectionLog: Array.isArray(value.connectionLog)
