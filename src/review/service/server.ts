@@ -154,6 +154,7 @@ const refuse = ({
 }): void => {
   response.writeHead(status, {
     "content-type": "text/plain; charset=utf-8",
+    "cache-control": "no-store",
     ...SECURITY_HEADERS,
   });
   response.end(`${reason}\n`);

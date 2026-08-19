@@ -138,8 +138,8 @@ const servicePage = ({
 };
 
 // A clock time is what a person recognises in "the review stopped at 2:41 AM".
-// The date is left off because every case this renders is recent by
-// construction: a link clicked after a session ended.
+// The date is left off because an ending is recent by construction: this is
+// read when a saved link is clicked after the session behind it stopped.
 const clockTime = (atMs: number): string => {
   if (!Number.isFinite(atMs)) return "an unknown time";
   const spoken = new Date(atMs).toLocaleTimeString(undefined, {
@@ -152,6 +152,35 @@ const clockTime = (atMs: number): string => {
     /\s*([AP])\.?M\.?$/iu,
     (_match, half: string) => `${half.toLowerCase()}m`,
   );
+};
+
+// How long this process has been up, which is the one clock in the product
+// that is not recent by construction: the service has no idle timeout, so it
+// may have started days ago and a bare time would read as today. The date
+// appears only when that would be wrong, so a service started today says
+// exactly what it has always said.
+const startedTime = ({
+  atMs,
+  now,
+}: {
+  readonly atMs: number;
+  readonly now: number;
+}): string => {
+  if (!Number.isFinite(atMs)) return clockTime(atMs);
+  const started = new Date(atMs);
+  const today = new Date(now);
+  const startedToday =
+    started.getFullYear() === today.getFullYear() &&
+    started.getMonth() === today.getMonth() &&
+    started.getDate() === today.getDate();
+  if (startedToday) return clockTime(atMs);
+  // Local time throughout, the same frame the clock itself is written in, so
+  // the date turns over when the reader's day does.
+  const day = started.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `${day}, ${clockTime(atMs)}`;
 };
 
 const commandBlock = ({ command }: { readonly command: string }): string => {
@@ -256,14 +285,16 @@ ${commandBlock({ command: "big-plan review <your-plan.mdx>" })}`,
 const welcomeContent = ({
   port,
   startedAtMs,
+  now,
 }: {
   readonly port: number;
   readonly startedAtMs: number;
+  readonly now: number;
 }): string => `<h1${PROSE}>Welcome to Big Plan.</h1>
 <p${PROSE}>Reviewing agent plans is kind of a big deal.</p>
 <section class="${CARD}">
 <h2 class="plan-slide-title m-0 border-b-0 pb-0 text-2xl">Big Plan service</h2>
-<p${PROSE}>Hosted at <span class="font-mono">127.0.0.1:${port}</span>. Running since ${escapeHtml(clockTime(startedAtMs))}.</p>
+<p${PROSE}>Hosted at <span class="font-mono">127.0.0.1:${port}</span>. Running since ${escapeHtml(startedTime({ atMs: startedAtMs, now }))}.</p>
 <p${PROSE}>${button({ label: "Stop the service", variant: "destructive", href: "/stop" })}</p>
 <p${PROSE}><em${PROSE}>Stopping means Big Plans on this machine will no longer be accessible through the web browser.</em></p>
 </section>
@@ -273,13 +304,15 @@ ${tip({ bodyHtml: `<p${PROSE}>Managing the Big Plan service is for advanced user
 export const renderServiceWelcomePage = ({
   port,
   startedAtMs,
+  now = Date.now(),
 }: {
   readonly port: number;
   readonly startedAtMs: number;
+  readonly now?: number;
 }): string =>
   servicePage({
     title: "Welcome to Big Plan",
-    contentHtml: welcomeContent({ port, startedAtMs }),
+    contentHtml: welcomeContent({ port, startedAtMs, now }),
   });
 
 /**
@@ -295,14 +328,16 @@ export const renderServiceStopConfirmPage = ({
   port,
   startedAtMs,
   nonce,
+  now = Date.now(),
 }: {
   readonly port: number;
   readonly startedAtMs: number;
   readonly nonce: string;
+  readonly now?: number;
 }): string =>
   servicePage({
     title: "Stop the service?",
-    contentHtml: welcomeContent({ port, startedAtMs }),
+    contentHtml: welcomeContent({ port, startedAtMs, now }),
     overlayHtml: `<div class="fixed inset-0 z-50 grid place-items-center bg-backdrop/70 p-4" data-modal-backdrop>
 <div class="w-full max-w-lg rounded-xl border border-edge bg-raised p-6 text-ink shadow-floating" role="alertdialog" aria-modal="true" aria-labelledby="service-stop-title" aria-describedby="service-stop-description">
 <h2 class="m-0 text-xl font-semibold" id="service-stop-title">Stop the service?</h2>

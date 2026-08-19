@@ -18,13 +18,19 @@ import {
 const atMs = Date.parse("2026-08-17T14:41:00.000Z");
 
 const welcome = (): string =>
-  renderServiceWelcomePage({ port: 8790, startedAtMs: atMs });
+  renderServiceWelcomePage({ port: 8790, startedAtMs: atMs, now: atMs });
 
 // The page is formatted with whatever locale the machine running it has, so a
-// rule about meridiems can only be checked against a locale the test names.
+// rule about how a moment reads can only be checked against a locale the test
+// names. `now` decides whether the service started today.
 const formatTime = Date.prototype.toLocaleTimeString;
-const welcomeIn = (locale: string, startedAtMs: number): string => {
-  const pinned = vi
+const formatDate = Date.prototype.toLocaleDateString;
+const welcomeIn = (
+  locale: string,
+  startedAtMs: number,
+  now: number = startedAtMs,
+): string => {
+  const pinnedTime = vi
     .spyOn(Date.prototype, "toLocaleTimeString")
     .mockImplementation(function (
       this: Date,
@@ -33,10 +39,20 @@ const welcomeIn = (locale: string, startedAtMs: number): string => {
     ): string {
       return formatTime.call(this, locale, options);
     });
+  const pinnedDate = vi
+    .spyOn(Date.prototype, "toLocaleDateString")
+    .mockImplementation(function (
+      this: Date,
+      _locales?: Intl.LocalesArgument,
+      options?: Intl.DateTimeFormatOptions,
+    ): string {
+      return formatDate.call(this, locale, options);
+    });
   try {
-    return renderServiceWelcomePage({ port: 8790, startedAtMs });
+    return renderServiceWelcomePage({ port: 8790, startedAtMs, now });
   } finally {
-    pinned.mockRestore();
+    pinnedTime.mockRestore();
+    pinnedDate.mockRestore();
   }
 };
 
@@ -101,6 +117,25 @@ describe("the service's pages", () => {
     expect(welcomeIn("en-GB", Date.parse("2026-08-18T18:15:00"))).toContain(
       "Running since 18:15.",
     );
+  });
+
+  it("should name the day when this process did not start today", () => {
+    // The service has no idle timeout, so a bare clock on a process that
+    // started days ago would read as this afternoon.
+    const quarterPastSix = Date.parse("2026-08-18T18:15:00");
+    const threeDaysLater = Date.parse("2026-08-21T09:00:00");
+    expect(welcomeIn("en-US", quarterPastSix, threeDaysLater)).toContain(
+      "Running since Aug 18, 6:15pm.",
+    );
+  });
+
+  it("should say nothing about the day for a service started today", () => {
+    // The approved one-line form, unchanged in the case a reader sees most.
+    const quarterPastSix = Date.parse("2026-08-18T18:15:00");
+    const laterToday = Date.parse("2026-08-18T23:59:00");
+    const html = welcomeIn("en-US", quarterPastSix, laterToday);
+    expect(html).toContain("Running since 6:15pm.");
+    expect(html).not.toMatch(/Running since \w+ \d+,/u);
   });
 
   it("should name who the service page is for", () => {
@@ -230,6 +265,25 @@ describe("the service's pages", () => {
     });
     expect(interrupted).toContain("The review stopped unexpectedly.");
     expect(interrupted).not.toContain("ended normally");
+  });
+
+  it("should keep an ending's clock bare however long ago it was", () => {
+    // An ending is read when a saved link is clicked, so it is recent by
+    // construction and the ratified wording carries no date.
+    const lastYear = Date.parse("2025-01-02T02:41:00");
+    expect(
+      renderPlanEndedPage({
+        planPath: "/work/plan.mdx",
+        reason: "The review session was stopped by the reviewer.",
+        atMs: lastYear,
+      }),
+    ).not.toMatch(/stopped at \w+ \d+,/u);
+    expect(
+      renderPlanInterruptedPage({
+        planPath: "/work/plan.mdx",
+        lastSeenAtMs: lastYear,
+      }),
+    ).not.toMatch(/Last seen at \w+ \d+,/u);
   });
 
   it("should hand over a command that runs for a path with a space in it", () => {

@@ -399,9 +399,12 @@ describe("the service listener", () => {
     // the rules the HTML routes carry are the rules all of them carry.
     for (const response of [
       await get("/healthz"),
+      // Unarmed, so this is the refusal a browser could otherwise cache and
+      // replay in place of the page the stop redirect is aimed at.
       await get("/stopped"),
       await rawResponse({ path: "/healthz", host: "plan-review.evil.test" }),
     ]) {
+      expect(response.headers.get("cache-control")).toBe("no-store");
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
       expect(response.headers.get("referrer-policy")).toBe("no-referrer");
       expect(response.headers.get("content-security-policy")).toContain(
