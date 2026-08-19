@@ -72,15 +72,20 @@ MDX plan source
   -> CLI command
   -> parse and validate allowed Markdown and component syntax
   -> validate and translate built-in components
+  -> React view -> HAST -> document transforms -> block identity
      -> machine output -> machine-readable JSON
-     -> human output -> React view -> HAST -> document transforms
-        -> self-contained HTML review document
+     -> human output -> self-contained HTML review document
   -> validate and human output -> linting rules on the authored plan
 ```
 
 Each component validates its authored attributes and content into plain data describing what it should show.
-Machine delivery collects that data as JSON.
-Human delivery gives the same data to the component's React view, crosses one React-to-HAST boundary, applies document-wide transforms, and packages inert HTML.
+Both deliveries then give that data to the component's React view, cross one React-to-HAST boundary, and apply document-wide transforms; only what they publish differs.
+Human delivery packages the result as inert HTML.
+Machine delivery publishes the collected models as JSON, each carrying the block address its rendered root was given, which is why it renders too: a block address only exists over a finished deck.
+The two differ in exactly one other respect, and it is a consequence rather than a choice: machine delivery makes a component's model carry its nested components' presentation, because no later pass reaches a deferred placeholder that only a model holds.
+
+Every component-root block descriptor carries the authored name and the model that produced it, joined by a delivery-local instance key that the pipeline strips before serialization.
+That join is what lets a document-wide pass read what a component asserted instead of sniffing the markup the component just rendered, and it is why a rendered document is byte-identical with the join in place.
 Validation renders the plan in memory while collecting the same component models in one pass.
 It discards the generated HTML, then applies its registered linting rules to the authored plan.
 React is a presentation-edge implementation tool.
