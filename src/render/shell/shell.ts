@@ -265,7 +265,7 @@ const renderPreferencesSection = ({
 
 // A settings page: its own heading, its own explanation, and one control
 // group. Beside the sidebar the heading is the page title, so the pane says
-// what it is once the reviewer's eye has left the rail. Stacked under the
+// what it is once the reviewer's eye has left the sidebar. Stacked under the
 // sidebar it would only repeat the chip one line above it, so there it stays
 // in the accessibility tree and out of the reading order.
 //

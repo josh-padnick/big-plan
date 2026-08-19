@@ -70,14 +70,21 @@ export const PREFERENCES_SCRIPT = `<script>
     } catch (_) {}
   };
 
-  // The field shows what an approval would actually carry every time the sheet
-  // opens, so a stored note the contract cannot honour - unreadable,
-  // over-long, or blank - shows as the default rather than as itself. src/render/preferences.ts owns that rule and
+  // What an approval would actually carry, or null where storage refused to
+  // answer at all. A stored note the contract cannot honour - unreadable,
+  // over-long, or blank - reads as the default rather than as itself, but a
+  // browser that will not open storage is saying nothing about the note rather
+  // than saying there is none. src/render/preferences.ts owns that rule and
   // src/review/shared/approval-message.ts is the island's copy of it; this is
   // the same rule again, because the delivered script imports neither.
   const storedMessage = () => {
+    let raw;
     try {
-      const raw = localStorage.getItem(messageKey);
+      raw = localStorage.getItem(messageKey);
+    } catch (_) {
+      return null;
+    }
+    try {
       if (raw === null) return defaultMessage;
       const record = JSON.parse(raw);
       if (
@@ -94,6 +101,16 @@ export const PREFERENCES_SCRIPT = `<script>
     } catch (_) {
       return defaultMessage;
     }
+  };
+
+  // The field has to show what an approval would carry at every moment it is
+  // visible, so both boundaries where the reviewer can leave it disagreeing
+  // with the record - opening the sheet and leaving the field - read the record
+  // back. Where storage refused to answer, the text on screen is the only copy
+  // of the note the product still has, so it is kept rather than replaced.
+  const normalizeMessageField = () => {
+    const message = storedMessage();
+    if (message !== null) messageInput.value = message;
   };
 
   // The default is what absence already means, so storing it would only make a
@@ -250,7 +267,7 @@ export const PREFERENCES_SCRIPT = `<script>
     openButton.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
       isolate();
-      messageInput.value = storedMessage();
+      normalizeMessageField();
       // The sidebar is where reading the sheet starts, so the open dialog hands
       // the keyboard to the selected item rather than to a control inside a
       // panel the reviewer may not be looking at.
@@ -348,6 +365,12 @@ export const PREFERENCES_SCRIPT = `<script>
     });
   }
   messageInput.addEventListener("input", saveMessage);
+  // Blank is the one value the record cannot hold, so it is the one value the
+  // field cannot be left holding either. Anything the reviewer actually wrote
+  // is left exactly as they typed it.
+  messageInput.addEventListener("blur", () => {
+    if (messageInput.value.trim() === "") normalizeMessageField();
+  });
   messageReset.addEventListener("click", (event) => {
     event.preventDefault();
     try {

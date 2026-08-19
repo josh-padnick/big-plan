@@ -214,10 +214,10 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
     expect(cards.map(({ height }) => height)).toEqual([112, 112, 112]);
     expect(new Set(cards.map(({ left }) => left)).size).toBe(3);
     expect(new Set(cards.map(({ top }) => top)).size).toBe(1);
-    // A narrow rail beside the page it opens, never two equal columns: the
+    // A narrow sidebar beside the page it opens, never two equal columns: the
     // content pane takes the clear majority of the sheet.
     const layout = await dialog.evaluate((element) => {
-      const railRect = element
+      const sidebarRect = element
         .querySelector("[data-preferences-sections]")
         .getBoundingClientRect();
       const tabs = Array.from(
@@ -229,20 +229,20 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
         )
         .getBoundingClientRect();
       return {
-        railWidth: Math.round(railRect.width),
+        sidebarWidth: Math.round(sidebarRect.width),
         paneWidth: Math.round(pane.width),
-        railLeftOfPane: railRect.right <= pane.left,
+        sidebarLeftOfPane: sidebarRect.right <= pane.left,
         tabCount: tabs.length,
         tabColumns: new Set(tabs.map((tab) => Math.round(tab.left))).size,
         tabRows: new Set(tabs.map((tab) => Math.round(tab.top))).size,
       };
     });
-    expect(layout.railLeftOfPane).toBe(true);
+    expect(layout.sidebarLeftOfPane).toBe(true);
     // One column, one row per setting: the sidebar grows downward beside the
     // page, whatever it has grown to hold.
     expect(layout.tabColumns).toBe(1);
     expect(layout.tabRows).toBe(layout.tabCount);
-    expect(layout.paneWidth).toBeGreaterThan(layout.railWidth * 2);
+    expect(layout.paneWidth).toBeGreaterThan(layout.sidebarWidth * 2);
     await openSection(page, "Color theme");
     const themes = await dialog
       .locator("label:has([data-preference-palette])")
@@ -936,6 +936,20 @@ test("should keep the approval message the reviewer wrote across a reload", asyn
         APPROVAL_MESSAGE_STORAGE_KEY,
       ),
     ).toBeNull();
+    // Mid-edit the field is the reviewer's, so what they typed stays put.
+    await expect(message).toHaveValue("   ");
+    // Leaving the field is the first moment they are done with it, and the
+    // field must never be left showing a note an approval would not send - a
+    // reviewer who clears it and walks away without reopening the sheet
+    // included.
+    await message.blur();
+    await expect(message).toHaveValue(DEFAULT_APPROVAL_MESSAGE);
+    expect(
+      await page.evaluate(
+        (key) => localStorage.getItem(key),
+        APPROVAL_MESSAGE_STORAGE_KEY,
+      ),
+    ).toBeNull();
     await page.keyboard.press("Escape");
     await settings.click();
     await openSection(page, "Approval message");
@@ -998,6 +1012,40 @@ test("should keep the approval message the reviewer wrote across a reload", asyn
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
+});
+
+test("should keep a note the browser refused to store rather than replacing it", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  // Where the browser refuses storage - blocked for the origin, or a file the
+  // UA will not give storage to - the reviewer's typed note is the only copy
+  // the product still has. Reopening the sheet must not overwrite it with the
+  // standard wording, because there is nowhere to recover it from.
+  await page.addInitScript(() => {
+    const refuse = () => {
+      throw new DOMException("storage is blocked", "SecurityError");
+    };
+    for (const method of ["getItem", "setItem", "removeItem"]) {
+      Object.defineProperty(Storage.prototype, method, {
+        configurable: true,
+        value: refuse,
+      });
+    }
+  });
+  await page.goto(sampleViewerUrl);
+  const settings = page.getByRole("button", { name: "Open settings" });
+  const message = page.getByRole("textbox", { name: "Message", exact: true });
+  const written = "Land the schema change first, then the read path.";
+
+  await settings.click();
+  await openSection(page, "Approval message");
+  await expect(message).toHaveValue(DEFAULT_APPROVAL_MESSAGE);
+  await message.fill(written);
+  await page.keyboard.press("Escape");
+  await settings.click();
+  await openSection(page, "Approval message");
+  await expect(message).toHaveValue(written);
 });
 
 test("should open settings on the page an approve dialog asks for", async ({
