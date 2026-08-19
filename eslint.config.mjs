@@ -476,6 +476,28 @@ export default tseslint.config(
     },
   },
   {
+    // A list laid out as a grid must say what its column is. A grid item keeps
+    // `min-width: auto`, so an implicit track is floored at the widest item's
+    // min-content width and the whole list grows past its container - which a
+    // scrolling panel then hides rather than reports. That is how one pasted
+    // code line clipped every card in the feedback sidebar (BIG-185). Naming
+    // the track (`grid-cols-[minmax(0,1fr)]`) is the one-word answer, and it
+    // is fenced here because the failure is silent: the markup is valid, the
+    // cascade is clean, and only a reader at a narrow width ever sees it.
+    files: ["src/**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "Literal[value=/^(?!.*grid-cols-)(?=.*(?:^|[ ])list-none(?:[ ]|$))(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/], TemplateElement[value.raw=/^(?!.*grid-cols-)(?=.*(?:^|[ ])list-none(?:[ ]|$))(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/]",
+          message:
+            "A grid list must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows its container.",
+        },
+      ],
+    },
+  },
+  {
     // Node-runtime JavaScript: the bin shim and build-time generators.
     files: ["bin/**/*.mjs", "scripts/**/*.mjs"],
     languageOptions: { globals: globals.node },
