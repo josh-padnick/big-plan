@@ -17,6 +17,7 @@ import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
 import {
   type ReviewInput,
   type ReviewInputContract,
+  type ReviewInputKind,
   type ReviewInputState,
 } from "./input-contract.js";
 
@@ -407,6 +408,10 @@ export const encodeReviewInputContract = (
   value: ReviewInputContract,
 ): ReviewInputContract => value;
 
+const INPUT_KINDS: ReadonlySet<string> = new Set<ReviewInputKind>([
+  "decision",
+  "change-set",
+]);
 const INPUT_STATES: ReadonlySet<string> = new Set<ReviewInputState>([
   "answered",
   "unanswered",
@@ -417,11 +422,8 @@ const INPUT_STATES: ReadonlySet<string> = new Set<ReviewInputState>([
  * Decodes the input contract, or says it could not.
  *
  * A body this build cannot read is reported as unreadable rather than as an
- * empty contract, because the two mean opposite things to a reader: one says
- * nobody could answer what the review needs, the other says the review needs
- * nothing. A revision it cannot order on is unreadable for the same reason -
- * the guard that drops older responses cannot hold a body it cannot place, and
- * the first read would otherwise slip past it and present as a definite answer.
+ * empty contract. Both source revisions must be orderable because either one
+ * going backwards would let an older response displace newer reviewer work.
  */
 export const decodeReviewInputContract = (
   value: unknown,
@@ -429,13 +431,17 @@ export const decodeReviewInputContract = (
   if (!isReviewWireRecord(value) || !Array.isArray(value.inputs)) {
     return undefined;
   }
-  const revision = storedRevision(value.revision);
-  if (revision < 0) return undefined;
+  const answersRevision = storedRevision(value.answersRevision);
+  const dispositionsRevision = storedRevision(value.dispositionsRevision);
+  if (answersRevision < 0 || dispositionsRevision < 0) return undefined;
   return {
-    revision,
+    answersRevision,
+    dispositionsRevision,
     inputs: value.inputs.flatMap((input): ReadonlyArray<ReviewInput> =>
       isReviewWireRecord(input) &&
       typeof input.inputId === "string" &&
+      typeof input.kind === "string" &&
+      INPUT_KINDS.has(input.kind) &&
       typeof input.label === "string" &&
       typeof input.isCritical === "boolean" &&
       typeof input.state === "string" &&
@@ -444,6 +450,7 @@ export const decodeReviewInputContract = (
         ? [
             {
               inputId: input.inputId,
+              kind: input.kind as ReviewInputKind,
               label: input.label,
               isCritical: input.isCritical,
               state: input.state as ReviewInputState,

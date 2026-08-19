@@ -3,17 +3,20 @@
 // turns that set into a judgment about whether the plan is ready.
 //
 // The contract exists because "is this plan ready to approve" was previously
-// unanswerable. The answers record knows only what was answered, never what
-// the plan asked in total, so it cannot say what is still outstanding; a
-// surface counting it alone would report readiness for questions nobody had
-// reached. The contract covers the plan's decisions for now, and grows to the
-// rest of what a review waits on as each of those becomes enumerable.
+// unanswerable. Two records hold the reviewer's work - decision answers and
+// change dispositions - and each answers only its own question. Neither knows
+// what the plan asks in total, so neither can say what is still outstanding,
+// and a surface that counted one of them would report readiness while the
+// other still held open work.
 //
 // One input is one obligation the reviewer either has met or has not. Its
 // state is derived, never stored: an answer that stopped applying is stale
 // rather than answered, and restoring the wording it answered makes it
 // answered again, exactly as the answers store's currency predicate decides.
 // Nothing here writes, and nothing here remembers.
+
+/** What kind of thing a review is waiting on. */
+export type ReviewInputKind = "decision" | "change-set";
 
 /**
  * Where one input stands.
@@ -27,14 +30,17 @@ export type ReviewInputState = "answered" | "unanswered" | "stale";
 
 /** One thing the review expects from the reviewer before the plan is approved. */
 export type ReviewInput = {
-  /** Stable within one plan: the decision's own id. */
+  /** Stable within one plan: a decision id, or a change-set id. */
   readonly inputId: string;
+  readonly kind: ReviewInputKind;
   /** What this input is, in the reviewer's words rather than an id. */
   readonly label: string;
   /**
    * True only where the plan's author said this question must be settled.
-   * Criticality is an authoring judgment about a question, so nothing derives
-   * it: only the author knows which answers would change what gets built.
+   * A change set is never critical: criticality is an authoring judgment about
+   * a question, and no author writes a change set. An unreviewed change set is
+   * still open work and still counts against readiness; it just does not carry
+   * the author's claim that approving without it would be wrong.
    */
   readonly isCritical: boolean;
   readonly state: ReviewInputState;
@@ -45,14 +51,16 @@ export type ReviewInput = {
 /**
  * The whole contract as one response.
  *
- * The source record's revision travels with it because the inputs alone do not
- * say which read is newer. A browser applies a response only when that count
- * has not gone backwards, which is the same guard the record already gives its
- * own reader.
+ * Both source revisions travel because the contract is derived from two
+ * independent records, each with its own monotonic write count. A browser
+ * treats a response as newer only when neither revision went backwards, which
+ * is the same guard each record already gives its own reader and the only one
+ * that holds when two of them are joined.
  */
 export type ReviewInputContract = {
   readonly inputs: ReadonlyArray<ReviewInput>;
-  readonly revision: number;
+  readonly answersRevision: number;
+  readonly dispositionsRevision: number;
 };
 
 /** How much of the contract is met, and what is still owed. */
@@ -92,5 +100,6 @@ export const reviewInputStanding = (
 /** The empty contract a browser holds before the runtime has answered. */
 export const emptyReviewInputContract = (): ReviewInputContract => ({
   inputs: [],
-  revision: -1,
+  answersRevision: -1,
+  dispositionsRevision: -1,
 });

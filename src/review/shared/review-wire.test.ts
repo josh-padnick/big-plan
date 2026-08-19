@@ -626,7 +626,18 @@ describe("review wire contract", () => {
       // slip past the guard on the first read and present as a definite
       // answer about the plan. It is reported unreadable instead.
       expect(
-        decodeReviewInputContract({ inputs: [], revision }),
+        decodeReviewInputContract({
+          inputs: [],
+          answersRevision: revision,
+          dispositionsRevision: 0,
+        }),
+      ).toBeUndefined();
+      expect(
+        decodeReviewInputContract({
+          inputs: [],
+          answersRevision: 0,
+          dispositionsRevision: revision,
+        }),
       ).toBeUndefined();
     }
   });
@@ -638,9 +649,16 @@ describe("review wire contract", () => {
     for (const body of [null, "contract", 7, {}, { inputs: "none" }]) {
       expect(decodeReviewInputContract(body)).toBeUndefined();
     }
-    expect(decodeReviewInputContract({ inputs: [], revision: 0 })).toEqual({
+    expect(
+      decodeReviewInputContract({
+        inputs: [],
+        answersRevision: 0,
+        dispositionsRevision: 0,
+      }),
+    ).toEqual({
       inputs: [],
-      revision: 0,
+      answersRevision: 0,
+      dispositionsRevision: 0,
     });
   });
 
@@ -655,8 +673,15 @@ describe("review wire contract", () => {
         revision,
       );
       expect(
-        decodeReviewInputContract({ inputs: [], revision })?.revision,
-      ).toBe(revision);
+        decodeReviewInputContract({
+          inputs: [],
+          answersRevision: revision,
+          dispositionsRevision: revision,
+        }),
+      ).toMatchObject({
+        answersRevision: revision,
+        dispositionsRevision: revision,
+      });
     }
   });
 });

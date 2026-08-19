@@ -44,6 +44,7 @@ describe("committed change sets", () => {
         provenance: "feedback",
         baseSnapshot: BASE,
         resultSnapshot: SECOND,
+        priorResultSnapshots: [FIRST],
         committedAt: "2026-08-17T12:05:00.000Z",
       },
     ]);

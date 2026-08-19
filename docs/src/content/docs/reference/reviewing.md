@@ -150,9 +150,10 @@ In a standalone rendered document, an answer lasts only for the reading session 
 
 ## What the review is waiting for
 
-A live review's **Inputs** tab lists what the review is waiting on: for now, every decision the plan asks.
+A live review's **Inputs** tab lists every decision the plan asks and every non-empty change set an agent publishes.
 Each row says where that input stands - answered, not answered, or stale - and a decision the plan's author marked `critical` says so beside its state.
-Selecting a row scrolls the plan to that decision's card.
+Change sets are never critical and become answered once every changed place is accepted.
+Selecting a decision row scrolls the plan to that decision's card.
 
 The list is the runtime's answer rather than the page's, so two browsers reading the same review read the same list, and a reload cannot invent a different one.
 **Stale** is its own state rather than a kind of unanswered: you answered, and the plan moved underneath the answer.

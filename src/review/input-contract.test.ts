@@ -4,8 +4,14 @@
 
 import { describe, expect, it } from "vitest";
 import { deriveDecisionInventory } from "./decision-inventory.js";
-import { reviewInputs } from "./input-contract.js";
+import {
+  changeSetInputs,
+  reviewInputs,
+  type ChangeSetInput,
+  type ChangeSetPlaces,
+} from "./input-contract.js";
 import type { StagedInputs } from "./plan-inputs-store.js";
+import type { ChangeDispositionState } from "./shared/change-disposition.js";
 
 const decision = ({
   question,
@@ -29,6 +35,11 @@ const inventoryOf = (markdown: string) =>
   deriveDecisionInventory({ markdown, fallbackTitle: "plan" });
 
 const NO_ANSWERS: StagedInputs = { version: 1, revision: 0, answers: [] };
+const NO_CHANGE_SETS: ReadonlyArray<ChangeSetInput> = [];
+const NO_DISPOSITIONS: ChangeDispositionState = {
+  revision: 0,
+  accepted: [],
+};
 
 const answerFor = ({
   markdown,
@@ -60,13 +71,20 @@ const contractOf = ({
 }: {
   readonly markdown: string;
   readonly inputs: StagedInputs;
-}) => reviewInputs({ inventory: inventoryOf(markdown), inputs });
+}) =>
+  reviewInputs({
+    inventory: inventoryOf(markdown),
+    inputs,
+    changeSets: NO_CHANGE_SETS,
+    dispositions: NO_DISPOSITIONS,
+  });
 
 describe("the review's decision inputs", () => {
   it("should list every decision the plan asks with its criticality", () => {
     expect(contractOf({ markdown: PLAN, inputs: NO_ANSWERS })).toEqual([
       {
         inputId: "quick-decision-do-we-ship-behind-a-flag",
+        kind: "decision",
         label: "Do we ship behind a flag?",
         isCritical: true,
         state: "unanswered",
@@ -74,6 +92,7 @@ describe("the review's decision inputs", () => {
       },
       {
         inputId: "quick-decision-do-we-rename-the-endpoint",
+        kind: "decision",
         label: "Do we rename the endpoint?",
         isCritical: false,
         state: "unanswered",
@@ -131,5 +150,88 @@ describe("the review's decision inputs", () => {
 
     expect(flagged?.state).toBe("stale");
     expect(flagged?.detail).toBe("This decision changed after it was answered");
+  });
+});
+
+const PLACE_IDS = ["place-one", "place-two"];
+const CHANGE_SET = {
+  changeSetId: "abc1",
+  label: "Name the rollback owner",
+  from: "1111111111111111",
+  to: "2222222222222222",
+  priorResultSnapshots: [] as ReadonlyArray<string>,
+  places: { kind: "known", placeIds: PLACE_IDS } as ChangeSetPlaces,
+};
+
+const acceptedAt = ({
+  from,
+  to,
+}: {
+  readonly from: string;
+  readonly to: string;
+}) =>
+  PLACE_IDS.map((placeId) => ({
+    from,
+    to,
+    placeId,
+    acceptedAt: "2026-08-18T00:00:00.000Z",
+  }));
+
+describe("the review's change-set inputs", () => {
+  it("should list an open change set as non-critical", () => {
+    expect(
+      changeSetInputs({
+        changeSets: [CHANGE_SET],
+        dispositions: NO_DISPOSITIONS,
+      }),
+    ).toEqual([
+      {
+        inputId: "abc1",
+        kind: "change-set",
+        label: "Name the rollback owner",
+        isCritical: false,
+        state: "unanswered",
+        detail: "0 of 2 changes accepted",
+      },
+    ]);
+  });
+
+  it("should answer a change set only once every place is accepted", () => {
+    expect(
+      changeSetInputs({
+        changeSets: [CHANGE_SET],
+        dispositions: {
+          revision: 1,
+          accepted: acceptedAt({
+            from: CHANGE_SET.from,
+            to: CHANGE_SET.to,
+          }),
+        },
+      })[0]?.state,
+    ).toBe("answered");
+  });
+
+  it("should call a change set stale when a later revision reopens it", () => {
+    const [revised] = changeSetInputs({
+      changeSets: [
+        {
+          ...CHANGE_SET,
+          to: "3333333333333333",
+          priorResultSnapshots: [CHANGE_SET.to],
+        },
+      ],
+      dispositions: {
+        revision: 2,
+        accepted: acceptedAt({
+          from: CHANGE_SET.from,
+          to: CHANGE_SET.to,
+        }),
+      },
+    });
+
+    expect(revised?.state).toBe("stale");
+    expect(revised?.detail).toBe(
+      "Revised after review; 0 of 2 changes accepted",
+    );
   });
 });

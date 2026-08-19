@@ -6,6 +6,7 @@ import { reviewInputStanding, type ReviewInput } from "./input-contract.js";
 
 const input = (overrides: Partial<ReviewInput> = {}): ReviewInput => ({
   inputId: "decision-one",
+  kind: "decision",
   label: "Which release path?",
   isCritical: false,
   state: "unanswered",

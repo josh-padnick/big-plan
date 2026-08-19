@@ -3,19 +3,20 @@
 //
 // The list is the runtime's answer, not this panel's. Every state shown here -
 // answered, not answered, stale, critical - is derived server-side from the
-// plan the runtime compiled and the record the reviewer's answers go into, so
-// a second browser reading the same review reads the same contract and a
+// plan the runtime compiled and the two records the reviewer's work goes into,
+// so a second browser reading the same review reads the same contract and a
 // reload cannot invent a different one.
 //
 // The panel refetches on exactly the moments this page applied a newer copy of
-// the record the contract is derived from, and on a replaced article. A clock
-// of its own would make it more current than the decision cards that same
-// record drives, and two surfaces disagreeing about one review is the failure
-// the contract exists to remove.
+// a record the contract joins, and on a replaced article. A clock of its own
+// would make it more current than the decision cards and change-set controls
+// those records drive, and two surfaces disagreeing about one review is the
+// failure the contract exists to remove.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CHECK_ICON } from "../../icons/lucide/check.js";
 import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
+import { FILE_DIFF_ICON } from "../../icons/lucide/file-diff.js";
 import { OCTAGON_ALERT_ICON } from "../../icons/lucide/octagon-alert.js";
 import { ROTATE_CCW_ICON } from "../../icons/lucide/rotate-ccw.js";
 import { TRIANGLE_ALERT_ICON } from "../../icons/lucide/triangle-alert.js";
@@ -123,9 +124,8 @@ export const inputsPanelReading = ({
 /**
  * Keeps the panel's copy of the contract equal to the runtime's.
  *
- * The contract is derived from a record that carries its own write count, so a
- * response counts as newer only when that count has not gone backwards. That is
- * the same guard the record gives its own reader.
+ * The contract joins two records with independent write counts, so a response
+ * counts as newer only when neither count went backwards.
  *
  * A read that fails once a contract is already shown leaves it shown: the
  * reviewer is better served by the list the runtime last gave than by losing it
@@ -142,7 +142,7 @@ const useReviewInputContract = (): {
     emptyReviewInputContract,
   );
   const [standing, setStanding] = useState<ContractReadStanding>("reading");
-  const applied = useRef(-1);
+  const applied = useRef({ answers: -1, dispositions: -1 });
   const reader = useRef<() => void>(() => undefined);
 
   const apply = useCallback((value: unknown): void => {
@@ -151,8 +151,16 @@ const useReviewInputContract = (): {
       setStanding((current) => (current === "read" ? current : "unavailable"));
       return;
     }
-    if (next.revision < applied.current) return;
-    applied.current = next.revision;
+    if (
+      next.answersRevision < applied.current.answers ||
+      next.dispositionsRevision < applied.current.dispositions
+    ) {
+      return;
+    }
+    applied.current = {
+      answers: next.answersRevision,
+      dispositions: next.dispositionsRevision,
+    };
     setContract(next);
     setStanding("read");
   }, []);
@@ -189,8 +197,8 @@ const useReviewInputContract = (): {
   return { contract, standing, readAgain };
 };
 
-// A decision the reader can be sent to is worth sending them to, so the whole
-// row is the way there.
+// A decision can be a destination. A change set lives in a tour, so its row
+// states where it stands without pretending to be a destination.
 const showDecision = (decisionId: string): void => {
   const decision = liveDecisionFigure(decisionId);
   if ("missing" in decision) return;
@@ -200,18 +208,9 @@ const showDecision = (decisionId: string): void => {
   });
 };
 
-const InputRow = ({ input }: { readonly input: ReviewInput }) => (
-  <li
-    className="min-w-0 rounded-lg bg-surface"
-    data-review-input={input.inputId}
-    data-review-input-state={input.state}
-    {...(input.isCritical ? { "data-review-input-critical": "" } : {})}
-  >
-    <button
-      type="button"
-      className="block w-full cursor-pointer rounded-lg border border-transparent bg-transparent p-3 text-left transition hover:bg-raised hover:shadow-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
-      onClick={() => showDecision(input.inputId)}
-    >
+const InputRow = ({ input }: { readonly input: ReviewInput }) => {
+  const body = (
+    <>
       <span className="flex flex-wrap items-center gap-1.5">
         <Badge size="status" tone={STATE_TONES[input.state]}>
           <span className="mr-1 inline-flex size-3" aria-hidden="true">
@@ -224,14 +223,42 @@ const InputRow = ({ input }: { readonly input: ReviewInput }) => (
             {"Critical"}
           </Badge>
         ) : null}
+        <span className="ml-auto inline-flex items-center gap-1 text-2xs tracking-caps text-subtle uppercase">
+          {input.kind === "decision" ? null : (
+            <span className="inline-flex size-3" aria-hidden="true">
+              <Icon icon={FILE_DIFF_ICON} />
+            </span>
+          )}
+          {input.kind === "decision" ? "Decision" : "Changes"}
+        </span>
       </span>
       <span className="mt-1.5 block text-sm font-medium text-ink">
         {input.label}
       </span>
       <span className="mt-0.5 block text-xs text-muted">{input.detail}</span>
-    </button>
-  </li>
-);
+    </>
+  );
+  return (
+    <li
+      className="min-w-0 rounded-lg bg-surface"
+      data-review-input={input.inputId}
+      data-review-input-state={input.state}
+      {...(input.isCritical ? { "data-review-input-critical": "" } : {})}
+    >
+      {input.kind === "decision" ? (
+        <button
+          type="button"
+          className="block w-full cursor-pointer rounded-lg border border-transparent bg-transparent p-3 text-left transition hover:bg-raised hover:shadow-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
+          onClick={() => showDecision(input.inputId)}
+        >
+          {body}
+        </button>
+      ) : (
+        <div className="p-3">{body}</div>
+      )}
+    </li>
+  );
+};
 
 /**
  * Says that nobody could answer what the review is waiting for, and offers the
@@ -334,7 +361,7 @@ export const InputsSurface = () => {
       ) : (
         <p className="m-0 text-sm text-muted">
           {reading.body === "nothing"
-            ? "This plan asks nothing of you yet. Decisions the plan raises appear here as the review goes on."
+            ? "This plan asks nothing of you yet. Open decisions and the change sets an agent publishes appear here as the review goes on."
             : "Reading what this review expects…"}
         </p>
       )}
