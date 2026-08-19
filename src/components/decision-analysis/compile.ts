@@ -59,6 +59,7 @@ const DECISION_SCHEMA = {
   state: { kind: "enum", values: DECISION_STATUSES, required: true },
   interaction: { kind: "enum", values: DECISION_INTERACTIONS, required: true },
   scoring: { kind: "enum", values: DECISION_SCORING },
+  critical: { kind: "booleanShorthand" },
 } satisfies ComponentAttributeSchema;
 
 const CRITERION_SCHEMA = {
@@ -557,6 +558,20 @@ export const compileDecisionAnalysisComponent = ({
   const interaction = validated.interaction ?? "audit";
   const status = state === "proposed" ? "open" : state;
   const scoring = validated.scoring ?? "qualitative";
+  // Criticality is an obligation to answer, so it is only meaningful on a
+  // question the reader can answer. Saying so here rather than dropping the
+  // attribute quietly is what stops a settled record from being authored as a
+  // blocker the approval surface would then have to explain away.
+  if (
+    validated.critical === true &&
+    !(status === "open" && interaction === "choose")
+  ) {
+    diagnostics.add({
+      message:
+        'DecisionAnalysis marks "critical" only with state="proposed" and interaction="choose"',
+      position,
+    });
+  }
   const id = ids.allocate({
     prefix: "decision-analysis",
     label: question,
@@ -636,6 +651,7 @@ export const compileDecisionAnalysisComponent = ({
     layout: "matrix",
     scoring,
     interaction,
+    isCritical: validated.critical === true,
     context: meaningfulChildren(children),
     detail,
     criteria,

@@ -18,7 +18,8 @@ description: A compact option-by-option choice with inline considerations.
 </Decision>
 ```
 
-`question` is required. Add at least two uniquely titled options and at most one `recommended` option. A `Consideration` requires `label` and `verdict`; its optional `tone` is `good`, `bad`, `mixed`, or `neutral`.
+`question` is required. Add at least two uniquely titled options and at most one `recommended` option.
+Add `critical` when the reviewer must settle this question before work begins; the card says so, and the review's [Inputs list](/reference/reviewing/#what-the-review-is-waiting-for) marks it. A `Consideration` requires `label` and `verdict`; its optional `tone` is `good`, `bad`, `mixed`, or `neutral`.
 
 A `Consideration` body defines its label: the first body authored for a label becomes the definition that label reveals on hover and keyboard focus.
 A label authored without a body stays plain text.

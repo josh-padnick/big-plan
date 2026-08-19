@@ -26,6 +26,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { ACTIVITY_ICON } from "../../icons/lucide/activity.js";
+import { CIRCLE_QUESTION_MARK_ICON } from "../../icons/lucide/circle-question-mark.js";
 import { CIRCLE_X_ICON } from "../../icons/lucide/circle-x.js";
 import { HOURGLASS_ICON } from "../../icons/lucide/hourglass.js";
 import { MESSAGE_SQUARE_ICON } from "../../icons/lucide/message-square.js";
@@ -86,7 +87,6 @@ import {
   decodeAgentSnapshot as parseAgentSnapshot,
   decodeSnapshotDiff as parseSnapshotDiff,
   decodeProgress as parseProgress,
-  decodeReviewState as parseReviewState,
   decodeReviewSnapshot as parseSnapshot,
   decodeRuntimeSession as parseRuntimeSession,
   emptyAgentSnapshot,
@@ -105,6 +105,7 @@ import {
 import { AgentHealthAlert } from "./agent-connection.browser.js";
 import { AgentSurface } from "./agent-surface.browser.js";
 import { ChatSurface } from "./chat-surface.browser.js";
+import { InputsSurface } from "./inputs-surface.browser.js";
 import {
   batchSectionTone,
   CommentsSurface,
@@ -193,6 +194,7 @@ import {
   runtimeIdentity,
   type RuntimeIdentity,
 } from "./review-runtime-client.browser.js";
+import { applyAnswersRecord } from "./answers-record.browser.js";
 import {
   AlertDialog,
   Badge,
@@ -365,10 +367,13 @@ type SelectionControlState = {
   readonly left: number;
 };
 
-type FeedbackTab = "comments" | "chat" | "agent";
+type FeedbackTab = "comments" | "chat" | "inputs" | "agent";
+// Inputs is a live-runtime tab because its whole content is the runtime's
+// derived contract; a document opened without one has nothing to show there.
 const LIVE_FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = [
   "comments",
   "chat",
+  "inputs",
   "agent",
 ];
 const STATIC_FEEDBACK_TABS: ReadonlyArray<FeedbackTab> = ["comments", "chat"];
@@ -4529,16 +4534,15 @@ export const ReviewController = () => {
     },
     [],
   );
-  // Every response from the answers store carries the whole current record and
-  // the revision that produced it, so applying one is the only way this page
-  // learns what is stored. A strictly older revision lost a race with a write
-  // that has already been applied and is dropped without comment.
   const applyAnswersResponse = useCallback((value: unknown): void => {
-    const state = parseReviewState(value);
-    if (state.revision < appliedAnswerRevision.current) return;
-    appliedAnswerRevision.current = state.revision;
-    setStoredAnswers(state.answers);
-    setSupersededDecisionIds(state.supersededDecisionIds);
+    applyAnswersRecord({
+      value,
+      applied: appliedAnswerRevision,
+      show: (state) => {
+        setStoredAnswers(state.answers);
+        setSupersededDecisionIds(state.supersededDecisionIds);
+      },
+    });
   }, []);
   const flushPendingDecisionInputs = useCallback(async (): Promise<void> => {
     if (
@@ -6730,19 +6734,34 @@ export const ReviewController = () => {
                 Chat
               </button>
               {identity === null ? null : (
-                <button
-                  id="review-tab-agent"
-                  type="button"
-                  className={FEEDBACK_TAB_CLASS}
-                  role="tab"
-                  aria-controls="review-panel-agent"
-                  aria-selected={tab === "agent"}
-                  tabIndex={tab === "agent" ? 0 : -1}
-                  onClick={() => setTab("agent")}
-                >
-                  <Icon icon={ACTIVITY_ICON} />
-                  Agent
-                </button>
+                <>
+                  <button
+                    id="review-tab-inputs"
+                    type="button"
+                    className={FEEDBACK_TAB_CLASS}
+                    role="tab"
+                    aria-controls="review-panel-inputs"
+                    aria-selected={tab === "inputs"}
+                    tabIndex={tab === "inputs" ? 0 : -1}
+                    onClick={() => setTab("inputs")}
+                  >
+                    <Icon icon={CIRCLE_QUESTION_MARK_ICON} />
+                    Inputs
+                  </button>
+                  <button
+                    id="review-tab-agent"
+                    type="button"
+                    className={FEEDBACK_TAB_CLASS}
+                    role="tab"
+                    aria-controls="review-panel-agent"
+                    aria-selected={tab === "agent"}
+                    tabIndex={tab === "agent" ? 0 : -1}
+                    onClick={() => setTab("agent")}
+                  >
+                    <Icon icon={ACTIVITY_ICON} />
+                    Agent
+                  </button>
+                </>
               )}
             </div>
             <Button
@@ -7014,6 +7033,7 @@ export const ReviewController = () => {
               }}
             />
           ) : null}
+          {tab === "inputs" && identity !== null ? <InputsSurface /> : null}
           {tab === "agent" && identity !== null ? (
             <AgentSurface
               model={{

@@ -132,6 +132,23 @@ Keep `bun run test:e2e` in the low-single-digit-minute range.
 If it grows past that, merge overlapping journeys or delete stale ones.
 The brake must not become the bottleneck that stops safe, frequent change.
 
+### Where these journey rules come from
+
+The fleet's Playwright standard is the authority for how a journey is written.
+It is recorded here so a future journey inherits it rather than rediscovering it.
+
+- [Fabrica testing guide](https://github.com/fabricahq/app/blob/main/_docs/testing.md)
+- [Fabrica Playwright rules](https://github.com/fabricahq/app/tree/main/_rules/playwright)
+
+Three of its rules bite hardest here.
+
+1. A journey guards a flow whose breakage means the product is effectively down, and the suite stays fast enough to run on every change.
+   The suite-runtime budget above is the local form of this rule.
+2. Every spec imports `test` and `expect` from [`test/fixtures.ts`](../test/fixtures.ts), never from `@playwright/test`.
+   The raw import silently opts a spec out of the console-error and page-error contract, so a journey can pass while the page throws on every navigation.
+3. Act, then assert the user-visible outcome and let Playwright retry.
+   No `waitForTimeout`, no redundant pre-waits, and no one-shot DOM reads such as `expect(await locator.count())`.
+
 ## CI
 
 The CI workflow runs on every push.

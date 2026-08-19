@@ -156,6 +156,7 @@ import {
   disposeOfChanges,
   readChangeDispositionState,
 } from "./routes-dispositions.js";
+import { readReviewInputContract } from "./routes-input-contract.js";
 import { readRuntimeSession } from "./routes-session.js";
 
 const TOKEN_HEADER = "x-big-plan-review-token";
@@ -213,6 +214,11 @@ const API_ROUTES: ReadonlyArray<ApiRoute> = [
     method: "GET",
     path: "/api/change-dispositions",
     handler: readChangeDispositionState,
+  },
+  {
+    method: "GET",
+    path: "/api/input-contract",
+    handler: readReviewInputContract,
   },
   {
     method: "POST",

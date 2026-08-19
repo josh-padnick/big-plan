@@ -14,6 +14,11 @@ import {
 } from "./agent-model.js";
 import type { TerminalAgentRequest } from "./agent-request-state.js";
 import { isProgressStepCode, type ProgressStepCode } from "./progress-code.js";
+import {
+  type ReviewInput,
+  type ReviewInputContract,
+  type ReviewInputState,
+} from "./input-contract.js";
 
 export type ReviewSnapshot = {
   readonly drafts: ReadonlyArray<ReviewComment>;
@@ -340,6 +345,20 @@ export const decodeReviewSnapshot = (value: unknown): ReviewSnapshot => {
   };
 };
 
+/**
+ * A record's write count as a reader may use it. Every store advances this by
+ * whole steps from zero, so a value that is not a whole count is not a write
+ * this build can order against - and accepting one would be worse than
+ * refusing it: a fractional revision sits above the legitimate write that
+ * follows it, and would silently discard every later response until the count
+ * climbed past it. Anything unusable decodes to -1, which is older than any
+ * accepted write and can therefore never displace applied state.
+ */
+const storedRevision = (candidate: unknown): number =>
+  typeof candidate === "number" && Number.isInteger(candidate) && candidate >= 0
+    ? candidate
+    : -1;
+
 /** Encodes the change dispositions a review has recorded. */
 export const encodeChangeDispositions = (
   value: ChangeDispositionStateSource,
@@ -358,10 +377,7 @@ export const decodeChangeDispositions = (
     return { accepted: [], revision: -1 };
   }
   return {
-    revision:
-      typeof value.revision === "number" && Number.isFinite(value.revision)
-        ? value.revision
-        : -1,
+    revision: storedRevision(value.revision),
     accepted: value.accepted.flatMap(
       (entry): ReadonlyArray<ChangeDisposition> =>
         isReviewWireRecord(entry) &&
@@ -386,6 +402,59 @@ export const decodeChangeDispositions = (
   };
 };
 
+/** Encodes the review's derived input contract for transport. */
+export const encodeReviewInputContract = (
+  value: ReviewInputContract,
+): ReviewInputContract => value;
+
+const INPUT_STATES: ReadonlySet<string> = new Set<ReviewInputState>([
+  "answered",
+  "unanswered",
+  "stale",
+]);
+
+/**
+ * Decodes the input contract, or says it could not.
+ *
+ * A body this build cannot read is reported as unreadable rather than as an
+ * empty contract, because the two mean opposite things to a reader: one says
+ * nobody could answer what the review needs, the other says the review needs
+ * nothing. A revision it cannot order on is unreadable for the same reason -
+ * the guard that drops older responses cannot hold a body it cannot place, and
+ * the first read would otherwise slip past it and present as a definite answer.
+ */
+export const decodeReviewInputContract = (
+  value: unknown,
+): ReviewInputContract | undefined => {
+  if (!isReviewWireRecord(value) || !Array.isArray(value.inputs)) {
+    return undefined;
+  }
+  const revision = storedRevision(value.revision);
+  if (revision < 0) return undefined;
+  return {
+    revision,
+    inputs: value.inputs.flatMap((input): ReadonlyArray<ReviewInput> =>
+      isReviewWireRecord(input) &&
+      typeof input.inputId === "string" &&
+      typeof input.label === "string" &&
+      typeof input.isCritical === "boolean" &&
+      typeof input.state === "string" &&
+      INPUT_STATES.has(input.state) &&
+      typeof input.detail === "string"
+        ? [
+            {
+              inputId: input.inputId,
+              label: input.label,
+              isCritical: input.isCritical,
+              state: input.state as ReviewInputState,
+              detail: input.detail,
+            },
+          ]
+        : [],
+    ),
+  };
+};
+
 /** Encodes the durable browser-safe facts gathered during plan review. */
 export const encodeReviewState = (
   value: ReviewStateSource,
@@ -401,10 +470,7 @@ export const decodeReviewState = (value: unknown): ReviewState => {
     return { answers: [], supersededDecisionIds: [], revision: -1 };
   }
   return {
-    revision:
-      typeof value.revision === "number" && Number.isFinite(value.revision)
-        ? value.revision
-        : -1,
+    revision: storedRevision(value.revision),
     supersededDecisionIds: Array.isArray(value.supersededDecisionIds)
       ? value.supersededDecisionIds.filter(
           (id): id is string => typeof id === "string",

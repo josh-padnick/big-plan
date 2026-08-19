@@ -126,6 +126,10 @@ export const useChangeDispositions = (): ChangeDispositionsValue => {
       document.removeEventListener("bigplan:review-authority", onAuthority);
   }, [identity]);
 
+  // Every response from the disposition store carries the whole current record
+  // and the revision that produced it, so applying one is the only way this
+  // page learns what is stored. A strictly older revision lost a race with a
+  // write that has already been applied and is dropped without comment.
   const applyResponse = useCallback((value: unknown): void => {
     const state = decodeChangeDispositions(value);
     if (state.revision < appliedRevision.current) return;

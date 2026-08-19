@@ -186,6 +186,7 @@ type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
     | "statusAccent"
     | "statusNeutral"
     | "statusWarning"
+    | "statusWarningOutline"
     | "statusDanger";
   readonly weight?: "semibold" | "bold";
 };
@@ -209,6 +210,10 @@ const BADGE_TONES = {
   statusNeutral: "bg-[color-mix(in_srgb,var(--ink-c)_8%,var(--bg))] text-muted",
   statusWarning:
     "bg-[color-mix(in_srgb,var(--callout-warning-c)_14%,var(--bg))] text-[var(--callout-warning-c)]",
+  // The same reading as statusWarning at a lighter weight, so a row can carry
+  // both a warning state and a warning-family label without the two competing.
+  statusWarningOutline:
+    "border border-[var(--callout-warning-c)] bg-transparent text-[var(--callout-warning-c)]",
   statusDanger:
     "bg-[color-mix(in_srgb,var(--danger-c)_14%,var(--bg))] text-danger",
 } as const;

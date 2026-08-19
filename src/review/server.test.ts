@@ -962,6 +962,158 @@ describe("review runtime staged decision answers", () => {
   });
 });
 
+describe("review runtime input contract", () => {
+  const CONTRACT_PLAN = `# Two questions
+
+<Decision critical question="Which release path should we use?">
+
+<Option title="Gradual rollout" recommended summary="Start with one group.">
+<Consideration label="Risk" verdict="Low" tone="good" />
+</Option>
+
+<Option title="Immediate rollout" summary="Release everywhere together.">
+<Consideration label="Risk" verdict="High" tone="bad" />
+</Option>
+
+</Decision>
+
+<QuickDecision question="Do we rename the endpoint?">
+
+<Option title="Yes" recommended summary="The old name misleads." />
+
+<Option title="No" summary="Callers already depend on it." />
+
+</QuickDecision>
+`;
+  const RENAME_ID = "quick-decision-do-we-rename-the-endpoint";
+
+  const contractOf = async (
+    target: ReviewRuntime,
+    sessionToken: string,
+  ): Promise<
+    ReadonlyArray<{
+      readonly label: string;
+      readonly isCritical: boolean;
+      readonly state: string;
+    }>
+  > => {
+    const value: unknown = await (
+      await callRuntime({ target, sessionToken, path: "/api/input-contract" })
+    ).json();
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      !("inputs" in value) ||
+      !Array.isArray(value.inputs)
+    ) {
+      throw new Error("Input contract response carried no inputs");
+    }
+    return value.inputs as ReadonlyArray<{
+      readonly label: string;
+      readonly isCritical: boolean;
+      readonly state: string;
+    }>;
+  };
+
+  const withContractRuntime = async (
+    work: (context: {
+      readonly target: ReviewRuntime;
+      readonly sessionToken: string;
+      readonly planPath: string;
+    }) => Promise<void>,
+  ): Promise<void> => {
+    const directory = await mkdtemp(join(tmpdir(), "big-plan-contract-"));
+    const planPath = join(directory, "plan.mdx");
+    await writeFile(planPath, CONTRACT_PLAN);
+    const target = await startReviewRuntime({ planPath });
+    try {
+      await work({
+        target,
+        sessionToken: await runtimeToken(target),
+        planPath,
+      });
+    } finally {
+      await target.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  };
+
+  it("should list every input the plan asks and which of them is critical", async () => {
+    await withContractRuntime(async ({ target, sessionToken }) => {
+      expect(await contractOf(target, sessionToken)).toEqual([
+        {
+          inputId: DECISION_ID,
+          label: "Which release path should we use?",
+          isCritical: true,
+          state: "unanswered",
+          detail: "No answer recorded",
+        },
+        {
+          inputId: RENAME_ID,
+          label: "Do we rename the endpoint?",
+          isCritical: false,
+          state: "unanswered",
+          detail: "No answer recorded",
+        },
+      ]);
+    });
+  });
+
+  it("should turn exactly the reworded decision's input stale", async () => {
+    await withContractRuntime(async ({ target, sessionToken, planPath }) => {
+      for (const answer of [
+        {
+          decisionId: DECISION_ID,
+          optionId: GRADUAL_OPTION_ID,
+          optionTitle: "Gradual rollout",
+          prompt: "Which release path should we use?",
+          premiseSnapshot: deriveSnapshotDigest(CONTRACT_PLAN),
+        },
+        {
+          decisionId: RENAME_ID,
+          optionId: `${RENAME_ID}-option-yes`,
+          optionTitle: "Yes",
+          prompt: "Do we rename the endpoint?",
+          premiseSnapshot: deriveSnapshotDigest(CONTRACT_PLAN),
+        },
+      ]) {
+        expect(
+          (
+            await callRuntime({
+              target,
+              sessionToken,
+              path: "/api/inputs",
+              method: "POST",
+              body: { op: "stage", answer },
+            })
+          ).status,
+        ).toBe(200);
+      }
+      expect(
+        (await contractOf(target, sessionToken)).map((input) => input.state),
+      ).toEqual(["answered", "answered"]);
+
+      await writeFile(
+        planPath,
+        CONTRACT_PLAN.replace(
+          "The old name misleads.",
+          "The old name misleads every new caller.",
+        ),
+      );
+
+      expect(
+        (await contractOf(target, sessionToken)).map((input) => [
+          input.label,
+          input.state,
+        ]),
+      ).toEqual([
+        ["Which release path should we use?", "answered"],
+        ["Do we rename the endpoint?", "stale"],
+      ]);
+    });
+  });
+});
+
 describe("review runtime document", () => {
   it("should render the document itself and stamp this session on it", async () => {
     const html = await (await fetch(runtime.url)).text();

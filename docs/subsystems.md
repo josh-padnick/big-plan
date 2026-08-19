@@ -35,7 +35,7 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
 
 **Problem set.** The core entity of review is the change set: a baseline snapshot, a current snapshot, acceptance state, provenance, and an optionally attached conversation, diffed from its start, rendered in place of what it changes, and closed by explicit acceptance.
 
-**Code anchors.** `src/review/snapshot-diff.ts`, `src/review/change-set-commit.ts`, `src/review/change-dispositions-store.ts`, `src/review/shared/change-disposition.ts`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/review/browser/wireframe-screen-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, snapshots in `src/review/store.ts`.
+**Code anchors.** `src/review/snapshot-diff.ts`, `src/review/change-set-commit.ts`, `src/review/change-dispositions-store.ts`, `src/review/input-contract.ts`, `src/review/shared/change-disposition.ts`, `src/review/shared/input-contract.ts`, `src/review/browser/inputs-surface.browser.tsx`, `src/review/shared/thread-projection.ts`, `src/review/shared/change-attribution.ts`, `src/review/shared/comment.ts`, `src/review/browser/diff-lens.browser.tsx`, `src/review/browser/diff-tour.browser.tsx`, `src/review/browser/diff-anchor.ts`, `src/review/browser/wireframe-screen-diff.ts`, `src/review/browser/inline-comments.browser.tsx`, snapshots in `src/review/store.ts`.
 
 **Boundary rules.**
 
@@ -49,6 +49,9 @@ That three-way seam, not a threads-versus-diffs-versus-reviews split, is what th
   When the full aggregate lands it implements that contract without adopting claim stages as domain state.
 - A change set's disposition is a review fact, not a browser preference.
   `src/review/change-dispositions-store.ts` owns the record and `src/review/shared/change-disposition.ts` owns the one selector that turns it into a count, so every surface showing how much of a set is still open reads the same number and a reload never reopens closed work.
+- What a review is waiting for is one derived contract, never a per-surface tally.
+  `src/review/input-contract.ts` joins the compiled decision inventory with the answers record into the inputs a review expects - decisions for now, growing to the rest of what a review waits on as each of those becomes enumerable; `src/review/shared/input-contract.ts` owns the one selector that turns them into a standing, including how many critical ones are still open.
+  Criticality is authored on a decision and travels through `CompiledDecisionCard.isCritical`; it is deliberately excluded from the decision digest, because raising what approval demands does not change what the reviewer answered.
 - Delivery (getting a message to the runtime) belongs to Session Reliability, and furniture (composer, tooltips, layout) belongs to Commenting Surface; only Change Engine code changes when acceptance semantics change.
 
 ### B. Session Reliability

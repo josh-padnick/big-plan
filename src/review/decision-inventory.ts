@@ -12,6 +12,7 @@
 import { createHash } from "node:crypto";
 import {
   isAnswerableDecisionCard,
+  isCriticalDecisionCard,
   type CompiledDecisionCard,
 } from "../components/_model/decision-card.js";
 import { compilePlanModel } from "../render/compile-plan-model.js";
@@ -21,6 +22,10 @@ export type DecisionInventoryEntry = {
   readonly decisionId: string;
   readonly optionIds: ReadonlySet<string>;
   readonly decisionDigest: string;
+  /** The question as authored, so a surface can name the input it lists. */
+  readonly question: string;
+  /** The author's judgment that this one must be settled before approval. */
+  readonly isCritical: boolean;
 };
 
 export type DecisionInventory = ReadonlyMap<string, DecisionInventoryEntry>;
@@ -28,12 +33,23 @@ export type DecisionInventory = ReadonlyMap<string, DecisionInventoryEntry>;
 // Positions record where a decision sits in the file, which any unrelated edit
 // above it changes. Stripping them, and ordering keys by name rather than by
 // the compiler's literal order, keeps the digest a statement about content.
+//
+// Criticality is stripped for a different reason: it is not part of what the
+// reviewer answered. Marking an already-answered question critical raises what
+// approval demands without changing what was asked, so folding it in would
+// mask an answer that still answers the question, exactly the false stale this
+// digest exists to avoid.
+const UNDIGESTED_FIELDS: ReadonlySet<string> = new Set([
+  "position",
+  "isCritical",
+]);
+
 const canonical = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(canonical);
   if (typeof value !== "object" || value === null) return value;
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key]) => key !== "position")
+      .filter(([key]) => !UNDIGESTED_FIELDS.has(key))
       .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
       .map(([key, entry]) => [key, canonical(entry)]),
   );
@@ -57,6 +73,7 @@ const asDecisionCard = (model: unknown): CompiledDecisionCard | undefined => {
     typeof candidate.question !== "string" ||
     typeof candidate.status !== "string" ||
     typeof candidate.interaction !== "string" ||
+    typeof candidate.isCritical !== "boolean" ||
     !Array.isArray(candidate.options)
   ) {
     return undefined;
@@ -81,6 +98,8 @@ export const deriveDecisionInventory = ({
       decisionId: model.id,
       optionIds: new Set(model.options.map((option) => option.id)),
       decisionDigest: deriveDecisionDigest(model),
+      question: model.question,
+      isCritical: isCriticalDecisionCard(model),
     });
   }
   return inventory;

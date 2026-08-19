@@ -182,6 +182,7 @@ Big Plan ships components that present specific kinds of information better than
 Draw every illustration with a component, never with ASCII art: a box-drawing sketch in a code fence breaks on a narrow screen, says nothing to a screen reader, and gives the reviewer nothing to point at.
 Where no component fits the picture, embed a real image and caption what to notice in it.
 A decision buried in prose is a decision the reviewer cannot easily accept or reject.
+Mark a decision `critical` when the reviewer must settle it before work begins, and leave the rest unmarked: the review lists every question it is waiting on, and a plan where everything is critical tells the reviewer nothing about where to start.
 Before using a component, run `big-plan guidance <Component>` (for example `big-plan guidance DecisionAnalysis`) for how to use it well.
 Every component's attributes and accepted shapes are at https://big-plan.ai/components/; look them up rather than guessing.
 

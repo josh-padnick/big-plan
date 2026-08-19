@@ -7,7 +7,9 @@ import {
   decodeChangeDispositions,
   decodeProgress,
   decodeRuntimeSession,
+  decodeReviewInputContract,
   decodeReviewSnapshot,
+  decodeReviewState,
   decodeSnapshotDiff,
   encodeAgentSnapshot,
   encodeProgress,
@@ -601,6 +603,60 @@ describe("review wire contract", () => {
   it("should decode an unreadable disposition body as older than any write", () => {
     for (const value of [null, {}, { accepted: [] }, { revision: "4" }]) {
       expect(decodeChangeDispositions(value).revision).toBe(-1);
+    }
+  });
+
+  // A revision no store could have written is worse than useless if accepted:
+  // it sits above the legitimate write that follows it, and would discard
+  // every later response until the count climbed past it.
+  it("should refuse a revision that is not a whole write count", () => {
+    for (const revision of [
+      0.5,
+      -1,
+      -2,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+    ]) {
+      expect(
+        decodeChangeDispositions({ accepted: [], revision }).revision,
+      ).toBe(-1);
+      expect(decodeReviewState({ answers: [], revision }).revision).toBe(-1);
+      // The contract has no place to put an unorderable revision: it is the
+      // one record whose reader starts at -1, so a body carrying one would
+      // slip past the guard on the first read and present as a definite
+      // answer about the plan. It is reported unreadable instead.
+      expect(
+        decodeReviewInputContract({ inputs: [], revision }),
+      ).toBeUndefined();
+    }
+  });
+
+  // "Nobody could read this" and "the review needs nothing" are opposite
+  // statements to a reader, so the decoder never turns the first into the
+  // second.
+  it("should report a contract body it cannot read rather than an empty one", () => {
+    for (const body of [null, "contract", 7, {}, { inputs: "none" }]) {
+      expect(decodeReviewInputContract(body)).toBeUndefined();
+    }
+    expect(decodeReviewInputContract({ inputs: [], revision: 0 })).toEqual({
+      inputs: [],
+      revision: 0,
+    });
+  });
+
+  // Zero earns its own case: it is the first write every store makes, and a
+  // predicate that refused it would report a fresh record as unreadable.
+  it("should keep a whole write count, including the first one", () => {
+    for (const revision of [0, 7]) {
+      expect(
+        decodeChangeDispositions({ accepted: [], revision }).revision,
+      ).toBe(revision);
+      expect(decodeReviewState({ answers: [], revision }).revision).toBe(
+        revision,
+      );
+      expect(
+        decodeReviewInputContract({ inputs: [], revision })?.revision,
+      ).toBe(revision);
     }
   });
 });
