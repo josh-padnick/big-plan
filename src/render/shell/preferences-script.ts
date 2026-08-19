@@ -3,6 +3,10 @@
 // focus isolation, and keyboard escape routes.
 
 import {
+  APPROVAL_MESSAGE_LIMIT,
+  APPROVAL_MESSAGE_RECORD_VERSION,
+  APPROVAL_MESSAGE_STORAGE_KEY,
+  DEFAULT_APPROVAL_MESSAGE,
   PREFERENCES_RECORD_VERSION,
   PREFERENCES_STORAGE_KEY,
 } from "../preferences.js";
@@ -25,6 +29,8 @@ export const PREFERENCES_SCRIPT = `<script>
   const panels = Array.from(
     document.querySelectorAll("[data-preferences-panel]"),
   );
+  const messageInput = document.querySelector("[data-approval-message-input]");
+  const messageReset = document.querySelector("[data-approval-message-reset]");
   if (
     !(control instanceof HTMLElement) ||
     !(dialog instanceof HTMLElement) ||
@@ -32,6 +38,8 @@ export const PREFERENCES_SCRIPT = `<script>
     !(openButton instanceof HTMLButtonElement) ||
     !(closeButton instanceof HTMLButtonElement) ||
     !(sectionList instanceof HTMLElement) ||
+    !(messageInput instanceof HTMLTextAreaElement) ||
+    !(messageReset instanceof HTMLButtonElement) ||
     modes.length === 0 ||
     palettes.length === 0 ||
     sections.length === 0 ||
@@ -41,6 +49,10 @@ export const PREFERENCES_SCRIPT = `<script>
 
   const key = ${JSON.stringify(PREFERENCES_STORAGE_KEY)};
   const version = ${PREFERENCES_RECORD_VERSION};
+  const messageKey = ${JSON.stringify(APPROVAL_MESSAGE_STORAGE_KEY)};
+  const messageVersion = ${APPROVAL_MESSAGE_RECORD_VERSION};
+  const messageLimit = ${APPROVAL_MESSAGE_LIMIT};
+  const defaultMessage = ${JSON.stringify(DEFAULT_APPROVAL_MESSAGE)};
   let isolatedElements = [];
   let open = false;
   let openedByKeyboard = false;
@@ -55,6 +67,49 @@ export const PREFERENCES_SCRIPT = `<script>
       if (mode !== "system") record.mode = mode;
       if (palette !== "default") record.palette = palette;
       localStorage.setItem(key, JSON.stringify(record));
+    } catch (_) {}
+  };
+
+  // The field shows what an approval would actually carry, so a stored note the
+  // contract cannot honour - unreadable, over-long, or blank - shows as the
+  // default rather than as itself. src/render/preferences.ts owns that rule and
+  // src/review/shared/approval-message.ts is the island's copy of it; this is
+  // the same rule again, because the delivered script imports neither.
+  const storedMessage = () => {
+    try {
+      const raw = localStorage.getItem(messageKey);
+      if (raw === null) return defaultMessage;
+      const record = JSON.parse(raw);
+      if (
+        record === null ||
+        typeof record !== "object" ||
+        Array.isArray(record) ||
+        record.version !== messageVersion ||
+        typeof record.message !== "string" ||
+        record.message.length > messageLimit
+      )
+        return defaultMessage;
+      const message = record.message.trim();
+      return message === "" ? defaultMessage : message;
+    } catch (_) {
+      return defaultMessage;
+    }
+  };
+
+  // The default is what absence already means, so storing it would only make a
+  // record that says nothing: the key is removed instead, exactly as the
+  // appearance record omits System.
+  const saveMessage = () => {
+    try {
+      const message = messageInput.value.slice(0, messageLimit);
+      if (message.trim() === "" || message === defaultMessage) {
+        localStorage.removeItem(messageKey);
+        return;
+      }
+      localStorage.setItem(
+        messageKey,
+        JSON.stringify({ version: messageVersion, message }),
+      );
     } catch (_) {}
   };
 
@@ -229,6 +284,7 @@ export const PREFERENCES_SCRIPT = `<script>
   showSection(selectedSection().getAttribute("data-preferences-section"));
   syncGroup(modes, "data-preference-mode", currentMode());
   syncGroup(palettes, "data-preference-palette", currentPalette());
+  messageInput.value = storedMessage();
   control.hidden = false;
   openButton.addEventListener("click", (event) => {
     event.preventDefault();
@@ -291,6 +347,40 @@ export const PREFERENCES_SCRIPT = `<script>
       save();
     });
   }
+  messageInput.addEventListener("input", saveMessage);
+  messageReset.addEventListener("click", (event) => {
+    event.preventDefault();
+    try {
+      localStorage.removeItem(messageKey);
+    } catch (_) {}
+    messageInput.value = defaultMessage;
+    messageInput.focus();
+  });
+
+  // The review island's "Edit message" opens this sheet on the settings page it
+  // means, so the reviewer lands on the field rather than hunting the sidebar
+  // for it. The island owns the dispatch; the shell owns where it lands.
+  document.addEventListener("bigplan:open-settings", (event) => {
+    const requested =
+      event instanceof CustomEvent && typeof event.detail?.category === "string"
+        ? event.detail.category
+        : null;
+    const panel = panels.find(
+      (candidate) =>
+        candidate.getAttribute("data-preferences-panel") === requested,
+    );
+    if (panel !== undefined) showSection(requested);
+    openedByKeyboard = false;
+    if (!open) setOpen(true);
+    if (panel === undefined) return;
+    const landing = Array.from(
+      panel.querySelectorAll(
+        'a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter(isTabbable)[0];
+    if (landing !== undefined) landing.focus();
+  });
+
   document.addEventListener("keydown", (event) => {
     if (!open) return;
     if (event.key === "Escape") {

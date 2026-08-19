@@ -4,6 +4,8 @@
 // are enforced by the fixtures module.
 
 import {
+  APPROVAL_MESSAGE_STORAGE_KEY,
+  DEFAULT_APPROVAL_MESSAGE,
   PREFERENCES_STORAGE_KEY,
   serializePreferencesRecord,
 } from "../src/render/preferences.js";
@@ -12,7 +14,10 @@ import { expect, test, type Page } from "./fixtures";
 // The settings sheet is a sidebar plus one page, so a control is reachable only
 // once its section is selected. Every step below opens its own section rather
 // than assuming which page happens to be showing.
-const openSection = (page: Page, name: "Appearance" | "Color theme") =>
+const openSection = (
+  page: Page,
+  name: "Appearance" | "Color theme" | "Approval message",
+) =>
   page.getByRole("tab", { name, exact: true }).click();
 
 // A colour with no alpha component is fully opaque. The previous pattern
@@ -158,11 +163,15 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
       const options = Array.from(
         element.querySelectorAll("[data-preference-mode]"),
       ).map((option) => option.closest("label").getBoundingClientRect().height);
-      // The sidebar stacks above the page it opens rather than beside it, so
-      // its items share one row and the sheet stays one column.
+      // The sidebar stacks above the page it opens rather than beside it, and
+      // wraps onto a second row rather than scrolling sideways, so every
+      // category stays on screen and the sheet stays one column.
       const sections = Array.from(
         element.querySelectorAll("[data-preferences-section]"),
       ).map((tab) => tab.getBoundingClientRect());
+      const panel = element
+        .querySelector("[data-preferences-panel]")
+        .getBoundingClientRect();
       return {
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
@@ -170,7 +179,8 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
         right: rect.right,
         verticalCenter: (rect.top + rect.bottom) / 2,
         optionHeights: options,
-        sectionTops: new Set(sections.map((tab) => Math.round(tab.top))).size,
+        sectionBottom: Math.max(...sections.map((tab) => tab.bottom)),
+        panelTop: panel.top,
         sectionHeights: sections.map((tab) => Math.round(tab.height)),
         sectionRight: Math.max(...sections.map((tab) => tab.right)),
         documentScrollWidth: document.documentElement.scrollWidth,
@@ -182,8 +192,10 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
     expect(geometry.right).toBe(width - 12);
     expect(geometry.verticalCenter).toBeCloseTo(geometry.viewportHeight / 2);
     expect(geometry.optionHeights).toEqual([68, 68, 68]);
-    expect(geometry.sectionTops).toBe(1);
-    expect(geometry.sectionHeights).toEqual([44, 44]);
+    expect(geometry.sectionBottom).toBeLessThanOrEqual(geometry.panelTop);
+    // Every item is one touch target tall, however many settings the sidebar
+    // has grown to hold, and none of them is parked off the sheet's edge.
+    expect(new Set(geometry.sectionHeights)).toEqual(new Set([44]));
     expect(geometry.sectionRight).toBeLessThanOrEqual(geometry.right);
     expect(geometry.documentScrollWidth).toBe(geometry.viewportWidth);
     await page.keyboard.press("Escape");
@@ -221,13 +233,16 @@ test("should recompose settings as a centered sheet on narrow screens", async ({
         railWidth: Math.round(railRect.width),
         paneWidth: Math.round(pane.width),
         railLeftOfPane: railRect.right <= pane.left,
+        tabCount: tabs.length,
         tabColumns: new Set(tabs.map((tab) => Math.round(tab.left))).size,
         tabRows: new Set(tabs.map((tab) => Math.round(tab.top))).size,
       };
     });
     expect(layout.railLeftOfPane).toBe(true);
+    // One column, one row per setting: the rail grows downward beside the
+    // page, whatever it has grown to hold.
     expect(layout.tabColumns).toBe(1);
-    expect(layout.tabRows).toBe(2);
+    expect(layout.tabRows).toBe(layout.tabCount);
     expect(layout.paneWidth).toBeGreaterThan(layout.railWidth * 2);
     await openSection(page, "Color theme");
     const themes = await dialog
@@ -725,8 +740,12 @@ test("should navigate settings through a sidebar of separate pages", async ({
   const settings = page.getByRole("button", { name: "Open settings" });
   const appearanceTab = page.getByRole("tab", { name: "Appearance" });
   const paletteTab = page.getByRole("tab", { name: "Color theme" });
+  const messageTab = page.getByRole("tab", { name: "Approval message" });
   const appearancePanel = page.locator('[data-preferences-panel="appearance"]');
   const palettePanel = page.locator('[data-preferences-panel="palette"]');
+  const messagePanel = page.locator(
+    '[data-preferences-panel="approval-message"]',
+  );
 
   await test.step("the sheet opens on the first page with the sidebar focused", async () => {
     await settings.click();
@@ -735,6 +754,7 @@ test("should navigate settings through a sidebar of separate pages", async ({
     await expect(appearanceTab).toHaveAttribute("aria-selected", "true");
     await expect(appearancePanel).toBeVisible();
     await expect(palettePanel).toBeHidden();
+    await expect(messagePanel).toBeHidden();
   });
 
   await test.step("each page shows only its own controls", async () => {
@@ -764,7 +784,10 @@ test("should navigate settings through a sidebar of separate pages", async ({
     await page.keyboard.press("Home");
     await expect(appearanceTab).toBeFocused();
     await page.keyboard.press("End");
-    await expect(paletteTab).toBeFocused();
+    await expect(messageTab).toBeFocused();
+    await expect(messagePanel).toBeVisible();
+    await page.keyboard.press("Home");
+    await expect(appearanceTab).toBeFocused();
   });
 
   await test.step("Tab still wraps inside the dialog with both pages present", async () => {
@@ -865,5 +888,107 @@ test("should hold one settings size while the reviewer changes page", async ({
     expect(pages.lefts).toBe(1);
     expect(Math.round(pages.paneHeight)).toBe(Math.round(pages.tallest));
     await page.keyboard.press("Escape");
+  });
+});
+
+test("should keep the approval message the reviewer wrote across a reload", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  await page.goto(sampleViewerUrl);
+  await page.evaluate((keys) => {
+    for (const key of keys) localStorage.removeItem(key);
+  }, [PREFERENCES_STORAGE_KEY, APPROVAL_MESSAGE_STORAGE_KEY]);
+  await page.reload();
+  const settings = page.getByRole("button", { name: "Open settings" });
+  const message = page.getByRole("textbox", { name: "Message", exact: true });
+  const written = "Start with the migration and check in before the cutover.";
+
+  await test.step("the page opens on the wording an approval would carry", async () => {
+    await settings.click();
+    await openSection(page, "Approval message");
+    await expect(message).toBeVisible();
+    await expect(message).toHaveValue(DEFAULT_APPROVAL_MESSAGE);
+    // The pages are peers: opening this one puts the other two away.
+    await expect(page.getByRole("radio", { name: "System" })).toBeHidden();
+    await expect(page.getByRole("radio", { name: "Default" })).toBeHidden();
+  });
+
+  await test.step("a written message survives a reload", async () => {
+    await message.fill(written);
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await settings.click();
+    await openSection(page, "Approval message");
+    await expect(message).toHaveValue(written);
+  });
+
+  await test.step("Reset to default restores the standard wording, and that survives too", async () => {
+    await page.getByRole("button", { name: "Reset to default" }).click();
+    await expect(message).toHaveValue(DEFAULT_APPROVAL_MESSAGE);
+    await expect(message).toBeFocused();
+    // The default is what absence means, so resetting leaves nothing stored.
+    expect(
+      await page.evaluate(
+        (key) => localStorage.getItem(key),
+        APPROVAL_MESSAGE_STORAGE_KEY,
+      ),
+    ).toBeNull();
+    await page.reload();
+    await settings.click();
+    await openSection(page, "Approval message");
+    await expect(message).toHaveValue(DEFAULT_APPROVAL_MESSAGE);
+  });
+
+  await test.step("the appearance choice still applies and persists beside it", async () => {
+    await openSection(page, "Appearance");
+    await page.getByRole("radio", { name: "Dark" }).check();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
+});
+
+test("should open settings on the page an approve dialog asks for", async ({
+  page,
+  sampleViewerUrl,
+}) => {
+  // The review island's "Edit message" dispatches this event so the reviewer
+  // lands on the field instead of hunting the sidebar for it.
+  await page.goto(sampleViewerUrl);
+  await page.evaluate(
+    (key) => localStorage.removeItem(key),
+    APPROVAL_MESSAGE_STORAGE_KEY,
+  );
+  await page.reload();
+  const openOnCategory = (category: string) =>
+    page.evaluate(
+      (name) =>
+        document.dispatchEvent(
+          new CustomEvent("bigplan:open-settings", {
+            detail: { category: name },
+          }),
+        ),
+      category,
+    );
+
+  await openOnCategory("approval-message");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "Approval message" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("textbox", { name: "Message", exact: true }),
+  ).toBeFocused();
+
+  await test.step("a second ask moves the open sheet to that page", async () => {
+    await openOnCategory("appearance");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Appearance" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden();
   });
 });
