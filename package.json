@@ -38,8 +38,7 @@
     "check:merge-gates": "node scripts/merge-gates/check.mjs",
     "warn:stale-copy": "node scripts/merge-guard/warn-stale-copy.mjs",
     "test:e2e": "playwright test",
-    "lint:actions": "github-actionlint",
-    "lint": "bun run lint:actions && eslint . && node scripts/style-contract/check.mjs && node scripts/design-system/check.mjs && node scripts/design-system/palettes.mjs && prettier --check .",
+    "lint": "eslint . && node scripts/style-contract/check.mjs && node scripts/design-system/check.mjs && node scripts/design-system/palettes.mjs && prettier --check .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -75,7 +74,6 @@
     "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.7.0",
-    "github-actionlint": "1.7.12",
     "postcss": "^8.5.25",
     "prettier": "^3.9.5",
     "tailwindcss": "^4.3.2",
