@@ -81,7 +81,8 @@ MDX plan source
 Each component validates its authored attributes and content into plain data describing what it should show.
 Both deliveries then give that data to the component's React view, cross one React-to-HAST boundary, and apply document-wide transforms; only what they publish differs.
 Human delivery packages the result as inert HTML.
-Machine delivery publishes the collected models as JSON, each carrying the block address its rendered root was given, which is why it renders too: a block address only exists over a finished deck.
+Machine delivery publishes the collected models as JSON, which is why it renders too: each model carries the block address its rendered root was given, and a block address only exists over a finished deck.
+That address is present only where the component's root became a block a reader can point at, so a component rendered privately inside another component's markup, and a slide, which is a scope rather than a block, each publish a model with no address.
 The two differ in exactly one other respect, and it is a consequence rather than a choice: machine delivery makes a component's model carry its nested components' presentation, because no later pass reaches a deferred placeholder that only a model holds.
 
 Every component-root block descriptor carries the authored name and the model that produced it, joined by a delivery-local instance key that the pipeline strips before serialization.

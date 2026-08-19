@@ -148,10 +148,24 @@ describe("compilePlanModel", () => {
   // The key that makes the join exact is delivery-local: it names one instance
   // inside one compilation, so publishing it would invite a consumer to store
   // an address that means nothing on the next compile.
+  //
+  // A parent's model holds its nested components' rendered markup directly,
+  // and that markup is the one copy the document-wide strip never reaches, so
+  // the nested case is the one that has to be asserted rather than assumed.
   it("should keep the delivery-local instance key out of machine delivery", () => {
-    const plan = compilePlanModel({ markdown: PLAN, fallbackTitle: "x" });
+    const plan = compilePlanModel({
+      markdown:
+        '<Decision question="Q?">\n\n<Callout type="note">\n\nNested context.\n\n</Callout>\n\n<Option title="A" />\n\n<Option title="B" />\n\n</Decision>\n',
+      fallbackTitle: "x",
+    });
+    const published = JSON.stringify(plan);
 
-    expect(JSON.stringify(plan)).not.toContain("instanceKey");
+    expect(plan.components.map(({ component }) => component)).toEqual([
+      "Decision",
+      "Callout",
+    ]);
+    expect(published).not.toContain("instanceKey");
+    expect(published).not.toContain("data-component-instance");
   });
 
   it("should fall back to the caller's title when the plan has no h1", () => {

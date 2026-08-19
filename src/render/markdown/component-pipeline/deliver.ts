@@ -154,6 +154,7 @@ const renderFlowElement = ({
   ids,
   delivery,
   materializeModel,
+  insideComponentBody,
   renderArtifacts,
 }: {
   readonly node: MdxJsxFlowElement;
@@ -162,6 +163,9 @@ const renderFlowElement = ({
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
   readonly materializeModel: boolean;
+  // Whether this element is being rendered into another component's body
+  // rather than into the document. See the instance key below.
+  readonly insideComponentBody: boolean;
   readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): Element | undefined => {
   const name = node.name;
@@ -185,6 +189,7 @@ const renderFlowElement = ({
     // adaptation so an outline-aware component still defers.
     materializeModels:
       delivery.kind === "render" && delivery.materializeNestedModels,
+    insideComponentBody: true,
     ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
   });
   if (definition === undefined) {
@@ -220,15 +225,22 @@ const renderFlowElement = ({
       model: compiled.model,
     });
   }
-  // The authored component name and its instance key ride on its own rendered
-  // root so later document-wide passes can name what a reader is pointing at,
-  // and reach the model behind it, without knowing any component's markup.
+  // Only a root the document will hold carries the key. A root rendered into
+  // another component's body is that component's private markup: block
+  // identity never stamps it, so it needs no key - and it would never lose
+  // one, because the parent's model holds this very element while the document
+  // holds the copy the parent's own rendering reparsed, and only that copy
+  // passes under the strip.
+  const stampedKey = insideComponentBody ? undefined : instanceKey;
+  // The authored component name and that key ride on the rendered root so
+  // later document-wide passes can name what a reader is pointing at, and
+  // reach the model behind it, without knowing any component's markup.
   const named = (element: Element | undefined): Element | undefined => {
     if (element !== undefined && name !== null) {
       element.properties[COMPONENT_NAME_ATTRIBUTE] = name;
     }
-    if (element !== undefined && instanceKey !== undefined) {
-      element.properties[COMPONENT_INSTANCE_ATTRIBUTE] = instanceKey;
+    if (element !== undefined && stampedKey !== undefined) {
+      element.properties[COMPONENT_INSTANCE_ATTRIBUTE] = stampedKey;
     }
     return element;
   };
@@ -247,7 +259,7 @@ const renderFlowElement = ({
       marker: compiled.outline.marker,
       ...(node.position === undefined ? {} : { position: node.position }),
       ...(name === null ? {} : { component: name }),
-      ...(instanceKey === undefined ? {} : { instanceKey }),
+      ...(stampedKey === undefined ? {} : { instanceKey: stampedKey }),
     });
   }
   const rendered = named(delivery.adapt(compiled.presentation()));
@@ -270,6 +282,7 @@ const renderChildren = ({
   ids,
   delivery,
   materializeModels,
+  insideComponentBody = false,
   renderArtifacts,
 }: {
   readonly parent: ParentNode;
@@ -279,6 +292,7 @@ const renderChildren = ({
   readonly ids: ComponentIdAllocator;
   readonly delivery: ComponentDelivery;
   readonly materializeModels: boolean;
+  readonly insideComponentBody?: boolean;
   readonly renderArtifacts?: ReadonlyMap<string, unknown>;
 }): ReadonlyArray<ScopedChild> => {
   const scopedChildren: Array<ScopedChild> = [];
@@ -307,6 +321,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModels,
+        insideComponentBody,
         ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
       scopedChildren.push({
@@ -329,6 +344,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModels,
+        insideComponentBody,
         ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
     }
@@ -340,6 +356,7 @@ const renderChildren = ({
         ids,
         delivery,
         materializeModel: materializeModels,
+        insideComponentBody,
         ...(renderArtifacts === undefined ? {} : { renderArtifacts }),
       });
       parent.children.splice(

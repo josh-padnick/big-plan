@@ -7,7 +7,10 @@ import type {
   CompiledMarkdown,
   Section,
 } from "./markdown/compile-markdown.js";
-import { compileMarkdown } from "./markdown/compile-markdown.js";
+import {
+  compileMarkdown,
+  compileMarkdownModel,
+} from "./markdown/compile-markdown.js";
 export { MarkdownDiagnosticsError } from "./markdown/compile-markdown.js";
 export type { BlockDescriptor } from "./markdown/compile-markdown.js";
 import { renderPage } from "./page.js";
@@ -133,8 +136,14 @@ export const renderDocument = ({
 };
 
 /**
- * Exercises complete HTML delivery while returning the collected plan-model
+ * Exercises complete rendering while returning the collected plan-model
  * summary and discarding the generated document.
+ *
+ * It compiles through machine delivery, because the summary it returns is the
+ * one the compile command publishes and the two are asserted to agree. Human
+ * delivery would hand back a model still holding a nested component's deferred
+ * outline placeholder, so validation would pass a plan whose published model
+ * the compile command would never produce.
  */
 export const validateDocument = ({
   markdown,
@@ -143,7 +152,7 @@ export const validateDocument = ({
   readonly markdown: string;
   readonly fallbackTitle: string;
 }): PlanModel => {
-  const compiled = compileMarkdown({ markdown });
+  const compiled = compileMarkdownModel({ markdown });
   const rendered = renderCompiledDocument({
     compiled,
     fallbackTitle,
