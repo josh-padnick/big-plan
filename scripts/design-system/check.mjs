@@ -169,7 +169,9 @@ const RULES = [
 // leading turns a clipping container into a descender guillotine: the g, j, p,
 // q and y of an ordinary title are sliced flat and nothing errors. The type
 // step's own line height is the fix, so the pair is refused rather than the
-// utility.
+// utility. These run ahead of the approved-metric marker below and ignore it:
+// the marker licenses a value the captain approved over the scale, and clipped
+// text is a defect nobody approves.
 const PAIR_RULES = [
   {
     name: "clipped leading",
