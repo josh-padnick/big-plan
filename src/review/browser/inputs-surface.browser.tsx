@@ -324,7 +324,7 @@ export const InputsSurface = () => {
         ) : null}
       </section>
       {reading.body === "inputs" ? (
-        <ul className="m-0 grid list-none gap-2 p-0">
+        <ul className="m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-2 p-0 [&>li]:min-w-0">
           {contract.inputs.map((input) => (
             <InputRow key={input.inputId} input={input} />
           ))}

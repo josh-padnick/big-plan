@@ -432,7 +432,7 @@ export const RequestStatusStrip = ({
         </button>
       ) : null}
       {isWorking && isExpanded && earlier.length > 0 ? (
-        <ol className="m-0 grid max-h-36 min-w-0 list-none overflow-y-auto pl-1 text-ink">
+        <ol className="m-0 grid max-h-36 min-w-0 grid-cols-[minmax(0,1fr)] list-none overflow-y-auto pl-1 text-ink [&>li]:min-w-0">
           {earlier.map((event) => (
             <li
               key={event.seq}

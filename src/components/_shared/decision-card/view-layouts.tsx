@@ -171,7 +171,7 @@ export const RowsLayout = ({
         ) : null}
       </div>
       <ul
-        className="decision-rows m-0 grid list-none p-0"
+        className="decision-rows m-0 grid grid-cols-[minmax(0,1fr)] list-none p-0 [&>li]:min-w-0"
         data-decision-rows=""
       >
         {model.options.map((option, index) => (
@@ -544,7 +544,7 @@ export const MatrixLayout = ({
         ? { "data-decision-weighting": "" }
         : {})}
     >
-      <ol className="decision-keyed-chooser m-0 grid list-none gap-0 border-b border-edge bg-surface p-0">
+      <ol className="decision-keyed-chooser m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-0 border-b border-edge bg-surface p-0 [&>li]:min-w-0">
         {model.options.map((option, index) => (
           <li
             className="decision-keyed-option"
@@ -748,7 +748,7 @@ export const BriefLayout = ({
           {lead.summary}
         </p>
       )}
-      <ul className="decision-brief-list m-0 grid list-none gap-0 p-0">
+      <ul className="decision-brief-list m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-0 p-0 [&>li]:min-w-0">
         {model.options.map((option, index) => (
           <li
             className="decision-brief-option grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-6 py-3"

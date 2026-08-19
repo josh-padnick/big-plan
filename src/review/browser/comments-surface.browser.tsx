@@ -44,6 +44,20 @@ export const batchSectionTone = ({
     ? "queued"
     : "working";
 
+/**
+ * One thread list in the sidebar.
+ *
+ * The column track is declared rather than left implicit because a grid item
+ * keeps `min-width: auto`, and an implicit track is floored at the widest
+ * item's min-content width. One long unbreakable line - a code block a
+ * reviewer pasted into a comment - therefore sized the track past the sidebar,
+ * and every card in the list, expanded or collapsed, was clipped by the
+ * panel's hidden horizontal overflow (BIG-185). `minmax(0, 1fr)` lets the
+ * track shrink to the panel, so a card's width is the sidebar's to decide.
+ */
+const THREAD_LIST_CLASSES =
+  "grid grid-cols-[minmax(0,1fr)] list-none gap-2 p-0 [&>li]:min-w-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none";
+
 type LifecycleSectionProps = {
   readonly label: string;
   readonly count: number;
@@ -262,7 +276,7 @@ export const CommentsSurface = ({
               contained={grouped}
             >
               {batch.content}
-              <ol className="mt-2 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
+              <ol className={`mt-2 ${THREAD_LIST_CLASSES}`}>
                 {batch.comments.map((comment) => (
                   <li key={comment.id}>
                     {model.renderSent(comment, false, true)}
@@ -292,7 +306,7 @@ export const CommentsSurface = ({
               tone="queued"
               first={first()}
             >
-              <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
+              <ol className={`m-0 ${THREAD_LIST_CLASSES}`}>
                 {queued.map((comment) => (
                   <li key={comment.id}>
                     {model.renderSent(
@@ -314,7 +328,7 @@ export const CommentsSurface = ({
               tone="staged"
               first={first()}
             >
-              <ol className="m-0 grid list-none gap-2 p-0 [&>li>*]:m-0 [&>li>*]:w-full [&>li>*]:max-w-none">
+              <ol className={`m-0 ${THREAD_LIST_CLASSES}`}>
                 {model.drafts.map((comment) => (
                   <li key={comment.id}>{model.renderDraft(comment, true)}</li>
                 ))}

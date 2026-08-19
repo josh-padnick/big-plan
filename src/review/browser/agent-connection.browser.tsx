@@ -793,7 +793,7 @@ const ConnectionLog = ({
               <h3 className="mt-0 mb-1 border-b border-edge pb-1 text-2xs font-semibold text-muted">
                 {date}
               </h3>
-              <ol className="m-0 grid list-none gap-1.5 p-0">
+              <ol className="m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-1.5 p-0 [&>li]:min-w-0">
                 {rows.map((event) => {
                   const index = ordered.indexOf(event);
                   const next = ordered[index + 1];
