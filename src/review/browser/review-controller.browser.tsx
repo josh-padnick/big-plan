@@ -122,6 +122,8 @@ import {
 } from "./comments-surface.browser.js";
 import {
   AgentChangeDigest,
+  CodeBlock,
+  InlineCode,
   MessageTurn,
   ReviewerMessagePreview,
   RequestStatusStrip,
@@ -1506,14 +1508,10 @@ const renderReviewerNode = (
   key: string,
 ): ReactNode => {
   if (node.type === "text") return node.value;
-  if (node.type === "inlineCode") return <code key={key}>{node.value}</code>;
-  if (node.type === "code") {
-    return (
-      <pre key={key}>
-        <code>{node.value}</code>
-      </pre>
-    );
-  }
+  if (node.type === "inlineCode")
+    return <InlineCode key={key} value={node.value} />;
+  if (node.type === "code")
+    return <CodeBlock key={key} value={node.value} language={node.language} />;
   if (node.type === "image") {
     return <ReviewImage key={key} id={node.id} alt={node.alt} />;
   }

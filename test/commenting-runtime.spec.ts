@@ -3037,6 +3037,66 @@ test("should keep every sidebar comment card inside the sidebar", async ({
   }
 });
 
+// The same containment, on the staged path: a comment is drawn by a different
+// renderer before it is sent, so it needs its own proof that a pasted code
+// block stays inside the card rather than being clipped by it (BIG-185).
+test("should keep a staged comment's code block inside its sidebar card", async ({
+  page,
+  reviewRuntimeUrl,
+}) => {
+  await page.goto(reviewRuntimeUrl);
+  const sidebar = page.getByRole("complementary", { name: "Feedback" });
+
+  const quotedCall =
+    "await retrySchedule.claimNextDueBatch({ merchantId, limit: 100, lockTimeoutMs: 30000, onExhausted: reportToOncall });";
+  await stageComment(
+    page,
+    [
+      "Name the recovery owner here, and call out the claim below explicitly",
+      "so a reviewer can check it against the retry schedule we already ship:",
+      "",
+      "```ts",
+      quotedCall,
+      "```",
+    ].join("\n"),
+  );
+  await page.getByRole("button", { name: /^Feedback(?: \d+)?$/u }).click();
+
+  // A staged card starts collapsed and its body starts clamped, so the pasted
+  // call only reaches the page once both are open.
+  await sidebar
+    .getByRole("button", {
+      name: /Expand staged comment: .*claimNextDueBatch/su,
+    })
+    .click();
+  const card = sidebar.locator('[data-review-surface="rail"]');
+  await expect(card).toHaveCount(1);
+  await card.getByRole("button", { name: "… more" }).click();
+
+  const quoted = card.locator("pre code");
+  await expect(quoted).toHaveText(quotedCall);
+
+  const list = sidebar
+    .locator("ol")
+    .filter({ has: page.locator('[data-review-surface="rail"]') });
+  const sidebarBox = await boxOf(sidebar);
+  const listBox = await boxOf(list);
+  const cardBox = await boxOf(card);
+  const quotedBox = await boxOf(quoted);
+
+  // The card fits the list that holds it, the list fits the sidebar, and the
+  // quoted call fits the card. The last one is what a bare `pre` breaks: it
+  // keeps `white-space: pre`, so the line runs past the card's edge and the
+  // card's hidden overflow cuts it mid-word instead of wrapping it.
+  expect(Math.round(cardBox.width)).toBe(Math.round(listBox.width));
+  expect(Math.round(cardBox.x + cardBox.width)).toBeLessThanOrEqual(
+    Math.round(sidebarBox.x + sidebarBox.width),
+  );
+  expect(Math.round(quotedBox.x + quotedBox.width)).toBeLessThanOrEqual(
+    Math.round(cardBox.x + cardBox.width),
+  );
+});
+
 // BIG-158 and BIG-162. A batch header speaks for one batch, so it may not
 // borrow the sidebar's working group: while an earlier batch runs, that group
 // holds work this batch has nothing to do with. Reading it dressed a batch

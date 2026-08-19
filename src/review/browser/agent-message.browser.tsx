@@ -58,20 +58,22 @@ const absoluteTime = (at: number): string =>
 /**
  * Code in a message, however that message was authored.
  *
- * Both renderers below speak the same Markdown vocabulary, so code has one
- * presentation and one containment rule rather than a copy per renderer. The
- * containment is what keeps the rule honest: a `pre` left to the user agent
- * keeps `white-space: pre`, so one long line gives the message an unbounded
- * min-content width and pushes the card holding it past its surface, where a
- * scrolling panel hides the overflow instead of reporting it (BIG-185).
+ * Every renderer of a reviewer or agent message speaks the same Markdown
+ * vocabulary, so code has one presentation and one containment rule rather
+ * than a copy per renderer - including the staged-comment renderer in
+ * review-controller, which is why these are exported. The containment is what
+ * keeps the rule honest: a `pre` left to the user agent keeps `white-space:
+ * pre`, so one long line gives the message an unbounded min-content width and
+ * pushes the card holding it past its surface, where a scrolling panel hides
+ * the overflow instead of reporting it (BIG-185).
  */
-const InlineCode = ({ value }: { readonly value: string }) => (
+export const InlineCode = ({ value }: { readonly value: string }) => (
   <code className="max-w-full rounded-sm border border-edge bg-surface px-1 font-mono text-[0.9em] [overflow-wrap:anywhere]">
     {value}
   </code>
 );
 
-const CodeBlock = ({
+export const CodeBlock = ({
   value,
   language,
 }: {

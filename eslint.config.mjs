@@ -11,6 +11,41 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 import eslintConfigPrettier from "eslint-config-prettier";
 
+// The two bespoke syntax fences below are declared as data because the review
+// island is in scope for both. Flat config replaces a rule's options rather
+// than merging them, so declaring `no-restricted-syntax` twice over the same
+// file silently drops one fence - the exact quiet failure both exist to stop.
+
+// live-target.browser.ts is the one owner of identity lookups against plan
+// DOM. A hand-written selector for a block id or a flow anchor skips its
+// article scoping, its lens-copy exclusion, and its drift check, and every
+// one of those omissions fails silently by resolving something plausible,
+// so the selector text itself is fenced to the resolver. The shell scripts
+// are fenced too even though they have no such lookup today: the layering
+// keeps the resolver out of their reach, so a first one there needs a
+// deliberate answer rather than a copied query.
+const PLAN_IDENTITY_SELECTOR = {
+  selector:
+    'TemplateElement[value.raw=/data-(block-id|flow-anchor)="/], Literal[value=/data-(block-id|flow-anchor)="/]',
+  message:
+    "Resolve plan identity through live-target.browser.ts (liveBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, lens-copy exclusion, and the drift check.",
+};
+
+// A list laid out as a grid must say what its column is. A grid item keeps
+// `min-width: auto`, so an implicit track is floored at the widest item's
+// min-content width and the whole list grows past its container - which a
+// scrolling panel then hides rather than reports. That is how one pasted
+// code line clipped every card in the feedback sidebar (BIG-185). Naming
+// the track (`grid-cols-[minmax(0,1fr)]`) is the one-word answer, and it
+// is fenced because the failure is silent: the markup is valid, the
+// cascade is clean, and only a reader at a narrow width ever sees it.
+const GRID_LIST_TRACK_SELECTOR = {
+  selector:
+    "Literal[value=/^(?!.*grid-cols-)(?=.*(?:^|[ ])list-none(?:[ ]|$))(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/], TemplateElement[value.raw=/^(?!.*grid-cols-)(?=.*(?:^|[ ])list-none(?:[ ]|$))(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/]",
+  message:
+    "A grid list in the review sidebar must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows the panel.",
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -449,59 +484,28 @@ export default tseslint.config(
     rules: { "no-restricted-imports": "off" },
   },
   {
-    // live-target.browser.ts is the one owner of identity lookups against plan
-    // DOM. A hand-written selector for a block id or a flow anchor skips its
-    // article scoping, its lens-copy exclusion, and its drift check, and every
-    // one of those omissions fails silently by resolving something plausible,
-    // so the selector text itself is fenced to the resolver. The shell scripts
-    // are fenced too even though they have no such lookup today: the layering
-    // keeps the resolver out of their reach, so a first one there needs a
-    // deliberate answer rather than a copied query.
-    files: [
-      "src/review/browser/**/*.ts",
-      "src/review/browser/**/*.tsx",
-      "src/render/shell/**/*.ts",
-    ],
+    // The review island is the one scope both fences cover, so both ride in a
+    // single `no-restricted-syntax` declaration.
+    files: ["src/review/browser/**/*.ts", "src/review/browser/**/*.tsx"],
     ignores: ["src/review/browser/live-target.browser.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",
-        {
-          selector:
-            'TemplateElement[value.raw=/data-(block-id|flow-anchor)="/], Literal[value=/data-(block-id|flow-anchor)="/]',
-          message:
-            "Resolve plan identity through live-target.browser.ts (liveBlock, liveFlowAnchor, liveLensAnchor); a raw identity selector skips article scoping, lens-copy exclusion, and the drift check.",
-        },
+        PLAN_IDENTITY_SELECTOR,
+        GRID_LIST_TRACK_SELECTOR,
       ],
     },
   },
   {
-    // A list laid out as a grid must say what its column is. A grid item keeps
-    // `min-width: auto`, so an implicit track is floored at the widest item's
-    // min-content width and the whole list grows past its container - which a
-    // scrolling panel then hides rather than reports. That is how one pasted
-    // code line clipped every card in the feedback sidebar (BIG-185). Naming
-    // the track (`grid-cols-[minmax(0,1fr)]`) is the one-word answer, and it
-    // is fenced here because the failure is silent: the markup is valid, the
-    // cascade is clean, and only a reader at a narrow width ever sees it.
-    //
-    // Scoped to the review browser because that is where the premise holds:
-    // the sidebar is a fixed-width column and every list in it is one column,
-    // so the track is always the container's to set. A plan component is a
-    // different regime - `decision-card.css` gives `.decision-rows` a
+    // The shell takes the identity fence alone. The grid fence's premise is
+    // the sidebar - a fixed-width column whose every list is one column, so
+    // the track is always the container's to set. A plan component is a
+    // different regime: `decision-card.css` gives `.decision-rows` a
     // responsive `repeat(auto-fit, ...)` track, and a utility here would
     // outrank it and collapse the option cards into a stack.
-    files: ["src/review/browser/**/*.ts", "src/review/browser/**/*.tsx"],
+    files: ["src/render/shell/**/*.ts"],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            "Literal[value=/^(?!.*grid-cols-)(?=.*(?:^|[ ])list-none(?:[ ]|$))(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/], TemplateElement[value.raw=/^(?!.*grid-cols-)(?=.*(?:^|[ ])list-none(?:[ ]|$))(?=.*(?:^|[ ])grid(?:[ ]|$)).*$/]",
-          message:
-            "A grid list in the review sidebar must declare its column track (grid-cols-[minmax(0,1fr)]); an implicit track is floored at the widest item's min-content width and overflows the panel.",
-        },
-      ],
+      "no-restricted-syntax": ["error", PLAN_IDENTITY_SELECTOR],
     },
   },
   {
